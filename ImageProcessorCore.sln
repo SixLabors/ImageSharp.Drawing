@@ -1,11 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
-VisualStudioVersion = 14.0.23107.0
+VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ImageProcessor", "src\ImageProcessor\ImageProcessor.xproj", "{2AA31A1F-142C-43F4-8687-09ABCA4B3A26}"
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ImageProcessorCore", "src\ImageProcessorCore\ImageProcessorCore.xproj", "{2AA31A1F-142C-43F4-8687-09ABCA4B3A26}"
 EndProject
-Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ImageProcessor.Tests", "tests\ImageProcessor.Tests\ImageProcessor.Tests.xproj", "{F836E8E6-B4D9-4208-8346-140C74678B91}"
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "ImageProcessorCore.Tests", "tests\ImageProcessorCore.Tests\ImageProcessorCore.Tests.xproj", "{F836E8E6-B4D9-4208-8346-140C74678B91}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
