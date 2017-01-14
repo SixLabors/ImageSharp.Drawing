@@ -1,0 +1,34 @@
+{
+  "version": "0.0.0-*",
+  "configurations": {
+    "Release": {
+      "buildOptions": {
+        "warningsAsErrors": true
+      }
+    }
+  },
+  "dependencies": {
+    "Shaper2D": {
+      "target": "project",
+      "version": "0.0.1-*"
+    },
+    "xunit": "2.2.0-*",
+    "dotnet-test-xunit": "2.2.0-*"
+  },
+  "frameworks": {
+    "netcoreapp1.1": {
+      "dependencies": {
+        "Microsoft.NETCore.App": {
+          "type": "platform",
+          "version": "1.0.0-*"
+        },
+        "Microsoft.CodeCoverage": "1.0.2"
+      }
+    },
+    "net451": {
+      "dependencies": {
+      }
+    }
+  },
+  "testRunner": "xunit"
+}

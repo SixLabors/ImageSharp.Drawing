@@ -3,9 +3,26 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shaper2D", "Shaper2D\Shaper2D.csproj", "{8EC582C9-750F-48BC-B48E-B3F89A5BA7B7}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionItems", "{C317F1B1-D75E-4C6D-83EB-80367343E0D7}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		global.json = global.json
+		README.md = README.md
+	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Items", "Items", "{20777789-C567-4304-BB8D-11FAF5328812}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{815C0625-CD3D-440F-9F80-2D83856AB7AE}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{56801022-D71A-4FBE-BC5B-CBA08E2284EC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{9E574A07-F879-4811-9C41-5CBDC6BAFDB7}"
+	ProjectSection(SolutionItems) = preProject
+		src\Shared\AssemblyInfo.Common.cs = src\Shared\AssemblyInfo.Common.cs
+		src\Shared\stylecop.json = src\Shared\stylecop.json
+	EndProjectSection
+EndProject
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "Shaper2D", "src\Shaper2D\Shaper2D.xproj", "{2E33181E-6E28-4662-A801-E2E7DC206029}"
+EndProject
+Project("{8BB2217D-0F2D-49D1-97BC-3654ED321F3B}") = "Shaper2D.Tests", "tests\Shaper2D.Tests\Shaper2D.Tests.xproj", "{F836E8E6-B4D9-4208-8346-140C74678B91}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,12 +30,21 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{8EC582C9-750F-48BC-B48E-B3F89A5BA7B7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8EC582C9-750F-48BC-B48E-B3F89A5BA7B7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8EC582C9-750F-48BC-B48E-B3F89A5BA7B7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8EC582C9-750F-48BC-B48E-B3F89A5BA7B7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F836E8E6-B4D9-4208-8346-140C74678B91}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F836E8E6-B4D9-4208-8346-140C74678B91}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F836E8E6-B4D9-4208-8346-140C74678B91}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F836E8E6-B4D9-4208-8346-140C74678B91}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9E574A07-F879-4811-9C41-5CBDC6BAFDB7} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
+		{2E33181E-6E28-4662-A801-E2E7DC206029} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
+		{F836E8E6-B4D9-4208-8346-140C74678B91} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
 	EndGlobalSection
 EndGlobal

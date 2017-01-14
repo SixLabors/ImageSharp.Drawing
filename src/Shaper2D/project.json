@@ -1,0 +1,73 @@
+{
+  "version": "0.0.1-alpha1-*",
+  "title": "Shaper2D",
+  "description": "Polygon manipulation on mergin library",
+  "authors": [
+    "Scott Williams and contributors"
+  ],
+  "packOptions": {
+    "owners": [
+      "Scott Williams and contributors"
+    ],
+    "projectUrl": "https://github.com/tocsoft/Shaper2D",
+    "licenseUrl": "http://www.apache.org/licenses/LICENSE-2.0",
+    "iconUrl": "https://raw.githubusercontent.com/tocsoft/Shaper2D/master/build/icons/shaper2d-logo-128.png",
+    "requireLicenseAcceptance": false,
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/tocsoft/Shaper2D"
+    },
+    "tags": [
+      "polygon",
+      "rectangle",
+      "point in polygon",
+      "complex polygons",
+      "shape",
+      "2D"
+    ]
+  },
+  "buildOptions": {
+    "allowUnsafe": true,
+    "xmlDoc": true,
+    "additionalArguments": [ "/additionalfile:../Shared/stylecop.json", "/ruleset:../../Shaper2D.ruleset" ],
+    "compile": [
+      "../Shared/*.cs"
+    ]
+  },
+  "configurations": {
+    "Release": {
+      "buildOptions": {
+        "warningsAsErrors": true,
+        "optimize": true
+      }
+    }
+  },
+  "dependencies": {
+    "StyleCop.Analyzers": {
+      "version": "1.0.0",
+      "type": "build"
+    },
+    "System.Collections.Immutable": "1.2.0",
+    "System.Numerics.Vectors": "4.1.1"
+  },
+  "frameworks": {
+    "netstandard1.1": {
+      "dependencies": {
+        "System.Collections": "4.0.11",
+        "System.Diagnostics.Debug": "4.0.11",
+        "System.Diagnostics.Tools": "4.0.1",
+        "System.Linq": "4.1.0",
+        "System.ObjectModel": "4.0.12",
+        "System.Resources.ResourceManager": "4.0.1",
+        "System.Runtime.Extensions": "4.1.0",
+        "System.Runtime.InteropServices": "4.1.0",
+        "System.Runtime.Numerics": "4.0.1"
+      }
+    },
+    "net45": {
+      "dependencies": {
+        "System.Runtime": "4.0.0"
+      }
+    }
+  }
+}
