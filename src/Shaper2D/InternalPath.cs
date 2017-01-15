@@ -41,17 +41,7 @@ namespace Shaper2D
         private readonly Lazy<float> totalDistance;
 
         /// <summary>
-        /// The constant.
-        /// </summary>
-        private float[] constant;
-
-        /// <summary>
-        /// The multiples.
-        /// </summary>
-        private float[] multiple;
-
-        /// <summary>
-        /// The distances.
+        /// The distances
         /// </summary>
         private float[] distance;
 
@@ -210,6 +200,37 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Finds the intersections.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns>The points along the line the intesect with the boundries of the polygon.</returns>
+        public IEnumerable<Point> FindIntersections(Vector2 start, Vector2 end)
+        {
+            int polyCorners = this.points.Length;
+
+            if (!this.closedPath)
+            {
+                polyCorners -= 1;
+            }
+
+            for (int i = 0; i < polyCorners; i++)
+            {
+                int next = i + 1;
+                if (this.closedPath && next == polyCorners)
+                {
+                    next = 0;
+                }
+
+                Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
+                if (point != MaxVector)
+                {
+                    yield return point;
+                }
+            }
+        }
+
+        /// <summary>
         /// Determines if the specified point is inside or outside the path.
         /// </summary>
         /// <param name="point">The point.</param>
@@ -227,26 +248,39 @@ namespace Shaper2D
                 return false;
             }
 
-            this.CalculateConstants();
+            Vector2 start = point;
+            Vector2 end = this.Bounds.Location;
+            end -= new Vector2(10, 10); // take some away to ensure we are definatly not ona  corneer etc;
 
-            ImmutableArray<Point> poly = this.points;
-            int polyCorners = poly.Length;
+            int polyCorners = this.points.Length;
 
-            int j = polyCorners - 1;
-            bool oddNodes = false;
-
-            for (int i = 0; i < polyCorners; i++)
+            if (!this.closedPath)
             {
-                if ((poly[i].Y < point.Y && poly[j].Y >= point.Y)
-                || (poly[j].Y < point.Y && poly[i].Y >= point.Y))
-                {
-                    oddNodes ^= (point.Y * this.multiple[i]) + this.constant[i] < point.X;
-                }
-
-                j = i;
+                polyCorners -= 1;
             }
 
-            return oddNodes;
+            bool inside = false;
+            for (int i = 0; i < polyCorners; i++)
+            {
+                int next = i + 1;
+                if (this.closedPath && next == polyCorners)
+                {
+                    next = 0;
+                }
+
+                if (point == this.points[i] || point == this.points[next])
+                {
+                    return true;
+                }
+
+                Vector2 p = FindIntersection(this.points[i], this.points[next], start, end);
+                if (p != MaxVector)
+                {
+                    inside ^= true;
+                }
+            }
+
+            return inside;
         }
 
         /// <summary>
@@ -346,10 +380,6 @@ namespace Shaper2D
             {
                 return point;
             }
-            else if (BoundingBoxesIntersect(line2Start, line2End, point, point))
-            {
-                return point;
-            }
 
             return MaxVector;
         }
@@ -422,8 +452,6 @@ namespace Shaper2D
 
                 ImmutableArray<Point> poly = this.points;
                 int polyCorners = poly.Length;
-                this.constant = new float[polyCorners];
-                this.multiple = new float[polyCorners];
                 this.distance = new float[polyCorners];
                 int i, j = polyCorners - 1;
 
@@ -432,18 +460,6 @@ namespace Shaper2D
                 for (i = 0; i < polyCorners; i++)
                 {
                     this.distance[j] = this.distance[i] + Vector2.Distance(poly[i], poly[j]);
-                    if (poly[j].Y == poly[i].Y)
-                    {
-                        this.constant[i] = poly[i].X;
-                        this.multiple[i] = 0;
-                    }
-                    else
-                    {
-                        Vector2 subtracted = poly[j] - poly[i];
-                        this.constant[i] = (poly[i].X - ((poly[i].Y * poly[j].X) / subtracted.Y)) + ((poly[i].Y * poly[i].X) / subtracted.Y);
-                        this.multiple[i] = subtracted.X / subtracted.Y;
-                    }
-
                     j = i;
                 }
 

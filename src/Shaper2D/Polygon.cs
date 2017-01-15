@@ -5,6 +5,7 @@
 
 namespace Shaper2D
 {
+    using System;
     using System.Collections;
     using System.Collections.Generic;
     using System.Collections.Immutable;
@@ -99,6 +100,18 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Determines whether the <see cref="IShape" /> contains the specified point
+        /// </summary>
+        /// <param name="point">The point.</param>
+        /// <returns>
+        ///   <c>true</c> if the <see cref="IShape" /> contains the specified point; otherwise, <c>false</c>.
+        /// </returns>
+        public bool Contains(Point point)
+        {
+            return this.innerPath.PointInPolygon(point);
+        }
+
+        /// <summary>
         /// Calcualtes the distance along and away from the path for a specified point.
         /// </summary>
         /// <param name="point">The point along the path.</param>
@@ -136,6 +149,20 @@ namespace Shaper2D
         public int FindIntersections(Point start, Point end, Point[] buffer, int count, int offset)
         {
             return this.innerPath.FindIntersections(start, end, buffer, count, offset);
+        }
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populate a buffer for all points on the polygon that the line intersects.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns>
+        /// The locations along the line segment that intersect with the edges of the shape.
+        /// </returns>
+        public IEnumerable<Point> FindIntersections(Point start, Point end)
+        {
+            return this.innerPath.FindIntersections(start, end);
         }
     }
 }

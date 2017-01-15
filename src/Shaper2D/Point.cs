@@ -181,7 +181,7 @@ namespace Shaper2D
         /// <returns>A new point offset by the size</returns>
         public Point Offset(Size p)
         {
-            return new Point(this.backingVector + new Vector2(p.Width, p.Height));
+            return new Point(this.backingVector + p.ToVector2());
         }
 
         /// <inheritdoc/>

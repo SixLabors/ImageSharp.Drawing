@@ -203,6 +203,33 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populate a buffer for all points on the polygon that the line intersects.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns>
+        /// The locations along the line segment that intersect with the edges of the shape.
+        /// </returns>
+        public IEnumerable<Point> FindIntersections(Point start, Point end)
+        {
+            var buffer = new Point[2];
+            var c = this.FindIntersections(start, end, buffer, 2, 0);
+            if (c == 2)
+            {
+                return buffer;
+            }
+            else if (c == 1)
+            {
+                return new[] { buffer[0] };
+            }
+            else
+            {
+                return Enumerable.Empty<Point>();
+            }
+        }
+
+        /// <summary>
         /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
         /// populate a buffer for all points on the edges of the <see cref="Rectangle"/>
         /// that the line intersects.

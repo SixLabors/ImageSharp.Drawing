@@ -146,6 +146,48 @@ namespace Shaper2D
             return totalAdded;
         }
 
+        /// <summary>
+        /// Determines whether the <see cref="IShape" /> contains the specified point
+        /// </summary>
+        /// <param name="point">The point.</param>
+        /// <returns>
+        ///   <c>true</c> if the <see cref="IShape" /> contains the specified point; otherwise, <c>false</c>.
+        /// </returns>
+        public bool Contains(Point point)
+        {
+            bool inside = false;
+            foreach (IShape shape in this.shapes)
+            {
+                if (shape.Contains(point))
+                {
+                    inside ^= true; // flip the inside flag
+                }
+            }
+
+            return inside;
+        }
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populate a buffer for all points on the polygon that the line intersects.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns>
+        /// The locations along the line segment that intersect with the edges of the shape.
+        /// </returns>
+        public IEnumerable<Point> FindIntersections(Point start, Point end)
+        {
+            for (int i = 0; i < this.shapes.Length; i++)
+            {
+                var points = this.shapes[i].FindIntersections(start, end);
+                foreach (var point in points)
+                {
+                    yield return point;
+                }
+            }
+        }
+
         private void AddPoints(Clipper clipper, IShape shape, PolyType polyType)
         {
             // if the path is already the shape use it directly and skip the path loop.

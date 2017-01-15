@@ -62,34 +62,6 @@ namespace Shaper2D
         public bool IsEmpty => this.Equals(Empty);
 
         /// <summary>
-        /// Computes the sum of adding two sizes.
-        /// </summary>
-        /// <param name="left">The size on the left hand of the operand.</param>
-        /// <param name="right">The size on the right hand of the operand.</param>
-        /// <returns>
-        /// The <see cref="Size"/>
-        /// </returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Size operator +(Size left, Size right)
-        {
-            return new Size(left.backingVector + right.backingVector);
-        }
-
-        /// <summary>
-        /// Computes the difference left by subtracting one size from another.
-        /// </summary>
-        /// <param name="left">The size on the left hand of the operand.</param>
-        /// <param name="right">The size on the right hand of the operand.</param>
-        /// <returns>
-        /// The <see cref="Size"/>
-        /// </returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Size operator -(Size left, Size right)
-        {
-            return new Size(left.backingVector - right.backingVector);
-        }
-
-        /// <summary>
         /// Compares two <see cref="Size"/> objects for equality.
         /// </summary>
         /// <param name="left">
@@ -123,6 +95,15 @@ namespace Shaper2D
         public static bool operator !=(Size left, Size right)
         {
             return left.backingVector != right.backingVector;
+        }
+
+        /// <summary>
+        /// returns the size as a <see cref="Vector2"/>
+        /// </summary>
+        /// <returns>The size as a vector2.</returns>
+        public Vector2 ToVector2()
+        {
+            return this.backingVector;
         }
 
         /// <inheritdoc/>

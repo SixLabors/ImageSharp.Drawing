@@ -5,6 +5,7 @@
 
 namespace Shaper2D
 {
+    using System;
     using System.Collections;
     using System.Collections.Generic;
     using System.Numerics;
@@ -12,6 +13,7 @@ namespace Shaper2D
     /// <summary>
     /// Represents a polygon made up exclusivly of a single Linear path.
     /// </summary>
+    /// <seealso cref="Shaper2D.IShape" />
     public sealed class LinearPolygon : IShape
     {
         private Polygon innerPolygon;
@@ -56,6 +58,16 @@ namespace Shaper2D
         public IEnumerable<IPath> Paths => this.innerPolygon.Paths;
 
         /// <summary>
+        /// Determines whether the <see cref="IShape" /> contains the specified point
+        /// </summary>
+        /// <param name="point">The point.</param>
+        /// <returns>
+        ///   <c>true</c> if the <see cref="IShape" /> contains the specified point; otherwise, <c>false</c>.
+        /// </returns>
+        public bool Contains(Point point)
+            => this.innerPolygon.Contains(point);
+
+        /// <summary>
         /// the distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
         /// </summary>
         /// <param name="point">The point.</param>
@@ -63,6 +75,18 @@ namespace Shaper2D
         /// Returns the distance from the shape to the point
         /// </returns>
         public float Distance(Point point) => this.innerPolygon.Distance(point);
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populate a buffer for all points on the polygon that the line intersects.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns>
+        /// The locations along the line segment that intersect with the edges of the shape.
+        /// </returns>
+        public IEnumerable<Point> FindIntersections(Point start, Point end)
+            => this.innerPolygon.FindIntersections(start, end);
 
         /// <summary>
         /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
@@ -77,8 +101,6 @@ namespace Shaper2D
         /// The number of intersections populated into the buffer.
         /// </returns>
         public int FindIntersections(Point start, Point end, Point[] buffer, int count, int offset)
-        {
-            return this.innerPolygon.FindIntersections(start, end, buffer, count, offset);
-        }
+            => this.innerPolygon.FindIntersections(start, end, buffer, count, offset);
     }
 }

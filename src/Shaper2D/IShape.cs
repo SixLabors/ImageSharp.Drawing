@@ -47,6 +47,15 @@ namespace Shaper2D
         float Distance(Point point);
 
         /// <summary>
+        /// Determines whether the <see cref="IShape"/> contains the specified point
+        /// </summary>
+        /// <param name="point">The point.</param>
+        /// <returns>
+        ///   <c>true</c> if the <see cref="IShape"/> contains the specified point; otherwise, <c>false</c>.
+        /// </returns>
+        bool Contains(Point point);
+
+        /// <summary>
         /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
         /// populate a buffer for all points on the polygon that the line intersects.
         /// </summary>
@@ -59,5 +68,14 @@ namespace Shaper2D
         /// The number of intersections populated into the buffer.
         /// </returns>
         int FindIntersections(Point start, Point end, Point[] buffer, int count, int offset);
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
+        /// populate a buffer for all points on the polygon that the line intersects.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns>The locations along the line segment that intersect with the edges of the shape.</returns>
+        IEnumerable<Point> FindIntersections(Point start, Point end);
     }
 }
