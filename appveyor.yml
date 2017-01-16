@@ -4,7 +4,7 @@ install:
 - choco install gitversion.portable -pre -y
   
 before_build:
-- ps: gitversion /l console /output buildserver /updateAssemblyInfo
+- ps: gitversion /l console /output buildserver
 
 build_script:
 - cmd: build.cmd
