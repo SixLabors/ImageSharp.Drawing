@@ -215,17 +215,14 @@ namespace Shaper2D
         {
             var buffer = new Point[2];
             var c = this.FindIntersections(start, end, buffer, 2, 0);
-            if (c == 2)
+            switch (c)
             {
-                return buffer;
-            }
-            else if (c == 1)
-            {
-                return new[] { buffer[0] };
-            }
-            else
-            {
-                return Enumerable.Empty<Point>();
+                case 2:
+                    return buffer;
+                case 1:
+                    return new[] { buffer[0] };
+                default:
+                    return Enumerable.Empty<Point>();
             }
         }
 
@@ -248,18 +245,26 @@ namespace Shaper2D
             Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
             Vector2 endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
 
-            if (startPoint == Vector2.Clamp(startPoint, start, end))
+            // start doesn't change when its inside the shape thus not crossing
+            if (startPoint != start.ToVector2())
             {
-                // if start closest is within line then its a valid point
-                discovered++;
-                buffer[offset++] = startPoint;
+                if (startPoint == Vector2.Clamp(startPoint, start, end))
+                {
+                    // if start closest is within line then its a valid point
+                    discovered++;
+                    buffer[offset++] = startPoint;
+                }
             }
 
-            if (endPoint == Vector2.Clamp(endPoint, start, end))
+            // end didn't change it must not intercept with an edge
+            if (endPoint != end.ToVector2())
             {
-                // if start closest is within line then its a valid point
-                discovered++;
-                buffer[offset++] = endPoint;
+                if (endPoint == Vector2.Clamp(endPoint, start, end))
+                {
+                    // if start closest is within line then its a valid point
+                    discovered++;
+                    buffer[offset] = endPoint;
+                }
             }
 
             return discovered;
@@ -327,8 +332,7 @@ namespace Shaper2D
                     {
                         // closer to rhs
                         clamped.X = this.bottomRight.X; // x is already the same
-
-                        distanceAlongEdge = (this.bottomRight.Y - clamped.Y) + this.Size.Width;
+                        distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
                     }
                 }
             }
@@ -355,9 +359,14 @@ namespace Shaper2D
                     }
                     else if (this.bottomRight.X == clamped.X)
                     {
-                        distanceAlongEdge = (this.bottomRight.Y - clamped.Y) + this.Size.Width;
+                        distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
                     }
                 }
+            }
+
+            if (distanceAlongEdge == this.length)
+            {
+                distanceAlongEdge = 0;
             }
 
             return new PointInfo
