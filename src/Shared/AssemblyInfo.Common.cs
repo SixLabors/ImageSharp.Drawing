@@ -13,7 +13,7 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyDescription("A cross-platform library for processing of image files; written in C#")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Scott Williams")]
-[assembly: AssemblyProduct("ImageSharp")]
+[assembly: AssemblyProduct("Shaper2D")]
 [assembly: AssemblyCopyright("Copyright (c) Scott Williams and contributors.")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
