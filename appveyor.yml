@@ -1,21 +1,28 @@
 
 version: 0.0.{build}
 install:
-- choco install gitversion.portable -pre -y
+  - choco install gitversion.portable -pre -y
   
 before_build:
-- ps: gitversion /l console /output buildserver
+  - ps: gitversion /l console /output buildserver
 
 build_script:
-- cmd: build.cmd
+  - cmd: build.cmd
     
+test_script:
+  - tests\CodeCoverage\CodeCoverage.cmd
+
 after_build:
   - cmd: appveyor PushArtifact "artifacts\Shaper2D.%GitVersion_NuGetVersion%.nupkg"
 
 deploy:
-- provider: NuGet
-  server: https://www.myget.org/F/shaper2d/api/v2/package
-  api_key:
-    secure: SyrSERGrjkK21TSCsHtqke5279SMxXCg2NXKjR2qaErP0khEplwxPwE8Ch5bxzyf
+  - provider: NuGet
+    server: https://www.myget.org/F/shaper2d/api/v2/package
+    symbol_server: https://www.myget.org/F/shaper2d/api/v2/package # https://nuget.symbolsource.org/MyGet/imagesharp
+    api_key:
+      secure: SyrSERGrjkK21TSCsHtqke5279SMxXCg2NXKjR2qaErP0khEplwxPwE8Ch5bxzyf
+    artifact: /.*\.nupkg/
+    on:
+      branch: master
 
 test: off
