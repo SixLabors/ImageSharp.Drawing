@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("ImageSharp.Tests")]
+[assembly: AssemblyTitle("Shaper2D.Tests")]
 [assembly: AssemblyDescription("A cross-platform library for processing of image files written in C#")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("ImageSharp.Tests")]
+[assembly: AssemblyProduct("Shaper2D.Tests")]
 [assembly: AssemblyCopyright("Copyright © Scott Williams and contributors.")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
