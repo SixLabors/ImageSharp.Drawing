@@ -22,9 +22,12 @@ namespace Shaper2D
         /// <summary>
         /// Represents a <see cref="Size"/> that has Width and Height values set to zero.
         /// </summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public static readonly Size Empty = default(Size);
 
         private readonly Vector2 backingVector;
+
+        private readonly bool isSet;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Size"/> struct.
@@ -43,6 +46,7 @@ namespace Shaper2D
         public Size(Vector2 vector)
         {
             this.backingVector = vector;
+            this.isSet = true;
         }
 
         /// <summary>
@@ -62,6 +66,34 @@ namespace Shaper2D
         public bool IsEmpty => this.Equals(Empty);
 
         /// <summary>
+        /// Computes the sum of adding two Sizes.
+        /// </summary>
+        /// <param name="left">The Size on the left hand of the operand.</param>
+        /// <param name="right">The Size on the right hand of the operand.</param>
+        /// <returns>
+        /// The <see cref="Size"/>
+        /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Size operator +(Size left, Size right)
+        {
+            return new Size(left.backingVector + right.backingVector);
+        }
+
+        /// <summary>
+        /// Computes the difference left by subtracting one Size from another.
+        /// </summary>
+        /// <param name="left">The Size on the left hand of the operand.</param>
+        /// <param name="right">The Size on the right hand of the operand.</param>
+        /// <returns>
+        /// The <see cref="Size"/>
+        /// </returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static Size operator -(Size left, Size right)
+        {
+            return new Size(left.backingVector - right.backingVector);
+        }
+
+        /// <summary>
         /// Compares two <see cref="Size"/> objects for equality.
         /// </summary>
         /// <param name="left">
@@ -76,7 +108,12 @@ namespace Shaper2D
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(Size left, Size right)
         {
-            return left.backingVector == right.backingVector;
+            if (left.isSet && right.isSet)
+            {
+                return left.backingVector == right.backingVector;
+            }
+
+            return left.isSet == right.isSet;
         }
 
         /// <summary>
@@ -94,7 +131,12 @@ namespace Shaper2D
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(Size left, Size right)
         {
-            return left.backingVector != right.backingVector;
+            if (left.isSet && right.isSet)
+            {
+                return left.backingVector != right.backingVector;
+            }
+
+            return left.isSet != right.isSet;
         }
 
         /// <summary>
@@ -138,7 +180,7 @@ namespace Shaper2D
         /// <inheritdoc/>
         public bool Equals(Size other)
         {
-            return this.backingVector == other.backingVector;
+            return this == other;
         }
     }
 }

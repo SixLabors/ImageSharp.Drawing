@@ -5,6 +5,7 @@
 namespace Shaper2D
 {
     using System;
+    using System.Buffers;
     using System.Collections.Generic;
     using System.Collections.Immutable;
     using System.Linq;
@@ -152,7 +153,7 @@ namespace Shaper2D
 
             return new PointInfo
             {
-                DistanceAlongPath = this.distance[closestPoint] + Vector2.Distance(this.points[closestPoint], point),
+                DistanceAlongPath = this.distance[closestPoint] + Vector2.Distance(this.points[closestPoint], internalInfo.PointOnLine),
                 DistanceFromPath = (float)Math.Sqrt(internalInfo.DistanceSquared),
                 SearchPoint = point,
                 ClosestPointOnPath = internalInfo.PointOnLine
@@ -190,9 +191,13 @@ namespace Shaper2D
                 Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
                 if (point != MaxVector)
                 {
-                    buffer[position + offset] = point;
-                    position++;
-                    count--;
+                    if (this.points[i].ToVector2() != point || (this.closedPath && i == 0))
+                    {
+                        // we skip starts and get it next time unless its an open path and this is the first seg
+                        buffer[position + offset] = point;
+                        position++;
+                        count--;
+                    }
                 }
             }
 
@@ -204,29 +209,21 @@ namespace Shaper2D
         /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
-        /// <returns>The points along the line the intesect with the boundries of the polygon.</returns>
+        /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
         public IEnumerable<Point> FindIntersections(Vector2 start, Vector2 end)
         {
-            int polyCorners = this.points.Length;
-
-            if (!this.closedPath)
+            var buffer = ArrayPool<Point>.Shared.Rent(this.points.Length);
+            try
             {
-                polyCorners -= 1;
+                var hits = this.FindIntersections(start, end, buffer, this.points.Length, 0);
+                for (var i = 0; i < hits; i++)
+                {
+                    yield return buffer[i];
+                }
             }
-
-            for (int i = 0; i < polyCorners; i++)
+            finally
             {
-                int next = i + 1;
-                if (this.closedPath && next == polyCorners)
-                {
-                    next = 0;
-                }
-
-                Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
-                if (point != MaxVector)
-                {
-                    yield return point;
-                }
+                ArrayPool<Point>.Shared.Return(buffer);
             }
         }
 
@@ -250,20 +247,15 @@ namespace Shaper2D
 
             Vector2 start = point;
             Vector2 end = this.Bounds.Location;
-            end -= new Vector2(10, 10); // take some away to ensure we are definatly not ona  corneer etc;
+            end -= new Vector2(10, 10); // take some away to ensure we are defiantly not on a corner etc;
 
             int polyCorners = this.points.Length;
-
-            if (!this.closedPath)
-            {
-                polyCorners -= 1;
-            }
 
             bool inside = false;
             for (int i = 0; i < polyCorners; i++)
             {
                 int next = i + 1;
-                if (this.closedPath && next == polyCorners)
+                if (next == polyCorners)
                 {
                     next = 0;
                 }
@@ -277,6 +269,12 @@ namespace Shaper2D
                 if (p != MaxVector)
                 {
                     inside ^= true;
+
+                    if (p == this.points[i].ToVector2())
+                    {
+                        // if left point is the match then skip it we will hit it on the way around on the right
+                        inside ^= true;
+                    }
                 }
             }
 
@@ -284,7 +282,7 @@ namespace Shaper2D
         }
 
         /// <summary>
-        /// Determins if the bounding box for 2 lines
+        /// Determines if the bounding box for 2 lines
         /// described by <paramref name="line1Start" /> and <paramref name="line1End" />
         /// and  <paramref name="line2Start" /> and <paramref name="line2End" /> overlap.
         /// </summary>
@@ -339,7 +337,7 @@ namespace Shaper2D
             Vector2 line2Diff = line2End - line2Start;
 
             Vector2 point;
-            if (line1Diff.X == 0)
+            if (Math.Abs(line1Diff.X) < float.Epsilon)
             {
                 float slope = line2Diff.Y / line2Diff.X;
                 float yinter = line2Start.Y - (slope * line2Start.X);
@@ -348,11 +346,11 @@ namespace Shaper2D
 
                 // horizontal and vertical lines
             }
-            else if (line2Diff.X == 0)
+            else if (Math.Abs(line2Diff.X) < float.Epsilon)
             {
                 float slope = line1Diff.Y / line1Diff.X;
-                float yinter = line1Start.Y - (slope * line1Start.X);
-                float y = (line2Start.X * slope) + yinter;
+                float yInter = line1Start.Y - (slope * line1Start.X);
+                float y = (line2Start.X * slope) + yInter;
                 point = new Vector2(line2Start.X, y);
 
                 // horizontal and vertical lines
@@ -362,21 +360,22 @@ namespace Shaper2D
                 float slope1 = line1Diff.Y / line1Diff.X;
                 float slope2 = line2Diff.Y / line2Diff.X;
 
-                float yinter1 = line1Start.Y - (slope1 * line1Start.X);
-                float yinter2 = line2Start.Y - (slope2 * line2Start.X);
+                float yInter1 = line1Start.Y - (slope1 * line1Start.X);
+                float yInter2 = line2Start.Y - (slope2 * line2Start.X);
 
-                if (slope1 == slope2 && yinter1 != yinter2)
+                if (Math.Abs(slope1 - slope2) < float.Epsilon && Math.Abs(yInter1 - yInter2) > float.Epsilon)
                 {
                     return MaxVector;
                 }
 
-                float x = (yinter2 - yinter1) / (slope1 - slope2);
-                float y = (slope1 * x) + yinter1;
+                float x = (yInter2 - yInter1) / (slope1 - slope2);
+                float y = (slope1 * x) + yInter1;
 
                 point = new Vector2(x, y);
             }
 
-            if (BoundingBoxesIntersect(line1Start, line1End, point, point))
+            if (BoundingBoxesIntersect(line1Start, line1End, point, point)
+                && BoundingBoxesIntersect(line2Start, line2End, point, point))
             {
                 return point;
             }
@@ -453,14 +452,13 @@ namespace Shaper2D
                 ImmutableArray<Point> poly = this.points;
                 int polyCorners = poly.Length;
                 this.distance = new float[polyCorners];
-                int i, j = polyCorners - 1;
 
                 this.distance[0] = 0;
 
-                for (i = 0; i < polyCorners; i++)
+                for (int i = 1; i < polyCorners; i++)
                 {
-                    this.distance[j] = this.distance[i] + Vector2.Distance(poly[i], poly[j]);
-                    j = i;
+                    int previousIndex = i - 1;
+                    this.distance[i] = this.distance[previousIndex] + Vector2.Distance(poly[i], poly[previousIndex]);
                 }
 
                 this.calculated = true;

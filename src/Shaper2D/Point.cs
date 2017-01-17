@@ -27,6 +27,8 @@ namespace Shaper2D
 
         private readonly Vector2 backingVector;
 
+        private bool isSet;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Point"/> struct.
         /// </summary>
@@ -46,6 +48,7 @@ namespace Shaper2D
         public Point(Vector2 vector)
         {
             this.backingVector = vector;
+            this.isSet = true;
         }
 
         /// <summary>
@@ -62,7 +65,7 @@ namespace Shaper2D
         /// Gets a value indicating whether this <see cref="Point"/> is empty.
         /// </summary>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsEmpty => this.Equals(Empty);
+        public bool IsEmpty => !this.isSet;
 
         /// <summary>
         /// Performs an implicit conversion from <see cref="Point"/> to <see cref="Vector2"/>.
@@ -133,7 +136,12 @@ namespace Shaper2D
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(Point left, Point right)
         {
-            return left.backingVector == right.backingVector;
+            if (left.isSet && right.isSet)
+            {
+                return left.backingVector == right.backingVector;
+            }
+
+            return left.isSet == right.isSet;
         }
 
         /// <summary>
@@ -151,7 +159,12 @@ namespace Shaper2D
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(Point left, Point right)
         {
-            return left.backingVector != right.backingVector;
+            if (left.isSet && right.isSet)
+            {
+                return left.backingVector != right.backingVector;
+            }
+
+            return left.isSet != right.isSet;
         }
 
         /// <summary>
@@ -195,7 +208,7 @@ namespace Shaper2D
         {
             if (obj is Point)
             {
-                return this.backingVector == ((Point)obj).backingVector;
+                return this == (Point)obj;
             }
 
             return false;
@@ -210,7 +223,7 @@ namespace Shaper2D
         /// </returns>
         public bool Equals(Point other)
         {
-            return this.backingVector == other.backingVector;
+            return this == other;
         }
     }
 }

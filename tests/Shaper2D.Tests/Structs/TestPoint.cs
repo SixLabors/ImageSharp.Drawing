@@ -6,6 +6,8 @@ using Xunit.Abstractions;
 
 namespace Shaper2D.Tests
 {
+    using System.Numerics;
+
     public class TestPoint : IXunitSerializable
     {
         protected TestPoint() { }
@@ -36,6 +38,10 @@ namespace Shaper2D.Tests
             return $"({X}, {Y})";
         }
 
+        public static implicit operator Vector2(TestPoint p)
+        {
+            return new Vector2(p.X, p.Y);
+        }
         public static implicit operator Point(TestPoint p)
         {
             return new Point(p.X, p.Y);
