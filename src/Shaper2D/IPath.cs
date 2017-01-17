@@ -3,10 +3,8 @@
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
 
-
 namespace Shaper2D
 {
-    using System.Numerics;
     using System.Collections.Immutable;
 
     /// <summary>
