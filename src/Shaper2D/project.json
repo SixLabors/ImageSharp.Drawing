@@ -11,7 +11,7 @@
     ],
     "projectUrl": "https://github.com/tocsoft/Shaper2D",
     "licenseUrl": "http://www.apache.org/licenses/LICENSE-2.0",
-    "iconUrl": "https://raw.githubusercontent.com/tocsoft/Shaper2D/master/build/icons/shaper2d-logo-128.png",
+    "iconUrl": "https://raw.githubusercontent.com/tocsoft/Shaper2D/master/icons/icon.png",
     "requireLicenseAcceptance": false,
     "repository": {
       "type": "git",
