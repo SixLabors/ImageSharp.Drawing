@@ -276,7 +276,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        ImmutableArray<Point> ILineSegment.AsSimpleLinearPath()
+        ImmutableArray<Point> IPath.AsSimpleLinearPath()
         {
             return this.points;
         }

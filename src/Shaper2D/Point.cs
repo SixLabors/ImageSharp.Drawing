@@ -164,17 +164,6 @@ namespace Shaper2D
         }
 
         /// <summary>
-        /// Translates this <see cref="Point"/> by the specified amount.
-        /// </summary>
-        /// <param name="dx">The amount to offset the x-coordinate.</param>
-        /// <param name="dy">The amount to offset the y-coordinate.</param>
-        /// <returns>A new point offset by the size</returns>
-        public Point Offset(float dx, float dy)
-        {
-            return new Point(this.backingVector + new Vector2(dx, dy));
-        }
-
-        /// <summary>
         /// Translates this <see cref="Point" /> by the specified amount.
         /// </summary>
         /// <param name="p">The <see cref="Point" /> used offset this <see cref="Point" />.</param>

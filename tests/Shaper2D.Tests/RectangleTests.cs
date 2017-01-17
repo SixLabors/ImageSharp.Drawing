@@ -174,7 +174,7 @@ namespace Shaper2D.Tests
         [Fact]
         public void LienearSegements()
         {
-            ILineSegment shape = new Rectangle(10, 11, 12, 13);
+            IPath shape = new Rectangle(10, 11, 12, 13);
             var segemnts = shape.AsSimpleLinearPath();
             Assert.Equal(new Point(10, 11), segemnts[0]);
             Assert.Equal(new Point(22, 11), segemnts[1]);

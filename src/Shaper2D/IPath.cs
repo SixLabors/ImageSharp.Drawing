@@ -3,14 +3,16 @@
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
 
+
 namespace Shaper2D
 {
     using System.Numerics;
+    using System.Collections.Immutable;
 
     /// <summary>
     /// Represents a logic path that can be drawn
     /// </summary>
-    public interface IPath : ILineSegment
+    public interface IPath
     {
         /// <summary>
         /// Gets the bounds enclosing the path
@@ -44,5 +46,11 @@ namespace Shaper2D
         /// Returns details about the point and its distance away from the path.
         /// </returns>
         PointInfo Distance(Point point);
+
+        /// <summary>
+        /// Converts the <see cref="IPath" /> into a simple linear path..
+        /// </summary>
+        /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
+        ImmutableArray<Point> AsSimpleLinearPath();
     }
 }
