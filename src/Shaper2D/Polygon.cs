@@ -56,14 +56,6 @@ namespace Shaper2D
         public float Length => this.innerPath.Length;
 
         /// <summary>
-        /// Gets a value indicating whether this instance is closed.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if this instance is closed; otherwise, <c>false</c>.
-        /// </value>
-        public bool IsClosed => true;
-
-        /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
         /// </summary>
         /// <value>

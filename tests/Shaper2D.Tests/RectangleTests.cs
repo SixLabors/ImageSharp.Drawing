@@ -223,13 +223,6 @@ namespace Shaper2D.Tests
         }
 
         [Fact]
-        public void IsClosed_Path()
-        {
-            IPath shape = new Rectangle(10, 11, 12, 13);
-            Assert.Equal(true, shape.IsClosed);
-        }
-
-        [Fact]
         public void Length_Path()
         {
             IPath shape = new Rectangle(10, 11, 12, 13);

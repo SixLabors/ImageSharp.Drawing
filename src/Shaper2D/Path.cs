@@ -32,9 +32,6 @@ namespace Shaper2D
         public Rectangle Bounds => this.innerPath.Bounds;
 
         /// <inheritdoc />
-        public bool IsClosed => false;
-
-        /// <inheritdoc />
         public float Length => this.innerPath.Length;
 
         /// <inheritdoc />

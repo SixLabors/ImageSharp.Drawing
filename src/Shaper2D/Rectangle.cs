@@ -128,14 +128,6 @@ namespace Shaper2D
         IEnumerable<IPath> IShape.Paths => this.pathCollection;
 
         /// <summary>
-        /// Gets a value indicating whether this instance is closed.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if this instance is closed; otherwise, <c>false</c>.
-        /// </value>
-        bool IPath.IsClosed => true;
-
-        /// <summary>
         /// Gets the length of the path
         /// </summary>
         /// <value>

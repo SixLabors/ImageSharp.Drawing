@@ -21,14 +21,6 @@ namespace Shaper2D
         Rectangle Bounds { get; }
 
         /// <summary>
-        /// Gets a value indicating whether this instance is closed.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if this instance is closed; otherwise, <c>false</c>.
-        /// </value>
-        bool IsClosed { get; }
-
-        /// <summary>
         /// Gets the length of the path
         /// </summary>
         /// <value>
