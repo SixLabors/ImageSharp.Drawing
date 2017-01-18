@@ -41,12 +41,11 @@ namespace Shaper2D.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="polyType">Type of the poly.</param>
-        /// <returns></returns>
         public void AddPaths(IEnumerable<IShape> path, PolyType polyType)
         {
             foreach (var p in path)
             {
-                AddPath(p, polyType);
+                this.AddPath(p, polyType);
             }
         }
 
@@ -55,12 +54,11 @@ namespace Shaper2D.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="polyType">Type of the poly.</param>
-        /// <returns></returns>
         public void AddPaths(IEnumerable<IPath> path, PolyType polyType)
         {
             foreach (var p in path)
             {
-                AddPath(p, polyType);
+                this.AddPath(p, polyType);
             }
         }
 
@@ -69,7 +67,6 @@ namespace Shaper2D.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="polyType">Type of the poly.</param>
-        /// <returns></returns>
         public void AddPath(IShape path, PolyType polyType)
         {
             if (path is IPath)
@@ -297,48 +294,15 @@ namespace Shaper2D.PolygonClipper
             return true;
         }
 
-        private static List<IShape> ExtractOutlines(PolyNode tree)
-        {
-            var result = new List<IShape>();
-            ExtractOutlines(tree, result);
-            return result;
-
-        }
-
-        private static void ExtractOutlines(PolyNode tree, List<IShape> shapes)
-        {
-            if (tree.Contour.Any())
-            {
-                // if the source path is set then we clipper retained the full path intact thus we can freely
-                // use it and get any shape optimisations that are availible.
-                if (tree.SourcePath != null)
-                {
-                    shapes.Add((IShape)tree.SourcePath);
-                }
-                else
-                {
-                    Polygon polygon = new Polygon(new LinearLineSegment(tree.Contour.Select(x => new Point(x)).ToArray()));
-
-                    shapes.Add(polygon);
-                }
-            }
-
-            foreach (PolyNode c in tree.Children)
-            {
-                ExtractOutlines(c, shapes);
-            }
-        }
-
         /// <summary>
         /// Executes the specified clip type.
         /// </summary>
         /// <returns>
-        /// Returns the <see cref="IShape[]" /> containing the converted polygons.
+        /// Returns the <see cref="IShape" /> array containing the converted polygons.
         /// </returns>
         public IShape[] Execute()
         {
             PolyTree polytree = new PolyTree();
-            
             bool succeeded = this.ExecuteInternal();
 
             // build the return polygons ...
@@ -363,6 +327,37 @@ namespace Shaper2D.PolygonClipper
             }
 
             return edge.Bot.X + Round(edge.Dx * (currentY - edge.Bot.Y));
+        }
+
+        private static List<IShape> ExtractOutlines(PolyNode tree)
+        {
+            var result = new List<IShape>();
+            ExtractOutlines(tree, result);
+            return result;
+        }
+
+        private static void ExtractOutlines(PolyNode tree, List<IShape> shapes)
+        {
+            if (tree.Contour.Any())
+            {
+                // if the source path is set then we clipper retained the full path intact thus we can freely
+                // use it and get any shape optimisations that are availible.
+                if (tree.SourcePath != null)
+                {
+                    shapes.Add((IShape)tree.SourcePath);
+                }
+                else
+                {
+                    Polygon polygon = new Polygon(new LinearLineSegment(tree.Contour.Select(x => new Point(x)).ToArray()));
+
+                    shapes.Add(polygon);
+                }
+            }
+
+            foreach (PolyNode c in tree.Children)
+            {
+                ExtractOutlines(c, shapes);
+            }
         }
 
         private static double DistanceFromLineSqrd(Vector2 pt, Vector2 ln1, Vector2 ln2)
@@ -3084,9 +3079,7 @@ namespace Shaper2D.PolygonClipper
                         // outRec1 contains outRec2 ...
                         outRec2.IsHole = !outRec1.IsHole;
                         outRec2.FirstLeft = outRec1;
-
                         this.FixupFirstLefts2(outRec2, outRec1);
-
                     }
                     else if (Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts))
                     {
@@ -3095,19 +3088,14 @@ namespace Shaper2D.PolygonClipper
                         outRec1.IsHole = !outRec2.IsHole;
                         outRec2.FirstLeft = outRec1.FirstLeft;
                         outRec1.FirstLeft = outRec2;
-
-
                         this.FixupFirstLefts2(outRec1, outRec2);
-
                     }
                     else
                     {
                         // the 2 polygons are completely separate ...
                         outRec2.IsHole = outRec1.IsHole;
                         outRec2.FirstLeft = outRec1.FirstLeft;
-
                         this.FixupFirstLefts1(outRec1, outRec2);
-
                     }
                 }
                 else
@@ -3126,7 +3114,6 @@ namespace Shaper2D.PolygonClipper
                     outRec2.FirstLeft = outRec1;
 
                     this.FixupFirstLefts3(outRec2, outRec1);
-
                 }
             }
         }
@@ -3188,9 +3175,7 @@ namespace Shaper2D.PolygonClipper
                                 outrec.IsHole = !outrec2.IsHole;
                                 outrec2.FirstLeft = outrec.FirstLeft;
                                 outrec.FirstLeft = outrec2;
-
                                 this.FixupFirstLefts2(outrec, outrec2);
-
                             }
                             else
                             {
@@ -3198,7 +3183,6 @@ namespace Shaper2D.PolygonClipper
                                 outrec2.IsHole = outrec.IsHole;
                                 outrec2.FirstLeft = outrec.FirstLeft;
                                 this.FixupFirstLefts1(outrec, outrec2);
-
                             }
 
                             op2 = op; // ie get ready for the next iteration

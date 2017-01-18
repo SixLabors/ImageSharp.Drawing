@@ -1,4 +1,4 @@
-﻿// <copyright file="TEdge.cs" company="Scott Williams">
+﻿// <copyright file="Edge.cs" company="Scott Williams">
 // Copyright (c) Scott Williams and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
@@ -49,7 +49,7 @@ namespace Shaper2D.PolygonClipper
         /// <value>
         /// The top.
         /// </value>
-        internal System.Numerics.Vector2 Top { get; set; }
+        public System.Numerics.Vector2 Top { get; set; }
 
         /// <summary>
         /// Gets or sets the delta.
@@ -84,7 +84,6 @@ namespace Shaper2D.PolygonClipper
         /// <remarks>Side only refers to current side of solution poly</remarks>
         public EdgeSide Side { get; set; }
 
-
         /// <summary>
         /// Gets or sets the wind delta.
         /// </summary>
@@ -97,10 +96,16 @@ namespace Shaper2D.PolygonClipper
         public int WindindDelta { get; set; }
 
         /// <summary>
-        /// The winding count
+        /// Gets or sets the winding count
         /// </summary>
         public int WindingCount { get; set; }
 
+        /// <summary>
+        /// Gets or sets the type of the winding count in opposite poly.
+        /// </summary>
+        /// <value>
+        /// The type of the winding count in opposite poly.
+        /// </value>
         public int WindingCountInOppositePolyType { get; set; }
 
         /// <summary>
@@ -120,10 +125,9 @@ namespace Shaper2D.PolygonClipper
         public Edge NextEdge { get; set; }
 
         /// <summary>
-        /// The previous
+        /// Gets or sets the previous
         /// </summary>
         public Edge PreviousEdge { get; set; }
-
 
         /// <summary>
         /// Gets or sets the next in LML.
@@ -142,18 +146,21 @@ namespace Shaper2D.PolygonClipper
         public Edge NextInAEL { get; set; }
 
         /// <summary>
-        /// The previous in ael
+        /// Gets or sets the previous in ael
         /// </summary>
         public Edge PreviousInAEL { get; set; }
 
         /// <summary>
-        /// The next in sel
+        /// Gets or sets the next in sel
         /// </summary>
         public Edge NextInSEL { get; set; }
 
         /// <summary>
-        /// The previous in sel
+        /// Gets or sets the previous in sel.
         /// </summary>
+        /// <value>
+        /// The previous in sel.
+        /// </value>
         public Edge PreviousInSEL { get; set; }
     }
 }

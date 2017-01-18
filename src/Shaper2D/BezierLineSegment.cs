@@ -51,7 +51,6 @@ namespace Shaper2D
             : this(new[] { start, controlPoint1, controlPoint2, end }.Merge(additionalPoints))
         {
         }
-        
 
         /// <summary>
         /// Returns the current <see cref="ILineSegment" /> a simple linear path.
