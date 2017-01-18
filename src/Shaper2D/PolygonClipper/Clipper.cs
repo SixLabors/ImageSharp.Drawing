@@ -37,6 +37,55 @@ namespace Shaper2D.PolygonClipper
         private Edge activeEdges = null;
 
         /// <summary>
+        /// Adds the paths.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        /// <param name="polyType">Type of the poly.</param>
+        /// <returns></returns>
+        public void AddPaths(IEnumerable<IShape> path, PolyType polyType)
+        {
+            foreach (var p in path)
+            {
+                AddPath(p, polyType);
+            }
+        }
+
+        /// <summary>
+        /// Adds the paths.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        /// <param name="polyType">Type of the poly.</param>
+        /// <returns></returns>
+        public void AddPaths(IEnumerable<IPath> path, PolyType polyType)
+        {
+            foreach (var p in path)
+            {
+                AddPath(p, polyType);
+            }
+        }
+
+        /// <summary>
+        /// Adds the path.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        /// <param name="polyType">Type of the poly.</param>
+        /// <returns></returns>
+        public void AddPath(IShape path, PolyType polyType)
+        {
+            if (path is IPath)
+            {
+                this.AddPath((IPath)path, polyType);
+            }
+            else
+            {
+                foreach (var p in path.Paths)
+                {
+                    this.AddPath(p, polyType);
+                }
+            }
+        }
+
+        /// <summary>
         /// Adds the path.
         /// </summary>
         /// <param name="path">The path.</param>
@@ -248,13 +297,45 @@ namespace Shaper2D.PolygonClipper
             return true;
         }
 
+        private static List<IShape> ExtractOutlines(PolyNode tree)
+        {
+            var result = new List<IShape>();
+            ExtractOutlines(tree, result);
+            return result;
+
+        }
+
+        private static void ExtractOutlines(PolyNode tree, List<IShape> shapes)
+        {
+            if (tree.Contour.Any())
+            {
+                // if the source path is set then we clipper retained the full path intact thus we can freely
+                // use it and get any shape optimisations that are availible.
+                if (tree.SourcePath != null)
+                {
+                    shapes.Add((IShape)tree.SourcePath);
+                }
+                else
+                {
+                    Polygon polygon = new Polygon(new LinearLineSegment(tree.Contour.Select(x => new Point(x)).ToArray()));
+
+                    shapes.Add(polygon);
+                }
+            }
+
+            foreach (PolyNode c in tree.Children)
+            {
+                ExtractOutlines(c, shapes);
+            }
+        }
+
         /// <summary>
         /// Executes the specified clip type.
         /// </summary>
         /// <returns>
-        /// Returns the <see cref="PolyTree" /> containing the converted polygons.
+        /// Returns the <see cref="IShape[]" /> containing the converted polygons.
         /// </returns>
-        public PolyTree Execute()
+        public IShape[] Execute()
         {
             PolyTree polytree = new PolyTree();
             
@@ -266,7 +347,7 @@ namespace Shaper2D.PolygonClipper
                 this.BuildResult2(polytree);
             }
 
-            return polytree;
+            return ExtractOutlines(polytree).ToArray();
         }
 
         private static float Round(double value)

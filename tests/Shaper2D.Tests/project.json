@@ -13,7 +13,8 @@
       "version": "0.0.1-*"
     },
     "xunit": "2.2.0-*",
-    "dotnet-test-xunit": "2.2.0-*"
+    "dotnet-test-xunit": "2.2.0-*",
+    "System.Linq": "4.3.0"
   },
   "frameworks": {
     "netcoreapp1.1": {

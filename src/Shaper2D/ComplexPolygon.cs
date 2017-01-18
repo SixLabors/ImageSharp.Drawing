@@ -189,77 +189,16 @@ namespace Shaper2D
             }
         }
 
-        private void AddPoints(Clipper clipper, IShape shape, PolyType polyType)
-        {
-            // if the path is already the shape use it directly and skip the path loop.
-            if (shape is IPath)
-            {
-                clipper.AddPath(
-                      (IPath)shape,
-                      polyType);
-            }
-            else
-            {
-                foreach (IPath path in shape.Paths)
-                {
-                    clipper.AddPath(
-                        path,
-                        polyType);
-                }
-            }
-        }
-
-        private void AddPoints(Clipper clipper, IEnumerable<IShape> shapes, PolyType polyType)
-        {
-            foreach (IShape shape in shapes)
-            {
-                this.AddPoints(clipper, shape, polyType);
-            }
-        }
-
-        private void ExtractOutlines(PolyNode tree, List<IShape> shapes, List<IPath> paths)
-        {
-            if (tree.Contour.Any())
-            {
-                // if the source path is set then we clipper retained the full path intact thus we can freely
-                // use it and get any shape optimisations that are availible.
-                if (tree.SourcePath != null)
-                {
-                    shapes.Add((IShape)tree.SourcePath);
-                    paths.Add(tree.SourcePath);
-                }
-                else
-                {
-                    Polygon polygon = new Polygon(new LinearLineSegment(tree.Contour.Select(x => new Point(x)).ToArray()));
-
-                    shapes.Add(polygon);
-                    paths.Add(polygon);
-                }
-            }
-
-            foreach (PolyNode c in tree.Children)
-            {
-                this.ExtractOutlines(c, shapes, paths);
-            }
-        }
-
         private int FixAndSetShapes(IEnumerable<IShape> outlines, IEnumerable<IShape> holes)
         {
             Clipper clipper = new Clipper();
 
             // add the outlines and the holes to clipper, scaling up from the float source to the int based system clipper uses
-            this.AddPoints(clipper, outlines, PolyType.Subject);
-            this.AddPoints(clipper, holes, PolyType.Clip);
+            clipper.AddPaths(outlines, PolyType.Subject);
+            clipper.AddPaths(holes, PolyType.Clip);
 
-            PolyTree tree = clipper.Execute();
-
-            List<IShape> shapes = new List<IShape>();
-            List<IPath> paths = new List<IPath>();
-
-            // convert the 'tree' back to paths
-            this.ExtractOutlines(tree, shapes, paths);
-            this.shapes = shapes.ToArray();
-            this.paths = ImmutableArray.Create<IPath>(paths.ToArray());
+            this.shapes = clipper.Execute();
+            this.paths = ImmutableArray.Create(this.shapes.SelectMany(x => x.Paths).ToArray());
 
             int intersections = 0;
             foreach (IShape s in this.shapes)
