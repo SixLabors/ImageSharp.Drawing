@@ -19,60 +19,22 @@ namespace Shaper2D.PolygonClipper
         private const double HorizontalDeltaLimit = -3.4E+38;
         private const int Skip = -2;
         private const int Unassigned = -1; // InitOptions that can be passed to the constructor ...
+        private static readonly IComparer<IntersectNode> IntersectNodeComparer = new IntersectNodeSort();
+        private readonly List<IntersectNode> intersectList = new List<IntersectNode>();
 
-        private Maxima maxima;
-        private TEdge sortedEdges;
-        private List<IntersectNode> intersectList;
-        private IComparer<IntersectNode> intersectNodeComparer = new IntersectNodeSort();
-        private bool executeLocked;
+        private readonly List<Join> joins = new List<Join>();
 
-        private List<Join> joins;
-        private List<Join> ghostJoins;
-        private bool usingPolyTree;
-        private LocalMinima minimaList = null;
-        private LocalMinima currentLM = null;
-        private List<List<TEdge>> edges = new List<List<TEdge>>();
-        private Scanbeam scanbeam;
-        private List<OutRec> polyOuts;
-        private TEdge activeEdges;
+        private readonly List<Join> ghostJoins = new List<Join>();
+        private readonly List<List<Edge>> edges = new List<List<Edge>>();
+        private readonly List<OutRec> polyOuts = new List<OutRec>();
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Clipper"/> class.
-        /// </summary>
-        public Clipper()
-        {
-            this.scanbeam = null;
-            this.maxima = null;
-            this.activeEdges = null;
-            this.sortedEdges = null;
-            this.intersectList = new List<IntersectNode>();
-            this.executeLocked = false;
-            this.usingPolyTree = false;
-            this.polyOuts = new List<OutRec>();
-            this.joins = new List<Join>();
-            this.ghostJoins = new List<Join>();
-        }
+        private Maxima maxima = null;
+        private Edge sortedEdges = null;
 
-        /// <summary>
-        /// Node types
-        /// </summary>
-        private enum NodeType
-        {
-            /// <summary>
-            /// Any
-            /// </summary>
-            Any,
-
-            /// <summary>
-            /// The open
-            /// </summary>
-            Open,
-
-            /// <summary>
-            /// The closed
-            /// </summary>
-            Closed
-        }
+        private LocalMinima minimaList;
+        private LocalMinima currentLM;
+        private Scanbeam scanbeam = null;
+        private Edge activeEdges = null;
 
         /// <summary>
         /// Adds the path.
@@ -83,112 +45,114 @@ namespace Shaper2D.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         public bool AddPath(IPath path, PolyType polyType)
         {
-            var pg = path.AsSimpleLinearPath();
+            var points = path.AsSimpleLinearPath();
 
-            int highI = pg.Length - 1;
-            while (highI > 0 && (pg[highI] == pg[0]))
+            int hi = points.Length - 1;
+            while (hi > 0 && (points[hi] == points[0]))
             {
-                --highI;
+                --hi;
             }
 
-            while (highI > 0 && (pg[highI] == pg[highI - 1]))
+            while (hi > 0 && (points[hi] == points[hi - 1]))
             {
-                --highI;
+                --hi;
             }
 
-            if (highI < 2)
+            if (hi < 2)
             {
                 return false;
             }
 
             // create a new edge array ...
-            List<TEdge> edges = new List<TEdge>(highI + 1);
-            for (int i = 0; i <= highI; i++)
+            List<Edge> edges = new List<Edge>(hi + 1);
+            for (int i = 0; i <= hi; i++)
             {
-                edges.Add(new TEdge() { SourcePath = path });
+                edges.Add(new Edge() { SourcePath = path });
             }
 
             bool isFlat = true;
 
             // 1. Basic (first) edge initialization ...
-            edges[1].Curr = pg[1];
+            edges[1].Curr = points[1];
 
-            InitEdge(edges[0], edges[1], edges[highI], pg[0]);
-            InitEdge(edges[highI], edges[0], edges[highI - 1], pg[highI]);
-            for (int i = highI - 1; i >= 1; --i)
+            InitEdge(edges[0], edges[1], edges[hi], points[0]);
+            InitEdge(edges[hi], edges[0], edges[hi - 1], points[hi]);
+            for (int i = hi - 1; i >= 1; --i)
             {
-                InitEdge(edges[i], edges[i + 1], edges[i - 1], pg[i]);
+                InitEdge(edges[i], edges[i + 1], edges[i - 1], points[i]);
             }
 
-            TEdge eStart = edges[0];
+            Edge startEdge = edges[0];
 
             // 2. Remove duplicate vertices, and (when closed) collinear edges ...
-            TEdge edge = eStart, eLoopStop = eStart;
+            Edge edge = startEdge;
+            Edge loopStop = startEdge;
             while (true)
             {
                 // nb: allows matching start and end points when not Closed ...
-                if (edge.Curr == edge.Next.Curr)
+                if (edge.Curr == edge.NextEdge.Curr)
                 {
-                    if (edge == edge.Next)
+                    if (edge == edge.NextEdge)
                     {
                         break;
                     }
 
-                    if (edge == eStart)
+                    if (edge == startEdge)
                     {
-                        eStart = edge.Next;
+                        startEdge = edge.NextEdge;
                     }
 
                     edge = RemoveEdge(edge);
-                    eLoopStop = edge;
+                    loopStop = edge;
                     continue;
                 }
 
-                if (edge.Prev == edge.Next)
+                if (edge.PreviousEdge == edge.NextEdge)
                 {
                     break; // only two vertices
                 }
-                else if (SlopesEqual(edge.Prev.Curr, edge.Curr, edge.Next.Curr))
+
+                if (SlopesEqual(edge.PreviousEdge.Curr, edge.Curr, edge.NextEdge.Curr))
                 {
                     // Collinear edges are allowed for open paths but in closed paths
                     // the default is to merge adjacent collinear edges into a single edge.
                     // However, if the PreserveCollinear property is enabled, only overlapping
                     // collinear edges (ie spikes) will be removed from closed paths.
-                    if (edge == eStart)
+                    if (edge == startEdge)
                     {
-                        eStart = edge.Next;
+                        startEdge = edge.NextEdge;
                     }
 
                     edge = RemoveEdge(edge);
-                    edge = edge.Prev;
-                    eLoopStop = edge;
+                    edge = edge.PreviousEdge;
+                    loopStop = edge;
                     continue;
                 }
 
-                edge = edge.Next;
-                if (edge == eLoopStop)
+                edge = edge.NextEdge;
+                if (edge == loopStop)
                 {
                     break;
                 }
             }
 
-            if (edge.Prev == edge.Next)
+            if (edge.PreviousEdge == edge.NextEdge)
             {
                 return false;
             }
 
             // 3. Do second stage of edge initialization ...
-            edge = eStart;
+            edge = startEdge;
             do
             {
                 this.InitEdge2(edge, polyType);
-                edge = edge.Next;
-                if (isFlat && edge.Curr.Y != eStart.Curr.Y)
+                edge = edge.NextEdge;
+                if (isFlat && edge.Curr.Y != startEdge.Curr.Y)
                 {
                     isFlat = false;
                 }
             }
-            while (edge != eStart);
+            while (edge != startEdge);
 
             // 4. Finally, add edge bounds to LocalMinima list ...
             // Totally flat paths must be handled differently when adding them
@@ -199,26 +163,25 @@ namespace Shaper2D.PolygonClipper
             }
 
             this.edges.Add(edges);
-            bool leftBoundIsForward;
-            TEdge emIn = null;
+            Edge loopBreakerEdge = null;
 
             // workaround to avoid an endless loop in the while loop below when
             // open paths have matching start and end points ...
-            if (edge.Prev.Bot == edge.Prev.Top)
+            if (edge.PreviousEdge.Bot == edge.PreviousEdge.Top)
             {
-                edge = edge.Next;
+                edge = edge.NextEdge;
             }
 
             while (true)
             {
                 edge = FindNextLocMin(edge);
-                if (edge == emIn)
+                if (edge == loopBreakerEdge)
                 {
                     break;
                 }
-                else if (emIn == null)
+                else if (loopBreakerEdge == null)
                 {
-                    emIn = edge;
+                    loopBreakerEdge = edge;
                 }
 
                 // E and E.Prev now share a local minima (left aligned if horizontal).
@@ -226,50 +189,51 @@ namespace Shaper2D.PolygonClipper
                 LocalMinima locMin = new LocalMinima();
                 locMin.Next = null;
                 locMin.Y = edge.Bot.Y;
-                if (edge.Dx < edge.Prev.Dx)
+                bool leftBoundIsForward;
+                if (edge.Dx < edge.PreviousEdge.Dx)
                 {
-                    locMin.LeftBound = edge.Prev;
+                    locMin.LeftBound = edge.PreviousEdge;
                     locMin.RightBound = edge;
                     leftBoundIsForward = false; // Q.nextInLML = Q.prev
                 }
                 else
                 {
                     locMin.LeftBound = edge;
-                    locMin.RightBound = edge.Prev;
+                    locMin.RightBound = edge.PreviousEdge;
                     leftBoundIsForward = true; // Q.nextInLML = Q.next
                 }
 
                 locMin.LeftBound.Side = EdgeSide.Left;
                 locMin.RightBound.Side = EdgeSide.Right;
 
-                if (locMin.LeftBound.Next == locMin.RightBound)
+                if (locMin.LeftBound.NextEdge == locMin.RightBound)
                 {
-                    locMin.LeftBound.WindDelta = -1;
+                    locMin.LeftBound.WindindDelta = -1;
                 }
                 else
                 {
-                    locMin.LeftBound.WindDelta = 1;
+                    locMin.LeftBound.WindindDelta = 1;
                 }
 
-                locMin.RightBound.WindDelta = -locMin.LeftBound.WindDelta;
+                locMin.RightBound.WindindDelta = -locMin.LeftBound.WindindDelta;
 
                 edge = this.ProcessBound(locMin.LeftBound, leftBoundIsForward);
-                if (edge.OutIdx == Skip)
+                if (edge.OutIndex == Skip)
                 {
                     edge = this.ProcessBound(edge, leftBoundIsForward);
                 }
 
-                TEdge edge2 = this.ProcessBound(locMin.RightBound, !leftBoundIsForward);
-                if (edge2.OutIdx == Skip)
+                Edge edge2 = this.ProcessBound(locMin.RightBound, !leftBoundIsForward);
+                if (edge2.OutIndex == Skip)
                 {
                     edge2 = this.ProcessBound(edge2, !leftBoundIsForward);
                 }
 
-                if (locMin.LeftBound.OutIdx == Skip)
+                if (locMin.LeftBound.OutIndex == Skip)
                 {
                     locMin.LeftBound = null;
                 }
-                else if (locMin.RightBound.OutIdx == Skip)
+                else if (locMin.RightBound.OutIndex == Skip)
                 {
                     locMin.RightBound = null;
                 }
@@ -288,42 +252,21 @@ namespace Shaper2D.PolygonClipper
         /// Executes the specified clip type.
         /// </summary>
         /// <returns>
-        /// Returns the polytree containing the converted polygons.
+        /// Returns the <see cref="PolyTree" /> containing the converted polygons.
         /// </returns>
         public PolyTree Execute()
         {
             PolyTree polytree = new PolyTree();
+            
+            bool succeeded = this.ExecuteInternal();
 
-            if (this.executeLocked)
-            {
-                return null;
-            }
-
-            this.executeLocked = true;
-            this.usingPolyTree = true;
-            bool succeeded;
-            try
-            {
-                succeeded = this.ExecuteInternal();
-
-                // build the return polygons ...
-                if (succeeded)
-                {
-                    this.BuildResult2(polytree);
-                }
-            }
-            finally
-            {
-                this.DisposeAllPolyPts();
-                this.executeLocked = false;
-            }
-
+            // build the return polygons ...
             if (succeeded)
             {
-                return polytree;
+                this.BuildResult2(polytree);
             }
 
-            return null;
+            return polytree;
         }
 
         private static float Round(double value)
@@ -331,7 +274,7 @@ namespace Shaper2D.PolygonClipper
             return value < 0 ? (float)(value - 0.5) : (float)(value + 0.5);
         }
 
-        private static float TopX(TEdge edge, float currentY)
+        private static float TopX(Edge edge, float currentY)
         {
             if (currentY == edge.Top.Y)
             {
@@ -339,27 +282,6 @@ namespace Shaper2D.PolygonClipper
             }
 
             return edge.Bot.X + Round(edge.Dx * (currentY - edge.Bot.Y));
-        }
-
-        private static void AddPolyNodeToPaths(PolyNode polynode, NodeType nt, List<List<Vector2>> paths)
-        {
-            bool match = true;
-            switch (nt)
-            {
-                case NodeType.Open: return;
-                case NodeType.Closed: match = !polynode.IsOpen; break;
-                default: break;
-            }
-
-            if (polynode.Polygon.Count > 0 && match)
-            {
-                paths.Add(polynode.Polygon);
-            }
-
-            foreach (PolyNode pn in polynode.Children)
-            {
-                AddPolyNodeToPaths(pn, nt, paths);
-            }
         }
 
         private static double DistanceFromLineSqrd(Vector2 pt, Vector2 ln1, Vector2 ln2)
@@ -375,57 +297,6 @@ namespace Shaper2D.PolygonClipper
             double c = (a * ln1.X) + (b * ln1.Y);
             c = (a * pt.X) + (b * pt.Y) - c;
             return (c * c) / ((a * a) + (b * b));
-        }
-
-        private static bool SlopesNearCollinear(Vector2 pt1, Vector2 pt2, Vector2 pt3, double distSqrd)
-        {
-            // this function is more accurate when the point that's GEOMETRICALLY
-            // between the other 2 points is the one that's tested for distance.
-            // nb: with 'spikes', either pt1 or pt3 is geometrically between the other pts
-            if (Math.Abs(pt1.X - pt2.X) > Math.Abs(pt1.Y - pt2.Y))
-            {
-                if ((pt1.X > pt2.X) == (pt1.X < pt3.X))
-                {
-                    return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
-                }
-                else if ((pt2.X > pt1.X) == (pt2.X < pt3.X))
-                {
-                    return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
-                }
-                else
-                {
-                    return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
-                }
-            }
-            else
-            {
-                if ((pt1.Y > pt2.Y) == (pt1.Y < pt3.Y))
-                {
-                    return DistanceFromLineSqrd(pt1, pt2, pt3) < distSqrd;
-                }
-                else if ((pt2.Y > pt1.Y) == (pt2.Y < pt3.Y))
-                {
-                    return DistanceFromLineSqrd(pt2, pt1, pt3) < distSqrd;
-                }
-                else
-                {
-                    return DistanceFromLineSqrd(pt3, pt1, pt2) < distSqrd;
-                }
-            }
-        }
-
-        private static bool PointsAreClose(Vector2 pt1, Vector2 pt2, double distSqrd)
-        {
-            return Vector2.DistanceSquared(pt1, pt2) <= distSqrd;
-        }
-
-        private static OutPt ExcludeOp(OutPt op)
-        {
-            OutPt result = op.Prev;
-            result.Next = op.Next;
-            op.Next.Prev = result;
-            result.Idx = 0;
-            return result;
         }
 
         private static void FixHoleLinkage(OutRec outRec)
@@ -455,12 +326,15 @@ namespace Shaper2D.PolygonClipper
             // returns 0 if false, +1 if true, -1 if pt ON polygon boundary
             int result = 0;
             OutPt startOp = op;
-            float ptx = pt.X, pty = pt.Y;
-            float poly0x = op.Pt.X, poly0y = op.Pt.Y;
+            float ptx = pt.X;
+            float pty = pt.Y;
+            float poly0x = op.Pt.X;
+            float poly0y = op.Pt.Y;
             do
             {
                 op = op.Next;
-                float poly1x = op.Pt.X, poly1y = op.Pt.Y;
+                float poly1x = op.Pt.X;
+                float poly1y = op.Pt.Y;
 
                 if (poly1y == pty)
                 {
@@ -538,18 +412,18 @@ namespace Shaper2D.PolygonClipper
             return true;
         }
 
-        private static void SwapSides(TEdge edge1, TEdge edge2)
+        private static void SwapSides(Edge edge1, Edge edge2)
         {
             EdgeSide side = edge1.Side;
             edge1.Side = edge2.Side;
             edge2.Side = side;
         }
 
-        private static void SwapPolyIndexes(TEdge edge1, TEdge edge2)
+        private static void SwapPolyIndexes(Edge edge1, Edge edge2)
         {
-            int outIdx = edge1.OutIdx;
-            edge1.OutIdx = edge2.OutIdx;
-            edge2.OutIdx = outIdx;
+            int outIdx = edge1.OutIndex;
+            edge1.OutIndex = edge2.OutIndex;
+            edge2.OutIndex = outIdx;
         }
 
         private static double GetDx(Vector2 pt1, Vector2 pt2)
@@ -579,38 +453,38 @@ namespace Shaper2D.PolygonClipper
             return (seg1a < seg2b) && (seg2a < seg1b);
         }
 
-        private static TEdge FindNextLocMin(TEdge edge)
+        private static Edge FindNextLocMin(Edge edge)
         {
-            TEdge edge2;
+            Edge edge2;
             while (true)
             {
-                while (edge.Bot != edge.Prev.Bot || edge.Curr == edge.Top)
+                while (edge.Bot != edge.PreviousEdge.Bot || edge.Curr == edge.Top)
                 {
-                    edge = edge.Next;
+                    edge = edge.NextEdge;
                 }
 
-                if (edge.Dx != HorizontalDeltaLimit && edge.Prev.Dx != HorizontalDeltaLimit)
+                if (edge.Dx != HorizontalDeltaLimit && edge.PreviousEdge.Dx != HorizontalDeltaLimit)
                 {
                     break;
                 }
 
-                while (edge.Prev.Dx == HorizontalDeltaLimit)
+                while (edge.PreviousEdge.Dx == HorizontalDeltaLimit)
                 {
-                    edge = edge.Prev;
+                    edge = edge.PreviousEdge;
                 }
 
                 edge2 = edge;
                 while (edge.Dx == HorizontalDeltaLimit)
                 {
-                    edge = edge.Next;
+                    edge = edge.NextEdge;
                 }
 
-                if (edge.Top.Y == edge.Prev.Bot.Y)
+                if (edge.Top.Y == edge.PreviousEdge.Bot.Y)
                 {
                     continue; // ie just an intermediate horz.
                 }
 
-                if (edge2.Prev.Bot.X < edge.Bot.X)
+                if (edge2.PreviousEdge.Bot.X < edge.Bot.X)
                 {
                     edge = edge2;
                 }
@@ -630,16 +504,18 @@ namespace Shaper2D.PolygonClipper
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsHorizontal(TEdge e)
+        private static bool IsHorizontal(Edge e)
         {
             return e.Delta.Y == 0;
         }
 
-        private static bool SlopesEqual(TEdge e1, TEdge e2)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool SlopesEqual(Edge e1, Edge e2)
         {
             return e1.Delta.Y * e2.Delta.X == e1.Delta.X * e2.Delta.Y;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3)
         {
             var dif12 = pt1 - pt2;
@@ -647,6 +523,7 @@ namespace Shaper2D.PolygonClipper
             return (dif12.Y * dif23.X) - (dif12.X * dif23.Y) == 0;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3, Vector2 pt4)
         {
             var dif12 = pt1 - pt2;
@@ -655,12 +532,12 @@ namespace Shaper2D.PolygonClipper
             return (dif12.Y * dif34.X) - (dif12.X * dif34.Y) == 0;
         }
 
-        private static void InitEdge(TEdge e, TEdge eNext, TEdge ePrev, Vector2 pt)
+        private static void InitEdge(Edge e, Edge eNext, Edge ePrev, Vector2 pt)
         {
-            e.Next = eNext;
-            e.Prev = ePrev;
+            e.NextEdge = eNext;
+            e.PreviousEdge = ePrev;
             e.Curr = pt;
-            e.OutIdx = Unassigned;
+            e.OutIndex = Unassigned;
         }
 
         private static OutRec ParseFirstLeft(OutRec firstLeft)
@@ -689,64 +566,29 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private static TEdge RemoveEdge(TEdge e)
+        private static Edge RemoveEdge(Edge e)
         {
             // removes e from double_linked_list (but without removing from memory)
-            e.Prev.Next = e.Next;
-            e.Next.Prev = e.Prev;
-            TEdge result = e.Next;
-            e.Prev = null; // flag as removed (see ClipperBase.Clear)
+            e.PreviousEdge.NextEdge = e.NextEdge;
+            e.NextEdge.PreviousEdge = e.PreviousEdge;
+            Edge result = e.NextEdge;
+            e.PreviousEdge = null; // flag as removed (see ClipperBase.Clear)
             return result;
         }
 
-        private static void ReverseHorizontal(TEdge e)
+        private static void ReverseHorizontal(Edge e)
         {
             // swap horizontal edges' top and bottom x's so they follow the natural
             // progression of the bounds - ie so their xbots will align with the
             // adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
-            Swap(ref e.Top.X, ref e.Bot.X);
-        }
+            var t = e.Top;
+            var b = e.Bot;
+            Swap(ref t.X, ref b.X);
+            e.Top = t;
+            e.Bot = b;
 
-        private void InsertMaxima(float x)
-        {
-            // double-linked list: sorted ascending, ignoring dups.
-            Maxima newMax = new Maxima();
-            newMax.X = x;
-            if (this.maxima == null)
-            {
-                this.maxima = newMax;
-                this.maxima.Next = null;
-                this.maxima.Prev = null;
-            }
-            else if (x < this.maxima.X)
-            {
-                newMax.Next = this.maxima;
-                newMax.Prev = null;
-                this.maxima = newMax;
-            }
-            else
-            {
-                Maxima m = this.maxima;
-                while (m.Next != null && (x >= m.Next.X))
-                {
-                    m = m.Next;
-                }
-
-                if (x == m.X)
-                {
-                    return; // ie ignores duplicates (& CG to clean up newMax)
-                }
-
-                // insert newMax between m and m.Next ...
-                newMax.Next = m.Next;
-                newMax.Prev = m;
-                if (m.Next != null)
-                {
-                    m.Next.Prev = newMax;
-                }
-
-                m.Next = newMax;
-            }
+            // old code incase the above doesn't work
+            // Swap(ref e.Top.X, ref e.Bot.X);
         }
 
         private bool ExecuteInternal()
@@ -814,16 +656,6 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private void DisposeAllPolyPts()
-        {
-            for (int i = 0; i < this.polyOuts.Count; ++i)
-            {
-                this.DisposeOutRec(i);
-            }
-
-            this.polyOuts.Clear();
-        }
-
         private void AddJoin(OutPt op1, OutPt op2, Vector2 offPt)
         {
             Join j = new Join();
@@ -846,8 +678,8 @@ namespace Shaper2D.PolygonClipper
             LocalMinima lm;
             while (this.PopLocalMinima(botY, out lm))
             {
-                TEdge lb = lm.LeftBound;
-                TEdge rb = lm.RightBound;
+                Edge lb = lm.LeftBound;
+                Edge rb = lm.RightBound;
 
                 OutPt op1 = null;
                 if (lb == null)
@@ -875,8 +707,8 @@ namespace Shaper2D.PolygonClipper
                     this.InsertEdgeIntoAEL(lb, null);
                     this.InsertEdgeIntoAEL(rb, lb);
                     this.SetWindingCount(lb);
-                    rb.WindCnt = lb.WindCnt;
-                    rb.WindCnt2 = lb.WindCnt2;
+                    rb.WindingCount = lb.WindingCount;
+                    rb.WindingCountInOppositePolyType = lb.WindingCountInOppositePolyType;
                     if (this.IsContributing(lb))
                     {
                         op1 = this.AddLocalMinPoly(lb, rb, lb.Bot);
@@ -909,7 +741,7 @@ namespace Shaper2D.PolygonClipper
 
                 // if output polygons share an Edge with a horizontal rb, they'll need joining later ...
                 if (op1 != null && IsHorizontal(rb) &&
-                 this.ghostJoins.Count > 0 && rb.WindDelta != 0)
+                 this.ghostJoins.Count > 0 && rb.WindindDelta != 0)
                 {
                     for (int i = 0; i < this.ghostJoins.Count; i++)
                     {
@@ -923,27 +755,27 @@ namespace Shaper2D.PolygonClipper
                     }
                 }
 
-                if (lb.OutIdx >= 0 && lb.PrevInAEL != null &&
-                  lb.PrevInAEL.Curr.X == lb.Bot.X &&
-                  lb.PrevInAEL.OutIdx >= 0 &&
-                  SlopesEqual(lb.PrevInAEL.Curr, lb.PrevInAEL.Top, lb.Curr, lb.Top) &&
-                  lb.WindDelta != 0 && lb.PrevInAEL.WindDelta != 0)
+                if (lb.OutIndex >= 0 && lb.PreviousInAEL != null &&
+                  lb.PreviousInAEL.Curr.X == lb.Bot.X &&
+                  lb.PreviousInAEL.OutIndex >= 0 &&
+                  SlopesEqual(lb.PreviousInAEL.Curr, lb.PreviousInAEL.Top, lb.Curr, lb.Top) &&
+                  lb.WindindDelta != 0 && lb.PreviousInAEL.WindindDelta != 0)
                 {
-                    OutPt op2 = this.AddOutPt(lb.PrevInAEL, lb.Bot);
+                    OutPt op2 = this.AddOutPt(lb.PreviousInAEL, lb.Bot);
                     this.AddJoin(op1, op2, lb.Top);
                 }
 
                 if (lb.NextInAEL != rb)
                 {
-                    if (rb.OutIdx >= 0 && rb.PrevInAEL.OutIdx >= 0 &&
-                      SlopesEqual(rb.PrevInAEL.Curr, rb.PrevInAEL.Top, rb.Curr, rb.Top) &&
-                      rb.WindDelta != 0 && rb.PrevInAEL.WindDelta != 0)
+                    if (rb.OutIndex >= 0 && rb.PreviousInAEL.OutIndex >= 0 &&
+                      SlopesEqual(rb.PreviousInAEL.Curr, rb.PreviousInAEL.Top, rb.Curr, rb.Top) &&
+                      rb.WindindDelta != 0 && rb.PreviousInAEL.WindindDelta != 0)
                     {
-                        OutPt op2 = this.AddOutPt(rb.PrevInAEL, rb.Bot);
+                        OutPt op2 = this.AddOutPt(rb.PreviousInAEL, rb.Bot);
                         this.AddJoin(op1, op2, rb.Top);
                     }
 
-                    TEdge e = lb.NextInAEL;
+                    Edge e = lb.NextInAEL;
                     if (e != null)
                     {
                         while (e != rb)
@@ -958,19 +790,19 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private void InsertEdgeIntoAEL(TEdge edge, TEdge startEdge)
+        private void InsertEdgeIntoAEL(Edge edge, Edge startEdge)
         {
             if (this.activeEdges == null)
             {
-                edge.PrevInAEL = null;
+                edge.PreviousInAEL = null;
                 edge.NextInAEL = null;
                 this.activeEdges = edge;
             }
             else if (startEdge == null && this.E2InsertsBeforeE1(this.activeEdges, edge))
             {
-                edge.PrevInAEL = null;
+                edge.PreviousInAEL = null;
                 edge.NextInAEL = this.activeEdges;
-                this.activeEdges.PrevInAEL = edge;
+                this.activeEdges.PreviousInAEL = edge;
                 this.activeEdges = edge;
             }
             else
@@ -989,15 +821,15 @@ namespace Shaper2D.PolygonClipper
                 edge.NextInAEL = startEdge.NextInAEL;
                 if (startEdge.NextInAEL != null)
                 {
-                    startEdge.NextInAEL.PrevInAEL = edge;
+                    startEdge.NextInAEL.PreviousInAEL = edge;
                 }
 
-                edge.PrevInAEL = startEdge;
+                edge.PreviousInAEL = startEdge;
                 startEdge.NextInAEL = edge;
             }
         }
 
-        private bool E2InsertsBeforeE1(TEdge e1, TEdge e2)
+        private bool E2InsertsBeforeE1(Edge e1, Edge e2)
         {
             if (e2.Curr.X == e1.Curr.X)
             {
@@ -1016,80 +848,80 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private bool IsContributing(TEdge edge)
+        private bool IsContributing(Edge edge)
         {
             // return false if a subj line has been flagged as inside a subj polygon
-            if (edge.WindDelta == 0 && edge.WindCnt != 1)
+            if (edge.WindindDelta == 0 && edge.WindingCount != 1)
             {
                 return false;
             }
 
-            if (edge.PolyTyp == PolyType.Subject)
+            if (edge.PolyType == PolyType.Subject)
             {
-                return edge.WindCnt2 == 0;
+                return edge.WindingCountInOppositePolyType == 0;
             }
             else
             {
-                return edge.WindCnt2 != 0;
+                return edge.WindingCountInOppositePolyType != 0;
             }
         }
 
-        private void SetWindingCount(TEdge edge)
+        private void SetWindingCount(Edge edge)
         {
-            TEdge e = edge.PrevInAEL;
+            Edge e = edge.PreviousInAEL;
 
             // find the edge of the same polytype that immediately preceeds 'edge' in AEL
-            while (e != null && ((e.PolyTyp != edge.PolyTyp) || (e.WindDelta == 0)))
+            while (e != null && ((e.PolyType != edge.PolyType) || (e.WindindDelta == 0)))
             {
-                e = e.PrevInAEL;
+                e = e.PreviousInAEL;
             }
 
             if (e == null)
             {
-                if (edge.WindDelta == 0)
+                if (edge.WindindDelta == 0)
                 {
-                    edge.WindCnt = 1;
+                    edge.WindingCount = 1;
                 }
                 else
                 {
-                    edge.WindCnt = edge.WindDelta;
+                    edge.WindingCount = edge.WindindDelta;
                 }
 
-                edge.WindCnt2 = 0;
+                edge.WindingCountInOppositePolyType = 0;
                 e = this.activeEdges; // ie get ready to calc WindCnt2
             }
-            else if (edge.WindDelta == 0)
+            else if (edge.WindindDelta == 0)
             {
-                edge.WindCnt = 1;
-                edge.WindCnt2 = e.WindCnt2;
+                edge.WindingCount = 1;
+                edge.WindingCountInOppositePolyType = e.WindingCountInOppositePolyType;
                 e = e.NextInAEL; // ie get ready to calc WindCnt2
             }
             else
             {
                 // EvenOdd filling ...
-                if (edge.WindDelta == 0)
+                if (edge.WindindDelta == 0)
                 {
                     // are we inside a subj polygon ...
                     bool inside = true;
-                    TEdge e2 = e.PrevInAEL;
+                    Edge e2 = e.PreviousInAEL;
                     while (e2 != null)
                     {
-                        if (e2.PolyTyp == e.PolyTyp && e2.WindDelta != 0)
+                        if (e2.PolyType == e.PolyType && e2.WindindDelta != 0)
                         {
                             inside = !inside;
                         }
 
-                        e2 = e2.PrevInAEL;
+                        e2 = e2.PreviousInAEL;
                     }
 
-                    edge.WindCnt = inside ? 0 : 1;
+                    edge.WindingCount = inside ? 0 : 1;
                 }
                 else
                 {
-                    edge.WindCnt = edge.WindDelta;
+                    edge.WindingCount = edge.WindindDelta;
                 }
 
-                edge.WindCnt2 = e.WindCnt2;
+                edge.WindingCountInOppositePolyType = e.WindingCountInOppositePolyType;
                 e = e.NextInAEL; // ie get ready to calc WindCnt2
             }
 
@@ -1097,16 +929,16 @@ namespace Shaper2D.PolygonClipper
             // EvenOdd filling ...
             while (e != edge)
             {
-                if (e.WindDelta != 0)
+                if (e.WindindDelta != 0)
                 {
-                    edge.WindCnt2 = edge.WindCnt2 == 0 ? 1 : 0;
+                    edge.WindingCountInOppositePolyType = edge.WindingCountInOppositePolyType == 0 ? 1 : 0;
                 }
 
                 e = e.NextInAEL;
             }
         }
 
-        private void AddEdgeToSEL(TEdge edge)
+        private void AddEdgeToSEL(Edge edge)
         {
             // SEL pointers in PEdge are use to build transient lists of horizontal edges.
             // However, since we don't need to worry about processing order, all additions
@@ -1114,19 +946,19 @@ namespace Shaper2D.PolygonClipper
             if (this.sortedEdges == null)
             {
                 this.sortedEdges = edge;
-                edge.PrevInSEL = null;
+                edge.PreviousInSEL = null;
                 edge.NextInSEL = null;
             }
             else
             {
                 edge.NextInSEL = this.sortedEdges;
-                edge.PrevInSEL = null;
-                this.sortedEdges.PrevInSEL = edge;
+                edge.PreviousInSEL = null;
+                this.sortedEdges.PreviousInSEL = edge;
                 this.sortedEdges = edge;
             }
         }
 
-        private bool PopEdgeFromSEL(out TEdge e)
+        private bool PopEdgeFromSEL(out Edge e)
         {
             // Pop edge from front of SEL (ie SEL is a FILO list)
             e = this.sortedEdges;
@@ -1135,133 +967,133 @@ namespace Shaper2D.PolygonClipper
                 return false;
             }
 
-            TEdge oldE = e;
+            Edge oldE = e;
             this.sortedEdges = e.NextInSEL;
             if (this.sortedEdges != null)
             {
-                this.sortedEdges.PrevInSEL = null;
+                this.sortedEdges.PreviousInSEL = null;
             }
 
             oldE.NextInSEL = null;
-            oldE.PrevInSEL = null;
+            oldE.PreviousInSEL = null;
             return true;
         }
 
         private void CopyAELToSEL()
         {
-            TEdge e = this.activeEdges;
+            Edge e = this.activeEdges;
             this.sortedEdges = e;
             while (e != null)
             {
-                e.PrevInSEL = e.PrevInAEL;
+                e.PreviousInSEL = e.PreviousInAEL;
                 e.NextInSEL = e.NextInAEL;
                 e = e.NextInAEL;
             }
         }
 
-        private void SwapPositionsInSEL(TEdge edge1, TEdge edge2)
+        private void SwapPositionsInSEL(Edge edge1, Edge edge2)
         {
-            if (edge1.NextInSEL == null && edge1.PrevInSEL == null)
+            if (edge1.NextInSEL == null && edge1.PreviousInSEL == null)
             {
                 return;
             }
 
-            if (edge2.NextInSEL == null && edge2.PrevInSEL == null)
+            if (edge2.NextInSEL == null && edge2.PreviousInSEL == null)
             {
                 return;
             }
 
             if (edge1.NextInSEL == edge2)
             {
-                TEdge next = edge2.NextInSEL;
+                Edge next = edge2.NextInSEL;
                 if (next != null)
                 {
-                    next.PrevInSEL = edge1;
+                    next.PreviousInSEL = edge1;
                 }
 
-                TEdge prev = edge1.PrevInSEL;
+                Edge prev = edge1.PreviousInSEL;
                 if (prev != null)
                 {
                     prev.NextInSEL = edge2;
                 }
 
-                edge2.PrevInSEL = prev;
+                edge2.PreviousInSEL = prev;
                 edge2.NextInSEL = edge1;
-                edge1.PrevInSEL = edge2;
+                edge1.PreviousInSEL = edge2;
                 edge1.NextInSEL = next;
             }
             else if (edge2.NextInSEL == edge1)
             {
-                TEdge next = edge1.NextInSEL;
+                Edge next = edge1.NextInSEL;
                 if (next != null)
                 {
-                    next.PrevInSEL = edge2;
+                    next.PreviousInSEL = edge2;
                 }
 
-                TEdge prev = edge2.PrevInSEL;
+                Edge prev = edge2.PreviousInSEL;
                 if (prev != null)
                 {
                     prev.NextInSEL = edge1;
                 }
 
-                edge1.PrevInSEL = prev;
+                edge1.PreviousInSEL = prev;
                 edge1.NextInSEL = edge2;
-                edge2.PrevInSEL = edge1;
+                edge2.PreviousInSEL = edge1;
                 edge2.NextInSEL = next;
             }
             else
             {
-                TEdge next = edge1.NextInSEL;
-                TEdge prev = edge1.PrevInSEL;
+                Edge next = edge1.NextInSEL;
+                Edge prev = edge1.PreviousInSEL;
                 edge1.NextInSEL = edge2.NextInSEL;
                 if (edge1.NextInSEL != null)
                 {
-                    edge1.NextInSEL.PrevInSEL = edge1;
+                    edge1.NextInSEL.PreviousInSEL = edge1;
                 }
 
-                edge1.PrevInSEL = edge2.PrevInSEL;
-                if (edge1.PrevInSEL != null)
+                edge1.PreviousInSEL = edge2.PreviousInSEL;
+                if (edge1.PreviousInSEL != null)
                 {
-                    edge1.PrevInSEL.NextInSEL = edge1;
+                    edge1.PreviousInSEL.NextInSEL = edge1;
                 }
 
                 edge2.NextInSEL = next;
                 if (edge2.NextInSEL != null)
                 {
-                    edge2.NextInSEL.PrevInSEL = edge2;
+                    edge2.NextInSEL.PreviousInSEL = edge2;
                 }
 
-                edge2.PrevInSEL = prev;
-                if (edge2.PrevInSEL != null)
+                edge2.PreviousInSEL = prev;
+                if (edge2.PreviousInSEL != null)
                 {
-                    edge2.PrevInSEL.NextInSEL = edge2;
+                    edge2.PreviousInSEL.NextInSEL = edge2;
                 }
             }
 
-            if (edge1.PrevInSEL == null)
+            if (edge1.PreviousInSEL == null)
             {
                 this.sortedEdges = edge1;
             }
-            else if (edge2.PrevInSEL == null)
+            else if (edge2.PreviousInSEL == null)
             {
                 this.sortedEdges = edge2;
             }
         }
 
-        private void AddLocalMaxPoly(TEdge e1, TEdge e2, Vector2 pt)
+        private void AddLocalMaxPoly(Edge e1, Edge e2, Vector2 pt)
         {
             this.AddOutPt(e1, pt);
-            if (e2.WindDelta == 0)
+            if (e2.WindindDelta == 0)
             {
                 this.AddOutPt(e2, pt);
             }
 
-            if (e1.OutIdx == e2.OutIdx)
+            if (e1.OutIndex == e2.OutIndex)
             {
-                e1.OutIdx = Unassigned;
-                e2.OutIdx = Unassigned;
+                e1.OutIndex = Unassigned;
+                e2.OutIndex = Unassigned;
             }
-            else if (e1.OutIdx < e2.OutIdx)
+            else if (e1.OutIndex < e2.OutIndex)
             {
                 this.AppendPolygon(e1, e2);
             }
@@ -1271,50 +1103,50 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private OutPt AddLocalMinPoly(TEdge e1, TEdge e2, Vector2 pt)
+        private OutPt AddLocalMinPoly(Edge e1, Edge e2, Vector2 pt)
         {
             OutPt result;
-            TEdge e, prevE;
+            Edge e, prevE;
             if (IsHorizontal(e2) || (e1.Dx > e2.Dx))
             {
                 result = this.AddOutPt(e1, pt);
-                e2.OutIdx = e1.OutIdx;
+                e2.OutIndex = e1.OutIndex;
                 e1.Side = EdgeSide.Left;
                 e2.Side = EdgeSide.Right;
                 e = e1;
-                if (e.PrevInAEL == e2)
+                if (e.PreviousInAEL == e2)
                 {
-                    prevE = e2.PrevInAEL;
+                    prevE = e2.PreviousInAEL;
                 }
                 else
                 {
-                    prevE = e.PrevInAEL;
+                    prevE = e.PreviousInAEL;
                 }
             }
             else
             {
                 result = this.AddOutPt(e2, pt);
-                e1.OutIdx = e2.OutIdx;
+                e1.OutIndex = e2.OutIndex;
                 e1.Side = EdgeSide.Right;
                 e2.Side = EdgeSide.Left;
                 e = e2;
-                if (e.PrevInAEL == e1)
+                if (e.PreviousInAEL == e1)
                 {
-                    prevE = e1.PrevInAEL;
+                    prevE = e1.PreviousInAEL;
                 }
                 else
                 {
-                    prevE = e.PrevInAEL;
+                    prevE = e.PreviousInAEL;
                 }
             }
 
-            if (prevE != null && prevE.OutIdx >= 0)
+            if (prevE != null && prevE.OutIndex >= 0)
             {
                 float xPrev = TopX(prevE, pt.Y);
                 float xE = TopX(e, pt.Y);
                 if ((xPrev == xE) &&
-                    (e.WindDelta != 0) &&
-                    (prevE.WindDelta != 0) &&
+                    (e.WindindDelta != 0) &&
+                    (prevE.WindindDelta != 0) &&
                     SlopesEqual(new Vector2(xPrev, pt.Y), prevE.Top, new Vector2(xE, pt.Y), e.Top))
                 {
                     OutPt outPt = this.AddOutPt(prevE, pt);
@@ -1325,13 +1157,13 @@ namespace Shaper2D.PolygonClipper
             return result;
         }
 
-        private OutPt AddOutPt(TEdge e, Vector2 pt)
+        private OutPt AddOutPt(Edge e, Vector2 pt)
         {
-            if (e.OutIdx < 0)
+            if (e.OutIndex < 0)
             {
                 OutRec outRec = this.CreateOutRec();
                 outRec.SourcePath = e.SourcePath; // copy source from edge to outrec
-                outRec.IsOpen = e.WindDelta == 0;
+                outRec.IsOpen = e.WindindDelta == 0;
                 OutPt newOp = new OutPt();
                 outRec.Pts = newOp;
                 newOp.Idx = outRec.Idx;
@@ -1343,12 +1175,12 @@ namespace Shaper2D.PolygonClipper
                     this.SetHoleState(e, outRec);
                 }
 
-                e.OutIdx = outRec.Idx; // nb: do this after SetZ !
+                e.OutIndex = outRec.Idx; // nb: do this after SetZ !
                 return newOp;
             }
             else
             {
-                OutRec outRec = this.polyOuts[e.OutIdx];
+                OutRec outRec = this.polyOuts[e.OutIndex];
 
                 if (outRec.SourcePath != e.SourcePath)
                 {
@@ -1385,9 +1217,9 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private OutPt GetLastOutPt(TEdge e)
+        private OutPt GetLastOutPt(Edge e)
         {
-            OutRec outRec = this.polyOuts[e.OutIdx];
+            OutRec outRec = this.polyOuts[e.OutIndex];
             if (e.Side == EdgeSide.Left)
             {
                 return outRec.Pts;
@@ -1398,25 +1230,25 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private void SetHoleState(TEdge e, OutRec outRec)
+        private void SetHoleState(Edge e, OutRec outRec)
         {
-            TEdge e2 = e.PrevInAEL;
-            TEdge eTmp = null;
+            Edge e2 = e.PreviousInAEL;
+            Edge eTmp = null;
             while (e2 != null)
             {
-                if (e2.OutIdx >= 0 && e2.WindDelta != 0)
+                if (e2.OutIndex >= 0 && e2.WindindDelta != 0)
                 {
                     if (eTmp == null)
                     {
                         eTmp = e2;
                     }
-                    else if (eTmp.OutIdx == e2.OutIdx)
+                    else if (eTmp.OutIndex == e2.OutIndex)
                     {
                         eTmp = null; // paired
                     }
                 }
 
-                e2 = e2.PrevInAEL;
+                e2 = e2.PreviousInAEL;
             }
 
             if (eTmp == null)
@@ -1426,7 +1258,7 @@ namespace Shaper2D.PolygonClipper
             }
             else
             {
-                outRec.FirstLeft = this.polyOuts[eTmp.OutIdx];
+                outRec.FirstLeft = this.polyOuts[eTmp.OutIndex];
                 outRec.IsHole = !outRec.FirstLeft.IsHole;
             }
         }
@@ -1600,10 +1432,10 @@ namespace Shaper2D.PolygonClipper
             return outrec;
         }
 
-        private void AppendPolygon(TEdge e1, TEdge e2)
+        private void AppendPolygon(Edge e1, Edge e2)
         {
-            OutRec outRec1 = this.polyOuts[e1.OutIdx];
-            OutRec outRec2 = this.polyOuts[e2.OutIdx];
+            OutRec outRec1 = this.polyOuts[e1.OutIndex];
+            OutRec outRec2 = this.polyOuts[e2.OutIndex];
 
             OutRec holeStateRec;
             if (this.OutRec1RightOfOutRec2(outRec1, outRec2))
@@ -1686,18 +1518,18 @@ namespace Shaper2D.PolygonClipper
 
             outRec2.FirstLeft = outRec1;
 
-            int okIdx = e1.OutIdx;
-            int obsoleteIdx = e2.OutIdx;
+            int okIdx = e1.OutIndex;
+            int obsoleteIdx = e2.OutIndex;
 
-            e1.OutIdx = Unassigned; // nb: safe because we only get here via AddLocalMaxPoly
-            e2.OutIdx = Unassigned;
+            e1.OutIndex = Unassigned; // nb: safe because we only get here via AddLocalMaxPoly
+            e2.OutIndex = Unassigned;
 
-            TEdge e = this.activeEdges;
+            Edge e = this.activeEdges;
             while (e != null)
             {
-                if (e.OutIdx == obsoleteIdx)
+                if (e.OutIndex == obsoleteIdx)
                 {
-                    e.OutIdx = okIdx;
+                    e.OutIndex = okIdx;
                     e.Side = e1.Side;
                     break;
                 }
@@ -1728,35 +1560,35 @@ namespace Shaper2D.PolygonClipper
             while (pp1 != pp);
         }
 
-        private void IntersectEdges(TEdge e1, TEdge e2, Vector2 pt)
+        private void IntersectEdges(Edge e1, Edge e2, Vector2 pt)
         {
             // e1 will be to the left of e2 BELOW the intersection. Therefore e1 is before
             // e2 in AEL except when e1 is being inserted at the intersection point ...
-            bool e1Contributing = e1.OutIdx >= 0;
-            bool e2Contributing = e2.OutIdx >= 0;
+            bool e1Contributing = e1.OutIndex >= 0;
+            bool e2Contributing = e2.OutIndex >= 0;
 
             // update winding counts...
             // assumes that e1 will be to the Right of e2 ABOVE the intersection
-            if (e1.PolyTyp == e2.PolyTyp)
+            if (e1.PolyType == e2.PolyType)
             {
-                int oldE1WindCnt = e1.WindCnt;
-                e1.WindCnt = e2.WindCnt;
-                e2.WindCnt = oldE1WindCnt;
+                int oldE1WindCnt = e1.WindingCount;
+                e1.WindingCount = e2.WindingCount;
+                e2.WindingCount = oldE1WindCnt;
             }
             else
             {
-                e1.WindCnt2 = (e1.WindCnt2 == 0) ? 1 : 0;
-                e2.WindCnt2 = (e2.WindCnt2 == 0) ? 1 : 0;
+                e1.WindingCountInOppositePolyType = (e1.WindingCountInOppositePolyType == 0) ? 1 : 0;
+                e2.WindingCountInOppositePolyType = (e2.WindingCountInOppositePolyType == 0) ? 1 : 0;
             }
 
             int e1Wc, e2Wc;
-            e1Wc = Math.Abs(e1.WindCnt);
-            e2Wc = Math.Abs(e2.WindCnt);
+            e1Wc = Math.Abs(e1.WindingCount);
+            e2Wc = Math.Abs(e2.WindingCount);
 
             if (e1Contributing && e2Contributing)
             {
                 if ((e1Wc != 0 && e1Wc != 1) || (e2Wc != 0 && e2Wc != 1) ||
-                  (e1.PolyTyp != e2.PolyTyp))
+                  (e1.PolyType != e2.PolyType))
                 {
                     this.AddLocalMaxPoly(e1, e2, pt);
                 }
@@ -1791,17 +1623,17 @@ namespace Shaper2D.PolygonClipper
                 // neither edge is currently contributing ...
                 float e1Wc2, e2Wc2;
 
-                e1Wc2 = Math.Abs(e1.WindCnt2);
-                e2Wc2 = Math.Abs(e2.WindCnt2);
+                e1Wc2 = Math.Abs(e1.WindingCountInOppositePolyType);
+                e2Wc2 = Math.Abs(e2.WindingCountInOppositePolyType);
 
-                if (e1.PolyTyp != e2.PolyTyp)
+                if (e1.PolyType != e2.PolyType)
                 {
                     this.AddLocalMinPoly(e1, e2, pt);
                 }
                 else if (e1Wc == 1 && e2Wc == 1)
                 {
-                    if (((e1.PolyTyp == PolyType.Clip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
-                        ((e1.PolyTyp == PolyType.Subject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
+                    if (((e1.PolyType == PolyType.Clip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
+                        ((e1.PolyType == PolyType.Subject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
                     {
                         this.AddLocalMinPoly(e1, e2, pt);
                     }
@@ -1815,14 +1647,14 @@ namespace Shaper2D.PolygonClipper
 
         private void ProcessHorizontals()
         {
-            TEdge horzEdge; // m_SortedEdges;
+            Edge horzEdge; // m_SortedEdges;
             while (this.PopEdgeFromSEL(out horzEdge))
             {
                 this.ProcessHorizontal(horzEdge);
             }
         }
 
-        private void GetHorzDirection(TEdge horzEdge, out Direction dir, out float left, out float right)
+        private void GetHorzDirection(Edge horzEdge, out Direction dir, out float left, out float right)
         {
             if (horzEdge.Bot.X < horzEdge.Top.X)
             {
@@ -1838,15 +1670,15 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private void ProcessHorizontal(TEdge horzEdge)
+        private void ProcessHorizontal(Edge horzEdge)
         {
             Direction dir;
             float horzLeft, horzRight;
-            bool isOpen = horzEdge.WindDelta == 0;
+            bool isOpen = horzEdge.WindindDelta == 0;
 
             this.GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
 
-            TEdge eLastHorz = horzEdge, eMaxPair = null;
+            Edge eLastHorz = horzEdge, eMaxPair = null;
             while (eLastHorz.NextInLML != null && IsHorizontal(eLastHorz.NextInLML))
             {
                 eLastHorz = eLastHorz.NextInLML;
@@ -1893,7 +1725,7 @@ namespace Shaper2D.PolygonClipper
             while (true)
             {
                 bool isLastHorz = horzEdge == eLastHorz;
-                TEdge e = this.GetNextInAEL(horzEdge, dir);
+                Edge e = this.GetNextInAEL(horzEdge, dir);
                 while (e != null)
                 {
                     // this code block inserts extra coords into horizontal edges (in output
@@ -1905,7 +1737,7 @@ namespace Shaper2D.PolygonClipper
                         {
                             while (currMax != null && currMax.X < e.Curr.X)
                             {
-                                if (horzEdge.OutIdx >= 0 && !isOpen)
+                                if (horzEdge.OutIndex >= 0 && !isOpen)
                                 {
                                     this.AddOutPt(horzEdge, new Vector2(currMax.X, horzEdge.Bot.Y));
                                 }
@@ -1917,7 +1749,7 @@ namespace Shaper2D.PolygonClipper
                         {
                             while (currMax != null && currMax.X > e.Curr.X)
                             {
-                                if (horzEdge.OutIdx >= 0 && !isOpen)
+                                if (horzEdge.OutIndex >= 0 && !isOpen)
                                 {
                                     this.AddOutPt(horzEdge, new Vector2(currMax.X, horzEdge.Bot.Y));
                                 }
@@ -1942,13 +1774,13 @@ namespace Shaper2D.PolygonClipper
                     }
 
                     // note: may be done multiple times
-                    if (horzEdge.OutIdx >= 0 && !isOpen)
+                    if (horzEdge.OutIndex >= 0 && !isOpen)
                     {
                         op1 = this.AddOutPt(horzEdge, e.Curr);
-                        TEdge eNextHorz = this.sortedEdges;
+                        Edge eNextHorz = this.sortedEdges;
                         while (eNextHorz != null)
                         {
-                            if (eNextHorz.OutIdx >= 0 &&
+                            if (eNextHorz.OutIndex >= 0 &&
                               HorzSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
                             {
                                 OutPt op2 = this.GetLastOutPt(eNextHorz);
@@ -1965,7 +1797,7 @@ namespace Shaper2D.PolygonClipper
                     // we're at the last of consec. horizontals when matching with eMaxPair
                     if (e == eMaxPair && isLastHorz)
                     {
-                        if (horzEdge.OutIdx >= 0)
+                        if (horzEdge.OutIndex >= 0)
                         {
                             this.AddLocalMaxPoly(horzEdge, eMaxPair, horzEdge.Top);
                         }
@@ -1986,7 +1818,7 @@ namespace Shaper2D.PolygonClipper
                         this.IntersectEdges(e, horzEdge, pt);
                     }
 
-                    TEdge eNext = this.GetNextInAEL(e, dir);
+                    Edge eNext = this.GetNextInAEL(e, dir);
                     this.SwapPositionsInAEL(horzEdge, e);
                     e = eNext;
                 } // end while(e != null)
@@ -1998,7 +1830,7 @@ namespace Shaper2D.PolygonClipper
                 }
 
                 this.UpdateEdgeIntoAEL(ref horzEdge);
-                if (horzEdge.OutIdx >= 0)
+                if (horzEdge.OutIndex >= 0)
                 {
                     this.AddOutPt(horzEdge, horzEdge.Bot);
                 }
@@ -2006,13 +1838,13 @@ namespace Shaper2D.PolygonClipper
                 this.GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
             }
 
-            if (horzEdge.OutIdx >= 0 && op1 == null)
+            if (horzEdge.OutIndex >= 0 && op1 == null)
             {
                 op1 = this.GetLastOutPt(horzEdge);
-                TEdge eNextHorz = this.sortedEdges;
+                Edge eNextHorz = this.sortedEdges;
                 while (eNextHorz != null)
                 {
-                    if (eNextHorz.OutIdx >= 0 &&
+                    if (eNextHorz.OutIndex >= 0 &&
                       HorzSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
                     {
                         OutPt op2 = this.GetLastOutPt(eNextHorz);
@@ -2027,30 +1859,30 @@ namespace Shaper2D.PolygonClipper
 
             if (horzEdge.NextInLML != null)
             {
-                if (horzEdge.OutIdx >= 0)
+                if (horzEdge.OutIndex >= 0)
                 {
                     op1 = this.AddOutPt(horzEdge, horzEdge.Top);
 
                     this.UpdateEdgeIntoAEL(ref horzEdge);
-                    if (horzEdge.WindDelta == 0)
+                    if (horzEdge.WindindDelta == 0)
                     {
                         return;
                     }
 
                     // nb: HorzEdge is no longer horizontal here
-                    TEdge ePrev = horzEdge.PrevInAEL;
-                    TEdge eNext = horzEdge.NextInAEL;
+                    Edge ePrev = horzEdge.PreviousInAEL;
+                    Edge eNext = horzEdge.NextInAEL;
                     if (ePrev != null && ePrev.Curr.X == horzEdge.Bot.X &&
-                      ePrev.Curr.Y == horzEdge.Bot.Y && ePrev.WindDelta != 0 &&
-                      (ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
+                      ePrev.Curr.Y == horzEdge.Bot.Y && ePrev.WindindDelta != 0 &&
+                      (ePrev.OutIndex >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
                       SlopesEqual(horzEdge, ePrev)))
                     {
                         OutPt op2 = this.AddOutPt(ePrev, horzEdge.Bot);
                         this.AddJoin(op1, op2, horzEdge.Top);
                     }
                     else if (eNext != null && eNext.Curr.X == horzEdge.Bot.X &&
-                      eNext.Curr.Y == horzEdge.Bot.Y && eNext.WindDelta != 0 &&
-                      eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
+                      eNext.Curr.Y == horzEdge.Bot.Y && eNext.WindindDelta != 0 &&
+                      eNext.OutIndex >= 0 && eNext.Curr.Y > eNext.Top.Y &&
                       SlopesEqual(horzEdge, eNext))
                     {
                         OutPt op2 = this.AddOutPt(eNext, horzEdge.Bot);
@@ -2064,7 +1896,7 @@ namespace Shaper2D.PolygonClipper
             }
             else
             {
-                if (horzEdge.OutIdx >= 0)
+                if (horzEdge.OutIndex >= 0)
                 {
                     this.AddOutPt(horzEdge, horzEdge.Top);
                 }
@@ -2073,30 +1905,30 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private TEdge GetNextInAEL(TEdge e, Direction direction)
+        private Edge GetNextInAEL(Edge e, Direction direction)
         {
-            return direction == Direction.LeftToRight ? e.NextInAEL : e.PrevInAEL;
+            return direction == Direction.LeftToRight ? e.NextInAEL : e.PreviousInAEL;
         }
 
-        private bool IsMaxima(TEdge e, double y)
+        private bool IsMaxima(Edge e, double y)
         {
             return e != null && e.Top.Y == y && e.NextInLML == null;
         }
 
-        private bool IsIntermediate(TEdge e, double y)
+        private bool IsIntermediate(Edge e, double y)
         {
             return e.Top.Y == y && e.NextInLML != null;
         }
 
-        private TEdge GetMaximaPair(TEdge e)
+        private Edge GetMaximaPair(Edge e)
         {
-            if ((e.Next.Top == e.Top) && e.Next.NextInLML == null)
+            if ((e.NextEdge.Top == e.Top) && e.NextEdge.NextInLML == null)
             {
-                return e.Next;
+                return e.NextEdge;
             }
-            else if ((e.Prev.Top == e.Top) && e.Prev.NextInLML == null)
+            else if ((e.PreviousEdge.Top == e.Top) && e.PreviousEdge.NextInLML == null)
             {
-                return e.Prev;
+                return e.PreviousEdge;
             }
             else
             {
@@ -2104,12 +1936,12 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private TEdge GetMaximaPairEx(TEdge e)
+        private Edge GetMaximaPairEx(Edge e)
         {
             // as above but returns null if MaxPair isn't in AEL (unless it's horizontal)
-            TEdge result = this.GetMaximaPair(e);
-            if (result == null || result.OutIdx == Skip ||
-              ((result.NextInAEL == result.PrevInAEL) && !IsHorizontal(result)))
+            Edge result = this.GetMaximaPair(e);
+            if (result == null || result.OutIndex == Skip ||
+              ((result.NextInAEL == result.PreviousInAEL) && !IsHorizontal(result)))
             {
                 return null;
             }
@@ -2160,13 +1992,13 @@ namespace Shaper2D.PolygonClipper
             }
 
             // prepare for sorting ...
-            TEdge e = this.activeEdges;
+            Edge e = this.activeEdges;
             this.sortedEdges = e;
             while (e != null)
             {
-                e.PrevInSEL = e.PrevInAEL;
+                e.PreviousInSEL = e.PreviousInAEL;
                 e.NextInSEL = e.NextInAEL;
-                e.Curr.X = TopX(e, topY);
+                e.Curr = new Vector2(TopX(e, topY), e.Curr.Y);
                 e = e.NextInAEL;
             }
 
@@ -2178,7 +2010,7 @@ namespace Shaper2D.PolygonClipper
                 e = this.sortedEdges;
                 while (e.NextInSEL != null)
                 {
-                    TEdge eNext = e.NextInSEL;
+                    Edge eNext = e.NextInSEL;
                     Vector2 pt;
                     if (e.Curr.X > eNext.Curr.X)
                     {
@@ -2203,9 +2035,9 @@ namespace Shaper2D.PolygonClipper
                     }
                 }
 
-                if (e.PrevInSEL != null)
+                if (e.PreviousInSEL != null)
                 {
-                    e.PrevInSEL.NextInSEL = null;
+                    e.PreviousInSEL.NextInSEL = null;
                 }
                 else
                 {
@@ -2219,7 +2051,7 @@ namespace Shaper2D.PolygonClipper
         private bool EdgesAdjacent(IntersectNode inode)
         {
             return (inode.Edge1.NextInSEL == inode.Edge2) ||
-              (inode.Edge1.PrevInSEL == inode.Edge2);
+              (inode.Edge1.PreviousInSEL == inode.Edge2);
         }
 
         private bool FixupIntersectionOrder()
@@ -2227,7 +2059,7 @@ namespace Shaper2D.PolygonClipper
             // pre-condition: intersections are sorted bottom-most first.
             // Now it's crucial that intersections are made only between adjacent edges,
             // so to ensure this the order of intersections may need adjusting ...
-            this.intersectList.Sort(this.intersectNodeComparer);
+            this.intersectList.Sort(IntersectNodeComparer);
 
             this.CopyAELToSEL();
             int cnt = this.intersectList.Count;
@@ -2271,7 +2103,7 @@ namespace Shaper2D.PolygonClipper
             this.intersectList.Clear();
         }
 
-        private void IntersectPoint(TEdge edge1, TEdge edge2, out Vector2 ip)
+        private void IntersectPoint(Edge edge1, Edge edge2, out Vector2 ip)
         {
             ip = default(Vector2);
             double b1, b2;
@@ -2367,7 +2199,7 @@ namespace Shaper2D.PolygonClipper
 
         private void ProcessEdgesAtTopOfScanbeam(float topY)
         {
-            TEdge e = this.activeEdges;
+            Edge e = this.activeEdges;
             while (e != null)
             {
                 // 1. process maxima, treating them as if they're 'bent' horizontal edges,
@@ -2376,13 +2208,13 @@ namespace Shaper2D.PolygonClipper
 
                 if (isMaximaEdge)
                 {
-                    TEdge eMaxPair = this.GetMaximaPairEx(e);
+                    Edge eMaxPair = this.GetMaximaPairEx(e);
                     isMaximaEdge = eMaxPair == null || !IsHorizontal(eMaxPair);
                 }
 
                 if (isMaximaEdge)
                 {
-                    TEdge ePrev = e.PrevInAEL;
+                    Edge ePrev = e.PreviousInAEL;
                     this.DoMaxima(e);
                     if (ePrev == null)
                     {
@@ -2399,7 +2231,7 @@ namespace Shaper2D.PolygonClipper
                     if (this.IsIntermediate(e, topY) && IsHorizontal(e.NextInLML))
                     {
                         this.UpdateEdgeIntoAEL(ref e);
-                        if (e.OutIdx >= 0)
+                        if (e.OutIndex >= 0)
                         {
                             this.AddOutPt(e, e.Bot);
                         }
@@ -2408,8 +2240,7 @@ namespace Shaper2D.PolygonClipper
                     }
                     else
                     {
-                        e.Curr.X = TopX(e, topY);
-                        e.Curr.Y = topY;
+                        e.Curr = new Vector2(TopX(e, topY), topY);
                     }
 
                     e = e.NextInAEL;
@@ -2427,7 +2258,7 @@ namespace Shaper2D.PolygonClipper
                 if (this.IsIntermediate(e, topY))
                 {
                     OutPt op = null;
-                    if (e.OutIdx >= 0)
+                    if (e.OutIndex >= 0)
                     {
                         op = this.AddOutPt(e, e.Top);
                     }
@@ -2435,22 +2266,22 @@ namespace Shaper2D.PolygonClipper
                     this.UpdateEdgeIntoAEL(ref e);
 
                     // if output polygons share an edge, they'll need joining later ...
-                    TEdge ePrev = e.PrevInAEL;
-                    TEdge eNext = e.NextInAEL;
+                    Edge ePrev = e.PreviousInAEL;
+                    Edge eNext = e.NextInAEL;
                     if (ePrev != null && ePrev.Curr.X == e.Bot.X &&
                       ePrev.Curr.Y == e.Bot.Y && op != null &&
-                      ePrev.OutIdx >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
+                      ePrev.OutIndex >= 0 && ePrev.Curr.Y > ePrev.Top.Y &&
                       SlopesEqual(e.Curr, e.Top, ePrev.Curr, ePrev.Top) &&
-                      (e.WindDelta != 0) && (ePrev.WindDelta != 0))
+                      (e.WindindDelta != 0) && (ePrev.WindindDelta != 0))
                     {
                         OutPt op2 = this.AddOutPt(ePrev, e.Bot);
                         this.AddJoin(op, op2, e.Top);
                     }
                     else if (eNext != null && eNext.Curr.X == e.Bot.X &&
                       eNext.Curr.Y == e.Bot.Y && op != null &&
-                      eNext.OutIdx >= 0 && eNext.Curr.Y > eNext.Top.Y &&
+                      eNext.OutIndex >= 0 && eNext.Curr.Y > eNext.Top.Y &&
                       SlopesEqual(e.Curr, e.Top, eNext.Curr, eNext.Top) &&
-                      (e.WindDelta != 0) && (eNext.WindDelta != 0))
+                      (e.WindindDelta != 0) && (eNext.WindindDelta != 0))
                     {
                         OutPt op2 = this.AddOutPt(eNext, e.Bot);
                         this.AddJoin(op, op2, e.Top);
@@ -2461,12 +2292,12 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private void DoMaxima(TEdge e)
+        private void DoMaxima(Edge e)
         {
-            TEdge eMaxPair = this.GetMaximaPairEx(e);
+            Edge eMaxPair = this.GetMaximaPairEx(e);
             if (eMaxPair == null)
             {
-                if (e.OutIdx >= 0)
+                if (e.OutIndex >= 0)
                 {
                     this.AddOutPt(e, e.Top);
                 }
@@ -2475,7 +2306,7 @@ namespace Shaper2D.PolygonClipper
                 return;
             }
 
-            TEdge eNext = e.NextInAEL;
+            Edge eNext = e.NextInAEL;
             while (eNext != null && eNext != eMaxPair)
             {
                 this.IntersectEdges(e, eNext, e.Top);
@@ -2483,14 +2314,14 @@ namespace Shaper2D.PolygonClipper
                 eNext = e.NextInAEL;
             }
 
-            if (e.OutIdx == Unassigned && eMaxPair.OutIdx == Unassigned)
+            if (e.OutIndex == Unassigned && eMaxPair.OutIndex == Unassigned)
             {
                 this.DeleteFromAEL(e);
                 this.DeleteFromAEL(eMaxPair);
             }
-            else if (e.OutIdx >= 0 && eMaxPair.OutIdx >= 0)
+            else if (e.OutIndex >= 0 && eMaxPair.OutIndex >= 0)
             {
-                if (e.OutIdx >= 0)
+                if (e.OutIndex >= 0)
                 {
                     this.AddLocalMaxPoly(e, eMaxPair, e.Top);
                 }
@@ -3173,10 +3004,8 @@ namespace Shaper2D.PolygonClipper
                         outRec2.IsHole = !outRec1.IsHole;
                         outRec2.FirstLeft = outRec1;
 
-                        if (this.usingPolyTree)
-                        {
-                            this.FixupFirstLefts2(outRec2, outRec1);
-                        }
+                        this.FixupFirstLefts2(outRec2, outRec1);
+
                     }
                     else if (Poly2ContainsPoly1(outRec1.Pts, outRec2.Pts))
                     {
@@ -3186,10 +3015,9 @@ namespace Shaper2D.PolygonClipper
                         outRec2.FirstLeft = outRec1.FirstLeft;
                         outRec1.FirstLeft = outRec2;
 
-                        if (this.usingPolyTree)
-                        {
-                            this.FixupFirstLefts2(outRec1, outRec2);
-                        }
+
+                        this.FixupFirstLefts2(outRec1, outRec2);
+
                     }
                     else
                     {
@@ -3197,11 +3025,8 @@ namespace Shaper2D.PolygonClipper
                         outRec2.IsHole = outRec1.IsHole;
                         outRec2.FirstLeft = outRec1.FirstLeft;
 
-                        // fixup FirstLeft pointers that may need reassigning to OutRec2
-                        if (this.usingPolyTree)
-                        {
-                            this.FixupFirstLefts1(outRec1, outRec2);
-                        }
+                        this.FixupFirstLefts1(outRec1, outRec2);
+
                     }
                 }
                 else
@@ -3219,11 +3044,8 @@ namespace Shaper2D.PolygonClipper
 
                     outRec2.FirstLeft = outRec1;
 
-                    // fixup FirstLeft pointers that may need reassigning to OutRec1
-                    if (this.usingPolyTree)
-                    {
-                        this.FixupFirstLefts3(outRec2, outRec1);
-                    }
+                    this.FixupFirstLefts3(outRec2, outRec1);
+
                 }
             }
         }
@@ -3276,33 +3098,26 @@ namespace Shaper2D.PolygonClipper
                                 // OutRec2 is contained by OutRec1 ...
                                 outrec2.IsHole = !outrec.IsHole;
                                 outrec2.FirstLeft = outrec;
-                                if (this.usingPolyTree)
-                                {
-                                    this.FixupFirstLefts2(outrec2, outrec);
-                                }
+                                this.FixupFirstLefts2(outrec2, outrec);
                             }
-                            else
-                              if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
+                            else if (Poly2ContainsPoly1(outrec.Pts, outrec2.Pts))
                             {
                                 // OutRec1 is contained by OutRec2 ...
                                 outrec2.IsHole = outrec.IsHole;
                                 outrec.IsHole = !outrec2.IsHole;
                                 outrec2.FirstLeft = outrec.FirstLeft;
                                 outrec.FirstLeft = outrec2;
-                                if (this.usingPolyTree)
-                                {
-                                    this.FixupFirstLefts2(outrec, outrec2);
-                                }
+
+                                this.FixupFirstLefts2(outrec, outrec2);
+
                             }
                             else
                             {
                                 // the 2 polygons are separate ...
                                 outrec2.IsHole = outrec.IsHole;
                                 outrec2.FirstLeft = outrec.FirstLeft;
-                                if (this.usingPolyTree)
-                                {
-                                    this.FixupFirstLefts1(outrec, outrec2);
-                                }
+                                this.FixupFirstLefts1(outrec, outrec2);
+
                             }
 
                             op2 = op; // ie get ready for the next iteration
@@ -3341,10 +3156,9 @@ namespace Shaper2D.PolygonClipper
             return a * 0.5;
         }
 
-        private void SetDx(TEdge e)
+        private void SetDx(Edge e)
         {
-            e.Delta.X = e.Top.X - e.Bot.X;
-            e.Delta.Y = e.Top.Y - e.Bot.Y;
+            e.Delta = new Vector2(e.Top.X - e.Bot.X, e.Top.Y - e.Bot.Y);
             if (e.Delta.Y == 0)
             {
                 e.Dx = HorizontalDeltaLimit;
@@ -3405,18 +3219,18 @@ namespace Shaper2D.PolygonClipper
             while (lm != null)
             {
                 this.InsertScanbeam(lm.Y);
-                TEdge e = lm.LeftBound;
+                Edge e = lm.LeftBound;
                 if (e != null)
                 {
                     e.Curr = e.Bot;
-                    e.OutIdx = Unassigned;
+                    e.OutIndex = Unassigned;
                 }
 
                 e = lm.RightBound;
                 if (e != null)
                 {
                     e.Curr = e.Bot;
-                    e.OutIdx = Unassigned;
+                    e.OutIndex = Unassigned;
                 }
 
                 lm = lm.Next;
@@ -3502,16 +3316,16 @@ namespace Shaper2D.PolygonClipper
             this.polyOuts[index] = null;
         }
 
-        private void UpdateEdgeIntoAEL(ref TEdge e)
+        private void UpdateEdgeIntoAEL(ref Edge e)
         {
             if (e.NextInLML == null)
             {
                 throw new ClipperException("UpdateEdgeIntoAEL: invalid call");
             }
 
-            TEdge aelPrev = e.PrevInAEL;
-            TEdge aelNext = e.NextInAEL;
-            e.NextInLML.OutIdx = e.OutIdx;
+            Edge aelPrev = e.PreviousInAEL;
+            Edge aelNext = e.NextInAEL;
+            e.NextInLML.OutIndex = e.OutIndex;
             if (aelPrev != null)
             {
                 aelPrev.NextInAEL = e.NextInLML;
@@ -3523,16 +3337,16 @@ namespace Shaper2D.PolygonClipper
 
             if (aelNext != null)
             {
-                aelNext.PrevInAEL = e.NextInLML;
+                aelNext.PreviousInAEL = e.NextInLML;
             }
 
             e.NextInLML.Side = e.Side;
-            e.NextInLML.WindDelta = e.WindDelta;
-            e.NextInLML.WindCnt = e.WindCnt;
-            e.NextInLML.WindCnt2 = e.WindCnt2;
+            e.NextInLML.WindindDelta = e.WindindDelta;
+            e.NextInLML.WindingCount = e.WindingCount;
+            e.NextInLML.WindingCountInOppositePolyType = e.WindingCountInOppositePolyType;
             e = e.NextInLML;
             e.Curr = e.Bot;
-            e.PrevInAEL = aelPrev;
+            e.PreviousInAEL = aelPrev;
             e.NextInAEL = aelNext;
             if (!IsHorizontal(e))
             {
@@ -3540,96 +3354,96 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private void SwapPositionsInAEL(TEdge edge1, TEdge edge2)
+        private void SwapPositionsInAEL(Edge edge1, Edge edge2)
         {
             // check that one or other edge hasn't already been removed from AEL ...
-            if (edge1.NextInAEL == edge1.PrevInAEL ||
-              edge2.NextInAEL == edge2.PrevInAEL)
+            if (edge1.NextInAEL == edge1.PreviousInAEL ||
+              edge2.NextInAEL == edge2.PreviousInAEL)
             {
                 return;
             }
 
             if (edge1.NextInAEL == edge2)
             {
-                TEdge next = edge2.NextInAEL;
+                Edge next = edge2.NextInAEL;
                 if (next != null)
                 {
-                    next.PrevInAEL = edge1;
+                    next.PreviousInAEL = edge1;
                 }
 
-                TEdge prev = edge1.PrevInAEL;
+                Edge prev = edge1.PreviousInAEL;
                 if (prev != null)
                 {
                     prev.NextInAEL = edge2;
                 }
 
-                edge2.PrevInAEL = prev;
+                edge2.PreviousInAEL = prev;
                 edge2.NextInAEL = edge1;
-                edge1.PrevInAEL = edge2;
+                edge1.PreviousInAEL = edge2;
                 edge1.NextInAEL = next;
             }
             else if (edge2.NextInAEL == edge1)
             {
-                TEdge next = edge1.NextInAEL;
+                Edge next = edge1.NextInAEL;
                 if (next != null)
                 {
-                    next.PrevInAEL = edge2;
+                    next.PreviousInAEL = edge2;
                 }
 
-                TEdge prev = edge2.PrevInAEL;
+                Edge prev = edge2.PreviousInAEL;
                 if (prev != null)
                 {
                     prev.NextInAEL = edge1;
                 }
 
-                edge1.PrevInAEL = prev;
+                edge1.PreviousInAEL = prev;
                 edge1.NextInAEL = edge2;
-                edge2.PrevInAEL = edge1;
+                edge2.PreviousInAEL = edge1;
                 edge2.NextInAEL = next;
             }
             else
             {
-                TEdge next = edge1.NextInAEL;
-                TEdge prev = edge1.PrevInAEL;
+                Edge next = edge1.NextInAEL;
+                Edge prev = edge1.PreviousInAEL;
                 edge1.NextInAEL = edge2.NextInAEL;
                 if (edge1.NextInAEL != null)
                 {
-                    edge1.NextInAEL.PrevInAEL = edge1;
+                    edge1.NextInAEL.PreviousInAEL = edge1;
                 }
 
-                edge1.PrevInAEL = edge2.PrevInAEL;
-                if (edge1.PrevInAEL != null)
+                edge1.PreviousInAEL = edge2.PreviousInAEL;
+                if (edge1.PreviousInAEL != null)
                 {
-                    edge1.PrevInAEL.NextInAEL = edge1;
+                    edge1.PreviousInAEL.NextInAEL = edge1;
                 }
 
                 edge2.NextInAEL = next;
                 if (edge2.NextInAEL != null)
                 {
-                    edge2.NextInAEL.PrevInAEL = edge2;
+                    edge2.NextInAEL.PreviousInAEL = edge2;
                 }
 
-                edge2.PrevInAEL = prev;
-                if (edge2.PrevInAEL != null)
+                edge2.PreviousInAEL = prev;
+                if (edge2.PreviousInAEL != null)
                 {
-                    edge2.PrevInAEL.NextInAEL = edge2;
+                    edge2.PreviousInAEL.NextInAEL = edge2;
                 }
             }
 
-            if (edge1.PrevInAEL == null)
+            if (edge1.PreviousInAEL == null)
             {
                 this.activeEdges = edge1;
             }
-            else if (edge2.PrevInAEL == null)
+            else if (edge2.PreviousInAEL == null)
             {
                 this.activeEdges = edge2;
             }
         }
 
-        private void DeleteFromAEL(TEdge e)
+        private void DeleteFromAEL(Edge e)
         {
-            TEdge aelPrev = e.PrevInAEL;
-            TEdge aelNext = e.NextInAEL;
+            Edge aelPrev = e.PreviousInAEL;
+            Edge aelNext = e.NextInAEL;
             if (aelPrev == null && aelNext == null && (e != this.activeEdges))
             {
                 return; // already deleted
@@ -3646,62 +3460,62 @@ namespace Shaper2D.PolygonClipper
 
             if (aelNext != null)
             {
-                aelNext.PrevInAEL = aelPrev;
+                aelNext.PreviousInAEL = aelPrev;
             }
 
             e.NextInAEL = null;
-            e.PrevInAEL = null;
+            e.PreviousInAEL = null;
         }
 
-        private void InitEdge2(TEdge e, PolyType polyType)
+        private void InitEdge2(Edge e, PolyType polyType)
         {
-            if (e.Curr.Y >= e.Next.Curr.Y)
+            if (e.Curr.Y >= e.NextEdge.Curr.Y)
             {
                 e.Bot = e.Curr;
-                e.Top = e.Next.Curr;
+                e.Top = e.NextEdge.Curr;
             }
             else
             {
                 e.Top = e.Curr;
-                e.Bot = e.Next.Curr;
+                e.Bot = e.NextEdge.Curr;
             }
 
             this.SetDx(e);
-            e.PolyTyp = polyType;
+            e.PolyType = polyType;
         }
 
-        private TEdge ProcessBound(TEdge edge, bool leftBoundIsForward)
+        private Edge ProcessBound(Edge edge, bool leftBoundIsForward)
         {
-            TEdge eStart, result = edge;
-            TEdge horz;
+            Edge eStart, result = edge;
+            Edge horz;
 
-            if (result.OutIdx == Skip)
+            if (result.OutIndex == Skip)
             {
                 // check if there are edges beyond the skip edge in the bound and if so
                 // create another LocMin and calling ProcessBound once more ...
                 edge = result;
                 if (leftBoundIsForward)
                 {
-                    while (edge.Top.Y == edge.Next.Bot.Y)
+                    while (edge.Top.Y == edge.NextEdge.Bot.Y)
                     {
-                        edge = edge.Next;
+                        edge = edge.NextEdge;
                     }
 
                     while (edge != result && edge.Dx == HorizontalDeltaLimit)
                     {
-                        edge = edge.Prev;
+                        edge = edge.PreviousEdge;
                     }
                 }
                 else
                 {
-                    while (edge.Top.Y == edge.Prev.Bot.Y)
+                    while (edge.Top.Y == edge.PreviousEdge.Bot.Y)
                     {
-                        edge = edge.Prev;
+                        edge = edge.PreviousEdge;
                     }
 
                     while (edge != result && edge.Dx == HorizontalDeltaLimit)
                     {
-                        edge = edge.Next;
+                        edge = edge.NextEdge;
                     }
                 }
 
@@ -3709,11 +3523,11 @@ namespace Shaper2D.PolygonClipper
                 {
                     if (leftBoundIsForward)
                     {
-                        result = edge.Next;
+                        result = edge.NextEdge;
                     }
                     else
                     {
-                        result = edge.Prev;
+                        result = edge.PreviousEdge;
                     }
                 }
                 else
@@ -3721,11 +3535,11 @@ namespace Shaper2D.PolygonClipper
                     // there are more edges in the bound beyond result starting with E
                     if (leftBoundIsForward)
                     {
-                        edge = result.Next;
+                        edge = result.NextEdge;
                     }
                     else
                     {
-                        edge = result.Prev;
+                        edge = result.PreviousEdge;
                     }
 
                     LocalMinima locMin = new LocalMinima();
@@ -3733,7 +3547,7 @@ namespace Shaper2D.PolygonClipper
                     locMin.Y = edge.Bot.Y;
                     locMin.LeftBound = null;
                     locMin.RightBound = edge;
-                    edge.WindDelta = 0;
+                    edge.WindindDelta = 0;
                     result = this.ProcessBound(edge, leftBoundIsForward);
                     this.InsertLocalMinima(locMin);
                 }
@@ -3748,11 +3562,11 @@ namespace Shaper2D.PolygonClipper
                 // Also, consecutive horz. edges may start heading left before going right.
                 if (leftBoundIsForward)
                 {
-                    eStart = edge.Prev;
+                    eStart = edge.PreviousEdge;
                 }
                 else
                 {
-                    eStart = edge.Next;
+                    eStart = edge.NextEdge;
                 }
 
                 // ie an adjoining horizontal skip edge
@@ -3772,84 +3586,84 @@ namespace Shaper2D.PolygonClipper
             eStart = edge;
             if (leftBoundIsForward)
             {
-                while (result.Top.Y == result.Next.Bot.Y && result.Next.OutIdx != Skip)
+                while (result.Top.Y == result.NextEdge.Bot.Y && result.NextEdge.OutIndex != Skip)
                 {
-                    result = result.Next;
+                    result = result.NextEdge;
                 }
 
-                if (result.Dx == HorizontalDeltaLimit && result.Next.OutIdx != Skip)
+                if (result.Dx == HorizontalDeltaLimit && result.NextEdge.OutIndex != Skip)
                 {
                     // nb: at the top of a bound, horizontals are added to the bound
                     // only when the preceding edge attaches to the horizontal's left vertex
                     // unless a Skip edge is encountered when that becomes the top divide
                     horz = result;
-                    while (horz.Prev.Dx == HorizontalDeltaLimit)
+                    while (horz.PreviousEdge.Dx == HorizontalDeltaLimit)
                     {
-                        horz = horz.Prev;
+                        horz = horz.PreviousEdge;
                     }
 
-                    if (horz.Prev.Top.X > result.Next.Top.X)
+                    if (horz.PreviousEdge.Top.X > result.NextEdge.Top.X)
                     {
-                        result = horz.Prev;
+                        result = horz.PreviousEdge;
                     }
                 }
 
                 while (edge != result)
                 {
-                    edge.NextInLML = edge.Next;
-                    if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.Prev.Top.X)
+                    edge.NextInLML = edge.NextEdge;
+                    if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.PreviousEdge.Top.X)
                     {
                         ReverseHorizontal(edge);
                     }
 
-                    edge = edge.Next;
+                    edge = edge.NextEdge;
                 }
 
-                if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.Prev.Top.X)
+                if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.PreviousEdge.Top.X)
                 {
                     ReverseHorizontal(edge);
                 }
 
-                result = result.Next; // move to the edge just beyond current bound
+                result = result.NextEdge; // move to the edge just beyond current bound
             }
             else
             {
-                while (result.Top.Y == result.Prev.Bot.Y && result.Prev.OutIdx != Skip)
+                while (result.Top.Y == result.PreviousEdge.Bot.Y && result.PreviousEdge.OutIndex != Skip)
                 {
-                    result = result.Prev;
+                    result = result.PreviousEdge;
                 }
 
-                if (result.Dx == HorizontalDeltaLimit && result.Prev.OutIdx != Skip)
+                if (result.Dx == HorizontalDeltaLimit && result.PreviousEdge.OutIndex != Skip)
                 {
                     horz = result;
-                    while (horz.Next.Dx == HorizontalDeltaLimit)
+                    while (horz.NextEdge.Dx == HorizontalDeltaLimit)
                     {
-                        horz = horz.Next;
+                        horz = horz.NextEdge;
                     }
 
-                    if (horz.Next.Top.X == result.Prev.Top.X || horz.Next.Top.X > result.Prev.Top.X)
+                    if (horz.NextEdge.Top.X == result.PreviousEdge.Top.X || horz.NextEdge.Top.X > result.PreviousEdge.Top.X)
                     {
-                        result = horz.Next;
+                        result = horz.NextEdge;
                     }
                 }
 
                 while (edge != result)
                 {
-                    edge.NextInLML = edge.Prev;
-                    if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.Next.Top.X)
+                    edge.NextInLML = edge.PreviousEdge;
+                    if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.NextEdge.Top.X)
                     {
                         ReverseHorizontal(edge);
                     }
 
-                    edge = edge.Prev;
+                    edge = edge.PreviousEdge;
                 }
 
-                if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.Next.Top.X)
+                if (edge.Dx == HorizontalDeltaLimit && edge != eStart && edge.Bot.X != edge.NextEdge.Top.X)
                 {
                     ReverseHorizontal(edge);
                 }
 
-                result = result.Prev; // move to the edge just beyond current bound
+                result = result.PreviousEdge; // move to the edge just beyond current bound
             }
 
             return result;

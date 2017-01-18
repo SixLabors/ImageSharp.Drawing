@@ -81,14 +81,12 @@ namespace Shaper2D
         public float Distance(Point point)
         {
             bool isInside = this.innerPath.PointInPolygon(point);
-
-            float distance = this.innerPath.DistanceFromPath(point).DistanceFromPath;
             if (isInside)
             {
-                return -distance;
+                return 0;
             }
 
-            return distance;
+            return this.innerPath.DistanceFromPath(point).DistanceFromPath;
         }
 
         /// <summary>

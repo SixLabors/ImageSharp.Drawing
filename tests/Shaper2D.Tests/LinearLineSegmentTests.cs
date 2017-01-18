@@ -13,8 +13,14 @@ namespace Shaper2D.Tests
         {
             var segment = new LinearLineSegment(new Point(0, 0), new Point(10, 10));
             Assert.Equal(2, segment.AsSimpleLinearPath().Length);
-            Assert.Equal(new Point(0,0), segment.AsSimpleLinearPath()[0]);
-            Assert.Equal(new Point(10,10), segment.AsSimpleLinearPath()[1]);
+            Assert.Equal(new Point(0, 0), segment.AsSimpleLinearPath()[0]);
+            Assert.Equal(new Point(10, 10), segment.AsSimpleLinearPath()[1]);
+        }
+
+        [Fact]
+        public void MustHaveAtleast2Points()
+        {
+           var error = Assert.Throws<ArgumentOutOfRangeException>(()=> new LinearLineSegment(new [] { new Point(0, 0) }));
         }
     }
 }

@@ -31,10 +31,21 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="LinearLineSegment" /> class.
+        /// </summary>
+        /// <param name="point1">The point1.</param>
+        /// <param name="point2">The point2.</param>
+        /// <param name="additionalPoints">Additional points</param>
+        public LinearLineSegment(Point point1, Point point2, params Point[] additionalPoints)
+            : this(new[] { point1, point2 }.Merge(additionalPoints))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public LinearLineSegment(params Point[] points)
+        public LinearLineSegment(Point[] points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Count(), 2, nameof(points));

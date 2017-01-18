@@ -20,12 +20,12 @@ namespace Shaper2D.PolygonClipper
         /// <summary>
         /// The edge1
         /// </summary>
-        internal TEdge Edge1;
+        internal Edge Edge1;
 
         /// <summary>
         /// The edge2
         /// </summary>
-        internal TEdge Edge2;
+        internal Edge Edge2;
 
         /// <summary>
         /// The pt

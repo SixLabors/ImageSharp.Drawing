@@ -14,103 +14,146 @@ namespace Shaper2D.PolygonClipper
     /// <summary>
     /// TEdge
     /// </summary>
-    internal class TEdge
+    internal class Edge
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The source path, see if we can link this back later
+        /// Gets or sets the source path.
         /// </summary>
-        internal IPath SourcePath;
+        /// <value>
+        /// The source path.
+        /// </value>
+        public IPath SourcePath { get; set; }
 
         /// <summary>
-        /// The bot
+        /// Gets or sets the bot.
         /// </summary>
-        internal System.Numerics.Vector2 Bot;
+        /// <value>
+        /// The bot.
+        /// </value>
+        public System.Numerics.Vector2 Bot { get; set; }
 
         /// <summary>
-        /// The current (updated for every new scanbeam)
+        /// Gets or sets the curr.
         /// </summary>
-        internal System.Numerics.Vector2 Curr;
+        /// <value>
+        /// The curr.
+        /// </value>
+        /// <remarks>
+        /// updated for every new scanbeam.
+        /// </remarks>
+        public System.Numerics.Vector2 Curr { get; set; }
 
         /// <summary>
-        /// The top
+        /// Gets or sets the top.
         /// </summary>
-        internal System.Numerics.Vector2 Top;
+        /// <value>
+        /// The top.
+        /// </value>
+        internal System.Numerics.Vector2 Top { get; set; }
 
         /// <summary>
-        /// The delta
+        /// Gets or sets the delta.
         /// </summary>
-        internal System.Numerics.Vector2 Delta;
+        /// <value>
+        /// The delta.
+        /// </value>
+        public System.Numerics.Vector2 Delta { get; set; }
 
         /// <summary>
-        /// The dx
+        /// Gets or sets the dx.
         /// </summary>
-        internal double Dx;
+        /// <value>
+        /// The dx.
+        /// </value>
+        public double Dx { get; set; }
 
         /// <summary>
-        /// The poly type
+        /// Gets or sets the poly type.
         /// </summary>
-        internal PolyType PolyTyp;
+        /// <value>
+        /// The poly type.
+        /// </value>
+        public PolyType PolyType { get; set; }
 
         /// <summary>
-        /// Side only refers to current side of solution poly
+        /// Gets or sets the side.
         /// </summary>
-        internal EdgeSide Side;
+        /// <value>
+        /// The side.
+        /// </value>
+        /// <remarks>Side only refers to current side of solution poly</remarks>
+        public EdgeSide Side { get; set; }
+
 
         /// <summary>
-        ///  1 or -1 depending on winding direction
+        /// Gets or sets the wind delta.
         /// </summary>
-        internal int WindDelta;
+        /// <value>
+        /// The wind delta.
+        /// </value>
+        /// <remarks>
+        /// 1 or -1 depending on winding direction
+        /// </remarks>
+        public int WindindDelta { get; set; }
 
         /// <summary>
         /// The winding count
         /// </summary>
-        internal int WindCnt;
+        public int WindingCount { get; set; }
+
+        public int WindingCountInOppositePolyType { get; set; }
 
         /// <summary>
-        /// The winding count of the opposite polytype
+        /// Gets or sets the index of the out.
         /// </summary>
-        internal int WindCnt2;
+        /// <value>
+        /// The index of the out.
+        /// </value>
+        public int OutIndex { get; set; }
 
         /// <summary>
-        /// The out index
+        /// Gets or sets the next edge
         /// </summary>
-        internal int OutIdx;
-
-        /// <summary>
-        /// The next
-        /// </summary>
-        internal TEdge Next;
+        /// <value>
+        /// The next edge.
+        /// </value>
+        public Edge NextEdge { get; set; }
 
         /// <summary>
         /// The previous
         /// </summary>
-        internal TEdge Prev;
+        public Edge PreviousEdge { get; set; }
+
 
         /// <summary>
-        /// The next in LML
+        /// Gets or sets the next in LML.
         /// </summary>
-        internal TEdge NextInLML;
+        /// <value>
+        /// The next in LML.
+        /// </value>
+        public Edge NextInLML { get; set; }
 
         /// <summary>
-        /// The next in ael
+        /// Gets or sets the next in ael
         /// </summary>
-        internal TEdge NextInAEL;
+        /// <value>
+        /// The next in ael.
+        /// </value>
+        public Edge NextInAEL { get; set; }
 
         /// <summary>
         /// The previous in ael
         /// </summary>
-        internal TEdge PrevInAEL;
+        public Edge PreviousInAEL { get; set; }
 
         /// <summary>
         /// The next in sel
         /// </summary>
-        internal TEdge NextInSEL;
+        public Edge NextInSEL { get; set; }
 
         /// <summary>
         /// The previous in sel
         /// </summary>
-        internal TEdge PrevInSEL;
-#pragma warning restore SA1401 // Field must be
+        public Edge PreviousInSEL { get; set; }
     }
 }

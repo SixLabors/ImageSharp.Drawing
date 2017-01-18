@@ -6,6 +6,7 @@
 namespace Shaper2D
 {
     using System.Collections.Immutable;
+    using System.Linq;
     using System.Numerics;
 
     /// <summary>
@@ -24,19 +25,33 @@ namespace Shaper2D
         /// <summary>
         /// The line points.
         /// </summary>
-        private readonly Point[] linePoints;
+        private readonly ImmutableArray<Point> linePoints;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(params Point[] points)
+        public BezierLineSegment(Point[] points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
 
             this.linePoints = this.GetDrawingPoints(points);
         }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="controlPoint1">The control point1.</param>
+        /// <param name="controlPoint2">The control point2.</param>
+        /// <param name="end">The end.</param>
+        /// <param name="additionalPoints">The additional points.</param>
+        public BezierLineSegment(Point start, Point controlPoint1, Point controlPoint2, Point end, params Point[] additionalPoints)
+            : this(new[] { start, controlPoint1, controlPoint2, end }.Merge(additionalPoints))
+        {
+        }
+        
 
         /// <summary>
         /// Returns the current <see cref="ILineSegment" /> a simple linear path.
@@ -46,7 +61,7 @@ namespace Shaper2D
         /// </returns>
         public ImmutableArray<Point> AsSimpleLinearPath()
         {
-            return ImmutableArray.Create(this.linePoints);
+            return this.linePoints;
         }
 
         /// <summary>
@@ -56,7 +71,7 @@ namespace Shaper2D
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
-        private Point[] GetDrawingPoints(Point[] controlPoints)
+        private ImmutableArray<Point> GetDrawingPoints(Point[] controlPoints)
         {
             // TODO we need to calculate an optimal SegmentsPerCurve value depending on the calculated length of this curve
             int curveCount = (controlPoints.Length - 1) / 3;
@@ -86,7 +101,7 @@ namespace Shaper2D
                 }
             }
 
-            return drawingPoints;
+            return ImmutableArray.Create(drawingPoints);
         }
 
         /// <summary>

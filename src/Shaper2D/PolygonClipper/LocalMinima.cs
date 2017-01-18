@@ -25,12 +25,12 @@ namespace Shaper2D.PolygonClipper
         /// <summary>
         /// The left bound
         /// </summary>
-        internal TEdge LeftBound;
+        internal Edge LeftBound;
 
         /// <summary>
         /// The right bound
         /// </summary>
-        internal TEdge RightBound;
+        internal Edge RightBound;
 
         /// <summary>
         /// The next
