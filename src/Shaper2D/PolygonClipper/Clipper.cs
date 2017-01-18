@@ -50,19 +50,6 @@ namespace Shaper2D.PolygonClipper
         }
 
         /// <summary>
-        /// Adds the paths.
-        /// </summary>
-        /// <param name="path">The path.</param>
-        /// <param name="polyType">Type of the poly.</param>
-        public void AddPaths(IEnumerable<IPath> path, PolyType polyType)
-        {
-            foreach (var p in path)
-            {
-                this.AddPath(p, polyType);
-            }
-        }
-
-        /// <summary>
         /// Adds the path.
         /// </summary>
         /// <param name="path">The path.</param>
@@ -232,9 +219,12 @@ namespace Shaper2D.PolygonClipper
 
                 // E and E.Prev now share a local minima (left aligned if horizontal).
                 // Compare their slopes to find which starts which bound ...
-                LocalMinima locMin = new LocalMinima();
-                locMin.Next = null;
-                locMin.Y = edge.Bot.Y;
+                LocalMinima locMin = new LocalMinima
+                {
+                    Next = null,
+                    Y = edge.Bot.Y
+                };
+
                 bool leftBoundIsForward;
                 if (edge.Dx < edge.PreviousEdge.Dx)
                 {
@@ -358,21 +348,6 @@ namespace Shaper2D.PolygonClipper
             {
                 ExtractOutlines(c, shapes);
             }
-        }
-
-        private static double DistanceFromLineSqrd(Vector2 pt, Vector2 ln1, Vector2 ln2)
-        {
-            // The equation of a line in general form (Ax + By + C = 0)
-            // given 2 points (x¹,y¹) & (x²,y²) is ...
-            // (y¹ - y²)x + (x² - x¹)y + (y² - y¹)x¹ - (x² - x¹)y¹ = 0
-            // A = (y¹ - y²); B = (x² - x¹); C = (y² - y¹)x¹ - (x² - x¹)y¹
-            // perpendicular distance of point (x³,y³) = (Ax³ + By³ + C)/Sqrt(A² + B²)
-            // see http://en.wikipedia.org/wiki/Perpendicular_distance
-            double a = ln1.Y - ln2.Y;
-            double b = ln2.X - ln1.X;
-            double c = (a * ln1.X) + (b * ln1.Y);
-            c = (a * pt.X) + (b * pt.Y) - c;
-            return (c * c) / ((a * a) + (b * b));
         }
 
         private static void FixHoleLinkage(OutRec outRec)
@@ -514,7 +489,7 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private static bool HorzSegmentsOverlap(float seg1a, float seg1b, float seg2a, float seg2b)
+        private static bool HorizontalSegmentsOverlap(float seg1a, float seg1b, float seg2a, float seg2b)
         {
             if (seg1a > seg1b)
             {
@@ -624,22 +599,6 @@ namespace Shaper2D.PolygonClipper
             }
 
             return firstLeft;
-        }
-
-        private static bool Pt2IsBetweenPt1AndPt3(Vector2 pt1, Vector2 pt2, Vector2 pt3)
-        {
-            if ((pt1 == pt3) || (pt1 == pt2) || (pt3 == pt2))
-            {
-                return false;
-            }
-            else if (pt1.X != pt3.X)
-            {
-                return (pt2.X > pt1.X) == (pt2.X < pt3.X);
-            }
-            else
-            {
-                return (pt2.Y > pt1.Y) == (pt2.Y < pt3.Y);
-            }
         }
 
         private static Edge RemoveEdge(Edge e)
@@ -824,7 +783,7 @@ namespace Shaper2D.PolygonClipper
                         // if the horizontal Rb and a 'ghost' horizontal overlap, then convert
                         // the 'ghost' join to a real join ready for later ...
                         Join j = this.ghostJoins[i];
-                        if (HorzSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
+                        if (HorizontalSegmentsOverlap(j.OutPt1.Pt.X, j.OffPt.X, rb.Bot.X, rb.Top.X))
                         {
                             this.AddJoin(j.OutPt1, op1, j.OffPt);
                         }
@@ -1309,32 +1268,32 @@ namespace Shaper2D.PolygonClipper
         private void SetHoleState(Edge e, OutRec outRec)
         {
             Edge e2 = e.PreviousInAEL;
-            Edge eTmp = null;
+            Edge tmpEdge = null;
             while (e2 != null)
             {
                 if (e2.OutIndex >= 0 && e2.WindindDelta != 0)
                 {
-                    if (eTmp == null)
+                    if (tmpEdge == null)
                     {
-                        eTmp = e2;
+                        tmpEdge = e2;
                     }
-                    else if (eTmp.OutIndex == e2.OutIndex)
+                    else if (tmpEdge.OutIndex == e2.OutIndex)
                     {
-                        eTmp = null; // paired
+                        tmpEdge = null; // paired
                     }
                 }
 
                 e2 = e2.PreviousInAEL;
             }
 
-            if (eTmp == null)
+            if (tmpEdge == null)
             {
                 outRec.FirstLeft = null;
                 outRec.IsHole = false;
             }
             else
             {
-                outRec.FirstLeft = this.polyOuts[eTmp.OutIndex];
+                outRec.FirstLeft = this.polyOuts[tmpEdge.OutIndex];
                 outRec.IsHole = !outRec.FirstLeft.IsHole;
             }
         }
@@ -1657,9 +1616,8 @@ namespace Shaper2D.PolygonClipper
                 e2.WindingCountInOppositePolyType = (e2.WindingCountInOppositePolyType == 0) ? 1 : 0;
             }
 
-            int e1Wc, e2Wc;
-            e1Wc = Math.Abs(e1.WindingCount);
-            e2Wc = Math.Abs(e2.WindingCount);
+            int e1Wc = Math.Abs(e1.WindingCount);
+            int e2Wc = Math.Abs(e2.WindingCount);
 
             if (e1Contributing && e2Contributing)
             {
@@ -1697,10 +1655,8 @@ namespace Shaper2D.PolygonClipper
             else if ((e1Wc == 0 || e1Wc == 1) && (e2Wc == 0 || e2Wc == 1))
             {
                 // neither edge is currently contributing ...
-                float e1Wc2, e2Wc2;
-
-                e1Wc2 = Math.Abs(e1.WindingCountInOppositePolyType);
-                e2Wc2 = Math.Abs(e2.WindingCountInOppositePolyType);
+                float e1Wc2 = Math.Abs(e1.WindingCountInOppositePolyType);
+                float e2Wc2 = Math.Abs(e2.WindingCountInOppositePolyType);
 
                 if (e1.PolyType != e2.PolyType)
                 {
@@ -1857,7 +1813,7 @@ namespace Shaper2D.PolygonClipper
                         while (eNextHorz != null)
                         {
                             if (eNextHorz.OutIndex >= 0 &&
-                              HorzSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
+                              HorizontalSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
                             {
                                 OutPt op2 = this.GetLastOutPt(eNextHorz);
                                 this.AddJoin(op2, op1, eNextHorz.Top);
@@ -1921,7 +1877,7 @@ namespace Shaper2D.PolygonClipper
                 while (eNextHorz != null)
                 {
                     if (eNextHorz.OutIndex >= 0 &&
-                      HorzSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
+                      HorizontalSegmentsOverlap(horzEdge.Bot.X, horzEdge.Top.X, eNextHorz.Bot.X, eNextHorz.Top.X))
                     {
                         OutPt op2 = this.GetLastOutPt(eNextHorz);
                         this.AddJoin(op2, op1, eNextHorz.Top);
@@ -3197,11 +3153,6 @@ namespace Shaper2D.PolygonClipper
             }
         }
 
-        private double Area(OutRec outRec)
-        {
-            return this.Area(outRec.Pts);
-        }
-
         private double Area(OutPt op)
         {
             OutPt opFirst = op;
@@ -3371,14 +3322,6 @@ namespace Shaper2D.PolygonClipper
             this.polyOuts.Add(result);
             result.Idx = this.polyOuts.Count - 1;
             return result;
-        }
-
-        private void DisposeOutRec(int index)
-        {
-            OutRec outRec = this.polyOuts[index];
-            outRec.Pts = null;
-            outRec = null;
-            this.polyOuts[index] = null;
         }
 
         private void UpdateEdgeIntoAEL(ref Edge e)
