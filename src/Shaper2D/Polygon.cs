@@ -17,7 +17,7 @@ namespace Shaper2D
     public sealed class Polygon : IShape, IPath
     {
         private readonly InternalPath innerPath;
-        private readonly IEnumerable<IPath> pathCollection;
+        private readonly ImmutableArray<IPath> pathCollection;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Polygon"/> class.
@@ -26,7 +26,7 @@ namespace Shaper2D
         public Polygon(params ILineSegment[] segments)
         {
             this.innerPath = new InternalPath(segments, true);
-            this.pathCollection = new[] { this };
+            this.pathCollection = ImmutableArray.Create<IPath>(this);
         }
 
         /// <summary>
@@ -36,7 +36,7 @@ namespace Shaper2D
         public Polygon(ILineSegment segment)
         {
             this.innerPath = new InternalPath(segment, true);
-            this.pathCollection = new[] { this };
+            this.pathCollection = ImmutableArray.Create<IPath>(this);
         }
 
         /// <summary>
@@ -69,7 +69,7 @@ namespace Shaper2D
         /// <value>
         /// The paths.
         /// </value>
-        public IEnumerable<IPath> Paths => this.pathCollection;
+        public ImmutableArray<IPath> Paths => this.pathCollection;
 
         /// <summary>
         /// the distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds

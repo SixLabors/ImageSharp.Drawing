@@ -22,7 +22,7 @@ namespace Shaper2D
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
         private readonly ImmutableArray<Point> points;
-        private readonly IEnumerable<IPath> pathCollection;
+        private readonly ImmutableArray<IPath> pathCollection;
         private readonly float halfLength;
         private readonly float length;
 
@@ -60,7 +60,7 @@ namespace Shaper2D
 
             this.halfLength = size.Width + size.Height;
             this.length = this.halfLength * 2;
-            this.pathCollection = new[] { this };
+            this.pathCollection = ImmutableArray.Create<IPath>(this);
         }
 
         /// <summary>
@@ -125,7 +125,7 @@ namespace Shaper2D
         /// <value>
         /// The paths.
         /// </value>
-        IEnumerable<IPath> IShape.Paths => this.pathCollection;
+        ImmutableArray<IPath> IShape.Paths => this.pathCollection;
 
         /// <summary>
         /// Gets the length of the path

@@ -6,6 +6,7 @@
 namespace Shaper2D
 {
     using System.Collections.Generic;
+    using System.Collections.Immutable;
     using System.Numerics;
 
     /// <summary>
@@ -27,7 +28,7 @@ namespace Shaper2D
         /// <value>
         /// The paths.
         /// </value>
-        IEnumerable<IPath> Paths { get; }
+        ImmutableArray<IPath> Paths { get; }
 
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.

@@ -8,6 +8,7 @@ namespace Shaper2D
     using System;
     using System.Collections;
     using System.Collections.Generic;
+    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -22,7 +23,7 @@ namespace Shaper2D
     {
         private const float ClipperScaleFactor = 100f;
         private IShape[] shapes;
-        private IEnumerable<IPath> paths;
+        private ImmutableArray<IPath> paths;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
@@ -60,7 +61,7 @@ namespace Shaper2D
         /// <value>
         /// The paths.
         /// </value>
-        public IEnumerable<IPath> Paths => this.paths;
+        public ImmutableArray<IPath> Paths => this.paths;
 
         /// <summary>
         /// Gets the bounding box of this shape.
@@ -258,7 +259,7 @@ namespace Shaper2D
             // convert the 'tree' back to paths
             this.ExtractOutlines(tree, shapes, paths);
             this.shapes = shapes.ToArray();
-            this.paths = paths.ToArray();
+            this.paths = ImmutableArray.Create<IPath>(paths.ToArray());
 
             int intersections = 0;
             foreach (IShape s in this.shapes)
