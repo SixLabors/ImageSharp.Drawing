@@ -22,13 +22,13 @@ namespace Shaper2D.PolygonClipper
         /// <param name="node1">The node1.</param>
         /// <param name="node2">The node2.</param>
         /// <returns>
-        /// 1 if node2 %gt; node1
-        /// -1 if node2 $lt; node1
+        /// 1 if node2 &gt; node1
+        /// -1 if node2 &lt; node1
         /// 0 if same
         /// </returns>
         public int Compare(IntersectNode node1, IntersectNode node2)
         {
-            float i = node2.Pt.Y - node1.Pt.Y;
+            float i = node2.Point.Y - node1.Point.Y;
             if (i > 0)
             {
                 return 1;

@@ -17,46 +17,53 @@ namespace Shaper2D.PolygonClipper
     /// </summary>
     internal class OutRec
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The source path
+        /// Gets or sets the source path
         /// </summary>
-        internal IPath SourcePath;
+        public IPath SourcePath { get; set; }
 
         /// <summary>
-        /// The index
+        /// Gets or sets the index
         /// </summary>
-        internal int Idx;
+        public int Index { get; set; }
 
         /// <summary>
-        /// The is hole
+        /// Gets or sets a value indicating whether this instance is a hole.
         /// </summary>
-        internal bool IsHole;
+        /// <value>
+        ///   <c>true</c> if this instance is hole; otherwise, <c>false</c>.
+        /// </value>
+        public bool IsHole { get; set; }
 
         /// <summary>
-        /// The is open
+        /// Gets or sets a value indicating whether this instance is open.
         /// </summary>
-        internal bool IsOpen;
+        /// <value>
+        ///   <c>true</c> if this instance is open; otherwise, <c>false</c>.
+        /// </value>
+        public bool IsOpen { get; set; }
 
         /// <summary>
-        /// The first left
+        /// Gets or sets the first left
         /// </summary>
-        internal OutRec FirstLeft;
+        public OutRec FirstLeft { get; set; }
 
         /// <summary>
-        /// The PTS
+        /// Gets or sets the points.
         /// </summary>
-        internal OutPt Pts;
+        public OutPoint Points { get; set; }
 
         /// <summary>
-        /// The bottom pt
+        /// Gets or sets the bottom point.
         /// </summary>
-        internal OutPt BottomPt;
+        /// <value>
+        /// The bottom point.
+        /// </value>
+        public OutPoint BottomPoint { get; set; }
 
         /// <summary>
-        /// The poly node
+        /// Gets or sets the poly node
         /// </summary>
-        internal PolyNode PolyNode;
-#pragma warning restore SA1401 // Field must be private
+        public PolyNode PolyNode { get; set; }
     }
 }

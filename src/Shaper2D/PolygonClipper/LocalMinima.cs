@@ -12,31 +12,28 @@ namespace Shaper2D.PolygonClipper
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// ??
+    /// Represents a local minima
     /// </summary>
     internal class LocalMinima
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The y
+        /// Gets or sets the y
         /// </summary>
-        internal float Y;
+        internal float Y { get; set; }
 
         /// <summary>
-        /// The left bound
+        /// Gets or sets the left bound
         /// </summary>
-        internal Edge LeftBound;
+        internal Edge LeftBound { get; set; }
 
         /// <summary>
-        /// The right bound
+        /// Gets or sets the right bound
         /// </summary>
-        internal Edge RightBound;
+        internal Edge RightBound { get; set; }
 
         /// <summary>
-        /// The next
+        /// Gets or sets the next
         /// </summary>
-        internal LocalMinima Next;
-
-#pragma warning restore SA1401 // Field must be private
+        internal LocalMinima Next { get; set; }
     }
 }

@@ -16,16 +16,14 @@ namespace Shaper2D.PolygonClipper
     /// </summary>
     internal class Scanbeam // would this work as a struct?
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The y
+        /// Gets or sets the y
         /// </summary>
-        internal float Y;
+        public float Y { get; set; }
 
         /// <summary>
-        /// The next
+        /// Gets or sets the next
         /// </summary>
-        internal Scanbeam Next;
-#pragma warning restore SA1401 // Field must be private
+        public Scanbeam Next { get; set; }
     }
 }

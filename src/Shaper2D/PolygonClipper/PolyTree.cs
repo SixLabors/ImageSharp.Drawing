@@ -17,12 +17,10 @@ namespace Shaper2D.PolygonClipper
     /// <seealso cref="Shaper2D.PolygonClipper.PolyNode" />
     internal class PolyTree : PolyNode
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// All polys
+        /// Gets or sets all polygon nodes.
         /// </summary>
-        internal List<PolyNode> AllPolys = new List<PolyNode>();
-#pragma warning restore SA1401 // Field must be private
+        public List<PolyNode> AllPolygonNodes { get; set; } = new List<PolyNode>();
 
         /// <summary>
         /// Gets the total.
@@ -34,10 +32,10 @@ namespace Shaper2D.PolygonClipper
         {
             get
             {
-                int result = this.AllPolys.Count;
+                int result = this.AllPolygonNodes.Count;
 
                 // with negative offsets, ignore the hidden outer polygon ...
-                if (result > 0 && this.Children[0] != this.AllPolys[0])
+                if (result > 0 && this.Children[0] != this.AllPolygonNodes[0])
                 {
                     result--;
                 }
@@ -51,12 +49,12 @@ namespace Shaper2D.PolygonClipper
         /// </summary>
         public void Clear()
         {
-            for (int i = 0; i < this.AllPolys.Count; i++)
+            for (int i = 0; i < this.AllPolygonNodes.Count; i++)
             {
-                this.AllPolys[i] = null;
+                this.AllPolygonNodes[i] = null;
             }
 
-            this.AllPolys.Clear();
+            this.AllPolygonNodes.Clear();
             this.Children.Clear();
         }
 

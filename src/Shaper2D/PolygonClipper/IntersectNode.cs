@@ -12,25 +12,23 @@ namespace Shaper2D.PolygonClipper
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// ??
+    /// Intersect Node
     /// </summary>
     internal class IntersectNode
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The edge1
+        /// Gets or sets the edge1
         /// </summary>
-        internal Edge Edge1;
+        public Edge Edge1 { get; set; }
 
         /// <summary>
-        /// The edge2
+        /// Gets or sets the edge2
         /// </summary>
-        internal Edge Edge2;
+        public Edge Edge2 { get; set; }
 
         /// <summary>
-        /// The pt
+        /// Gets or sets the point.
         /// </summary>
-        internal System.Numerics.Vector2 Pt;
-#pragma warning restore SA1401 // Field must be private
+        public System.Numerics.Vector2 Point { get; set; }
     }
 }

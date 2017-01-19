@@ -12,7 +12,7 @@ namespace Shaper2D.PolygonClipper
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// ???
+    /// the direction
     /// </summary>
     internal enum Direction
     {

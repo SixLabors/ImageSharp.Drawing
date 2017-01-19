@@ -12,25 +12,23 @@ namespace Shaper2D.PolygonClipper
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// ??
+    /// Represents the maxima
     /// </summary>
     internal class Maxima
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The x
+        /// Gets or sets the x
         /// </summary>
-        internal float X;
+        internal float X { get; set; }
 
         /// <summary>
-        /// The next
+        /// Gets or sets the next <see cref="Maxima"/>
         /// </summary>
-        internal Maxima Next;
+        internal Maxima Next { get; set; }
 
         /// <summary>
-        /// The previous
+        /// Gets or sets the previous <see cref="Maxima"/>
         /// </summary>
-        internal Maxima Prev;
-#pragma warning restore SA1401 // Field must be private
+        internal Maxima Previous { get; set; }
     }
 }

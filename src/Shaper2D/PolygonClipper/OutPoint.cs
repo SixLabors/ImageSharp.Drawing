@@ -1,4 +1,4 @@
-﻿// <copyright file="OutPt.cs" company="Scott Williams">
+﻿// <copyright file="OutPoint.cs" company="Scott Williams">
 // Copyright (c) Scott Williams and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
@@ -12,30 +12,28 @@ namespace Shaper2D.PolygonClipper
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// ??
+    /// Represents the out point.
     /// </summary>
-    internal class OutPt
+    internal class OutPoint
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The index
+        /// Gets or sets the index
         /// </summary>
-        internal int Idx;
+        public int Index { get; set; }
 
         /// <summary>
-        /// The pt
+        /// Gets or sets the point
         /// </summary>
-        internal System.Numerics.Vector2 Pt;
+        public System.Numerics.Vector2 Point { get; set; }
 
         /// <summary>
-        /// The next
+        /// Gets or sets the next <see cref="OutPoint"/>
         /// </summary>
-        internal OutPt Next;
+        public OutPoint Next { get; set; }
 
         /// <summary>
-        /// The previous
+        /// Gets or sets the previous <see cref="OutPoint"/>
         /// </summary>
-        internal OutPt Prev;
-#pragma warning restore SA1401 // Field must be private
+        public OutPoint Previous { get; set; }
     }
 }

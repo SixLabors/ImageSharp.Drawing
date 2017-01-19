@@ -12,25 +12,23 @@ namespace Shaper2D.PolygonClipper
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// ??
+    /// Joins 2 points.
     /// </summary>
     internal class Join
     {
-#pragma warning disable SA1401 // Field must be private
         /// <summary>
-        /// The out PT1
+        /// Gets or sets the out Point 1
         /// </summary>
-        internal OutPt OutPt1;
+        internal OutPoint OutPoint1 { get; set; }
 
         /// <summary>
-        /// The out PT2
+        /// Gets or sets the out point 2
         /// </summary>
-        internal OutPt OutPt2;
+        internal OutPoint OutPoint2 { get; set; }
 
         /// <summary>
-        /// The off pt
+        /// Gets or sets the off point.
         /// </summary>
-        internal System.Numerics.Vector2 OffPt;
-#pragma warning restore SA1401 // Field must be private
+        internal System.Numerics.Vector2 OffPoint { get; set; }
     }
 }

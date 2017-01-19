@@ -12,7 +12,7 @@ namespace Shaper2D.PolygonClipper
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// ??
+    /// which side the edge represents.
     /// </summary>
     internal enum EdgeSide
     {

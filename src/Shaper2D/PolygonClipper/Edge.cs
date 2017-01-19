@@ -25,23 +25,23 @@ namespace Shaper2D.PolygonClipper
         public IPath SourcePath { get; set; }
 
         /// <summary>
-        /// Gets or sets the bot.
+        /// Gets or sets the bottom.
         /// </summary>
         /// <value>
         /// The bot.
         /// </value>
-        public System.Numerics.Vector2 Bot { get; set; }
+        public System.Numerics.Vector2 Bottom { get; set; }
 
         /// <summary>
-        /// Gets or sets the curr.
+        /// Gets or sets the current.
         /// </summary>
         /// <value>
-        /// The curr.
+        /// The current.
         /// </value>
         /// <remarks>
         /// updated for every new scanbeam.
         /// </remarks>
-        public System.Numerics.Vector2 Curr { get; set; }
+        public System.Numerics.Vector2 Current { get; set; }
 
         /// <summary>
         /// Gets or sets the top.
@@ -93,7 +93,7 @@ namespace Shaper2D.PolygonClipper
         /// <remarks>
         /// 1 or -1 depending on winding direction
         /// </remarks>
-        public int WindindDelta { get; set; }
+        public int WindingDelta { get; set; }
 
         /// <summary>
         /// Gets or sets the winding count
