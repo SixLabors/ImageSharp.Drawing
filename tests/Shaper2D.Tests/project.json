@@ -3,7 +3,7 @@
   "configurations": {
     "Release": {
       "buildOptions": {
-        "warningsAsErrors": true
+        "warningsAsErrors": false
       }
     }
   },

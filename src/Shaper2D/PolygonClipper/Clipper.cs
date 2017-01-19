@@ -140,12 +140,6 @@ namespace Shaper2D.PolygonClipper
                     continue;
                 }
 
-                //can't have only 2 verticies
-                //if (edge.PreviousEdge == edge.NextEdge)
-                //{
-                //    break; // only two vertices
-                //}
-
                 if (SlopesEqual(edge.PreviousEdge.Current, edge.Current, edge.NextEdge.Current))
                 {
                     // Collinear edges are allowed for open paths but in closed paths
