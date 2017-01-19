@@ -2,9 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Moq;
 
 namespace Shaper2D.Tests.PolygonClipper
 {
+    using System.Collections.Immutable;
+
     using Shaper2D.PolygonClipper;
 
     using Xunit;
@@ -56,6 +59,28 @@ namespace Shaper2D.Tests.PolygonClipper
             Assert.Equal(2, shapes.Length);
             Assert.Contains(this.BigSquare, shapes);
             Assert.Contains(this.Hole, shapes);
+        }
+
+        [Fact]
+        public void TrimsDipliactesOfStartFromEnd()
+        {
+            var clipper = new Clipper();
+            var mockPath = new Mock<IPath>();
+            mockPath.Setup(x => x.AsSimpleLinearPath())
+                .Returns(ImmutableArray.Create(new Point(0, 0), new Point(1, 1), new Point(0, 0)));
+
+            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, PolyType.Subject); });
+        }
+
+        [Fact]
+        public void SelfClosingPathTrimsDuplicatesOfEndFromEnd()
+        {
+            var clipper = new Clipper();
+            var mockPath = new Mock<IPath>();
+            mockPath.Setup(x => x.AsSimpleLinearPath())
+                .Returns(ImmutableArray.Create(new Point(0, 0), new Point(1, 1), new Point(1, 1)));
+
+            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, PolyType.Subject); });
         }
     }
 }

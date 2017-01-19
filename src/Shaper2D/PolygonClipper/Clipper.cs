@@ -32,7 +32,7 @@ namespace Shaper2D.PolygonClipper
         private Edge sortedEdges = null;
 
         private LocalMinima minimaList;
-        private LocalMinima currentLM;
+        private LocalMinima currentLocalMinima;
         private Scanbeam scanbeam = null;
         private Edge activeEdges = null;
 
@@ -93,7 +93,7 @@ namespace Shaper2D.PolygonClipper
 
             if (hi < 2)
             {
-                return false;
+                throw new ClipperException("must have more than 2 distinct points");
             }
 
             // create a new edge array ...
@@ -122,9 +122,9 @@ namespace Shaper2D.PolygonClipper
             Edge loopStop = startEdge;
             while (true)
             {
-                // nb: allows matching start and end points when not Closed ...
                 if (edge.Current == edge.NextEdge.Current)
                 {
+                    //remove unneeded edges
                     if (edge == edge.NextEdge)
                     {
                         break;
@@ -140,10 +140,11 @@ namespace Shaper2D.PolygonClipper
                     continue;
                 }
 
-                if (edge.PreviousEdge == edge.NextEdge)
-                {
-                    break; // only two vertices
-                }
+                //can't have only 2 verticies
+                //if (edge.PreviousEdge == edge.NextEdge)
+                //{
+                //    break; // only two vertices
+                //}
 
                 if (SlopesEqual(edge.PreviousEdge.Current, edge.Current, edge.NextEdge.Current))
                 {
@@ -331,7 +332,7 @@ namespace Shaper2D.PolygonClipper
             if (tree.Contour.Any())
             {
                 // if the source path is set then we clipper retained the full path intact thus we can freely
-                // use it and get any shape optimisations that are availible.
+                // use it and get any shape optimizations that are available.
                 if (tree.SourcePath != null)
                 {
                     shapes.Add((IShape)tree.SourcePath);
@@ -3210,10 +3211,10 @@ namespace Shaper2D.PolygonClipper
 
         private bool PopLocalMinima(float y, out LocalMinima current)
         {
-            current = this.currentLM;
-            if (this.currentLM != null && this.currentLM.Y == y)
+            current = this.currentLocalMinima;
+            if (this.currentLocalMinima != null && this.currentLocalMinima.Y == y)
             {
-                this.currentLM = this.currentLM.Next;
+                this.currentLocalMinima = this.currentLocalMinima.Next;
                 return true;
             }
 
@@ -3222,8 +3223,8 @@ namespace Shaper2D.PolygonClipper
 
         private void Reset()
         {
-            this.currentLM = this.minimaList;
-            if (this.currentLM == null)
+            this.currentLocalMinima = this.minimaList;
+            if (this.currentLocalMinima == null)
             {
                 return; // ie nothing to process
             }
@@ -3305,7 +3306,7 @@ namespace Shaper2D.PolygonClipper
 
         private bool LocalMinimaPending()
         {
-            return this.currentLM != null;
+            return this.currentLocalMinima != null;
         }
 
         private OutRec CreateOutRec()
