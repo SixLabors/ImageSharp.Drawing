@@ -18,6 +18,7 @@ namespace Shaper2D.Tests.PolygonClipper
         private Rectangle Hole = new Rectangle(20,20, 10,10);
         private Rectangle TopLeft = new Rectangle(0,0, 20,20);
         private Rectangle TopRight = new Rectangle(30,0, 20,20);
+        private Rectangle TopMiddle = new Rectangle(20,0, 10,20);
 
         private IShape[] Clip(IPath shape, params IPath[] hole)
         {
@@ -81,6 +82,15 @@ namespace Shaper2D.Tests.PolygonClipper
                 .Returns(ImmutableArray.Create(new Point(0, 0), new Point(1, 1), new Point(1, 1)));
 
             Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, PolyType.Subject); });
+        }
+
+        [Fact]
+        public void TouchingByNotOverlapping()
+        {
+            var shapes = this.Clip(this.TopMiddle, this.TopLeft);
+            Assert.Equal(1, shapes.Length);
+            Assert.DoesNotContain(this.TopMiddle, shapes);
+            Assert.DoesNotContain(this.TopLeft, shapes);
         }
     }
 }
