@@ -6,6 +6,7 @@
 namespace Shaper2D
 {
     using System.Collections.Immutable;
+    using System.Numerics;
 
     /// <summary>
     /// Represents a logic path that can be drawn
@@ -41,6 +42,13 @@ namespace Shaper2D
         /// Converts the <see cref="IPath" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
-        ImmutableArray<Point> AsSimpleLinearPath();
+        ImmutableArray<Point> Flatten();
+
+        /// <summary>
+        /// Transforms the path using the specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>A new path with the matrix applied to it.</returns>
+        IPath Transform(Matrix3x2 matrix);
     }
 }

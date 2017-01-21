@@ -15,8 +15,7 @@ namespace Shaper2D
     using PolygonClipper;
 
     /// <summary>
-    /// Represents a complex polygon made up of one or more outline
-    /// polygons and one or more holes to punch out of them.
+    /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
     /// </summary>
     /// <seealso cref="Shaper2D.IShape" />
     public sealed class ComplexPolygon : IShape
@@ -26,31 +25,53 @@ namespace Shaper2D
         private ImmutableArray<IPath> paths;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
+        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
-        /// <param name="outline">The outline.</param>
-        /// <param name="holes">The holes.</param>
-        public ComplexPolygon(IShape outline, params IShape[] holes)
-            : this(new[] { outline }, holes)
+        /// <param name="shapes">The shapes.</param>
+        public ComplexPolygon(params IShape[] shapes)
         {
-        }
+            Guard.NotNull(shapes, nameof(shapes));
+            Guard.MustBeGreaterThanOrEqualTo(shapes.Length, 1, nameof(shapes));
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
-        /// </summary>
-        /// <param name="outlines">The outlines.</param>
-        /// <param name="holes">The holes.</param>
-        public ComplexPolygon(IShape[] outlines, IShape[] holes)
-        {
-            Guard.NotNull(outlines, nameof(outlines));
-            Guard.MustBeGreaterThanOrEqualTo(outlines.Length, 1, nameof(outlines));
+            this.shapes = shapes;
+            var pathCount = shapes.Sum(x => x.Paths.Length);
+            var paths = new IPath[pathCount];
+            int index = 0;
 
-            this.MaxIntersections = this.FixAndSetShapes(outlines, holes);
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
 
-            float minX = this.shapes.Min(x => x.Bounds.Left);
-            float maxX = this.shapes.Max(x => x.Bounds.Right);
-            float minY = this.shapes.Min(x => x.Bounds.Top);
-            float maxY = this.shapes.Max(x => x.Bounds.Bottom);
+            foreach (var s in shapes)
+            {
+                if (s.Bounds.Left < minX)
+                {
+                    minX = s.Bounds.Left;
+                }
+
+                if (s.Bounds.Right > maxX)
+                {
+                    maxX = s.Bounds.Right;
+                }
+
+                if (s.Bounds.Top < minY)
+                {
+                    minY = s.Bounds.Top;
+                }
+
+                if (s.Bounds.Bottom > maxY)
+                {
+                    maxY = s.Bounds.Bottom;
+                }
+
+                foreach (var p in s.Paths)
+                {
+                    paths[index++] = p;
+                }
+            }
+
+            this.paths = ImmutableArray.Create(paths);
 
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
         }
@@ -189,24 +210,29 @@ namespace Shaper2D
             }
         }
 
-        private int FixAndSetShapes(IEnumerable<IShape> outlines, IEnumerable<IShape> holes)
+        /// <summary>
+        /// Transforms the shape using the specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>
+        /// A new shape with the matrix applied to it.
+        /// </returns>
+        public IShape Transform(Matrix3x2 matrix)
         {
-            Clipper clipper = new Clipper();
-
-            // add the outlines and the holes to clipper, scaling up from the float source to the int based system clipper uses
-            clipper.AddPaths(outlines, PolyType.Subject);
-            clipper.AddPaths(holes, PolyType.Clip);
-
-            this.shapes = clipper.Execute();
-            this.paths = ImmutableArray.Create(this.shapes.SelectMany(x => x.Paths).ToArray());
-
-            int intersections = 0;
-            foreach (IShape s in this.shapes)
+            if (matrix.IsIdentity)
             {
-                intersections += s.MaxIntersections;
+                // no transform to apply skip it
+                return this;
             }
 
-            return intersections;
+            var shapes = new IShape[this.shapes.Length];
+            var i = 0;
+            foreach (var s in this.shapes)
+            {
+                shapes[i++] = s.Transform(matrix);
+            }
+
+            return new ComplexPolygon(shapes);
         }
     }
 }

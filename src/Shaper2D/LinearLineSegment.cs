@@ -5,6 +5,7 @@
 
 namespace Shaper2D
 {
+    using System;
     using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
@@ -51,7 +52,17 @@ namespace Shaper2D
             Guard.MustBeGreaterThanOrEqualTo(points.Count(), 2, nameof(points));
 
             this.points = ImmutableArray.Create(points);
+
+            this.EndPoint = points[points.Length - 1];
         }
+
+        /// <summary>
+        /// Gets the end point.
+        /// </summary>
+        /// <value>
+        /// The end point.
+        /// </value>
+        public Point EndPoint { get; private set; }
 
         /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
@@ -59,9 +70,34 @@ namespace Shaper2D
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Point> AsSimpleLinearPath()
+        public ImmutableArray<Point> Flatten()
         {
             return this.points;
+        }
+
+        /// <summary>
+        /// Transforms the current LineSegment using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>
+        /// A line segment with the matrix applied to it.
+        /// </returns>
+        public ILineSegment Transform(Matrix3x2 matrix)
+        {
+            if (matrix.IsIdentity)
+            {
+                // no transform to apply skip it
+                return this;
+            }
+
+            var points = new Point[this.points.Length];
+            var i = 0;
+            foreach (var p in this.points)
+            {
+                points[i++] = p.Transform(matrix);
+            }
+
+            return new LinearLineSegment(points);
         }
     }
 }

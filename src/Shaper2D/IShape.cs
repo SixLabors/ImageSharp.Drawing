@@ -78,5 +78,12 @@ namespace Shaper2D
         /// <param name="end">The end.</param>
         /// <returns>The locations along the line segment that intersect with the edges of the shape.</returns>
         IEnumerable<Point> FindIntersections(Point start, Point end);
+
+        /// <summary>
+        /// Transforms the shape using the specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>A new shape with the matrix applied to it.</returns>
+        IShape Transform(Matrix3x2 matrix);
     }
 }

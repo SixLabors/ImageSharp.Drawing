@@ -12,9 +12,10 @@ namespace Shaper2D.Tests
         public void SingleSegmentConstructor()
         {
             var segment = new LinearLineSegment(new Point(0, 0), new Point(10, 10));
-            Assert.Equal(2, segment.AsSimpleLinearPath().Length);
-            Assert.Equal(new Point(0, 0), segment.AsSimpleLinearPath()[0]);
-            Assert.Equal(new Point(10, 10), segment.AsSimpleLinearPath()[1]);
+            var flatPath = segment.Flatten();
+            Assert.Equal(2, flatPath.Length);
+            Assert.Equal(new Point(0, 0), flatPath[0]);
+            Assert.Equal(new Point(10, 10), flatPath[1]);
         }
 
         [Fact]

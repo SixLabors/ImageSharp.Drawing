@@ -25,6 +25,7 @@ namespace Shaper2D
         /// <param name="segments">The segments.</param>
         public Polygon(params ILineSegment[] segments)
         {
+            this.LineSegments = ImmutableArray.Create(segments);
             this.innerPath = new InternalPath(segments, true);
             this.pathCollection = ImmutableArray.Create<IPath>(this);
         }
@@ -35,9 +36,18 @@ namespace Shaper2D
         /// <param name="segment">The segment.</param>
         public Polygon(ILineSegment segment)
         {
+            this.LineSegments = ImmutableArray.Create(segment);
             this.innerPath = new InternalPath(segment, true);
             this.pathCollection = ImmutableArray.Create<IPath>(this);
         }
+
+        /// <summary>
+        /// Gets the line segments.
+        /// </summary>
+        /// <value>
+        /// The line segments.
+        /// </value>
+        public ImmutableArray<ILineSegment> LineSegments { get; }
 
         /// <summary>
         /// Gets the bounding box of this shape.
@@ -119,7 +129,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Point> AsSimpleLinearPath()
+        public ImmutableArray<Point> Flatten()
         {
             return this.innerPath.Points;
         }
@@ -153,6 +163,49 @@ namespace Shaper2D
         public IEnumerable<Point> FindIntersections(Point start, Point end)
         {
             return this.innerPath.FindIntersections(start, end);
+        }
+
+        /// <summary>
+        /// Transforms the rectangle using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>
+        /// A new shape with the matrix applied to it.
+        /// </returns>
+        public IShape Transform(Matrix3x2 matrix)
+        {
+            var segments = new ILineSegment[this.LineSegments.Length];
+            var i = 0;
+            foreach (var s in this.LineSegments)
+            {
+                segments[i++] = s.Transform(matrix);
+            }
+
+            return new Polygon(segments);
+        }
+
+        /// <summary>
+        /// Transforms the path using the specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>
+        /// A new path with the matrix applied to it.
+        /// </returns>
+        IPath IPath.Transform(Matrix3x2 matrix)
+        {
+            if (matrix.IsIdentity)
+            {
+                return this;
+            }
+
+            var segments = new ILineSegment[this.LineSegments.Length];
+            var i = 0;
+            foreach (var s in this.LineSegments)
+            {
+                segments[i++] = s.Transform(matrix);
+            }
+
+            return new Polygon(segments);
         }
     }
 }

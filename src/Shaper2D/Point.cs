@@ -21,9 +21,14 @@ namespace Shaper2D
     public struct Point : IEquatable<Point>
     {
         /// <summary>
-        /// Represents a <see cref="Point"/> that has X and Y values set to zero.
+        /// Represents an unset <see cref="Point"/>.
         /// </summary>
         public static readonly Point Empty = default(Point);
+
+        /// <summary>
+        /// Represents a <see cref="Point"/> that has X and Y values set to zero.
+        /// </summary>
+        public static readonly Point Zero = new Point(0, 0);
 
         private readonly Vector2 backingVector;
 
@@ -184,6 +189,16 @@ namespace Shaper2D
         public Point Offset(Size p)
         {
             return new Point(this.backingVector + p.ToVector2());
+        }
+
+        /// <summary>
+        /// Applies the specified matrix to this point
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>A new point with the transofrm applied upon it.</returns>
+        public Point Transform(Matrix3x2 matrix)
+        {
+            return new Point(Vector2.Transform(this.backingVector, matrix));
         }
 
         /// <inheritdoc/>

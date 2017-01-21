@@ -20,19 +20,19 @@ namespace Shaper2D.Tests.PolygonClipper
         private Rectangle TopRight = new Rectangle(30,0, 20,20);
         private Rectangle TopMiddle = new Rectangle(20,0, 10,20);
 
-        private IShape[] Clip(IPath shape, params IPath[] hole)
+        private ImmutableArray<IShape> Clip(IPath shape, params IPath[] hole)
         {
             var clipper = new Clipper();
 
-            clipper.AddPath(shape, PolyType.Subject);
+            clipper.AddPath(shape, ClippingType.Subject);
             if (hole != null)
             {
                 foreach (var s in hole)
                 {
-                    clipper.AddPath(s, PolyType.Clip);
+                    clipper.AddPath(s, ClippingType.Clip);
                 }
             }
-            return clipper.Execute();
+            return clipper.GenerateClippedShapes();
         }
 
         [Fact]
@@ -67,10 +67,10 @@ namespace Shaper2D.Tests.PolygonClipper
         {
             var clipper = new Clipper();
             var mockPath = new Mock<IPath>();
-            mockPath.Setup(x => x.AsSimpleLinearPath())
+            mockPath.Setup(x => x.Flatten())
                 .Returns(ImmutableArray.Create(new Point(0, 0), new Point(1, 1), new Point(0, 0)));
 
-            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, PolyType.Subject); });
+            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, ClippingType.Subject); });
         }
 
         [Fact]
@@ -78,10 +78,10 @@ namespace Shaper2D.Tests.PolygonClipper
         {
             var clipper = new Clipper();
             var mockPath = new Mock<IPath>();
-            mockPath.Setup(x => x.AsSimpleLinearPath())
+            mockPath.Setup(x => x.Flatten())
                 .Returns(ImmutableArray.Create(new Point(0, 0), new Point(1, 1), new Point(1, 1)));
 
-            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, PolyType.Subject); });
+            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, ClippingType.Subject); });
         }
 
         [Fact]
