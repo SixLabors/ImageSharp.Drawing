@@ -111,7 +111,7 @@ namespace Shaper2D.Tests
         public void AsSimpleLinearPath()
         {
             var poly = new Polygon(new LinearLineSegment(new Point(0, 0), new Point(0, 10), new Point(5, 5)));
-            var paths = poly.AsSimpleLinearPath();
+            var paths = poly.Flatten();
             Assert.Equal(3, paths.Length);
             Assert.Equal(new Point(0, 0), paths[0]);
             Assert.Equal(new Point(0, 10), paths[1]);

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -175,7 +176,7 @@ namespace Shaper2D.Tests
         public void LienearSegements()
         {
             IPath shape = new Rectangle(10, 11, 12, 13);
-            var segemnts = shape.AsSimpleLinearPath();
+            var segemnts = shape.Flatten();
             Assert.Equal(new Point(10, 11), segemnts[0]);
             Assert.Equal(new Point(22, 11), segemnts[1]);
             Assert.Equal(new Point(22, 24), segemnts[2]);
@@ -242,6 +243,27 @@ namespace Shaper2D.Tests
             IShape shape = new Rectangle(10, 11, 12, 13);
 
             Assert.Equal((IPath)shape, shape.Paths.Single());
+        }
+
+        [Fact]
+        public void TransformIdnetityReturnsSahpeObject()
+        {
+
+            Rectangle shape = new Rectangle(0, 0, 200, 60);
+            var transformdShape =  shape.Transform(Matrix3x2.Identity);
+
+            Assert.Same(shape, transformdShape);
+        }
+
+        [Fact]
+        public void Transform()
+        {
+            Rectangle shape = new Rectangle(0, 0, 200, 60);
+
+            var newShape = (Rectangle)shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
+
+            Assert.Equal(new Point(20, 2), newShape.Location);
+            Assert.Equal(new Size(60, 200), newShape.Size);
         }
     }
 }

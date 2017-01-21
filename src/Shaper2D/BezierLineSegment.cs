@@ -5,6 +5,7 @@
 
 namespace Shaper2D
 {
+    using System;
     using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
@@ -26,6 +27,7 @@ namespace Shaper2D
         /// The line points.
         /// </summary>
         private readonly ImmutableArray<Point> linePoints;
+        private readonly Point[] controlPoints;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
@@ -36,7 +38,16 @@ namespace Shaper2D
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
 
+            int correctPointCount = (points.Length - 1) % 3;
+            if (correctPointCount != 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(points), "points must be a multiple of 3 plus 1 long.");
+            }
+
+            this.controlPoints = points.ToArray();
             this.linePoints = this.GetDrawingPoints(points);
+
+            this.EndPoint = points[points.Length - 1];
         }
 
         /// <summary>
@@ -53,14 +64,45 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Gets the end point.
+        /// </summary>
+        /// <value>
+        /// The end point.
+        /// </value>
+        public Point EndPoint { get; private set; }
+
+        /// <summary>
         /// Returns the current <see cref="ILineSegment" /> a simple linear path.
         /// </summary>
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Point> AsSimpleLinearPath()
+        public ImmutableArray<Point> Flatten()
         {
             return this.linePoints;
+        }
+
+        /// <summary>
+        /// Transforms the current LineSegment using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>A line segment with the matrix applied to it.</returns>
+        public ILineSegment Transform(Matrix3x2 matrix)
+        {
+            if (matrix.IsIdentity)
+            {
+                // no transform to apply skip it
+                return this;
+            }
+
+            var points = new Point[this.controlPoints.Length];
+            var i = 0;
+            foreach (var p in this.controlPoints)
+            {
+                points[i++] = p.Transform(matrix);
+            }
+
+            return new BezierLineSegment(points);
         }
 
         /// <summary>

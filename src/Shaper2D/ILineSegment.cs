@@ -14,9 +14,24 @@ namespace Shaper2D
     public interface ILineSegment
     {
         /// <summary>
+        /// Gets the end point.
+        /// </summary>
+        /// <value>
+        /// The end point.
+        /// </value>
+        Point EndPoint { get; }
+
+        /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="ILineSegment" /> as simple linear path.</returns>
-        ImmutableArray<Point> AsSimpleLinearPath(); // TODO move this over to ReadonlySpan<Vector2> once available
+        ImmutableArray<Point> Flatten();
+
+        /// <summary>
+        /// Transforms the current LineSegment using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>A line segment with the matrix applied to it.</returns>
+        ILineSegment Transform(Matrix3x2 matrix);
     }
 }

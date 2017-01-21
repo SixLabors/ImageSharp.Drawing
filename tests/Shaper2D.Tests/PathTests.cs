@@ -75,7 +75,7 @@ namespace Shaper2D.Tests
         public void SimplePath()
         {
             var path = new Path(new LinearLineSegment(new Point(0, 0), new Point(10, 0), new Point(10, 10), new Point(0, 10)));
-            var points = path.AsSimpleLinearPath();
+            var points = path.Flatten();
 
             Assert.Equal(4, points.Length);
             Assert.Equal(new Point(0, 0), points[0]);

@@ -73,7 +73,7 @@ namespace Shaper2D.PolygonClipper
         /// <value>
         /// The poly type.
         /// </value>
-        public PolyType PolyType { get; set; }
+        public ClippingType PolyType { get; set; }
 
         /// <summary>
         /// Gets or sets the side.

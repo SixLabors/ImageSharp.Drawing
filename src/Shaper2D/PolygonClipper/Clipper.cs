@@ -7,6 +7,7 @@ namespace Shaper2D.PolygonClipper
 {
     using System;
     using System.Collections.Generic;
+    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
     using System.Runtime.CompilerServices;
@@ -14,7 +15,7 @@ namespace Shaper2D.PolygonClipper
     /// <summary>
     /// Library to clip polygons.
     /// </summary>
-    internal class Clipper
+    public class Clipper
     {
         private const double HorizontalDeltaLimit = -3.4E+38;
         private const int Skip = -2;
@@ -27,256 +28,34 @@ namespace Shaper2D.PolygonClipper
         private readonly List<Join> ghostJoins = new List<Join>();
         private readonly List<List<Edge>> edges = new List<List<Edge>>();
         private readonly List<OutRec> polyOuts = new List<OutRec>();
+        private readonly object syncRoot = new object();
 
         private Maxima maxima = null;
         private Edge sortedEdges = null;
-
         private LocalMinima minimaList;
         private LocalMinima currentLocalMinima;
         private Scanbeam scanbeam = null;
         private Edge activeEdges = null;
+        private bool resultsDirty = true;
+        private ImmutableArray<IShape> results;
 
         /// <summary>
-        /// Adds the paths.
+        /// Initializes a new instance of the <see cref="Clipper"/> class.
         /// </summary>
-        /// <param name="path">The path.</param>
-        /// <param name="polyType">Type of the poly.</param>
-        public void AddPaths(IEnumerable<IShape> path, PolyType polyType)
+        /// <param name="shapes">The shapes.</param>
+        public Clipper(IEnumerable<ClipableShape> shapes)
         {
-            foreach (var p in path)
-            {
-                this.AddPath(p, polyType);
-            }
+            Guard.NotNull(shapes, nameof(shapes));
+            this.AddShapes(shapes);
         }
 
         /// <summary>
-        /// Adds the path.
+        /// Initializes a new instance of the <see cref="Clipper" /> class.
         /// </summary>
-        /// <param name="path">The path.</param>
-        /// <param name="polyType">Type of the poly.</param>
-        public void AddPath(IShape path, PolyType polyType)
+        /// <param name="shapes">The shapes.</param>
+        public Clipper(params ClipableShape[] shapes)
         {
-            if (path is IPath)
-            {
-                this.AddPath((IPath)path, polyType);
-            }
-            else
-            {
-                foreach (var p in path.Paths)
-                {
-                    this.AddPath(p, polyType);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Adds the path.
-        /// </summary>
-        /// <param name="path">The path.</param>
-        /// <param name="polyType">Type of the poly.</param>
-        /// <returns>True if the path was added.</returns>
-        /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
-        public bool AddPath(IPath path, PolyType polyType)
-        {
-            var points = path.AsSimpleLinearPath();
-
-            int hi = points.Length - 1;
-            while (hi > 0 && (points[hi] == points[0]))
-            {
-                --hi;
-            }
-
-            while (hi > 0 && (points[hi] == points[hi - 1]))
-            {
-                --hi;
-            }
-
-            if (hi < 2)
-            {
-                throw new ClipperException("must have more than 2 distinct points");
-            }
-
-            // create a new edge array ...
-            List<Edge> edges = new List<Edge>(hi + 1);
-            for (int i = 0; i <= hi; i++)
-            {
-                edges.Add(new Edge() { SourcePath = path });
-            }
-
-            bool isFlat = true;
-
-            // 1. Basic (first) edge initialization ...
-            edges[1].Current = points[1];
-
-            InitEdge(edges[0], edges[1], edges[hi], points[0]);
-            InitEdge(edges[hi], edges[0], edges[hi - 1], points[hi]);
-            for (int i = hi - 1; i >= 1; --i)
-            {
-                InitEdge(edges[i], edges[i + 1], edges[i - 1], points[i]);
-            }
-
-            Edge startEdge = edges[0];
-
-            // 2. Remove duplicate vertices, and (when closed) collinear edges ...
-            Edge edge = startEdge;
-            Edge loopStop = startEdge;
-            while (true)
-            {
-                if (edge.Current == edge.NextEdge.Current)
-                {
-                    //remove unneeded edges
-                    if (edge == edge.NextEdge)
-                    {
-                        break;
-                    }
-
-                    if (edge == startEdge)
-                    {
-                        startEdge = edge.NextEdge;
-                    }
-
-                    edge = RemoveEdge(edge);
-                    loopStop = edge;
-                    continue;
-                }
-
-                if (SlopesEqual(edge.PreviousEdge.Current, edge.Current, edge.NextEdge.Current))
-                {
-                    // Collinear edges are allowed for open paths but in closed paths
-                    // the default is to merge adjacent collinear edges into a single edge.
-                    // However, if the PreserveCollinear property is enabled, only overlapping
-                    // collinear edges (ie spikes) will be removed from closed paths.
-                    if (edge == startEdge)
-                    {
-                        startEdge = edge.NextEdge;
-                    }
-
-                    edge = RemoveEdge(edge);
-                    edge = edge.PreviousEdge;
-                    loopStop = edge;
-                    continue;
-                }
-
-                edge = edge.NextEdge;
-                if (edge == loopStop)
-                {
-                    break;
-                }
-            }
-
-            if (edge.PreviousEdge == edge.NextEdge)
-            {
-                return false;
-            }
-
-            // 3. Do second stage of edge initialization ...
-            edge = startEdge;
-            do
-            {
-                this.InitEdge2(edge, polyType);
-                edge = edge.NextEdge;
-                if (isFlat && edge.Current.Y != startEdge.Current.Y)
-                {
-                    isFlat = false;
-                }
-            }
-            while (edge != startEdge);
-
-            // 4. Finally, add edge bounds to LocalMinima list ...
-            // Totally flat paths must be handled differently when adding them
-            // to LocalMinima list to avoid endless loops etc ...
-            if (isFlat)
-            {
-                return false;
-            }
-
-            this.edges.Add(edges);
-            Edge loopBreakerEdge = null;
-
-            // workaround to avoid an endless loop in the while loop below when
-            // open paths have matching start and end points ...
-            if (edge.PreviousEdge.Bottom == edge.PreviousEdge.Top)
-            {
-                edge = edge.NextEdge;
-            }
-
-            while (true)
-            {
-                edge = FindNextLocMin(edge);
-                if (edge == loopBreakerEdge)
-                {
-                    break;
-                }
-                else if (loopBreakerEdge == null)
-                {
-                    loopBreakerEdge = edge;
-                }
-
-                // E and E.Prev now share a local minima (left aligned if horizontal).
-                // Compare their slopes to find which starts which bound ...
-                LocalMinima locMin = new LocalMinima
-                {
-                    Next = null,
-                    Y = edge.Bottom.Y
-                };
-
-                bool leftBoundIsForward;
-                if (edge.Dx < edge.PreviousEdge.Dx)
-                {
-                    locMin.LeftBound = edge.PreviousEdge;
-                    locMin.RightBound = edge;
-                    leftBoundIsForward = false; // Q.nextInLML = Q.prev
-                }
-                else
-                {
-                    locMin.LeftBound = edge;
-                    locMin.RightBound = edge.PreviousEdge;
-                    leftBoundIsForward = true; // Q.nextInLML = Q.next
-                }
-
-                locMin.LeftBound.Side = EdgeSide.Left;
-                locMin.RightBound.Side = EdgeSide.Right;
-
-                if (locMin.LeftBound.NextEdge == locMin.RightBound)
-                {
-                    locMin.LeftBound.WindingDelta = -1;
-                }
-                else
-                {
-                    locMin.LeftBound.WindingDelta = 1;
-                }
-
-                locMin.RightBound.WindingDelta = -locMin.LeftBound.WindingDelta;
-
-                edge = this.ProcessBound(locMin.LeftBound, leftBoundIsForward);
-                if (edge.OutIndex == Skip)
-                {
-                    edge = this.ProcessBound(edge, leftBoundIsForward);
-                }
-
-                Edge edge2 = this.ProcessBound(locMin.RightBound, !leftBoundIsForward);
-                if (edge2.OutIndex == Skip)
-                {
-                    edge2 = this.ProcessBound(edge2, !leftBoundIsForward);
-                }
-
-                if (locMin.LeftBound.OutIndex == Skip)
-                {
-                    locMin.LeftBound = null;
-                }
-                else if (locMin.RightBound.OutIndex == Skip)
-                {
-                    locMin.RightBound = null;
-                }
-
-                this.InsertLocalMinima(locMin);
-                if (!leftBoundIsForward)
-                {
-                    edge = edge2;
-                }
-            }
-
-            return true;
+            this.AddShapes(shapes);
         }
 
         /// <summary>
@@ -285,18 +64,299 @@ namespace Shaper2D.PolygonClipper
         /// <returns>
         /// Returns the <see cref="IShape" /> array containing the converted polygons.
         /// </returns>
-        public IShape[] Execute()
+        public ImmutableArray<IShape> GenerateClippedShapes()
         {
-            PolyTree polytree = new PolyTree();
-            bool succeeded = this.ExecuteInternal();
-
-            // build the return polygons ...
-            if (succeeded)
+            if (!this.resultsDirty)
             {
-                this.BuildResult2(polytree);
+                return this.results;
             }
 
-            return ExtractOutlines(polytree).ToArray();
+            lock (this.syncRoot)
+            {
+                if (!this.resultsDirty)
+                {
+                    return this.results;
+                }
+
+                try
+                {
+                    bool succeeded = this.ExecuteInternal();
+
+                    // build the return polygons ...
+                    if (succeeded)
+                    {
+                        this.results = this.BuildResult();
+                        this.resultsDirty = false;
+                    }
+                }
+                finally
+                {
+                    this.DisposeAllPolyPoints();
+                }
+
+                return this.results;
+            }
+        }
+
+        /// <summary>
+        /// Adds the paths.
+        /// </summary>
+        /// <param name="clipableShaps">The clipable shaps.</param>
+        public void AddShapes(IEnumerable<ClipableShape> clipableShaps)
+        {
+            foreach (var p in clipableShaps)
+            {
+                this.AddShape(p.Shape, p.Type);
+            }
+        }
+
+        /// <summary>
+        /// Adds the shapes.
+        /// </summary>
+        /// <param name="shapes">The shapes.</param>
+        /// <param name="clippingType">The clipping type.</param>
+        public void AddShapes(IEnumerable<IShape> shapes, ClippingType clippingType)
+        {
+            foreach (var p in shapes)
+            {
+                this.AddShape(p, clippingType);
+            }
+        }
+
+        /// <summary>
+        /// Adds the path.
+        /// </summary>
+        /// <param name="shape">The shape.</param>
+        /// <param name="clippingType">The clipping type.</param>
+        internal void AddShape(IShape shape, ClippingType clippingType)
+        {
+            if (shape is IPath)
+            {
+                this.AddPath((IPath)shape, clippingType);
+            }
+            else
+            {
+                foreach (var p in shape.Paths)
+                {
+                    this.AddPath(p, clippingType);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds the path.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        /// <param name="clippingType">Type of the poly.</param>
+        /// <returns>True if the path was added.</returns>
+        /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
+        internal bool AddPath(IPath path, ClippingType clippingType)
+        {
+            // every path we add lock the clipper to prevent state curruption
+            lock (this.syncRoot)
+            {
+                this.resultsDirty = true;
+
+                var points = path.Flatten();
+
+                int hi = points.Length - 1;
+                while (hi > 0 && (points[hi] == points[0]))
+                {
+                    --hi;
+                }
+
+                while (hi > 0 && (points[hi] == points[hi - 1]))
+                {
+                    --hi;
+                }
+
+                if (hi < 2)
+                {
+                    throw new ClipperException("must have more than 2 distinct points");
+                }
+
+                // create a new edge array ...
+                List<Edge> edges = new List<Edge>(hi + 1);
+                for (int i = 0; i <= hi; i++)
+                {
+                    edges.Add(new Edge() { SourcePath = path });
+                }
+
+                bool isFlat = true;
+
+                // 1. Basic (first) edge initialization ...
+                edges[1].Current = points[1];
+
+                InitEdge(edges[0], edges[1], edges[hi], points[0]);
+                InitEdge(edges[hi], edges[0], edges[hi - 1], points[hi]);
+                for (int i = hi - 1; i >= 1; --i)
+                {
+                    InitEdge(edges[i], edges[i + 1], edges[i - 1], points[i]);
+                }
+
+                Edge startEdge = edges[0];
+
+                // 2. Remove duplicate vertices, and (when closed) collinear edges ...
+                Edge edge = startEdge;
+                Edge loopStop = startEdge;
+                while (true)
+                {
+                    if (edge.Current == edge.NextEdge.Current)
+                    {
+                        // remove unneeded edges
+                        if (edge == edge.NextEdge)
+                        {
+                            break;
+                        }
+
+                        if (edge == startEdge)
+                        {
+                            startEdge = edge.NextEdge;
+                        }
+
+                        edge = RemoveEdge(edge);
+                        loopStop = edge;
+                        continue;
+                    }
+
+                    if (SlopesEqual(edge.PreviousEdge.Current, edge.Current, edge.NextEdge.Current))
+                    {
+                        // Collinear edges are allowed for open paths but in closed paths
+                        // the default is to merge adjacent collinear edges into a single edge.
+                        // However, if the PreserveCollinear property is enabled, only overlapping
+                        // collinear edges (ie spikes) will be removed from closed paths.
+                        if (edge == startEdge)
+                        {
+                            startEdge = edge.NextEdge;
+                        }
+
+                        edge = RemoveEdge(edge);
+                        edge = edge.PreviousEdge;
+                        loopStop = edge;
+                        continue;
+                    }
+
+                    edge = edge.NextEdge;
+                    if (edge == loopStop)
+                    {
+                        break;
+                    }
+                }
+
+                if (edge.PreviousEdge == edge.NextEdge)
+                {
+                    return false;
+                }
+
+                // 3. Do second stage of edge initialization ...
+                edge = startEdge;
+                do
+                {
+                    this.InitEdge2(edge, clippingType);
+                    edge = edge.NextEdge;
+                    if (isFlat && edge.Current.Y != startEdge.Current.Y)
+                    {
+                        isFlat = false;
+                    }
+                }
+                while (edge != startEdge);
+
+                // 4. Finally, add edge bounds to LocalMinima list ...
+                // Totally flat paths must be handled differently when adding them
+                // to LocalMinima list to avoid endless loops etc ...
+                if (isFlat)
+                {
+                    return false;
+                }
+
+                this.edges.Add(edges);
+                Edge loopBreakerEdge = null;
+
+                // workaround to avoid an endless loop in the while loop below when
+                // open paths have matching start and end points ...
+                if (edge.PreviousEdge.Bottom == edge.PreviousEdge.Top)
+                {
+                    edge = edge.NextEdge;
+                }
+
+                while (true)
+                {
+                    edge = FindNextLocMin(edge);
+                    if (edge == loopBreakerEdge)
+                    {
+                        break;
+                    }
+                    else if (loopBreakerEdge == null)
+                    {
+                        loopBreakerEdge = edge;
+                    }
+
+                    // E and E.Prev now share a local minima (left aligned if horizontal).
+                    // Compare their slopes to find which starts which bound ...
+                    LocalMinima locMin = new LocalMinima
+                    {
+                        Next = null,
+                        Y = edge.Bottom.Y
+                    };
+
+                    bool leftBoundIsForward;
+                    if (edge.Dx < edge.PreviousEdge.Dx)
+                    {
+                        locMin.LeftBound = edge.PreviousEdge;
+                        locMin.RightBound = edge;
+                        leftBoundIsForward = false; // Q.nextInLML = Q.prev
+                    }
+                    else
+                    {
+                        locMin.LeftBound = edge;
+                        locMin.RightBound = edge.PreviousEdge;
+                        leftBoundIsForward = true; // Q.nextInLML = Q.next
+                    }
+
+                    locMin.LeftBound.Side = EdgeSide.Left;
+                    locMin.RightBound.Side = EdgeSide.Right;
+
+                    if (locMin.LeftBound.NextEdge == locMin.RightBound)
+                    {
+                        locMin.LeftBound.WindingDelta = -1;
+                    }
+                    else
+                    {
+                        locMin.LeftBound.WindingDelta = 1;
+                    }
+
+                    locMin.RightBound.WindingDelta = -locMin.LeftBound.WindingDelta;
+
+                    edge = this.ProcessBound(locMin.LeftBound, leftBoundIsForward);
+                    if (edge.OutIndex == Skip)
+                    {
+                        edge = this.ProcessBound(edge, leftBoundIsForward);
+                    }
+
+                    Edge edge2 = this.ProcessBound(locMin.RightBound, !leftBoundIsForward);
+                    if (edge2.OutIndex == Skip)
+                    {
+                        edge2 = this.ProcessBound(edge2, !leftBoundIsForward);
+                    }
+
+                    if (locMin.LeftBound.OutIndex == Skip)
+                    {
+                        locMin.LeftBound = null;
+                    }
+                    else if (locMin.RightBound.OutIndex == Skip)
+                    {
+                        locMin.RightBound = null;
+                    }
+
+                    this.InsertLocalMinima(locMin);
+                    if (!leftBoundIsForward)
+                    {
+                        edge = edge2;
+                    }
+                }
+
+                return true;
+            }
         }
 
         private static float Round(double value)
@@ -312,37 +372,6 @@ namespace Shaper2D.PolygonClipper
             }
 
             return edge.Bottom.X + Round(edge.Dx * (currentY - edge.Bottom.Y));
-        }
-
-        private static List<IShape> ExtractOutlines(PolyNode tree)
-        {
-            var result = new List<IShape>();
-            ExtractOutlines(tree, result);
-            return result;
-        }
-
-        private static void ExtractOutlines(PolyNode tree, List<IShape> shapes)
-        {
-            if (tree.Contour.Any())
-            {
-                // if the source path is set then we clipper retained the full path intact thus we can freely
-                // use it and get any shape optimizations that are available.
-                if (tree.SourcePath != null)
-                {
-                    shapes.Add((IShape)tree.SourcePath);
-                }
-                else
-                {
-                    Polygon polygon = new Polygon(new LinearLineSegment(tree.Contour.Select(x => new Point(x)).ToArray()));
-
-                    shapes.Add(polygon);
-                }
-            }
-
-            foreach (PolyNode c in tree.Children)
-            {
-                ExtractOutlines(c, shapes);
-            }
         }
 
         private static void FixHoleLinkage(OutRec outRec)
@@ -621,6 +650,16 @@ namespace Shaper2D.PolygonClipper
             // Swap(ref e.Top.X, ref e.Bot.X);
         }
 
+        private void DisposeAllPolyPoints()
+        {
+            foreach (var polyout in this.polyOuts)
+            {
+                polyout.Points = null;
+            }
+
+            this.polyOuts.Clear();
+        }
+
         private bool ExecuteInternal()
         {
             try
@@ -886,7 +925,7 @@ namespace Shaper2D.PolygonClipper
                 return false;
             }
 
-            if (edge.PolyType == PolyType.Subject)
+            if (edge.PolyType == ClippingType.Subject)
             {
                 return edge.WindingCountInOppositePolyType == 0;
             }
@@ -1659,8 +1698,8 @@ namespace Shaper2D.PolygonClipper
                 }
                 else if (e1Wc == 1 && e2Wc == 1)
                 {
-                    if (((e1.PolyType == PolyType.Clip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
-                        ((e1.PolyType == PolyType.Subject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
+                    if (((e1.PolyType == ClippingType.Clip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
+                        ((e1.PolyType == ClippingType.Subject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
                     {
                         this.AddLocalMinPoly(e1, e2, pt);
                     }
@@ -2380,12 +2419,11 @@ namespace Shaper2D.PolygonClipper
             return result;
         }
 
-        private void BuildResult2(PolyTree polytree)
+        private ImmutableArray<IShape> BuildResult()
         {
-            polytree.Clear();
+            List<IShape> shapes = new List<IShape>(this.polyOuts.Count);
 
             // add each output polygon/contour to polytree ...
-            polytree.AllPolygonNodes.Capacity = this.polyOuts.Count;
             for (int i = 0; i < this.polyOuts.Count; i++)
             {
                 OutRec outRec = this.polyOuts[i];
@@ -2397,42 +2435,26 @@ namespace Shaper2D.PolygonClipper
                 }
 
                 FixHoleLinkage(outRec);
-                PolyNode pn = new PolyNode();
-                pn.SourcePath = outRec.SourcePath;
-                polytree.AllPolygonNodes.Add(pn);
-                outRec.PolyNode = pn;
-                pn.Contour.Capacity = cnt;
-                OutPoint op = outRec.Points.Previous;
-                for (int j = 0; j < cnt; j++)
+                var shape = outRec.SourcePath as IShape;
+                if (shape != null)
                 {
-                    pn.Contour.Add(op.Point);
-                    op = op.Previous;
-                }
-            }
-
-            // fixup PolyNode links etc ...
-            polytree.Children.Capacity = this.polyOuts.Count;
-            for (int i = 0; i < this.polyOuts.Count; i++)
-            {
-                OutRec outRec = this.polyOuts[i];
-                if (outRec.PolyNode == null)
-                {
-                    continue;
-                }
-                else if (outRec.IsOpen)
-                {
-                    polytree.AddChild(outRec.PolyNode);
-                }
-                else if (outRec.FirstLeft != null &&
-                  outRec.FirstLeft.PolyNode != null)
-                {
-                    outRec.FirstLeft.PolyNode.AddChild(outRec.PolyNode);
+                    shapes.Add(shape);
                 }
                 else
                 {
-                    polytree.AddChild(outRec.PolyNode);
+                    var points = new Point[cnt];
+                    OutPoint op = outRec.Points.Previous;
+                    for (int j = 0; j < cnt; j++)
+                    {
+                        points[i] = op.Point;
+                        op = op.Previous;
+                    }
+
+                    shapes.Add(new Polygon(new LinearLineSegment(points)));
                 }
             }
+
+            return shapes.ToImmutableArray();
         }
 
         private void FixupOutPolyline(OutRec outrec)
@@ -3305,16 +3327,8 @@ namespace Shaper2D.PolygonClipper
 
         private OutRec CreateOutRec()
         {
-            OutRec result = new OutRec();
-            result.Index = Unassigned;
-            result.IsHole = false;
-            result.IsOpen = false;
-            result.FirstLeft = null;
-            result.Points = null;
-            result.BottomPoint = null;
-            result.PolyNode = null;
+            var result = new OutRec(this.polyOuts.Count);
             this.polyOuts.Add(result);
-            result.Index = this.polyOuts.Count - 1;
             return result;
         }
 
@@ -3469,7 +3483,7 @@ namespace Shaper2D.PolygonClipper
             e.PreviousInAEL = null;
         }
 
-        private void InitEdge2(Edge e, PolyType polyType)
+        private void InitEdge2(Edge e, ClippingType polyType)
         {
             if (e.Current.Y >= e.NextEdge.Current.Y)
             {

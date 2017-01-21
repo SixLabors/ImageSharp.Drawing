@@ -67,7 +67,7 @@ namespace Shaper2D
         /// <param name="segment">The segment.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(ILineSegment segment, bool isClosedPath)
-            : this(segment.AsSimpleLinearPath(), isClosedPath)
+            : this(segment.Flatten(), isClosedPath)
         {
         }
 
@@ -395,7 +395,7 @@ namespace Shaper2D
             List<Point> simplified = new List<Point>();
             foreach (ILineSegment seg in segments)
             {
-                simplified.AddRange(seg.AsSimpleLinearPath());
+                simplified.AddRange(seg.Flatten());
             }
 
             return simplified.ToImmutableArray();

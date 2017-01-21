@@ -39,16 +39,16 @@ namespace Shaper2D
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Rectangle"/> class.
+        /// Initializes a new instance of the <see cref="Rectangle" /> class.
         /// </summary>
-        /// <param name="location">The location.</param>
-        /// <param name="size">The size.</param>
-        public Rectangle(Point location, Size size)
+        /// <param name="topLeft">The top left.</param>
+        /// <param name="bottomRight">The bottom right.</param>
+        public Rectangle(Point topLeft, Point bottomRight)
         {
-            this.Location = location;
-            this.topLeft = location;
-            this.bottomRight = location.Offset(size);
-            this.Size = size;
+            this.Location = topLeft;
+            this.topLeft = topLeft;
+            this.bottomRight = bottomRight;
+            this.Size = new Size(bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
 
             this.points = ImmutableArray.Create(new Point[4]
             {
@@ -58,9 +58,19 @@ namespace Shaper2D
                 new Vector2(this.topLeft.X, this.bottomRight.Y)
             });
 
-            this.halfLength = size.Width + size.Height;
+            this.halfLength = this.Size.Width + this.Size.Height;
             this.length = this.halfLength * 2;
             this.pathCollection = ImmutableArray.Create<IPath>(this);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Rectangle"/> class.
+        /// </summary>
+        /// <param name="location">The location.</param>
+        /// <param name="size">The size.</param>
+        public Rectangle(Point location, Size size)
+            : this(location, location.Offset(size))
+        {
         }
 
         /// <summary>
@@ -80,6 +90,14 @@ namespace Shaper2D
         public float Left => this.topLeft.X;
 
         /// <summary>
+        /// Gets the X.
+        /// </summary>
+        /// <value>
+        /// The X.
+        /// </value>
+        public float X => this.topLeft.X;
+
+        /// <summary>
         /// Gets the right.
         /// </summary>
         /// <value>
@@ -94,6 +112,14 @@ namespace Shaper2D
         /// The top.
         /// </value>
         public float Top => this.topLeft.Y;
+
+        /// <summary>
+        /// Gets the Y.
+        /// </summary>
+        /// <value>
+        /// The Y.
+        /// </value>
+        public float Y => this.topLeft.Y;
 
         /// <summary>
         /// Gets the bottom.
@@ -263,12 +289,41 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Transforms the rectangle using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>
+        /// A new shape with the matrix applied to it.
+        /// </returns>
+        public IShape Transform(Matrix3x2 matrix)
+        {
+            if (matrix.IsIdentity)
+            {
+                return this;
+            }
+
+            return new Rectangle(Vector2.Transform(this.topLeft, matrix), Vector2.Transform(this.bottomRight, matrix));
+        }
+
+        /// <summary>
+        /// Transforms the rectangle using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>
+        /// A new path with the matrix applied to it.
+        /// </returns>
+        IPath IPath.Transform(Matrix3x2 matrix)
+        {
+            return (IPath)this.Transform(matrix);
+        }
+
+        /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
         /// </summary>
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        ImmutableArray<Point> IPath.AsSimpleLinearPath()
+        ImmutableArray<Point> IPath.Flatten()
         {
             return this.points;
         }

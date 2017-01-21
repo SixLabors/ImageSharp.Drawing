@@ -12,7 +12,7 @@ namespace Shaper2D.Tests
         public void SingleSegmentConstructor()
         {
             var segment = new BezierLineSegment(new Point(0, 0), new Point(10, 0), new Point(10, 0), new Point(20, 0));
-            var points = segment.AsSimpleLinearPath();
+            var points = segment.Flatten();
             Assert.Equal(51, points.Length);
             Assert.Contains(new Point(0, 0), points);
             Assert.Contains(new Point(10, 0), points);

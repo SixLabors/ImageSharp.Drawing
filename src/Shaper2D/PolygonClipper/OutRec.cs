@@ -18,6 +18,20 @@ namespace Shaper2D.PolygonClipper
     internal class OutRec
     {
         /// <summary>
+        /// Initializes a new instance of the <see cref="OutRec"/> class.
+        /// </summary>
+        /// <param name="index">The index.</param>
+        public OutRec(int index)
+        {
+            this.Index = index;
+            this.IsHole = false;
+            this.IsOpen = false;
+            this.FirstLeft = null;
+            this.Points = null;
+            this.BottomPoint = null;
+        }
+
+        /// <summary>
         /// Gets or sets the source path
         /// </summary>
         public IPath SourcePath { get; set; }
@@ -60,10 +74,5 @@ namespace Shaper2D.PolygonClipper
         /// The bottom point.
         /// </value>
         public OutPoint BottomPoint { get; set; }
-
-        /// <summary>
-        /// Gets or sets the poly node
-        /// </summary>
-        public PolyNode PolyNode { get; set; }
     }
 }
