@@ -12,16 +12,15 @@ namespace Shaper2D
     using System.Threading.Tasks;
 
     /// <summary>
-    /// Allow you to delacatrivly build shapes and paths.
+    /// Allow you to derivatively build shapes and paths.
     /// </summary>
     public class ShapeBuilder
     {
+        private readonly List<ILineSegment[]> figures = new List<ILineSegment[]>();
+        private readonly List<ILineSegment> segments = new List<ILineSegment>();
         private readonly Matrix3x2 defaultTransform;
         private Point currentPoint = Point.Empty;
         private Matrix3x2 currentTransform;
-
-        private List<ILineSegment[]> figures = new List<ILineSegment[]>();
-        private List<ILineSegment> segments = new List<ILineSegment>();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ShapeBuilder" /> class.
@@ -50,11 +49,28 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Sets the origin all subsequent point should be relative to.
+        /// </summary>
+        /// <param name="origin">The origin.</param>
+        public void SetOrigin(Point origin)
+        {
+            this.currentTransform.Translation = origin;
+        }
+
+        /// <summary>
         /// Resets the translation to the default.
         /// </summary>
         public void ResetTransform()
         {
             this.currentTransform = this.defaultTransform;
+        }
+
+        /// <summary>
+        /// Resets the origin to the default.
+        /// </summary>
+        public void ResetOrigin()
+        {
+            this.currentTransform.Translation = this.defaultTransform.Translation;
         }
 
         /// <summary>

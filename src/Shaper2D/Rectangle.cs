@@ -205,6 +205,17 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Convertes to path to a closed shape.
+        /// </summary>
+        /// <returns>
+        /// Returns the path as a closed shape.
+        /// </returns>
+        IShape IPath.AsShape()
+        {
+            return this;
+        }
+
+        /// <summary>
         /// the distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
         /// </summary>
         /// <param name="point">The point.</param>

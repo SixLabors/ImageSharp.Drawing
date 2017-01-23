@@ -24,8 +24,17 @@ namespace Shaper2D
         /// </summary>
         /// <param name="segments">The segments.</param>
         public Polygon(params ILineSegment[] segments)
+            : this(ImmutableArray.Create(segments))
         {
-            this.LineSegments = ImmutableArray.Create(segments);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Polygon"/> class.
+        /// </summary>
+        /// <param name="segments">The segments.</param>
+        public Polygon(ImmutableArray<ILineSegment> segments)
+        {
+            this.LineSegments = segments;
             this.innerPath = new InternalPath(segments, true);
             this.pathCollection = ImmutableArray.Create<IPath>(this);
         }
@@ -206,6 +215,17 @@ namespace Shaper2D
             }
 
             return new Polygon(segments);
+        }
+
+        /// <summary>
+        /// Converts a path to a closed shape.
+        /// </summary>
+        /// <returns>
+        /// Returns the path as a closed shape.
+        /// </returns>
+        IShape IPath.AsShape()
+        {
+            return this;
         }
     }
 }

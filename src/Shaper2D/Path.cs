@@ -24,9 +24,18 @@ namespace Shaper2D
         /// </summary>
         /// <param name="segment">The segment.</param>
         public Path(params ILineSegment[] segment)
+            : this(ImmutableArray.Create(segment))
         {
-            this.innerPath = new InternalPath(segment, false);
-            this.LineSegments = ImmutableArray.Create(segment);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Path"/> class.
+        /// </summary>
+        /// <param name="segments">The segments.</param>
+        public Path(ImmutableArray<ILineSegment> segments)
+        {
+            this.innerPath = new InternalPath(segments, false);
+            this.LineSegments = segments;
         }
 
         /// <summary>
@@ -72,6 +81,17 @@ namespace Shaper2D
             }
 
             return new Path(segments);
+        }
+
+        /// <summary>
+        /// Convertes to path to a closed shape.
+        /// </summary>
+        /// <returns>
+        /// Returns the path as a closed shape.
+        /// </returns>
+        public IShape AsShape()
+        {
+            return new Polygon(this.LineSegments);
         }
     }
 }

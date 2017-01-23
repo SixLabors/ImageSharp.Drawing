@@ -50,5 +50,11 @@ namespace Shaper2D
         /// <param name="matrix">The matrix.</param>
         /// <returns>A new path with the matrix applied to it.</returns>
         IPath Transform(Matrix3x2 matrix);
+
+        /// <summary>
+        /// Converts a path to a closed shape.
+        /// </summary>
+        /// <returns>Returns the path as a closed shape.</returns>
+        IShape AsShape();
     }
 }

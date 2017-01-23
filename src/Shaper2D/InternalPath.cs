@@ -57,6 +57,16 @@ namespace Shaper2D
         /// <param name="segments">The segments.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(ILineSegment[] segments, bool isClosedPath)
+            : this(ImmutableArray.Create(segments), isClosedPath)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="InternalPath"/> class.
+        /// </summary>
+        /// <param name="segments">The segments.</param>
+        /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+        internal InternalPath(ImmutableArray<ILineSegment> segments, bool isClosedPath)
             : this(Simplify(segments), isClosedPath)
         {
         }
@@ -87,6 +97,21 @@ namespace Shaper2D
             float maxY = this.points.Max(x => x.Y);
 
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
+            this.totalDistance = new Lazy<float>(this.CalculateLength);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="InternalPath" /> class.
+        /// </summary>
+        /// <param name="prototype">The prototype.</param>
+        /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+        internal InternalPath(InternalPath prototype, bool isClosedPath)
+        {
+            this.points = prototype.points;
+            this.distance = prototype.distance;
+            this.calculated = prototype.calculated;
+            this.Bounds = prototype.Bounds;
+            this.closedPath = isClosedPath;
             this.totalDistance = new Lazy<float>(this.CalculateLength);
         }
 
@@ -390,7 +415,7 @@ namespace Shaper2D
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
-        private static ImmutableArray<Point> Simplify(ILineSegment[] segments)
+        private static ImmutableArray<Point> Simplify(ImmutableArray<ILineSegment> segments)
         {
             List<Point> simplified = new List<Point>();
             foreach (ILineSegment seg in segments)
@@ -526,6 +551,26 @@ namespace Shaper2D
             /// The point on the current line.
             /// </summary>
             public Point PointOnLine;
+        }
+
+        /// <summary>
+        /// Transforms the specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns></returns>
+        public InternalPath Transform(Matrix3x2 matrix)
+        {
+            if (matrix.IsIdentity)
+            {
+                return this;
+            }
+
+            var transformedpoints = new Point[this.points.Length];
+            for (var i = 0; i < this.points.Length; i++)
+            {
+                transformedpoints[i] = this.points[i].Transform(matrix);
+            }
+            return new InternalPath(ImmutableArray.Create(transformedpoints), this.closedPath);
         }
     }
 }
