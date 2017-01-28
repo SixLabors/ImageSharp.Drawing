@@ -19,14 +19,14 @@ namespace Shaper2D
         /// <summary>
         /// The collection of points.
         /// </summary>
-        private readonly ImmutableArray<Point> points;
+        private readonly ImmutableArray<Vector2> points;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
         /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
-        public LinearLineSegment(Point start, Point end)
+        public LinearLineSegment(Vector2 start, Vector2 end)
             : this(new[] { start, end })
         {
         }
@@ -37,7 +37,7 @@ namespace Shaper2D
         /// <param name="point1">The point1.</param>
         /// <param name="point2">The point2.</param>
         /// <param name="additionalPoints">Additional points</param>
-        public LinearLineSegment(Point point1, Point point2, params Point[] additionalPoints)
+        public LinearLineSegment(Vector2 point1, Vector2 point2, params Vector2[] additionalPoints)
             : this(new[] { point1, point2 }.Merge(additionalPoints))
         {
         }
@@ -46,7 +46,7 @@ namespace Shaper2D
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public LinearLineSegment(Point[] points)
+        public LinearLineSegment(Vector2[] points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Count(), 2, nameof(points));
@@ -62,7 +62,7 @@ namespace Shaper2D
         /// <value>
         /// The end point.
         /// </value>
-        public Point EndPoint { get; private set; }
+        public Vector2 EndPoint { get; private set; }
 
         /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
@@ -70,7 +70,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Point> Flatten()
+        public ImmutableArray<Vector2> Flatten()
         {
             return this.points;
         }
@@ -90,11 +90,11 @@ namespace Shaper2D
                 return this;
             }
 
-            var points = new Point[this.points.Length];
+            var points = new Vector2[this.points.Length];
             var i = 0;
             foreach (var p in this.points)
             {
-                points[i++] = p.Transform(matrix);
+                points[i++] = Vector2.Transform(p, matrix);
             }
 
             return new LinearLineSegment(points);

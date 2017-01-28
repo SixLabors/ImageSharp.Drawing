@@ -21,14 +21,14 @@ namespace Shaper2D
     public sealed class ComplexPolygon : IShape
     {
         private const float ClipperScaleFactor = 100f;
-        private IShape[] shapes;
+        private ImmutableArray<IShape> shapes;
         private ImmutableArray<IPath> paths;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
+        /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
         /// </summary>
         /// <param name="shapes">The shapes.</param>
-        public ComplexPolygon(params IShape[] shapes)
+        public ComplexPolygon(ImmutableArray<IShape> shapes)
         {
             Guard.NotNull(shapes, nameof(shapes));
             Guard.MustBeGreaterThanOrEqualTo(shapes.Length, 1, nameof(shapes));
@@ -77,6 +77,15 @@ namespace Shaper2D
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
+        /// </summary>
+        /// <param name="shapes">The shapes.</param>
+        public ComplexPolygon(params IShape[] shapes)
+            : this(ImmutableArray.Create(shapes))
+        {
+        }
+
+        /// <summary>
         /// Gets the paths that make up this shape
         /// </summary>
         /// <value>
@@ -112,7 +121,7 @@ namespace Shaper2D
         /// therefore for apoint to be in more that one we must be in a hole of another, theoretically this could
         /// then flip again to be in a outlin inside a hole inside an outline :)
         /// </remarks>
-        float IShape.Distance(Point point)
+        float IShape.Distance(Vector2 point)
         {
             float dist = float.MaxValue;
             bool inside = false;
@@ -154,7 +163,7 @@ namespace Shaper2D
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(Point start, Point end, Point[] buffer, int count, int offset)
+        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             int totalAdded = 0;
             for (int i = 0; i < this.shapes.Length; i++)
@@ -175,7 +184,7 @@ namespace Shaper2D
         /// <returns>
         ///   <c>true</c> if the <see cref="IShape" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(Point point)
+        public bool Contains(Vector2 point)
         {
             bool inside = false;
             foreach (IShape shape in this.shapes)
@@ -198,7 +207,7 @@ namespace Shaper2D
         /// <returns>
         /// The locations along the line segment that intersect with the edges of the shape.
         /// </returns>
-        public IEnumerable<Point> FindIntersections(Point start, Point end)
+        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
         {
             for (int i = 0; i < this.shapes.Length; i++)
             {

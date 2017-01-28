@@ -42,11 +42,7 @@ namespace Shaper2D.Tests
         {
             return new Vector2(p.X, p.Y);
         }
-        public static implicit operator Point(TestPoint p)
-        {
-            return new Point(p.X, p.Y);
-        }
-        public static implicit operator TestPoint(Point p)
+        public static implicit operator TestPoint(Vector2 p)
         {
             return new TestPoint(p.X, p.Y);
         }

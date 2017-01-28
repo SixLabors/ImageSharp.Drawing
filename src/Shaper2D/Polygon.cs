@@ -97,7 +97,7 @@ namespace Shaper2D
         /// <returns>
         /// The distance of the point away from the shape
         /// </returns>
-        public float Distance(Point point)
+        public float Distance(Vector2 point)
         {
             bool isInside = this.innerPath.PointInPolygon(point);
             if (isInside)
@@ -115,7 +115,7 @@ namespace Shaper2D
         /// <returns>
         ///   <c>true</c> if the <see cref="IShape" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(Point point)
+        public bool Contains(Vector2 point)
         {
             return this.innerPath.PointInPolygon(point);
         }
@@ -127,7 +127,7 @@ namespace Shaper2D
         /// <returns>
         /// distance metadata about the point.
         /// </returns>
-        PointInfo IPath.Distance(Point point)
+        PointInfo IPath.Distance(Vector2 point)
         {
             return this.innerPath.DistanceFromPath(point);
         }
@@ -138,7 +138,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Point> Flatten()
+        public ImmutableArray<Vector2> Flatten()
         {
             return this.innerPath.Points;
         }
@@ -155,7 +155,7 @@ namespace Shaper2D
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(Point start, Point end, Point[] buffer, int count, int offset)
+        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             return this.innerPath.FindIntersections(start, end, buffer, count, offset);
         }
@@ -169,7 +169,7 @@ namespace Shaper2D
         /// <returns>
         /// The locations along the line segment that intersect with the edges of the shape.
         /// </returns>
-        public IEnumerable<Point> FindIntersections(Point start, Point end)
+        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
         {
             return this.innerPath.FindIntersections(start, end);
         }

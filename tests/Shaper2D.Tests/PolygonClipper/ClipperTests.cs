@@ -7,6 +7,7 @@ using Moq;
 namespace Shaper2D.Tests.PolygonClipper
 {
     using System.Collections.Immutable;
+    using System.Numerics;
 
     using Shaper2D.PolygonClipper;
 
@@ -68,7 +69,7 @@ namespace Shaper2D.Tests.PolygonClipper
             var clipper = new Clipper();
             var mockPath = new Mock<IPath>();
             mockPath.Setup(x => x.Flatten())
-                .Returns(ImmutableArray.Create(new Point(0, 0), new Point(1, 1), new Point(0, 0)));
+                .Returns(ImmutableArray.Create(new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0)));
 
             Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, ClippingType.Subject); });
         }
@@ -79,7 +80,7 @@ namespace Shaper2D.Tests.PolygonClipper
             var clipper = new Clipper();
             var mockPath = new Mock<IPath>();
             mockPath.Setup(x => x.Flatten())
-                .Returns(ImmutableArray.Create(new Point(0, 0), new Point(1, 1), new Point(1, 1)));
+                .Returns(ImmutableArray.Create(new Vector2(0, 0), new Vector2(1, 1), new Vector2(1, 1)));
 
             Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, ClippingType.Subject); });
         }

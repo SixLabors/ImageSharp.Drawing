@@ -48,7 +48,6 @@
       "type": "build"
     },
     "System.Collections.Immutable": "1.2.0",
-    "System.Numerics.Vectors": "4.1.1",
     "System.Buffers": "4.0.0"
   },
   "frameworks": {
@@ -62,12 +61,26 @@
         "System.Resources.ResourceManager": "4.0.1",
         "System.Runtime.Extensions": "4.1.0",
         "System.Runtime.InteropServices": "4.1.0",
+        "System.Numerics.Vectors": "4.1.1",
         "System.Runtime.Numerics": "4.0.1"
       }
     },
     "net45": {
       "dependencies": {
-        "System.Runtime": "4.0.0"
+        "System.Numerics.Vectors": "4.1.1"
+      },
+      "frameworkAssemblies": {
+        "System.Runtime": { "type": "build" }
+      }
+    },
+    "net461": {
+      "dependencies": {
+        "System.Threading.Tasks.Parallel": "4.0.0"
+      },
+      "frameworkAssemblies": {
+        "System.Runtime": { "type": "build" },
+        "System.Numerics": "4.0.0.0",
+        "System.Numerics.Vectors": "4.0.0.0"
       }
     }
   },

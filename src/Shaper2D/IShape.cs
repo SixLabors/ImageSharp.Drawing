@@ -45,7 +45,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the distance from the shape to the point
         /// </returns>
-        float Distance(Point point);
+        float Distance(Vector2 point);
 
         /// <summary>
         /// Determines whether the <see cref="IShape"/> contains the specified point
@@ -54,7 +54,7 @@ namespace Shaper2D
         /// <returns>
         ///   <c>true</c> if the <see cref="IShape"/> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        bool Contains(Point point);
+        bool Contains(Vector2 point);
 
         /// <summary>
         /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
@@ -68,7 +68,7 @@ namespace Shaper2D
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        int FindIntersections(Point start, Point end, Point[] buffer, int count, int offset);
+        int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset);
 
         /// <summary>
         /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
@@ -77,7 +77,7 @@ namespace Shaper2D
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
         /// <returns>The locations along the line segment that intersect with the edges of the shape.</returns>
-        IEnumerable<Point> FindIntersections(Point start, Point end);
+        IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end);
 
         /// <summary>
         /// Transforms the shape using the specified matrix.

@@ -53,13 +53,13 @@ namespace Shaper2D
         public float Length => this.innerPath.Length;
 
         /// <inheritdoc />
-        public ImmutableArray<Point> Flatten()
+        public ImmutableArray<Vector2> Flatten()
         {
             return this.innerPath.Points;
         }
 
         /// <inheritdoc />
-        public PointInfo Distance(Point point)
+        public PointInfo Distance(Vector2 point)
         {
             return this.innerPath.DistanceFromPath(point);
         }

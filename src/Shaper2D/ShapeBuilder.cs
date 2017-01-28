@@ -19,7 +19,7 @@ namespace Shaper2D
         private readonly List<ILineSegment[]> figures = new List<ILineSegment[]>();
         private readonly List<ILineSegment> segments = new List<ILineSegment>();
         private readonly Matrix3x2 defaultTransform;
-        private Point currentPoint = Point.Empty;
+        private Vector2 currentPoint = Vector2.Zero;
         private Matrix3x2 currentTransform;
 
         /// <summary>
@@ -52,7 +52,7 @@ namespace Shaper2D
         /// Sets the origin all subsequent point should be relative to.
         /// </summary>
         /// <param name="origin">The origin.</param>
-        public void SetOrigin(Point origin)
+        public void SetOrigin(Vector2 origin)
         {
             this.currentTransform.Translation = origin;
         }
@@ -77,9 +77,9 @@ namespace Shaper2D
         /// Adds the line connecting the current point to the new point.
         /// </summary>
         /// <param name="point">The point.</param>
-        public void AddLine(Point point)
+        public void AddLine(Vector2 point)
         {
-            var endPoint = point.Transform(this.currentTransform);
+            var endPoint = Vector2.Transform(point, this.currentTransform);
             this.segments.Add(new LinearLineSegment(this.currentPoint, endPoint));
             this.currentPoint = endPoint;
         }
@@ -88,7 +88,7 @@ namespace Shaper2D
         /// Adds a series of line segments connecting the current point to the new points.
         /// </summary>
         /// <param name="points">The points.</param>
-        public void AddLines(IEnumerable<Point> points)
+        public void AddLines(IEnumerable<Vector2> points)
         {
             foreach (var p in points)
             {
@@ -113,13 +113,13 @@ namespace Shaper2D
         /// <param name="controlPoint1">The control point1.</param>
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="endPoint">The end point.</param>
-        public void AddBezier(Point controlPoint1, Point controlPoint2, Point endPoint)
+        public void AddBezier(Vector2 controlPoint1, Vector2 controlPoint2, Vector2 endPoint)
         {
-            endPoint = endPoint.Transform(this.currentTransform);
+            endPoint = Vector2.Transform(endPoint, this.currentTransform);
             this.segments.Add(new BezierLineSegment(
                 this.currentPoint,
-                controlPoint1.Transform(this.currentTransform),
-                controlPoint2.Transform(this.currentTransform),
+                 Vector2.Transform(controlPoint1, this.currentTransform),
+                 Vector2.Transform(controlPoint2, this.currentTransform),
                 endPoint));
             this.currentPoint = endPoint;
         }
@@ -128,7 +128,7 @@ namespace Shaper2D
         /// Moves the current point.
         /// </summary>
         /// <param name="point">The point.</param>
-        public void MoveTo(Point point)
+        public void MoveTo(Vector2 point)
         {
             if (this.segments.Any())
             {
@@ -136,7 +136,7 @@ namespace Shaper2D
                 this.segments.Clear();
             }
 
-            this.currentPoint = point.Transform(this.currentTransform);
+            this.currentPoint = Vector2.Transform(point, this.currentTransform);
         }
 
         /// <summary>
@@ -146,7 +146,7 @@ namespace Shaper2D
         /// <param name="y">The y.</param>
         public void MoveTo(float x, float y)
         {
-            this.MoveTo(new Point(x, y));
+            this.MoveTo(new Vector2(x, y));
         }
 
         /// <summary>

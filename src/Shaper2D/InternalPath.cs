@@ -29,7 +29,7 @@ namespace Shaper2D
         /// <summary>
         /// The points.
         /// </summary>
-        private readonly ImmutableArray<Point> points;
+        private readonly ImmutableArray<Vector2> points;
 
         /// <summary>
         /// The closed path.
@@ -86,7 +86,7 @@ namespace Shaper2D
         /// </summary>
         /// <param name="points">The points.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(ImmutableArray<Point> points, bool isClosedPath)
+        internal InternalPath(ImmutableArray<Vector2> points, bool isClosedPath)
         {
             this.points = points;
             this.closedPath = isClosedPath;
@@ -140,7 +140,7 @@ namespace Shaper2D
         /// <value>
         /// The points.
         /// </value>
-        internal ImmutableArray<Point> Points => this.points;
+        internal ImmutableArray<Vector2> Points => this.points;
 
         /// <summary>
         /// Calculates the distance from the path.
@@ -195,7 +195,7 @@ namespace Shaper2D
         /// <param name="count">The count.</param>
         /// <param name="offset">The offset.</param>
         /// <returns>number iof intersections hit</returns>
-        public int FindIntersections(Vector2 start, Vector2 end, Point[] buffer, int count, int offset)
+        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             int polyCorners = this.points.Length;
 
@@ -216,7 +216,7 @@ namespace Shaper2D
                 Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
                 if (point != MaxVector)
                 {
-                    if (this.points[i].ToVector2() != point || (this.closedPath && i == 0))
+                    if (this.points[i] != point || (this.closedPath && i == 0))
                     {
                         // we skip starts and get it next time unless its an open path and this is the first seg
                         buffer[position + offset] = point;
@@ -235,9 +235,9 @@ namespace Shaper2D
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
         /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
-        public IEnumerable<Point> FindIntersections(Vector2 start, Vector2 end)
+        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
         {
-            var buffer = ArrayPool<Point>.Shared.Rent(this.points.Length);
+            var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
             try
             {
                 var hits = this.FindIntersections(start, end, buffer, this.points.Length, 0);
@@ -248,7 +248,7 @@ namespace Shaper2D
             }
             finally
             {
-                ArrayPool<Point>.Shared.Return(buffer);
+                ArrayPool<Vector2>.Shared.Return(buffer);
             }
         }
 
@@ -257,7 +257,7 @@ namespace Shaper2D
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>Returns true if the point is inside the closed path.</returns>
-        public bool PointInPolygon(Point point)
+        public bool PointInPolygon(Vector2 point)
         {
             // You can only be inside a path if its "closed"
             if (!this.closedPath)
@@ -295,7 +295,7 @@ namespace Shaper2D
                 {
                     inside ^= true;
 
-                    if (p == this.points[i].ToVector2())
+                    if (p == this.points[i])
                     {
                         // if left point is the match then skip it we will hit it on the way around on the right
                         inside ^= true;
@@ -415,9 +415,9 @@ namespace Shaper2D
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
-        private static ImmutableArray<Point> Simplify(ImmutableArray<ILineSegment> segments)
+        private static ImmutableArray<Vector2> Simplify(ImmutableArray<ILineSegment> segments)
         {
-            List<Point> simplified = new List<Point>();
+            List<Vector2> simplified = new List<Vector2>();
             foreach (ILineSegment seg in segments)
             {
                 simplified.AddRange(seg.Flatten());
@@ -474,7 +474,7 @@ namespace Shaper2D
                     return;
                 }
 
-                ImmutableArray<Point> poly = this.points;
+                ImmutableArray<Vector2> poly = this.points;
                 int polyCorners = poly.Length;
                 this.distance = new float[polyCorners];
 
@@ -550,27 +550,7 @@ namespace Shaper2D
             /// <summary>
             /// The point on the current line.
             /// </summary>
-            public Point PointOnLine;
-        }
-
-        /// <summary>
-        /// Transforms the specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns></returns>
-        public InternalPath Transform(Matrix3x2 matrix)
-        {
-            if (matrix.IsIdentity)
-            {
-                return this;
-            }
-
-            var transformedpoints = new Point[this.points.Length];
-            for (var i = 0; i < this.points.Length; i++)
-            {
-                transformedpoints[i] = this.points[i].Transform(matrix);
-            }
-            return new InternalPath(ImmutableArray.Create(transformedpoints), this.closedPath);
+            public Vector2 PointOnLine;
         }
     }
 }

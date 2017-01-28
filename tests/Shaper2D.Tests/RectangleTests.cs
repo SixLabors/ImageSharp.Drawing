@@ -13,15 +13,15 @@ namespace Shaper2D.Tests
             new TheoryData<TestPoint, TestSize, TestPoint, bool>
             {
                {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(10,10), // test
+                    new Vector2(10,10), // test
                     true
                 }, //corner is inside
                 {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(9,9), // test
+                    new Vector2(9,9), // test
                     false
                 }, //corner is inside
             };
@@ -29,39 +29,39 @@ namespace Shaper2D.Tests
             new TheoryData<TestPoint, TestSize, TestPoint, float>
             {
                {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(10,10), // test
+                    new Vector2(10,10), // test
                     0f
                 }, //corner is inside
                 {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(9,10), // test
+                    new Vector2(9,10), // test
                     1f
                 },
                 {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(10,13), // test
+                    new Vector2(10,13), // test
                     0f
                 },
                 {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(14,13), // test
+                    new Vector2(14,13), // test
                     -3f
                 },
                 {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(13,14), // test
+                    new Vector2(13,14), // test
                     -3f
                 },
                 {
-                    new Point(10,10), // loc
+                    new Vector2(10,10), // loc
                     new Size(100,100), // size
-                    new Point(7,6), // test
+                    new Vector2(7,6), // test
                     5f
                 },
             };
@@ -69,34 +69,34 @@ namespace Shaper2D.Tests
         public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
             new TheoryData<TestPoint, float, float>
             {
-               { new Point(0,0), 0f, 0f },
-               { new Point(1,0), 0f, 1f },
-               { new Point(9,0), 0f, 9f },
-               { new Point(10,0), 0f, 10f },
-               { new Point(10, 1), 0f, 11f },
-               { new Point(10,9), 0f, 19f },
-               { new Point(10,10), 0f, 20f },
-               { new Point(9,10), 0f, 21f },
-               { new Point(1,10), 0f, 29f },
-               { new Point(0,10), 0f, 30f },
-               { new Point(0,9), 0f, 31f },
-               { new Point(0,1), 0f, 39f },
+               { new Vector2(0,0), 0f, 0f },
+               { new Vector2(1,0), 0f, 1f },
+               { new Vector2(9,0), 0f, 9f },
+               { new Vector2(10,0), 0f, 10f },
+               { new Vector2(10, 1), 0f, 11f },
+               { new Vector2(10,9), 0f, 19f },
+               { new Vector2(10,10), 0f, 20f },
+               { new Vector2(9,10), 0f, 21f },
+               { new Vector2(1,10), 0f, 29f },
+               { new Vector2(0,10), 0f, 30f },
+               { new Vector2(0,9), 0f, 31f },
+               { new Vector2(0,1), 0f, 39f },
 
-               { new Point(4,3), 3f, 4f },
-               { new Point(3, 4), 3f, 36f },
+               { new Vector2(4,3), 3f, 4f },
+               { new Vector2(3, 4), 3f, 36f },
 
-               { new Point(-1,0), 1f, 0f },
-               { new Point(1,-1), 1f, 1f },
-               { new Point(9,-1), 1f, 9f },
-               { new Point(11,0), 1f, 10f },
-               { new Point(11, 1), 1f, 11f },
-               { new Point(11,9), 1f, 19f },
-               { new Point(11,10), 1f, 20f },
-               { new Point(9,11), 1f, 21f },
-               { new Point(1,11), 1f, 29f },
-               { new Point(-1,10), 1f, 30f },
-               { new Point(-1,9), 1f, 31f },
-               { new Point(-1,1), 1f, 39f },
+               { new Vector2(-1,0), 1f, 0f },
+               { new Vector2(1,-1), 1f, 1f },
+               { new Vector2(9,-1), 1f, 9f },
+               { new Vector2(11,0), 1f, 10f },
+               { new Vector2(11, 1), 1f, 11f },
+               { new Vector2(11,9), 1f, 19f },
+               { new Vector2(11,10), 1f, 20f },
+               { new Vector2(9,11), 1f, 21f },
+               { new Vector2(1,11), 1f, 29f },
+               { new Vector2(-1,10), 1f, 30f },
+               { new Vector2(-1,9), 1f, 31f },
+               { new Vector2(-1,1), 1f, 39f },
             };
 
         [Theory]
@@ -177,38 +177,38 @@ namespace Shaper2D.Tests
         {
             IPath shape = new Rectangle(10, 11, 12, 13);
             var segemnts = shape.Flatten();
-            Assert.Equal(new Point(10, 11), segemnts[0]);
-            Assert.Equal(new Point(22, 11), segemnts[1]);
-            Assert.Equal(new Point(22, 24), segemnts[2]);
-            Assert.Equal(new Point(10, 24), segemnts[3]);
+            Assert.Equal(new Vector2(10, 11), segemnts[0]);
+            Assert.Equal(new Vector2(22, 11), segemnts[1]);
+            Assert.Equal(new Vector2(22, 24), segemnts[2]);
+            Assert.Equal(new Vector2(10, 24), segemnts[3]);
         }
 
         [Fact]
         public void Intersections_2()
         {
             IShape shape = new Rectangle(1, 1, 10, 10);
-            var intersections = shape.FindIntersections(new Point(0, 5), new Point(20, 5));
+            var intersections = shape.FindIntersections(new Vector2(0, 5), new Vector2(20, 5));
 
             Assert.Equal(2, intersections.Count());
-            Assert.Equal(new Point(1, 5), intersections.First());
-            Assert.Equal(new Point(11, 5), intersections.Last());
+            Assert.Equal(new Vector2(1, 5), intersections.First());
+            Assert.Equal(new Vector2(11, 5), intersections.Last());
         }
 
         [Fact]
         public void Intersections_1()
         {
             IShape shape = new Rectangle(1, 1, 10, 10);
-            var intersections = shape.FindIntersections(new Point(0, 5), new Point(5, 5));
+            var intersections = shape.FindIntersections(new Vector2(0, 5), new Vector2(5, 5));
 
             Assert.Equal(1, intersections.Count());
-            Assert.Equal(new Point(1, 5), intersections.First());
+            Assert.Equal(new Vector2(1, 5), intersections.First());
         }
 
         [Fact]
         public void Intersections_0()
         {
             IShape shape = new Rectangle(1, 1, 10, 10);
-            var intersections = shape.FindIntersections(new Point(0, 5), new Point(-5, 5));
+            var intersections = shape.FindIntersections(new Vector2(0, 5), new Vector2(-5, 5));
 
             Assert.Equal(0, intersections.Count());
         }
@@ -262,7 +262,7 @@ namespace Shaper2D.Tests
 
             var newShape = (Rectangle)shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
 
-            Assert.Equal(new Point(20, 2), newShape.Location);
+            Assert.Equal(new Vector2(20, 2), newShape.Location);
             Assert.Equal(new Size(60, 200), newShape.Size);
         }
     }

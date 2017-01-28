@@ -36,13 +36,13 @@ namespace Shaper2D
         /// <returns>
         /// Returns details about the point and its distance away from the path.
         /// </returns>
-        PointInfo Distance(Point point);
+        PointInfo Distance(Vector2 point);
 
         /// <summary>
         /// Converts the <see cref="IPath" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
-        ImmutableArray<Point> Flatten();
+        ImmutableArray<Vector2> Flatten();
 
         /// <summary>
         /// Transforms the path using the specified matrix.

@@ -14,14 +14,14 @@ namespace Shaper2D
     using System.Threading.Tasks;
 
     /// <summary>
-    /// A way of optermising drawing rectangles.
+    /// A way of optimizing drawing rectangles.
     /// </summary>
     /// <seealso cref="Shaper2D.IShape" />
     public class Rectangle : IShape, IPath
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
-        private readonly ImmutableArray<Point> points;
+        private readonly ImmutableArray<Vector2> points;
         private readonly ImmutableArray<IPath> pathCollection;
         private readonly float halfLength;
         private readonly float length;
@@ -34,7 +34,7 @@ namespace Shaper2D
         /// <param name="width">The width.</param>
         /// <param name="height">The height.</param>
         public Rectangle(float x, float y, float width, float height)
-            : this(new Point(x, y), new Size(width, height))
+            : this(new Vector2(x, y), new Size(width, height))
         {
         }
 
@@ -43,14 +43,14 @@ namespace Shaper2D
         /// </summary>
         /// <param name="topLeft">The top left.</param>
         /// <param name="bottomRight">The bottom right.</param>
-        public Rectangle(Point topLeft, Point bottomRight)
+        public Rectangle(Vector2 topLeft, Vector2 bottomRight)
         {
             this.Location = topLeft;
             this.topLeft = topLeft;
             this.bottomRight = bottomRight;
             this.Size = new Size(bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
 
-            this.points = ImmutableArray.Create(new Point[4]
+            this.points = ImmutableArray.Create(new Vector2[4]
             {
                 this.topLeft,
                 new Vector2(this.bottomRight.X, this.topLeft.Y),
@@ -68,8 +68,8 @@ namespace Shaper2D
         /// </summary>
         /// <param name="location">The location.</param>
         /// <param name="size">The size.</param>
-        public Rectangle(Point location, Size size)
-            : this(location, location.Offset(size))
+        public Rectangle(Vector2 location, Size size)
+            : this(location, location + size.ToVector2())
         {
         }
 
@@ -79,7 +79,7 @@ namespace Shaper2D
         /// <value>
         /// The location.
         /// </value>
-        public Point Location { get; }
+        public Vector2 Location { get; }
 
         /// <summary>
         /// Gets the left.
@@ -185,10 +185,9 @@ namespace Shaper2D
         /// <returns>
         /// The <see cref="bool" />
         /// </returns>
-        public bool Contains(Point point)
+        public bool Contains(Vector2 point)
         {
-            var v = point.ToVector2();
-            return Vector2.Clamp(v, this.topLeft, this.bottomRight) == v;
+            return Vector2.Clamp(point, this.topLeft, this.bottomRight) == point;
         }
 
         /// <summary>
@@ -198,7 +197,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns details about the point and its distance away from the path.
         /// </returns>
-        PointInfo IPath.Distance(Point point)
+        PointInfo IPath.Distance(Vector2 point)
         {
             bool inside; // dont care about inside/outside for paths just distance
             return this.Distance(point, false, out inside);
@@ -222,7 +221,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the distance from the shape to the point
         /// </returns>
-        public float Distance(Point point)
+        public float Distance(Vector2 point)
         {
             bool insidePoly;
             PointInfo result = this.Distance(point, true, out insidePoly);
@@ -240,9 +239,9 @@ namespace Shaper2D
         /// <returns>
         /// The locations along the line segment that intersect with the edges of the shape.
         /// </returns>
-        public IEnumerable<Point> FindIntersections(Point start, Point end)
+        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
         {
-            var buffer = new Point[2];
+            var buffer = new Vector2[2];
             var c = this.FindIntersections(start, end, buffer, 2, 0);
             switch (c)
             {
@@ -251,7 +250,7 @@ namespace Shaper2D
                 case 1:
                     return new[] { buffer[0] };
                 default:
-                    return Enumerable.Empty<Point>();
+                    return Enumerable.Empty<Vector2>();
             }
         }
 
@@ -268,14 +267,14 @@ namespace Shaper2D
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(Point start, Point end, Point[] buffer, int count, int offset)
+        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             int discovered = 0;
             Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
             Vector2 endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
 
             // start doesn't change when its inside the shape thus not crossing
-            if (startPoint != start.ToVector2())
+            if (startPoint != start)
             {
                 if (startPoint == Vector2.Clamp(startPoint, start, end))
                 {
@@ -286,7 +285,7 @@ namespace Shaper2D
             }
 
             // end didn't change it must not intercept with an edge
-            if (endPoint != end.ToVector2())
+            if (endPoint != end)
             {
                 if (endPoint == Vector2.Clamp(endPoint, start, end))
                 {
@@ -334,7 +333,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        ImmutableArray<Point> IPath.Flatten()
+        ImmutableArray<Vector2> IPath.Flatten()
         {
             return this.points;
         }

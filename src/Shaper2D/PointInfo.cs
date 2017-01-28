@@ -15,7 +15,7 @@ namespace Shaper2D
         /// <summary>
         /// The search point
         /// </summary>
-        public Point SearchPoint;
+        public Vector2 SearchPoint;
 
         /// <summary>
         /// The distance along path <see cref="ClosestPointOnPath"/> is away from the start of the path
@@ -30,6 +30,6 @@ namespace Shaper2D
         /// <summary>
         /// The closest point to <see cref="SearchPoint"/> that lies on the path.
         /// </summary>
-        public Point ClosestPointOnPath;
+        public Vector2 ClosestPointOnPath;
     }
 }

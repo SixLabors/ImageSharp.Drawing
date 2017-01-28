@@ -19,13 +19,13 @@ namespace Shaper2D
         /// <value>
         /// The end point.
         /// </value>
-        Point EndPoint { get; }
+        Vector2 EndPoint { get; }
 
         /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="ILineSegment" /> as simple linear path.</returns>
-        ImmutableArray<Point> Flatten();
+        ImmutableArray<Vector2> Flatten();
 
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.

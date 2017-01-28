@@ -2442,7 +2442,7 @@ namespace Shaper2D.PolygonClipper
                 }
                 else
                 {
-                    var points = new Point[cnt];
+                    var points = new Vector2[cnt];
                     OutPoint op = outRec.Points.Previous;
                     for (int j = 0; j < cnt; j++)
                     {

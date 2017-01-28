@@ -26,14 +26,14 @@ namespace Shaper2D
         /// <summary>
         /// The line points.
         /// </summary>
-        private readonly ImmutableArray<Point> linePoints;
-        private readonly Point[] controlPoints;
+        private readonly ImmutableArray<Vector2> linePoints;
+        private readonly Vector2[] controlPoints;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(Point[] points)
+        public BezierLineSegment(Vector2[] points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
@@ -58,7 +58,7 @@ namespace Shaper2D
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="end">The end.</param>
         /// <param name="additionalPoints">The additional points.</param>
-        public BezierLineSegment(Point start, Point controlPoint1, Point controlPoint2, Point end, params Point[] additionalPoints)
+        public BezierLineSegment(Vector2 start, Vector2 controlPoint1, Vector2 controlPoint2, Vector2 end, params Vector2[] additionalPoints)
             : this(new[] { start, controlPoint1, controlPoint2, end }.Merge(additionalPoints))
         {
         }
@@ -69,7 +69,7 @@ namespace Shaper2D
         /// <value>
         /// The end point.
         /// </value>
-        public Point EndPoint { get; private set; }
+        public Vector2 EndPoint { get; private set; }
 
         /// <summary>
         /// Returns the current <see cref="ILineSegment" /> a simple linear path.
@@ -77,7 +77,7 @@ namespace Shaper2D
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Point> Flatten()
+        public ImmutableArray<Vector2> Flatten()
         {
             return this.linePoints;
         }
@@ -95,11 +95,11 @@ namespace Shaper2D
                 return this;
             }
 
-            var points = new Point[this.controlPoints.Length];
+            var points = new Vector2[this.controlPoints.Length];
             var i = 0;
             foreach (var p in this.controlPoints)
             {
-                points[i++] = p.Transform(matrix);
+                points[i++] = Vector2.Transform(p, matrix);
             }
 
             return new BezierLineSegment(points);
@@ -112,13 +112,13 @@ namespace Shaper2D
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
-        private ImmutableArray<Point> GetDrawingPoints(Point[] controlPoints)
+        private ImmutableArray<Vector2> GetDrawingPoints(Vector2[] controlPoints)
         {
             // TODO we need to calculate an optimal SegmentsPerCurve value depending on the calculated length of this curve
             int curveCount = (controlPoints.Length - 1) / 3;
             int finalPointCount = (SegmentsPerCurve * curveCount) + 1; // we have SegmentsPerCurve for each curve plus the origon point;
 
-            Point[] drawingPoints = new Point[finalPointCount];
+            Vector2[] drawingPoints = new Vector2[finalPointCount];
 
             int position = 0;
             int targetPoint = controlPoints.Length - 3;
