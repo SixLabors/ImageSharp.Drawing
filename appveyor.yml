@@ -15,8 +15,8 @@ after_build:
 
 deploy:
   - provider: NuGet
-    server: https://www.myget.org/F/SixLabors/api/v2/package
-    symbol_server: https://www.myget.org/F/SixLabors/api/v2/package # https://nuget.symbolsource.org/MyGet/shaper2d
+    server: https://www.myget.org/F/sixlabors/api/v2/package
+    symbol_server: https://www.myget.org/F/sixlabors/symbols/api/v2/package
     api_key:
       secure: SyrSERGrjkK21TSCsHtqke5279SMxXCg2NXKjR2qaErP0khEplwxPwE8Ch5bxzyf
     artifact: /.*\.nupkg/
