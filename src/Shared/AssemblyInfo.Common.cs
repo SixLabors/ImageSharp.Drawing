@@ -13,7 +13,7 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyDescription("A cross-platform library for processing of image files; written in C#")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Scott Williams")]
-[assembly: AssemblyProduct("Shaper2D")]
+[assembly: AssemblyProduct("SixLabors.Shapes")]
 [assembly: AssemblyCopyright("Copyright (c) Scott Williams and contributors.")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -34,4 +34,4 @@ using System.Runtime.CompilerServices;
 [assembly: AssemblyInformationalVersion("1.0.0.0")]
 
 // Ensure the internals can be tested.
-[assembly: InternalsVisibleTo("Shaper2D.Tests")]
+[assembly: InternalsVisibleTo("SixLabors.Shapes.Tests")]

@@ -11,12 +11,12 @@ build_script:
   - cmd: tests\CodeCoverage\CodeCoverage.cmd
 
 after_build:
-  - cmd: appveyor PushArtifact "artifacts\Shaper2D.%GitVersion_NuGetVersion%.nupkg"
+  - cmd: appveyor PushArtifact "artifacts\SixLabors.Shapes.%GitVersion_NuGetVersion%.nupkg"
 
 deploy:
   - provider: NuGet
-    server: https://www.myget.org/F/shaper2d/api/v2/package
-    symbol_server: https://www.myget.org/F/shaper2d/api/v2/package # https://nuget.symbolsource.org/MyGet/shaper2d
+    server: https://www.myget.org/F/SixLabors/api/v2/package
+    symbol_server: https://www.myget.org/F/SixLabors/api/v2/package # https://nuget.symbolsource.org/MyGet/shaper2d
     api_key:
       secure: SyrSERGrjkK21TSCsHtqke5279SMxXCg2NXKjR2qaErP0khEplwxPwE8Ch5bxzyf
     artifact: /.*\.nupkg/
