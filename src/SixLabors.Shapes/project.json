@@ -1,5 +1,5 @@
 {
-  "version": "0.0.1-alpha1-*",
+  "version": "0.1.0-alpha1-*",
   "title": "SixLabors.Shapes",
   "description": "Polygon manipulation on mergin library",
   "authors": [
