@@ -22,28 +22,75 @@ namespace SixLabors.Shapes
     {
         private const float ClipperScaleFactor = 100f;
         private ImmutableArray<IShape> shapes;
-        private ImmutableArray<IPath> paths;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
+        /// </summary>
+        /// <param name="shapes">The shapes.</param>
+        public ComplexPolygon(params IShape[] shapes)
+            : this(ImmutableArray.Create(shapes))
+        {
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
         /// </summary>
         /// <param name="shapes">The shapes.</param>
         public ComplexPolygon(ImmutableArray<IShape> shapes)
+            : this(shapes, ImmutableArray<IPath>.Empty)
         {
-            Guard.NotNull(shapes, nameof(shapes));
             Guard.MustBeGreaterThanOrEqualTo(shapes.Length, 1, nameof(shapes));
+        }
 
-            this.shapes = shapes;
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
+        /// </summary>
+        /// <param name="paths">The paths.</param>
+        public ComplexPolygon(params IPath[] paths)
+            : this(ImmutableArray.Create(paths))
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
+        /// </summary>
+        /// <param name="paths">The paths.</param>
+        public ComplexPolygon(ImmutableArray<IPath> paths)
+            : this(ImmutableArray<IShape>.Empty, paths)
+        {
+            Guard.MustBeGreaterThanOrEqualTo(paths.Length, 1, nameof(paths));
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
+        /// </summary>
+        /// <param name="shapes">The shapes.</param>
+        /// <param name="paths">The paths.</param>
+        private ComplexPolygon(ImmutableArray<IShape> shapes, ImmutableArray<IPath> paths)
+        {
             var pathCount = shapes.Sum(x => x.Paths.Length);
-            var paths = new IPath[pathCount];
-            int index = 0;
+
+            var allShapes = new List<IShape>(shapes.Length + paths.Length);
+            var allPaths = new List<IPath>(pathCount + paths.Length);
+
+            foreach (var p in paths)
+            {
+                allPaths.Add(p);
+                allShapes.Add(p.AsShape());
+            }
+
+            foreach (var s in shapes)
+            {
+                allPaths.AddRange(s.Paths);
+                allShapes.Add(s);
+            }
 
             float minX = float.MaxValue;
             float maxX = float.MinValue;
             float minY = float.MaxValue;
             float maxY = float.MinValue;
 
-            foreach (var s in shapes)
+            foreach (var s in allShapes)
             {
                 if (s.Bounds.Left < minX)
                 {
@@ -65,24 +112,13 @@ namespace SixLabors.Shapes
                     maxY = s.Bounds.Bottom;
                 }
 
-                foreach (var p in s.Paths)
-                {
-                    paths[index++] = p;
-                }
+                this.MaxIntersections += s.MaxIntersections;
             }
 
-            this.paths = ImmutableArray.Create(paths);
+            this.Paths = ImmutableArray.Create(allPaths.ToArray());
+            this.shapes = ImmutableArray.Create(allShapes.ToArray());
 
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
-        /// </summary>
-        /// <param name="shapes">The shapes.</param>
-        public ComplexPolygon(params IShape[] shapes)
-            : this(ImmutableArray.Create(shapes))
-        {
         }
 
         /// <summary>
@@ -91,7 +127,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The paths.
         /// </value>
-        public ImmutableArray<IPath> Paths => this.paths;
+        public ImmutableArray<IPath> Paths { get; }
 
         /// <summary>
         /// Gets the bounding box of this shape.
@@ -118,8 +154,8 @@ namespace SixLabors.Shapes
         /// </returns>
         /// <remarks>
         /// Due to the clipping we did during construction we know that out shapes do not overlap at there edges
-        /// therefore for apoint to be in more that one we must be in a hole of another, theoretically this could
-        /// then flip again to be in a outlin inside a hole inside an outline :)
+        /// therefore for a point to be in more that one we must be in a hole of another, theoretically this could
+        /// then flip again to be in a outline inside a hole inside an outline :)
         /// </remarks>
         float IShape.Distance(Vector2 point)
         {

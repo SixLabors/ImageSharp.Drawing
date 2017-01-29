@@ -16,16 +16,16 @@ namespace SixLabors.Shapes
     /// </summary>
     public class ShapeBuilder
     {
-        private readonly List<ILineSegment[]> figures = new List<ILineSegment[]>();
-        private readonly List<ILineSegment> segments = new List<ILineSegment>();
+        private readonly List<Figure> figures = new List<Figure>();
         private readonly Matrix3x2 defaultTransform;
-        private Vector2 currentPoint = Vector2.Zero;
+        private Figure currentFigure = null;
         private Matrix3x2 currentTransform;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ShapeBuilder" /> class.
         /// </summary>
         public ShapeBuilder()
+            : this(Matrix3x2.Identity)
         {
         }
 
@@ -36,6 +36,8 @@ namespace SixLabors.Shapes
         public ShapeBuilder(Matrix3x2 defaultTransform)
         {
             this.defaultTransform = defaultTransform;
+            this.currentFigure = new Figure();
+            this.figures.Add(this.currentFigure);
             this.ResetTransform();
         }
 
@@ -76,12 +78,25 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Adds the line connecting the current point to the new point.
         /// </summary>
-        /// <param name="point">The point.</param>
-        public void AddLine(Vector2 point)
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        public void AddLine(Vector2 start, Vector2 end)
         {
-            var endPoint = Vector2.Transform(point, this.currentTransform);
-            this.segments.Add(new LinearLineSegment(this.currentPoint, endPoint));
-            this.currentPoint = endPoint;
+            end = Vector2.Transform(end, this.currentTransform);
+            start = Vector2.Transform(start, this.currentTransform);
+            this.currentFigure.AddSegment(new LinearLineSegment(start, end));
+        }
+
+        /// <summary>
+        /// Adds the line connecting the current point to the new point.
+        /// </summary>
+        /// <param name="x1">The x1.</param>
+        /// <param name="y1">The y1.</param>
+        /// <param name="x2">The x2.</param>
+        /// <param name="y2">The y2.</param>
+        public void AddLine(float x1, float y1, float x2, float y2)
+        {
+            this.AddLine(new Vector2(x1, y1), new Vector2(x2, y2));
         }
 
         /// <summary>
@@ -90,10 +105,18 @@ namespace SixLabors.Shapes
         /// <param name="points">The points.</param>
         public void AddLines(IEnumerable<Vector2> points)
         {
-            foreach (var p in points)
-            {
-                this.AddLine(p);
-            }
+            Guard.NotNull(points, nameof(points));
+
+            this.AddLines(points.ToArray());
+        }
+
+        /// <summary>
+        /// Adds a series of line segments connecting the current point to the new points.
+        /// </summary>
+        /// <param name="points">The points.</param>
+        public void AddLines(params Vector2[] points)
+        {
+            this.AddSegment(new LinearLineSegment(points));
         }
 
         /// <summary>
@@ -102,51 +125,61 @@ namespace SixLabors.Shapes
         /// <param name="segment">The segment.</param>
         public void AddSegment(ILineSegment segment)
         {
-            var segments = segment.Transform(this.currentTransform);
-            this.segments.Add(segments);
-            this.currentPoint = segments.EndPoint;
+            this.currentFigure.AddSegment(segment.Transform(this.currentTransform));
         }
 
         /// <summary>
         /// Adds a bezier curve to the current figure joining the last point to the endPoint.
         /// </summary>
+        /// <param name="startPoint">The start point.</param>
         /// <param name="controlPoint1">The control point1.</param>
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="endPoint">The end point.</param>
-        public void AddBezier(Vector2 controlPoint1, Vector2 controlPoint2, Vector2 endPoint)
+        public void AddBezier(Vector2 startPoint, Vector2 controlPoint1, Vector2 controlPoint2, Vector2 endPoint)
         {
-            endPoint = Vector2.Transform(endPoint, this.currentTransform);
-            this.segments.Add(new BezierLineSegment(
-                this.currentPoint,
+            this.currentFigure.AddSegment(new BezierLineSegment(
+                Vector2.Transform(startPoint, this.currentTransform),
                  Vector2.Transform(controlPoint1, this.currentTransform),
                  Vector2.Transform(controlPoint2, this.currentTransform),
-                endPoint));
-            this.currentPoint = endPoint;
+                Vector2.Transform(endPoint, this.currentTransform)));
         }
 
         /// <summary>
-        /// Moves the current point.
+        /// Starts a new figure but leaves the previous one open.
         /// </summary>
-        /// <param name="point">The point.</param>
-        public void MoveTo(Vector2 point)
+        public void StartFigure()
         {
-            if (this.segments.Any())
+            if (!this.currentFigure.IsEmpty)
             {
-                this.figures.Add(this.segments.ToArray());
-                this.segments.Clear();
+                this.currentFigure = new Figure();
+                this.figures.Add(this.currentFigure);
+            }
+            else
+            {
+                this.currentFigure.IsClosed = false;
+            }
+        }
+
+        /// <summary>
+        /// Closes the current figure.
+        /// </summary>
+        public void CloseFigure()
+        {
+            this.currentFigure.IsClosed = true;
+            this.StartFigure();
+        }
+
+        /// <summary>
+        /// Closes the current figure.
+        /// </summary>
+        public void CloseAllFigures()
+        {
+            foreach (var f in this.figures)
+            {
+                f.IsClosed = true;
             }
 
-            this.currentPoint = Vector2.Transform(point, this.currentTransform);
-        }
-
-        /// <summary>
-        /// Moves the current point
-        /// </summary>
-        /// <param name="x">The x.</param>
-        /// <param name="y">The y.</param>
-        public void MoveTo(float x, float y)
-        {
-            this.MoveTo(new Vector2(x, y));
+            this.CloseFigure();
         }
 
         /// <summary>
@@ -155,21 +188,31 @@ namespace SixLabors.Shapes
         /// <returns>The current set of operations as a complex polygon</returns>
         public ComplexPolygon Build()
         {
-            var isWorking = this.segments.Any();
+            return new ComplexPolygon(this.figures.Where(x => !x.IsEmpty).Select(x => x.AsPath()).ToArray());
+        }
 
-            var shapes = new IShape[this.figures.Count + (isWorking ? 1 : 0)];
-            var index = 0;
-            foreach (var segments in this.figures)
+        private class Figure
+        {
+            private List<ILineSegment> segments = new List<ILineSegment>();
+
+            public bool IsClosed { get; set; } = false;
+
+            public bool IsEmpty => !this.segments.Any();
+
+            public void AddSegment(ILineSegment segment)
             {
-                shapes[index++] = new Polygon(segments);
+                this.segments.Add(segment);
             }
 
-            if (isWorking)
+            public IPath AsPath()
             {
-                shapes[index++] = new Polygon(this.segments.ToArray());
-            }
+                if (this.IsClosed)
+                {
+                    return new Polygon(this.segments.ToArray());
+                }
 
-            return new ComplexPolygon(shapes);
+                return new Path(this.segments.ToArray());
+            }
         }
     }
 }
