@@ -15,11 +15,21 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
 
     public class ClipperTests
     {
-        private Rectangle BigSquare = new Rectangle(10,10, 40,40);
-        private Rectangle Hole = new Rectangle(20,20, 10,10);
-        private Rectangle TopLeft = new Rectangle(0,0, 20,20);
-        private Rectangle TopRight = new Rectangle(30,0, 20,20);
-        private Rectangle TopMiddle = new Rectangle(20,0, 10,20);
+        private Rectangle BigSquare = new Rectangle(10, 10, 40, 40);
+        private Rectangle Hole = new Rectangle(20, 20, 10, 10);
+        private Rectangle TopLeft = new Rectangle(0, 0, 20, 20);
+        private Rectangle TopRight = new Rectangle(30, 0, 20, 20);
+        private Rectangle TopMiddle = new Rectangle(20, 0, 10, 20);
+
+        private Polygon BigTriangle = new Polygon(new LinearLineSegment(
+                         new Vector2(10, 10),
+                         new Vector2(200, 150),
+                         new Vector2(50, 300)));
+
+        private Polygon LittleTriangle = new Polygon(new LinearLineSegment(
+                        new Vector2(37, 85),
+                        new Vector2(130, 40),
+                        new Vector2(65, 137)));
 
         private ImmutableArray<IShape> Clip(IShape shape, params IShape[] hole)
         {
@@ -35,6 +45,19 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
             }
 
             return clipper.GenerateClippedShapes();
+        }
+
+        [Fact]
+        public void OverlappingTriangles()
+        {
+            var shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
+            Assert.Equal(1, shapes.Length);
+            var path = shapes.Single().Paths.Single().Flatten();
+            Assert.Equal(7, path.Length);
+            foreach (var p in this.BigTriangle.Flatten())
+            {
+                Assert.Contains(p, path);
+            }
         }
 
         [Fact]

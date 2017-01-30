@@ -2446,7 +2446,7 @@ namespace SixLabors.Shapes.PolygonClipper
                         OutPoint op = outRec.Points.Previous;
                         for (int j = 0; j < cnt; j++)
                         {
-                            points[i] = op.Point;
+                            points[j] = op.Point;
                             op = op.Previous;
                         }
 
