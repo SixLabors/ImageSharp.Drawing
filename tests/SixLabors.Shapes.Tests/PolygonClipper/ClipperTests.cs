@@ -21,18 +21,19 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         private Rectangle TopRight = new Rectangle(30,0, 20,20);
         private Rectangle TopMiddle = new Rectangle(20,0, 10,20);
 
-        private ImmutableArray<IShape> Clip(IPath shape, params IPath[] hole)
+        private ImmutableArray<IShape> Clip(IShape shape, params IShape[] hole)
         {
             var clipper = new Clipper();
 
-            clipper.AddPath(shape, ClippingType.Subject);
+            clipper.AddShape(shape, ClippingType.Subject);
             if (hole != null)
             {
                 foreach (var s in hole)
                 {
-                    clipper.AddPath(s, ClippingType.Clip);
+                    clipper.AddShape(s, ClippingType.Clip);
                 }
             }
+
             return clipper.GenerateClippedShapes();
         }
 

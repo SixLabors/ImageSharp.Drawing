@@ -208,7 +208,7 @@ namespace SixLabors.Shapes
             {
                 if (this.IsClosed)
                 {
-                    return new Polygon(this.segments.ToArray());
+                    return new Polygon(this.segments.ToArray()).AsPath();
                 }
 
                 return new Path(this.segments.ToArray());

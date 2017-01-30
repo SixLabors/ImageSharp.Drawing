@@ -17,7 +17,7 @@ namespace SixLabors.Shapes
     /// A way of optimizing drawing rectangles.
     /// </summary>
     /// <seealso cref="SixLabors.Shapes.IShape" />
-    public class Rectangle : IShape, IPath
+    public class Rectangle : IShape
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
@@ -25,6 +25,8 @@ namespace SixLabors.Shapes
         private readonly ImmutableArray<IPath> pathCollection;
         private readonly float halfLength;
         private readonly float length;
+
+        private readonly RectanglePath path;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Rectangle" /> class.
@@ -60,7 +62,8 @@ namespace SixLabors.Shapes
 
             this.halfLength = this.Size.Width + this.Size.Height;
             this.length = this.halfLength * 2;
-            this.pathCollection = ImmutableArray.Create<IPath>(this);
+            this.path = new RectanglePath(this);
+            this.pathCollection = ImmutableArray.Create<IPath>(this.path);
         }
 
         /// <summary>
@@ -138,28 +141,12 @@ namespace SixLabors.Shapes
         Rectangle IShape.Bounds => this;
 
         /// <summary>
-        /// Gets the bounding box of this shape.
-        /// </summary>
-        /// <value>
-        /// The bounds.
-        /// </value>
-        Rectangle IPath.Bounds => this;
-
-        /// <summary>
         /// Gets the paths that make up this shape
         /// </summary>
         /// <value>
         /// The paths.
         /// </value>
         ImmutableArray<IPath> IShape.Paths => this.pathCollection;
-
-        /// <summary>
-        /// Gets the length of the path
-        /// </summary>
-        /// <value>
-        /// The length.
-        /// </value>
-        float IPath.Length => this.length;
 
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
@@ -178,7 +165,7 @@ namespace SixLabors.Shapes
         public Size Size { get; private set; }
 
         /// <summary>
-        /// Determines if the specfied point is contained within the rectangular region defined by
+        /// Determines if the specified point is contained within the rectangular region defined by
         /// this <see cref="Rectangle" />.
         /// </summary>
         /// <param name="point">The point.</param>
@@ -188,30 +175,6 @@ namespace SixLabors.Shapes
         public bool Contains(Vector2 point)
         {
             return Vector2.Clamp(point, this.topLeft, this.bottomRight) == point;
-        }
-
-        /// <summary>
-        /// Calculates the distance along and away from the path for a specified point.
-        /// </summary>
-        /// <param name="point">The point along the path.</param>
-        /// <returns>
-        /// Returns details about the point and its distance away from the path.
-        /// </returns>
-        PointInfo IPath.Distance(Vector2 point)
-        {
-            bool inside; // dont care about inside/outside for paths just distance
-            return this.Distance(point, false, out inside);
-        }
-
-        /// <summary>
-        /// Convertes to path to a closed shape.
-        /// </summary>
-        /// <returns>
-        /// Returns the path as a closed shape.
-        /// </returns>
-        IShape IPath.AsShape()
-        {
-            return this;
         }
 
         /// <summary>
@@ -305,7 +268,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        public IShape Transform(Matrix3x2 matrix)
+        public Rectangle Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -316,27 +279,13 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Transforms the rectangle using specified matrix.
+        /// Transforms the shape using the specified matrix.
         /// </summary>
         /// <param name="matrix">The matrix.</param>
         /// <returns>
-        /// A new path with the matrix applied to it.
+        /// A new shape with the matrix applied to it.
         /// </returns>
-        IPath IPath.Transform(Matrix3x2 matrix)
-        {
-            return (IPath)this.Transform(matrix);
-        }
-
-        /// <summary>
-        /// Converts the <see cref="ILineSegment" /> into a simple linear path..
-        /// </summary>
-        /// <returns>
-        /// Returns the current <see cref="ILineSegment" /> as simple linear path.
-        /// </returns>
-        ImmutableArray<Vector2> IPath.Flatten()
-        {
-            return this.points;
-        }
+        IShape IShape.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
         private PointInfo Distance(Vector2 point, bool getDistanceAwayOnly, out bool isInside)
         {
@@ -433,6 +382,32 @@ namespace SixLabors.Shapes
                 ClosestPointOnPath = clamped,
                 DistanceAlongPath = distanceAlongEdge
             };
+        }
+
+        private class RectanglePath : IWrapperPath
+        {
+            private readonly Rectangle rect;
+
+            public RectanglePath(Rectangle rect)
+            {
+                this.rect = rect;
+            }
+
+            public Rectangle Bounds => this.rect;
+
+            public float Length => this.rect.length;
+
+            public PointInfo Distance(Vector2 point)
+            {
+                    bool inside; // dont care about inside/outside for paths just distance
+                    return this.rect.Distance(point, false, out inside);
+            }
+
+            public ImmutableArray<Vector2> Flatten() => this.rect.points;
+
+            public IPath Transform(Matrix3x2 matrix) => this.rect.Transform(matrix).path;
+
+            public IShape AsShape() => this.rect;
         }
     }
 }

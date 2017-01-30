@@ -103,7 +103,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
         {
-            IPath path = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
+            IPath path = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10))).AsPath();
             var info = path.Distance(point);
             Assert.Equal(expectedDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
@@ -144,21 +144,21 @@ namespace SixLabors.Shapes.Tests
         }
 
         [Fact]
-        public void ReturnsSelfASOwnPath_SingleSegment()
+        public void ReturnsWrapperOfSelfASOwnPath_SingleSegment()
         {
             var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
             var paths = poly.Paths;
             Assert.Equal(1, paths.Length);
-            Assert.Equal(poly, paths[0]);
+            Assert.Equal(poly, paths[0].AsShape());
         }
 
         [Fact]
-        public void ReturnsSelfASOwnPath_MultiSegment()
+        public void ReturnsWrapperOfSelfASOwnPath_MultiSegment()
         {
             var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10)), new LinearLineSegment(new Vector2(2, 5), new Vector2(5, 5)));
             var paths = poly.Paths;
             Assert.Equal(1, paths.Length);
-            Assert.Equal(poly, paths[0]);
+            Assert.Equal(poly, paths[0].AsShape());
         }
 
         [Fact]
@@ -175,7 +175,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Length()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10)));
+            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10))).AsPath();
             Assert.Equal(20, poly.Length);
         }
 

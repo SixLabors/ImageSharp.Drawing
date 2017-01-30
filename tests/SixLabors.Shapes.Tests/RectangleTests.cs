@@ -120,7 +120,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectecDistance, float alongPath)
         {
-            IPath shape = new Rectangle(0, 0, 10, 10);
+            IPath shape = new Rectangle(0, 0, 10, 10).AsPath();
             var info = shape.Distance(point);
             Assert.Equal(expectecDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
@@ -175,7 +175,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void LienearSegements()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13);
+            IPath shape = new Rectangle(10, 11, 12, 13).AsPath();
             var segemnts = shape.Flatten();
             Assert.Equal(new Vector2(10, 11), segemnts[0]);
             Assert.Equal(new Vector2(22, 11), segemnts[1]);
@@ -216,7 +216,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds_Path()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13);
+            IPath shape = new Rectangle(10, 11, 12, 13).AsPath();
             Assert.Equal(10, shape.Bounds.Left);
             Assert.Equal(22, shape.Bounds.Right);
             Assert.Equal(11, shape.Bounds.Top);
@@ -226,7 +226,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Length_Path()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13);
+            IPath shape = new Rectangle(10, 11, 12, 13).AsPath();
             Assert.Equal(50, shape.Length);
         }
 
@@ -242,7 +242,7 @@ namespace SixLabors.Shapes.Tests
         {
             IShape shape = new Rectangle(10, 11, 12, 13);
 
-            Assert.Equal((IPath)shape, shape.Paths.Single());
+            Assert.Equal(shape, shape.Paths.Single().AsShape());
         }
 
         [Fact]

@@ -9,15 +9,16 @@ namespace SixLabors.Shapes
     using System.Collections;
     using System.Collections.Generic;
     using System.Collections.Immutable;
+    using System.Linq;
     using System.Numerics;
 
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
-    public sealed class Polygon : IShape, IPath
+    public sealed class Polygon : IShape
     {
         private readonly InternalPath innerPath;
-        private readonly ImmutableArray<IPath> pathCollection;
+        private readonly PolygonPath path;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Polygon"/> class.
@@ -36,7 +37,8 @@ namespace SixLabors.Shapes
         {
             this.LineSegments = segments;
             this.innerPath = new InternalPath(segments, true);
-            this.pathCollection = ImmutableArray.Create<IPath>(this);
+            this.path = new PolygonPath(this);
+            this.Paths = ImmutableArray.Create<IPath>(this.path);
         }
 
         /// <summary>
@@ -47,7 +49,8 @@ namespace SixLabors.Shapes
         {
             this.LineSegments = ImmutableArray.Create(segment);
             this.innerPath = new InternalPath(segment, true);
-            this.pathCollection = ImmutableArray.Create<IPath>(this);
+            this.path = new PolygonPath(this);
+            this.Paths = ImmutableArray.Create<IPath>(this.path);
         }
 
         /// <summary>
@@ -67,14 +70,6 @@ namespace SixLabors.Shapes
         public Rectangle Bounds => this.innerPath.Bounds;
 
         /// <summary>
-        /// Gets the length of the path
-        /// </summary>
-        /// <value>
-        /// The length.
-        /// </value>
-        public float Length => this.innerPath.Length;
-
-        /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
         /// </summary>
         /// <value>
@@ -88,7 +83,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The paths.
         /// </value>
-        public ImmutableArray<IPath> Paths => this.pathCollection;
+        public ImmutableArray<IPath> Paths { get; }
 
         /// <summary>
         /// the distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
@@ -118,18 +113,6 @@ namespace SixLabors.Shapes
         public bool Contains(Vector2 point)
         {
             return this.innerPath.PointInPolygon(point);
-        }
-
-        /// <summary>
-        /// Calcualtes the distance along and away from the path for a specified point.
-        /// </summary>
-        /// <param name="point">The point along the path.</param>
-        /// <returns>
-        /// distance metadata about the point.
-        /// </returns>
-        PointInfo IPath.Distance(Vector2 point)
-        {
-            return this.innerPath.DistanceFromPath(point);
         }
 
         /// <summary>
@@ -175,32 +158,19 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
+        /// Returns this polygon as a path
+        /// </summary>
+        /// <returns>This polygon as a path</returns>
+        public IPath AsPath() => this.path;
+
+        /// <summary>
         /// Transforms the rectangle using specified matrix.
         /// </summary>
         /// <param name="matrix">The matrix.</param>
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        public IShape Transform(Matrix3x2 matrix)
-        {
-            var segments = new ILineSegment[this.LineSegments.Length];
-            var i = 0;
-            foreach (var s in this.LineSegments)
-            {
-                segments[i++] = s.Transform(matrix);
-            }
-
-            return new Polygon(segments);
-        }
-
-        /// <summary>
-        /// Transforms the path using the specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new path with the matrix applied to it.
-        /// </returns>
-        IPath IPath.Transform(Matrix3x2 matrix)
+        public Polygon Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -218,14 +188,34 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Converts a path to a closed shape.
+        /// Transforms the shape using the specified matrix.
         /// </summary>
+        /// <param name="matrix">The matrix.</param>
         /// <returns>
-        /// Returns the path as a closed shape.
+        /// A new shape with the matrix applied to it.
         /// </returns>
-        IShape IPath.AsShape()
+        IShape IShape.Transform(Matrix3x2 matrix) => this.Transform(matrix);
+
+        private class PolygonPath : IWrapperPath
         {
-            return this;
+            private readonly Polygon polygon;
+
+            public PolygonPath(Polygon polygon)
+            {
+                this.polygon = polygon;
+            }
+
+            public Rectangle Bounds => this.polygon.Bounds;
+
+            public float Length => this.polygon.innerPath.Length;
+
+            public PointInfo Distance(Vector2 point) => this.polygon.innerPath.DistanceFromPath(point);
+
+            public ImmutableArray<Vector2> Flatten() => this.polygon.innerPath.Points;
+
+            public IPath Transform(Matrix3x2 matrix) => this.polygon.Transform(matrix).path;
+
+            public IShape AsShape() => this.polygon;
         }
     }
 }

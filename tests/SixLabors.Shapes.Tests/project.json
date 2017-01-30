@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "SixLabors.Shapes": {
-      "target": "project",
-      "version": "0.0.1-*"
+      "target": "project"
     },
     "xunit": "2.2.0-*",
     "dotnet-test-xunit": "2.2.0-*",

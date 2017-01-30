@@ -130,16 +130,9 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="clippingType">The clipping type.</param>
         internal void AddShape(IShape shape, ClippingType clippingType)
         {
-            if (shape is IPath)
+            foreach (var p in shape.Paths)
             {
-                this.AddPath((IPath)shape, clippingType);
-            }
-            else
-            {
-                foreach (var p in shape.Paths)
-                {
-                    this.AddPath(p, clippingType);
-                }
+                this.AddPath(p, clippingType);
             }
         }
 
@@ -2442,15 +2435,23 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
                 else
                 {
-                    var points = new Vector2[cnt];
-                    OutPoint op = outRec.Points.Previous;
-                    for (int j = 0; j < cnt; j++)
+                    var wrapped = outRec.SourcePath as IWrapperPath;
+                    if (wrapped != null)
                     {
-                        points[i] = op.Point;
-                        op = op.Previous;
+                        shapes.Add(wrapped.AsShape());
                     }
+                    else
+                    {
+                        var points = new Vector2[cnt];
+                        OutPoint op = outRec.Points.Previous;
+                        for (int j = 0; j < cnt; j++)
+                        {
+                            points[i] = op.Point;
+                            op = op.Previous;
+                        }
 
-                    shapes.Add(new Polygon(new LinearLineSegment(points)));
+                        shapes.Add(new Polygon(new LinearLineSegment(points)));
+                    }
                 }
             }
 
