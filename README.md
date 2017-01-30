@@ -4,9 +4,9 @@
 **SixLabors.Shapes** is a new cross-platform 2D polygon manipulation AP.
 
 [![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/SixLabors/Shapes/master/APACHE-2.0-LICENSE.txt)
-[![GitHub issues](https://img.shields.io/github/issues/tocsoft/SixLabors.Shapes.svg)](https://github.com/SixLabors/Shapes/issues)
-[![GitHub stars](https://img.shields.io/github/stars/tocsoft/SixLabors.Shapes.svg)](https://github.com/SixLabors/Shapes/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/tocsoft/SixLabors.Shapes.svg)](https://github.com/SixLabors/Shapes/network)
+[![GitHub issues](https://img.shields.io/github/issues/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/issues)
+[![GitHub stars](https://img.shields.io/github/stars/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/network)
 
 ### Installation
 At present the code is pre-release but when ready it will be available on [Nuget](http://www.nuget.org). 
