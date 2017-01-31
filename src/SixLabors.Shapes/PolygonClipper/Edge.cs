@@ -162,5 +162,19 @@ namespace SixLabors.Shapes.PolygonClipper
         /// The previous in sel.
         /// </value>
         public Edge PreviousInSEL { get; set; }
+
+        /// <summary>
+        /// Initializes the specified next.
+        /// </summary>
+        /// <param name="next">The next.</param>
+        /// <param name="prev">The previous.</param>
+        /// <param name="pt">The pt.</param>
+        public void Init(Edge next, Edge prev, Vector2 pt)
+        {
+            this.NextEdge = next;
+            this.PreviousEdge = prev;
+            this.Current = pt;
+            this.OutIndex = Clipper.Unassigned;
+        }
     }
 }

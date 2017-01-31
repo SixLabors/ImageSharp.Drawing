@@ -17,9 +17,12 @@ namespace SixLabors.Shapes.PolygonClipper
     /// </summary>
     public class Clipper
     {
+        /// <summary>
+        /// The unassigned
+        /// </summary>
+        internal const int Unassigned = -1; // InitOptions that can be passed to the constructor ...
         private const double HorizontalDeltaLimit = -3.4E+38;
         private const int Skip = -2;
-        private const int Unassigned = -1; // InitOptions that can be passed to the constructor ...
         private static readonly IComparer<IntersectNode> IntersectNodeComparer = new IntersectNodeSort();
         private readonly List<IntersectNode> intersectList = new List<IntersectNode>();
 
@@ -180,11 +183,11 @@ namespace SixLabors.Shapes.PolygonClipper
                 // 1. Basic (first) edge initialization ...
                 edges[1].Current = points[1];
 
-                InitEdge(edges[0], edges[1], edges[hi], points[0]);
-                InitEdge(edges[hi], edges[0], edges[hi - 1], points[hi]);
+                edges[0].Init(edges[1], edges[hi], points[0]);
+                edges[hi].Init(edges[0], edges[hi - 1], points[hi]);
                 for (int i = hi - 1; i >= 1; --i)
                 {
-                    InitEdge(edges[i], edges[i + 1], edges[i - 1], points[i]);
+                    edges[i].Init(edges[i + 1], edges[i - 1], points[i]);
                 }
 
                 Edge startEdge = edges[0];
@@ -212,7 +215,7 @@ namespace SixLabors.Shapes.PolygonClipper
                         continue;
                     }
 
-                    if (SlopesEqual(edge.PreviousEdge.Current, edge.Current, edge.NextEdge.Current))
+                    if (VectorHelpers.SlopesEqual(edge.PreviousEdge.Current, edge.Current, edge.NextEdge.Current))
                     {
                         // Collinear edges are allowed for open paths but in closed paths
                         // the default is to merge adjacent collinear edges into a single edge.
@@ -583,31 +586,6 @@ namespace SixLabors.Shapes.PolygonClipper
             return e1.Delta.Y * e2.Delta.X == e1.Delta.X * e2.Delta.Y;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3)
-        {
-            var dif12 = pt1 - pt2;
-            var dif23 = pt2 - pt3;
-            return (dif12.Y * dif23.X) - (dif12.X * dif23.Y) == 0;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3, Vector2 pt4)
-        {
-            var dif12 = pt1 - pt2;
-            var dif34 = pt3 - pt4;
-
-            return (dif12.Y * dif34.X) - (dif12.X * dif34.Y) == 0;
-        }
-
-        private static void InitEdge(Edge e, Edge eNext, Edge ePrev, Vector2 pt)
-        {
-            e.NextEdge = eNext;
-            e.PreviousEdge = ePrev;
-            e.Current = pt;
-            e.OutIndex = Unassigned;
-        }
-
         private static OutRec ParseFirstLeft(OutRec firstLeft)
         {
             while (firstLeft != null && firstLeft.Points == null)
@@ -682,31 +660,11 @@ namespace SixLabors.Shapes.PolygonClipper
                     this.InsertLocalMinimaIntoAEL(botY);
                 }
 
-                // fix orientations ...
-                foreach (OutRec outRec in this.polyOuts)
-                {
-                    if (outRec.Points == null || outRec.IsOpen)
-                    {
-                        continue;
-                    }
-                }
-
                 this.JoinCommonEdges();
 
                 foreach (OutRec outRec in this.polyOuts)
                 {
-                    if (outRec.Points == null)
-                    {
-                        continue;
-                    }
-                    else if (outRec.IsOpen)
-                    {
-                        this.FixupOutPolyline(outRec);
-                    }
-                    else
-                    {
-                        this.FixupOutPolygon(outRec);
-                    }
+                    outRec.FixupOuts();
                 }
 
                 return true;
@@ -820,7 +778,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 if (lb.OutIndex >= 0 && lb.PreviousInAEL != null &&
                   lb.PreviousInAEL.Current.X == lb.Bottom.X &&
                   lb.PreviousInAEL.OutIndex >= 0 &&
-                  SlopesEqual(lb.PreviousInAEL.Current, lb.PreviousInAEL.Top, lb.Current, lb.Top) &&
+                  VectorHelpers.SlopesEqual(lb.PreviousInAEL.Current, lb.PreviousInAEL.Top, lb.Current, lb.Top) &&
                   lb.WindingDelta != 0 && lb.PreviousInAEL.WindingDelta != 0)
                 {
                     OutPoint op2 = this.AddOutPt(lb.PreviousInAEL, lb.Bottom);
@@ -830,7 +788,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 if (lb.NextInAEL != rb)
                 {
                     if (rb.OutIndex >= 0 && rb.PreviousInAEL.OutIndex >= 0 &&
-                      SlopesEqual(rb.PreviousInAEL.Current, rb.PreviousInAEL.Top, rb.Current, rb.Top) &&
+                      VectorHelpers.SlopesEqual(rb.PreviousInAEL.Current, rb.PreviousInAEL.Top, rb.Current, rb.Top) &&
                       rb.WindingDelta != 0 && rb.PreviousInAEL.WindingDelta != 0)
                     {
                         OutPoint op2 = this.AddOutPt(rb.PreviousInAEL, rb.Bottom);
@@ -1209,7 +1167,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 if ((xPrev == xE) &&
                     (e.WindingDelta != 0) &&
                     (prevE.WindingDelta != 0) &&
-                    SlopesEqual(new Vector2(xPrev, pt.Y), prevE.Top, new Vector2(xE, pt.Y), e.Top))
+                    VectorHelpers.SlopesEqual(new Vector2(xPrev, pt.Y), prevE.Top, new Vector2(xE, pt.Y), e.Top))
                 {
                     OutPoint outPt = this.AddOutPt(prevE, pt);
                     this.AddJoin(result, outPt, e.Top);
@@ -1737,15 +1695,16 @@ namespace SixLabors.Shapes.PolygonClipper
 
             this.GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
 
-            Edge eLastHorz = horzEdge, eMaxPair = null;
-            while (eLastHorz.NextInLML != null && IsHorizontal(eLastHorz.NextInLML))
+            Edge lastHorzEdge = horzEdge;
+            Edge maxPairEdge = null;
+            while (lastHorzEdge.NextInLML != null && IsHorizontal(lastHorzEdge.NextInLML))
             {
-                eLastHorz = eLastHorz.NextInLML;
+                lastHorzEdge = lastHorzEdge.NextInLML;
             }
 
-            if (eLastHorz.NextInLML == null)
+            if (lastHorzEdge.NextInLML == null)
             {
-                eMaxPair = this.GetMaximaPair(eLastHorz);
+                maxPairEdge = this.GetMaximaPair(lastHorzEdge);
             }
 
             Maxima currMax = this.maxima;
@@ -1759,7 +1718,7 @@ namespace SixLabors.Shapes.PolygonClipper
                         currMax = currMax.Next;
                     }
 
-                    if (currMax != null && currMax.X >= eLastHorz.Top.X)
+                    if (currMax != null && currMax.X >= lastHorzEdge.Top.X)
                     {
                         currMax = null;
                     }
@@ -1771,7 +1730,7 @@ namespace SixLabors.Shapes.PolygonClipper
                         currMax = currMax.Next;
                     }
 
-                    if (currMax.X <= eLastHorz.Top.X)
+                    if (currMax.X <= lastHorzEdge.Top.X)
                     {
                         currMax = null;
                     }
@@ -1783,7 +1742,7 @@ namespace SixLabors.Shapes.PolygonClipper
             // loop through consec. horizontal edges
             while (true)
             {
-                bool isLastHorz = horzEdge == eLastHorz;
+                bool isLastHorz = horzEdge == lastHorzEdge;
                 Edge e = this.GetNextInAEL(horzEdge, dir);
                 while (e != null)
                 {
@@ -1854,15 +1813,15 @@ namespace SixLabors.Shapes.PolygonClipper
 
                     // OK, so far we're still in range of the horizontal Edge  but make sure
                     // we're at the last of consec. horizontals when matching with eMaxPair
-                    if (e == eMaxPair && isLastHorz)
+                    if (e == maxPairEdge && isLastHorz)
                     {
                         if (horzEdge.OutIndex >= 0)
                         {
-                            this.AddLocalMaxPoly(horzEdge, eMaxPair, horzEdge.Top);
+                            this.AddLocalMaxPoly(horzEdge, maxPairEdge, horzEdge.Top);
                         }
 
                         this.DeleteFromAEL(horzEdge);
-                        this.DeleteFromAEL(eMaxPair);
+                        this.DeleteFromAEL(maxPairEdge);
                         return;
                     }
 
@@ -1929,22 +1888,22 @@ namespace SixLabors.Shapes.PolygonClipper
                     }
 
                     // nb: HorzEdge is no longer horizontal here
-                    Edge ePrev = horzEdge.PreviousInAEL;
-                    Edge eNext = horzEdge.NextInAEL;
-                    if (ePrev != null && ePrev.Current.X == horzEdge.Bottom.X &&
-                      ePrev.Current.Y == horzEdge.Bottom.Y && ePrev.WindingDelta != 0 &&
-                      (ePrev.OutIndex >= 0 && ePrev.Current.Y > ePrev.Top.Y &&
-                      SlopesEqual(horzEdge, ePrev)))
+                    Edge prevEdge = horzEdge.PreviousInAEL;
+                    Edge nextEdge = horzEdge.NextInAEL;
+                    if (prevEdge != null && prevEdge.Current.X == horzEdge.Bottom.X &&
+                      prevEdge.Current.Y == horzEdge.Bottom.Y && prevEdge.WindingDelta != 0 &&
+                      (prevEdge.OutIndex >= 0 && prevEdge.Current.Y > prevEdge.Top.Y &&
+                      SlopesEqual(horzEdge, prevEdge)))
                     {
-                        OutPoint op2 = this.AddOutPt(ePrev, horzEdge.Bottom);
+                        OutPoint op2 = this.AddOutPt(prevEdge, horzEdge.Bottom);
                         this.AddJoin(op1, op2, horzEdge.Top);
                     }
-                    else if (eNext != null && eNext.Current.X == horzEdge.Bottom.X &&
-                      eNext.Current.Y == horzEdge.Bottom.Y && eNext.WindingDelta != 0 &&
-                      eNext.OutIndex >= 0 && eNext.Current.Y > eNext.Top.Y &&
-                      SlopesEqual(horzEdge, eNext))
+                    else if (nextEdge != null && nextEdge.Current.X == horzEdge.Bottom.X &&
+                      nextEdge.Current.Y == horzEdge.Bottom.Y && nextEdge.WindingDelta != 0 &&
+                      nextEdge.OutIndex >= 0 && nextEdge.Current.Y > nextEdge.Top.Y &&
+                      SlopesEqual(horzEdge, nextEdge))
                     {
-                        OutPoint op2 = this.AddOutPt(eNext, horzEdge.Bottom);
+                        OutPoint op2 = this.AddOutPt(nextEdge, horzEdge.Bottom);
                         this.AddJoin(op1, op2, horzEdge.Top);
                     }
                 }
@@ -2069,11 +2028,11 @@ namespace SixLabors.Shapes.PolygonClipper
                 e = this.sortedEdges;
                 while (e.NextInSEL != null)
                 {
-                    Edge eNext = e.NextInSEL;
+                    Edge nextEdge = e.NextInSEL;
                     Vector2 pt;
-                    if (e.Current.X > eNext.Current.X)
+                    if (e.Current.X > nextEdge.Current.X)
                     {
-                        this.IntersectPoint(e, eNext, out pt);
+                        this.IntersectPoint(e, nextEdge, out pt);
                         if (pt.Y < topY)
                         {
                             pt = new Vector2(TopX(e, topY), topY);
@@ -2081,16 +2040,16 @@ namespace SixLabors.Shapes.PolygonClipper
 
                         IntersectNode newNode = new IntersectNode();
                         newNode.Edge1 = e;
-                        newNode.Edge2 = eNext;
+                        newNode.Edge2 = nextEdge;
                         newNode.Point = pt;
                         this.intersectList.Add(newNode);
 
-                        this.SwapPositionsInSEL(e, eNext);
+                        this.SwapPositionsInSEL(e, nextEdge);
                         isModified = true;
                     }
                     else
                     {
-                        e = eNext;
+                        e = nextEdge;
                     }
                 }
 
@@ -2325,24 +2284,24 @@ namespace SixLabors.Shapes.PolygonClipper
                     this.UpdateEdgeIntoAEL(ref e);
 
                     // if output polygons share an edge, they'll need joining later ...
-                    Edge ePrev = e.PreviousInAEL;
-                    Edge eNext = e.NextInAEL;
-                    if (ePrev != null && ePrev.Current.X == e.Bottom.X &&
-                      ePrev.Current.Y == e.Bottom.Y && op != null &&
-                      ePrev.OutIndex >= 0 && ePrev.Current.Y > ePrev.Top.Y &&
-                      SlopesEqual(e.Current, e.Top, ePrev.Current, ePrev.Top) &&
-                      (e.WindingDelta != 0) && (ePrev.WindingDelta != 0))
+                    Edge prevEdge = e.PreviousInAEL;
+                    Edge nextEdge = e.NextInAEL;
+                    if (prevEdge != null && prevEdge.Current.X == e.Bottom.X &&
+                      prevEdge.Current.Y == e.Bottom.Y && op != null &&
+                      prevEdge.OutIndex >= 0 && prevEdge.Current.Y > prevEdge.Top.Y &&
+                      VectorHelpers.SlopesEqual(e.Current, e.Top, prevEdge.Current, prevEdge.Top) &&
+                      (e.WindingDelta != 0) && (prevEdge.WindingDelta != 0))
                     {
-                        OutPoint op2 = this.AddOutPt(ePrev, e.Bottom);
+                        OutPoint op2 = this.AddOutPt(prevEdge, e.Bottom);
                         this.AddJoin(op, op2, e.Top);
                     }
-                    else if (eNext != null && eNext.Current.X == e.Bottom.X &&
-                      eNext.Current.Y == e.Bottom.Y && op != null &&
-                      eNext.OutIndex >= 0 && eNext.Current.Y > eNext.Top.Y &&
-                      SlopesEqual(e.Current, e.Top, eNext.Current, eNext.Top) &&
-                      (e.WindingDelta != 0) && (eNext.WindingDelta != 0))
+                    else if (nextEdge != null && nextEdge.Current.X == e.Bottom.X &&
+                      nextEdge.Current.Y == e.Bottom.Y && op != null &&
+                      nextEdge.OutIndex >= 0 && nextEdge.Current.Y > nextEdge.Top.Y &&
+                      VectorHelpers.SlopesEqual(e.Current, e.Top, nextEdge.Current, nextEdge.Top) &&
+                      (e.WindingDelta != 0) && (nextEdge.WindingDelta != 0))
                     {
-                        OutPoint op2 = this.AddOutPt(eNext, e.Bottom);
+                        OutPoint op2 = this.AddOutPt(nextEdge, e.Bottom);
                         this.AddJoin(op, op2, e.Top);
                     }
                 }
@@ -2365,12 +2324,12 @@ namespace SixLabors.Shapes.PolygonClipper
                 return;
             }
 
-            Edge eNext = e.NextInAEL;
-            while (eNext != null && eNext != eMaxPair)
+            Edge nextEdge = e.NextInAEL;
+            while (nextEdge != null && nextEdge != eMaxPair)
             {
-                this.IntersectEdges(e, eNext, e.Top);
-                this.SwapPositionsInAEL(e, eNext);
-                eNext = e.NextInAEL;
+                this.IntersectEdges(e, nextEdge, e.Top);
+                this.SwapPositionsInAEL(e, nextEdge);
+                nextEdge = e.NextInAEL;
             }
 
             if (e.OutIndex == Unassigned && eMaxPair.OutIndex == Unassigned)
@@ -2456,75 +2415,6 @@ namespace SixLabors.Shapes.PolygonClipper
             }
 
             return shapes.ToImmutableArray();
-        }
-
-        private void FixupOutPolyline(OutRec outrec)
-        {
-            OutPoint pp = outrec.Points;
-            OutPoint lastPP = pp.Previous;
-            while (pp != lastPP)
-            {
-                pp = pp.Next;
-                if (pp.Point == pp.Previous.Point)
-                {
-                    if (pp == lastPP)
-                    {
-                        lastPP = pp.Previous;
-                    }
-
-                    OutPoint tmpPP = pp.Previous;
-                    tmpPP.Next = pp.Next;
-                    pp.Next.Previous = tmpPP;
-                    pp = tmpPP;
-                }
-            }
-
-            if (pp == pp.Previous)
-            {
-                outrec.Points = null;
-            }
-        }
-
-        private void FixupOutPolygon(OutRec outRec)
-        {
-            // FixupOutPolygon() - removes duplicate points and simplifies consecutive
-            // parallel edges by removing the middle vertex.
-            OutPoint lastOK = null;
-            outRec.BottomPoint = null;
-            OutPoint pp = outRec.Points;
-            while (true)
-            {
-                if (pp.Previous == pp || pp.Previous == pp.Next)
-                {
-                    outRec.Points = null;
-                    return;
-                }
-
-                // test for duplicate points and collinear edges ...
-                if ((pp.Point == pp.Next.Point) || (pp.Point == pp.Previous.Point) ||
-                  SlopesEqual(pp.Previous.Point, pp.Point, pp.Next.Point))
-                {
-                    lastOK = null;
-                    pp.Previous.Next = pp.Next;
-                    pp.Next.Previous = pp.Previous;
-                    pp = pp.Previous;
-                }
-                else if (pp == lastOK)
-                {
-                    break;
-                }
-                else
-                {
-                    if (lastOK == null)
-                    {
-                        lastOK = pp;
-                    }
-
-                    pp = pp.Next;
-                }
-            }
-
-            outRec.Points = pp;
         }
 
         private OutPoint DupOutPt(OutPoint outPt, bool insertAfter)
@@ -2857,7 +2747,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     op1b = op1b.Next;
                 }
 
-                bool reverse1 = (op1b.Point.Y > op1.Point.Y) || !SlopesEqual(op1.Point, op1b.Point, j.OffPoint);
+                bool reverse1 = (op1b.Point.Y > op1.Point.Y) || !VectorHelpers.SlopesEqual(op1.Point, op1b.Point, j.OffPoint);
                 if (reverse1)
                 {
                     op1b = op1.Previous;
@@ -2867,7 +2757,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     }
 
                     if ((op1b.Point.Y > op1.Point.Y) ||
-                      !SlopesEqual(op1.Point, op1b.Point, j.OffPoint))
+                      !VectorHelpers.SlopesEqual(op1.Point, op1b.Point, j.OffPoint))
                     {
                         return false;
                     }
@@ -2879,7 +2769,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     op2b = op2b.Next;
                 }
 
-                bool reverse2 = (op2b.Point.Y > op2.Point.Y) || !SlopesEqual(op2.Point, op2b.Point, j.OffPoint);
+                bool reverse2 = (op2b.Point.Y > op2.Point.Y) || !VectorHelpers.SlopesEqual(op2.Point, op2b.Point, j.OffPoint);
                 if (reverse2)
                 {
                     op2b = op2.Previous;
@@ -2889,7 +2779,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     }
 
                     if ((op2b.Point.Y > op2.Point.Y) ||
-                      !SlopesEqual(op2.Point, op2b.Point, j.OffPoint))
+                      !VectorHelpers.SlopesEqual(op2.Point, op2b.Point, j.OffPoint))
                     {
                         return false;
                     }

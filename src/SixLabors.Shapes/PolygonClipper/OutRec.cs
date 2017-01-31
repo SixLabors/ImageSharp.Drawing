@@ -25,7 +25,6 @@ namespace SixLabors.Shapes.PolygonClipper
         {
             this.Index = index;
             this.IsHole = false;
-            this.IsOpen = false;
             this.FirstLeft = null;
             this.Points = null;
             this.BottomPoint = null;
@@ -55,7 +54,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <value>
         ///   <c>true</c> if this instance is open; otherwise, <c>false</c>.
         /// </value>
-        public bool IsOpen { get; set; }
+        public bool IsOpen { get; set; } = false;
 
         /// <summary>
         /// Gets or sets the first left
@@ -74,5 +73,94 @@ namespace SixLabors.Shapes.PolygonClipper
         /// The bottom point.
         /// </value>
         public OutPoint BottomPoint { get; set; }
+
+        /// <summary>
+        /// Fixups the outs.
+        /// </summary>
+        public void FixupOuts()
+        {
+            if (this.Points == null)
+            {
+                return;
+            }
+
+            if (this.IsOpen)
+            {
+                this.FixupOutPolyline();
+            }
+            else
+            {
+                this.FixupOutPolygon();
+            }
+        }
+
+        private void FixupOutPolyline()
+        {
+            OutPoint pp = this.Points;
+            OutPoint lastPP = pp.Previous;
+            while (pp != lastPP)
+            {
+                pp = pp.Next;
+                if (pp.Point == pp.Previous.Point)
+                {
+                    if (pp == lastPP)
+                    {
+                        lastPP = pp.Previous;
+                    }
+
+                    OutPoint tmpPP = pp.Previous;
+                    tmpPP.Next = pp.Next;
+                    pp.Next.Previous = tmpPP;
+                    pp = tmpPP;
+                }
+            }
+
+            if (pp == pp.Previous)
+            {
+                this.Points = null;
+            }
+        }
+
+        private void FixupOutPolygon()
+        {
+            // FixupOutPolygon() - removes duplicate points and simplifies consecutive
+            // parallel edges by removing the middle vertex.
+            OutPoint lastOK = null;
+            this.BottomPoint = null;
+            OutPoint pp = this.Points;
+            while (true)
+            {
+                if (pp.Previous == pp || pp.Previous == pp.Next)
+                {
+                    this.Points = null;
+                    return;
+                }
+
+                // test for duplicate points and collinear edges ...
+                if ((pp.Point == pp.Next.Point) || (pp.Point == pp.Previous.Point) ||
+                  VectorHelpers.SlopesEqual(pp.Previous.Point, pp.Point, pp.Next.Point))
+                {
+                    lastOK = null;
+                    pp.Previous.Next = pp.Next;
+                    pp.Next.Previous = pp.Previous;
+                    pp = pp.Previous;
+                }
+                else if (pp == lastOK)
+                {
+                    break;
+                }
+                else
+                {
+                    if (lastOK == null)
+                    {
+                        lastOK = pp;
+                    }
+
+                    pp = pp.Next;
+                }
+            }
+
+            this.Points = pp;
+        }
     }
 }
