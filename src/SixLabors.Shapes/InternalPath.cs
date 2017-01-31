@@ -17,6 +17,11 @@ namespace SixLabors.Shapes
     internal class InternalPath
     {
         /// <summary>
+        /// The epsilon for float comparison
+        /// </summary>
+        private const float Epsilon = 0.00001f;
+
+        /// <summary>
         /// The maximum vector
         /// </summary>
         private static readonly Vector2 MaxVector = new Vector2(float.MaxValue);
@@ -324,15 +329,15 @@ namespace SixLabors.Shapes
             Vector2 topLeft2 = Vector2.Min(line2Start, line2End);
             Vector2 bottomRight2 = Vector2.Max(line2Start, line2End);
 
-            float left1 = topLeft1.X;
-            float right1 = bottomRight1.X;
-            float top1 = topLeft1.Y;
-            float bottom1 = bottomRight1.Y;
+            float left1 = topLeft1.X - Epsilon;
+            float right1 = bottomRight1.X + Epsilon;
+            float top1 = topLeft1.Y - Epsilon;
+            float bottom1 = bottomRight1.Y + Epsilon;
 
-            float left2 = topLeft2.X;
-            float right2 = bottomRight2.X;
-            float top2 = topLeft2.Y;
-            float bottom2 = bottomRight2.Y;
+            float left2 = topLeft2.X - Epsilon;
+            float right2 = bottomRight2.X + Epsilon;
+            float top2 = topLeft2.Y - Epsilon;
+            float bottom2 = bottomRight2.Y + Epsilon;
 
             return left1 <= right2 && right1 >= left2
                 &&
@@ -362,7 +367,7 @@ namespace SixLabors.Shapes
             Vector2 line2Diff = line2End - line2Start;
 
             Vector2 point;
-            if (Math.Abs(line1Diff.X) < float.Epsilon)
+            if (Math.Abs(line1Diff.X) < Epsilon)
             {
                 float slope = line2Diff.Y / line2Diff.X;
                 float yinter = line2Start.Y - (slope * line2Start.X);
@@ -371,7 +376,7 @@ namespace SixLabors.Shapes
 
                 // horizontal and vertical lines
             }
-            else if (Math.Abs(line2Diff.X) < float.Epsilon)
+            else if (Math.Abs(line2Diff.X) < Epsilon)
             {
                 float slope = line1Diff.Y / line1Diff.X;
                 float yInter = line1Start.Y - (slope * line1Start.X);
@@ -388,7 +393,7 @@ namespace SixLabors.Shapes
                 float yInter1 = line1Start.Y - (slope1 * line1Start.X);
                 float yInter2 = line2Start.Y - (slope2 * line2Start.X);
 
-                if (Math.Abs(slope1 - slope2) < float.Epsilon && Math.Abs(yInter1 - yInter2) > float.Epsilon)
+                if (Math.Abs(slope1 - slope2) < Epsilon && Math.Abs(yInter1 - yInter2) > Epsilon)
                 {
                     return MaxVector;
                 }

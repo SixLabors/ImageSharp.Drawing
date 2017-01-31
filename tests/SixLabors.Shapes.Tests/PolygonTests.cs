@@ -187,5 +187,16 @@ namespace SixLabors.Shapes.Tests
             // with linear polygons its the number of points the segments have
             Assert.Equal(2, poly.MaxIntersections);
         }
+
+        [Fact]
+        public void FindBothIntersections()
+        {
+            var poly = new Polygon(new LinearLineSegment(
+                            new Vector2(10, 10),
+                            new Vector2(200, 150),
+                            new Vector2(50, 300)));
+            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 55), new Vector2(float.MaxValue, 55));
+            Assert.Equal(2, intersections.Count());
+        }
     }
 }
