@@ -6,13 +6,11 @@
 namespace SixLabors.Shapes.PolygonClipper
 {
     using System;
-    using System.Collections.Generic;
-    using System.Linq;
     using System.Numerics;
     using System.Runtime.CompilerServices;
 
     /// <summary>
-    /// TEdge
+    /// Class for managing the edges as a linked list
     /// </summary>
     internal class Edge
     {
@@ -25,15 +23,15 @@ namespace SixLabors.Shapes.PolygonClipper
         public IPath SourcePath { get; set; }
 
         /// <summary>
-        /// Gets or sets the bottom.
+        /// Gets the bottom.
         /// </summary>
         /// <value>
         /// The bot.
         /// </value>
-        public System.Numerics.Vector2 Bottom { get; set; }
+        public Vector2 Bottom { get; private set; }
 
         /// <summary>
-        /// Gets or sets the current.
+        /// Gets or sets the current point.
         /// </summary>
         /// <value>
         /// The current.
@@ -41,15 +39,15 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <remarks>
         /// updated for every new scanbeam.
         /// </remarks>
-        public System.Numerics.Vector2 Current { get; set; }
+        public Vector2 Current { get; set; }
 
         /// <summary>
-        /// Gets or sets the top.
+        /// Gets the top.
         /// </summary>
         /// <value>
         /// The top.
         /// </value>
-        public System.Numerics.Vector2 Top { get; set; }
+        public Vector2 Top { get; private set; }
 
         /// <summary>
         /// Gets or sets the delta.
@@ -57,15 +55,15 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <value>
         /// The delta.
         /// </value>
-        public System.Numerics.Vector2 Delta { get; set; }
+        public Vector2 Delta { get; set; }
 
         /// <summary>
-        /// Gets or sets the dx.
+        /// Gets the dx.
         /// </summary>
         /// <value>
         /// The dx.
         /// </value>
-        public double Dx { get; set; }
+        public double Dx { get; private set; }
 
         /// <summary>
         /// Gets or sets the poly type.
@@ -130,12 +128,12 @@ namespace SixLabors.Shapes.PolygonClipper
         public Edge PreviousEdge { get; set; }
 
         /// <summary>
-        /// Gets or sets the next in LML.
+        /// Gets the next in LML.
         /// </summary>
         /// <value>
         /// The next in LML.
         /// </value>
-        public Edge NextInLML { get; set; }
+        public Edge NextInLml { get; private set; }
 
         /// <summary>
         /// Gets or sets the next in ael
@@ -143,17 +141,17 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <value>
         /// The next in ael.
         /// </value>
-        public Edge NextInAEL { get; set; }
+        public Edge NextInAel { get; set; }
 
         /// <summary>
         /// Gets or sets the previous in ael
         /// </summary>
-        public Edge PreviousInAEL { get; set; }
+        public Edge PreviousInAel { get; set; }
 
         /// <summary>
-        /// Gets or sets the next in sel
+        /// Gets or sets the next in Sorted Edge List
         /// </summary>
-        public Edge NextInSEL { get; set; }
+        public Edge NextInSortedEdgeList { get; set; }
 
         /// <summary>
         /// Gets a value indicating whether this instance is horizontal.
@@ -164,32 +162,56 @@ namespace SixLabors.Shapes.PolygonClipper
         public bool IsHorizontal => this.Delta.Y == 0;
 
         /// <summary>
-        /// Gets or sets the previous in sel.
+        /// Gets or sets the previous in Sorted Edge List.
         /// </summary>
         /// <value>
-        /// The previous in sel.
+        /// The previous in Sorted Edge List.
         /// </value>
-        public Edge PreviousInSEL { get; set; }
+        public Edge PreviousInSortedEdgeList { get; set; }
 
         /// <summary>
-        /// Gets the horz direction.
+        /// should be inserted before target
         /// </summary>
-        /// <param name="dir">The dir.</param>
+        /// <param name="target">The target.</param>
+        /// <returns>true if it should insert itself before the target</returns>
+        public bool ShouldInsertBefore(Edge target)
+        {
+            if (this.Current.X == target.Current.X)
+            {
+                if (this.Top.Y > target.Top.Y)
+                {
+                    return this.Top.X < target.TopX(this.Top.Y);
+                }
+                else
+                {
+                    return target.Top.X > this.TopX(target.Top.Y);
+                }
+            }
+            else
+            {
+                return this.Current.X < target.Current.X;
+            }
+        }
+
+        /// <summary>
+        /// Gets the horizontal direction.
+        /// </summary>
         /// <param name="left">The left.</param>
         /// <param name="right">The right.</param>
-        public void GetHorzDirection(out Direction dir, out float left, out float right)
+        /// <returns>the direction</returns>
+        public Direction GetHorizontalDirection(out float left, out float right)
         {
             if (this.Bottom.X < this.Top.X)
             {
                 left = this.Bottom.X;
                 right = this.Top.X;
-                dir = Direction.LeftToRight;
+                return Direction.LeftToRight;
             }
             else
             {
                 left = this.Top.X;
                 right = this.Bottom.X;
-                dir = Direction.RightToLeft;
+                return Direction.RightToLeft;
             }
         }
 
@@ -296,7 +318,7 @@ namespace SixLabors.Shapes.PolygonClipper
         }
 
         /// <summary>
-        /// Nexts the bound edge.
+        /// Get the next boundry edge.
         /// </summary>
         /// <param name="leftBoundIsForward">if set to <c>true</c> [left bound is forward].</param>
         /// <returns>the next edge based on bounds</returns>
@@ -320,9 +342,9 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <summary>
         /// Fixes the horizontals.
         /// </summary>
-        /// <param name="forwardsisLeft">if set to <c>true</c> [forwardsis left].</param>
+        /// <param name="forwardsIsLeft">if set to <c>true</c> [forwards is left].</param>
         /// <returns>the edge just beyond current bound</returns>
-        public Edge FixHorizontals(bool forwardsisLeft)
+        public Edge FixHorizontals(bool forwardsIsLeft)
         {
             Edge edge = this;
             if (edge.Dx == Constants.HorizontalDeltaLimit)
@@ -330,7 +352,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 // We need to be careful with open paths because this may not be a
                 // true local minima (ie E may be following a skip edge).
                 // Also, consecutive horz. edges may start heading left before going right.
-                Edge next = edge.GetNextEdge(forwardsisLeft);
+                Edge next = edge.GetNextEdge(forwardsIsLeft);
 
                 // ie an adjoining horizontal skip edge
                 if (next.Dx == Constants.HorizontalDeltaLimit)
@@ -348,52 +370,52 @@ namespace SixLabors.Shapes.PolygonClipper
 
             Edge start = edge;
             Edge result = edge;
-            Edge nextEdgeToTest = result.GetNextEdge(forwardsisLeft);
+            Edge nextEdgeToTest = result.GetNextEdge(forwardsIsLeft);
             while (result.Top.Y == nextEdgeToTest.Bottom.Y && nextEdgeToTest.OutIndex != Constants.Skip)
             {
-                result = result.GetNextEdge(forwardsisLeft);
-                nextEdgeToTest = result.GetNextEdge(forwardsisLeft);
+                result = result.GetNextEdge(forwardsIsLeft);
+                nextEdgeToTest = result.GetNextEdge(forwardsIsLeft);
             }
 
-            if (result.Dx == Constants.HorizontalDeltaLimit && result.GetNextEdge(forwardsisLeft).OutIndex != Constants.Skip)
+            if (result.Dx == Constants.HorizontalDeltaLimit && result.GetNextEdge(forwardsIsLeft).OutIndex != Constants.Skip)
             {
-                var horz = result;
-                Edge horzEdgeToTest = horz.GetNextEdge(!forwardsisLeft);
-                while (horzEdgeToTest.Dx == Constants.HorizontalDeltaLimit)
+                var horizontalEdge = result;
+                Edge horizontalEdgeToTest = horizontalEdge.GetNextEdge(!forwardsIsLeft);
+                while (horizontalEdgeToTest.Dx == Constants.HorizontalDeltaLimit)
                 {
-                    horz = horz.GetNextEdge(!forwardsisLeft);
-                    horzEdgeToTest = horz.GetNextEdge(!forwardsisLeft);
+                    horizontalEdge = horizontalEdge.GetNextEdge(!forwardsIsLeft);
+                    horizontalEdgeToTest = horizontalEdge.GetNextEdge(!forwardsIsLeft);
                 }
 
-                if ((forwardsisLeft && horzEdgeToTest.Top.X == horzEdgeToTest.Top.X) || horzEdgeToTest.Top.X > horzEdgeToTest.Top.X)
+                if ((forwardsIsLeft && horizontalEdgeToTest.Top.X == horizontalEdgeToTest.Top.X) || horizontalEdgeToTest.Top.X > horizontalEdgeToTest.Top.X)
                 {
-                    result = horz.GetNextEdge(!forwardsisLeft);
+                    result = horizontalEdge.GetNextEdge(!forwardsIsLeft);
                 }
             }
 
             while (edge != result)
             {
-                edge.NextInLML = edge.GetNextEdge(forwardsisLeft);
+                edge.NextInLml = edge.GetNextEdge(forwardsIsLeft);
                 if (edge.Dx == Constants.HorizontalDeltaLimit && edge != start)
                 {
-                    if (edge.Bottom.X != edge.GetNextEdge(!forwardsisLeft).Top.X)
+                    if (edge.Bottom.X != edge.GetNextEdge(!forwardsIsLeft).Top.X)
                     {
                         edge.ReverseHorizontal();
                     }
                 }
 
-                edge = edge.GetNextEdge(forwardsisLeft);
+                edge = edge.GetNextEdge(forwardsIsLeft);
             }
 
             if (edge.Dx == Constants.HorizontalDeltaLimit && edge != start)
             {
-                if (edge.Bottom.X != edge.GetNextEdge(!forwardsisLeft).Top.X)
+                if (edge.Bottom.X != edge.GetNextEdge(!forwardsIsLeft).Top.X)
                 {
                     edge.ReverseHorizontal();
                 }
             }
 
-            return result.GetNextEdge(forwardsisLeft); // move to the edge just beyond current bound
+            return result.GetNextEdge(forwardsIsLeft); // move to the edge just beyond current bound
         }
 
         /// <summary>
@@ -414,29 +436,29 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <returns>true if the segments overlap</returns>
         public bool HorizontalSegmentsOverlap(Edge target)
         {
-            float seg1a = this.Bottom.X;
-            float seg1b = this.Top.X;
-            float seg2a = target.Bottom.X;
-            float seg2b = target.Top.X;
+            float segment1A = this.Bottom.X;
+            float segment1B = this.Top.X;
+            float segment2A = target.Bottom.X;
+            float segment2B = target.Top.X;
 
-            if (seg1a > seg1b)
+            if (segment1A > segment1B)
             {
-                Helpers.Swap(ref seg1a, ref seg1b);
+                Helpers.Swap(ref segment1A, ref segment1B);
             }
 
-            if (seg2a > seg2b)
+            if (segment2A > segment2B)
             {
-                Helpers.Swap(ref seg2a, ref seg2b);
+                Helpers.Swap(ref segment2A, ref segment2B);
             }
 
-            return (seg1a < seg2b) && (seg2a < seg1b);
+            return (segment1A < segment2B) && (segment2A < segment1B);
         }
 
         /// <summary>
-        /// Finds the next loc minimum.
+        /// Finds the next local minimum.
         /// </summary>
         /// <returns>the Next Loc minimum</returns>
-        public Edge FindNextLocMin()
+        public Edge FindNextLocalMin()
         {
             Edge edge = this;
             Edge edge2;
@@ -495,12 +517,12 @@ namespace SixLabors.Shapes.PolygonClipper
         /// </summary>
         /// <param name="next">The next.</param>
         /// <param name="prev">The previous.</param>
-        /// <param name="pt">The pt.</param>
-        public void Init(Edge next, Edge prev, Vector2 pt)
+        /// <param name="point">The point.</param>
+        public void Init(Edge next, Edge prev, Vector2 point)
         {
             this.NextEdge = next;
             this.PreviousEdge = prev;
-            this.Current = pt;
+            this.Current = point;
             this.OutIndex = Constants.Unassigned;
         }
 
@@ -557,28 +579,28 @@ namespace SixLabors.Shapes.PolygonClipper
         }
 
         /// <summary>
-        /// Lasts the horizonal edge.
+        /// Lasts the horizontal edge.
         /// </summary>
         /// <returns>The last horizontal edge</returns>
-        public Edge LastHorizonalEdge()
+        public Edge LastHorizontalEdge()
         {
             var lastHorzEdge = this;
-            while (lastHorzEdge.NextInLML != null && lastHorzEdge.NextInLML.IsHorizontal)
+            while (lastHorzEdge.NextInLml != null && lastHorzEdge.NextInLml.IsHorizontal)
             {
-                lastHorzEdge = lastHorzEdge.NextInLML;
+                lastHorzEdge = lastHorzEdge.NextInLml;
             }
 
             return lastHorzEdge;
         }
 
         /// <summary>
-        /// Gets the next in ael.
+        /// Gets the next in ael order.
         /// </summary>
         /// <param name="direction">The direction.</param>
         /// <returns>the next edge based on direction</returns>
-        public Edge GetNextInAEL(Direction direction)
+        public Edge GetNextInAel(Direction direction)
         {
-            return direction == Direction.LeftToRight ? this.NextInAEL : this.PreviousInAEL;
+            return direction == Direction.LeftToRight ? this.NextInAel : this.PreviousInAel;
         }
 
         /// <summary>
@@ -590,7 +612,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// </returns>
         public bool IsMaxima(double y)
         {
-            return this.Top.Y == y && this.NextInLML == null;
+            return this.Top.Y == y && this.NextInLml == null;
         }
 
         /// <summary>
@@ -599,12 +621,12 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <returns>The maxima pair for this edge</returns>
         public Edge GetMaximaPair()
         {
-            if ((this.NextEdge.Top == this.Top) && this.NextEdge.NextInLML == null)
+            if ((this.NextEdge.Top == this.Top) && this.NextEdge.NextInLml == null)
             {
                 return this.NextEdge;
             }
 
-            if ((this.PreviousEdge.Top == this.Top) && this.PreviousEdge.NextInLML == null)
+            if ((this.PreviousEdge.Top == this.Top) && this.PreviousEdge.NextInLml == null)
             {
                 return this.PreviousEdge;
             }
@@ -621,7 +643,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// </returns>
         public bool IsIntermediate(double y)
         {
-            return this.Top.Y == y && this.NextInLML != null;
+            return this.Top.Y == y && this.NextInLml != null;
         }
 
         /// <summary>
@@ -633,7 +655,7 @@ namespace SixLabors.Shapes.PolygonClipper
             // as above but returns null if MaxPair isn't in AEL (unless it's horizontal)
             Edge result = this.GetMaximaPair();
             if (result == null || result.OutIndex == Constants.Skip ||
-              ((result.NextInAEL == result.PreviousInAEL) && !result.IsHorizontal))
+              ((result.NextInAel == result.PreviousInAel) && !result.IsHorizontal))
             {
                 return null;
             }
@@ -645,7 +667,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Tops the x.
         /// </summary>
         /// <param name="currentY">The current y.</param>
-        /// <returns>Returns the calcualted top X the current Y</returns>
+        /// <returns>Returns the calculated top X the current Y</returns>
         public float TopX(float currentY)
         {
             if (currentY == this.Top.Y)
@@ -671,14 +693,14 @@ namespace SixLabors.Shapes.PolygonClipper
         }
 
         /// <summary>
-        /// Slopeses the equal.
+        /// Compares the slopes to determin if they are equivalent.
         /// </summary>
-        /// <param name="e2">The e2.</param>
-        /// <returns>return true if e2's slop equires this instances slop</returns>
+        /// <param name="other">The e2.</param>
+        /// <returns>return true if other's slope is the same as this slop</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool SlopesEqual(Edge e2)
+        public bool SlopesEqual(Edge other)
         {
-            return this.Delta.Y * e2.Delta.X == this.Delta.X * e2.Delta.Y;
+            return this.Delta.Y * other.Delta.X == this.Delta.X * other.Delta.Y;
         }
 
         private void ConfigureDelta()

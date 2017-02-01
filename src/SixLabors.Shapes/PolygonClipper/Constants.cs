@@ -29,5 +29,10 @@ namespace SixLabors.Shapes.PolygonClipper
         /// The horizontal delta limit
         /// </summary>
         public const double HorizontalDeltaLimit = -3.4E+38;
+
+        /// <summary>
+        /// The Epsilon
+        /// </summary>
+        public const float Epsilon = 0.00001f;
     }
 }
