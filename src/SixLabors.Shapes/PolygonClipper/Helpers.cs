@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes.PolygonClipper
 {
+    using System;
     using System.Numerics;
     using System.Runtime.CompilerServices;
 
@@ -13,6 +14,19 @@ namespace SixLabors.Shapes.PolygonClipper
     /// </summary>
     internal static class Helpers
     {
+        /// <summary>
+        /// Swaps the values in val1 and val2.
+        /// </summary>
+        /// <param name="val1">The val1.</param>
+        /// <param name="val2">The val2.</param>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static void Swap(ref float val1, ref float val2)
+        {
+            float tmp = val1;
+            val1 = val2;
+            val2 = tmp;
+        }
+
         /// <summary>
         /// Rounds the specified value.
         /// </summary>
@@ -70,6 +84,38 @@ namespace SixLabors.Shapes.PolygonClipper
             {
                 return (double)(pt2.X - pt1.X) / (pt2.Y - pt1.Y);
             }
+        }
+
+        public static bool GetOverlap(float a1, float a2, float b1, float b2, out float left, out float right)
+        {
+            if (a1 < a2)
+            {
+                if (b1 < b2)
+                {
+                    left = Math.Max(a1, b1);
+                    right = Math.Min(a2, b2);
+                }
+                else
+                {
+                    left = Math.Max(a1, b2);
+                    right = Math.Min(a2, b1);
+                }
+            }
+            else
+            {
+                if (b1 < b2)
+                {
+                    left = Math.Max(a2, b1);
+                    right = Math.Min(a1, b2);
+                }
+                else
+                {
+                    left = Math.Max(a2, b2);
+                    right = Math.Min(a1, b1);
+                }
+            }
+
+            return left < right;
         }
     }
 }

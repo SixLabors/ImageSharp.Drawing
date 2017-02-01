@@ -204,7 +204,7 @@ namespace SixLabors.Shapes.PolygonClipper
                             startEdge = edge.NextEdge;
                         }
 
-                        edge = RemoveEdge(edge);
+                        edge = edge.RemoveSelfReturnNext();
                         loopStop = edge;
                         continue;
                     }
@@ -220,7 +220,7 @@ namespace SixLabors.Shapes.PolygonClipper
                             startEdge = edge.NextEdge;
                         }
 
-                        edge = RemoveEdge(edge);
+                        edge = edge.RemoveSelfReturnNext();
                         edge = edge.PreviousEdge;
                         loopStop = edge;
                         continue;
@@ -242,7 +242,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 edge = startEdge;
                 do
                 {
-                    this.InitEdge2(edge, clippingType);
+                    edge.InitClippingType(clippingType);
                     edge = edge.NextEdge;
                     if (isFlat && edge.Current.Y != startEdge.Current.Y)
                     {
@@ -271,7 +271,7 @@ namespace SixLabors.Shapes.PolygonClipper
 
                 while (true)
                 {
-                    edge = FindNextLocMin(edge);
+                    edge = edge.FindNextLocMin();
                     if (edge == loopBreakerEdge)
                     {
                         break;
@@ -347,148 +347,6 @@ namespace SixLabors.Shapes.PolygonClipper
 
                 return true;
             }
-        }
-
-        private static void FixHoleLinkage(OutRec outRec)
-        {
-            // skip if an outermost polygon or
-            // already already points to the correct FirstLeft ...
-            if (outRec.FirstLeft == null ||
-                  (outRec.IsHole != outRec.FirstLeft.IsHole &&
-                  outRec.FirstLeft.Points != null))
-            {
-                return;
-            }
-
-            OutRec orfl = outRec.FirstLeft;
-            while (orfl != null && ((orfl.IsHole == outRec.IsHole) || orfl.Points == null))
-            {
-                orfl = orfl.FirstLeft;
-            }
-
-            outRec.FirstLeft = orfl;
-        }
-        
-        private static void SwapSides(Edge edge1, Edge edge2)
-        {
-            EdgeSide side = edge1.Side;
-            edge1.Side = edge2.Side;
-            edge2.Side = side;
-        }
-
-        private static void SwapPolyIndexes(Edge edge1, Edge edge2)
-        {
-            int outIdx = edge1.OutIndex;
-            edge1.OutIndex = edge2.OutIndex;
-            edge2.OutIndex = outIdx;
-        }
-
-
-
-        private static bool HorizontalSegmentsOverlap(float seg1a, float seg1b, float seg2a, float seg2b)
-        {
-            if (seg1a > seg1b)
-            {
-                Swap(ref seg1a, ref seg1b);
-            }
-
-            if (seg2a > seg2b)
-            {
-                Swap(ref seg2a, ref seg2b);
-            }
-
-            return (seg1a < seg2b) && (seg2a < seg1b);
-        }
-
-        private static Edge FindNextLocMin(Edge edge)
-        {
-            Edge edge2;
-            while (true)
-            {
-                while (edge.Bottom != edge.PreviousEdge.Bottom || edge.Current == edge.Top)
-                {
-                    edge = edge.NextEdge;
-                }
-
-                if (edge.Dx != Constants.HorizontalDeltaLimit && edge.PreviousEdge.Dx != Constants.HorizontalDeltaLimit)
-                {
-                    break;
-                }
-
-                while (edge.PreviousEdge.Dx == Constants.HorizontalDeltaLimit)
-                {
-                    edge = edge.PreviousEdge;
-                }
-
-                edge2 = edge;
-                while (edge.Dx == Constants.HorizontalDeltaLimit)
-                {
-                    edge = edge.NextEdge;
-                }
-
-                if (edge.Top.Y == edge.PreviousEdge.Bottom.Y)
-                {
-                    continue; // ie just an intermediate horz.
-                }
-
-                if (edge2.PreviousEdge.Bottom.X < edge.Bottom.X)
-                {
-                    edge = edge2;
-                }
-
-                break;
-            }
-
-            return edge;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void Swap(ref float val1, ref float val2)
-        {
-            float tmp = val1;
-            val1 = val2;
-            val2 = tmp;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool SlopesEqual(Edge e1, Edge e2)
-        {
-            return e1.Delta.Y * e2.Delta.X == e1.Delta.X * e2.Delta.Y;
-        }
-
-        private static OutRec ParseFirstLeft(OutRec firstLeft)
-        {
-            while (firstLeft != null && firstLeft.Points == null)
-            {
-                firstLeft = firstLeft.FirstLeft;
-            }
-
-            return firstLeft;
-        }
-
-        private static Edge RemoveEdge(Edge e)
-        {
-            // removes e from double_linked_list (but without removing from memory)
-            e.PreviousEdge.NextEdge = e.NextEdge;
-            e.NextEdge.PreviousEdge = e.PreviousEdge;
-            Edge result = e.NextEdge;
-            e.PreviousEdge = null; // flag as removed (see ClipperBase.Clear)
-            return result;
-        }
-
-        private static void ReverseHorizontal(Edge e)
-        {
-            // swap horizontal edges' top and bottom x's so they follow the natural
-            // progression of the bounds - ie so their xbots will align with the
-            // adjoining lower edge. [Helpful in the ProcessHorizontal() method.]
-            var t = e.Top;
-            var b = e.Bottom;
-            Swap(ref t.X, ref b.X);
-            e.Top = t;
-            e.Bottom = b;
-
-            // old code incase the above doesn't work
-            // Swap(ref e.Top.X, ref e.Bot.X);
         }
 
         private void DisposeAllPolyPoints()
@@ -638,7 +496,7 @@ namespace SixLabors.Shapes.PolygonClipper
                         // if the horizontal Rb and a 'ghost' horizontal overlap, then convert
                         // the 'ghost' join to a real join ready for later ...
                         Join j = this.ghostJoins[i];
-                        if (HorizontalSegmentsOverlap(j.OutPoint1.Point.X, j.OffPoint.X, rb.Bottom.X, rb.Top.X))
+                        if (j.HorizontalSegmentsOverlap(rb))
                         {
                             this.AddJoin(j.OutPoint1, op1, j.OffPoint);
                         }
@@ -1153,8 +1011,6 @@ namespace SixLabors.Shapes.PolygonClipper
             }
         }
 
-
-
         private bool OutRec1RightOfOutRec2(OutRec outRec1, OutRec outRec2)
         {
             do
@@ -1344,8 +1200,8 @@ namespace SixLabors.Shapes.PolygonClipper
                 {
                     this.AddOutPt(e1, pt);
                     this.AddOutPt(e2, pt);
-                    SwapSides(e1, e2);
-                    SwapPolyIndexes(e1, e2);
+                    e1.SwitchSides(e2);
+                    e1.SwitchIndexes(e2);
                 }
             }
             else if (e1Contributing)
@@ -1353,8 +1209,8 @@ namespace SixLabors.Shapes.PolygonClipper
                 if (e2Wc == 0 || e2Wc == 1)
                 {
                     this.AddOutPt(e1, pt);
-                    SwapSides(e1, e2);
-                    SwapPolyIndexes(e1, e2);
+                    e1.SwitchSides(e2);
+                    e1.SwitchIndexes(e2);
                 }
             }
             else if (e2Contributing)
@@ -1362,8 +1218,8 @@ namespace SixLabors.Shapes.PolygonClipper
                 if (e1Wc == 0 || e1Wc == 1)
                 {
                     this.AddOutPt(e2, pt);
-                    SwapSides(e1, e2);
-                    SwapPolyIndexes(e1, e2);
+                    e1.SwitchSides(e2);
+                    e1.SwitchIndexes(e2);
                 }
             }
             else if ((e1Wc == 0 || e1Wc == 1) && (e2Wc == 0 || e2Wc == 1))
@@ -1386,7 +1242,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
                 else
                 {
-                    SwapSides(e1, e2);
+                    e1.SwitchSides(e2);
                 }
             }
         }
@@ -1400,29 +1256,13 @@ namespace SixLabors.Shapes.PolygonClipper
             }
         }
 
-        private void GetHorzDirection(Edge horzEdge, out Direction dir, out float left, out float right)
-        {
-            if (horzEdge.Bottom.X < horzEdge.Top.X)
-            {
-                left = horzEdge.Bottom.X;
-                right = horzEdge.Top.X;
-                dir = Direction.LeftToRight;
-            }
-            else
-            {
-                left = horzEdge.Top.X;
-                right = horzEdge.Bottom.X;
-                dir = Direction.RightToLeft;
-            }
-        }
-
         private void ProcessHorizontal(Edge horzEdge)
         {
             Direction dir;
             float horzLeft, horzRight;
             bool isOpen = horzEdge.WindingDelta == 0;
 
-            this.GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
+            horzEdge.GetHorzDirection(out dir, out horzLeft, out horzRight);
 
             Edge lastHorzEdge = horzEdge.LastHorizonalEdge();
             Edge maxPairEdge = null;
@@ -1524,7 +1364,7 @@ namespace SixLabors.Shapes.PolygonClipper
                         while (eNextHorz != null)
                         {
                             if (eNextHorz.OutIndex >= 0 &&
-                              HorizontalSegmentsOverlap(horzEdge.Bottom.X, horzEdge.Top.X, eNextHorz.Bottom.X, eNextHorz.Top.X))
+                              horzEdge.HorizontalSegmentsOverlap(eNextHorz))
                             {
                                 OutPoint op2 = this.GetLastOutPt(eNextHorz);
                                 this.AddJoin(op2, op1, eNextHorz.Top);
@@ -1578,7 +1418,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     this.AddOutPt(horzEdge, horzEdge.Bottom);
                 }
 
-                this.GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
+                horzEdge.GetHorzDirection(out dir, out horzLeft, out horzRight);
             }
 
             if (horzEdge.OutIndex >= 0 && op1 == null)
@@ -1588,7 +1428,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 while (eNextHorz != null)
                 {
                     if (eNextHorz.OutIndex >= 0 &&
-                      HorizontalSegmentsOverlap(horzEdge.Bottom.X, horzEdge.Top.X, eNextHorz.Bottom.X, eNextHorz.Top.X))
+                        horzEdge.HorizontalSegmentsOverlap(eNextHorz))
                     {
                         OutPoint op2 = this.GetLastOutPt(eNextHorz);
                         this.AddJoin(op2, op1, eNextHorz.Top);
@@ -1618,7 +1458,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     if (prevEdge != null && prevEdge.Current.X == horzEdge.Bottom.X &&
                       prevEdge.Current.Y == horzEdge.Bottom.Y && prevEdge.WindingDelta != 0 &&
                       (prevEdge.OutIndex >= 0 && prevEdge.Current.Y > prevEdge.Top.Y &&
-                      SlopesEqual(horzEdge, prevEdge)))
+                      horzEdge.SlopesEqual(prevEdge)))
                     {
                         OutPoint op2 = this.AddOutPt(prevEdge, horzEdge.Bottom);
                         this.AddJoin(op1, op2, horzEdge.Top);
@@ -1626,7 +1466,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     else if (nextEdge != null && nextEdge.Current.X == horzEdge.Bottom.X &&
                       nextEdge.Current.Y == horzEdge.Bottom.Y && nextEdge.WindingDelta != 0 &&
                       nextEdge.OutIndex >= 0 && nextEdge.Current.Y > nextEdge.Top.Y &&
-                      SlopesEqual(horzEdge, nextEdge))
+                      horzEdge.SlopesEqual(nextEdge))
                     {
                         OutPoint op2 = this.AddOutPt(nextEdge, horzEdge.Bottom);
                         this.AddJoin(op1, op2, horzEdge.Top);
@@ -1710,10 +1550,9 @@ namespace SixLabors.Shapes.PolygonClipper
                 while (e.NextInSEL != null)
                 {
                     Edge nextEdge = e.NextInSEL;
-                    Vector2 pt;
                     if (e.Current.X > nextEdge.Current.X)
                     {
-                        this.IntersectPoint(e, nextEdge, out pt);
+                        Vector2 pt = e.IntersectPoint(nextEdge);
                         if (pt.Y < topY)
                         {
                             pt = new Vector2(e.TopX(topY), topY);
@@ -1747,12 +1586,6 @@ namespace SixLabors.Shapes.PolygonClipper
             this.sortedEdges = null;
         }
 
-        private bool EdgesAdjacent(IntersectNode inode)
-        {
-            return (inode.Edge1.NextInSEL == inode.Edge2) ||
-              (inode.Edge1.PreviousInSEL == inode.Edge2);
-        }
-
         private bool FixupIntersectionOrder()
         {
             // pre-condition: intersections are sorted bottom-most first.
@@ -1764,10 +1597,10 @@ namespace SixLabors.Shapes.PolygonClipper
             int cnt = this.intersectList.Count;
             for (int i = 0; i < cnt; i++)
             {
-                if (!this.EdgesAdjacent(this.intersectList[i]))
+                if (!this.intersectList[i].EdgesAdjacent())
                 {
                     int j = i + 1;
-                    while (j < cnt && !this.EdgesAdjacent(this.intersectList[j]))
+                    while (j < cnt && !this.intersectList[j].EdgesAdjacent())
                     {
                         j++;
                     }
@@ -1802,107 +1635,67 @@ namespace SixLabors.Shapes.PolygonClipper
             this.intersectList.Clear();
         }
 
-        private void IntersectPoint(Edge edge1, Edge edge2, out Vector2 ip)
+        private void ProcessEdgesAtTopOfScanbeam(float topY)
         {
-            ip = default(Vector2);
-            double b1, b2;
+            // 1. process maxima, treating them as if they're 'bent' horizontal edges,
+            //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
+            this.ProcessMaxima(topY);
 
-            // nb: with very large coordinate values, it's possible for SlopesEqual() to
-            // return false but for the edge.Dx value be equal due to double precision rounding.
-            if (edge1.Dx == edge2.Dx)
-            {
-                ip.Y = edge1.Current.Y;
-                ip.X = edge1.TopX(ip.Y);
-                return;
-            }
+            // 3. Process horizontals at the Top of the scanbeam ...
+            this.ProcessHorizontals();
+            this.maxima = null;
 
-            if (edge1.Delta.X == 0)
-            {
-                ip.X = edge1.Bottom.X;
-                if (edge2.IsHorizontal)
-                {
-                    ip.Y = edge2.Bottom.Y;
-                }
-                else
-                {
-                    b2 = edge2.Bottom.Y - (edge2.Bottom.X / edge2.Dx);
-                    ip.Y = Helpers.Round((ip.X / edge2.Dx) + b2);
-                }
-            }
-            else if (edge2.Delta.X == 0)
-            {
-                ip.X = edge2.Bottom.X;
-                if (edge1.IsHorizontal)
-                {
-                    ip.Y = edge1.Bottom.Y;
-                }
-                else
-                {
-                    b1 = edge1.Bottom.Y - (edge1.Bottom.X / edge1.Dx);
-                    ip.Y = Helpers.Round((ip.X / edge1.Dx) + b1);
-                }
-            }
-            else
-            {
-                b1 = edge1.Bottom.X - (edge1.Bottom.Y * edge1.Dx);
-                b2 = edge2.Bottom.X - (edge2.Bottom.Y * edge2.Dx);
-                double q = (b2 - b1) / (edge1.Dx - edge2.Dx);
-                ip.Y = Helpers.Round(q);
-                if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-                {
-                    ip.X = Helpers.Round((edge1.Dx * q) + b1);
-                }
-                else
-                {
-                    ip.X = Helpers.Round((edge2.Dx * q) + b2);
-                }
-            }
+            // 4. Promote intermediate vertices ...
+            this.PromoteIntermediateVertices(topY);
+        }
 
-            if (ip.Y < edge1.Top.Y || ip.Y < edge2.Top.Y)
+        private void PromoteIntermediateVertices(float topY)
+        {
+            var e = this.activeEdges;
+            while (e != null)
             {
-                if (edge1.Top.Y > edge2.Top.Y)
+                if (e.IsIntermediate(topY))
                 {
-                    ip.Y = edge1.Top.Y;
-                }
-                else
-                {
-                    ip.Y = edge2.Top.Y;
+                    OutPoint op = null;
+                    if (e.OutIndex >= 0)
+                    {
+                        op = this.AddOutPt(e, e.Top);
+                    }
+
+                    this.UpdateEdgeIntoAEL(ref e);
+
+                    // if output polygons share an edge, they'll need joining later ...
+                    Edge prevEdge = e.PreviousInAEL;
+                    Edge nextEdge = e.NextInAEL;
+                    if (prevEdge != null && prevEdge.Current.X == e.Bottom.X &&
+                      prevEdge.Current.Y == e.Bottom.Y && op != null &&
+                      prevEdge.OutIndex >= 0 && prevEdge.Current.Y > prevEdge.Top.Y &&
+                      Helpers.SlopesEqual(e.Current, e.Top, prevEdge.Current, prevEdge.Top) &&
+                      (e.WindingDelta != 0) && (prevEdge.WindingDelta != 0))
+                    {
+                        OutPoint op2 = this.AddOutPt(prevEdge, e.Bottom);
+                        this.AddJoin(op, op2, e.Top);
+                    }
+                    else if (nextEdge != null && nextEdge.Current.X == e.Bottom.X &&
+                      nextEdge.Current.Y == e.Bottom.Y && op != null &&
+                      nextEdge.OutIndex >= 0 && nextEdge.Current.Y > nextEdge.Top.Y &&
+                      Helpers.SlopesEqual(e.Current, e.Top, nextEdge.Current, nextEdge.Top) &&
+                      (e.WindingDelta != 0) && (nextEdge.WindingDelta != 0))
+                    {
+                        OutPoint op2 = this.AddOutPt(nextEdge, e.Bottom);
+                        this.AddJoin(op, op2, e.Top);
+                    }
                 }
 
-                if (Math.Abs(edge1.Dx) < Math.Abs(edge2.Dx))
-                {
-                    ip.X = edge1.TopX(ip.Y);
-                }
-                else
-                {
-                    ip.X = edge2.TopX(ip.Y);
-                }
-            }
-
-            // finally, don't allow 'ip' to be BELOW curr.Y (ie bottom of scanbeam) ...
-            if (ip.Y > edge1.Current.Y)
-            {
-                ip.Y = edge1.Current.Y;
-
-                // better to use the more vertical edge to derive X ...
-                if (Math.Abs(edge1.Dx) > Math.Abs(edge2.Dx))
-                {
-                    ip.X = edge2.TopX(ip.Y);
-                }
-                else
-                {
-                    ip.X = edge1.TopX(ip.Y);
-                }
+                e = e.NextInAEL;
             }
         }
 
-        private void ProcessEdgesAtTopOfScanbeam(float topY)
+        private void ProcessMaxima(float topY)
         {
             Edge e = this.activeEdges;
             while (e != null)
             {
-                // 1. process maxima, treating them as if they're 'bent' horizontal edges,
-                //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
                 bool isMaximaEdge = e.IsMaxima(topY);
 
                 if (isMaximaEdge)
@@ -1945,56 +1738,12 @@ namespace SixLabors.Shapes.PolygonClipper
                     e = e.NextInAEL;
                 }
             }
-
-            // 3. Process horizontals at the Top of the scanbeam ...
-            this.ProcessHorizontals();
-            this.maxima = null;
-
-            // 4. Promote intermediate vertices ...
-            e = this.activeEdges;
-            while (e != null)
-            {
-                if (e.IsIntermediate(topY))
-                {
-                    OutPoint op = null;
-                    if (e.OutIndex >= 0)
-                    {
-                        op = this.AddOutPt(e, e.Top);
-                    }
-
-                    this.UpdateEdgeIntoAEL(ref e);
-
-                    // if output polygons share an edge, they'll need joining later ...
-                    Edge prevEdge = e.PreviousInAEL;
-                    Edge nextEdge = e.NextInAEL;
-                    if (prevEdge != null && prevEdge.Current.X == e.Bottom.X &&
-                      prevEdge.Current.Y == e.Bottom.Y && op != null &&
-                      prevEdge.OutIndex >= 0 && prevEdge.Current.Y > prevEdge.Top.Y &&
-                      Helpers.SlopesEqual(e.Current, e.Top, prevEdge.Current, prevEdge.Top) &&
-                      (e.WindingDelta != 0) && (prevEdge.WindingDelta != 0))
-                    {
-                        OutPoint op2 = this.AddOutPt(prevEdge, e.Bottom);
-                        this.AddJoin(op, op2, e.Top);
-                    }
-                    else if (nextEdge != null && nextEdge.Current.X == e.Bottom.X &&
-                      nextEdge.Current.Y == e.Bottom.Y && op != null &&
-                      nextEdge.OutIndex >= 0 && nextEdge.Current.Y > nextEdge.Top.Y &&
-                      Helpers.SlopesEqual(e.Current, e.Top, nextEdge.Current, nextEdge.Top) &&
-                      (e.WindingDelta != 0) && (nextEdge.WindingDelta != 0))
-                    {
-                        OutPoint op2 = this.AddOutPt(nextEdge, e.Bottom);
-                        this.AddJoin(op, op2, e.Top);
-                    }
-                }
-
-                e = e.NextInAEL;
-            }
         }
 
         private void DoMaxima(Edge e)
         {
-            Edge eMaxPair = e?.GetMaximaPairEx();
-            if (eMaxPair == null)
+            Edge maxPair = e?.GetMaximaPairEx();
+            if (maxPair == null)
             {
                 if (e.OutIndex >= 0)
                 {
@@ -2006,27 +1755,27 @@ namespace SixLabors.Shapes.PolygonClipper
             }
 
             Edge nextEdge = e.NextInAEL;
-            while (nextEdge != null && nextEdge != eMaxPair)
+            while (nextEdge != null && nextEdge != maxPair)
             {
                 this.IntersectEdges(e, nextEdge, e.Top);
                 this.SwapPositionsInAEL(e, nextEdge);
                 nextEdge = e.NextInAEL;
             }
 
-            if (e.OutIndex == Constants.Unassigned && eMaxPair.OutIndex == Constants.Unassigned)
+            if (e.OutIndex == Constants.Unassigned && maxPair.OutIndex == Constants.Unassigned)
             {
                 this.DeleteFromAEL(e);
-                this.DeleteFromAEL(eMaxPair);
+                this.DeleteFromAEL(maxPair);
             }
-            else if (e.OutIndex >= 0 && eMaxPair.OutIndex >= 0)
+            else if (e.OutIndex >= 0 && maxPair.OutIndex >= 0)
             {
                 if (e.OutIndex >= 0)
                 {
-                    this.AddLocalMaxPoly(e, eMaxPair, e.Top);
+                    this.AddLocalMaxPoly(e, maxPair, e.Top);
                 }
 
                 this.DeleteFromAEL(e);
-                this.DeleteFromAEL(eMaxPair);
+                this.DeleteFromAEL(maxPair);
             }
             else
             {
@@ -2054,7 +1803,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     continue;
                 }
 
-                FixHoleLinkage(outRec);
+                outRec.FixHoleLinkage();
                 var shape = outRec.SourcePath as IShape;
                 if (shape != null)
                 {
@@ -2083,38 +1832,6 @@ namespace SixLabors.Shapes.PolygonClipper
             }
 
             return shapes.ToImmutableArray();
-        }
-
-        private bool GetOverlap(float a1, float a2, float b1, float b2, out float left, out float right)
-        {
-            if (a1 < a2)
-            {
-                if (b1 < b2)
-                {
-                    left = Math.Max(a1, b1);
-                    right = Math.Min(a2, b2);
-                }
-                else
-                {
-                    left = Math.Max(a1, b2);
-                    right = Math.Min(a2, b1);
-                }
-            }
-            else
-            {
-                if (b1 < b2)
-                {
-                    left = Math.Max(a2, b1);
-                    right = Math.Min(a1, b2);
-                }
-                else
-                {
-                    left = Math.Max(a2, b2);
-                    right = Math.Min(a1, b1);
-                }
-            }
-
-            return left < right;
         }
 
         private bool JoinHorz(OutPoint op1, OutPoint op1b, OutPoint op2, OutPoint op2b, Vector2 pt, bool discardLeft)
@@ -2344,7 +2061,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 float left, right;
 
                 // Op1 -. Op1b & Op2 -. Op2b are the extremites of the horizontal edges
-                if (!this.GetOverlap(op1.Point.X, op1b.Point.X, op2.Point.X, op2b.Point.X, out left, out right))
+                if (!Helpers.GetOverlap(op1.Point.X, op1b.Point.X, op2.Point.X, op2b.Point.X, out left, out right))
                 {
                     return false;
                 }
@@ -2467,7 +2184,7 @@ namespace SixLabors.Shapes.PolygonClipper
         {
             foreach (OutRec outRec in this.polyOuts)
             {
-                OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
+                OutRec firstLeft = outRec.GetFirstLeft();
                 if (outRec.Points != null && firstLeft == oldOutRec)
                 {
                     if (newOutRec.Points.Contains(outRec.Points))
@@ -2492,7 +2209,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     continue;
                 }
 
-                OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
+                OutRec firstLeft = outRec.GetFirstLeft();
                 if (firstLeft != orfl && firstLeft != innerOutRec && firstLeft != outerOutRec)
                 {
                     continue;
@@ -2518,7 +2235,7 @@ namespace SixLabors.Shapes.PolygonClipper
             // same as FixupFirstLefts1 but doesn't call Poly2ContainsPoly1()
             foreach (OutRec outRec in this.polyOuts)
             {
-                OutRec firstLeft = ParseFirstLeft(outRec.FirstLeft);
+                OutRec firstLeft = outRec.GetFirstLeft();
                 if (outRec.Points != null && outRec.FirstLeft == oldOutRec)
                 {
                     outRec.FirstLeft = newOutRec;
@@ -2623,106 +2340,6 @@ namespace SixLabors.Shapes.PolygonClipper
 
                     this.FixupFirstLefts3(outRec2, outRec1);
                 }
-            }
-        }
-
-        private void DoSimplePolygons()
-        {
-            int i = 0;
-            while (i < this.polyOuts.Count)
-            {
-                OutRec outrec = this.polyOuts[i++];
-                OutPoint op = outrec.Points;
-                if (op == null || outrec.IsOpen)
-                {
-                    continue;
-                }
-
-                do
-                {
-                    // for each Pt in Polygon until duplicate found do ...
-                    OutPoint op2 = op.Next;
-                    while (op2 != outrec.Points)
-                    {
-                        if ((op.Point == op2.Point) && op2.Next != op && op2.Previous != op)
-                        {
-                            // split the polygon into two ...
-                            OutPoint op3 = op.Previous;
-                            OutPoint op4 = op2.Previous;
-                            op.Previous = op4;
-                            op4.Next = op;
-                            op2.Previous = op3;
-                            op3.Next = op2;
-
-                            outrec.Points = op;
-                            OutRec outrec2 = this.CreateOutRec();
-                            outrec2.Points = op2;
-                            outrec2.SyncroniseOutpointIndexes();
-                            if (outrec.Points.Contains(outrec2.Points))
-                            {
-                                // OutRec2 is contained by OutRec1 ...
-                                outrec2.IsHole = !outrec.IsHole;
-                                outrec2.FirstLeft = outrec;
-                                this.FixupFirstLefts2(outrec2, outrec);
-                            }
-                            else if (outrec2.Points.Contains(outrec.Points))
-                            {
-                                // OutRec1 is contained by OutRec2 ...
-                                outrec2.IsHole = outrec.IsHole;
-                                outrec.IsHole = !outrec2.IsHole;
-                                outrec2.FirstLeft = outrec.FirstLeft;
-                                outrec.FirstLeft = outrec2;
-                                this.FixupFirstLefts2(outrec, outrec2);
-                            }
-                            else
-                            {
-                                // the 2 polygons are separate ...
-                                outrec2.IsHole = outrec.IsHole;
-                                outrec2.FirstLeft = outrec.FirstLeft;
-                                this.FixupFirstLefts1(outrec, outrec2);
-                            }
-
-                            op2 = op; // ie get ready for the next iteration
-                        }
-
-                        op2 = op2.Next;
-                    }
-
-                    op = op.Next;
-                }
-                while (op != outrec.Points);
-            }
-        }
-
-        private double Area(OutPoint op)
-        {
-            OutPoint opFirst = op;
-            if (op == null)
-            {
-                return 0;
-            }
-
-            double a = 0;
-            do
-            {
-                a = a + ((op.Previous.Point.X + op.Point.X) * (op.Previous.Point.Y - op.Point.Y));
-                op = op.Next;
-            }
-            while (op != opFirst);
-
-            return a * 0.5;
-        }
-
-        private void SetDx(Edge e)
-        {
-            e.Delta = new Vector2(e.Top.X - e.Bottom.X, e.Top.Y - e.Bottom.Y);
-            if (e.Delta.Y == 0)
-            {
-                e.Dx = Constants.HorizontalDeltaLimit;
-            }
-            else
-            {
-                e.Dx = e.Delta.X / e.Delta.Y;
             }
         }
 
@@ -3008,80 +2625,24 @@ namespace SixLabors.Shapes.PolygonClipper
             e.PreviousInAEL = null;
         }
 
-        private void InitEdge2(Edge e, ClippingType polyType)
-        {
-            if (e.Current.Y >= e.NextEdge.Current.Y)
-            {
-                e.Bottom = e.Current;
-                e.Top = e.NextEdge.Current;
-            }
-            else
-            {
-                e.Top = e.Current;
-                e.Bottom = e.NextEdge.Current;
-            }
-
-            this.SetDx(e);
-            e.PolyType = polyType;
-        }
-
         private Edge ProcessBound(Edge edge, bool leftBoundIsForward)
         {
-            Edge eStart, result = edge;
-            Edge horz;
+            Edge result = edge;
 
             if (result.OutIndex == Constants.Skip)
             {
                 // check if there are edges beyond the skip edge in the bound and if so
                 // create another LocMin and calling ProcessBound once more ...
-                edge = result;
-                if (leftBoundIsForward)
-                {
-                    while (edge.Top.Y == edge.NextEdge.Bottom.Y)
-                    {
-                        edge = edge.NextEdge;
-                    }
-
-                    while (edge != result && edge.Dx == Constants.HorizontalDeltaLimit)
-                    {
-                        edge = edge.PreviousEdge;
-                    }
-                }
-                else
-                {
-                    while (edge.Top.Y == edge.PreviousEdge.Bottom.Y)
-                    {
-                        edge = edge.PreviousEdge;
-                    }
-
-                    while (edge != result && edge.Dx == Constants.HorizontalDeltaLimit)
-                    {
-                        edge = edge.NextEdge;
-                    }
-                }
+                edge = result.NextBoundEdge(leftBoundIsForward);
 
                 if (edge == result)
                 {
-                    if (leftBoundIsForward)
-                    {
-                        result = edge.NextEdge;
-                    }
-                    else
-                    {
-                        result = edge.PreviousEdge;
-                    }
+                    result = edge.GetNextEdge(leftBoundIsForward);
                 }
                 else
                 {
                     // there are more edges in the bound beyond result starting with E
-                    if (leftBoundIsForward)
-                    {
-                        edge = result.NextEdge;
-                    }
-                    else
-                    {
-                        edge = result.PreviousEdge;
-                    }
+                    edge = result.GetNextEdge(leftBoundIsForward);
 
                     LocalMinima locMin = new LocalMinima();
                     locMin.Next = null;
@@ -3096,118 +2657,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 return result;
             }
 
-            if (edge.Dx == Constants.HorizontalDeltaLimit)
-            {
-                // We need to be careful with open paths because this may not be a
-                // true local minima (ie E may be following a skip edge).
-                // Also, consecutive horz. edges may start heading left before going right.
-                if (leftBoundIsForward)
-                {
-                    eStart = edge.PreviousEdge;
-                }
-                else
-                {
-                    eStart = edge.NextEdge;
-                }
-
-                // ie an adjoining horizontal skip edge
-                if (eStart.Dx == Constants.HorizontalDeltaLimit)
-                {
-                    if (eStart.Bottom.X != edge.Bottom.X && eStart.Top.X != edge.Bottom.X)
-                    {
-                        ReverseHorizontal(edge);
-                    }
-                }
-                else if (eStart.Bottom.X != edge.Bottom.X)
-                {
-                    ReverseHorizontal(edge);
-                }
-            }
-
-            eStart = edge;
-            if (leftBoundIsForward)
-            {
-                while (result.Top.Y == result.NextEdge.Bottom.Y && result.NextEdge.OutIndex != Constants.Skip)
-                {
-                    result = result.NextEdge;
-                }
-
-                if (result.Dx == Constants.HorizontalDeltaLimit && result.NextEdge.OutIndex != Constants.Skip)
-                {
-                    // nb: at the top of a bound, horizontals are added to the bound
-                    // only when the preceding edge attaches to the horizontal's left vertex
-                    // unless a Skip edge is encountered when that becomes the top divide
-                    horz = result;
-                    while (horz.PreviousEdge.Dx == Constants.HorizontalDeltaLimit)
-                    {
-                        horz = horz.PreviousEdge;
-                    }
-
-                    if (horz.PreviousEdge.Top.X > result.NextEdge.Top.X)
-                    {
-                        result = horz.PreviousEdge;
-                    }
-                }
-
-                while (edge != result)
-                {
-                    edge.NextInLML = edge.NextEdge;
-                    if (edge.Dx == Constants.HorizontalDeltaLimit && edge != eStart && edge.Bottom.X != edge.PreviousEdge.Top.X)
-                    {
-                        ReverseHorizontal(edge);
-                    }
-
-                    edge = edge.NextEdge;
-                }
-
-                if (edge.Dx == Constants.HorizontalDeltaLimit && edge != eStart && edge.Bottom.X != edge.PreviousEdge.Top.X)
-                {
-                    ReverseHorizontal(edge);
-                }
-
-                result = result.NextEdge; // move to the edge just beyond current bound
-            }
-            else
-            {
-                while (result.Top.Y == result.PreviousEdge.Bottom.Y && result.PreviousEdge.OutIndex != Constants.Skip)
-                {
-                    result = result.PreviousEdge;
-                }
-
-                if (result.Dx == Constants.HorizontalDeltaLimit && result.PreviousEdge.OutIndex != Constants.Skip)
-                {
-                    horz = result;
-                    while (horz.NextEdge.Dx == Constants.HorizontalDeltaLimit)
-                    {
-                        horz = horz.NextEdge;
-                    }
-
-                    if (horz.NextEdge.Top.X == result.PreviousEdge.Top.X || horz.NextEdge.Top.X > result.PreviousEdge.Top.X)
-                    {
-                        result = horz.NextEdge;
-                    }
-                }
-
-                while (edge != result)
-                {
-                    edge.NextInLML = edge.PreviousEdge;
-                    if (edge.Dx == Constants.HorizontalDeltaLimit && edge != eStart && edge.Bottom.X != edge.NextEdge.Top.X)
-                    {
-                        ReverseHorizontal(edge);
-                    }
-
-                    edge = edge.PreviousEdge;
-                }
-
-                if (edge.Dx == Constants.HorizontalDeltaLimit && edge != eStart && edge.Bottom.X != edge.NextEdge.Top.X)
-                {
-                    ReverseHorizontal(edge);
-                }
-
-                result = result.PreviousEdge; // move to the edge just beyond current bound
-            }
-
-            return result;
+            return edge.FixHorizontals(leftBoundIsForward);
         }
     }
 }

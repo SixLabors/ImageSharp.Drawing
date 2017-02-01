@@ -30,5 +30,11 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Gets or sets the point.
         /// </summary>
         public System.Numerics.Vector2 Point { get; set; }
+
+        public bool EdgesAdjacent()
+        {
+            return (this.Edge1.NextInSEL == this.Edge2) ||
+              (this.Edge1.PreviousInSEL == this.Edge2);
+        }
     }
 }

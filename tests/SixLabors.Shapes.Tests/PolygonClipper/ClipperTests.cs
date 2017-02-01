@@ -110,11 +110,11 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         }
 
         [Fact]
-        public void TouchingByNotOverlapping()
+        public void TouchingButNotOverlapping()
         {
             var shapes = this.Clip(this.TopMiddle, this.TopLeft);
             Assert.Equal(1, shapes.Length);
-            Assert.DoesNotContain(this.TopMiddle, shapes);
+            Assert.Contains(this.TopMiddle, shapes);
             Assert.DoesNotContain(this.TopLeft, shapes);
         }
     }

@@ -311,6 +311,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 {
                     return false;
                 }
+
                 return btmPt1.CalculateArea() > 0; // if otherwise identical use orientation
             }
             else

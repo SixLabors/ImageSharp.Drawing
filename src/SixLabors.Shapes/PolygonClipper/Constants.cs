@@ -10,7 +10,6 @@ namespace SixLabors.Shapes.PolygonClipper
     /// </summary>
     internal static class Constants
     {
-
         /// <summary>
         /// The unassigned
         /// </summary>

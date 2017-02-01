@@ -88,6 +88,18 @@ namespace SixLabors.Shapes.PolygonClipper
             while (op != this.Points);
         }
 
+        public OutRec GetFirstLeft()
+        {
+            var firstLeft = this.FirstLeft;
+
+            while (firstLeft != null && firstLeft.Points == null)
+            {
+                firstLeft = firstLeft.FirstLeft;
+            }
+
+            return firstLeft;
+        }
+
 
         public static OutRec GetLowermostRec(OutRec outRec1, OutRec outRec2)
         {
@@ -136,6 +148,26 @@ namespace SixLabors.Shapes.PolygonClipper
             {
                 return outRec2;
             }
+        }
+
+        public void FixHoleLinkage()
+        {
+            // skip if an outermost polygon or
+            // already already points to the correct FirstLeft ...
+            if (this.FirstLeft == null ||
+                  (this.IsHole != this.FirstLeft.IsHole &&
+                  this.FirstLeft.Points != null))
+            {
+                return;
+            }
+
+            OutRec orfl = this.FirstLeft;
+            while (orfl != null && ((orfl.IsHole == this.IsHole) || orfl.Points == null))
+            {
+                orfl = orfl.FirstLeft;
+            }
+
+            this.FirstLeft = orfl;
         }
 
         /// <summary>
