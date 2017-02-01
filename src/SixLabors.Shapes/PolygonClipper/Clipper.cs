@@ -888,12 +888,12 @@ namespace SixLabors.Shapes.PolygonClipper
 
             if (prevE != null && prevE.OutIndex >= 0)
             {
-                float xPrev = prevE.TopX(pt.Y);
-                float xE = e.TopX(pt.Y);
-                if ((xPrev == xE) &&
+                float prevX = prevE.TopX(pt.Y);
+                float edgeX = e.TopX(pt.Y);
+                if ((prevX == edgeX) &&
                     (e.WindingDelta != 0) &&
                     (prevE.WindingDelta != 0) &&
-                    Helpers.SlopesEqual(new Vector2(xPrev, pt.Y), prevE.Top, new Vector2(xE, pt.Y), e.Top))
+                    Helpers.SlopesEqual(new Vector2(prevX, pt.Y), prevE.Top, new Vector2(edgeX, pt.Y), e.Top))
                 {
                     OutPoint outPt = this.AddOutPt(prevE, pt);
                     this.AddJoin(result, outPt, e.Top);

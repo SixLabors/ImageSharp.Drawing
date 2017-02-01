@@ -126,33 +126,33 @@ namespace SixLabors.Shapes.PolygonClipper
                 outRec2.BottomPoint = outRec2.Points.GetBottomPt();
             }
 
-            OutPoint bPt1 = outRec1.BottomPoint;
-            OutPoint bPt2 = outRec2.BottomPoint;
-            if (bPt1.Point.Y > bPt2.Point.Y)
+            OutPoint bottomPoint1 = outRec1.BottomPoint;
+            OutPoint bottomPoint2 = outRec2.BottomPoint;
+            if (bottomPoint1.Point.Y > bottomPoint2.Point.Y)
             {
                 return outRec1;
             }
-            else if (bPt1.Point.Y < bPt2.Point.Y)
+            else if (bottomPoint1.Point.Y < bottomPoint2.Point.Y)
             {
                 return outRec2;
             }
-            else if (bPt1.Point.X < bPt2.Point.X)
+            else if (bottomPoint1.Point.X < bottomPoint2.Point.X)
             {
                 return outRec1;
             }
-            else if (bPt1.Point.X > bPt2.Point.X)
+            else if (bottomPoint1.Point.X > bottomPoint2.Point.X)
             {
                 return outRec2;
             }
-            else if (bPt1.Next == bPt1)
+            else if (bottomPoint1.Next == bottomPoint1)
             {
                 return outRec2;
             }
-            else if (bPt2.Next == bPt2)
+            else if (bottomPoint2.Next == bottomPoint2)
             {
                 return outRec1;
             }
-            else if (bPt1.FirstIsBottomPt(bPt2))
+            else if (bottomPoint1.FirstIsBottomPt(bottomPoint2))
             {
                 return outRec1;
             }

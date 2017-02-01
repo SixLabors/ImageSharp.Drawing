@@ -54,7 +54,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The calculated.
         /// </summary>
-        private bool calculated = false;
+        private bool calculated;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="InternalPath"/> class.
@@ -192,14 +192,14 @@ namespace SixLabors.Shapes
 
         /// <summary>
         /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
-        /// populate a buffer for all points on the path that the line intersects.
+        /// populates a buffer for all points on the path that the line intersects.
         /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
         /// <param name="buffer">The buffer.</param>
         /// <param name="count">The count.</param>
         /// <param name="offset">The offset.</param>
-        /// <returns>number iof intersections hit</returns>
+        /// <returns>number of intersections hit</returns>
         public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             int polyCorners = this.points.Length;
@@ -379,8 +379,8 @@ namespace SixLabors.Shapes
             else if (Math.Abs(line2Diff.X) < Epsilon)
             {
                 float slope = line1Diff.Y / line1Diff.X;
-                float yInter = line1Start.Y - (slope * line1Start.X);
-                float y = (line2Start.X * slope) + yInter;
+                float interY = line1Start.Y - (slope * line1Start.X);
+                float y = (line2Start.X * slope) + interY;
                 point = new Vector2(line2Start.X, y);
 
                 // horizontal and vertical lines
@@ -390,16 +390,16 @@ namespace SixLabors.Shapes
                 float slope1 = line1Diff.Y / line1Diff.X;
                 float slope2 = line2Diff.Y / line2Diff.X;
 
-                float yInter1 = line1Start.Y - (slope1 * line1Start.X);
-                float yInter2 = line2Start.Y - (slope2 * line2Start.X);
+                float interY1 = line1Start.Y - (slope1 * line1Start.X);
+                float interY2 = line2Start.Y - (slope2 * line2Start.X);
 
-                if (Math.Abs(slope1 - slope2) < Epsilon && Math.Abs(yInter1 - yInter2) > Epsilon)
+                if (Math.Abs(slope1 - slope2) < Epsilon && Math.Abs(interY1 - interY2) > Epsilon)
                 {
                     return MaxVector;
                 }
 
-                float x = (yInter2 - yInter1) / (slope1 - slope2);
-                float y = (slope1 * x) + yInter1;
+                float x = (interY2 - interY1) / (slope1 - slope2);
+                float y = (slope1 * x) + interY1;
 
                 point = new Vector2(x, y);
             }
