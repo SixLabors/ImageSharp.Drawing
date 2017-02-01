@@ -21,8 +21,13 @@ namespace SixLabors.Shapes.PolygonClipper
         /// The unassigned
         /// </summary>
         internal const int Unassigned = -1; // InitOptions that can be passed to the constructor ...
+
+        /// <summary>
+        /// The skip
+        /// </summary>
+        internal const int Skip = -2;
+
         private const double HorizontalDeltaLimit = -3.4E+38;
-        private const int Skip = -2;
         private static readonly IComparer<IntersectNode> IntersectNodeComparer = new IntersectNodeSort();
         private readonly List<IntersectNode> intersectList = new List<IntersectNode>();
 
@@ -575,12 +580,6 @@ namespace SixLabors.Shapes.PolygonClipper
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsHorizontal(Edge e)
-        {
-            return e.Delta.Y == 0;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool SlopesEqual(Edge e1, Edge e2)
         {
             return e1.Delta.Y * e2.Delta.X == e1.Delta.X * e2.Delta.Y;
@@ -739,7 +738,7 @@ namespace SixLabors.Shapes.PolygonClipper
 
                 if (rb != null)
                 {
-                    if (IsHorizontal(rb))
+                    if (rb.IsHorizontal)
                     {
                         if (rb.NextInLML != null)
                         {
@@ -760,7 +759,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
 
                 // if output polygons share an Edge with a horizontal rb, they'll need joining later ...
-                if (op1 != null && IsHorizontal(rb) &&
+                if (op1 != null && rb.IsHorizontal &&
                  this.ghostJoins.Count > 0 && rb.WindingDelta != 0)
                 {
                     for (int i = 0; i < this.ghostJoins.Count; i++)
@@ -1127,7 +1126,7 @@ namespace SixLabors.Shapes.PolygonClipper
         {
             OutPoint result;
             Edge e, prevE;
-            if (IsHorizontal(e2) || (e1.Dx > e2.Dx))
+            if (e2.IsHorizontal || (e1.Dx > e2.Dx))
             {
                 result = this.AddOutPt(e1, pt);
                 e2.OutIndex = e1.OutIndex;
@@ -1695,16 +1694,12 @@ namespace SixLabors.Shapes.PolygonClipper
 
             this.GetHorzDirection(horzEdge, out dir, out horzLeft, out horzRight);
 
-            Edge lastHorzEdge = horzEdge;
+            Edge lastHorzEdge = horzEdge.LastHorizonalEdge();
             Edge maxPairEdge = null;
-            while (lastHorzEdge.NextInLML != null && IsHorizontal(lastHorzEdge.NextInLML))
-            {
-                lastHorzEdge = lastHorzEdge.NextInLML;
-            }
 
             if (lastHorzEdge.NextInLML == null)
             {
-                maxPairEdge = this.GetMaximaPair(lastHorzEdge);
+                maxPairEdge = lastHorzEdge?.GetMaximaPair();
             }
 
             Maxima currMax = this.maxima;
@@ -1743,7 +1738,7 @@ namespace SixLabors.Shapes.PolygonClipper
             while (true)
             {
                 bool isLastHorz = horzEdge == lastHorzEdge;
-                Edge e = this.GetNextInAEL(horzEdge, dir);
+                Edge e = horzEdge.GetNextInAEL(dir);
                 while (e != null)
                 {
                     // this code block inserts extra coords into horizontal edges (in output
@@ -1836,13 +1831,13 @@ namespace SixLabors.Shapes.PolygonClipper
                         this.IntersectEdges(e, horzEdge, pt);
                     }
 
-                    Edge eNext = this.GetNextInAEL(e, dir);
+                    Edge eNext = e.GetNextInAEL(dir);
                     this.SwapPositionsInAEL(horzEdge, e);
                     e = eNext;
                 } // end while(e != null)
 
                 // Break out of loop if HorzEdge.NextInLML is not also horizontal ...
-                if (horzEdge.NextInLML == null || !IsHorizontal(horzEdge.NextInLML))
+                if (horzEdge.NextInLML == null || !horzEdge.NextInLML.IsHorizontal)
                 {
                     break;
                 }
@@ -1921,50 +1916,6 @@ namespace SixLabors.Shapes.PolygonClipper
 
                 this.DeleteFromAEL(horzEdge);
             }
-        }
-
-        private Edge GetNextInAEL(Edge e, Direction direction)
-        {
-            return direction == Direction.LeftToRight ? e.NextInAEL : e.PreviousInAEL;
-        }
-
-        private bool IsMaxima(Edge e, double y)
-        {
-            return e != null && e.Top.Y == y && e.NextInLML == null;
-        }
-
-        private bool IsIntermediate(Edge e, double y)
-        {
-            return e.Top.Y == y && e.NextInLML != null;
-        }
-
-        private Edge GetMaximaPair(Edge e)
-        {
-            if ((e.NextEdge.Top == e.Top) && e.NextEdge.NextInLML == null)
-            {
-                return e.NextEdge;
-            }
-            else if ((e.PreviousEdge.Top == e.Top) && e.PreviousEdge.NextInLML == null)
-            {
-                return e.PreviousEdge;
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        private Edge GetMaximaPairEx(Edge e)
-        {
-            // as above but returns null if MaxPair isn't in AEL (unless it's horizontal)
-            Edge result = this.GetMaximaPair(e);
-            if (result == null || result.OutIndex == Skip ||
-              ((result.NextInAEL == result.PreviousInAEL) && !IsHorizontal(result)))
-            {
-                return null;
-            }
-
-            return result;
         }
 
         private bool ProcessIntersections(float topY)
@@ -2138,7 +2089,7 @@ namespace SixLabors.Shapes.PolygonClipper
             if (edge1.Delta.X == 0)
             {
                 ip.X = edge1.Bottom.X;
-                if (IsHorizontal(edge2))
+                if (edge2.IsHorizontal)
                 {
                     ip.Y = edge2.Bottom.Y;
                 }
@@ -2151,7 +2102,7 @@ namespace SixLabors.Shapes.PolygonClipper
             else if (edge2.Delta.X == 0)
             {
                 ip.X = edge2.Bottom.X;
-                if (IsHorizontal(edge1))
+                if (edge1.IsHorizontal)
                 {
                     ip.Y = edge1.Bottom.Y;
                 }
@@ -2222,12 +2173,12 @@ namespace SixLabors.Shapes.PolygonClipper
             {
                 // 1. process maxima, treating them as if they're 'bent' horizontal edges,
                 //   but exclude maxima with horizontal edges. nb: e can't be a horizontal.
-                bool isMaximaEdge = this.IsMaxima(e, topY);
+                bool isMaximaEdge = e.IsMaxima(topY);
 
                 if (isMaximaEdge)
                 {
-                    Edge eMaxPair = this.GetMaximaPairEx(e);
-                    isMaximaEdge = eMaxPair == null || !IsHorizontal(eMaxPair);
+                    Edge eMaxPair = e.GetMaximaPairEx();
+                    isMaximaEdge = eMaxPair == null || !eMaxPair.IsHorizontal;
                 }
 
                 if (isMaximaEdge)
@@ -2246,7 +2197,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 else
                 {
                     // 2. promote horizontal edges, otherwise update Curr.X and Curr.Y ...
-                    if (this.IsIntermediate(e, topY) && IsHorizontal(e.NextInLML))
+                    if (e.IsIntermediate(topY) && e.NextInLML.IsHorizontal)
                     {
                         this.UpdateEdgeIntoAEL(ref e);
                         if (e.OutIndex >= 0)
@@ -2273,7 +2224,7 @@ namespace SixLabors.Shapes.PolygonClipper
             e = this.activeEdges;
             while (e != null)
             {
-                if (this.IsIntermediate(e, topY))
+                if (e.IsIntermediate(topY))
                 {
                     OutPoint op = null;
                     if (e.OutIndex >= 0)
@@ -2312,7 +2263,7 @@ namespace SixLabors.Shapes.PolygonClipper
 
         private void DoMaxima(Edge e)
         {
-            Edge eMaxPair = this.GetMaximaPairEx(e);
+            Edge eMaxPair = e?.GetMaximaPairEx();
             if (eMaxPair == null)
             {
                 if (e.OutIndex >= 0)
@@ -2353,24 +2304,6 @@ namespace SixLabors.Shapes.PolygonClipper
             }
         }
 
-        private int PointCount(OutPoint pts)
-        {
-            if (pts == null)
-            {
-                return 0;
-            }
-
-            int result = 0;
-            OutPoint p = pts;
-            do
-            {
-                result++;
-                p = p.Next;
-            }
-            while (p != pts);
-            return result;
-        }
-
         private ImmutableArray<IShape> BuildResult()
         {
             List<IShape> shapes = new List<IShape>(this.polyOuts.Count);
@@ -2379,7 +2312,12 @@ namespace SixLabors.Shapes.PolygonClipper
             for (int i = 0; i < this.polyOuts.Count; i++)
             {
                 OutRec outRec = this.polyOuts[i];
-                int cnt = this.PointCount(outRec.Points);
+                if (outRec.Points == null)
+                {
+                    continue;
+                }
+
+                int cnt = outRec.Points.Count();
                 if ((outRec.IsOpen && cnt < 2) ||
                   (!outRec.IsOpen && cnt < 3))
                 {
@@ -3255,7 +3193,7 @@ namespace SixLabors.Shapes.PolygonClipper
             e.Current = e.Bottom;
             e.PreviousInAEL = aelPrev;
             e.NextInAEL = aelNext;
-            if (!IsHorizontal(e))
+            if (!e.IsHorizontal)
             {
                 this.InsertScanbeam(e.Top.Y);
             }

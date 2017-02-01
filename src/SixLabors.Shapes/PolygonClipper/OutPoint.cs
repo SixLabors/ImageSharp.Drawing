@@ -35,5 +35,22 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Gets or sets the previous <see cref="OutPoint"/>
         /// </summary>
         public OutPoint Previous { get; set; }
+
+        /// <summary>
+        /// Counts this instance.
+        /// </summary>
+        /// <returns>count the number of points in this set</returns>
+        public int Count()
+        {
+            int result = 0;
+            OutPoint p = this;
+            do
+            {
+                result++;
+                p = p.Next;
+            }
+            while (p != this);
+            return result;
+        }
     }
 }

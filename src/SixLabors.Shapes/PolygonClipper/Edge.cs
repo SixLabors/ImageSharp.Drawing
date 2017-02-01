@@ -156,6 +156,14 @@ namespace SixLabors.Shapes.PolygonClipper
         public Edge NextInSEL { get; set; }
 
         /// <summary>
+        /// Gets a value indicating whether this instance is horizontal.
+        /// </summary>
+        /// <value>
+        /// <c>true</c> if this instance is horizontal; otherwise, <c>false</c>.
+        /// </value>
+        public bool IsHorizontal => this.Delta.Y == 0;
+
+        /// <summary>
         /// Gets or sets the previous in sel.
         /// </summary>
         /// <value>
@@ -175,6 +183,91 @@ namespace SixLabors.Shapes.PolygonClipper
             this.PreviousEdge = prev;
             this.Current = pt;
             this.OutIndex = Clipper.Unassigned;
+        }
+
+        /// <summary>
+        /// Lasts the horizonal edge.
+        /// </summary>
+        /// <returns>The last horizontal edge</returns>
+        public Edge LastHorizonalEdge()
+        {
+            var lastHorzEdge = this;
+            while (lastHorzEdge.NextInLML != null && lastHorzEdge.NextInLML.IsHorizontal)
+            {
+                lastHorzEdge = lastHorzEdge.NextInLML;
+            }
+
+            return lastHorzEdge;
+        }
+
+        /// <summary>
+        /// Gets the next in ael.
+        /// </summary>
+        /// <param name="direction">The direction.</param>
+        /// <returns>the next edge based on direction</returns>
+        public Edge GetNextInAEL(Direction direction)
+        {
+            return direction == Direction.LeftToRight ? this.NextInAEL : this.PreviousInAEL;
+        }
+
+        /// <summary>
+        /// Determines whether the edge is Maxima in relation to y.
+        /// </summary>
+        /// <param name="y">The y.</param>
+        /// <returns>
+        ///   <c>true</c> if the specified y is maxima; otherwise, <c>false</c>.
+        /// </returns>
+        public bool IsMaxima(double y)
+        {
+            return this.Top.Y == y && this.NextInLML == null;
+        }
+
+        /// <summary>
+        /// Gets the maxima pair.
+        /// </summary>
+        /// <returns>The maxima pair for this edge</returns>
+        public Edge GetMaximaPair()
+        {
+            if ((this.NextEdge.Top == this.Top) && this.NextEdge.NextInLML == null)
+            {
+                return this.NextEdge;
+            }
+
+            if ((this.PreviousEdge.Top == this.Top) && this.PreviousEdge.NextInLML == null)
+            {
+                return this.PreviousEdge;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Determines whether the specified intermediate in relation to y.
+        /// </summary>
+        /// <param name="y">The y.</param>
+        /// <returns>
+        ///   <c>true</c> if the specified y is intermediate; otherwise, <c>false</c>.
+        /// </returns>
+        public bool IsIntermediate(double y)
+        {
+            return this.Top.Y == y && this.NextInLML != null;
+        }
+
+        /// <summary>
+        /// Gets the maxima pair ex.
+        /// </summary>
+        /// <returns>The maxima pair for this edge unless it should be skipped</returns>
+        public Edge GetMaximaPairEx()
+        {
+            // as above but returns null if MaxPair isn't in AEL (unless it's horizontal)
+            Edge result = this.GetMaximaPair();
+            if (result == null || result.OutIndex == Clipper.Skip ||
+              ((result.NextInAEL == result.PreviousInAEL) && !result.IsHorizontal))
+            {
+                return null;
+            }
+
+            return result;
         }
     }
 }
