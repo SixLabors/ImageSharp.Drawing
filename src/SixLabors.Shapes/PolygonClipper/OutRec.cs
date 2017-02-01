@@ -75,6 +75,70 @@ namespace SixLabors.Shapes.PolygonClipper
         public OutPoint BottomPoint { get; set; }
 
         /// <summary>
+        /// Syncronises the outpoint indexes.
+        /// </summary>
+        public void SyncroniseOutpointIndexes()
+        {
+            OutPoint op = this.Points;
+            do
+            {
+                op.Index = this.Index;
+                op = op.Previous;
+            }
+            while (op != this.Points);
+        }
+
+
+        public static OutRec GetLowermostRec(OutRec outRec1, OutRec outRec2)
+        {
+            // work out which polygon fragment has the correct hole state ...
+            if (outRec1.BottomPoint == null)
+            {
+                outRec1.BottomPoint = outRec1.Points.GetBottomPt();
+            }
+
+            if (outRec2.BottomPoint == null)
+            {
+                outRec2.BottomPoint = outRec2.Points.GetBottomPt();
+            }
+
+            OutPoint bPt1 = outRec1.BottomPoint;
+            OutPoint bPt2 = outRec2.BottomPoint;
+            if (bPt1.Point.Y > bPt2.Point.Y)
+            {
+                return outRec1;
+            }
+            else if (bPt1.Point.Y < bPt2.Point.Y)
+            {
+                return outRec2;
+            }
+            else if (bPt1.Point.X < bPt2.Point.X)
+            {
+                return outRec1;
+            }
+            else if (bPt1.Point.X > bPt2.Point.X)
+            {
+                return outRec2;
+            }
+            else if (bPt1.Next == bPt1)
+            {
+                return outRec2;
+            }
+            else if (bPt2.Next == bPt2)
+            {
+                return outRec1;
+            }
+            else if (bPt1.FirstIsBottomPt(bPt2))
+            {
+                return outRec1;
+            }
+            else
+            {
+                return outRec2;
+            }
+        }
+
+        /// <summary>
         /// Fixups the outs.
         /// </summary>
         public void FixupOuts()
@@ -94,6 +158,9 @@ namespace SixLabors.Shapes.PolygonClipper
             }
         }
 
+        /// <summary>
+        /// Fixups the out polyline.
+        /// </summary>
         private void FixupOutPolyline()
         {
             OutPoint pp = this.Points;
@@ -121,6 +188,9 @@ namespace SixLabors.Shapes.PolygonClipper
             }
         }
 
+        /// <summary>
+        /// Fixups the out polygon.
+        /// </summary>
         private void FixupOutPolygon()
         {
             // FixupOutPolygon() - removes duplicate points and simplifies consecutive
@@ -138,7 +208,7 @@ namespace SixLabors.Shapes.PolygonClipper
 
                 // test for duplicate points and collinear edges ...
                 if ((pp.Point == pp.Next.Point) || (pp.Point == pp.Previous.Point) ||
-                  VectorHelpers.SlopesEqual(pp.Previous.Point, pp.Point, pp.Next.Point))
+                  Helpers.SlopesEqual(pp.Previous.Point, pp.Point, pp.Next.Point))
                 {
                     lastOK = null;
                     pp.Previous.Next = pp.Next;

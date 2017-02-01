@@ -182,7 +182,7 @@ namespace SixLabors.Shapes.PolygonClipper
             this.NextEdge = next;
             this.PreviousEdge = prev;
             this.Current = pt;
-            this.OutIndex = Clipper.Unassigned;
+            this.OutIndex = Constants.Unassigned;
         }
 
         /// <summary>
@@ -261,13 +261,28 @@ namespace SixLabors.Shapes.PolygonClipper
         {
             // as above but returns null if MaxPair isn't in AEL (unless it's horizontal)
             Edge result = this.GetMaximaPair();
-            if (result == null || result.OutIndex == Clipper.Skip ||
+            if (result == null || result.OutIndex == Constants.Skip ||
               ((result.NextInAEL == result.PreviousInAEL) && !result.IsHorizontal))
             {
                 return null;
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Tops the x.
+        /// </summary>
+        /// <param name="currentY">The current y.</param>
+        /// <returns>Returns the calcualted top X the current Y</returns>
+        public float TopX(float currentY)
+        {
+            if (currentY == this.Top.Y)
+            {
+                return this.Top.X;
+            }
+
+            return this.Bottom.X + Helpers.Round(this.Dx * (currentY - this.Bottom.Y));
         }
     }
 }

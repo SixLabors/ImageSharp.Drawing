@@ -1,4 +1,4 @@
-﻿// <copyright file="VectorHelpers.cs" company="Scott Williams">
+﻿// <copyright file="Helpers.cs" company="Scott Williams">
 // Copyright (c) Scott Williams and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
@@ -11,8 +11,19 @@ namespace SixLabors.Shapes.PolygonClipper
     /// <summary>
     /// Some helpers for vector data
     /// </summary>
-    internal static class VectorHelpers
+    internal static class Helpers
     {
+        /// <summary>
+        /// Rounds the specified value.
+        /// </summary>
+        /// <param name="value">The value.</param>
+        /// <returns>the value rounded</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static float Round(double value)
+        {
+            return value < 0 ? (float)(value - 0.5) : (float)(value + 0.5);
+        }
+
         /// <summary>
         /// Slopeses the equal.
         /// </summary>
@@ -21,7 +32,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="pt3">The PT3.</param>
         /// <returns>Returns true if the slopes are equal</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3)
+        public static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3)
         {
             return SlopesEqual(pt1, pt2, pt2, pt3);
         }
@@ -35,12 +46,30 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="pt4">The PT4.</param>
         /// <returns>Returns true if the slopes are equal</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3, Vector2 pt4)
+        public static bool SlopesEqual(Vector2 pt1, Vector2 pt2, Vector2 pt3, Vector2 pt4)
         {
             var dif12 = pt1 - pt2;
             var dif34 = pt3 - pt4;
 
             return (dif12.Y * dif34.X) - (dif12.X * dif34.Y) == 0;
+        }
+
+        /// <summary>
+        /// Dxes the specified PT2.
+        /// </summary>
+        /// <param name="pt1">The PT1.</param>
+        /// <param name="pt2">The PT2.</param>
+        /// <returns></returns>
+        public static double Dx(this Vector2 pt1, Vector2 pt2)
+        {
+            if (pt1.Y == pt2.Y)
+            {
+                return Constants.HorizontalDeltaLimit;
+            }
+            else
+            {
+                return (double)(pt2.X - pt1.X) / (pt2.Y - pt1.Y);
+            }
         }
     }
 }
