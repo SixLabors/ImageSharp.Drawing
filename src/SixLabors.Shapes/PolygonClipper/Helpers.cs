@@ -73,7 +73,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// </summary>
         /// <param name="pt1">The PT1.</param>
         /// <param name="pt2">The PT2.</param>
-        /// <returns></returns>
+        /// <returns>Dx of 2 points</returns>
         public static double Dx(this Vector2 pt1, Vector2 pt2)
         {
             if (pt1.Y == pt2.Y)
@@ -86,6 +86,16 @@ namespace SixLabors.Shapes.PolygonClipper
             }
         }
 
+        /// <summary>
+        /// Gets the overlap.
+        /// </summary>
+        /// <param name="a1">The a1.</param>
+        /// <param name="a2">The a2.</param>
+        /// <param name="b1">The b1.</param>
+        /// <param name="b2">The b2.</param>
+        /// <param name="left">The left.</param>
+        /// <param name="right">The right.</param>
+        /// <returns>true if left &lt; right</returns>
         public static bool GetOverlap(float a1, float a2, float b1, float b2, out float left, out float right)
         {
             if (a1 < a2)

@@ -35,7 +35,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Horizontals the segments overlap.
         /// </summary>
         /// <param name="target">The target.</param>
-        /// <returns></returns>
+        /// <returns>true if Horizontals the segments overlap</returns>
         public bool HorizontalSegmentsOverlap(Edge target)
         {
             float seg1a = this.OutPoint1.Point.X;

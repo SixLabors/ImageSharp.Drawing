@@ -31,6 +31,10 @@ namespace SixLabors.Shapes.PolygonClipper
         /// </summary>
         public System.Numerics.Vector2 Point { get; set; }
 
+        /// <summary>
+        /// Edgeses the adjacent.
+        /// </summary>
+        /// <returns>true if its edges are adjacent</returns>
         public bool EdgesAdjacent()
         {
             return (this.Edge1.NextInSEL == this.Edge2) ||

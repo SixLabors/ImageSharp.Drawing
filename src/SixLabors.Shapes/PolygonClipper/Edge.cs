@@ -197,7 +197,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Finds the point 2 edges intersect
         /// </summary>
         /// <param name="edge2">The edge2.</param>
-        /// <returns></returns>
+        /// <returns>the point where edges intersect</returns>
         public Vector2 IntersectPoint(Edge edge2)
         {
             Edge edge1 = this;
@@ -291,6 +291,7 @@ namespace SixLabors.Shapes.PolygonClipper
                     ip.X = edge1.TopX(ip.Y);
                 }
             }
+
             return ip;
         }
 
@@ -298,7 +299,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Nexts the bound edge.
         /// </summary>
         /// <param name="leftBoundIsForward">if set to <c>true</c> [left bound is forward].</param>
-        /// <returns></returns>
+        /// <returns>the next edge based on bounds</returns>
         public Edge NextBoundEdge(bool leftBoundIsForward)
         {
             Edge edge = this;
@@ -316,6 +317,11 @@ namespace SixLabors.Shapes.PolygonClipper
             return edge;
         }
 
+        /// <summary>
+        /// Fixes the horizontals.
+        /// </summary>
+        /// <param name="forwardsisLeft">if set to <c>true</c> [forwardsis left].</param>
+        /// <returns>the edge just beyond current bound</returns>
         public Edge FixHorizontals(bool forwardsisLeft)
         {
             Edge edge = this;
@@ -405,7 +411,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Horizontals the segments overlap.
         /// </summary>
         /// <param name="target">The target.</param>
-        /// <returns></returns>
+        /// <returns>true if the segments overlap</returns>
         public bool HorizontalSegmentsOverlap(Edge target)
         {
             float seg1a = this.Bottom.X;
@@ -429,7 +435,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <summary>
         /// Finds the next loc minimum.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>the Next Loc minimum</returns>
         public Edge FindNextLocMin()
         {
             Edge edge = this;
@@ -517,19 +523,27 @@ namespace SixLabors.Shapes.PolygonClipper
 
             this.PolyType = polyType;
 
-            ConfigureDelta();
+            this.ConfigureDelta();
         }
 
+        /// <summary>
+        /// Gets the next edge dependent on direction.
+        /// </summary>
+        /// <param name="leftBoundIsForward">if set to <c>true</c> [left bound is forward].</param>
+        /// <returns>the next edge</returns>
         public Edge GetNextEdge(bool leftBoundIsForward)
         {
             if (leftBoundIsForward)
             {
-                return NextEdge;
+                return this.NextEdge;
             }
 
-            return PreviousEdge;
+            return this.PreviousEdge;
         }
 
+        /// <summary>
+        /// Reverses the horizontal.
+        /// </summary>
         public void ReverseHorizontal()
         {
             // swap horizontal edges' top and bottom x's so they follow the natural
@@ -541,7 +555,6 @@ namespace SixLabors.Shapes.PolygonClipper
             this.Top = t;
             this.Bottom = b;
         }
-
 
         /// <summary>
         /// Lasts the horizonal edge.
@@ -646,7 +659,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <summary>
         /// Removes the self return next.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>removes this node from the linked list and returns the next node in the list.</returns>
         public Edge RemoveSelfReturnNext()
         {
             // removes e from double_linked_list (but without removing from memory)
@@ -661,7 +674,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Slopeses the equal.
         /// </summary>
         /// <param name="e2">The e2.</param>
-        /// <returns></returns>
+        /// <returns>return true if e2's slop equires this instances slop</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool SlopesEqual(Edge e2)
         {

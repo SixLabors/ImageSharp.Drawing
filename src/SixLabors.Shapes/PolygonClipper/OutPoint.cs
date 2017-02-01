@@ -36,18 +36,16 @@ namespace SixLabors.Shapes.PolygonClipper
         /// </summary>
         public OutPoint Previous { get; set; }
 
-
         /// <summary>
         /// Points the in polygon.
         /// </summary>
         /// <param name="point">The point.</param>
-        /// <returns></returns>
+        /// <returns>returns 0 if false, +1 if true, -1 if pt ON polygon boundary</returns>
         public int PointInPolygon(Vector2 point)
         {
             // See "The Point in Polygon Problem for Arbitrary Polygons" by Hormann & Agathos
             // http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.88.5498&rep=rep1&type=pdf
             OutPoint op = this;
-            // returns 0 if false, +1 if true, -1 if pt ON polygon boundary
             int result = 0;
             OutPoint startOp = op;
             float ptx = point.X;
@@ -117,7 +115,6 @@ namespace SixLabors.Shapes.PolygonClipper
 
             return result;
         }
-
 
         /// <summary>
         /// Determines whether [contains] [the specified out PT1].
@@ -193,7 +190,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <summary>
         /// Calculates the area.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>the area</returns>
         public double CalculateArea()
         {
             OutPoint op = this;
@@ -208,12 +205,10 @@ namespace SixLabors.Shapes.PolygonClipper
             return a * 0.5;
         }
 
-
-
         /// <summary>
         /// Gets the bottom pt.
         /// </summary>
-        /// <returns></returns>
+        /// <returns>the bottombpoint</returns>
         public OutPoint GetBottomPt()
         {
             OutPoint pp = this;
@@ -270,7 +265,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Firsts the is bottom pt.
         /// </summary>
         /// <param name="btmPt2">The BTM PT2.</param>
-        /// <returns></returns>
+        /// <returns>true if firsts the is bottom point</returns>
         public bool FirstIsBottomPt(OutPoint btmPt2)
         {
             OutPoint btmPt1 = this;

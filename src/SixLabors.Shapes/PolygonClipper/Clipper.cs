@@ -1053,7 +1053,7 @@ namespace SixLabors.Shapes.PolygonClipper
             }
             else
             {
-                holeStateRec = OutRec.GetLowermostRec(outRec1, outRec2);
+                holeStateRec = outRec1.GetLowermostRec(outRec2);
             }
 
             // get the start and ends of both output polygons and
@@ -2279,7 +2279,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
                 else
                 {
-                    holeStateRec = OutRec.GetLowermostRec(outRec1, outRec2);
+                    holeStateRec = outRec1.GetLowermostRec(outRec2);
                 }
 
                 if (!this.JoinPoints(join, outRec1, outRec2))

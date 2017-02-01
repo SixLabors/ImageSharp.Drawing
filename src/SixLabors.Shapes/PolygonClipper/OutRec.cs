@@ -88,6 +88,10 @@ namespace SixLabors.Shapes.PolygonClipper
             while (op != this.Points);
         }
 
+        /// <summary>
+        /// Gets the first left.
+        /// </summary>
+        /// <returns>first left rec</returns>
         public OutRec GetFirstLeft()
         {
             var firstLeft = this.FirstLeft;
@@ -100,9 +104,17 @@ namespace SixLabors.Shapes.PolygonClipper
             return firstLeft;
         }
 
-
-        public static OutRec GetLowermostRec(OutRec outRec1, OutRec outRec2)
+        /// <summary>
+        /// Gets the lowermost record.
+        /// </summary>
+        /// <param name="outRec2">The out rec2.</param>
+        /// <returns>
+        /// the lower most rec
+        /// </returns>
+        public OutRec GetLowermostRec(OutRec outRec2)
         {
+            OutRec outRec1 = this;
+
             // work out which polygon fragment has the correct hole state ...
             if (outRec1.BottomPoint == null)
             {
@@ -150,6 +162,9 @@ namespace SixLabors.Shapes.PolygonClipper
             }
         }
 
+        /// <summary>
+        /// Fixes the hole linkage.
+        /// </summary>
         public void FixHoleLinkage()
         {
             // skip if an outermost polygon or
