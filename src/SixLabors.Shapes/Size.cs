@@ -13,21 +13,9 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Stores an ordered pair of integers, which specify a height and width.
     /// </summary>
-    /// <remarks>
-    /// This struct is fully mutable. This is done (against the guidelines) for the sake of performance,
-    /// as it avoids the need to create new values for modification operations.
-    /// </remarks>
     public struct Size : IEquatable<Size>
     {
-        /// <summary>
-        /// Represents a <see cref="Size"/> that has Width and Height values set to zero.
-        /// </summary>
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public static readonly Size Empty = default(Size);
-
         private readonly Vector2 backingVector;
-
-        private readonly bool isSet;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Size"/> struct.
@@ -46,7 +34,6 @@ namespace SixLabors.Shapes
         public Size(Vector2 vector)
         {
             this.backingVector = vector;
-            this.isSet = true;
         }
 
         /// <summary>
@@ -58,12 +45,6 @@ namespace SixLabors.Shapes
         /// Gets the height of this <see cref="Size"/>.
         /// </summary>
         public float Height => this.backingVector.Y;
-
-        /// <summary>
-        /// Gets a value indicating whether this <see cref="Size"/> is empty.
-        /// </summary>
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        public bool IsEmpty => this.Equals(Empty);
 
         /// <summary>
         /// Computes the sum of adding two Sizes.
@@ -108,12 +89,7 @@ namespace SixLabors.Shapes
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator ==(Size left, Size right)
         {
-            if (left.isSet && right.isSet)
-            {
-                return left.backingVector == right.backingVector;
-            }
-
-            return left.isSet == right.isSet;
+            return left.backingVector == right.backingVector;
         }
 
         /// <summary>
@@ -131,12 +107,7 @@ namespace SixLabors.Shapes
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool operator !=(Size left, Size right)
         {
-            if (left.isSet && right.isSet)
-            {
-                return left.backingVector != right.backingVector;
-            }
-
-            return left.isSet != right.isSet;
+            return left.backingVector != right.backingVector;
         }
 
         /// <summary>
@@ -157,11 +128,6 @@ namespace SixLabors.Shapes
         /// <inheritdoc/>
         public override string ToString()
         {
-            if (this.IsEmpty)
-            {
-                return "Size [ Empty ]";
-            }
-
             return $"Size [ Width={this.Width}, Height={this.Height} ]";
         }
 

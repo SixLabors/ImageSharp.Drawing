@@ -9,12 +9,6 @@ namespace SixLabors.Shapes.Tests
     public class SizeTests
     {
         [Fact]
-        public void EmptyIsDefault()
-        {
-            Assert.Equal(true, Size.Empty.IsEmpty);
-        }
-
-        [Fact]
         public void Addition()
         {
             var actual = new Size(12, 13) + new Size(8, 7);
@@ -47,20 +41,6 @@ namespace SixLabors.Shapes.Tests
         {
             var actual = new Size(12, 13).Equals((object)new Size(12, 13));
             Assert.True(actual);
-        }
-
-        [Fact]
-        public void Equal_Empty()
-        {
-            var actual = default(Size) == Size.Empty;
-            Assert.True(actual);
-        }
-
-        [Fact]
-        public void NotEqual_Empty()
-        {
-            var actual = default(Size) != Size.Empty;
-            Assert.False(actual);
         }
 
         [Fact]
@@ -98,12 +78,6 @@ namespace SixLabors.Shapes.Tests
             var inst2 = new Size(10, 10);
 
             Assert.Equal(inst1.GetHashCode(), inst2.GetHashCode());
-        }
-
-        [Fact]
-        public void ToString_Empty()
-        {
-            Assert.Equal("Size [ Empty ]", Size.Empty.ToString());
         }
 
         [Fact]
