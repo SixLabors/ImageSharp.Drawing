@@ -1,7 +1,8 @@
 {
   "version": "0.1.0-alpha1-*",
   "title": "SixLabors.Shapes",
-  "description": "Polygon manipulation on mergin library",
+  "description": "Polygon manipulation/merging and interrogation library. \n\nIts a fully manged netstandard library so should work everywhere.",
+  "summary": "Polygon manipulation/merging and interrogation library.",
   "authors": [
     "Scott Williams and contributors"
   ],
@@ -84,7 +85,7 @@
       }
     }
   },
-   "tools": {
+  "tools": {
     "dotnet-version": "1.1.0"
   }
 }
