@@ -14,8 +14,11 @@
    viewBox="0 0 128 128"
    id="svg2"
    version="1.1"
-   inkscape:version="0.91 r13725"
-   sodipodi:docname="drawing.svg">
+   inkscape:version="0.92.0 r15299"
+   sodipodi:docname="icon.svg"
+   inkscape:export-filename="C:\Source\Shaper2D\icons\icon.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96">
   <defs
      id="defs4" />
   <sodipodi:namedview
@@ -26,15 +29,15 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="1.9079027"
-     inkscape:cx="-91.922379"
-     inkscape:cy="97.58783"
+     inkscape:cx="-3.0926834"
+     inkscape:cy="101.5855"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
      inkscape:snap-text-baseline="false"
-     inkscape:window-width="1920"
-     inkscape:window-height="1017"
-     inkscape:window-x="1912"
+     inkscape:window-width="1536"
+     inkscape:window-height="801"
+     inkscape:window-x="-8"
      inkscape:window-y="-8"
      inkscape:window-maximized="1"
      units="px" />
@@ -55,6 +58,14 @@
      inkscape:groupmode="layer"
      id="layer1"
      transform="translate(0,-924.3622)">
+    <rect
+       style="opacity:1;fill:#e3dedb;fill-opacity:1;stroke:#1a0b00;stroke-width:0.25031254;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       id="rect894"
+       width="127.74968"
+       height="127.74969"
+       x="0.12515627"
+       y="924.48737"
+       ry="4.5" />
     <rect
        style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:0.62365621;stroke-miterlimit:4;stroke-dasharray:1.87096866, 0.62365622;stroke-dashoffset:0.77700007"
        id="rect4531"
