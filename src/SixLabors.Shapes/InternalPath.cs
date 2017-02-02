@@ -225,7 +225,7 @@ namespace SixLabors.Shapes
                 Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
                 if (point != MaxVector)
                 {
-                    if (lastPoint == point)
+                    if (lastPoint.Equivelent(point, Epsilon))
                     {
                         // hit the same point a second time do we need to remove the old one if just clipping
                         var side = SideOfLine(this.points[last], start, end);

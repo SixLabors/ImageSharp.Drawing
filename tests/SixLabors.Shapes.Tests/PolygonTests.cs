@@ -283,5 +283,26 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(0, intersections.Count());
         }
 
+        [Fact]
+        public void MissingIntersection()
+        {
+            var simplePath = new Polygon(new LinearLineSegment(
+                             new Vector2(10, 10),
+                             new Vector2(200, 150),
+                             new Vector2(50, 300)));
+
+            var hole1 = new Polygon(new LinearLineSegment(
+                            new Vector2(37, 85),
+                            new Vector2(130, 40),
+                            new Vector2(65, 137)));
+
+            var poly = simplePath.Clip(hole1);
+
+            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 85), new Vector2(float.MaxValue, 85));
+
+            // returns an even number of points
+            Assert.Equal(4, intersections.Count());
+        }
+
     }
 }
