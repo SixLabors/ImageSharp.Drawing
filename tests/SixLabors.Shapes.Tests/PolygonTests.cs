@@ -238,7 +238,7 @@ namespace SixLabors.Shapes.Tests
 
 
         [Fact]
-        public void ClippingEdgeOuter()
+        public void ClippingEdgefromInside()
         {
             var simplePath = new Rectangle(10, 10, 100, 100).Clip(new Rectangle(20, 0, 20, 20));
 
@@ -249,7 +249,7 @@ namespace SixLabors.Shapes.Tests
         }
 
         [Fact]
-        public void ClippingInnerEdge()
+        public void ClippingEdgeFromOutside()
         {
             var simplePath = new Polygon(new LinearLineSegment(
                              new Vector2(10, 10),
@@ -259,7 +259,7 @@ namespace SixLabors.Shapes.Tests
             var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 10), new Vector2(float.MaxValue, 10));
 
             // returns an even number of points
-            Assert.Equal(0, intersections.Count());
+            Assert.Equal(2, intersections.Count());
         }
 
         [Fact]

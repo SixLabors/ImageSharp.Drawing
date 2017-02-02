@@ -212,6 +212,8 @@ namespace SixLabors.Shapes
             int position = 0;
             bool onCornerFirstPass = true;
             Side lastEdgeSide = Side.Same;
+            Vector2 lastPoint = MaxVector;
+            int last = -1;
             for (int i = 0; i < polyCorners && count > 0; i++)
             {
                 int next = i + 1;
@@ -223,70 +225,28 @@ namespace SixLabors.Shapes
                 Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
                 if (point != MaxVector)
                 {
-                    if (this.closedPath)
+                    if (lastPoint == point)
                     {
-                        var onCorner = this.points[i] == point || this.points[next] == point;
-
-                        if (onCorner)
+                        // hit the same point a second time do we need to remove the old one if just clipping
+                        var side = SideOfLine(this.points[last], start, end);
+                        if (side != Side.Same && side == SideOfLine(this.points[next], start, end))
                         {
-                            Vector2 testPoint = this.points[i];
-                            if (this.points[i] == point)
-                            {
-                                testPoint = this.points[next];
-                            }
-
-                            // we need to know are we on first pass or second pass
-                            if (onCornerFirstPass)
-                            {
-                                lastEdgeSide = SideOfLine(testPoint, start, end);
-                                if (lastEdgeSide == Side.Same)
-                                {
-                                    //skip
-                                    onCornerFirstPass = true;
-                                }
-                                else
-                                {
-                                    onCornerFirstPass = false;
-                                }
-                            }
-                            else
-                            {
-                                var side = SideOfLine(testPoint, start, end);
-
-                                if (side == lastEdgeSide)
-                                {
-                                    //skip the point its just a clip
-                                }
-                                else
-                                {
-                                    //we are crossing so just add it once
-                                    buffer[position + offset] = point;
-                                    position++;
-                                    count--;
-                                }
-                                onCornerFirstPass = true;
-                            }
-                        }
-                        else
-                        { 
-                            //we are crossing so just add it once
-                            buffer[position + offset] = point;
-                            position++;
-                            count--;
-                            onCornerFirstPass = true;
+                            // same side we don't bohter adding the crossing
+                            position--; //move back one and the next hist will replace it
+                            count++;
                         }
                     }
                     else
                     {
-                        // open path we include hitting the first corner but skip the start of each segment
-                        if (i == 0 || this.points[i] != point)
-                        {
-                            // we skip starts and get it next time unless its an open path and this is the first seg
-                            buffer[position + offset] = point;
-                            position++;
-                            count--;
-                        }
+                        // we are not double crossing so just add it once
+                        buffer[position + offset] = point;
+                        position++;
+                        count--;
                     }
+
+                    // record the last point sin the opposite direction
+                    last = i;
+                    lastPoint = point;
                 }
             }
 
@@ -336,8 +296,8 @@ namespace SixLabors.Shapes
 
             var topLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1);
             var topRight = new Vector2(this.Bounds.Right + 1, this.Bounds.Top - 1);
-            var bottomLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Bottom+1);
-            var bottomRight = new Vector2(this.Bounds.Right+ 1, this.Bounds.Bottom+1);
+            var bottomLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Bottom + 1);
+            var bottomRight = new Vector2(this.Bounds.Right + 1, this.Bounds.Bottom + 1);
 
             //get the point that cause the most intersections
             var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
@@ -357,17 +317,20 @@ namespace SixLabors.Shapes
 
         private static Side SideOfLine(Vector2 test, Vector2 lineStart, Vector2 lineEnd)
         {
-            var ca = test - lineStart;
-            var ba = lineEnd - lineStart;
-            var crossProduct = ba.X * ca.Y - ba.Y * ca.X;
+            var testDiff = test - lineStart;
+            var lineDiff = lineEnd - lineStart;
+            var crossProduct = (lineDiff.X * testDiff.Y) - (lineDiff.Y * testDiff.X);
+
             if (crossProduct == 0)
             {
                 return Side.Same;
             }
+
             if (crossProduct > 0)
             {
                 return Side.Left;
             }
+
             return Side.Right;
         }
 
