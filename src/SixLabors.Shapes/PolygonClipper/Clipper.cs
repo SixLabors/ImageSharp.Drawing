@@ -40,7 +40,6 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="shapes">The shapes.</param>
         public Clipper(IEnumerable<ClipableShape> shapes)
         {
-            Guard.NotNull(shapes, nameof(shapes));
             this.AddShapes(shapes);
         }
 
@@ -99,6 +98,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="shapes">The shapes.</param>
         public void AddShapes(IEnumerable<ClipableShape> shapes)
         {
+            Guard.NotNull(shapes, nameof(shapes));
             foreach (var p in shapes)
             {
                 this.AddShape(p.Shape, p.Type);
@@ -112,6 +112,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="clippingType">The clipping type.</param>
         public void AddShapes(IEnumerable<IShape> shapes, ClippingType clippingType)
         {
+            Guard.NotNull(shapes, nameof(shapes));
             foreach (var p in shapes)
             {
                 this.AddShape(p, clippingType);
@@ -125,6 +126,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="clippingType">The clipping type.</param>
         internal void AddShape(IShape shape, ClippingType clippingType)
         {
+            Guard.NotNull(shape, nameof(shape));
             foreach (var p in shape.Paths)
             {
                 this.AddPath(p, clippingType);
@@ -140,6 +142,8 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         internal bool AddPath(IPath path, ClippingType clippingType)
         {
+            Guard.NotNull(path, nameof(path));
+
             // every path we add lock the clipper to prevent state curruption
             lock (this.syncRoot)
             {
