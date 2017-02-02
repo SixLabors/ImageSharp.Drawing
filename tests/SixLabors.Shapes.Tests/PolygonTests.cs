@@ -198,5 +198,90 @@ namespace SixLabors.Shapes.Tests
             var intersections = poly.FindIntersections(new Vector2(float.MinValue, 55), new Vector2(float.MaxValue, 55));
             Assert.Equal(2, intersections.Count());
         }
+
+
+        [Fact]
+        public void HandleClippingInnerCorner()
+        {
+            var simplePath = new Polygon(new LinearLineSegment(
+                             new Vector2(10, 10),
+                             new Vector2(200, 150),
+                             new Vector2(50, 300)));
+
+            var hole1 = new Polygon(new LinearLineSegment(
+                            new Vector2(37, 85),
+                            new Vector2(130, 40),
+                            new Vector2(65, 137)));
+
+            var poly = simplePath.Clip(hole1);
+
+            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 137), new Vector2(float.MaxValue, 137));
+
+            // returns an even number of points
+            Assert.Equal(2, intersections.Count());
+        }
+
+
+        [Fact]
+        public void CrossingCorner()
+        {
+            var simplePath = new Polygon(new LinearLineSegment(
+                             new Vector2(10, 10),
+                             new Vector2(200, 150),
+                             new Vector2(50, 300)));
+
+            var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 150), new Vector2(float.MaxValue, 150));
+
+            // returns an even number of points
+            Assert.Equal(2, intersections.Count());
+        }
+
+
+        [Fact]
+        public void ClippingEdgeOuter()
+        {
+            var simplePath = new Rectangle(10, 10, 100, 100).Clip(new Rectangle(20, 0, 20, 20));
+
+            var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 20), new Vector2(float.MaxValue, 20));
+
+            // returns an even number of points
+            Assert.Equal(2, intersections.Count());
+        }
+
+        [Fact]
+        public void ClippingInnerEdge()
+        {
+            var simplePath = new Polygon(new LinearLineSegment(
+                             new Vector2(10, 10),
+                             new Vector2(100, 10),
+                             new Vector2(50, 300)));
+
+            var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 10), new Vector2(float.MaxValue, 10));
+
+            // returns an even number of points
+            Assert.Equal(0, intersections.Count());
+        }
+
+        [Fact]
+        public void HandleClippingOutterCorner()
+        {
+            var simplePath = new Polygon(new LinearLineSegment(
+                             new Vector2(10, 10),
+                             new Vector2(200, 150),
+                             new Vector2(50, 300)));
+
+            var hole1 = new Polygon(new LinearLineSegment(
+                            new Vector2(37, 85),
+                            new Vector2(130, 40),
+                            new Vector2(65, 137)));
+
+            var poly = simplePath.Clip(hole1);
+
+            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 300), new Vector2(float.MaxValue, 300));
+
+            // returns an even number of points
+            Assert.Equal(0, intersections.Count());
+        }
+
     }
 }
