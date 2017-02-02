@@ -136,7 +136,7 @@ namespace SixLabors.Shapes.Tests
         public void FindIntersectionsCollection()
         {
             var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0)));
-            
+
             var buffer = poly.FindIntersections(new Vector2(5, -5), new Vector2(5, 15)).ToArray();
             Assert.Equal(2, buffer.Length);
             Assert.Contains(new Vector2(5, 10), buffer);
@@ -304,5 +304,25 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(4, intersections.Count());
         }
 
+        [Theory]
+        [InlineData(243)]
+        [InlineData(341)]
+        [InlineData(199)]
+        public void BezierPolygonReturning2Points(int y)
+        {
+            // missing bands in test from ImageSharp
+            Vector2[] simplePath = new[] {
+                        new Vector2(10, 400),
+                        new Vector2(30, 10),
+                        new Vector2(240, 30),
+                        new Vector2(300, 400)
+            };
+
+            var poly = new Polygon(new BezierLineSegment(simplePath));
+
+            var points = poly.FindIntersections(new Vector2(float.MinValue, y), new Vector2(float.MaxValue, y)).ToList();
+
+            Assert.Equal(2, points.Count());
+        }
     }
 }

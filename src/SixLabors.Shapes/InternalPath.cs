@@ -19,7 +19,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The epsilon for float comparison
         /// </summary>
-        private const float Epsilon = 0.00001f;
+        private const float Epsilon = 0.0001f;
 
         /// <summary>
         /// The maximum vector
