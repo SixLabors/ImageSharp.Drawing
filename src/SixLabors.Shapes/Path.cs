@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using System;
     using System.Collections.Immutable;
     using System.Numerics;
 
@@ -18,6 +19,11 @@ namespace SixLabors.Shapes
         /// The inner path.
         /// </summary>
         private readonly InternalPath innerPath;
+
+        /// <summary>
+        /// a place for the shape to be cached.
+        /// </summary>
+        private IShape cachedShape;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Path"/> class.
@@ -91,7 +97,7 @@ namespace SixLabors.Shapes
         /// </returns>
         public IShape AsShape()
         {
-            return new Polygon(this.LineSegments);
+            return this.cachedShape ?? (this.cachedShape = new Polygon(this.LineSegments));
         }
     }
 }

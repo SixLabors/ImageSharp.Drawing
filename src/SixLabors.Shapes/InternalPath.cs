@@ -121,6 +121,27 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
+        /// The sides a point can land on
+        /// </summary>
+        public enum Side
+        {
+            /// <summary>
+            /// Indicates the point falls on the left logical side of the line.
+            /// </summary>
+            Left,
+
+            /// <summary>
+            /// Indicates the point falls on the right logical side of the line.
+            /// </summary>
+            Right,
+
+            /// <summary>
+            /// /// Indicates the point falls exactly on the line.
+            /// </summary>
+            Same
+        }
+
+        /// <summary>
         /// Gets the bounds.
         /// </summary>
         /// <value>
@@ -210,8 +231,6 @@ namespace SixLabors.Shapes
             }
 
             int position = 0;
-            bool onCornerFirstPass = true;
-            Side lastEdgeSide = Side.Same;
             Vector2 lastPoint = MaxVector;
             int last = -1;
             for (int i = 0; i < polyCorners && count > 0; i++)
@@ -232,7 +251,7 @@ namespace SixLabors.Shapes
                         if (side != Side.Same && side == SideOfLine(this.points[next], start, end))
                         {
                             // same side we don't bohter adding the crossing
-                            position--; //move back one and the next hist will replace it
+                            position--; // move back one and the next hist will replace it
                             count++;
                         }
                     }
@@ -299,7 +318,7 @@ namespace SixLabors.Shapes
             var bottomLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Bottom + 1);
             var bottomRight = new Vector2(this.Bounds.Right + 1, this.Bounds.Bottom + 1);
 
-            //get the point that cause the most intersections
+            // get the point that cause the most intersections
             var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
             try
             {
@@ -332,13 +351,6 @@ namespace SixLabors.Shapes
             }
 
             return Side.Right;
-        }
-
-        public enum Side
-        {
-            Left,
-            Right,
-            Same
         }
 
         /// <summary>

@@ -2,7 +2,6 @@
   "version": "0.1.0-alpha1-*",
   "title": "SixLabors.Shapes",
   "description": "Polygon manipulation/merging and interrogation library. \n\nIts a fully manged netstandard library so should work everywhere.",
-  "summary": "Polygon manipulation/merging and interrogation library.",
   "authors": [
     "Scott Williams and contributors"
   ],
@@ -10,6 +9,7 @@
     "owners": [
       "Scott Williams and contributors"
     ],
+    "summary": "Polygon manipulation/merging and interrogation library.",
     "projectUrl": "https://github.com/SixLabors/Shapes",
     "licenseUrl": "http://www.apache.org/licenses/LICENSE-2.0",
     "iconUrl": "https://raw.githubusercontent.com/SixLabors/Shapes/master/icons/icon.png",

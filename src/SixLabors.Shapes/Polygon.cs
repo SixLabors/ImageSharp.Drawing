@@ -15,7 +15,7 @@ namespace SixLabors.Shapes
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
-    public sealed class Polygon : IShape
+    public class Polygon : IShape
     {
         private readonly InternalPath innerPath;
         private readonly PolygonPath path;
