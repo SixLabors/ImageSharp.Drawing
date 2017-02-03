@@ -13,11 +13,11 @@
 [![GitHub forks](https://img.shields.io/github/forks/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/network)
 
 ### Installation
-At present the code is pre-release but when ready it will be available on [Nuget](http://www.nuget.org). 
 
 **Pre-release downloads**
 
-We already have a [MyGet package repository](https://www.myget.org/gallery/SixLabors) - for bleeding-edge / development NuGet releases.
+At present the code is pre-release we have initial pre-releases availible on [nuget](https://www.nuget.org/packages/SixLabors.Shapes/)
+We also have a [MyGet package repository](https://www.myget.org/gallery/SixLabors) - for bleeding-edge / development NuGet releases.
 
 ### Manual build
 
