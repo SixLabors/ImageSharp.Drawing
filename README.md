@@ -37,16 +37,19 @@ git clone https://github.com/SixLabors/Shapes.git
 
 - Point in Polygon
 - Line Intersections
-- Complex Polygons (with holes)
-- Polygon clipping
+- Complex Polygons
+- Simple polygon clipping
+- Regular Polygons (triangles, squares, pentagons etc, any number of sides)
+- Ellipses (and therfore circles)
+- Shape Builder api - for creates shapes declaratively 
 - Polygons
- - With Liniear line segments
- - With Beziear curve linesegments
- - Mixes Linear & beziear segments
+   - With Linear line segments
+   - With Beziear curve line segments
+   - Mixture of both Linear & beziear segments
 - Paths
- - With Liniear line segments
- - With Beziear curve linesegments
- - Mixes Linear & beziear segments
+   - With Linear line segments
+   - With Beziear curve line segments
+   - Mixture of both Linear & beziear segments
 
 ### API 
 
