@@ -82,7 +82,7 @@ namespace SixLabors.Shapes
         /// <param name="segment">The segment.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(ILineSegment segment, bool isClosedPath)
-            : this(segment.Flatten(), isClosedPath)
+            : this(segment?.Flatten() ?? ImmutableArray<Vector2>.Empty, isClosedPath)
         {
         }
 
@@ -104,21 +104,7 @@ namespace SixLabors.Shapes
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
             this.totalDistance = new Lazy<float>(this.CalculateLength);
         }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="InternalPath" /> class.
-        /// </summary>
-        /// <param name="prototype">The prototype.</param>
-        /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(InternalPath prototype, bool isClosedPath)
-        {
-            this.points = prototype.points;
-            this.distance = prototype.distance;
-            this.calculated = prototype.calculated;
-            this.Bounds = prototype.Bounds;
-            this.closedPath = isClosedPath;
-            this.totalDistance = new Lazy<float>(this.CalculateLength);
-        }
+        
 
         /// <summary>
         /// The sides a point can land on
@@ -250,7 +236,7 @@ namespace SixLabors.Shapes
                         var side = SideOfLine(this.points[last], start, end);
                         if (side != Side.Same && side == SideOfLine(this.points[next], start, end))
                         {
-                            // same side we don't bohter adding the crossing
+                            // same side we don't bother adding the crossing
                             position--; // move back one and the next hist will replace it
                             count++;
                         }

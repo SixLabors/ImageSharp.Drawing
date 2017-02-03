@@ -1,21 +1,24 @@
 
-# SixLabors.Shapes
+#  <img src="icons/icon.png" width="52" height="52" /> SixLabors.Shapes
 
 **SixLabors.Shapes** is a new cross-platform 2D polygon manipulation AP.
 
+[![Build status](https://ci.appveyor.com/api/projects/status/nvsaxcjb80cgp898/branch/master?svg=true)](https://ci.appveyor.com/project/tocsoft/shaper2d/branch/master)
+[![codecov](https://codecov.io/gh/SixLabors/Shapes/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/Shapes)
+[![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/SixLabors/Shapes/master/LICENSE.txt)
 
 [![Join the chat at https://gitter.im/SixLabors/Shapes](https://badges.gitter.im/SixLabors/Shapes.svg)](https://gitter.im/SixLabors/Shapes?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/SixLabors/Shapes/master/APACHE-2.0-LICENSE.txt)
 [![GitHub issues](https://img.shields.io/github/issues/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/issues)
 [![GitHub stars](https://img.shields.io/github/stars/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/network)
 
 ### Installation
-At present the code is pre-release but when ready it will be available on [Nuget](http://www.nuget.org). 
 
 **Pre-release downloads**
 
-We already have a [MyGet package repository](https://www.myget.org/gallery/SixLabors) - for bleeding-edge / development NuGet releases.
+At present the code is pre-release we have initial pre-releases availible on [nuget](https://www.nuget.org/packages/SixLabors.Shapes/).
+
+We also have a [MyGet package repository](https://www.myget.org/gallery/SixLabors) - for bleeding-edge / development NuGet releases.
 
 ### Manual build
 
@@ -34,7 +37,8 @@ git clone https://github.com/SixLabors/Shapes.git
 
 - Point in Polygon
 - Line Intersections
-- Complex Polygons (with holes, this can be contained or overlap(we fix them for you))
+- Complex Polygons (with holes)
+- Polygon clipping
 - Polygons
  - With Liniear line segments
  - With Beziear curve linesegments
