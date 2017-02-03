@@ -261,9 +261,17 @@ namespace SixLabors.Shapes.Tests
             Rectangle shape = new Rectangle(0, 0, 200, 60);
 
             var newShape = shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
-            
+
             Assert.Equal(new Vector2(20, 2), newShape.Bounds.Location);
             Assert.Equal(new Size(60, 200), newShape.Bounds.Size);
+        }
+
+        [Fact]
+        public void Center()
+        {
+            Rectangle shape = new Rectangle(50, 50, 200, 60);
+            
+            Assert.Equal(new Vector2(150, 80), shape.Center);
         }
     }
 }
