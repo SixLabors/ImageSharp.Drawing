@@ -260,10 +260,10 @@ namespace SixLabors.Shapes.Tests
         {
             Rectangle shape = new Rectangle(0, 0, 200, 60);
 
-            var newShape = (Rectangle)shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
-
-            Assert.Equal(new Vector2(20, 2), newShape.Location);
-            Assert.Equal(new Size(60, 200), newShape.Size);
+            var newShape = shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
+            
+            Assert.Equal(new Vector2(20, 2), newShape.Bounds.Location);
+            Assert.Equal(new Size(60, 200), newShape.Bounds.Size);
         }
     }
 }
