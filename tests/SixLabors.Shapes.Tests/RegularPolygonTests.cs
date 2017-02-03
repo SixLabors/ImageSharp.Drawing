@@ -85,7 +85,6 @@ namespace SixLabors.Shapes.Tests
         public void AngleChangesOnePointToStartAtThatPosition()
         {
             const double TwoPI = 2 * Math.PI;
-            const double HalfPI = Math.PI /2;
             float radius = 10;
             double anAngle = new Random().NextDouble() * TwoPI;
 
@@ -95,9 +94,7 @@ namespace SixLabors.Shapes.Tests
 
             var allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
-
-            //var target = anAngle - HalfPI;// we drop half a pi to rotate it 90 degreas 
-
+            
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
         }
 

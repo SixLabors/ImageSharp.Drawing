@@ -170,7 +170,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        public Polygon Transform(Matrix3x2 matrix)
+        public IShape Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -184,17 +184,9 @@ namespace SixLabors.Shapes
                 segments[i++] = s.Transform(matrix);
             }
 
+            // TODO add logic to convert a polygon to a rectangle if all the points line up.
             return new Polygon(segments);
         }
-
-        /// <summary>
-        /// Transforms the shape using the specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new shape with the matrix applied to it.
-        /// </returns>
-        IShape IShape.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
         private class PolygonPath : IWrapperPath
         {
@@ -213,7 +205,7 @@ namespace SixLabors.Shapes
 
             public ImmutableArray<Vector2> Flatten() => this.polygon.innerPath.Points;
 
-            public IPath Transform(Matrix3x2 matrix) => this.polygon.Transform(matrix).path;
+            public IPath Transform(Matrix3x2 matrix) => this.polygon.Transform(matrix).Paths[0];
 
             public IShape AsShape() => this.polygon;
         }

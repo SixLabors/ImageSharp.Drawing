@@ -47,11 +47,20 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="points">The points.</param>
         public LinearLineSegment(Vector2[] points)
+            : this(ImmutableArray.Create(points))
         {
             Guard.NotNull(points, nameof(points));
-            Guard.MustBeGreaterThanOrEqualTo(points.Count(), 2, nameof(points));
+        }
 
-            this.points = ImmutableArray.Create(points);
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
+        /// </summary>
+        /// <param name="points">The points.</param>
+        public LinearLineSegment(ImmutableArray<Vector2> points)
+        {
+            Guard.MustBeGreaterThanOrEqualTo(points.Length, 2, nameof(points));
+
+            this.points = points;
 
             this.EndPoint = points[points.Length - 1];
         }

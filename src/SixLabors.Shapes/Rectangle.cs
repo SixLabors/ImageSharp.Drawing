@@ -165,6 +165,14 @@ namespace SixLabors.Shapes
         public Size Size { get; private set; }
 
         /// <summary>
+        /// Gets the center.
+        /// </summary>
+        /// <value>
+        /// The center.
+        /// </value>
+        public Vector2 Center => this.topLeft + (this.bottomRight / 2);
+
+        /// <summary>
         /// Determines if the specified point is contained within the rectangular region defined by
         /// this <see cref="Rectangle" />.
         /// </summary>
@@ -268,24 +276,16 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        public Rectangle Transform(Matrix3x2 matrix)
+        public IShape Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
                 return this;
             }
 
-            return new Rectangle(Vector2.Transform(this.topLeft, matrix), Vector2.Transform(this.bottomRight, matrix));
+            // rectangles may be rotated and skewed which means they will then nedd representing by a polygon
+            return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
         }
-
-        /// <summary>
-        /// Transforms the shape using the specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new shape with the matrix applied to it.
-        /// </returns>
-        IShape IShape.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
         private PointInfo Distance(Vector2 point, bool getDistanceAwayOnly, out bool isInside)
         {
@@ -405,7 +405,7 @@ namespace SixLabors.Shapes
 
             public ImmutableArray<Vector2> Flatten() => this.rect.points;
 
-            public IPath Transform(Matrix3x2 matrix) => this.rect.Transform(matrix).path;
+            public IPath Transform(Matrix3x2 matrix) => this.rect.Transform(matrix).Paths[0];
 
             public IShape AsShape() => this.rect;
         }

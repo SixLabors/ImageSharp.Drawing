@@ -25,5 +25,13 @@ namespace SixLabors.Shapes.Tests
         {
             var error = Assert.Throws<ArgumentOutOfRangeException>(() => new LinearLineSegment(new[] { new Vector2(0, 0) }));
         }
+
+        [Fact]
+        public void NullPointsArrayThrowsCountException()
+        {
+            Assert.ThrowsAny<ArgumentOutOfRangeException>(() => {
+                new LinearLineSegment((Vector2[])null);
+            });
+        }
     }
 }
