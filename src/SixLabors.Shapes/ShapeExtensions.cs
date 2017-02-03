@@ -26,5 +26,16 @@ namespace SixLabors.Shapes
         {
             return shape.Transform(Matrix3x2.CreateRotation(radians, shape.Bounds.Center));
         }
+
+        /// <summary>
+        /// Creates a shape translated by the supplied postion
+        /// </summary>
+        /// <param name="shape">The shape to translate.</param>
+        /// <param name="position">The translation position.</param>
+        /// <returns></returns>
+        public static IShape Translate(this IShape shape, Vector2 position)
+        {
+            return shape.Transform(Matrix3x2.CreateTranslation(position));
+        }
     }
 }
