@@ -30,6 +30,15 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Initializes a new instance of the <see cref="Size"/> struct.
         /// </summary>
+        /// <param name="heightAndWidth">The height and width of the size.</param>
+        public Size(float heightAndWidth)
+            : this(new Vector2(heightAndWidth))
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Size"/> struct.
+        /// </summary>
         /// <param name="vector">The vector.</param>
         public Size(Vector2 vector)
         {
