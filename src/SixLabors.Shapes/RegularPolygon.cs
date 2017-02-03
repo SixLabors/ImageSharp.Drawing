@@ -70,7 +70,7 @@ namespace SixLabors.Shapes
             Guard.MustBeGreaterThan(verticies, 2, nameof(verticies));
             Guard.MustBeGreaterThan(radius, 0, nameof(radius));
 
-            Vector2 distanceVector = new Vector2(radius, 0);
+            Vector2 distanceVector = new Vector2(0, radius);
 
             float anglePerSegemnts = (float)((2 * Math.PI) / verticies);
             float current = angle;

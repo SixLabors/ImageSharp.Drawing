@@ -80,7 +80,7 @@ namespace SixLabors.Shapes.Tests
                     new Size(100,100), // size
                     new Vector2(9,9), // test
                     false
-                }, //corner is inside
+                }, 
           };
 
         public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =

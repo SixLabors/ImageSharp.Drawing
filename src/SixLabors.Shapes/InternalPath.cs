@@ -254,6 +254,13 @@ namespace SixLabors.Shapes
                     lastPoint = point;
                 }
             }
+            // don't trim the last point
+            if(position > 1 && this.closedPath && buffer[offset].Equivelent(buffer[position + offset -1], Epsilon) )
+            {
+                // is the first point the same as the last point? and we are closed
+                // if so we have double counter and must "drop" the last one.
+                position--;
+            }
 
             return position;
         }
@@ -299,6 +306,15 @@ namespace SixLabors.Shapes
                 return false;
             }
 
+            // if it hit any points then class it as inside
+            foreach (var p in this.points)
+            {
+                if (p.Equivelent(point, Epsilon))
+                {
+                    return true;
+                }
+            }
+
             var topLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1);
             var topRight = new Vector2(this.Bounds.Right + 1, this.Bounds.Top - 1);
             var bottomLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Bottom + 1);
@@ -308,10 +324,11 @@ namespace SixLabors.Shapes
             var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
             try
             {
-                var c1 = this.FindIntersections(point, topLeft, buffer, this.points.Length, 0) % 2 == 1;
-                var c2 = this.FindIntersections(point, topRight, buffer, this.points.Length, 0) % 2 == 1;
-                var c3 = this.FindIntersections(point, bottomLeft, buffer, this.points.Length, 0) % 2 == 1;
-                var c4 = this.FindIntersections(point, bottomRight, buffer, this.points.Length, 0) % 2 == 1;
+                var i = 0;
+                var c1 = (i = this.FindIntersections(point, topLeft, buffer, this.points.Length, 0)) % 2 == 1;
+                var c2 = (i = this.FindIntersections(point, topRight, buffer, this.points.Length, 0)) % 2 == 1;
+                var c3 = (i = this.FindIntersections(point, bottomLeft, buffer, this.points.Length, 0)) % 2 == 1;
+                var c4 = (i = this.FindIntersections(point, bottomRight, buffer, this.points.Length, 0)) % 2 == 1;
                 return c1 || c2 || c3 || c4;
             }
             finally

@@ -85,17 +85,30 @@ namespace SixLabors.Shapes.Tests
         public void AngleChangesOnePointToStartAtThatPosition()
         {
             const double TwoPI = 2 * Math.PI;
+            const double HalfPI = Math.PI /2;
             float radius = 10;
             double anAngle = new Random().NextDouble() * TwoPI;
 
             var poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
             var path = poly.AsPath();
             var points = path.Flatten();
-            
-            var allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
-                .Select(x=> x<0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
 
-            Assert.Contains(allAngles, a=> Math.Abs(a- anAngle) > 0.000001);
+            var allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
+                .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
+
+            //var target = anAngle - HalfPI;// we drop half a pi to rotate it 90 degreas 
+
+            Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
+        }
+
+        [Fact]
+        public void TriangleMissingIntersectionsDownCenter()
+        {
+
+            var poly = new SixLabors.Shapes.RegularPolygon(50, 50, 3, 30);
+            var points = poly.FindIntersections(new Vector2(0, 50), new Vector2(100, 50)).ToArray();
+
+            Assert.Equal(2, points.Length);
         }
     }
 }
