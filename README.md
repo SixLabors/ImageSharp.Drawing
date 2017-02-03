@@ -16,7 +16,8 @@
 
 **Pre-release downloads**
 
-At present the code is pre-release we have initial pre-releases availible on [nuget](https://www.nuget.org/packages/SixLabors.Shapes/)
+At present the code is pre-release we have initial pre-releases availible on [nuget](https://www.nuget.org/packages/SixLabors.Shapes/).
+
 We also have a [MyGet package repository](https://www.myget.org/gallery/SixLabors) - for bleeding-edge / development NuGet releases.
 
 ### Manual build
