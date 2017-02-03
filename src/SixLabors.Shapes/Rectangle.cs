@@ -170,7 +170,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The center.
         /// </value>
-        public Vector2 Center => this.topLeft + (this.bottomRight / 2);
+        public Vector2 Center => (this.topLeft + this.bottomRight) / 2;
 
         /// <summary>
         /// Determines if the specified point is contained within the rectangular region defined by

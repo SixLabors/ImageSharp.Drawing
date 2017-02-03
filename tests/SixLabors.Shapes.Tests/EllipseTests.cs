@@ -49,5 +49,23 @@ namespace SixLabors.Shapes.Tests
                 Assert.NotNull(p);
             }
         }
-    }
+
+        [Fact]
+        public void ClippingCornerShouldReturn1Points()
+        {
+            var poly = new Ellipse(50, 50, 30, 50);
+            var points = poly.FindIntersections(new Vector2(0, 75), new Vector2(100, 75)).ToArray();
+
+            Assert.Equal(1, points.Length);
+        }
+
+        [Fact]
+        public void AcrossEllipsShouldReturn2()
+        {
+            var poly = new Ellipse(50, 50, 30, 50);
+            var points = poly.FindIntersections(new Vector2(0, 49), new Vector2(100, 49)).ToArray();
+
+            Assert.Equal(2, points.Length);
+        }
+    }       
 }

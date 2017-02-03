@@ -19,7 +19,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The epsilon for float comparison
         /// </summary>
-        private const float Epsilon = 0.0001f;
+        private const float Epsilon = 0.001f;
 
         /// <summary>
         /// The maximum vector
@@ -234,11 +234,11 @@ namespace SixLabors.Shapes
                     {
                         // hit the same point a second time do we need to remove the old one if just clipping
                         var side = SideOfLine(this.points[last], start, end);
-                        if (side != Side.Same && side == SideOfLine(this.points[next], start, end))
+                        if(side != Side.Same && side == SideOfLine(this.points[next], start, end))
                         {
-                            // same side we don't bother adding the crossing
-                            position--; // move back one and the next hist will replace it
-                            count++;
+                            buffer[position + offset] = point;
+                            position++;
+                            count--;
                         }
                     }
                     else
@@ -254,6 +254,7 @@ namespace SixLabors.Shapes
                     lastPoint = point;
                 }
             }
+
             // don't trim the last point
             if(position > 1 && this.closedPath && buffer[offset].Equivelent(buffer[position + offset -1], Epsilon) )
             {

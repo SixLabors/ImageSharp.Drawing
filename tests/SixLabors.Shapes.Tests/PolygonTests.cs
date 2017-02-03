@@ -218,7 +218,7 @@ namespace SixLabors.Shapes.Tests
             var intersections = poly.FindIntersections(new Vector2(float.MinValue, 137), new Vector2(float.MaxValue, 137));
 
             // returns an even number of points
-            Assert.Equal(2, intersections.Count());
+            Assert.Equal(4, intersections.Count());
         }
 
 
@@ -245,7 +245,7 @@ namespace SixLabors.Shapes.Tests
             var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 20), new Vector2(float.MaxValue, 20));
 
             // returns an even number of points
-            Assert.Equal(2, intersections.Count());
+            Assert.Equal(4, intersections.Count());
         }
 
         [Fact]
@@ -280,7 +280,7 @@ namespace SixLabors.Shapes.Tests
             var intersections = poly.FindIntersections(new Vector2(float.MinValue, 300), new Vector2(float.MaxValue, 300));
 
             // returns an even number of points
-            Assert.Equal(0, intersections.Count());
+            Assert.Equal(1, intersections.Count());
         }
 
         [Fact]
