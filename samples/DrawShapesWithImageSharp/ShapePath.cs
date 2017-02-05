@@ -1,12 +1,11 @@
-﻿using System.Buffers;
+﻿/*
+ * NOTE : this file is note required to draw shapes with imagesharp in product
+ * just reference IamgeSharp.Drawing.Paths .
+ * */
+
+ using System.Buffers;
 using System.Collections.Immutable;
 using System.Numerics;
-
-using ImageSharp.Drawing.Processors;
-
-using SixLabors.Shapes;
-
-using Rectangle = ImageSharp.Rectangle;
 using ImageSharp.Drawing;
 
 namespace SixLabors.Shapes.DrawShapesWithImageSharp

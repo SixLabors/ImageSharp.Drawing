@@ -20,7 +20,6 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             paths.SaveImage("Clipping", "RectangleWithTopClipped.png");
         }
 
-
         private static void SaveImage(this IShape shape, params string[] path)
         {
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));
@@ -31,7 +30,10 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             using (var img = new Image((int)Math.Ceiling(width), (int)Math.Ceiling(height)))
             {
                 img.Fill(Color.DarkBlue);
+
+                // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
                 img.Fill(Color.HotPink, new ShapeRegion(shape));
+                img.Draw(Color.LawnGreen, 1, new ShapePath(shape));
 
                 //ensure directory exists
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath));
