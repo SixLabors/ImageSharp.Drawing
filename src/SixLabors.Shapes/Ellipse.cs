@@ -33,7 +33,7 @@ namespace SixLabors.Shapes
         /// <param name="location">The location the center of the circle will be placed.</param>
         /// <param name="radius">The radius final circle.</param>
         public Ellipse(Vector2 location, float radius)
-            : this(location, new Size(radius*2))
+            : this(location, new Size(radius * 2))
         {
         }
 
@@ -56,11 +56,11 @@ namespace SixLabors.Shapes
         /// <param name="y">The Y coordinate of the center of the circle.</param>
         /// <param name="radius">The radius final circle.</param>
         public Ellipse(float x, float y, float radius)
-            : this(new Vector2(x, y), new Size(radius*2))
+            : this(new Vector2(x, y), new Size(radius * 2))
         {
         }
 
-        private static new BezierLineSegment CreateSegment(Vector2 location, Size size)
+        private static BezierLineSegment CreateSegment(Vector2 location, Size size)
         {
             Guard.MustBeGreaterThan(size.Width, 0, "width");
             Guard.MustBeGreaterThan(size.Height, 0, "height");
@@ -71,7 +71,8 @@ namespace SixLabors.Shapes
 
             var halfHeightVector = new Vector2(0, halfHeight);
             var twoThirdsWidthVector = new Vector2(twoThirdsWidth, 0);
-            var points = new Vector2[7] {
+            var points = new Vector2[7]
+            {
                 location - halfHeightVector,
                 location + twoThirdsWidthVector - halfHeightVector,
                 location + twoThirdsWidthVector + halfHeightVector,

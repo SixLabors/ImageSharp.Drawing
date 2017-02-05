@@ -22,7 +22,7 @@ namespace SixLabors.Shapes.PolygonClipper
         Subject,
 
         /// <summary>
-        /// Represents a shape to act and a clipped path.
+        /// Represents a shape to act as a clipped path.
         /// </summary>
         Clip
     }

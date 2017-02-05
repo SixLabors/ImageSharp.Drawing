@@ -104,7 +104,6 @@ namespace SixLabors.Shapes
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
             this.totalDistance = new Lazy<float>(this.CalculateLength);
         }
-        
 
         /// <summary>
         /// The sides a point can land on
@@ -226,7 +225,7 @@ namespace SixLabors.Shapes
                     lastPoint = point;
                 }
             }
-			
+
             for (int i = 0; i < polyCorners && count > 0; i++)
             {
                 int next = i + 1;
@@ -240,18 +239,21 @@ namespace SixLabors.Shapes
                 {
                     if (lastPoint.Equivelent(point, Epsilon))
                     {
-                        lastPoint = MaxVector;;
+                        lastPoint = MaxVector;
 
                         int last = (i - 1 + polyCorners) % polyCorners;
+
                         // hit the same point a second time do we need to remove the old one if just clipping
                         if (this.points[next].Equivelent(point, Epsilon))
                         {
                             next = i;
                         }
+
                         if (this.points[last].Equivelent(point, Epsilon))
                         {
                             last = i;
                         }
+
                         var side = SideOfLine(this.points[last], start, end);
                         var side2 = SideOfLine(this.points[next], start, end);
 
@@ -325,12 +327,11 @@ namespace SixLabors.Shapes
                     return true;
                 }
 
-
+                // check if the point is on an intersection is it is then inside
                 for (var i = 0; i < intersection; i++)
-            // get the point that cause the most intersections
                 {
                     if (buffer[i].Equivelent(point, Epsilon))
-            {
+                    {
                         return true;
                     }
                 }
@@ -339,6 +340,7 @@ namespace SixLabors.Shapes
             {
                 ArrayPool<Vector2>.Shared.Return(buffer);
             }
+
             return false;
         }
 
@@ -357,6 +359,7 @@ namespace SixLabors.Shapes
                     lineDiff.X = float.MinValue;
                 }
             }
+
             if (float.IsInfinity(lineDiff.Y))
             {
                 if (lineDiff.Y > 0)
@@ -368,6 +371,7 @@ namespace SixLabors.Shapes
                     lineDiff.Y = float.MinValue;
                 }
             }
+
             var crossProduct = (lineDiff.X * testDiff.Y) - (lineDiff.Y * testDiff.X);
 
             if (crossProduct > -Epsilon && crossProduct < Epsilon)

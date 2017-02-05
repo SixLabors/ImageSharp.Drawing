@@ -18,7 +18,7 @@ namespace SixLabors.Shapes
     public class Polygon : IShape
     {
         private readonly InternalPath innerPath;
-        private readonly PolygonPath path;
+        private readonly IPath path;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Polygon"/> class.
@@ -51,6 +51,18 @@ namespace SixLabors.Shapes
             this.innerPath = new InternalPath(segment, true);
             this.path = new PolygonPath(this);
             this.Paths = ImmutableArray.Create<IPath>(this.path);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Polygon"/> class.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        internal Polygon(Path path)
+        {
+            this.LineSegments = path.LineSegments;
+            this.innerPath = new InternalPath(path.LineSegments, true);
+            this.path = path;
+            this.Paths = ImmutableArray.Create<IPath>(path);
         }
 
         /// <summary>

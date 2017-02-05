@@ -12,6 +12,8 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
     using SixLabors.Shapes.PolygonClipper;
 
     using Xunit;
+    using ClipperLib;
+    using Clipper = SixLabors.Shapes.PolygonClipper.Clipper;
 
     public class ClipperTests
     {
@@ -88,34 +90,22 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         }
 
         [Fact]
-        public void TrimsDipliactesOfStartFromEnd()
-        {
-            var clipper = new Clipper();
-            var mockPath = new Mock<IPath>();
-            mockPath.Setup(x => x.Flatten())
-                .Returns(ImmutableArray.Create(new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0)));
-
-            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, ClippingType.Subject); });
-        }
-
-        [Fact]
-        public void SelfClosingPathTrimsDuplicatesOfEndFromEnd()
-        {
-            var clipper = new Clipper();
-            var mockPath = new Mock<IPath>();
-            mockPath.Setup(x => x.Flatten())
-                .Returns(ImmutableArray.Create(new Vector2(0, 0), new Vector2(1, 1), new Vector2(1, 1)));
-
-            Assert.Throws<ClipperException>(() => { clipper.AddPath(mockPath.Object, ClippingType.Subject); });
-        }
-
-        [Fact]
         public void TouchingButNotOverlapping()
         {
             var shapes = this.Clip(this.TopMiddle, this.TopLeft);
             Assert.Equal(1, shapes.Length);
-            Assert.Contains(this.TopMiddle, shapes);
+            Assert.DoesNotContain(this.TopMiddle, shapes);
             Assert.DoesNotContain(this.TopLeft, shapes);
+        }
+
+        [Fact]
+        public void ClippingRectanglesCreateCorrectNumberOfPoints()
+        {
+            var paths = new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20)).Paths;
+            Assert.Equal(1, paths.Length);
+            var points = paths[0].Flatten();
+
+            Assert.Equal(8, points.Length);
         }
     }
 }

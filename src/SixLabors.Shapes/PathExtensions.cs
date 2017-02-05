@@ -21,7 +21,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="path">The path to rotate.</param>
         /// <param name="radians">The radians to rotate the path.</param>
-        /// <returns></returns>
+        /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
         public static IPath Rotate(this IPath path, float radians)
         {
             return path.Transform(Matrix3x2.CreateRotation(radians, path.Bounds.Center));
@@ -32,7 +32,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="position">The translation position.</param>
-        /// <returns></returns>
+        /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
         public static IPath Translate(this IPath path, Vector2 position)
         {
             return path.Transform(Matrix3x2.CreateTranslation(position));

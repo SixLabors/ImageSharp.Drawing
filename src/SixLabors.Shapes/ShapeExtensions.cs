@@ -21,7 +21,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="shape">The shape to rotate.</param>
         /// <param name="radians">The radians to rotate the shape.</param>
-        /// <returns></returns>
+        /// <returns>A <see cref="IShape"/> with a rotate transform applied.</returns>
         public static IShape Rotate(this IShape shape, float radians)
         {
             return shape.Transform(Matrix3x2.CreateRotation(radians, shape.Bounds.Center));
@@ -32,7 +32,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="shape">The shape to translate.</param>
         /// <param name="position">The translation position.</param>
-        /// <returns></returns>
+        /// <returns>A <see cref="IShape"/> with a translate transform applied.</returns>
         public static IShape Translate(this IShape shape, Vector2 position)
         {
             return shape.Transform(Matrix3x2.CreateTranslation(position));

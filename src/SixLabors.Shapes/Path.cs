@@ -97,7 +97,7 @@ namespace SixLabors.Shapes
         /// </returns>
         public IShape AsShape()
         {
-            return this.cachedShape ?? (this.cachedShape = new Polygon(this.LineSegments));
+            return this.cachedShape ?? (this.cachedShape = new Polygon(this));
         }
     }
 }
