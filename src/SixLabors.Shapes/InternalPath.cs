@@ -257,6 +257,12 @@ namespace SixLabors.Shapes
                         var side = SideOfLine(this.points[last], start, end);
                         var side2 = SideOfLine(this.points[next], start, end);
 
+                        if (side == Side.Same && side2 == Side.Same)
+                        {
+                            position--;
+                            count++;
+                            continue;
+                        }
                         if (side != side2)
                         {
                             // differnet side we skip adding as we are passing through it

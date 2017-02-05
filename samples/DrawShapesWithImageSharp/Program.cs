@@ -9,6 +9,18 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         public static void Main(string[] args)
         {
             GenerateClippedRectangle();
+
+            GenerateStar(3);
+            GenerateStar(4);
+            GenerateStar(5);
+            GenerateStar(6);
+            GenerateStar(30);
+        }
+
+        private static void GenerateStar(int points, float inner = 10, float outer = 20)
+        {
+            var star = new Star(40, 40, points, inner, outer);
+            star.SaveImage("Clipping", $"Star_{points}.png");
         }
 
         private static void GenerateClippedRectangle()
