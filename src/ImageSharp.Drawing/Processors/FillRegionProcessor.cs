@@ -1,4 +1,4 @@
-﻿// <copyright file="FillShapeProcessor.cs" company="James Jackson-South">
+﻿// <copyright file="FillRegionProcessor.cs" company="James Jackson-South">
 // Copyright (c) James Jackson-South and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
@@ -11,45 +11,58 @@ namespace ImageSharp.Drawing.Processors
     using System.Threading.Tasks;
     using Drawing;
     using ImageSharp.Processing;
-    using Shapes;
-    using Rectangle = ImageSharp.Rectangle;
 
     /// <summary>
     /// Usinf a brsuh and a shape fills shape with contents of brush the
     /// </summary>
     /// <typeparam name="TColor">The type of the color.</typeparam>
     /// <seealso cref="ImageSharp.Processing.ImageProcessor{TColor}" />
-    public class FillShapeProcessor<TColor> : ImageProcessor<TColor>
+    public class FillRegionProcessor<TColor> : ImageProcessor<TColor>
         where TColor : struct, IPackedPixel, IEquatable<TColor>
     {
         private const float AntialiasFactor = 1f;
         private const int DrawPadding = 1;
-        private readonly IBrush<TColor> fillColor;
-        private readonly IShape poly;
-        private readonly GraphicsOptions options;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="FillShapeProcessor{TColor}"/> class.
+        /// Initializes a new instance of the <see cref="FillRegionProcessor{TColor}" /> class.
         /// </summary>
-        /// <param name="brush">The brush.</param>
-        /// <param name="shape">The shape.</param>
-        /// <param name="options">The options.</param>
-        public FillShapeProcessor(IBrush<TColor> brush, IShape shape, GraphicsOptions options)
+        /// <param name="brush">The details how to fill the region of interest.</param>
+        /// <param name="region">The region of interest to be filled.</param>
+        /// <param name="options">The configuration options.</param>
+        public FillRegionProcessor(IBrush<TColor> brush, Region region, GraphicsOptions options)
         {
-            this.poly = shape;
-            this.fillColor = brush;
-            this.options = options;
+            this.Region = region;
+            this.Brush = brush;
+            this.Options = options;
         }
+
+        /// <summary>
+        /// Gets the brush.
+        /// </summary>
+        public IBrush<TColor> Brush { get; }
+
+        /// <summary>
+        /// Gets the region that this processor applies to.
+        /// </summary>
+        public Region Region { get; }
+
+        /// <summary>
+        /// Gets the options.
+        /// </summary>
+        /// <value>
+        /// The options.
+        /// </value>
+        public GraphicsOptions Options { get; }
 
         /// <inheritdoc/>
         protected override void OnApply(ImageBase<TColor> source, Rectangle sourceRectangle)
         {
-            Rectangle rect = RectangleF.Ceiling(this.poly.Bounds); // rounds the points out away from the center
+            Rectangle rect = this.Region.Bounds;
 
-            int polyStartY = rect.Y - DrawPadding;
-            int polyEndY = rect.Bottom + DrawPadding;
-            int startX = rect.X - DrawPadding;
-            int endX = rect.Right + DrawPadding;
+            int polyStartY = sourceRectangle.Y - DrawPadding;
+            int polyEndY = sourceRectangle.Bottom + DrawPadding;
+            int startX = sourceRectangle.X - DrawPadding;
+            int endX = sourceRectangle.Right + DrawPadding;
 
             int minX = Math.Max(sourceRectangle.Left, startX);
             int maxX = Math.Min(sourceRectangle.Right - 1, endX);
@@ -62,53 +75,60 @@ namespace ImageSharp.Drawing.Processors
             minY = Math.Max(0, minY);
             maxY = Math.Min(source.Height, maxY);
 
-            ArrayPool<Vector2> arrayPool = ArrayPool<Vector2>.Shared;
+            ArrayPool<float> arrayPool = ArrayPool<float>.Shared;
 
-            int maxIntersections = this.poly.MaxIntersections;
+            int maxIntersections = this.Region.MaxIntersections;
 
             using (PixelAccessor<TColor> sourcePixels = source.Lock())
-            using (BrushApplicator<TColor> applicator = this.fillColor.CreateApplicator(sourcePixels, rect))
+            using (BrushApplicator<TColor> applicator = this.Brush.CreateApplicator(sourcePixels, rect))
             {
                 Parallel.For(
                 minY,
                 maxY,
                 this.ParallelOptions,
-                y =>
+                (int y) =>
                 {
-                    Vector2[] buffer = arrayPool.Rent(maxIntersections);
+                    float[] buffer = arrayPool.Rent(maxIntersections);
 
                     try
                     {
-                        Vector2 left = new Vector2(startX, y);
-                        Vector2 right = new Vector2(endX, y);
+                        float right = endX;
 
                         // foreach line we get all the points where this line crosses the polygon
-                        int pointsFound = this.poly.FindIntersections(left, right, buffer, maxIntersections, 0);
+                        int pointsFound = this.Region.ScanY(y, buffer, maxIntersections, 0);
                         if (pointsFound == 0)
                         {
                             // nothign on this line skip
                             return;
                         }
 
-                        QuickSortX(buffer, pointsFound);
+                        if (pointsFound == 1 && maxIntersections > 1)
+                        {
+                            // we must have clipped a corner lets just duplicate it into point 2 and continue :)
+                            buffer[1] = buffer[0];
+                            pointsFound++;
+                        }
+
+                        if (pointsFound % 2 == 1)
+                        {
+                            // we seem to have just clipped a corner lets just skip it
+                            return;
+                        }
+
+                        QuickSort(buffer, pointsFound);
 
                         int currentIntersection = 0;
-                        float nextPoint = buffer[0].X;
+                        float nextPoint = buffer[0];
                         float lastPoint = float.MinValue;
                         bool isInside = false;
 
-                        // every odd point is the start of a line
-                        Vector2 currentPoint = default(Vector2);
-
                         for (int x = minX; x < maxX; x++)
                         {
-                            currentPoint.X = x;
-                            currentPoint.Y = y;
                             if (!isInside)
                             {
                                 if (x < (nextPoint - DrawPadding) && x > (lastPoint + DrawPadding))
                                 {
-                                    if (nextPoint == right.X)
+                                    if (nextPoint == right)
                                     {
                                         // we are in the ends run skip it
                                         x = maxX;
@@ -129,11 +149,11 @@ namespace ImageSharp.Drawing.Processors
                                 lastPoint = nextPoint;
                                 if (currentIntersection == pointsFound)
                                 {
-                                    nextPoint = right.X;
+                                    nextPoint = right;
                                 }
                                 else
                                 {
-                                    nextPoint = buffer[currentIntersection].X;
+                                    nextPoint = buffer[currentIntersection];
 
                                     // double point from a corner flip the bit back and move on again
                                     if (nextPoint == lastPoint)
@@ -143,11 +163,11 @@ namespace ImageSharp.Drawing.Processors
                                         currentIntersection++;
                                         if (currentIntersection == pointsFound)
                                         {
-                                            nextPoint = right.X;
+                                            nextPoint = right;
                                         }
                                         else
                                         {
-                                            nextPoint = buffer[currentIntersection].X;
+                                            nextPoint = buffer[currentIntersection];
                                         }
                                     }
                                 }
@@ -158,7 +178,7 @@ namespace ImageSharp.Drawing.Processors
                             float opacity = 1;
                             if (!isInside && !onCorner)
                             {
-                                if (this.options.Antialias)
+                                if (this.Options.Antialias)
                                 {
                                     float distance = float.MaxValue;
                                     if (x == lastPoint || x == nextPoint)
@@ -192,7 +212,7 @@ namespace ImageSharp.Drawing.Processors
                             if (opacity > Constants.Epsilon)
                             {
                                 Vector4 backgroundVector = sourcePixels[x, y].ToVector4();
-                                Vector4 sourceVector = applicator.GetColor(currentPoint).ToVector4();
+                                Vector4 sourceVector = applicator[x, y].ToVector4();
 
                                 Vector4 finalColor = Vector4BlendTransforms.PremultipliedLerp(backgroundVector, sourceVector, opacity);
                                 finalColor.W = backgroundVector.W;
@@ -209,49 +229,57 @@ namespace ImageSharp.Drawing.Processors
                     }
                 });
 
-                if (this.options.Antialias)
+                if (this.Options.Antialias)
                 {
                     // we only need to do the X can for antialiasing purposes
                     Parallel.For(
                     minX,
                     maxX,
                     this.ParallelOptions,
-                    x =>
+                    (int x) =>
                     {
-                        Vector2[] buffer = arrayPool.Rent(maxIntersections);
+                        float[] buffer = arrayPool.Rent(maxIntersections);
 
                         try
                         {
-                            Vector2 left = new Vector2(x, polyStartY);
-                            Vector2 right = new Vector2(x, polyEndY);
+                            float left = polyStartY;
+                            float right = polyEndY;
 
                             // foreach line we get all the points where this line crosses the polygon
-                            int pointsFound = this.poly.FindIntersections(left, right, buffer, maxIntersections, 0);
+                            int pointsFound = this.Region.ScanX(x, buffer, maxIntersections, 0);
                             if (pointsFound == 0)
                             {
                                 // nothign on this line skip
                                 return;
                             }
 
-                            QuickSortY(buffer, pointsFound);
+                            if (pointsFound == 1 && maxIntersections > 1)
+                            {
+                                // we must have clipped a corner lets just duplicate it into point 2 and continue :)
+                                buffer[1] = buffer[0];
+                                pointsFound++;
+                            }
+
+                            if (pointsFound % 2 == 1)
+                            {
+                                // we seem to have just clipped a corner lets just skip it
+                                return;
+                            }
+
+                            QuickSort(buffer, pointsFound);
 
                             int currentIntersection = 0;
-                            float nextPoint = buffer[0].Y;
-                            float lastPoint = left.Y;
+                            float nextPoint = buffer[0];
+                            float lastPoint = left;
                             bool isInside = false;
-
-                            // every odd point is the start of a line
-                            Vector2 currentPoint = default(Vector2);
 
                             for (int y = minY; y < maxY; y++)
                             {
-                                currentPoint.X = x;
-                                currentPoint.Y = y;
                                 if (!isInside)
                                 {
                                     if (y < (nextPoint - DrawPadding) && y > (lastPoint + DrawPadding))
                                     {
-                                        if (nextPoint == right.Y)
+                                        if (nextPoint == right)
                                         {
                                             // we are in the ends run skip it
                                             y = maxY;
@@ -266,7 +294,7 @@ namespace ImageSharp.Drawing.Processors
                                 {
                                     if (y < nextPoint - DrawPadding)
                                     {
-                                        if (nextPoint == right.Y)
+                                        if (nextPoint == right)
                                         {
                                             // we are in the ends run skip it
                                             y = maxY;
@@ -286,11 +314,11 @@ namespace ImageSharp.Drawing.Processors
                                     lastPoint = nextPoint;
                                     if (currentIntersection == pointsFound)
                                     {
-                                        nextPoint = right.Y;
+                                        nextPoint = right;
                                     }
                                     else
                                     {
-                                        nextPoint = buffer[currentIntersection].Y;
+                                        nextPoint = buffer[currentIntersection];
 
                                         // double point from a corner flip the bit back and move on again
                                         if (nextPoint == lastPoint)
@@ -300,11 +328,11 @@ namespace ImageSharp.Drawing.Processors
                                             currentIntersection++;
                                             if (currentIntersection == pointsFound)
                                             {
-                                                nextPoint = right.Y;
+                                                nextPoint = right;
                                             }
                                             else
                                             {
-                                                nextPoint = buffer[currentIntersection].Y;
+                                                nextPoint = buffer[currentIntersection];
                                             }
                                         }
                                     }
@@ -315,7 +343,7 @@ namespace ImageSharp.Drawing.Processors
                                 float opacity = 1;
                                 if (!isInside && !onCorner)
                                 {
-                                    if (this.options.Antialias)
+                                    if (this.Options.Antialias)
                                     {
                                         float distance = float.MaxValue;
                                         if (y == lastPoint || y == nextPoint)
@@ -350,8 +378,7 @@ namespace ImageSharp.Drawing.Processors
                                 if (opacity > Constants.Epsilon && opacity < 1)
                                 {
                                     Vector4 backgroundVector = sourcePixels[x, y].ToVector4();
-                                    Vector4 sourceVector = applicator.GetColor(currentPoint).ToVector4();
-
+                                    Vector4 sourceVector = applicator[x, y].ToVector4();
                                     Vector4 finalColor = Vector4BlendTransforms.PremultipliedLerp(backgroundVector, sourceVector, opacity);
                                     finalColor.W = backgroundVector.W;
 
@@ -370,48 +397,32 @@ namespace ImageSharp.Drawing.Processors
             }
         }
 
-        private static void Swap(Vector2[] data, int left, int right)
+        private static void Swap(float[] data, int left, int right)
         {
-            Vector2 tmp = data[left];
+            float tmp = data[left];
             data[left] = data[right];
             data[right] = tmp;
         }
 
-        private static void QuickSortY(Vector2[] data, int size)
+        private static void QuickSort(float[] data, int size)
         {
             int hi = Math.Min(data.Length - 1, size - 1);
-            QuickSortY(data, 0, hi);
+            QuickSort(data, 0, hi);
         }
 
-        private static void QuickSortY(Vector2[] data, int lo, int hi)
+        private static void QuickSort(float[] data, int lo, int hi)
         {
             if (lo < hi)
             {
-                int p = PartitionY(data, lo, hi);
-                QuickSortY(data, lo, p);
-                QuickSortY(data, p + 1, hi);
+                int p = Partition(data, lo, hi);
+                QuickSort(data, lo, p);
+                QuickSort(data, p + 1, hi);
             }
         }
 
-        private static void QuickSortX(Vector2[] data, int size)
+        private static int Partition(float[] data, int lo, int hi)
         {
-            int hi = Math.Min(data.Length - 1, size - 1);
-            QuickSortX(data, 0, hi);
-        }
-
-        private static void QuickSortX(Vector2[] data, int lo, int hi)
-        {
-            if (lo < hi)
-            {
-                int p = PartitionX(data, lo, hi);
-                QuickSortX(data, lo, p);
-                QuickSortX(data, p + 1, hi);
-            }
-        }
-
-        private static int PartitionX(Vector2[] data, int lo, int hi)
-        {
-            float pivot = data[lo].X;
+            float pivot = data[lo];
             int i = lo - 1;
             int j = hi + 1;
             while (true)
@@ -420,41 +431,13 @@ namespace ImageSharp.Drawing.Processors
                 {
                     i = i + 1;
                 }
-                while (data[i].X < pivot && i < hi);
+                while (data[i] < pivot && i < hi);
 
                 do
                 {
                     j = j - 1;
                 }
-                while (data[j].X > pivot && j > lo);
-
-                if (i >= j)
-                {
-                    return j;
-                }
-
-                Swap(data, i, j);
-            }
-        }
-
-        private static int PartitionY(Vector2[] data, int lo, int hi)
-        {
-            float pivot = data[lo].Y;
-            int i = lo - 1;
-            int j = hi + 1;
-            while (true)
-            {
-                do
-                {
-                    i = i + 1;
-                }
-                while (data[i].Y < pivot && i < hi);
-
-                do
-                {
-                    j = j - 1;
-                }
-                while (data[j].Y > pivot && j > lo);
+                while (data[j] > pivot && j > lo);
 
                 if (i >= j)
                 {
