@@ -109,12 +109,12 @@ namespace SixLabors.Shapes.Tests
         }
 
         [Fact]
-        public void ClippingCornerShouldReturn1Points()
+        public void ClippingCornerShouldReturn2Points()
         {
             var poly = new RegularPolygon(50, 50, 7, 30, -(float)Math.PI);
             var points = poly.FindIntersections(new Vector2(0, 20), new Vector2(100, 20)).ToArray();
 
-            Assert.Equal(1, points.Length);
+            Assert.Equal(2, points.Length);
         }
     }
 }

@@ -218,13 +218,21 @@ namespace SixLabors.Shapes
 
             int position = 0;
             Vector2 lastPoint = MaxVector;
-            int last = -1;
+            if (this.closedPath)
+            {
+                Vector2 point = FindIntersection(this.points[polyCorners - 1], this.points[0], start, end);
+                if (point != MaxVector)
+                {
+                    lastPoint = point;
+                }
+            }
+			
             for (int i = 0; i < polyCorners && count > 0; i++)
             {
                 int next = i + 1;
                 if (this.closedPath && next == polyCorners)
                 {
-                    next = 0;
+                    next -= polyCorners;
                 }
 
                 Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
@@ -232,35 +240,35 @@ namespace SixLabors.Shapes
                 {
                     if (lastPoint.Equivelent(point, Epsilon))
                     {
+                        lastPoint = MaxVector;;
+
+                        int last = (i - 1 + polyCorners) % polyCorners;
                         // hit the same point a second time do we need to remove the old one if just clipping
-                        var side = SideOfLine(this.points[last], start, end);
-                        if(side != Side.Same && side == SideOfLine(this.points[next], start, end))
+                        if (this.points[next].Equivelent(point, Epsilon))
                         {
-                            buffer[position + offset] = point;
-                            position++;
-                            count--;
+                            next = i;
+                        }
+                        if (this.points[last].Equivelent(point, Epsilon))
+                        {
+                            last = i;
+                        }
+                        var side = SideOfLine(this.points[last], start, end);
+                        var side2 = SideOfLine(this.points[next], start, end);
+
+                        if (side != side2)
+                        {
+                            // differnet side we skip adding as we are passing through it
+                            continue;
                         }
                     }
-                    else
-                    {
-                        // we are not double crossing so just add it once
-                        buffer[position + offset] = point;
-                        position++;
-                        count--;
-                    }
 
-                    // record the last point sin the opposite direction
-                    last = i;
+                    // we are not double crossing so just add it once
+                    buffer[position + offset] = point;
+                    position++;
+                    count--;
+
                     lastPoint = point;
                 }
-            }
-
-            // don't trim the last point
-            if(position > 1 && this.closedPath && buffer[offset].Equivelent(buffer[position + offset -1], Epsilon) )
-            {
-                // is the first point the same as the last point? and we are closed
-                // if so we have double counter and must "drop" the last one.
-                position--;
             }
 
             return position;
@@ -308,43 +316,61 @@ namespace SixLabors.Shapes
             }
 
             // if it hit any points then class it as inside
-            foreach (var p in this.points)
-            {
-                if (p.Equivelent(point, Epsilon))
-                {
-                    return true;
-                }
-            }
-
-            var topLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1);
-            var topRight = new Vector2(this.Bounds.Right + 1, this.Bounds.Top - 1);
-            var bottomLeft = new Vector2(this.Bounds.Left - 1, this.Bounds.Bottom + 1);
-            var bottomRight = new Vector2(this.Bounds.Right + 1, this.Bounds.Bottom + 1);
-
-            // get the point that cause the most intersections
             var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
             try
             {
-                var i = 0;
-                var c1 = (i = this.FindIntersections(point, topLeft, buffer, this.points.Length, 0)) % 2 == 1;
-                var c2 = (i = this.FindIntersections(point, topRight, buffer, this.points.Length, 0)) % 2 == 1;
-                var c3 = (i = this.FindIntersections(point, bottomLeft, buffer, this.points.Length, 0)) % 2 == 1;
-                var c4 = (i = this.FindIntersections(point, bottomRight, buffer, this.points.Length, 0)) % 2 == 1;
-                return c1 || c2 || c3 || c4;
+                var intersection = this.FindIntersections(point, MaxVector, buffer, this.points.Length, 0);
+                if (intersection % 2 == 1)
+                {
+                    return true;
+                }
+
+
+                for (var i = 0; i < intersection; i++)
+            // get the point that cause the most intersections
+                {
+                    if (buffer[i].Equivelent(point, Epsilon))
+            {
+                        return true;
+                    }
+                }
             }
             finally
             {
                 ArrayPool<Vector2>.Shared.Return(buffer);
             }
+            return false;
         }
 
         private static Side SideOfLine(Vector2 test, Vector2 lineStart, Vector2 lineEnd)
         {
             var testDiff = test - lineStart;
             var lineDiff = lineEnd - lineStart;
+            if (float.IsInfinity(lineDiff.X))
+            {
+                if (lineDiff.X > 0)
+                {
+                    lineDiff.X = float.MaxValue;
+                }
+                else
+                {
+                    lineDiff.X = float.MinValue;
+                }
+            }
+            if (float.IsInfinity(lineDiff.Y))
+            {
+                if (lineDiff.Y > 0)
+                {
+                    lineDiff.Y = float.MaxValue;
+                }
+                else
+                {
+                    lineDiff.Y = float.MinValue;
+                }
+            }
             var crossProduct = (lineDiff.X * testDiff.Y) - (lineDiff.Y * testDiff.X);
 
-            if (crossProduct == 0)
+            if (crossProduct > -Epsilon && crossProduct < Epsilon)
             {
                 return Side.Same;
             }

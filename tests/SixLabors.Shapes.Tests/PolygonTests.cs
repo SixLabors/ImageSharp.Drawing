@@ -280,7 +280,7 @@ namespace SixLabors.Shapes.Tests
             var intersections = poly.FindIntersections(new Vector2(float.MinValue, 300), new Vector2(float.MaxValue, 300));
 
             // returns an even number of points
-            Assert.Equal(1, intersections.Count());
+            Assert.Equal(2, intersections.Count());
         }
 
         [Fact]

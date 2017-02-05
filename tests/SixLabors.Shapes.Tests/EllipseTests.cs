@@ -51,12 +51,12 @@ namespace SixLabors.Shapes.Tests
         }
 
         [Fact]
-        public void ClippingCornerShouldReturn1Points()
+        public void ClippingCornerShouldReturn2Points()
         {
             var poly = new Ellipse(50, 50, 30, 50);
             var points = poly.FindIntersections(new Vector2(0, 75), new Vector2(100, 75)).ToArray();
 
-            Assert.Equal(1, points.Length);
+            Assert.Equal(2, points.Length);
         }
 
         [Fact]
