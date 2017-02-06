@@ -60,8 +60,9 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="x">The X coordinate of the center of the polygon.</param>
         /// <param name="y">The Y coordinate of the center of the polygon.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
-        /// <param name="prongs">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
+        /// <param name="prongs">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
+        /// <param name="innerRadii">The inner radii.</param>
+        /// <param name="outerRadii">The outer radii.</param>
         public Star(float x, float y, int prongs, float innerRadii, float outerRadii)
             : this(new Vector2(x, y), prongs, innerRadii, outerRadii)
         {
@@ -83,10 +84,11 @@ namespace SixLabors.Shapes
             var distance = distanceVectorInner;
             for (var i = 0; i < verticies; i++)
             {
-                if(distance == distanceVectorInner)
+                if (distance == distanceVectorInner)
                 {
                     distance = distanceVectorOuter;
-                }else
+                }
+                else
                 {
                     distance = distanceVectorInner;
                 }

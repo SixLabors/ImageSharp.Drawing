@@ -84,7 +84,8 @@ namespace SixLabors.Shapes.Tests
                 if (i % 2 == 1)
                 {
                     Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
-                }else
+                }
+                else
                 {
                     Assert.Equal(radius2, Vector2.Distance(Vector2.Zero, points[i]), 3);
                 }
@@ -96,7 +97,7 @@ namespace SixLabors.Shapes.Tests
         {
             const double TwoPI = 2 * Math.PI;
             float radius = 10;
-            float radius2= 20;
+            float radius2 = 20;
             double anAngle = new Random().NextDouble() * TwoPI;
 
             var poly = new Star(Vector2.Zero, 3, radius, radius2, (float)anAngle);
@@ -105,7 +106,7 @@ namespace SixLabors.Shapes.Tests
 
             var allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
-            
+
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
         }
 
@@ -119,13 +120,13 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(2, points.Length);
         }
 
-        //[Fact]
-        //public void ClippingCornerShouldReturn2Points()
-        //{
-        //    var star = new Star(40, 40, 3, 10, 20);
-        //    var points = star.FindIntersections(new Vector2(0, 30), new Vector2(100, 30)).ToArray();
+        [Fact]
+        public void ClippingCornerShouldReturn2Points()
+        {
+            var star = new Star(40, 40, 3, 10, 20);
+            var points = star.FindIntersections(new Vector2(0, 30), new Vector2(100, 30)).ToArray();
 
-        //    Assert.Equal(2, points.Length);
-        //}
+            Assert.True(points.Length % 2 == 0, "Should have even number of intersection points");
+        }
     }
 }

@@ -25,6 +25,7 @@ namespace SixLabors.Shapes
         /// The maximum vector
         /// </summary>
         private static readonly Vector2 MaxVector = new Vector2(float.MaxValue);
+        private static readonly Vector2 MinVector = new Vector2(float.MinValue);
 
         /// <summary>
         /// The locker.
@@ -215,14 +216,15 @@ namespace SixLabors.Shapes
                 polyCorners -= 1;
             }
 
+            Vector2[] intersectionBuffer = new Vector2[2];
             int position = 0;
             Vector2 lastPoint = MaxVector;
             if (this.closedPath)
             {
-                Vector2 point = FindIntersection(this.points[polyCorners - 1], this.points[0], start, end);
-                if (point != MaxVector)
+                int hitCount = FindIntersection(this.points[polyCorners - 1], this.points[0], start, end, intersectionBuffer);
+                if (hitCount > 0)
                 {
-                    lastPoint = point;
+                    lastPoint = intersectionBuffer[hitCount - 1];
                 }
             }
 
@@ -234,48 +236,55 @@ namespace SixLabors.Shapes
                     next -= polyCorners;
                 }
 
-                Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
-                if (point != MaxVector)
+                int hitCount = FindIntersection(this.points[i], this.points[next], start, end, intersectionBuffer);
+                if (hitCount > 0)
                 {
-                    if (lastPoint.Equivelent(point, Epsilon))
+                    for (var p = 0; p < hitCount; p++)
                     {
-                        lastPoint = MaxVector;
-
-                        int last = (i - 1 + polyCorners) % polyCorners;
-
-                        // hit the same point a second time do we need to remove the old one if just clipping
-                        if (this.points[next].Equivelent(point, Epsilon))
+                        var point = intersectionBuffer[p];
+                        if (point != MaxVector)
                         {
-                            next = i;
-                        }
+                            if (lastPoint.Equivelent(point, Epsilon))
+                            {
+                                lastPoint = MaxVector;
 
-                        if (this.points[last].Equivelent(point, Epsilon))
-                        {
-                            last = i;
-                        }
+                                int last = (i - 1 + polyCorners) % polyCorners;
 
-                        var side = SideOfLine(this.points[last], start, end);
-                        var side2 = SideOfLine(this.points[next], start, end);
+                                // hit the same point a second time do we need to remove the old one if just clipping
+                                if (this.points[next].Equivelent(point, Epsilon))
+                                {
+                                    next = i;
+                                }
 
-                        if (side == Side.Same && side2 == Side.Same)
-                        {
-                            position--;
-                            count++;
-                            continue;
-                        }
-                        if (side != side2)
-                        {
-                            // differnet side we skip adding as we are passing through it
-                            continue;
+                                if (this.points[last].Equivelent(point, Epsilon))
+                                {
+                                    last = i;
+                                }
+
+                                var side = SideOfLine(this.points[last], start, end);
+                                var side2 = SideOfLine(this.points[next], start, end);
+
+                                if (side == Side.Same && side2 == Side.Same)
+                                {
+                                    position--;
+                                    count++;
+                                    continue;
+                                }
+
+                                if (side != side2)
+                                {
+                                    // differnet side we skip adding as we are passing through it
+                                    continue;
+                                }
+                            }
+
+                            // we are not double crossing so just add it once
+                            buffer[position + offset] = point;
+                            position++;
+                            count--;
+                            lastPoint = point;
                         }
                     }
-
-                    // we are not double crossing so just add it once
-                    buffer[position + offset] = point;
-                    position++;
-                    count--;
-
-                    lastPoint = point;
                 }
             }
 
@@ -434,22 +443,28 @@ namespace SixLabors.Shapes
         /// <param name="line1End">The line1 end.</param>
         /// <param name="line2Start">The line2 start.</param>
         /// <param name="line2End">The line2 end.</param>
+        /// <param name="buffer">The buffer.</param>
         /// <returns>
-        /// A <see cref="Vector2"/> describing the point that the 2 lines cross or <see cref="MaxVector"/> if they do not.
+        /// the number of points on the line that it hit
         /// </returns>
-        private static Vector2 FindIntersection(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End)
+        private static int FindIntersection(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End, Vector2[] buffer)
         {
             // do bounding boxes overlap, if not then the lines can't and return fast.
             if (!BoundingBoxesIntersect(line1Start, line1End, line2Start, line2End))
             {
-                return MaxVector;
+                return 0;
             }
 
             Vector2 line1Diff = line1End - line1Start;
             Vector2 line2Diff = line2End - line2Start;
 
             Vector2 point;
-            if (Math.Abs(line1Diff.X) < Epsilon)
+            if ((Math.Abs(line1Diff.Y) < Epsilon && Math.Abs(line2Diff.Y) < Epsilon) || (Math.Abs(line1Diff.X) < Epsilon && Math.Abs(line2Diff.X) < Epsilon))
+            {
+                //vertical & vertical || horizontal & horizontal
+                return 0;
+            }
+            else if (Math.Abs(line1Diff.X) < Epsilon)
             {
                 float slope = line2Diff.Y / line2Diff.X;
                 float yinter = line2Start.Y - (slope * line2Start.X);
@@ -477,7 +492,7 @@ namespace SixLabors.Shapes
 
                 if (Math.Abs(slope1 - slope2) < Epsilon && Math.Abs(interY1 - interY2) > Epsilon)
                 {
-                    return MaxVector;
+                    return 0;
                 }
 
                 float x = (interY2 - interY1) / (slope1 - slope2);
@@ -489,10 +504,11 @@ namespace SixLabors.Shapes
             if (BoundingBoxesIntersect(line1Start, line1End, point, point)
                 && BoundingBoxesIntersect(line2Start, line2End, point, point))
             {
-                return point;
+                buffer[0] = point;
+                return 1;
             }
 
-            return MaxVector;
+            return 0;
         }
 
         /// <summary>

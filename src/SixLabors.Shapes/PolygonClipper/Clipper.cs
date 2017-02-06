@@ -157,7 +157,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         internal void AddPath(IPath path, ClippingType clippingType)
         {
-            // we are only closed shapes at this point, we need a better 
+            // we are only closed shapes at this point, we need a better
             // way to figure out if a path is a shape etc
             // might have to unify the apis
             var vectors = path.Flatten();
