@@ -1,9 +1,11 @@
 ﻿/*
- * NOTE : this file is note required to draw shapes with imagesharp in product
- * just reference IamgeSharp.Drawing.Paths .
+ * NOTE : this file is note required to draw shapes with imagesharp in production
+ * just reference ImageSharp.Drawing.Paths it already has all the mappings required.
  * */
 
- using System.Buffers;
+
+using System;
+using System.Buffers;
 using System.Collections.Immutable;
 using System.Numerics;
 using ImageSharp.Drawing;
@@ -28,7 +30,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             : this(ImmutableArray.Create(path))
         {
             this.shape = path.AsShape();
-            this.Bounds = path.Bounds.Convert();
+            this.Bounds = Convert(path.Bounds);
         }
 
         /// <summary>
@@ -39,7 +41,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             : this(shape.Paths)
         {
             this.shape = shape;
-            this.Bounds = shape.Bounds.Convert();
+            this.Bounds = Convert(shape.Bounds);
         }
 
         /// <summary>
@@ -143,6 +145,15 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 DistanceAlongPath = distanceAlongPath,
                 DistanceFromPath = distanceFromPath
             };
+        }
+
+        private static ImageSharp.Rectangle Convert(SixLabors.Shapes.Rectangle source)
+        {
+            int left = (int)Math.Floor(source.Left);
+            int right = (int)Math.Ceiling(source.Right);
+            int top = (int)Math.Floor(source.Top);
+            int bottom = (int)Math.Ceiling(source.Bottom);
+            return new ImageSharp.Rectangle(left, top, right - left, bottom - top);
         }
     }
 }

@@ -8,22 +8,29 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
     {
         public static void Main(string[] args)
         {
-            GenerateClippedRectangle();
-
-            GenerateStar(3);
-            GenerateStar(4);
-            GenerateStar(5);
-            GenerateStar(6);
-            GenerateStar(30);
+            OutputClippedRectangle();
+            OutputStars();
         }
 
-        private static void GenerateStar(int points, float inner = 10, float outer = 20)
+        private static void OutputStars()
         {
-            var star = new Star(40, 40, points, inner, outer);
-            star.SaveImage("Clipping", $"Star_{points}.png");
+            OutputStar(3, 5);
+            OutputStar(4);
+            OutputStar(5);
+            OutputStar(6);
+            OutputStar(20, 100, 200);
         }
 
-        private static void GenerateClippedRectangle()
+        private static void OutputStar(int points, float inner = 10, float outer = 20)
+        {
+            // center the shape outerRadii + 10 px away from edges
+            var offset = outer + 10;
+
+            var star = new Star(offset, offset, points, inner, outer);
+            star.SaveImage("Stars", $"Star_{points}.png");
+        }
+
+        private static void OutputClippedRectangle()
         {
             var rect1 = new Rectangle(10, 10, 40, 40);
             var rect2 = new Rectangle(20, 0, 20, 20);
@@ -32,14 +39,14 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             paths.SaveImage("Clipping", "RectangleWithTopClipped.png");
         }
 
-        private static void SaveImage(this IShape shape, params string[] path)
+        public static void SaveImage(this IShape shape, params string[] path)
         {
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));
             // pad even amount around shape
-            var width = shape.Bounds.Left + shape.Bounds.Right;
-            var height = shape.Bounds.Top + shape.Bounds.Bottom;
+            int width =(int)(shape.Bounds.Left + shape.Bounds.Right);
+            int height = (int)(shape.Bounds.Top + shape.Bounds.Bottom);
 
-            using (var img = new Image((int)Math.Ceiling(width), (int)Math.Ceiling(height)))
+            using (var img = new Image(width, height))
             {
                 img.Fill(Color.DarkBlue);
 
