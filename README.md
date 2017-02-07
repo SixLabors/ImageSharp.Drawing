@@ -41,7 +41,7 @@ git clone https://github.com/SixLabors/Shapes.git
 - Simple polygon clipping
 - Regular Polygons (triangles, squares, pentagons etc, any number of sides)
 - Ellipses (and therfore circles)
-- Shape Builder api - for creates shapes declaratively 
+- Shape Builder api - for creating shapes declaratively 
 - Polygons
    - With Linear line segments
    - With Beziear curve line segments
@@ -51,18 +51,13 @@ git clone https://github.com/SixLabors/Shapes.git
    - With Beziear curve line segments
    - Mixture of both Linear & beziear segments
 
-### API 
-
-TODO add api example in here (missing polygon builder class)
-
 ### How can you help?
 
 Please... Spread the word, contribute algorithms, submit performance improvements, unit tests. 
 
-
 ### Projects using SixLabors.Shapes
 
-None yet but should soon be used by SvgSharp and ImageSharp.
+* [ImageSharp](https://github.com/jimBobSquarePants/ImageSharp) - cross platform, fully manged, image manipultion and drawing library.
 
 ### The SixLabors.Shapes Team
 
