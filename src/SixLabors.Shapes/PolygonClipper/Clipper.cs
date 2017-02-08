@@ -33,20 +33,20 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Initializes a new instance of the <see cref="Clipper"/> class.
         /// </summary>
         /// <param name="shapes">The shapes.</param>
-        public Clipper(IEnumerable<ClipableShape> shapes)
+        public Clipper(IEnumerable<ClipablePath> shapes)
             : this()
         {
-            this.AddShapes(shapes);
+            this.AddPaths(shapes);
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Clipper" /> class.
         /// </summary>
         /// <param name="shapes">The shapes.</param>
-        public Clipper(params ClipableShape[] shapes)
+        public Clipper(params ClipablePath[] shapes)
             : this()
         {
-            this.AddShapes(shapes);
+            this.AddPaths(shapes);
         }
 
         /// <summary>
@@ -55,7 +55,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <returns>
         /// Returns the <see cref="IShape" /> array containing the converted polygons.
         /// </returns>
-        public ImmutableArray<IShape> GenerateClippedShapes()
+        public ImmutableArray<IPath> GenerateClippedShapes()
         {
             List<PolyNode> results = new List<PolyNode>();
             lock (this.syncRoot)
@@ -63,44 +63,36 @@ namespace SixLabors.Shapes.PolygonClipper
                 this.innerClipper.Execute(ClipType.ctDifference, results);
             }
 
-            IShape[] shapes = new IShape[results.Count];
+            IPath[] shapes = new IPath[results.Count];
             for (var i = 0; i < results.Count; i++)
             {
                 var source = results[i].Source;
-                var shape = source as IShape;
+                var path = source as IPath;
 
-                if (shape != null)
+                if (path != null)
                 {
-                    shapes[i] = shape;
+                    shapes[i] = path;
                 }
                 else
                 {
-                    var wrapped = source as IWrapperPath;
-                    if (wrapped != null)
+                    var points = new Vector2[results[i].Contour.Count];
+                    for (var j = 0; j < results[i].Contour.Count; j++)
                     {
-                        shapes[i] = wrapped.AsShape();
+                        var p = results[i].Contour[j];
+
+                        // to make the floating point polygons compatable with clipper we had
+                        // to scale them up to make them ints but still retain some level of precision
+                        // thus we have to scale them back down
+                        points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
+                    }
+
+                    if (results[i].IsOpen)
+                    {
+                        shapes[i] = new Path(new LinearLineSegment(points));
                     }
                     else
                     {
-                        var points = new Vector2[results[i].Contour.Count];
-                        for (var j = 0; j < results[i].Contour.Count; j++)
-                        {
-                            var p = results[i].Contour[j];
-
-                            // to make the floating point polygons compatable with clipper we had
-                            // to scale them up to make them ints but still retain some level of precision
-                            // thus we have to scale them back down
-                            points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
-                        }
-
-                        if (results[i].IsOpen)
-                        {
-                            shapes[i] = new Path(new LinearLineSegment(points)).AsShape();
-                        }
-                        else
-                        {
-                            shapes[i] = new Polygon(new LinearLineSegment(points));
-                        }
+                        shapes[i] = new Polygon(new LinearLineSegment(points));
                     }
                 }
             }
@@ -111,39 +103,39 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <summary>
         /// Adds the paths.
         /// </summary>
-        /// <param name="shapes">The shapes.</param>
-        public void AddShapes(IEnumerable<ClipableShape> shapes)
+        /// <param name="paths">The paths.</param>
+        public void AddPaths(IEnumerable<ClipablePath> paths)
         {
-            Guard.NotNull(shapes, nameof(shapes));
-            foreach (var p in shapes)
+            Guard.NotNull(paths, nameof(paths));
+            foreach (var p in paths)
             {
-                this.AddShape(p.Shape, p.Type);
+                this.AddPath(p.Path, p.Type);
             }
         }
 
         /// <summary>
         /// Adds the shapes.
         /// </summary>
-        /// <param name="shapes">The shapes.</param>
+        /// <param name="paths">The paths.</param>
         /// <param name="clippingType">The clipping type.</param>
-        public void AddShapes(IEnumerable<IShape> shapes, ClippingType clippingType)
+        public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
-            Guard.NotNull(shapes, nameof(shapes));
-            foreach (var p in shapes)
+            Guard.NotNull(paths, nameof(paths));
+            foreach (var p in paths)
             {
-                this.AddShape(p, clippingType);
+                this.AddPath(p, clippingType);
             }
         }
 
         /// <summary>
         /// Adds the path.
         /// </summary>
-        /// <param name="shape">The shape.</param>
+        /// <param name="path">The path.</param>
         /// <param name="clippingType">The clipping type.</param>
-        public void AddShape(IShape shape, ClippingType clippingType)
+        public void AddPath(IPath path, ClippingType clippingType)
         {
-            Guard.NotNull(shape, nameof(shape));
-            foreach (var p in shape.Paths)
+            Guard.NotNull(path, nameof(path));
+            foreach (var p in path.Flatten())
             {
                 this.AddPath(p, clippingType);
             }
@@ -155,12 +147,9 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="path">The path.</param>
         /// <param name="clippingType">Type of the poly.</param>
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
-        internal void AddPath(IPath path, ClippingType clippingType)
+        internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
-            // we are only closed shapes at this point, we need a better
-            // way to figure out if a path is a shape etc
-            // might have to unify the apis
-            var vectors = path.Flatten();
+            var vectors = path.Points;
             List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Length);
             foreach (var v in vectors)
             {
@@ -170,7 +159,7 @@ namespace SixLabors.Shapes.PolygonClipper
             PolyType type = clippingType == ClippingType.Clip ? PolyType.ptClip : PolyType.ptSubject;
             lock (this.syncRoot)
             {
-                this.innerClipper.AddPath(points, type, true, path);
+                this.innerClipper.AddPath(points, type, path.IsClosed, path);
             }
         }
     }

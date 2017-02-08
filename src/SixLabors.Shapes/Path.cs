@@ -13,17 +13,13 @@ namespace SixLabors.Shapes
     /// A aggregate of <see cref="ILineSegment"/>s making a single logical path
     /// </summary>
     /// <seealso cref="IPath" />
-    public class Path : IPath
+    public class Path : IPath, ISimplePath
     {
         /// <summary>
         /// The inner path.
         /// </summary>
         private readonly InternalPath innerPath;
-
-        /// <summary>
-        /// a place for the shape to be cached.
-        /// </summary>
-        private IShape cachedShape;
+        private readonly ImmutableArray<ISimplePath> flatPath;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Path"/> class.
@@ -40,9 +36,12 @@ namespace SixLabors.Shapes
         /// <param name="segments">The segments.</param>
         public Path(ImmutableArray<ILineSegment> segments)
         {
-            this.innerPath = new InternalPath(segments, false);
+            this.innerPath = new InternalPath(segments, IsClosed);
             this.LineSegments = segments;
+            this.flatPath = ImmutableArray.Create<ISimplePath>(this);
         }
+
+        public virtual bool IsClosed => false;
 
         /// <summary>
         /// Gets the line segments.
@@ -56,18 +55,20 @@ namespace SixLabors.Shapes
         public Rectangle Bounds => this.innerPath.Bounds;
 
         /// <inheritdoc />
-        public float Length => this.innerPath.Length;
-
-        /// <inheritdoc />
-        public ImmutableArray<Vector2> Flatten()
-        {
-            return this.innerPath.Points;
-        }
-
-        /// <inheritdoc />
         public PointInfo Distance(Vector2 point)
         {
-            return this.innerPath.DistanceFromPath(point);
+            var dist = this.innerPath.DistanceFromPath(point);
+
+            if (this.IsClosed)
+            {
+                bool isInside = this.innerPath.PointInPolygon(point);
+                if (isInside)
+                {
+                    dist.DistanceFromPath *= -1;
+                }
+            }
+
+            return dist;
         }
 
         /// <summary>
@@ -77,8 +78,13 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new path with the matrix applied to it.
         /// </returns>
-        public IPath Transform(Matrix3x2 matrix)
+        public virtual IPath Transform(Matrix3x2 matrix)
         {
+            if (matrix.IsIdentity)
+            {
+                return this;
+            }
+
             var segments = new ILineSegment[this.LineSegments.Length];
             var i = 0;
             foreach (var s in this.LineSegments)
@@ -90,14 +96,40 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Convertes to path to a closed shape.
+        /// Returns this polygon as a path
         /// </summary>
-        /// <returns>
-        /// Returns the path as a closed shape.
-        /// </returns>
-        public IShape AsShape()
+        /// <returns>This polygon as a path</returns>
+        public IPath AsClosedPath()
         {
-            return this.cachedShape ?? (this.cachedShape = new Polygon(this));
+            if (this.IsClosed)
+            {
+                return this;
+            }
+            else
+            {
+                return new Polygon(this.LineSegments);
+            }
         }
+
+        public PathTypes PathType => (this.IsClosed ? PathTypes.Open : PathTypes.Closed);
+
+        public int MaxIntersections => innerPath.Points.Length;
+
+        public ImmutableArray<ISimplePath> Flatten()
+        {
+            return flatPath;
+        }
+
+        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
+        {
+            return this.innerPath.FindIntersections(start, end, buffer, count, offset);
+        }
+
+        public bool Contains(Vector2 point)
+        {
+            return this.innerPath.PointInPolygon(point);
+        }
+
+        public ImmutableArray<Vector2> Points => this.innerPath.Points;
     }
 }

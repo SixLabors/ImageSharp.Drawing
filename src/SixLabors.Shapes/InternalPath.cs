@@ -291,28 +291,6 @@ namespace SixLabors.Shapes
             return position;
         }
 
-        /// <summary>
-        /// Finds the intersections.
-        /// </summary>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
-        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
-        {
-            var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
-            try
-            {
-                var hits = this.FindIntersections(start, end, buffer, this.points.Length, 0);
-                for (var i = 0; i < hits; i++)
-                {
-                    yield return buffer[i];
-                }
-            }
-            finally
-            {
-                ArrayPool<Vector2>.Shared.Return(buffer);
-            }
-        }
 
         /// <summary>
         /// Determines if the specified point is inside or outside the path.

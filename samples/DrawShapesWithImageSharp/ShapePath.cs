@@ -20,46 +20,17 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         /// <summary>
         /// The fillable shape
         /// </summary>
-        private readonly IShape shape;
+        private readonly IPath shape;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ShapePath"/> class.
         /// </summary>
         /// <param name="path">The path.</param>
         public ShapePath(IPath path)
-            : this(ImmutableArray.Create(path))
         {
-            this.shape = path.AsShape();
+            this.shape = path;
             this.Bounds = Convert(path.Bounds);
         }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ShapePath"/> class.
-        /// </summary>
-        /// <param name="shape">The shape.</param>
-        public ShapePath(IShape shape)
-            : this(shape.Paths)
-        {
-            this.shape = shape;
-            this.Bounds = Convert(shape.Bounds);
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ShapePath" /> class.
-        /// </summary>
-        /// <param name="paths">The paths.</param>
-        private ShapePath(ImmutableArray<IPath> paths)
-        {
-            this.Paths = paths;
-        }
-
-        /// <summary>
-        /// Gets the drawable paths
-        /// </summary>
-        /// <value>
-        /// The paths.
-        /// </value>
-        public ImmutableArray<IPath> Paths { get; }
 
         /// <inheritdoc/>
         public override int MaxIntersections => this.shape.MaxIntersections;
@@ -75,12 +46,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             Vector2[] innerbuffer = ArrayPool<Vector2>.Shared.Rent(length);
             try
             {
-                int count = this.shape.FindIntersections(
-                    start,
-                    end,
-                    innerbuffer,
-                    length,
-                    0);
+                int count = this.shape.FindIntersections(start, end, innerbuffer, length, 0);
 
                 for (int i = 0; i < count; i++)
                 {
@@ -103,12 +69,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             Vector2[] innerbuffer = ArrayPool<Vector2>.Shared.Rent(length);
             try
             {
-                int count = this.shape.FindIntersections(
-                    start,
-                    end,
-                    innerbuffer,
-                    length,
-                    0);
+                int count = this.shape.FindIntersections(start, end, innerbuffer, length, 0);
 
                 for (int i = 0; i < count; i++)
                 {
@@ -127,24 +88,17 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         public override ImageSharp.Drawing.PointInfo GetPointInfo(int x, int y)
         {
             Vector2 point = new Vector2(x, y);
-            float distanceFromPath = float.MaxValue;
-            float distanceAlongPath = 0;
 
-            for (int i = 0; i < this.Paths.Length; i++)
-            {
-                SixLabors.Shapes.PointInfo p = this.Paths[i].Distance(point);
-                if (p.DistanceFromPath < distanceFromPath)
-                {
-                    distanceFromPath = p.DistanceFromPath;
-                    distanceAlongPath = p.DistanceAlongPath;
-                }
-            }
+            var dist = this.shape.Distance(point);
 
             return new ImageSharp.Drawing.PointInfo
-            {
-                DistanceAlongPath = distanceAlongPath,
-                DistanceFromPath = distanceFromPath
-            };
+                       {
+                           DistanceAlongPath = dist.DistanceAlongPath,
+                           DistanceFromPath =
+                               dist.DistanceFromPath < 0
+                                   ? -dist.DistanceFromPath
+                                   : dist.DistanceFromPath
+                       };
         }
 
         private static ImageSharp.Rectangle Convert(SixLabors.Shapes.Rectangle source)

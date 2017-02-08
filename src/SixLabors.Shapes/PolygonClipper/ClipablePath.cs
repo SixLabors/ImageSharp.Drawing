@@ -13,26 +13,23 @@ namespace SixLabors.Shapes.PolygonClipper
     /// <summary>
     /// Represents a shape and its type for when clipping is applies.
     /// </summary>
-    public struct ClipableShape
+    public struct ClipablePath
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="ClipableShape"/> struct.
         /// </summary>
-        /// <param name="shape">The shape.</param>
+        /// <param name="shape">The path.</param>
         /// <param name="type">The type.</param>
-        public ClipableShape(IShape shape, ClippingType type)
+        public ClipablePath(IPath path, ClippingType type)
         {
-            this.Shape = shape;
+            this.Path = path;
             this.Type = type;
         }
 
         /// <summary>
-        /// Gets the shape.
+        /// Gets the path.
         /// </summary>
-        /// <value>
-        /// The shape.
-        /// </value>
-        public IShape Shape { get; private set; }
+        public IPath Path { get; private set; }
 
         /// <summary>
         /// Gets the type.

@@ -11,16 +11,6 @@ namespace SixLabors.Shapes.Tests
     public class PathTests
     {
         [Fact]
-        public void Length()
-        {
-            var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 2));
-
-            var path = new Path(seg1);
-
-            Assert.Equal(2, path.Length);
-        }
-
-        [Fact]
         public void Bounds()
         {
             var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(2, 2));
@@ -75,7 +65,7 @@ namespace SixLabors.Shapes.Tests
         public void SimplePath()
         {
             var path = new Path(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
-            var points = path.Flatten();
+            var points = path.Flatten().Single().Points;
 
             Assert.Equal(4, points.Length);
             Assert.Equal(new Vector2(0, 0), points[0]);

@@ -17,17 +17,15 @@ namespace SixLabors.Shapes
     /// A way of optimizing drawing rectangles.
     /// </summary>
     /// <seealso cref="SixLabors.Shapes.IShape" />
-    public class Rectangle : IShape
+    public class Rectangle : IPath, ISimplePath
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
         private readonly ImmutableArray<Vector2> points;
-        private readonly ImmutableArray<IPath> pathCollection;
+        private readonly ImmutableArray<ISimplePath> flatPath;
         private readonly float halfLength;
         private readonly float length;
-
-        private readonly RectanglePath path;
-
+        
         /// <summary>
         /// Initializes a new instance of the <see cref="Rectangle" /> class.
         /// </summary>
@@ -62,8 +60,7 @@ namespace SixLabors.Shapes
 
             this.halfLength = this.Size.Width + this.Size.Height;
             this.length = this.halfLength * 2;
-            this.path = new RectanglePath(this);
-            this.pathCollection = ImmutableArray.Create<IPath>(this.path);
+            this.flatPath = ImmutableArray.Create<ISimplePath>(this);
         }
 
         /// <summary>
@@ -138,15 +135,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The bounds.
         /// </value>
-        Rectangle IShape.Bounds => this;
-
-        /// <summary>
-        /// Gets the paths that make up this shape
-        /// </summary>
-        /// <value>
-        /// The paths.
-        /// </value>
-        ImmutableArray<IPath> IShape.Paths => this.pathCollection;
+        Rectangle IPath.Bounds => this;
 
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
@@ -154,7 +143,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The maximum intersections.
         /// </value>
-        int IShape.MaxIntersections => 4;
+        int IPath.MaxIntersections => 4;
 
         /// <summary>
         /// Gets the size.
@@ -183,46 +172,6 @@ namespace SixLabors.Shapes
         public bool Contains(Vector2 point)
         {
             return Vector2.Clamp(point, this.topLeft, this.bottomRight) == point;
-        }
-
-        /// <summary>
-        /// the distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        /// Returns the distance from the shape to the point
-        /// </returns>
-        public float Distance(Vector2 point)
-        {
-            bool insidePoly;
-            PointInfo result = this.Distance(point, true, out insidePoly);
-
-            // invert the distance from path when inside
-            return insidePoly ? -result.DistanceFromPath : result.DistanceFromPath;
-        }
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <returns>
-        /// The locations along the line segment that intersect with the edges of the shape.
-        /// </returns>
-        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
-        {
-            var buffer = new Vector2[2];
-            var c = this.FindIntersections(start, end, buffer, 2, 0);
-            switch (c)
-            {
-                case 2:
-                    return buffer;
-                case 1:
-                    return new[] { buffer[0] };
-                default:
-                    return Enumerable.Empty<Vector2>();
-            }
         }
 
         /// <summary>
@@ -276,7 +225,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        public IShape Transform(Matrix3x2 matrix)
+        public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -286,13 +235,15 @@ namespace SixLabors.Shapes
             // rectangles may be rotated and skewed which means they will then nedd representing by a polygon
             return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
         }
+        
+        public PathTypes PathType => PathTypes.Closed;
 
-        private PointInfo Distance(Vector2 point, bool getDistanceAwayOnly, out bool isInside)
+        public PointInfo Distance(Vector2 point)
         {
             // point in rectangle
             // if after its clamped by the extreams its still the same then it must be inside :)
             Vector2 clamped = Vector2.Clamp(point, this.topLeft, this.bottomRight);
-            isInside = clamped == point;
+            bool isInside = clamped == point;
 
             float distanceFromEdge = float.MaxValue;
             float distanceAlongEdge = 0f;
@@ -309,37 +260,34 @@ namespace SixLabors.Shapes
                 // and then the single smallest (dont have to worry about direction)
                 distanceFromEdge = Math.Min(minDists.X, minDists.Y);
 
-                if (!getDistanceAwayOnly)
+                // we need to make clamped the closest point
+                if (this.topLeft.X + distanceFromEdge == point.X)
                 {
-                    // we need to make clamped the closest point
-                    if (this.topLeft.X + distanceFromEdge == point.X)
-                    {
-                        // closer to lhf
-                        clamped.X = this.topLeft.X; // y is already the same
+                    // closer to lhf
+                    clamped.X = this.topLeft.X; // y is already the same
 
-                        // distance along edge is length minus the amout down we are from the top of the rect
-                        distanceAlongEdge = this.length - (clamped.Y - this.topLeft.Y);
-                    }
-                    else if (this.topLeft.Y + distanceFromEdge == point.Y)
-                    {
-                        // closer to top
-                        clamped.Y = this.topLeft.Y; // x is already the same
+                    // distance along edge is length minus the amout down we are from the top of the rect
+                    distanceAlongEdge = this.length - (clamped.Y - this.topLeft.Y);
+                }
+                else if (this.topLeft.Y + distanceFromEdge == point.Y)
+                {
+                    // closer to top
+                    clamped.Y = this.topLeft.Y; // x is already the same
 
-                        distanceAlongEdge = clamped.X - this.topLeft.X;
-                    }
-                    else if (this.bottomRight.Y - distanceFromEdge == point.Y)
-                    {
-                        // closer to bottom
-                        clamped.Y = this.bottomRight.Y; // x is already the same
+                    distanceAlongEdge = clamped.X - this.topLeft.X;
+                }
+                else if (this.bottomRight.Y - distanceFromEdge == point.Y)
+                {
+                    // closer to bottom
+                    clamped.Y = this.bottomRight.Y; // x is already the same
 
-                        distanceAlongEdge = (this.bottomRight.X - clamped.X) + this.halfLength;
-                    }
-                    else if (this.bottomRight.X - distanceFromEdge == point.X)
-                    {
-                        // closer to rhs
-                        clamped.X = this.bottomRight.X; // x is already the same
-                        distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
-                    }
+                    distanceAlongEdge = (this.bottomRight.X - clamped.X) + this.halfLength;
+                }
+                else if (this.bottomRight.X - distanceFromEdge == point.X)
+                {
+                    // closer to rhs
+                    clamped.X = this.bottomRight.X; // x is already the same
+                    distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
                 }
             }
             else
@@ -347,26 +295,23 @@ namespace SixLabors.Shapes
                 // clamped is the point on the path thats closest no matter what
                 distanceFromEdge = (clamped - point).Length();
 
-                if (!getDistanceAwayOnly)
+                // we need to figure out whats the cloests edge now and thus what distance/poitn is closest
+                if (this.topLeft.X == clamped.X)
                 {
-                    // we need to figure out whats the cloests edge now and thus what distance/poitn is closest
-                    if (this.topLeft.X == clamped.X)
-                    {
-                        // distance along edge is length minus the amout down we are from the top of the rect
-                        distanceAlongEdge = this.length - (clamped.Y - this.topLeft.Y);
-                    }
-                    else if (this.topLeft.Y == clamped.Y)
-                    {
-                        distanceAlongEdge = clamped.X - this.topLeft.X;
-                    }
-                    else if (this.bottomRight.Y == clamped.Y)
-                    {
-                        distanceAlongEdge = (this.bottomRight.X - clamped.X) + this.halfLength;
-                    }
-                    else if (this.bottomRight.X == clamped.X)
-                    {
-                        distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
-                    }
+                    // distance along edge is length minus the amout down we are from the top of the rect
+                    distanceAlongEdge = this.length - (clamped.Y - this.topLeft.Y);
+                }
+                else if (this.topLeft.Y == clamped.Y)
+                {
+                    distanceAlongEdge = clamped.X - this.topLeft.X;
+                }
+                else if (this.bottomRight.Y == clamped.Y)
+                {
+                    distanceAlongEdge = (this.bottomRight.X - clamped.X) + this.halfLength;
+                }
+                else if (this.bottomRight.X == clamped.X)
+                {
+                    distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
                 }
             }
 
@@ -378,36 +323,24 @@ namespace SixLabors.Shapes
             return new PointInfo
             {
                 SearchPoint = point,
-                DistanceFromPath = distanceFromEdge,
+                DistanceFromPath = (isInside ? -distanceFromEdge : distanceFromEdge),
                 ClosestPointOnPath = clamped,
                 DistanceAlongPath = distanceAlongEdge
             };
         }
 
-        private class RectanglePath : IWrapperPath
+        public ImmutableArray<ISimplePath> Flatten()
         {
-            private readonly Rectangle rect;
-
-            public RectanglePath(Rectangle rect)
-            {
-                this.rect = rect;
-            }
-
-            public Rectangle Bounds => this.rect;
-
-            public float Length => this.rect.length;
-
-            public PointInfo Distance(Vector2 point)
-            {
-                    bool inside; // dont care about inside/outside for paths just distance
-                    return this.rect.Distance(point, false, out inside);
-            }
-
-            public ImmutableArray<Vector2> Flatten() => this.rect.points;
-
-            public IPath Transform(Matrix3x2 matrix) => this.rect.Transform(matrix).Paths[0];
-
-            public IShape AsShape() => this.rect;
+            return this.flatPath;
         }
+
+        public IPath AsClosedPath()
+        {
+            return this;
+        }
+
+        public bool IsClosed => true;
+
+        public ImmutableArray<Vector2> Points => this.points;
     }
 }

@@ -188,7 +188,7 @@ namespace SixLabors.Shapes
         /// <returns>The current set of operations as a complex polygon</returns>
         public ComplexPolygon Build()
         {
-            return new ComplexPolygon(this.figures.Where(x => !x.IsEmpty).Select(x => x.AsPath()).ToArray());
+            return new ComplexPolygon(this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray());
         }
 
         private class Figure
@@ -204,11 +204,11 @@ namespace SixLabors.Shapes
                 this.segments.Add(segment);
             }
 
-            public IPath AsPath()
+            public IPath Build()
             {
                 if (this.IsClosed)
                 {
-                    return new Polygon(this.segments.ToArray()).AsPath();
+                    return new Polygon(this.segments.ToArray());
                 }
 
                 return new Path(this.segments.ToArray());

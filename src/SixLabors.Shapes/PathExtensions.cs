@@ -6,6 +6,7 @@
 namespace SixLabors.Shapes
 {
     using System;
+    using System.Buffers;
     using System.Collections.Generic;
     using System.Linq;
     using System.Numerics;
@@ -59,6 +60,53 @@ namespace SixLabors.Shapes
         public static IPath Translate(this IPath path, float x, float y)
         {
             return path.Translate(new Vector2(x, y));
+        }
+
+        /// <summary>
+        /// Creates a path translated by the supplied postion
+        /// </summary>
+        /// <param name="path">The path to translate.</param>
+        /// <param name="xScale">The amount to scale along the X axis.</param>
+        /// <param name="yScale">The amount to scale along the Y axis.</param>
+        /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+        public static IPath Scale(this IPath path, float xScale, float yScale)
+        {
+            return path.Transform(Matrix3x2.CreateScale(xScale, yScale, path.Bounds.Center));
+        }
+
+        /// <summary>
+        /// Creates a path translated by the supplied postion
+        /// </summary>
+        /// <param name="path">The path to translate.</param>
+        /// <param name="scale">The amount to scale along both the x and y axis.</param>
+        /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
+        public static IPath Scale(this IPath path, float scale)
+        {
+            return path.Transform(Matrix3x2.CreateScale(scale, path.Bounds.Center));
+        }
+
+
+        /// <summary>
+        /// Finds the intersections.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
+        public static IEnumerable<Vector2> FindIntersections(this IPath path, Vector2 start, Vector2 end)
+        {
+            var buffer = ArrayPool<Vector2>.Shared.Rent(path.MaxIntersections);
+            try
+            {
+                var hits = path.FindIntersections(start, end, buffer, path.MaxIntersections, 0);
+                for (var i = 0; i < hits; i++)
+                {
+                    yield return buffer[i];
+                }
+            }
+            finally
+            {
+                ArrayPool<Vector2>.Shared.Return(buffer);
+            }
         }
     }
 }

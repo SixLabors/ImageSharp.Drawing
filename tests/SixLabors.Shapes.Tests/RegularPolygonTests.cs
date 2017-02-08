@@ -59,9 +59,8 @@ namespace SixLabors.Shapes.Tests
             int pointsCount = new Random().Next(3, 20);
 
             var poly = new RegularPolygon(Vector2.Zero, pointsCount, radius, 0);
-            var path = poly.AsPath();
-
-            var points = path.Flatten();
+            
+            var points = poly.Flatten()[0].Points;
 
             // calcualte baselineDistance
             var baseline = Vector2.Distance(points[0], points[1]);
@@ -89,8 +88,7 @@ namespace SixLabors.Shapes.Tests
             double anAngle = new Random().NextDouble() * TwoPI;
 
             var poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
-            var path = poly.AsPath();
-            var points = path.Flatten();
+            var points = poly.Flatten()[0].Points;
 
             var allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI

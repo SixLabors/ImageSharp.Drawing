@@ -4,6 +4,8 @@ using System.IO;
 
 namespace SixLabors.Shapes.DrawShapesWithImageSharp
 {
+    using System.Numerics;
+
     public static class Program
     {
         public static void Main(string[] args)
@@ -19,6 +21,42 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             OutputStar(5);
             OutputStar(6);
             OutputStar(20, 100, 200);
+
+            OutputDrawnShape();
+            OutputDrawnShapeHourGlass();
+        }
+
+        private static void OutputDrawnShape()
+        {
+            // center the shape outerRadii + 10 px away from edges
+            var sb = new ShapeBuilder();
+
+            // draw a 'V'
+            sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));
+            sb.StartFigure();
+
+            // overlay rectangle
+            sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));
+            sb.AddLine(new Vector2(25, 30), new Vector2(15, 30));
+            sb.CloseFigure();
+
+            sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"paths.png");
+        }
+        private static void OutputDrawnShapeHourGlass()
+        {
+            // center the shape outerRadii + 10 px away from edges
+            var sb = new ShapeBuilder();
+
+            // draw a 'V'
+            sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));
+            sb.StartFigure();
+
+            // overlay rectangle
+            sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));
+            sb.AddLine(new Vector2(15, 30), new Vector2(25, 30));
+            sb.CloseFigure();
+
+            sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"HourGlass.png");
         }
 
         private static void OutputStar(int points, float inner = 10, float outer = 20)
@@ -39,8 +77,14 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             paths.SaveImage("Clipping", "RectangleWithTopClipped.png");
         }
 
-        public static void SaveImage(this IShape shape, params string[] path)
+        public static void SaveImage(this IPath shape, params string[] path)
         {
+
+            //lest offset back into the
+
+            shape = shape.Translate(shape.Bounds.Location * -1) //touch top left
+                    .Translate(new Vector2(10));
+
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));
             // pad even amount around shape
             int width =(int)(shape.Bounds.Left + shape.Bounds.Right);

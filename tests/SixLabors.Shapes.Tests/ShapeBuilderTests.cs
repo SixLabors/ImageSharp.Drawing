@@ -22,7 +22,7 @@ namespace SixLabors.Shapes.Tests
             var shape = builder.Build();
 
             Assert.Equal(1, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[0]);
         }
 
 
@@ -81,7 +81,7 @@ namespace SixLabors.Shapes.Tests
 
             Assert.Equal(2, shape.Paths.Length);
             Assert.IsType<Path>(shape.Paths[0]);
-            Assert.IsType<Polygon>(shape.Paths[1].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[1]);
         }
 
         [Fact]
@@ -97,7 +97,7 @@ namespace SixLabors.Shapes.Tests
             var shape = builder.Build();
 
             Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[0]);
             Assert.IsType<Path>(shape.Paths[1]);
         }
 
@@ -121,8 +121,8 @@ namespace SixLabors.Shapes.Tests
             shape = builder.Build();
 
             Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0].AsShape());
-            Assert.IsType<Polygon>(shape.Paths[1].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[0]);
+            Assert.IsType<Polygon>(shape.Paths[1]);
         }
 
         [Fact]

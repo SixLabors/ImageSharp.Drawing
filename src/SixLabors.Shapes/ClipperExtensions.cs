@@ -23,12 +23,12 @@ namespace SixLabors.Shapes
         /// <param name="shape">The shape.</param>
         /// <param name="holes">The holes.</param>
         /// <returns>Returns a new shape with the holes cliped out out the shape.</returns>
-        public static IShape Clip(this IShape shape, IEnumerable<IShape> holes)
+        public static IPath Clip(this IPath shape, IEnumerable<IPath> holes)
         {
             var clipper = new PolygonClipper.Clipper();
 
-            clipper.AddShape(shape, ClippingType.Subject);
-            clipper.AddShapes(holes, ClippingType.Clip);
+            clipper.AddPath(shape, ClippingType.Subject);
+            clipper.AddPaths(holes, ClippingType.Clip);
             var result = clipper.GenerateClippedShapes();
             return new ComplexPolygon(result);
         }
@@ -39,6 +39,6 @@ namespace SixLabors.Shapes
         /// <param name="shape">The shape.</param>
         /// <param name="holes">The holes.</param>
         /// <returns>Returns a new shape with the holes cliped out out the shape.</returns>
-        public static IShape Clip(this IShape shape, params IShape[] holes) => shape.Clip((IEnumerable<IShape>)holes);
+        public static IPath Clip(this IPath shape, params IPath[] holes) => shape.Clip((IEnumerable<IPath>)holes);
     }
 }
