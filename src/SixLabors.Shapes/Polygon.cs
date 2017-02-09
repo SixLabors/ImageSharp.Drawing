@@ -31,7 +31,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="segments">The segments.</param>
         public Polygon(ImmutableArray<ILineSegment> segments)
-            :base(segments)
+            : base(segments)
         {
         }
 
@@ -40,7 +40,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="segment">The segment.</param>
         public Polygon(ILineSegment segment)
-            :base(segment)
+            : base(segment)
         {
         }
 
@@ -49,18 +49,14 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="path">The path.</param>
         internal Polygon(Path path)
-            : base(path.LineSegments)
+            : base(path)
         {
         }
 
-        public override bool IsClosed
-        {
-            get
-            {
-                return true;
-            }
-        }
-
+        /// <summary>
+        /// Gets a value indicating whether this instance is a closed path.
+        /// </summary>
+        protected override bool IsClosed => true;
 
         /// <summary>
         /// Transforms the rectangle using specified matrix.

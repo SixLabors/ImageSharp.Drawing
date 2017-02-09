@@ -291,7 +291,6 @@ namespace SixLabors.Shapes
             return position;
         }
 
-
         /// <summary>
         /// Determines if the specified point is inside or outside the path.
         /// </summary>
@@ -439,14 +438,14 @@ namespace SixLabors.Shapes
             Vector2 point;
             if ((Math.Abs(line1Diff.Y) < Epsilon && Math.Abs(line2Diff.Y) < Epsilon) || (Math.Abs(line1Diff.X) < Epsilon && Math.Abs(line2Diff.X) < Epsilon))
             {
-                //vertical & vertical || horizontal & horizontal
+                // vertical & vertical || horizontal & horizontal
                 return 0;
             }
             else if (Math.Abs(line1Diff.X) < Epsilon)
             {
                 float slope = line2Diff.Y / line2Diff.X;
-                float yinter = line2Start.Y - (slope * line2Start.X);
-                float y = (line1Start.X * slope) + yinter;
+                float inter = line2Start.Y - (slope * line2Start.X);
+                float y = (line1Start.X * slope) + inter;
                 point = new Vector2(line1Start.X, y);
 
                 // horizontal and vertical lines

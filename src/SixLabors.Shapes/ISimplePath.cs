@@ -1,4 +1,4 @@
-﻿// <copyright file="IPath.cs" company="Scott Williams">
+﻿// <copyright file="ISimplePath.cs" company="Scott Williams">
 // Copyright (c) Scott Williams and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
@@ -19,7 +19,7 @@ namespace SixLabors.Shapes
         bool IsClosed { get; }
 
         /// <summary>
-        /// Gets the points that make up this simple linear path.
+        /// Gets the points that make this up as a simple linear path.
         /// </summary>
         ImmutableArray<Vector2> Points { get; }
     }

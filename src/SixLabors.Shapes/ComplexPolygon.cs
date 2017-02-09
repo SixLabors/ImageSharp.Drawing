@@ -17,10 +17,9 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
     /// </summary>
-    /// <seealso cref="SixLabors.Shapes.IShape" />
+    /// <seealso cref="SixLabors.Shapes.IPath" />
     public sealed class ComplexPolygon : IPath
     {
-
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
@@ -40,8 +39,8 @@ namespace SixLabors.Shapes
             float maxX = float.MinValue;
             float minY = float.MaxValue;
             float maxY = float.MinValue;
-            
-            foreach (var s in paths)
+
+            foreach (IPath s in paths)
             {
                 if (s.Bounds.Left < minX)
                 {
@@ -65,10 +64,10 @@ namespace SixLabors.Shapes
 
                 this.MaxIntersections += s.MaxIntersections;
             }
+
             if (paths.Length == 1)
             {
                 this.PathType = paths[0].PathType;
-                
             }
             else
             {
@@ -79,6 +78,11 @@ namespace SixLabors.Shapes
 
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
         }
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
+        /// </summary>
+        public PathTypes PathType { get; }
 
         /// <summary>
         /// Gets the paths that make up this shape
@@ -176,11 +180,11 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Determines whether the <see cref="IShape" /> contains the specified point
+        /// Determines whether the <see cref="IPath" /> contains the specified point
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>
-        ///   <c>true</c> if the <see cref="IShape" /> contains the specified point; otherwise, <c>false</c>.
+        ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
         public bool Contains(Vector2 point)
         {
@@ -221,8 +225,12 @@ namespace SixLabors.Shapes
             return new ComplexPolygon(shapes);
         }
 
-        public PathTypes PathType { get; }
-
+        /// <summary>
+        /// Converts the <see cref="IPath" /> into a simple linear path..
+        /// </summary>
+        /// <returns>
+        /// Returns the current <see cref="IPath" /> as simple linear path.
+        /// </returns>
         public ImmutableArray<ISimplePath> Flatten()
         {
             var paths = new List<ISimplePath>();
@@ -234,6 +242,12 @@ namespace SixLabors.Shapes
             return ImmutableArray.Create(paths.ToArray());
         }
 
+        /// <summary>
+        /// Converts a path to a closed path.
+        /// </summary>
+        /// <returns>
+        /// Returns the path as a closed path.
+        /// </returns>
         public IPath AsClosedPath()
         {
             if (this.PathType == PathTypes.Closed)
@@ -243,7 +257,7 @@ namespace SixLabors.Shapes
             else
             {
                 IPath[] paths = new IPath[this.Paths.Length];
-                for(var i = 0; i< this.Paths.Length; i++)
+                for (var i = 0; i < this.Paths.Length; i++)
                 {
                     paths[i] = this.Paths[i].AsClosedPath();
                 }

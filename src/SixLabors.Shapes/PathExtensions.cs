@@ -85,13 +85,15 @@ namespace SixLabors.Shapes
             return path.Transform(Matrix3x2.CreateScale(scale, path.Bounds.Center));
         }
 
-
         /// <summary>
         /// Finds the intersections.
         /// </summary>
+        /// <param name="path">The path.</param>
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
-        /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
+        /// <returns>
+        /// The points along the line the intersect with the boundaries of the polygon.
+        /// </returns>
         public static IEnumerable<Vector2> FindIntersections(this IPath path, Vector2 start, Vector2 end)
         {
             var buffer = ArrayPool<Vector2>.Shared.Rent(path.MaxIntersections);

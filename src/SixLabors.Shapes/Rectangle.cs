@@ -16,7 +16,7 @@ namespace SixLabors.Shapes
     /// <summary>
     /// A way of optimizing drawing rectangles.
     /// </summary>
-    /// <seealso cref="SixLabors.Shapes.IShape" />
+    /// <seealso cref="SixLabors.Shapes.IPath" />
     public class Rectangle : IPath, ISimplePath
     {
         private readonly Vector2 topLeft;
@@ -25,7 +25,7 @@ namespace SixLabors.Shapes
         private readonly ImmutableArray<ISimplePath> flatPath;
         private readonly float halfLength;
         private readonly float length;
-        
+
         /// <summary>
         /// Initializes a new instance of the <see cref="Rectangle" /> class.
         /// </summary>
@@ -146,12 +146,43 @@ namespace SixLabors.Shapes
         int IPath.MaxIntersections => 4;
 
         /// <summary>
+        /// Gets a value indicating whether this instance is a closed path.
+        /// </summary>
+        bool ISimplePath.IsClosed => true;
+
+        /// <summary>
+        /// Gets the points that make this up as a simple linear path.
+        /// </summary>
+        ImmutableArray<Vector2> ISimplePath.Points => this.points;
+
+        /// <summary>
         /// Gets the size.
         /// </summary>
         /// <value>
         /// The size.
         /// </value>
         public Size Size { get; private set; }
+
+        /// <summary>
+        /// Gets the size.
+        /// </summary>
+        /// <value>
+        /// The size.
+        /// </value>
+        public float Width => this.Size.Width;
+
+        /// <summary>
+        /// Gets the height.
+        /// </summary>
+        /// <value>
+        /// The height.
+        /// </value>
+        public float Height => this.Size.Height;
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
+        /// </summary>
+        PathTypes IPath.PathType => PathTypes.Closed;
 
         /// <summary>
         /// Gets the center.
@@ -187,7 +218,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
+        int IPath.FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             int discovered = 0;
             Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
@@ -225,7 +256,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        public IPath Transform(Matrix3x2 matrix)
+        IPath IPath.Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -235,10 +266,15 @@ namespace SixLabors.Shapes
             // rectangles may be rotated and skewed which means they will then nedd representing by a polygon
             return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
         }
-        
-        public PathTypes PathType => PathTypes.Closed;
 
-        public PointInfo Distance(Vector2 point)
+        /// <summary>
+        /// Calculates the distance along and away from the path for a specified point.
+        /// </summary>
+        /// <param name="point">The point along the path.</param>
+        /// <returns>
+        /// Returns details about the point and its distance away from the path.
+        /// </returns>
+        PointInfo IPath.Distance(Vector2 point)
         {
             // point in rectangle
             // if after its clamped by the extreams its still the same then it must be inside :)
@@ -320,27 +356,37 @@ namespace SixLabors.Shapes
                 distanceAlongEdge = 0;
             }
 
+            distanceFromEdge = isInside ? -distanceFromEdge : distanceFromEdge;
+
             return new PointInfo
             {
                 SearchPoint = point,
-                DistanceFromPath = (isInside ? -distanceFromEdge : distanceFromEdge),
+                DistanceFromPath = distanceFromEdge,
                 ClosestPointOnPath = clamped,
                 DistanceAlongPath = distanceAlongEdge
             };
         }
 
-        public ImmutableArray<ISimplePath> Flatten()
+        /// <summary>
+        /// Converts the <see cref="IPath" /> into a simple linear path..
+        /// </summary>
+        /// <returns>
+        /// Returns the current <see cref="IPath" /> as simple linear path.
+        /// </returns>
+        ImmutableArray<ISimplePath> IPath.Flatten()
         {
             return this.flatPath;
         }
 
-        public IPath AsClosedPath()
+        /// <summary>
+        /// Converts a path to a closed path.
+        /// </summary>
+        /// <returns>
+        /// Returns the path as a closed path.
+        /// </returns>
+        IPath IPath.AsClosedPath()
         {
             return this;
         }
-
-        public bool IsClosed => true;
-
-        public ImmutableArray<Vector2> Points => this.points;
     }
 }

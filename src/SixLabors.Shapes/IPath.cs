@@ -14,7 +14,7 @@ namespace SixLabors.Shapes
     public interface IPath
     {
         /// <summary>
-        /// Gets a value indicating whether this instance is a closed path.
+        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
         /// </summary>
         PathTypes PathType { get; }
 

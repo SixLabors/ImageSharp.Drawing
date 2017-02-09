@@ -15,9 +15,6 @@ namespace SixLabors.Shapes
     /// <seealso cref="IPath" />
     public class Path : IPath, ISimplePath
     {
-        /// <summary>
-        /// The inner path.
-        /// </summary>
         private readonly InternalPath innerPath;
         private readonly ImmutableArray<ISimplePath> flatPath;
 
@@ -31,28 +28,57 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="Path" /> class.
+        /// </summary>
+        /// <param name="path">The path.</param>
+        public Path(Path path)
+            : this(path.LineSegments)
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="Path"/> class.
         /// </summary>
         /// <param name="segments">The segments.</param>
         public Path(ImmutableArray<ILineSegment> segments)
         {
-            this.innerPath = new InternalPath(segments, IsClosed);
+            this.innerPath = new InternalPath(segments, this.IsClosed);
             this.LineSegments = segments;
             this.flatPath = ImmutableArray.Create<ISimplePath>(this);
         }
 
-        public virtual bool IsClosed => false;
+        /// <summary>
+        /// Gets a value indicating whether this instance is a closed path.
+        /// </summary>
+        bool ISimplePath.IsClosed => this.IsClosed;
 
         /// <summary>
-        /// Gets the line segments.
+        /// Gets the points that make up this simple linear path.
         /// </summary>
-        /// <value>
-        /// The line segments.
-        /// </value>
-        public ImmutableArray<ILineSegment> LineSegments { get; }
+        public ImmutableArray<Vector2> Points => this.innerPath.Points;
 
         /// <inheritdoc />
         public Rectangle Bounds => this.innerPath.Bounds;
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
+        /// </summary>
+        public PathTypes PathType => this.IsClosed ? PathTypes.Open : PathTypes.Closed;
+
+        /// <summary>
+        /// Gets the maximum number intersections that a shape can have when testing a line.
+        /// </summary>
+        public int MaxIntersections => this.innerPath.Points.Length;
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is a closed path.
+        /// </summary>
+        protected virtual bool IsClosed => false;
+
+        /// <summary>
+        /// Gets the line segments
+        /// </summary>
+        protected ImmutableArray<ILineSegment> LineSegments { get; }
 
         /// <inheritdoc />
         public PointInfo Distance(Vector2 point)
@@ -111,25 +137,44 @@ namespace SixLabors.Shapes
             }
         }
 
-        public PathTypes PathType => (this.IsClosed ? PathTypes.Open : PathTypes.Closed);
-
-        public int MaxIntersections => innerPath.Points.Length;
-
+        /// <summary>
+        /// Converts the <see cref="IPath" /> into a simple linear path..
+        /// </summary>
+        /// <returns>
+        /// Returns the current <see cref="IPath" /> as simple linear path.
+        /// </returns>
         public ImmutableArray<ISimplePath> Flatten()
         {
-            return flatPath;
+            return this.flatPath;
         }
 
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populate a buffer for all points on the polygon that the line intersects.
+        /// </summary>
+        /// <param name="start">The start point of the line.</param>
+        /// <param name="end">The end point of the line.</param>
+        /// <param name="buffer">The buffer that will be populated with intersections.</param>
+        /// <param name="count">The count.</param>
+        /// <param name="offset">The offset.</param>
+        /// <returns>
+        /// The number of intersections populated into the buffer.
+        /// </returns>
         public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             return this.innerPath.FindIntersections(start, end, buffer, count, offset);
         }
 
+        /// <summary>
+        /// Determines whether the <see cref="IPath" /> contains the specified point
+        /// </summary>
+        /// <param name="point">The point.</param>
+        /// <returns>
+        ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
+        /// </returns>
         public bool Contains(Vector2 point)
         {
             return this.innerPath.PointInPolygon(point);
         }
-
-        public ImmutableArray<Vector2> Points => this.innerPath.Points;
     }
 }

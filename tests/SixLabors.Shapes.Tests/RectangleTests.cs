@@ -242,7 +242,7 @@ namespace SixLabors.Shapes.Tests
         public void TransformIdnetityReturnsSahpeObject()
         {
 
-            Rectangle shape = new Rectangle(0, 0, 200, 60);
+            IPath shape = new Rectangle(0, 0, 200, 60);
             var transformdShape =  shape.Transform(Matrix3x2.Identity);
 
             Assert.Same(shape, transformdShape);
@@ -251,7 +251,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Transform()
         {
-            Rectangle shape = new Rectangle(0, 0, 200, 60);
+            IPath shape = new Rectangle(0, 0, 200, 60);
 
             var newShape = shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
 

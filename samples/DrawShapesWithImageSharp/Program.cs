@@ -24,6 +24,13 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             OutputDrawnShape();
             OutputDrawnShapeHourGlass();
+
+            DrawOval();
+        }
+
+        private static void DrawOval()
+        {
+            new Ellipse(0, 0, 10, 20).Scale(5).SaveImage("Curves", "Ellipse.png");
         }
 
         private static void OutputDrawnShape()

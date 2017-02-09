@@ -43,12 +43,13 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="RegularPolygon" /> class.
+        /// Initializes a new instance of the <see cref="Star" /> class.
         /// </summary>
         /// <param name="x">The X coordinate of the center of the polygon.</param>
         /// <param name="y">The Y coordinate of the center of the polygon.</param>
         /// <param name="prongs">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
+        /// <param name="innerRadii">The inner radii.</param>
+        /// <param name="outerRadii">The outer radii.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
         public Star(float x, float y, int prongs, float innerRadii, float outerRadii, float angle)
             : this(new Vector2(x, y), prongs, innerRadii, outerRadii, angle)
@@ -56,7 +57,7 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="RegularPolygon" /> class.
+        /// Initializes a new instance of the <see cref="Star" /> class.
         /// </summary>
         /// <param name="x">The X coordinate of the center of the polygon.</param>
         /// <param name="y">The Y coordinate of the center of the polygon.</param>

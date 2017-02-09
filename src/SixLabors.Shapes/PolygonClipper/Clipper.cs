@@ -53,7 +53,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Executes the specified clip type.
         /// </summary>
         /// <returns>
-        /// Returns the <see cref="IShape" /> array containing the converted polygons.
+        /// Returns the <see cref="IPath" /> array containing the converted polygons.
         /// </returns>
         public ImmutableArray<IPath> GenerateClippedShapes()
         {

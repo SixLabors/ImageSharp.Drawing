@@ -1,4 +1,4 @@
-﻿// <copyright file="ClipableShape.cs" company="Scott Williams">
+﻿// <copyright file="ClipablePath.cs" company="Scott Williams">
 // Copyright (c) Scott Williams and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
@@ -16,9 +16,9 @@ namespace SixLabors.Shapes.PolygonClipper
     public struct ClipablePath
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="ClipableShape"/> struct.
+        /// Initializes a new instance of the <see cref="ClipablePath" /> struct.
         /// </summary>
-        /// <param name="shape">The path.</param>
+        /// <param name="path">The path.</param>
         /// <param name="type">The type.</param>
         public ClipablePath(IPath path, ClippingType type)
         {
