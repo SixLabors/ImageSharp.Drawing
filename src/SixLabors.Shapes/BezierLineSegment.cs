@@ -19,7 +19,7 @@ namespace SixLabors.Shapes
     {
         // code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
         private const float MinimumSqrDistance = 1.75f;
-        private const float DivisionThreshold = -0.997f;
+        private const float DivisionThreshold = -.9995f;
 
         /// <summary>
         /// The line points.

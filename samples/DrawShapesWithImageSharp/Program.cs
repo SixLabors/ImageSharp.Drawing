@@ -26,6 +26,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             OutputDrawnShapeHourGlass();
 
             DrawOval();
+            DrawArc();
         }
 
         private static void DrawOval()
@@ -33,6 +34,16 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             new Ellipse(0, 0, 10, 20).Scale(5).SaveImage("Curves", "Ellipse.png");
         }
 
+        private static void DrawArc()
+        {
+            new Polygon(new BezierLineSegment( new[] {
+                        new Vector2(10, 400),
+                        new Vector2(30, 10),
+                        new Vector2(240, 30),
+                        new Vector2(300, 400)
+            })).SaveImage("Curves", "Arc.png");
+        }
+        
         private static void OutputDrawnShape()
         {
             // center the shape outerRadii + 10 px away from edges
