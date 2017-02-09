@@ -87,15 +87,12 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         public static void SaveImage(this IPath shape, params string[] path)
         {
-
-            //lest offset back into the
-
-            shape = shape.Translate(shape.Bounds.Location * -1) //touch top left
-                    .Translate(new Vector2(10));
+            shape = shape.Translate(shape.Bounds.Location * -1) // touch top left
+                    .Translate(new Vector2(10)); // move in from top left
 
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));
             // pad even amount around shape
-            int width =(int)(shape.Bounds.Left + shape.Bounds.Right);
+            int width = (int)(shape.Bounds.Left + shape.Bounds.Right);
             int height = (int)(shape.Bounds.Top + shape.Bounds.Bottom);
 
             using (var img = new Image(width, height))
@@ -106,7 +103,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 img.Fill(Color.HotPink, new ShapeRegion(shape));
                 img.Draw(Color.LawnGreen, 1, new ShapePath(shape));
 
-                //ensure directory exists
+                // Ensure directory exists
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath));
 
                 using (var fs = File.Create(fullPath))

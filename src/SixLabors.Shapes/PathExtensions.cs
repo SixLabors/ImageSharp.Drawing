@@ -66,12 +66,12 @@ namespace SixLabors.Shapes
         /// Creates a path translated by the supplied postion
         /// </summary>
         /// <param name="path">The path to translate.</param>
-        /// <param name="xScale">The amount to scale along the X axis.</param>
-        /// <param name="yScale">The amount to scale along the Y axis.</param>
+        /// <param name="scaleX">The amount to scale along the X axis.</param>
+        /// <param name="scaleY">The amount to scale along the Y axis.</param>
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
-        public static IPath Scale(this IPath path, float xScale, float yScale)
+        public static IPath Scale(this IPath path, float scaleX, float scaleY)
         {
-            return path.Transform(Matrix3x2.CreateScale(xScale, yScale, path.Bounds.Center));
+            return path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, path.Bounds.Center));
         }
 
         /// <summary>

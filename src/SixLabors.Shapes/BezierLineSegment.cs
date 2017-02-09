@@ -18,7 +18,6 @@ namespace SixLabors.Shapes
     public class BezierLineSegment : ILineSegment
     {
         // code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
-
         private const float MinimumSqrDistance = 1.75f;
         private const float DivisionThreshold = -0.997f;
 
@@ -158,7 +157,8 @@ namespace SixLabors.Shapes
             ImmutableArray<Vector2> controlPoints,
             int depth)
         {
-            if (depth > 999) // max recursive depth for control points, means this is approx the max number of points discoverable
+            // max recursive depth for control points, means this is approx the max number of points discoverable
+            if (depth > 999)
             {
                 return 0;
             }
