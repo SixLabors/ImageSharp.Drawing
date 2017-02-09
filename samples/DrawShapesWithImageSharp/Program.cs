@@ -36,7 +36,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         private static void OutputDrawnShape()
         {
             // center the shape outerRadii + 10 px away from edges
-            var sb = new ShapeBuilder();
+            var sb = new PathBuilder();
 
             // draw a 'V'
             sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));
@@ -49,10 +49,11 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"paths.png");
         }
+
         private static void OutputDrawnShapeHourGlass()
         {
             // center the shape outerRadii + 10 px away from edges
-            var sb = new ShapeBuilder();
+            var sb = new PathBuilder();
 
             // draw a 'V'
             sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));

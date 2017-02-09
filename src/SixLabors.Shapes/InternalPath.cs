@@ -25,7 +25,6 @@ namespace SixLabors.Shapes
         /// The maximum vector
         /// </summary>
         private static readonly Vector2 MaxVector = new Vector2(float.MaxValue);
-        private static readonly Vector2 MinVector = new Vector2(float.MinValue);
 
         /// <summary>
         /// The locker.
