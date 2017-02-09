@@ -62,9 +62,8 @@ namespace SixLabors.Shapes.Tests
             int pointsCount = new Random().Next(3, 20);
 
             var poly = new Star(Vector2.Zero, pointsCount, radius, radius2, 0);
-            var path = poly.AsPath();
 
-            var points = path.Flatten();
+            var points = poly.Flatten()[0].Points;
 
             // calcualte baselineDistance
             var baseline = Vector2.Distance(points[0], points[1]);
@@ -101,10 +100,9 @@ namespace SixLabors.Shapes.Tests
             double anAngle = new Random().NextDouble() * TwoPI;
 
             var poly = new Star(Vector2.Zero, 3, radius, radius2, (float)anAngle);
-            var path = poly.AsPath();
-            var points = path.Flatten();
+            var points = poly.Flatten();
 
-            var allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
+            var allAngles = points[0].Points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
 
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);

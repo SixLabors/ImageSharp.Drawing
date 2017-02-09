@@ -35,7 +35,7 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(4, intersections);
         }
 
-        public int ScanY(IShape shape, int y, float[] buffer, int length, int offset)
+        public int ScanY(IPath shape, int y, float[] buffer, int length, int offset)
         {
             Vector2 start = new Vector2(shape.Bounds.Left - 1, y);
             Vector2 end = new Vector2(shape.Bounds.Right + 1, y);

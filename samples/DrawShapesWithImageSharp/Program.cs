@@ -4,6 +4,8 @@ using System.IO;
 
 namespace SixLabors.Shapes.DrawShapesWithImageSharp
 {
+    using System.Numerics;
+
     public static class Program
     {
         public static void Main(string[] args)
@@ -19,6 +21,50 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             OutputStar(5);
             OutputStar(6);
             OutputStar(20, 100, 200);
+
+            OutputDrawnShape();
+            OutputDrawnShapeHourGlass();
+
+            DrawOval();
+        }
+
+        private static void DrawOval()
+        {
+            new Ellipse(0, 0, 10, 20).Scale(5).SaveImage("Curves", "Ellipse.png");
+        }
+
+        private static void OutputDrawnShape()
+        {
+            // center the shape outerRadii + 10 px away from edges
+            var sb = new PathBuilder();
+
+            // draw a 'V'
+            sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));
+            sb.StartFigure();
+
+            // overlay rectangle
+            sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));
+            sb.AddLine(new Vector2(25, 30), new Vector2(15, 30));
+            sb.CloseFigure();
+
+            sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"paths.png");
+        }
+
+        private static void OutputDrawnShapeHourGlass()
+        {
+            // center the shape outerRadii + 10 px away from edges
+            var sb = new PathBuilder();
+
+            // draw a 'V'
+            sb.AddLines(new Vector2(10, 10), new Vector2(20, 20), new Vector2(30, 10));
+            sb.StartFigure();
+
+            // overlay rectangle
+            sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));
+            sb.AddLine(new Vector2(15, 30), new Vector2(25, 30));
+            sb.CloseFigure();
+
+            sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"HourGlass.png");
         }
 
         private static void OutputStar(int points, float inner = 10, float outer = 20)
@@ -39,11 +85,14 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             paths.SaveImage("Clipping", "RectangleWithTopClipped.png");
         }
 
-        public static void SaveImage(this IShape shape, params string[] path)
+        public static void SaveImage(this IPath shape, params string[] path)
         {
+            shape = shape.Translate(shape.Bounds.Location * -1) // touch top left
+                    .Translate(new Vector2(10)); // move in from top left
+
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));
             // pad even amount around shape
-            int width =(int)(shape.Bounds.Left + shape.Bounds.Right);
+            int width = (int)(shape.Bounds.Left + shape.Bounds.Right);
             int height = (int)(shape.Bounds.Top + shape.Bounds.Bottom);
 
             using (var img = new Image(width, height))
@@ -54,7 +103,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 img.Fill(Color.HotPink, new ShapeRegion(shape));
                 img.Draw(Color.LawnGreen, 1, new ShapePath(shape));
 
-                //ensure directory exists
+                // Ensure directory exists
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(fullPath));
 
                 using (var fs = File.Create(fullPath))

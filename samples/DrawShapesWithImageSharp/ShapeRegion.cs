@@ -20,26 +20,17 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         /// <summary>
         /// Initializes a new instance of the <see cref="ShapeRegion"/> class.
         /// </summary>
-        /// <param name="path">The path.</param>
-        public ShapeRegion(IPath path)
-            : this(path.AsShape())
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ShapeRegion"/> class.
-        /// </summary>
         /// <param name="shape">The shape.</param>
-        public ShapeRegion(IShape shape)
+        public ShapeRegion(IPath shape)
         {
-            this.Shape = shape;
+            this.Shape = shape.AsClosedPath();
             this.Bounds = Convert(shape.Bounds);
         }
 
         /// <summary>
         /// Gets the fillable shape
         /// </summary>
-        public IShape Shape { get; }
+        public IPath Shape { get; }
 
         /// <inheritdoc/>
         public override int MaxIntersections => this.Shape.MaxIntersections;

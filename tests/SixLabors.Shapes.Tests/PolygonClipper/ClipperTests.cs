@@ -33,16 +33,16 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
                         new Vector2(130, 40),
                         new Vector2(65, 137)));
 
-        private ImmutableArray<IShape> Clip(IShape shape, params IShape[] hole)
+        private ImmutableArray<IPath> Clip(IPath shape, params IPath[] hole)
         {
             var clipper = new Clipper();
 
-            clipper.AddShape(shape, ClippingType.Subject);
+            clipper.AddPath(shape, ClippingType.Subject);
             if (hole != null)
             {
                 foreach (var s in hole)
                 {
-                    clipper.AddShape(s, ClippingType.Clip);
+                    clipper.AddPath(s, ClippingType.Clip);
                 }
             }
 
@@ -54,9 +54,9 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         {
             var shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
             Assert.Equal(1, shapes.Length);
-            var path = shapes.Single().Paths.Single().Flatten();
+            var path = shapes.Single().Flatten()[0].Points;
             Assert.Equal(7, path.Length);
-            foreach (var p in this.BigTriangle.Flatten())
+            foreach (var p in this.BigTriangle.Flatten()[0].Points)
             {
                 Assert.Contains(p, path);
             }
@@ -101,9 +101,9 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void ClippingRectanglesCreateCorrectNumberOfPoints()
         {
-            var paths = new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20)).Paths;
+            var paths = new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20)).Flatten();
             Assert.Equal(1, paths.Length);
-            var points = paths[0].Flatten();
+            var points = paths[0].Points;
 
             Assert.Equal(8, points.Length);
         }

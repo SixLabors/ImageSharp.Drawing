@@ -15,7 +15,6 @@ namespace SixLabors.Shapes.Tests
         {
             var segment = new BezierLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 0), new Vector2(20, 0));
             var points = segment.Flatten();
-            Assert.Equal(51, points.Length);
             Assert.Contains(new Vector2(0, 0), points);
             Assert.Contains(new Vector2(10, 0), points);
             Assert.Contains(new Vector2(20, 0), points);

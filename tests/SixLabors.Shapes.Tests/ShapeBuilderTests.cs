@@ -14,7 +14,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void DrawLinesClosedFigure()
         {
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -22,14 +22,14 @@ namespace SixLabors.Shapes.Tests
             var shape = builder.Build();
 
             Assert.Equal(1, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[0]);
         }
 
 
         [Fact]
         public void AddBezier()
         {
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddBezier(new Vector2(10, 10), new Vector2(20, 20), new Vector2(20, 30), new Vector2(10, 40));
             var shape = builder.Build();
@@ -40,7 +40,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void DrawLinesOpenFigure()
         {
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -53,7 +53,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void DrawLines2OpenFigures()
         {
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -69,7 +69,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void DrawLinesOpenThenClosedFigures()
         {
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -81,13 +81,13 @@ namespace SixLabors.Shapes.Tests
 
             Assert.Equal(2, shape.Paths.Length);
             Assert.IsType<Path>(shape.Paths[0]);
-            Assert.IsType<Polygon>(shape.Paths[1].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[1]);
         }
 
         [Fact]
         public void DrawLinesClosedThenOpenFigures()
         {
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -97,14 +97,14 @@ namespace SixLabors.Shapes.Tests
             var shape = builder.Build();
 
             Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[0]);
             Assert.IsType<Path>(shape.Paths[1]);
         }
 
         [Fact]
         public void DrawLinesCloseAllFigures()
         {
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -121,8 +121,8 @@ namespace SixLabors.Shapes.Tests
             shape = builder.Build();
 
             Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0].AsShape());
-            Assert.IsType<Polygon>(shape.Paths[1].AsShape());
+            Assert.IsType<Polygon>(shape.Paths[0]);
+            Assert.IsType<Polygon>(shape.Paths[1]);
         }
 
         [Fact]
@@ -131,7 +131,7 @@ namespace SixLabors.Shapes.Tests
             var point1 = new Vector2(10, 10);
             var point2 = new Vector2(10, 90);
             var point3 = new Vector2(50, 50);
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLines(new List<Vector2> { point1, point2, point3});
             var shape = builder.Build();
@@ -144,7 +144,7 @@ namespace SixLabors.Shapes.Tests
             var point1 = new Vector2(10, 10);
             var point2 = new Vector2(10, 90);
             var point3 = new Vector2(50, 50);
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
             builder.StartFigure();
             builder.StartFigure();
             builder.StartFigure();
@@ -161,7 +161,7 @@ namespace SixLabors.Shapes.Tests
             var point2 = new Vector2(10, 90);
             var point3 = new Vector2(50, 50);
             var matrix = Matrix3x2.CreateTranslation(new Vector2(5, 5));
-            var builder = new ShapeBuilder(matrix);
+            var builder = new PathBuilder(matrix);
 
             builder.AddLines(point1, point2, point3);
             var shape = builder.Build();
@@ -175,7 +175,7 @@ namespace SixLabors.Shapes.Tests
             var point2 = new Vector2(10, 90);
             var point3 = new Vector2(50, 50);
             var matrix = Matrix3x2.CreateTranslation(new Vector2(100, 100));
-            var builder = new ShapeBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLines(point1, point2, point3);
             builder.SetTransform(matrix);
@@ -198,7 +198,7 @@ namespace SixLabors.Shapes.Tests
             var point2 = new Vector2(10, 90);
             var point3 = new Vector2(50, 50);
             var origin = new Vector2(-50, -100);
-            var builder = new ShapeBuilder(Matrix3x2.CreateScale(10));
+            var builder = new PathBuilder(Matrix3x2.CreateScale(10));
 
             builder.AddLines(point1, point2, point3);
             builder.SetOrigin(origin);

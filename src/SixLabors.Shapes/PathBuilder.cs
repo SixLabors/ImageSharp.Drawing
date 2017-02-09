@@ -1,4 +1,4 @@
-﻿// <copyright file="ShapeBuilder.cs" company="Scott Williams">
+﻿// <copyright file="PathBuilder.cs" company="Scott Williams">
 // Copyright (c) Scott Williams and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
@@ -14,7 +14,7 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Allow you to derivatively build shapes and paths.
     /// </summary>
-    public class ShapeBuilder
+    public class PathBuilder
     {
         private readonly List<Figure> figures = new List<Figure>();
         private readonly Matrix3x2 defaultTransform;
@@ -22,18 +22,18 @@ namespace SixLabors.Shapes
         private Matrix3x2 currentTransform;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ShapeBuilder" /> class.
+        /// Initializes a new instance of the <see cref="PathBuilder" /> class.
         /// </summary>
-        public ShapeBuilder()
+        public PathBuilder()
             : this(Matrix3x2.Identity)
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ShapeBuilder"/> class.
+        /// Initializes a new instance of the <see cref="PathBuilder"/> class.
         /// </summary>
         /// <param name="defaultTransform">The default transform.</param>
-        public ShapeBuilder(Matrix3x2 defaultTransform)
+        public PathBuilder(Matrix3x2 defaultTransform)
         {
             this.defaultTransform = defaultTransform;
             this.currentFigure = new Figure();
@@ -42,7 +42,7 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Sets the translation to be applied to all items to follow being applied to the <see cref="ShapeBuilder"/>.
+        /// Sets the translation to be applied to all items to follow being applied to the <see cref="PathBuilder"/>.
         /// </summary>
         /// <param name="translation">The translation.</param>
         public void SetTransform(Matrix3x2 translation)
@@ -188,7 +188,7 @@ namespace SixLabors.Shapes
         /// <returns>The current set of operations as a complex polygon</returns>
         public ComplexPolygon Build()
         {
-            return new ComplexPolygon(this.figures.Where(x => !x.IsEmpty).Select(x => x.AsPath()).ToArray());
+            return new ComplexPolygon(this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray());
         }
 
         private class Figure
@@ -204,11 +204,11 @@ namespace SixLabors.Shapes
                 this.segments.Add(segment);
             }
 
-            public IPath AsPath()
+            public IPath Build()
             {
                 if (this.IsClosed)
                 {
-                    return new Polygon(this.segments.ToArray()).AsPath();
+                    return new Polygon(this.segments.ToArray());
                 }
 
                 return new Path(this.segments.ToArray());

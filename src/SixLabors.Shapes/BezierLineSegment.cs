@@ -6,6 +6,7 @@
 namespace SixLabors.Shapes
 {
     using System;
+    using System.Collections.Generic;
     using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
@@ -17,11 +18,8 @@ namespace SixLabors.Shapes
     public class BezierLineSegment : ILineSegment
     {
         // code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
-
-        /// <summary>
-        /// The segments per curve.
-        /// </summary>
-        private const int SegmentsPerCurve = 50;
+        private const float MinimumSqrDistance = 1.75f;
+        private const float DivisionThreshold = -0.997f;
 
         /// <summary>
         /// The line points.
@@ -33,7 +31,7 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(Vector2[] points)
+        public BezierLineSegment(ImmutableArray<Vector2> points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
@@ -45,9 +43,18 @@ namespace SixLabors.Shapes
             }
 
             this.controlPoints = points.ToArray();
-            this.linePoints = this.GetDrawingPoints(points);
+            this.linePoints = GetDrawingPoints(points);
 
             this.EndPoint = points[points.Length - 1];
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
+        /// </summary>
+        /// <param name="points">The points.</param>
+        public BezierLineSegment(Vector2[] points)
+            : this(ImmutableArray.Create(points))
+        {
         }
 
         /// <summary>
@@ -105,44 +112,96 @@ namespace SixLabors.Shapes
             return new BezierLineSegment(points);
         }
 
-        /// <summary>
-        /// Returns the drawing points along the line.
-        /// </summary>
-        /// <param name="controlPoints">The control points.</param>
-        /// <returns>
-        /// The <see cref="T:Vector2[]"/>.
-        /// </returns>
-        private ImmutableArray<Vector2> GetDrawingPoints(Vector2[] controlPoints)
+        private static ImmutableArray<Vector2> GetDrawingPoints(ImmutableArray<Vector2> controlPoints)
         {
-            // TODO we need to calculate an optimal SegmentsPerCurve value depending on the calculated length of this curve
+            List<Vector2> drawingPoints = new List<Vector2>();
             int curveCount = (controlPoints.Length - 1) / 3;
-            int finalPointCount = (SegmentsPerCurve * curveCount) + 1; // we have SegmentsPerCurve for each curve plus the origon point;
 
-            Vector2[] drawingPoints = new Vector2[finalPointCount];
-
-            int position = 0;
-            int targetPoint = controlPoints.Length - 3;
-            for (int i = 0; i < targetPoint; i += 3)
+            for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
             {
-                Vector2 p0 = controlPoints[i];
-                Vector2 p1 = controlPoints[i + 1];
-                Vector2 p2 = controlPoints[i + 2];
-                Vector2 p3 = controlPoints[i + 3];
+                List<Vector2> bezierCurveDrawingPoints = FindDrawingPoints(curveIndex, controlPoints);
 
-                // only do this for the first end point. When i != 0, this coincides with the end point of the previous segment,
-                if (i == 0)
+                if (curveIndex != 0)
                 {
-                    drawingPoints[position++] = this.CalculateBezierPoint(0, p0, p1, p2, p3);
+                    //remove the fist point, as it coincides with the last point of the previous Bezier curve.
+                    bezierCurveDrawingPoints.RemoveAt(0);
                 }
 
-                for (int j = 1; j <= SegmentsPerCurve; j++)
-                {
-                    float t = j / (float)SegmentsPerCurve;
-                    drawingPoints[position++] = this.CalculateBezierPoint(t, p0, p1, p2, p3);
-                }
+                drawingPoints.AddRange(bezierCurveDrawingPoints);
             }
 
-            return ImmutableArray.Create(drawingPoints);
+            return drawingPoints.ToImmutableArray();
+        }
+
+        private static List<Vector2> FindDrawingPoints(int curveIndex, ImmutableArray<Vector2> controlPoints)
+        {
+            List<Vector2> pointList = new List<Vector2>();
+
+            Vector2 left = CalculateBezierPoint(curveIndex, 0, controlPoints);
+            Vector2 right = CalculateBezierPoint(curveIndex, 1, controlPoints);
+
+            pointList.Add(left);
+            pointList.Add(right);
+
+            FindDrawingPoints(curveIndex, 0, 1, pointList, 1, controlPoints, 0);
+
+            return pointList;
+        }
+
+        private static int FindDrawingPoints(
+            int curveIndex,
+            float t0,
+            float t1,
+            List<Vector2> pointList,
+            int insertionIndex,
+            ImmutableArray<Vector2> controlPoints,
+            int depth)
+        {
+            // max recursive depth for control points, means this is approx the max number of points discoverable
+            if (depth > 999)
+            {
+                return 0;
+            }
+
+            Vector2 left = CalculateBezierPoint(curveIndex, t0, controlPoints);
+            Vector2 right = CalculateBezierPoint(curveIndex, t1, controlPoints);
+
+            if ((left - right).LengthSquared() < MinimumSqrDistance)
+            {
+                return 0;
+            }
+
+            float midT = (t0 + t1) / 2;
+            Vector2 mid = CalculateBezierPoint(curveIndex, midT, controlPoints);
+
+            Vector2 leftDirection = Vector2.Normalize(left - mid);
+            Vector2 rightDirection = Vector2.Normalize(right - mid);
+
+            if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
+            {
+                int pointsAddedCount = 0;
+
+                pointsAddedCount += FindDrawingPoints(curveIndex, t0, midT, pointList, insertionIndex, controlPoints, depth + 1);
+                pointList.Insert(insertionIndex + pointsAddedCount, mid);
+                pointsAddedCount++;
+                pointsAddedCount += FindDrawingPoints(curveIndex, midT, t1, pointList, insertionIndex + pointsAddedCount, controlPoints, depth + 1);
+
+                return pointsAddedCount;
+            }
+
+            return 0;
+        }
+
+        private static Vector2 CalculateBezierPoint(int curveIndex, float t, ImmutableArray<Vector2> controlPoints)
+        {
+            int nodeIndex = curveIndex * 3;
+
+            Vector2 p0 = controlPoints[nodeIndex];
+            Vector2 p1 = controlPoints[nodeIndex + 1];
+            Vector2 p2 = controlPoints[nodeIndex + 2];
+            Vector2 p3 = controlPoints[nodeIndex + 3];
+
+            return CalculateBezierPoint(t, p0, p1, p2, p3);
         }
 
         /// <summary>
@@ -156,7 +215,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// The <see cref="Vector2"/>.
         /// </returns>
-        private Vector2 CalculateBezierPoint(float t, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)
+        private static Vector2 CalculateBezierPoint(float t, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3)
         {
             float u = 1 - t;
             float tt = t * t;

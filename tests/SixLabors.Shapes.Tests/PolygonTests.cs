@@ -48,7 +48,6 @@ namespace SixLabors.Shapes.Tests
                     new TestPoint[] {new Vector2(10, 10), new Vector2(10, 100), new Vector2(100, 100), new Vector2(100, 10)},
                     new Vector2(10, 10),
                     0
-
                 },
                {
                    new TestPoint[] { new Vector2(10, 10), new Vector2(10, 100), new Vector2(100, 100), new Vector2(100, 10) },
@@ -56,7 +55,7 @@ namespace SixLabors.Shapes.Tests
                },
                {
                    new TestPoint[] { new Vector2(10, 10), new Vector2(10, 100), new Vector2(100, 100), new Vector2(100, 10) },
-                   new Vector2(11, 11), 0
+                   new Vector2(11, 11), -1
                 },
                {
                    new TestPoint[] { new Vector2(10, 10), new Vector2(10, 100), new Vector2(100, 100), new Vector2(100, 10) },
@@ -69,7 +68,7 @@ namespace SixLabors.Shapes.Tests
         public void Distance(TestPoint[] controlPoints, TestPoint point, float expected)
         {
             var shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (Vector2)x).ToArray()));
-            Assert.Equal(expected, shape.Distance(point));
+            Assert.Equal(expected, shape.Distance(point).DistanceFromPath);
         }
 
         public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
@@ -86,8 +85,8 @@ namespace SixLabors.Shapes.Tests
                     { new Vector2(1,  10), 0f, 29f },
                     { new Vector2(0,  10), 0f, 30f },
                     { new Vector2(0,  1), 0f, 39f },
-                    { new Vector2(4,  3), 3f, 4f },
-                    { new Vector2(3, 4), 3f, 36f },
+                    { new Vector2(4,  3), -3f, 4f },
+                    { new Vector2(3, 4), -3f, 36f },
                     { new Vector2(-1,  0), 1f, 0f },
                     { new Vector2(1,  -1), 1f, 1f },
                     { new Vector2(9,  -1), 1f, 9f },
@@ -103,7 +102,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
         {
-            IPath path = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10))).AsPath();
+            IPath path = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
             var info = path.Distance(point);
             Assert.Equal(expectedDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
@@ -113,7 +112,7 @@ namespace SixLabors.Shapes.Tests
         public void AsSimpleLinearPath()
         {
             var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
-            var paths = poly.Flatten();
+            var paths = poly.Flatten()[0].Points;
             Assert.Equal(3, paths.Length);
             Assert.Equal(new Vector2(0, 0), paths[0]);
             Assert.Equal(new Vector2(0, 10), paths[1]);
@@ -147,18 +146,18 @@ namespace SixLabors.Shapes.Tests
         public void ReturnsWrapperOfSelfASOwnPath_SingleSegment()
         {
             var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
-            var paths = poly.Paths;
+            var paths = poly.Flatten();
             Assert.Equal(1, paths.Length);
-            Assert.Equal(poly, paths[0].AsShape());
+            Assert.Equal(poly, paths[0]);
         }
 
         [Fact]
         public void ReturnsWrapperOfSelfASOwnPath_MultiSegment()
         {
             var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10)), new LinearLineSegment(new Vector2(2, 5), new Vector2(5, 5)));
-            var paths = poly.Paths;
+            var paths = poly.Flatten();
             Assert.Equal(1, paths.Length);
-            Assert.Equal(poly, paths[0].AsShape());
+            Assert.Equal(poly, paths[0]);
         }
 
         [Fact]
@@ -170,13 +169,6 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(0, bounds.Top);
             Assert.Equal(5, bounds.Right);
             Assert.Equal(10, bounds.Bottom);
-        }
-
-        [Fact]
-        public void Length()
-        {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10))).AsPath();
-            Assert.Equal(20, poly.Length);
         }
 
         [Fact]
@@ -198,7 +190,6 @@ namespace SixLabors.Shapes.Tests
             var intersections = poly.FindIntersections(new Vector2(float.MinValue, 55), new Vector2(float.MaxValue, 55));
             Assert.Equal(2, intersections.Count());
         }
-
 
         [Fact]
         public void HandleClippingInnerCorner()

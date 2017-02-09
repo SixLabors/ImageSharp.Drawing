@@ -9,7 +9,7 @@ namespace SixLabors.Shapes.Tests
     {
         public static IPath AsPath(this Rectangle rect)
         {
-            return ((IShape)rect).Paths[0];
+            return ((IPath)rect);
         }
     }
 }

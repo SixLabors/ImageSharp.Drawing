@@ -17,31 +17,9 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
     /// </summary>
-    /// <seealso cref="SixLabors.Shapes.IShape" />
-    public sealed class ComplexPolygon : IShape
+    /// <seealso cref="SixLabors.Shapes.IPath" />
+    public sealed class ComplexPolygon : IPath
     {
-        private const float ClipperScaleFactor = 100f;
-        private ImmutableArray<IShape> shapes;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
-        /// </summary>
-        /// <param name="shapes">The shapes.</param>
-        public ComplexPolygon(params IShape[] shapes)
-            : this(ImmutableArray.Create(shapes))
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
-        /// </summary>
-        /// <param name="shapes">The shapes.</param>
-        public ComplexPolygon(ImmutableArray<IShape> shapes)
-            : this(shapes, ImmutableArray<IPath>.Empty)
-        {
-            Guard.MustBeGreaterThanOrEqualTo(shapes.Length, 1, nameof(shapes));
-        }
-
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
@@ -56,41 +34,13 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="paths">The paths.</param>
         public ComplexPolygon(ImmutableArray<IPath> paths)
-            : this(ImmutableArray<IShape>.Empty, paths)
         {
-            Guard.MustBeGreaterThanOrEqualTo(paths.Length, 1, nameof(paths));
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
-        /// </summary>
-        /// <param name="shapes">The shapes.</param>
-        /// <param name="paths">The paths.</param>
-        private ComplexPolygon(ImmutableArray<IShape> shapes, ImmutableArray<IPath> paths)
-        {
-            var pathCount = shapes.Sum(x => x.Paths.Length);
-
-            var allShapes = new List<IShape>(shapes.Length + paths.Length);
-            var allPaths = new List<IPath>(pathCount + paths.Length);
-
-            foreach (var p in paths)
-            {
-                allPaths.Add(p);
-                allShapes.Add(p.AsShape());
-            }
-
-            foreach (var s in shapes)
-            {
-                allPaths.AddRange(s.Paths);
-                allShapes.Add(s);
-            }
-
             float minX = float.MaxValue;
             float maxX = float.MinValue;
             float minY = float.MaxValue;
             float maxY = float.MinValue;
 
-            foreach (var s in allShapes)
+            foreach (IPath s in paths)
             {
                 if (s.Bounds.Left < minX)
                 {
@@ -115,11 +65,24 @@ namespace SixLabors.Shapes
                 this.MaxIntersections += s.MaxIntersections;
             }
 
-            this.Paths = ImmutableArray.Create(allPaths.ToArray());
-            this.shapes = ImmutableArray.Create(allShapes.ToArray());
+            if (paths.Length == 1)
+            {
+                this.PathType = paths[0].PathType;
+            }
+            else
+            {
+                this.PathType = PathTypes.Mixed;
+            }
+
+            this.Paths = paths;
 
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
         }
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
+        /// </summary>
+        public PathTypes PathType { get; }
 
         /// <summary>
         /// Gets the paths that make up this shape
@@ -157,33 +120,35 @@ namespace SixLabors.Shapes
         /// therefore for a point to be in more that one we must be in a hole of another, theoretically this could
         /// then flip again to be in a outline inside a hole inside an outline :)
         /// </remarks>
-        float IShape.Distance(Vector2 point)
+        public PointInfo Distance(Vector2 point)
         {
             float dist = float.MaxValue;
+            var pointInfo = default(PointInfo);
             bool inside = false;
-            foreach (IShape shape in this.shapes)
+            foreach (IPath shape in this.Paths)
             {
-                float d = shape.Distance(point);
+                var d = shape.Distance(point);
 
-                if (d <= 0)
+                if (d.DistanceFromPath <= 0)
                 {
                     // we are inside a poly
-                    d = -d;  // flip the sign
+                    d.DistanceFromPath = -d.DistanceFromPath;  // flip the sign
                     inside ^= true; // flip the inside flag
                 }
 
-                if (d < dist)
+                if (d.DistanceFromPath < dist)
                 {
-                    dist = d;
+                    dist = d.DistanceFromPath;
+                    pointInfo = d;
                 }
             }
 
             if (inside)
             {
-                return -dist;
+                pointInfo.DistanceFromPath = -pointInfo.DistanceFromPath;
             }
 
-            return dist;
+            return pointInfo;
         }
 
         /// <summary>
@@ -202,28 +167,29 @@ namespace SixLabors.Shapes
         public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
             int totalAdded = 0;
-            for (int i = 0; i < this.shapes.Length; i++)
+            for (int i = 0; i < this.Paths.Length; i++)
             {
-                int added = this.shapes[i].FindIntersections(start, end, buffer, count, offset);
+                int added = this.Paths[i].FindIntersections(start, end, buffer, count, offset);
                 count -= added;
                 offset += added;
                 totalAdded += added;
             }
 
+            // TODO we should sort by distance from start
             return totalAdded;
         }
 
         /// <summary>
-        /// Determines whether the <see cref="IShape" /> contains the specified point
+        /// Determines whether the <see cref="IPath" /> contains the specified point
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>
-        ///   <c>true</c> if the <see cref="IShape" /> contains the specified point; otherwise, <c>false</c>.
+        ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
         public bool Contains(Vector2 point)
         {
             bool inside = false;
-            foreach (IShape shape in this.shapes)
+            foreach (var shape in this.Paths)
             {
                 if (shape.Contains(point))
                 {
@@ -235,34 +201,13 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <returns>
-        /// The locations along the line segment that intersect with the edges of the shape.
-        /// </returns>
-        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
-        {
-            for (int i = 0; i < this.shapes.Length; i++)
-            {
-                var points = this.shapes[i].FindIntersections(start, end);
-                foreach (var point in points)
-                {
-                    yield return point;
-                }
-            }
-        }
-
-        /// <summary>
         /// Transforms the shape using the specified matrix.
         /// </summary>
         /// <param name="matrix">The matrix.</param>
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        public IShape Transform(Matrix3x2 matrix)
+        public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -270,14 +215,55 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            var shapes = new IShape[this.shapes.Length];
+            var shapes = new IPath[this.Paths.Length];
             var i = 0;
-            foreach (var s in this.shapes)
+            foreach (var s in this.Paths)
             {
                 shapes[i++] = s.Transform(matrix);
             }
 
             return new ComplexPolygon(shapes);
+        }
+
+        /// <summary>
+        /// Converts the <see cref="IPath" /> into a simple linear path..
+        /// </summary>
+        /// <returns>
+        /// Returns the current <see cref="IPath" /> as simple linear path.
+        /// </returns>
+        public ImmutableArray<ISimplePath> Flatten()
+        {
+            var paths = new List<ISimplePath>();
+            foreach (var path in this.Paths)
+            {
+                paths.AddRange(path.Flatten());
+            }
+
+            return ImmutableArray.Create(paths.ToArray());
+        }
+
+        /// <summary>
+        /// Converts a path to a closed path.
+        /// </summary>
+        /// <returns>
+        /// Returns the path as a closed path.
+        /// </returns>
+        public IPath AsClosedPath()
+        {
+            if (this.PathType == PathTypes.Closed)
+            {
+                return this;
+            }
+            else
+            {
+                IPath[] paths = new IPath[this.Paths.Length];
+                for (var i = 0; i < this.Paths.Length; i++)
+                {
+                    paths[i] = this.Paths[i].AsClosedPath();
+                }
+
+                return new ComplexPolygon(paths);
+            }
         }
     }
 }

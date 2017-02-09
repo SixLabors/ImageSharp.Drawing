@@ -25,7 +25,6 @@ namespace SixLabors.Shapes
         /// The maximum vector
         /// </summary>
         private static readonly Vector2 MaxVector = new Vector2(float.MaxValue);
-        private static readonly Vector2 MinVector = new Vector2(float.MinValue);
 
         /// <summary>
         /// The locker.
@@ -292,29 +291,6 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Finds the intersections.
-        /// </summary>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
-        public IEnumerable<Vector2> FindIntersections(Vector2 start, Vector2 end)
-        {
-            var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
-            try
-            {
-                var hits = this.FindIntersections(start, end, buffer, this.points.Length, 0);
-                for (var i = 0; i < hits; i++)
-                {
-                    yield return buffer[i];
-                }
-            }
-            finally
-            {
-                ArrayPool<Vector2>.Shared.Return(buffer);
-            }
-        }
-
-        /// <summary>
         /// Determines if the specified point is inside or outside the path.
         /// </summary>
         /// <param name="point">The point.</param>
@@ -461,14 +437,14 @@ namespace SixLabors.Shapes
             Vector2 point;
             if ((Math.Abs(line1Diff.Y) < Epsilon && Math.Abs(line2Diff.Y) < Epsilon) || (Math.Abs(line1Diff.X) < Epsilon && Math.Abs(line2Diff.X) < Epsilon))
             {
-                //vertical & vertical || horizontal & horizontal
+                // vertical & vertical || horizontal & horizontal
                 return 0;
             }
             else if (Math.Abs(line1Diff.X) < Epsilon)
             {
                 float slope = line2Diff.Y / line2Diff.X;
-                float yinter = line2Start.Y - (slope * line2Start.X);
-                float y = (line1Start.X * slope) + yinter;
+                float inter = line2Start.Y - (slope * line2Start.X);
+                float y = (line1Start.X * slope) + inter;
                 point = new Vector2(line1Start.X, y);
 
                 // horizontal and vertical lines
