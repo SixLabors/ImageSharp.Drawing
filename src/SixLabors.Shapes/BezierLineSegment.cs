@@ -32,7 +32,7 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(Vector2[] points)
+        public BezierLineSegment(ImmutableArray<Vector2> points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
@@ -44,9 +44,18 @@ namespace SixLabors.Shapes
             }
 
             this.controlPoints = points.ToArray();
-            this.linePoints = this.GetDrawingPoints(points);
+            this.linePoints = GetDrawingPoints(points);
 
             this.EndPoint = points[points.Length - 1];
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
+        /// </summary>
+        /// <param name="points">The points.</param>
+        public BezierLineSegment(Vector2[] points)
+            : this(ImmutableArray.Create(points))
+        {
         }
 
         /// <summary>
@@ -172,10 +181,10 @@ namespace SixLabors.Shapes
             {
                 int pointsAddedCount = 0;
 
-                pointsAddedCount += FindDrawingPoints(curveIndex, t0, midT, pointList, insertionIndex, controlPoints, depth+1);
+                pointsAddedCount += FindDrawingPoints(curveIndex, t0, midT, pointList, insertionIndex, controlPoints, depth + 1);
                 pointList.Insert(insertionIndex + pointsAddedCount, mid);
                 pointsAddedCount++;
-                pointsAddedCount += FindDrawingPoints(curveIndex, midT, t1, pointList, insertionIndex + pointsAddedCount, controlPoints, depth+1);
+                pointsAddedCount += FindDrawingPoints(curveIndex, midT, t1, pointList, insertionIndex + pointsAddedCount, controlPoints, depth + 1);
 
                 return pointsAddedCount;
             }
