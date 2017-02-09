@@ -91,7 +91,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A line segment with the matrix applied to it.
         /// </returns>
-        public ILineSegment Transform(Matrix3x2 matrix)
+        public LinearLineSegment Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -108,5 +108,12 @@ namespace SixLabors.Shapes
 
             return new LinearLineSegment(points);
         }
+
+        /// <summary>
+        /// Transforms the current LineSegment using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>A line segment with the matrix applied to it.</returns>
+        ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
     }
 }

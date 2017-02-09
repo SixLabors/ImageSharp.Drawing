@@ -94,7 +94,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="matrix">The matrix.</param>
         /// <returns>A line segment with the matrix applied to it.</returns>
-        public ILineSegment Transform(Matrix3x2 matrix)
+        public BezierLineSegment Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -112,6 +112,13 @@ namespace SixLabors.Shapes
             return new BezierLineSegment(points);
         }
 
+        /// <summary>
+        /// Transforms the current LineSegment using specified matrix.
+        /// </summary>
+        /// <param name="matrix">The matrix.</param>
+        /// <returns>A line segment with the matrix applied to it.</returns>
+        ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
+
         private static ImmutableArray<Vector2> GetDrawingPoints(ImmutableArray<Vector2> controlPoints)
         {
             List<Vector2> drawingPoints = new List<Vector2>();
@@ -123,7 +130,7 @@ namespace SixLabors.Shapes
 
                 if (curveIndex != 0)
                 {
-                    //remove the fist point, as it coincides with the last point of the previous Bezier curve.
+                    // remove the fist point, as it coincides with the last point of the previous Bezier curve.
                     bezierCurveDrawingPoints.RemoveAt(0);
                 }
 

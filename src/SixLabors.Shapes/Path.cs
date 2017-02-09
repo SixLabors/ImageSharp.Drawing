@@ -55,7 +55,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        public ImmutableArray<Vector2> Points => this.innerPath.Points;
+        ImmutableArray<Vector2> ISimplePath.Points => this.innerPath.Points;
 
         /// <inheritdoc />
         public Rectangle Bounds => this.innerPath.Bounds;
@@ -71,14 +71,14 @@ namespace SixLabors.Shapes
         public int MaxIntersections => this.innerPath.Points.Length;
 
         /// <summary>
+        /// Gets the line segments
+        /// </summary>
+        public ImmutableArray<ILineSegment> LineSegments { get; }
+
+        /// <summary>
         /// Gets a value indicating whether this instance is a closed path.
         /// </summary>
         protected virtual bool IsClosed => false;
-
-        /// <summary>
-        /// Gets the line segments
-        /// </summary>
-        protected ImmutableArray<ILineSegment> LineSegments { get; }
 
         /// <inheritdoc />
         public PointInfo Distance(Vector2 point)
