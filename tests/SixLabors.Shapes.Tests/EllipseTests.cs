@@ -67,5 +67,17 @@ namespace SixLabors.Shapes.Tests
 
             Assert.Equal(2, points.Length);
         }
+        [Fact]
+        public void AcrossEllipseShouldReturn2()
+        {
+            var poly = new Ellipse(0, 0, 10, 20).Scale(5);
+            poly = poly.Translate(poly.Bounds.Location * -1) // touch top left
+               .Translate(new Vector2(10)); // move in from top left
+
+            var points = poly.FindIntersections(new Vector2(0, 10), new Vector2(100, 10)).ToArray();
+
+            Assert.Equal(2, points.Length);
+        }
+
     }       
 }

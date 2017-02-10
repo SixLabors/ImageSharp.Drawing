@@ -220,20 +220,40 @@ namespace SixLabors.Shapes
             Vector2 lastPoint = MaxVector;
             if (this.closedPath)
             {
-                int hitCount = FindIntersection(this.points[polyCorners - 1], this.points[0], start, end, intersectionBuffer);
+                int prev = polyCorners;
+                do
+                {
+                    prev--;
+                    if (prev == 0)
+                    {
+                        // all points are common, shouldn't match anything
+                        return 0;
+                    }
+                }
+                while (this.points[0].Equivelent(this.points[prev], Epsilon * 2)); // skip points too close together
+
+                int hitCount = FindIntersection(this.points[prev], this.points[0], start, end, intersectionBuffer);
                 if (hitCount > 0)
                 {
                     lastPoint = intersectionBuffer[hitCount - 1];
                 }
             }
 
-            for (int i = 0; i < polyCorners && count > 0; i++)
+            int inc = 0;
+            for (int i = 0; i < polyCorners && count > 0; i += inc)
             {
-                int next = i + 1;
-                if (this.closedPath && next == polyCorners)
+                int next = i;
+                inc = 0;
+                do
                 {
-                    next -= polyCorners;
+                    inc++;
+                    next++;
+                    if (this.closedPath && next == polyCorners)
+                    {
+                        next -= polyCorners;
+                    }
                 }
+                while (this.points[i].Equivelent(this.points[next], Epsilon * 2) && inc < polyCorners); // skip points too close together
 
                 int hitCount = FindIntersection(this.points[i], this.points[next], start, end, intersectionBuffer);
                 if (hitCount > 0)

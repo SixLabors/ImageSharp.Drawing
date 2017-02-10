@@ -20,6 +20,7 @@ namespace SixLabors.Shapes
         private readonly Matrix3x2 defaultTransform;
         private Figure currentFigure = null;
         private Matrix3x2 currentTransform;
+        private Matrix3x2 setTransform;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PathBuilder" /> class.
@@ -36,8 +37,7 @@ namespace SixLabors.Shapes
         public PathBuilder(Matrix3x2 defaultTransform)
         {
             this.defaultTransform = defaultTransform;
-            this.currentFigure = new Figure();
-            this.figures.Add(this.currentFigure);
+            this.Clear();
             this.ResetTransform();
         }
 
@@ -47,7 +47,8 @@ namespace SixLabors.Shapes
         /// <param name="translation">The translation.</param>
         public void SetTransform(Matrix3x2 translation)
         {
-            this.currentTransform = translation;
+            this.setTransform = translation;
+            this.currentTransform = this.setTransform * this.defaultTransform;
         }
 
         /// <summary>
@@ -56,7 +57,9 @@ namespace SixLabors.Shapes
         /// <param name="origin">The origin.</param>
         public void SetOrigin(Vector2 origin)
         {
-            this.currentTransform.Translation = origin;
+            // the new origin should be transofrmed based on the default transform
+            this.setTransform.Translation = origin;
+            this.currentTransform = this.setTransform * this.defaultTransform;
         }
 
         /// <summary>
@@ -64,7 +67,8 @@ namespace SixLabors.Shapes
         /// </summary>
         public void ResetTransform()
         {
-            this.currentTransform = this.defaultTransform;
+            this.setTransform = Matrix3x2.Identity;
+            this.currentTransform = this.setTransform * this.defaultTransform;
         }
 
         /// <summary>
@@ -72,7 +76,8 @@ namespace SixLabors.Shapes
         /// </summary>
         public void ResetOrigin()
         {
-            this.currentTransform.Translation = this.defaultTransform.Translation;
+            this.setTransform.Translation = Vector2.Zero;
+            this.currentTransform = this.setTransform * this.defaultTransform;
         }
 
         /// <summary>
@@ -186,9 +191,34 @@ namespace SixLabors.Shapes
         /// Builds a complex polygon fromn the current working set of working operations.
         /// </summary>
         /// <returns>The current set of operations as a complex polygon</returns>
-        public ComplexPolygon Build()
+        public IPath Build()
         {
-            return new ComplexPolygon(this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray());
+            var paths = this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray();
+            if (paths.Length == 1)
+            {
+                return paths[0];
+            }
+
+            return new ComplexPolygon(paths);
+        }
+
+        /// <summary>
+        /// Resets this instance, clearing any drawn paths and reseting any transforms.
+        /// </summary>
+        public void Reset()
+        {
+            this.Clear();
+            this.ResetTransform();
+        }
+
+        /// <summary>
+        /// Clears all drawn paths, Leaving any applied transforms.
+        /// </summary>
+        public void Clear()
+        {
+            this.currentFigure = new Figure();
+            this.figures.Clear();
+            this.figures.Add(this.currentFigure);
         }
 
         private class Figure
