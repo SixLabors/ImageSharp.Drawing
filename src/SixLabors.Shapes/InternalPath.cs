@@ -20,6 +20,7 @@ namespace SixLabors.Shapes
         /// The epsilon for float comparison
         /// </summary>
         private const float Epsilon = 0.001f;
+        private const float Epsilon2 = 0.2f;
 
         /// <summary>
         /// The maximum vector
@@ -230,7 +231,7 @@ namespace SixLabors.Shapes
                         return 0;
                     }
                 }
-                while (this.points[0].Equivelent(this.points[prev], Epsilon * 2)); // skip points too close together
+                while (this.points[0].Equivelent(this.points[prev], Epsilon2)); // skip points too close together
 
                 int hitCount = FindIntersection(this.points[prev], this.points[0], start, end, intersectionBuffer);
                 if (hitCount > 0)
@@ -253,7 +254,7 @@ namespace SixLabors.Shapes
                         next -= polyCorners;
                     }
                 }
-                while (this.points[i].Equivelent(this.points[next], Epsilon * 2) && inc < polyCorners); // skip points too close together
+                while (this.points[i].Equivelent(this.points[next], Epsilon2) && inc < polyCorners); // skip points too close together
 
                 int hitCount = FindIntersection(this.points[i], this.points[next], start, end, intersectionBuffer);
                 if (hitCount > 0)
