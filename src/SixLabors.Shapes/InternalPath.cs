@@ -238,6 +238,7 @@ namespace SixLabors.Shapes
                 {
                     lastPoint = intersectionBuffer[hitCount - 1];
                 }
+                polyCorners = prev + 1;
             }
 
             int inc = 0;
