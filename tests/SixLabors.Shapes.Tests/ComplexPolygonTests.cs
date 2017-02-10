@@ -104,7 +104,7 @@ namespace SixLabors.Shapes.Tests
             var data = new float[complex.MaxIntersections];
             var intersections = ScanY(complex, 30, data, complex.MaxIntersections, 0);
 
-            Assert.True(data[1] > 28, $"second intersection should be > 28 but was {data[1]}");
+            Assert.True(data[1] < 28, $"second intersection should be > 28 but was {data[1]}");
 
             Assert.True(intersections % 2 == 0, $"even number of intersections expected but found {intersections}");
         }
