@@ -100,10 +100,13 @@ namespace SixLabors.Shapes
             try
             {
                 var hits = path.FindIntersections(start, end, buffer, path.MaxIntersections, 0);
+                var results = new Vector2[hits];
                 for (var i = 0; i < hits; i++)
                 {
-                    yield return buffer[i];
+                    results[i] = buffer[i];
                 }
+
+                return results;
             }
             finally
             {

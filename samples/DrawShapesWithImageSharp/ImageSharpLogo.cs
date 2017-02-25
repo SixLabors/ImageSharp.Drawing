@@ -9,8 +9,12 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 {
     public static class ImageSharpLogo
     {
-        public static void SaveLogo(params string[] path)
+        public static void SaveLogo(float size, string path)
         {
+            // the point are based on a 1206x1206 shape so size requires scaling from there
+
+            float scalingFactor = size / 1206;
+            
             var center = new Vector2(603);
 
             // segment whoes cetner of rotation should be 
@@ -40,20 +44,23 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 Color.FromHex("085ba7"),
             };
 
-            using (var img = new Image(1206, 1206))
+            Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
+
+            var dimensions = (int)Math.Ceiling(size);
+            using (var img = new Image(dimensions, dimensions))
             {
                 img.Fill(Color.Black);
-                img.Fill(Color.FromHex("e1e1e1ff"), new ShapeRegion(new SixLabors.Shapes.Ellipse(center, 600f)));
-                img.Fill(Color.White, new ShapeRegion(new SixLabors.Shapes.Ellipse(center, 600f - 60)));
+                img.Fill(Color.FromHex("e1e1e1ff"), new ShapeRegion(new SixLabors.Shapes.Ellipse(center, 600f).Transform(scaler)));
+                img.Fill(Color.White, new ShapeRegion(new SixLabors.Shapes.Ellipse(center, 600f - 60).Transform(scaler)));
 
                 for (var i = 0; i < 6; i++)
                 {
-                    img.Fill(colors[i], new ShapeRegion(segments[i]));
+                    img.Fill(colors[i], new ShapeRegion(segments[i].Transform(scaler)));
                 }
 
-                img.Fill(new Color(0, 0, 0, 170), new ShapeRegion(new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f))));
+                img.Fill(new Color(0, 0, 0, 170), new ShapeRegion(new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f)).Transform(scaler)));
 
-                var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));
+                var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 
                 img.Save(fullPath);
             }

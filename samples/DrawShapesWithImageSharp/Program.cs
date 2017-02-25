@@ -13,6 +13,8 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         {
             OutputClippedRectangle();
             OutputStars();
+
+            ImageSharpLogo.SaveLogo(300, "ImageSharp.png");
         }
 
         private static void OutputStars()
@@ -30,8 +32,6 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawArc();
             DrawSerializedOPenSansLetterShape_a();
             DrawSerializedOPenSansLetterShape_o();
-
-            ImageSharpLogo.SaveLogo("ImageSharp.png");
         }
 
         private static void DrawSerializedOPenSansLetterShape_a()

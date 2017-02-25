@@ -187,12 +187,13 @@ namespace SixLabors.Shapes
             Guard.MustBeGreaterThan(size.Width, 0, "width");
             Guard.MustBeGreaterThan(size.Height, 0, "height");
 
-            var KAPPA = 0.5522848f;
-            var sizeVector = size.ToVector2()/2;
+            const float kappa = 0.5522848f;
+
+            var sizeVector = size.ToVector2() / 2;
 
             var rootLocation = location - sizeVector;
 
-            var pointO = sizeVector * KAPPA;
+            var pointO = sizeVector * kappa;
             var pointE = location + sizeVector;
             var pointM = location;
             var pointMminusO = pointM - pointO;
@@ -200,25 +201,23 @@ namespace SixLabors.Shapes
 
             var points = new Vector2[]
             {
-                new Vector2( rootLocation.X, pointM.Y),
+                new Vector2(rootLocation.X, pointM.Y),
 
-                new Vector2( rootLocation.X, pointMminusO.Y),
-                new Vector2( pointMminusO.X, rootLocation.Y),
-                new Vector2( pointM.X, rootLocation.Y),
+                new Vector2(rootLocation.X, pointMminusO.Y),
+                new Vector2(pointMminusO.X, rootLocation.Y),
+                new Vector2(pointM.X, rootLocation.Y),
 
+                new Vector2(pointMplusO.X, rootLocation.Y),
+                new Vector2(pointE.X, pointMminusO.Y),
+                new Vector2(pointE.X, pointM.Y),
 
-                new Vector2( pointMplusO.X, rootLocation.Y),
-                new Vector2( pointE.X, pointMminusO.Y),
-                new Vector2( pointE.X, pointM.Y),
+                new Vector2(pointE.X, pointMplusO.Y),
+                new Vector2(pointMplusO.X, pointE.Y),
+                new Vector2(pointM.X, pointE.Y),
 
-
-                new Vector2( pointE.X, pointMplusO.Y),
-                new Vector2( pointMplusO.X, pointE.Y),
-                new Vector2( pointM.X, pointE.Y),
-
-                new Vector2( pointMminusO.X, pointE.Y),
-                new Vector2( rootLocation.X, pointMplusO.Y),
-                new Vector2( rootLocation.X, pointM.Y),
+                new Vector2(pointMminusO.X, pointE.Y),
+                new Vector2(rootLocation.X, pointMplusO.Y),
+                new Vector2(rootLocation.X, pointM.Y),
             };
             return new BezierLineSegment(points);
         }

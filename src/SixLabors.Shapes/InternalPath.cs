@@ -128,6 +128,27 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
+        /// the orrientateion of an point form a line
+        /// </summary>
+        private enum Orientation
+        {
+            /// <summary>
+            /// POint is colienier
+            /// </summary>
+            Colinear = 0,
+
+            /// <summary>
+            /// Its clockwise
+            /// </summary>
+            Clockwise = 1,
+
+            /// <summary>
+            /// Its counter clockwise
+            /// </summary>
+            Counterclockwise = 2
+        }
+
+        /// <summary>
         /// Gets the bounds.
         /// </summary>
         /// <value>
@@ -238,6 +259,7 @@ namespace SixLabors.Shapes
                 {
                     lastPoint = intersectionBuffer[hitCount - 1];
                 }
+
                 polyCorners = prev + 1;
             }
 
@@ -307,6 +329,11 @@ namespace SixLabors.Shapes
                         }
                     }
                 }
+                else
+                {
+                    // no hit we reset the last hit as we are not testing connectlines anymore
+                    lastPoint = MaxVector;
+                }
             }
 
             return position;
@@ -334,7 +361,7 @@ namespace SixLabors.Shapes
             var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
             try
             {
-                var intersection = this.FindIntersections(point, MaxVector, buffer, this.points.Length, 0);
+                var intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, this.points.Length, 0);
                 if (intersection % 2 == 1)
                 {
                     return true;
@@ -400,6 +427,70 @@ namespace SixLabors.Shapes
             return Side.Right;
         }
 
+        private static bool DoIntersect(Vector2 p1, Vector2 q1, Vector2 p2, Vector2 q2)
+        {
+            // Find the four orientations needed for general and
+            // special cases
+            var o1 = CalulateOrientation(p1, q1, p2);
+            var o2 = CalulateOrientation(p1, q1, q2);
+            var o3 = CalulateOrientation(p2, q2, p1);
+            var o4 = CalulateOrientation(p2, q2, q1);
+
+            // General case
+            if (o1 != o2 && o3 != o4)
+            {
+                return true;
+            }
+
+            // Special Cases
+            // p1, q1 and p2 are colinear and p2 lies on segment p1q1
+            if (o1 == Orientation.Colinear && IsOnSegment(p1, p2, q1))
+            {
+                return true;
+            }
+
+            // p1, q1 and p2 are colinear and q2 lies on segment p1q1
+            if (o2 == Orientation.Colinear && IsOnSegment(p1, q2, q1))
+            {
+                return true;
+            }
+
+            // p2, q2 and p1 are colinear and p1 lies on segment p2q2
+            if (o3 == Orientation.Colinear && IsOnSegment(p2, p1, q2))
+            {
+                return true;
+            }
+
+            // p2, q2 and q1 are colinear and q1 lies on segment p2q2
+            if (o4 == Orientation.Colinear && IsOnSegment(p2, q1, q2))
+            {
+                return true;
+            }
+
+            return false; // Doesn't fall in any of the above cases
+        }
+
+        private static bool IsOnSegment(Vector2 p, Vector2 q, Vector2 r)
+        {
+            return q.X <= Math.Max(p.X, r.X) && q.X >= Math.Min(p.X, r.X) &&
+                q.Y <= Math.Max(p.Y, r.Y) && q.Y >= Math.Min(p.Y, r.Y);
+        }
+
+        private static Orientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
+        {
+            // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
+            // for details of below formula.
+            float val = ((q.Y - p.Y) * (r.X - q.X)) -
+                      ((q.X - p.X) * (r.Y - q.Y));
+
+            if (val > -Epsilon && val < Epsilon)
+            {
+                return Orientation.Colinear;  // colinear
+            }
+
+            return (val > 0) ? Orientation.Clockwise : Orientation.Counterclockwise; // clock or counterclock wise
+        }
+
         /// <summary>
         /// Determines if the bounding box for 2 lines
         /// described by <paramref name="line1Start" /> and <paramref name="line1End" />
@@ -448,65 +539,34 @@ namespace SixLabors.Shapes
         private static int FindIntersection(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End, Vector2[] buffer)
         {
             // do bounding boxes overlap, if not then the lines can't and return fast.
-            if (!BoundingBoxesIntersect(line1Start, line1End, line2Start, line2End))
+            if (!DoIntersect(line1Start, line1End, line2Start, line2End))
             {
                 return 0;
             }
 
-            Vector2 line1Diff = line1End - line1Start;
-            Vector2 line2Diff = line2End - line2Start;
+            float x1, y1, x2, y2, x3, y3, x4, y4;
+            x1 = line1Start.X;
+            y1 = line1Start.Y;
+            x2 = line1End.X;
+            y2 = line1End.Y;
 
-            Vector2 point;
-            if ((Math.Abs(line1Diff.Y) < Epsilon && Math.Abs(line2Diff.Y) < Epsilon) || (Math.Abs(line1Diff.X) < Epsilon && Math.Abs(line2Diff.X) < Epsilon))
+            x3 = line2Start.X;
+            y3 = line2Start.Y;
+            x4 = line2End.X;
+            y4 = line2End.Y;
+
+            float inter = ((x1 - x2) * (y3 - y4)) - ((y1 - y2) * (x3 - x4));
+
+            if (inter > -Epsilon && inter < Epsilon)
             {
-                // vertical & vertical || horizontal & horizontal
                 return 0;
             }
-            else if (Math.Abs(line1Diff.X) < Epsilon)
-            {
-                float slope = line2Diff.Y / line2Diff.X;
-                float inter = line2Start.Y - (slope * line2Start.X);
-                float y = (line1Start.X * slope) + inter;
-                point = new Vector2(line1Start.X, y);
 
-                // horizontal and vertical lines
-            }
-            else if (Math.Abs(line2Diff.X) < Epsilon)
-            {
-                float slope = line1Diff.Y / line1Diff.X;
-                float interY = line1Start.Y - (slope * line1Start.X);
-                float y = (line2Start.X * slope) + interY;
-                point = new Vector2(line2Start.X, y);
+            float x = (((x2 - x1) * ((x3 * y4) - (x4 * y3))) - ((x4 - x3) * ((x1 * y2) - (x2 * y1)))) / inter;
+            float y = (((y3 - y4) * ((x1 * y2) - (x2 * y1))) - ((y1 - y2) * ((x3 * y4) - (x4 * y3)))) / inter;
 
-                // horizontal and vertical lines
-            }
-            else
-            {
-                float slope1 = line1Diff.Y / line1Diff.X;
-                float slope2 = line2Diff.Y / line2Diff.X;
-
-                float interY1 = line1Start.Y - (slope1 * line1Start.X);
-                float interY2 = line2Start.Y - (slope2 * line2Start.X);
-
-                //if (Math.Abs(slope1 - slope2) < Epsilon && Math.Abs(interY1 - interY2) > Epsilon)
-                //{
-                //    return 0;
-                //}
-
-                float x = (interY2 - interY1) / (slope1 - slope2);
-                float y = (slope1 * x) + interY1;
-
-                point = new Vector2(x, y);
-            }
-
-            if (BoundingBoxesIntersect(line1Start, line1End, point, point)
-                && BoundingBoxesIntersect(line2Start, line2End, point, point))
-            {
-                buffer[0] = point;
-                return 1;
-            }
-
-            return 0;
+            buffer[0] = new Vector2(x, y);
+            return 1;
         }
 
         /// <summary>

@@ -250,7 +250,7 @@ namespace SixLabors.Shapes.Tests
             var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 10), new Vector2(float.MaxValue, 10));
 
             // returns an even number of points
-            Assert.Equal(2, intersections.Count());
+            Assert.Equal(0, intersections.Count() % 2);
         }
 
         [Fact]
