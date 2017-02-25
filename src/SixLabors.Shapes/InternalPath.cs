@@ -321,19 +321,6 @@ namespace SixLabors.Shapes
                                 }
                             }
 
-                            //if(position > 0)
-                            //{
-                                
-                            //    var prev = buffer[position + offset - 1];
-                            //    var side = SideOfLine(prev, start, end);
-                            //    var side2 = SideOfLine(point, start, end);
-
-                            //    if (side == Side.Same && side2 == Side.Same)
-                            //    {
-                            //        continue;
-                            //    }
-                            //}
-
                             // we are not double crossing so just add it once
                             buffer[position + offset] = point;
                             position++;
