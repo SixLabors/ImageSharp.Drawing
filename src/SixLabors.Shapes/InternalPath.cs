@@ -287,7 +287,7 @@ namespace SixLabors.Shapes
                         var point = intersectionBuffer[p];
                         if (point != MaxVector)
                         {
-                            if (lastPoint.Equivelent(point, Epsilon))
+                            if (lastPoint.Equivelent(point, Epsilon2))
                             {
                                 lastPoint = MaxVector;
 
@@ -321,11 +321,26 @@ namespace SixLabors.Shapes
                                 }
                             }
 
+                            //if(position > 0)
+                            //{
+                                
+                            //    var prev = buffer[position + offset - 1];
+                            //    var side = SideOfLine(prev, start, end);
+                            //    var side2 = SideOfLine(point, start, end);
+
+                            //    if (side == Side.Same && side2 == Side.Same)
+                            //    {
+                            //        continue;
+                            //    }
+                            //}
+
                             // we are not double crossing so just add it once
                             buffer[position + offset] = point;
                             position++;
                             count--;
                             lastPoint = point;
+
+                            
                         }
                     }
                 }
@@ -472,8 +487,8 @@ namespace SixLabors.Shapes
 
         private static bool IsOnSegment(Vector2 p, Vector2 q, Vector2 r)
         {
-            return q.X <= Math.Max(p.X, r.X) && q.X >= Math.Min(p.X, r.X) &&
-                q.Y <= Math.Max(p.Y, r.Y) && q.Y >= Math.Min(p.Y, r.Y);
+            return (q.X-Epsilon2) <= Math.Max(p.X, r.X) && (q.X + Epsilon2) >= Math.Min(p.X, r.X) &&
+                (q.Y - Epsilon2) <= Math.Max(p.Y, r.Y) && (q.Y + Epsilon2) >= Math.Min(p.Y, r.Y);
         }
 
         private static Orientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
@@ -549,7 +564,7 @@ namespace SixLabors.Shapes
             y1 = line1Start.Y;
             x2 = line1End.X;
             y2 = line1End.Y;
-
+            
             x3 = line2Start.X;
             y3 = line2Start.Y;
             x4 = line2End.X;

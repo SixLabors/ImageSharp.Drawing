@@ -31,8 +31,9 @@ namespace SixLabors.Shapes.Tests
 
             { "clippedRect",   new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20))     },
 
-            { "hourGlass", Shapes.HourGlass().AsClosedPath() }
-};
+            { "hourGlass", Shapes.HourGlass().AsClosedPath() },
+            { "BigCurve", new Polygon(new BezierLineSegment( new Vector2(10, 400), new Vector2(30, 10), new Vector2(240, 30), new Vector2(300, 400))) }
+        };
 
         public static TheoryData<string> polygonsTheoryData = new TheoryData<string> {
             { "ellispeWithHole" },
@@ -87,6 +88,7 @@ namespace SixLabors.Shapes.Tests
             { "clippedRect", 20},
             
             { "hourGlass", 25 },
+            { "BigCurve", 115}
         };
 
         [Theory]
@@ -95,9 +97,9 @@ namespace SixLabors.Shapes.Tests
         {
             var polygon = shapes[name];
 
-            var intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, yScanLine), new Vector2(polygon.Bounds.Right + 1, yScanLine));
+            var intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, yScanLine), new Vector2(polygon.Bounds.Right + 1, yScanLine)).Count();
 
-            Assert.True(intersections.Count() % 2 == 0, $"crosssections at '{yScanLine}' produced odd number of intersections");
+            Assert.True(intersections % 2 == 0, $"crosssections at '{yScanLine}' produced {intersections} intersections");
         }
     }
 }
