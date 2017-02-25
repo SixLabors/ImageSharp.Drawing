@@ -19,7 +19,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The epsilon for float comparison
         /// </summary>
-        private const float Epsilon = 0.001f;
+        private const float Epsilon = 0.003f;
         private const float Epsilon2 = 0.2f;
 
         /// <summary>
@@ -488,10 +488,10 @@ namespace SixLabors.Shapes
                 float interY1 = line1Start.Y - (slope1 * line1Start.X);
                 float interY2 = line2Start.Y - (slope2 * line2Start.X);
 
-                if (Math.Abs(slope1 - slope2) < Epsilon && Math.Abs(interY1 - interY2) > Epsilon)
-                {
-                    return 0;
-                }
+                //if (Math.Abs(slope1 - slope2) < Epsilon && Math.Abs(interY1 - interY2) > Epsilon)
+                //{
+                //    return 0;
+                //}
 
                 float x = (interY2 - interY1) / (slope1 - slope2);
                 float y = (slope1 * x) + interY1;

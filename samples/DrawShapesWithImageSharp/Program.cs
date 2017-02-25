@@ -30,6 +30,8 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawArc();
             DrawSerializedOPenSansLetterShape_a();
             DrawSerializedOPenSansLetterShape_o();
+
+            ImageSharpLogo.SaveLogo("ImageSharp.png");
         }
 
         private static void DrawSerializedOPenSansLetterShape_a()

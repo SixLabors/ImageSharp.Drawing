@@ -67,6 +67,7 @@ namespace SixLabors.Shapes.Tests
 
             Assert.Equal(2, points.Length);
         }
+
         [Fact]
         public void AcrossEllipseShouldReturn2()
         {
@@ -79,5 +80,6 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(2, points.Length);
         }
 
-    }       
+
+    }
 }

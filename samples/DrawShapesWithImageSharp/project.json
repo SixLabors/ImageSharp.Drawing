@@ -6,8 +6,8 @@
   },
   "dependencies": {
     "SixLabors.Shapes": { "target": "project" },
-    "ImageSharp.Drawing": "1.0.0-alpha2-00038",
-    "ImageSharp.Formats.Png": "1.0.0-alpha2-00034"
+    "ImageSharp.Drawing": "1.0.0-alpha2-00115",
+    "ImageSharp.Formats.Png": "1.0.0-alpha2-00111"
   },
   "frameworks": {
     "netcoreapp1.0": {
