@@ -1,12 +1,12 @@
 ---
 layout: default
-title: Getting Started with Jetstrap for Twitter Bootstrap
+title: Installing SixLabors.Shapes
 section: docs/gettingstarted
 ---
 
 ## Installing the library
 
-We have deplyoment tracks you can use when wanting to install SixLabors.Shapes.
+We have 3 deplyoment tracks you can use when wanting to install SixLabors.Shapes.
 
 ### 1. Nightly builds (Bleeding edge)
 
