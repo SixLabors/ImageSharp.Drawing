@@ -32,7 +32,13 @@ namespace SixLabors.Shapes.Tests
             { "clippedRect",   new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20))     },
 
             { "hourGlass", Shapes.HourGlass().AsClosedPath() },
-            { "BigCurve", new Polygon(new BezierLineSegment( new Vector2(10, 400), new Vector2(30, 10), new Vector2(240, 30), new Vector2(300, 400))) }
+            { "BigCurve", new Polygon(new BezierLineSegment( new Vector2(10, 400), new Vector2(30, 10), new Vector2(240, 30), new Vector2(300, 400))) },
+            { "ChopCorner", new Polygon(new LinearLineSegment(new Vector2( 8, 8 ),
+                new Vector2( 64, 8 ),
+                new Vector2( 64, 64 ),
+                new Vector2( 120, 64 ),
+                new Vector2( 120, 120 ),
+                new Vector2( 8, 120 ) )) }
         };
 
         public static TheoryData<string> polygonsTheoryData = new TheoryData<string> {
@@ -57,6 +63,7 @@ namespace SixLabors.Shapes.Tests
             { "clippedRect" },
 
             { "hourGlass" },
+            { "ChopCorner"},
         };
 
         [Theory]
@@ -88,7 +95,8 @@ namespace SixLabors.Shapes.Tests
             { "clippedRect", 20},
             
             { "hourGlass", 25 },
-            { "BigCurve", 115}
+            { "BigCurve", 115},
+            { "ChopCorner", 64},
         };
 
         [Theory]

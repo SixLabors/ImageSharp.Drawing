@@ -264,20 +264,51 @@ namespace SixLabors.Shapes
             }
 
             int inc = 0;
+            int lastCorner = polyCorners-1;
             for (int i = 0; i < polyCorners && count > 0; i += inc)
             {
-                int next = i;
-                inc = 0;
-                do
+                int next = FindNextPoint(polyCorners, i);
+                if (next > i)
                 {
-                    inc++;
-                    next++;
-                    if (this.closedPath && next == polyCorners)
+                    inc = next - i;
+                }else
+                {
+                    inc = 1;
+                }
+
+                if (closedPath && AreColliner(this.points[i], this.points[next], start, end))
+                {
+                    // lines are colinear and intersect
+                    // if this is the case we need to tell if this is an inflection or not
+                    var nextSide = Side.Same;
+                    // keep going next untill we are no longer on the line
+                    while (nextSide == Side.Same)
                     {
-                        next -= polyCorners;
+                        var nextPlus1 = FindNextPoint(polyCorners, next);
+                        nextSide = SideOfLine(this.points[nextPlus1], this.points[i], this.points[next]);
+                        if (nextSide == Side.Same)
+                        {
+                            //skip a point
+                            next = nextPlus1;
+                            if (nextPlus1 > next)
+                            {
+                                inc += nextPlus1 - next;
+                            }
+                            else
+                            {
+                                inc++;
+                            }
+                        }
+                    }
+
+                    var prevSide = SideOfLine(this.points[lastCorner], this.points[i], this.points[next]);
+                    if (prevSide != nextSide)
+                    {
+                        position--;
+                        count++;
+                        continue;
                     }
                 }
-                while (this.points[i].Equivelent(this.points[next], Epsilon2) && inc < polyCorners); // skip points too close together
 
                 int hitCount = FindIntersection(this.points[i], this.points[next], start, end, intersectionBuffer);
                 if (hitCount > 0)
@@ -326,8 +357,6 @@ namespace SixLabors.Shapes
                             position++;
                             count--;
                             lastPoint = point;
-
-                            
                         }
                     }
                 }
@@ -336,9 +365,40 @@ namespace SixLabors.Shapes
                     // no hit we reset the last hit as we are not testing connectlines anymore
                     lastPoint = MaxVector;
                 }
+                lastCorner = i;
             }
 
             return position;
+        }
+
+        private int FindNextPoint(int polyCorners, int i)
+        {
+            int inc1 = 0;
+            int nxt = i;
+            do
+            {
+                inc1++;
+                nxt = i + inc1;
+                if (this.closedPath && nxt == polyCorners)
+                {
+                    nxt -= polyCorners;
+                }
+            }
+            while (this.points[i].Equivelent(this.points[nxt], Epsilon2) && inc1 < polyCorners); // skip points too close together
+            return nxt;
+        }
+
+        /// <summary>
+        /// Ares the colliner.
+        /// </summary>
+        /// <param name="vector21">The vector21.</param>
+        /// <param name="vector22">The vector22.</param>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <returns></returns>
+        private bool AreColliner(Vector2 vector21, Vector2 vector22, Vector2 start, Vector2 end)
+        {
+            return SideOfLine(vector21, start, end) == Side.Same && SideOfLine(vector22, start, end) == Side.Same && DoIntersect(vector21, vector22, start, end);
         }
 
         /// <summary>

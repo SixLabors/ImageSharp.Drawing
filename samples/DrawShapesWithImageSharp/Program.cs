@@ -32,6 +32,19 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawArc();
             DrawSerializedOPenSansLetterShape_a();
             DrawSerializedOPenSansLetterShape_o();
+
+            DrawFatL();
+        }
+
+        private static void DrawFatL()
+        {
+            var shape = new Polygon(new LinearLineSegment(new Vector2(8, 8),
+               new Vector2(64, 8),
+               new Vector2(64, 64),
+               new Vector2(120, 64),
+               new Vector2(120, 120),
+               new Vector2(8, 120)));
+            shape.SaveImage("Issues", "ClippedCorner.png");
         }
 
         private static void DrawSerializedOPenSansLetterShape_a()
