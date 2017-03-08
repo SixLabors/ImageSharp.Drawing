@@ -28,13 +28,11 @@ Its a fully manged netstandard library so should work everywhere.</Description>
     <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
     <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
     <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+    <DebugType Condition="$(codecov) != ''">full</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="..\Shared\*.cs" Exclude="bin\**;obj\**;**\*.xproj;packages\**" />
-  </ItemGroup>
-  <ItemGroup>
-    <DotNetCliToolReference Include="dotnet-version" Version="1.1.0" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Buffers" Version="4.3.0" />

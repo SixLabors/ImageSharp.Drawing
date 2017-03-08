@@ -12,6 +12,7 @@
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
     <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
     <GenerateAssemblyCopyrightAttribute>false</GenerateAssemblyCopyrightAttribute>
+    <DebugType Condition="$(codecov) != ''">full</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
