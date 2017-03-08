@@ -4,16 +4,15 @@ cd tests\CodeCoverage
 
 nuget restore packages.config -PackagesDirectory .
 
-cd ..\SixLabors.Shapes.Tests
+cd ..
+cd ..
 
-dotnet restore SixLabors.Shapes.Tests.csproj
-dotnet build SixLabors.Shapes.Tests.csproj --no-incremental -c Release /p:codecov=true
+dotnet restore  SixLabors.Shapes.sln
+dotnet build  SixLabors.Shapes.sln --no-incremental -c debug /p:codecov=true
  
-cd ..
-cd ..
-
 rem The -threshold options prevents this taking ages...
-tests\CodeCoverage\OpenCover.4.6.519\tools\OpenCover.Console.exe -target:"dotnet.exe" -targetargs:"test tests\SixLabors.Shapes.Tests\SixLabors.Shapes.Tests.csproj --no-build -c Release /p:codecov=true" -threshold:10 -register:user -filter:"+[SixLabors.Shapes*]*" -excludebyattribute:*.ExcludeFromCodeCoverage* -hideskipped:All -returntargetcode -output:.\SixLabors.Shapes.Coverage.xml
+rem tests\CodeCoverage\OpenCover.4.6.519\tools\OpenCover.Console.exe -target:"dotnet.exe" -targetargs:"test tests\SixLabors.Shapes.Tests\SixLabors.Shapes.Tests.csproj --no-build -c Release /p:codecov=true" -threshold:10 -register:user -filter:"+[SixLabors.Shapes*]*" -excludebyattribute:*.ExcludeFromCodeCoverage* -hideskipped:All -returntargetcode -output:.\SixLabors.Shapes.Coverage.xml
+tests\CodeCoverage\OpenCover.4.6.519\tools\OpenCover.Console.exe -target:"dotnet.exe" -targetargs:"test tests\SixLabors.Shapes.Tests\SixLabors.Shapes.Tests.csproj --no-build -c debug" -searchdirs:"tests\SixLabors.Shapes.Tests\bin\Release\netcoreapp1.1" -register:user -output:.\SixLabors.Shapes.Coverage.xml -log:verbose -filter:"+[SixLabors.Shapes*]*" -oldStyle  -hideskipped:All -returntargetcode
 
 if %errorlevel% neq 0 exit /b %errorlevel%
 
