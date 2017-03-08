@@ -254,3 +254,6 @@ paket-files/
 
 # sample output
 /samples/DrawShapesWithImageSharp/Output/**
+
+/tests/CodeCoverage/OpenCover.*
+SixLabors.Shapes.Coverage.xml
