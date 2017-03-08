@@ -12,7 +12,7 @@ cd ..
 cd ..
 
 rem The -threshold options prevents this taking ages...
-tests\CodeCoverage\OpenCover.4.6.519\tools\OpenCover.Console.exe -target:"C:\Program Files\dotnet\dotnet.exe" -targetargs:"test tests\SixLabors.Shapes.Tests -c Release -f net451" -threshold:10 -register:user -filter:"+[SixLabors.Shapes*]*" -excludebyattribute:*.ExcludeFromCodeCoverage* -hideskipped:All -returntargetcode -output:.\SixLabors.Shapes.Coverage.xml
+tests\CodeCoverage\OpenCover.4.6.519\tools\OpenCover.Console.exe -target:"C:\Users\appveyor\AppData\Local\Microsoft\dotnet\dotnet.exe" -targetargs:"test tests\SixLabors.Shapes.Tests -c Release -f net451" -threshold:10 -register:user -filter:"+[SixLabors.Shapes*]*" -excludebyattribute:*.ExcludeFromCodeCoverage* -hideskipped:All -returntargetcode -output:.\SixLabors.Shapes.Coverage.xml
 
 if %errorlevel% neq 0 exit /b %errorlevel%
 
