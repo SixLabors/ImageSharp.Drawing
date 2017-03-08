@@ -14,7 +14,7 @@ install:
   # Prepend newly installed dotnet cli to the PATH of this build (this cannot be
   # done from inside the powershell script as it would require to restart
   # the parent CMD process).
-  - "SET PATH=C:\\Program Files\\dotnet\\bin;%PATH%"  
+  - "SET PATH=C:\\Users\\appveyor\\AppData\\Local\\Microsoft\\dotnet\\;%PATH%"  
 
 before_build:
   - cmd: dotnet --version
