@@ -7,8 +7,8 @@ nuget restore packages.config -PackagesDirectory .
 cd ..\SixLabors.Shapes.Tests
 
 dotnet restore SixLabors.Shapes.Tests.csproj
-dotnet build SixLabors.Shapes.Tests.csproj -c Release /p:codecov=true
-
+dotnet build SixLabors.Shapes.Tests.csproj --no-incremental -c Release /p:codecov=true
+ 
 cd ..
 cd ..
 
