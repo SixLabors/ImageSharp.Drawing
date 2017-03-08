@@ -1,8 +1,5 @@
 @echo Off
 
-gitversion /l console /output buildserver
-
-REM No glob support on Windows
 dotnet restore 
 
 ECHO Building nuget packages

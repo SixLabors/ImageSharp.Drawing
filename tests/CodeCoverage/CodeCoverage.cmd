@@ -6,7 +6,7 @@ nuget restore packages.config -PackagesDirectory .
 
 cd ..\SixLabors.Shapes.Tests
 
-dotnet restore
+dotnet restore SixLabors.Shapes.Tests.csproj
 
 cd ..
 cd ..
