@@ -5,6 +5,7 @@ install:
   
 before_build:
   - ps: gitversion /l console /output buildserver
+  - cmd: dotnet --version
 
 build_script:
   - cmd: build.cmd
