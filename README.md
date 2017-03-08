@@ -24,7 +24,7 @@ We also have a [MyGet package repository](https://www.myget.org/gallery/SixLabor
 
 If you prefer, you can compile SixLabors.Shapes yourself (please do and help!), you'll need:
 
-- [Visual Studio 2015 with Update 3 (or above)](https://www.visualstudio.com/news/releasenotes/vs2015-update3-vs)
+- [Visual Studio 2017](https://www.visualstudio.com/en-us/news/releasenotes/vs2017-relnotes)
 - The [.NET Core 1.0 SDK Installer](https://www.microsoft.com/net/core#windows) - Non VSCode link.
 
 To clone it locally click the "Clone in Windows" button above or run the following git commands.
