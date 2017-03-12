@@ -10,7 +10,7 @@ namespace SixLabors.Shapes.Tests
 
     public class TestPoint : IXunitSerializable
     {
-        protected TestPoint() { }
+        public TestPoint() { }
 
         public TestPoint(float x, float y)
         {

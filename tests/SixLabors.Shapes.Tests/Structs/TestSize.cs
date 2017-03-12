@@ -8,7 +8,7 @@ namespace SixLabors.Shapes.Tests
 {
     public class TestSize : IXunitSerializable
     {
-        protected TestSize() { }
+        public TestSize() { }
 
         public TestSize(float width, float height)
         {
