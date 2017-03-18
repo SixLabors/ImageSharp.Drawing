@@ -236,8 +236,7 @@ namespace SixLabors.Shapes
             {
                 polyCorners -= 1;
             }
-
-            Vector2[] intersectionBuffer = new Vector2[2];
+            
             int position = 0;
             Vector2 lastPoint = MaxVector;
             if (this.closedPath)
@@ -254,11 +253,7 @@ namespace SixLabors.Shapes
                 }
                 while (this.points[0].Equivelent(this.points[prev], Epsilon2)); // skip points too close together
 
-                int hitCount = FindIntersection(this.points[prev], this.points[0], start, end, intersectionBuffer);
-                if (hitCount > 0)
-                {
-                    lastPoint = intersectionBuffer[hitCount - 1];
-                }
+                lastPoint = FindIntersection(this.points[prev], this.points[0], start, end);
 
                 polyCorners = prev + 1;
             }
@@ -310,61 +305,52 @@ namespace SixLabors.Shapes
                     }
                 }
 
-                int hitCount = FindIntersection(this.points[i], this.points[next], start, end, intersectionBuffer);
-                if (hitCount > 0)
+                Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
+                if (point != MaxVector)
                 {
-                    for (var p = 0; p < hitCount; p++)
+                    if (lastPoint.Equivelent(point, Epsilon2))
                     {
-                        var point = intersectionBuffer[p];
-                        if (point != MaxVector)
+                        lastPoint = MaxVector;
+
+                        int last = (i - 1 + polyCorners) % polyCorners;
+
+                        // hit the same point a second time do we need to remove the old one if just clipping
+                        if (this.points[next].Equivelent(point, Epsilon))
                         {
-                            if (lastPoint.Equivelent(point, Epsilon2))
-                            {
-                                lastPoint = MaxVector;
+                            next = i;
+                        }
 
-                                int last = (i - 1 + polyCorners) % polyCorners;
+                        if (this.points[last].Equivelent(point, Epsilon))
+                        {
+                            last = i;
+                        }
 
-                                // hit the same point a second time do we need to remove the old one if just clipping
-                                if (this.points[next].Equivelent(point, Epsilon))
-                                {
-                                    next = i;
-                                }
+                        var side = SideOfLine(this.points[last], start, end);
+                        var side2 = SideOfLine(this.points[next], start, end);
 
-                                if (this.points[last].Equivelent(point, Epsilon))
-                                {
-                                    last = i;
-                                }
+                        if (side == Side.Same && side2 == Side.Same)
+                        {
+                            position--;
+                            count++;
+                            continue;
+                        }
 
-                                var side = SideOfLine(this.points[last], start, end);
-                                var side2 = SideOfLine(this.points[next], start, end);
-
-                                if (side == Side.Same && side2 == Side.Same)
-                                {
-                                    position--;
-                                    count++;
-                                    continue;
-                                }
-
-                                if (side != side2)
-                                {
-                                    // differnet side we skip adding as we are passing through it
-                                    continue;
-                                }
-                            }
-
-                            // we are not double crossing so just add it once
-                            buffer[position + offset] = point;
-                            position++;
-                            count--;
-                            lastPoint = point;
+                        if (side != side2)
+                        {
+                            // differnet side we skip adding as we are passing through it
+                            continue;
                         }
                     }
+
+                    // we are not double crossing so just add it once
+                    buffer[position + offset] = point;
+                    position++;
+                    count--;
+
+
                 }
-                else
-                {
-                    // no hit we reset the last hit as we are not testing connectlines anymore
-                    lastPoint = MaxVector;
-                }
+
+                lastPoint = point;
                 lastCorner = i;
             }
 
@@ -598,12 +584,12 @@ namespace SixLabors.Shapes
         /// <returns>
         /// the number of points on the line that it hit
         /// </returns>
-        private static int FindIntersection(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End, Vector2[] buffer)
+        private static Vector2 FindIntersection(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End)
         {
             // do bounding boxes overlap, if not then the lines can't and return fast.
             if (!DoIntersect(line1Start, line1End, line2Start, line2End))
             {
-                return 0;
+                return MaxVector;
             }
 
             float x1, y1, x2, y2, x3, y3, x4, y4;
@@ -621,14 +607,13 @@ namespace SixLabors.Shapes
 
             if (inter > -Epsilon && inter < Epsilon)
             {
-                return 0;
+                return MaxVector;
             }
 
             float x = (((x2 - x1) * ((x3 * y4) - (x4 * y3))) - ((x4 - x3) * ((x1 * y2) - (x2 * y1)))) / inter;
             float y = (((y3 - y4) * ((x1 * y2) - (x2 * y1))) - ((y1 - y2) * ((x3 * y4) - (x4 * y3)))) / inter;
 
-            buffer[0] = new Vector2(x, y);
-            return 1;
+            return new Vector2(x, y);
         }
 
         /// <summary>
