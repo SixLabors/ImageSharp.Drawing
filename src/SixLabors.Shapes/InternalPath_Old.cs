@@ -14,7 +14,7 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Internal logic for integrating linear paths.
     /// </summary>
-    internal class InternalPath
+    internal class InternalPath_Old
     {
         /// <summary>
         /// The epsilon for float comparison
@@ -35,7 +35,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The points.
         /// </summary>
-        private readonly PointData[] points;
+        private readonly ImmutableArray<Vector2> points;
 
         /// <summary>
         /// The closed path.
@@ -62,8 +62,18 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="segments">The segments.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IEnumerable<ILineSegment> segments, bool isClosedPath)
-            : this(Simplify(segments, isClosedPath), isClosedPath)
+        internal InternalPath_Old(ILineSegment[] segments, bool isClosedPath)
+            : this(ImmutableArray.Create(segments), isClosedPath)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="InternalPath"/> class.
+        /// </summary>
+        /// <param name="segments">The segments.</param>
+        /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+        internal InternalPath_Old(ImmutableArray<ILineSegment> segments, bool isClosedPath)
+            : this(Simplify(segments), isClosedPath)
         {
         }
 
@@ -72,8 +82,8 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="segment">The segment.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(ILineSegment segment, bool isClosedPath)
-            : this(segment?.Flatten() ?? Enumerable.Empty<Vector2>(), isClosedPath)
+        internal InternalPath_Old(ILineSegment segment, bool isClosedPath)
+            : this(segment?.Flatten() ?? ImmutableArray<Vector2>.Empty, isClosedPath)
         {
         }
 
@@ -82,27 +92,18 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="points">The points.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IEnumerable<Vector2> points, bool isClosedPath)
-            : this(Simplify(points, isClosedPath), isClosedPath)
-        { }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="InternalPath" /> class.
-        /// </summary>
-        /// <param name="points">The points.</param>
-        /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        private InternalPath(PointData[] points, bool isClosedPath)
+        internal InternalPath_Old(IEnumerable<Vector2> points, bool isClosedPath)
         {
-            this.points = points;
+            this.points = points.ToArray().ToImmutableArray();
             this.closedPath = isClosedPath;
 
-            float minX = this.points.Min(x => x.Point.X);
-            float maxX = this.points.Max(x => x.Point.X);
-            float minY = this.points.Min(x => x.Point.Y);
-            float maxY = this.points.Max(x => x.Point.Y);
+            float minX = this.points.Min(x => x.X);
+            float maxX = this.points.Max(x => x.X);
+            float minY = this.points.Min(x => x.Y);
+            float maxY = this.points.Max(x => x.Y);
 
             this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
-            this.Length = this.points.Sum(x => x.Length);
+            this.totalDistance = new Lazy<float>(this.CalculateLength);
         }
 
         /// <summary>
@@ -164,15 +165,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The length.
         /// </value>
-        public float Length { get; }
-
-        /// <summary>
-        /// Gets the length.
-        /// </summary>
-        /// <value>
-        /// The length.
-        /// </value>
-        public int PointCount => this.points.Length;
+        public float Length => this.totalDistance.Value;
 
         /// <summary>
         /// Gets the points.
@@ -180,7 +173,9 @@ namespace SixLabors.Shapes
         /// <value>
         /// The points.
         /// </value>
-        internal ImmutableArray<Vector2> Points() => this.points.Select(X=>X.Point).ToImmutableArray();
+        internal ImmutableArray<Vector2> Points => this.points;
+
+        public int PointCount => this.points.Length;
 
         /// <summary>
         /// Calculates the distance from the path.
@@ -190,6 +185,7 @@ namespace SixLabors.Shapes
         public PointInfo DistanceFromPath(Vector2 point)
         {
             this.CalculateConstants();
+
             PointInfoInternal internalInfo = default(PointInfoInternal);
             internalInfo.DistanceSquared = float.MaxValue; // Set it to max so that CalculateShorterDistance can reduce it back down
 
@@ -209,7 +205,7 @@ namespace SixLabors.Shapes
                     next = 0;
                 }
 
-                if (this.CalculateShorterDistance(this.points[i].Point, this.points[next].Point, point, ref internalInfo))
+                if (this.CalculateShorterDistance(this.points[i], this.points[next], point, ref internalInfo))
                 {
                     closestPoint = i;
                 }
@@ -217,7 +213,7 @@ namespace SixLabors.Shapes
 
             return new PointInfo
             {
-                DistanceAlongPath = this.distance[closestPoint] + Vector2.Distance(this.points[closestPoint].Point, internalInfo.PointOnLine),
+                DistanceAlongPath = this.distance[closestPoint] + Vector2.Distance(this.points[closestPoint], internalInfo.PointOnLine),
                 DistanceFromPath = (float)Math.Sqrt(internalInfo.DistanceSquared),
                 SearchPoint = point,
                 ClosestPointOnPath = internalInfo.PointOnLine
@@ -247,9 +243,21 @@ namespace SixLabors.Shapes
             Vector2 lastPoint = MaxVector;
             if (this.closedPath)
             {
-                int prev = polyCorners-1;
+                int prev = polyCorners;
+                do
+                {
+                    prev--;
+                    if (prev == 0)
+                    {
+                        // all points are common, shouldn't match anything
+                        return 0;
+                    }
+                }
+                while (this.points[0].Equivelent(this.points[prev], Epsilon2)); // skip points too close together
 
-                lastPoint = FindIntersection(this.points[prev].Point, this.points[0].Point, start, end);
+                lastPoint = FindIntersection(this.points[prev], this.points[0], start, end);
+
+                polyCorners = prev + 1;
             }
 
             int inc = 0;
@@ -265,7 +273,7 @@ namespace SixLabors.Shapes
                     inc = 1;
                 }
 
-                if (closedPath && AreColliner(this.points[i].Point, this.points[next].Point, start, end))
+                if (closedPath && AreColliner(this.points[i], this.points[next], start, end))
                 {
                     // lines are colinear and intersect
                     // if this is the case we need to tell if this is an inflection or not
@@ -274,7 +282,7 @@ namespace SixLabors.Shapes
                     while (nextSide == Side.Same)
                     {
                         var nextPlus1 = FindNextPoint(polyCorners, next);
-                        nextSide = SideOfLine(this.points[nextPlus1].Point, this.points[i].Point, this.points[next].Point);
+                        nextSide = SideOfLine(this.points[nextPlus1], this.points[i], this.points[next]);
                         if (nextSide == Side.Same)
                         {
                             //skip a point
@@ -290,7 +298,7 @@ namespace SixLabors.Shapes
                         }
                     }
 
-                    var prevSide = SideOfLine(this.points[lastCorner].Point, this.points[i].Point, this.points[next].Point);
+                    var prevSide = SideOfLine(this.points[lastCorner], this.points[i], this.points[next]);
                     if (prevSide != nextSide)
                     {
                         position--;
@@ -299,7 +307,7 @@ namespace SixLabors.Shapes
                     }
                 }
 
-                Vector2 point = FindIntersection(this.points[i].Point, this.points[next].Point, start, end);
+                Vector2 point = FindIntersection(this.points[i], this.points[next], start, end);
                 if (point != MaxVector)
                 {
                     if (lastPoint.Equivelent(point, Epsilon2))
@@ -309,18 +317,18 @@ namespace SixLabors.Shapes
                         int last = (i - 1 + polyCorners) % polyCorners;
 
                         // hit the same point a second time do we need to remove the old one if just clipping
-                        if (this.points[next].Point.Equivelent(point, Epsilon))
+                        if (this.points[next].Equivelent(point, Epsilon))
                         {
                             next = i;
                         }
 
-                        if (this.points[last].Point.Equivelent(point, Epsilon))
+                        if (this.points[last].Equivelent(point, Epsilon))
                         {
                             last = i;
                         }
 
-                        var side = SideOfLine(this.points[last].Point, start, end);
-                        var side2 = SideOfLine(this.points[next].Point, start, end);
+                        var side = SideOfLine(this.points[last], start, end);
+                        var side2 = SideOfLine(this.points[next], start, end);
 
                         if (side == Side.Same && side2 == Side.Same)
                         {
@@ -353,13 +361,16 @@ namespace SixLabors.Shapes
         {
             int inc1 = 0;
             int nxt = i;
-
-            nxt = i + 1;
-            if (this.closedPath && nxt == polyCorners)
+            do
             {
-                nxt -= polyCorners;
+                inc1++;
+                nxt = i + inc1;
+                if (this.closedPath && nxt == polyCorners)
+                {
+                    nxt -= polyCorners;
+                }
             }
-
+            while (this.points[i].Equivelent(this.points[nxt], Epsilon2) && inc1 < polyCorners); // skip points too close together
             return nxt;
         }
 
@@ -612,7 +623,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
-        private static PointData[] Simplify(IEnumerable<ILineSegment> segments, bool isClosed)
+        private static ImmutableArray<Vector2> Simplify(ImmutableArray<ILineSegment> segments)
         {
             List<Vector2> simplified = new List<Vector2>();
             foreach (ILineSegment seg in segments)
@@ -620,81 +631,7 @@ namespace SixLabors.Shapes
                 simplified.AddRange(seg.Flatten());
             }
 
-            return Simplify(simplified, isClosed);
-        }
-
-        private static PointData[] Simplify(IEnumerable<Vector2> vectors, bool isClosed)
-        {
-            Vector2[] points = vectors.ToArray();
-            List<PointData> results = new List<PointData>();
-
-            int polyCorners = points.Length;
-
-            Vector2 lastPoint = points[0];
-
-            if (!isClosed)
-            {
-                results.Add(new PointData
-                {
-                    Point = points[0],
-                    Orientation = Orientation.Colinear,
-                    Length = 0
-                });
-            }
-            else
-            {
-                if (isClosed)
-                {
-                    int prev = polyCorners;
-                    do
-                    {
-                        prev--;
-                        if (prev == 0)
-                        {
-                            // all points are common, shouldn't match anything
-                            results.Add(new PointData
-                            {
-                                Point = points[0],
-                                Orientation = Orientation.Colinear,
-                                Length = 0
-                            });
-                            return results.ToArray();
-                        }
-                    }
-                    while (points[0].Equivelent(points[prev], Epsilon2)); // skip points too close together
-                    polyCorners = prev + 1;
-                    lastPoint = points[prev];
-                }
-
-                results.Add(new PointData
-                {
-                    Point = points[0],
-                    Orientation =  CalulateOrientation(lastPoint, points[0], points[1]),
-                    Length = Vector2.Distance(lastPoint, points[0])
-                });
-
-                lastPoint = points[0];
-            }
-
-            for (var i = 1; i < polyCorners; i++)
-            {
-                var next = (i + 1) % polyCorners;
-                var or = CalulateOrientation(lastPoint, points[i], points[next]);
-                if(or == Orientation.Colinear && next != 0)
-                {
-                    continue;
-                }
-                results.Add(
-                    new PointData
-                    {
-                        Point = points[i],
-                        Orientation = or,
-                        Length = Vector2.Distance(lastPoint, points[i])
-                    });
-                lastPoint = points[i];
-            }
-
-            return results.ToArray();
+            return simplified.ToImmutableArray();
         }
 
         /// <summary>
@@ -721,7 +658,7 @@ namespace SixLabors.Shapes
                     next = 0;
                 }
 
-                length += this.points[i].Length;
+                length += Vector2.Distance(this.points[i], this.points[next]);
             }
 
             return length;
@@ -745,7 +682,7 @@ namespace SixLabors.Shapes
                     return;
                 }
 
-                PointData[] poly = this.points;
+                ImmutableArray<Vector2> poly = this.points;
                 int polyCorners = poly.Length;
                 this.distance = new float[polyCorners];
 
@@ -754,7 +691,7 @@ namespace SixLabors.Shapes
                 for (int i = 1; i < polyCorners; i++)
                 {
                     int previousIndex = i - 1;
-                    this.distance[i] = this.distance[previousIndex] + Vector2.Distance(poly[i].Point, poly[previousIndex].Point);
+                    this.distance[i] = this.distance[previousIndex] + Vector2.Distance(poly[i], poly[previousIndex]);
                 }
 
                 this.calculated = true;
@@ -822,14 +759,6 @@ namespace SixLabors.Shapes
             /// The point on the current line.
             /// </summary>
             public Vector2 PointOnLine;
-        }
-
-        private struct PointData
-        {
-            public Vector2 Point;
-            public Orientation Orientation;
-
-            public float Length;
         }
     }
 }

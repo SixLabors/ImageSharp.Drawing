@@ -18,10 +18,10 @@ namespace SixLabors.Shapes.Tests
 
             var path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
 
-            Assert.Equal(new Vector2(0, 0), path.Points[0]);
-            Assert.Equal(new Vector2(2, 2), path.Points[1]);
-            Assert.Equal(new Vector2(4, 4), path.Points[2]);
-            Assert.Equal(new Vector2(5, 5), path.Points[3]);
+            Assert.Contains(new Vector2(0, 0), path.Points());
+            Assert.DoesNotContain(new Vector2(2, 2), path.Points());
+            Assert.DoesNotContain(new Vector2(4, 4), path.Points());
+            Assert.Contains(new Vector2(5, 5), path.Points());
         }
 
         [Fact]
@@ -157,7 +157,7 @@ namespace SixLabors.Shapes.Tests
         public void Intersections_buffer()
         {
             var shape = Create(new Vector2(0, 0), new Size(10, 10));
-            var buffer = new Vector2[shape.Points.Length];
+            var buffer = new Vector2[shape.PointCount];
             var hits = shape.FindIntersections(new Vector2(5, -10), new Vector2(5, 20), buffer, 4, 0);
 
             Assert.Equal(2, hits);

@@ -35,3 +35,4 @@ using System.Runtime.CompilerServices;
 
 // Ensure the internals can be tested.
 [assembly: InternalsVisibleTo("SixLabors.Shapes.Tests")]
+[assembly: InternalsVisibleTo("SixLabors.Shapes.Benchmarks")]
