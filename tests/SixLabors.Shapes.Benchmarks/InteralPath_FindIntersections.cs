@@ -10,13 +10,18 @@ namespace SixLabors.Shapes.Benchmarks
 {
     public class InteralPath_FindIntersections
     {
+        private readonly Vector2[] vectors;
+
+        public InteralPath_FindIntersections()
+        {
+            this.vectors = new Ellipse(new System.Numerics.Vector2(0, 0), new Size(20, 10))
+                .Flatten()
+                .First().Points.ToArray();
+        }
+
         [Benchmark]
         public Vector2[] InternalOld()
         {
-            var vectors = new Ellipse(new System.Numerics.Vector2(0, 0), new Size(20, 10))
-                .Flatten()
-                .First().Points.ToArray();
-
             var path = new InternalPath_Old(vectors, true);
 
             Vector2[] buffer = new Vector2[path.PointCount*2];
@@ -30,10 +35,6 @@ namespace SixLabors.Shapes.Benchmarks
         [Benchmark]
         public Vector2[] InternalNew()
         {
-            var vectors = new Ellipse(new System.Numerics.Vector2(0, 0), new Size(20, 10))
-                .Flatten()
-                .First().Points.ToArray();
-
             var path = new InternalPath(vectors, true);
 
             Vector2[] buffer = new Vector2[path.PointCount*2];

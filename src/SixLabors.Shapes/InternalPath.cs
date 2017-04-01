@@ -254,16 +254,9 @@ namespace SixLabors.Shapes
 
             int inc = 0;
             int lastCorner = polyCorners-1;
-            for (int i = 0; i < polyCorners && count > 0; i += inc)
+            for (int i = 0; i < polyCorners && count > 0; i ++)
             {
-                int next = FindNextPoint(polyCorners, i);
-                if (next > i)
-                {
-                    inc = next - i;
-                }else
-                {
-                    inc = 1;
-                }
+                var next = (i + 1) % this.points.Length;
 
                 if (closedPath && AreColliner(this.points[i].Point, this.points[next].Point, start, end))
                 {
@@ -693,7 +686,11 @@ namespace SixLabors.Shapes
                     });
                 lastPoint = points[i];
             }
-
+            // walk back removing collinear points
+            while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
+            {
+                results.RemoveAt(results.Count - 1);
+            }
             return results.ToArray();
         }
 

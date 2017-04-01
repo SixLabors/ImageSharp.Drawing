@@ -79,7 +79,7 @@ namespace SixLabors.Shapes.Tests
                 var intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, y), new Vector2(polygon.Bounds.Right + 1, y));
                 if (intersections.Count() % 2 != 0)
                 {
-                    Assert.True(false, $"crosssections at '{y}' produced {intersections.Count()} number of intersections");
+                    Assert.True(false, $"crosssection of '{name}' at '{y}' produced {intersections.Count()} number of intersections");
                 }
             }
         }
@@ -93,8 +93,10 @@ namespace SixLabors.Shapes.Tests
             { "scaled_300_iris_3", 135 },
             { "scaled_300_iris_0", 165 },
             { "clippedRect", 20},
-            
+            { "clippedRect", 10},
+
             { "hourGlass", 25 },
+            { "hourGlass", 175 },
             { "BigCurve", 115},
             { "ChopCorner", 64},
         };
@@ -107,7 +109,7 @@ namespace SixLabors.Shapes.Tests
 
             var intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, yScanLine), new Vector2(polygon.Bounds.Right + 1, yScanLine)).Count();
 
-            Assert.True(intersections % 2 == 0, $"crosssections at '{yScanLine}' produced {intersections} intersections");
+            Assert.True(intersections % 2 == 0, $"crosssection of '{name}' at '{yScanLine}' produced {intersections} intersections");
         }
     }
 }
