@@ -91,27 +91,6 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// The sides a point can land on
-        /// </summary>
-        public enum Side
-        {
-            /// <summary>
-            /// Indicates the point falls on the left logical side of the line.
-            /// </summary>
-            Left,
-
-            /// <summary>
-            /// Indicates the point falls on the right logical side of the line.
-            /// </summary>
-            Right,
-
-            /// <summary>
-            /// /// Indicates the point falls exactly on the line.
-            /// </summary>
-            Same
-        }
-
-        /// <summary>
         /// the orrientateion of an point form a line
         /// </summary>
         private enum Orientation
@@ -246,13 +225,13 @@ namespace SixLabors.Shapes
                 {
                     // lines are colinear and intersect
                     // if this is the case we need to tell if this is an inflection or not
-                    var nextSide = Side.Same;
+                    var nextSide = Orientation.Colinear;
                     // keep going next untill we are no longer on the line
-                    while (nextSide == Side.Same)
+                    while (nextSide == Orientation.Colinear)
                     {
                         var nextPlus1 = FindNextPoint(polyCorners, next);
-                        nextSide = SideOfLine(this.points[nextPlus1].Point, this.points[i].Point, this.points[next].Point);
-                        if (nextSide == Side.Same)
+                        nextSide = CalulateOrientation (this.points[nextPlus1].Point, this.points[i].Point, this.points[next].Point);
+                        if (nextSide == Orientation.Colinear)
                         {
                             //skip a point
                             next = nextPlus1;
@@ -267,7 +246,7 @@ namespace SixLabors.Shapes
                         }
                     }
 
-                    var prevSide = SideOfLine(this.points[lastCorner].Point, this.points[i].Point, this.points[next].Point);
+                    var prevSide = CalulateOrientation(this.points[lastCorner].Point, this.points[i].Point, this.points[next].Point);
                     if (prevSide != nextSide)
                     {
                         position--;
@@ -296,10 +275,10 @@ namespace SixLabors.Shapes
                             last = i;
                         }
 
-                        var side = SideOfLine(this.points[last].Point, start, end);
-                        var side2 = SideOfLine(this.points[next].Point, start, end);
+                        var side = CalulateOrientation(this.points[last].Point, start, end);
+                        var side2 = CalulateOrientation(this.points[next].Point, start, end);
 
-                        if (side == Side.Same && side2 == Side.Same)
+                        if (side == Orientation.Colinear && side2 == Orientation.Colinear)
                         {
                             position--;
                             count++;
@@ -350,7 +329,9 @@ namespace SixLabors.Shapes
         /// <returns></returns>
         private bool AreColliner(Vector2 vector21, Vector2 vector22, Vector2 start, Vector2 end)
         {
-            return SideOfLine(vector21, start, end) == Side.Same && SideOfLine(vector22, start, end) == Side.Same && DoIntersect(vector21, vector22, start, end);
+            return CalulateOrientation(vector21, start, end) == Orientation.Colinear &&
+                CalulateOrientation(vector22, start, end) == Orientation.Colinear && 
+                DoIntersect(vector21, vector22, start, end);
         }
 
         /// <summary>
@@ -396,49 +377,6 @@ namespace SixLabors.Shapes
             }
 
             return false;
-        }
-
-        private static Side SideOfLine(Vector2 test, Vector2 lineStart, Vector2 lineEnd)
-        {
-            var testDiff = test - lineStart;
-            var lineDiff = lineEnd - lineStart;
-            if (float.IsInfinity(lineDiff.X))
-            {
-                if (lineDiff.X > 0)
-                {
-                    lineDiff.X = float.MaxValue;
-                }
-                else
-                {
-                    lineDiff.X = float.MinValue;
-                }
-            }
-
-            if (float.IsInfinity(lineDiff.Y))
-            {
-                if (lineDiff.Y > 0)
-                {
-                    lineDiff.Y = float.MaxValue;
-                }
-                else
-                {
-                    lineDiff.Y = float.MinValue;
-                }
-            }
-
-            var crossProduct = (lineDiff.X * testDiff.Y) - (lineDiff.Y * testDiff.X);
-
-            if (crossProduct > -Epsilon && crossProduct < Epsilon)
-            {
-                return Side.Same;
-            }
-
-            if (crossProduct > 0)
-            {
-                return Side.Left;
-            }
-
-            return Side.Right;
         }
 
         private static bool DoIntersect(Vector2 p1, Vector2 q1, Vector2 p2, Vector2 q2)
