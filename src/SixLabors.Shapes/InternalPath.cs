@@ -144,7 +144,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The points.
         /// </value>
-        internal ImmutableArray<Vector2> Points() => this.points.Select(X=>X.Point).ToImmutableArray();
+        internal ImmutableArray<Vector2> Points() => this.points.Select(X => X.Point).ToImmutableArray();
 
         /// <summary>
         /// Calculates the distance from the path.
@@ -205,32 +205,32 @@ namespace SixLabors.Shapes
             {
                 polyCorners -= 1;
             }
-            
+
             int position = 0;
             Vector2 lastPoint = MaxVector;
             if (this.closedPath)
             {
-                int prev = polyCorners-1;
+                int prev = polyCorners - 1;
 
                 lastPoint = FindIntersection(this.points[prev].Point, this.points[0].Point, start, end);
             }
 
             int inc = 0;
-            int lastCorner = polyCorners-1;
-            for (int i = 0; i < polyCorners && count > 0; i ++)
+            int lastCorner = polyCorners - 1;
+            for (int i = 0; i < polyCorners && count > 0; i++)
             {
-                var next = (i + 1) % this.points.Length;
+                int next = (i + 1) % this.points.Length;
 
                 if (closedPath && AreColliner(this.points[i].Point, this.points[next].Point, start, end))
                 {
                     // lines are colinear and intersect
                     // if this is the case we need to tell if this is an inflection or not
-                    var nextSide = Orientation.Colinear;
+                    Orientation nextSide = Orientation.Colinear;
                     // keep going next untill we are no longer on the line
                     while (nextSide == Orientation.Colinear)
                     {
-                        var nextPlus1 = FindNextPoint(polyCorners, next);
-                        nextSide = CalulateOrientation (this.points[nextPlus1].Point, this.points[i].Point, this.points[next].Point);
+                        int nextPlus1 = (next + 1) % this.points.Length;
+                        nextSide = CalulateOrientation(this.points[nextPlus1].Point, this.points[i].Point, this.points[next].Point);
                         if (nextSide == Orientation.Colinear)
                         {
                             //skip a point
@@ -246,7 +246,7 @@ namespace SixLabors.Shapes
                         }
                     }
 
-                    var prevSide = CalulateOrientation(this.points[lastCorner].Point, this.points[i].Point, this.points[next].Point);
+                    Orientation prevSide = CalulateOrientation(this.points[lastCorner].Point, this.points[i].Point, this.points[next].Point);
                     if (prevSide != nextSide)
                     {
                         position--;
@@ -275,8 +275,8 @@ namespace SixLabors.Shapes
                             last = i;
                         }
 
-                        var side = CalulateOrientation(this.points[last].Point, start, end);
-                        var side2 = CalulateOrientation(this.points[next].Point, start, end);
+                        Orientation side = CalulateOrientation(this.points[last].Point, start, end);
+                        Orientation side2 = CalulateOrientation(this.points[next].Point, start, end);
 
                         if (side == Orientation.Colinear && side2 == Orientation.Colinear)
                         {
@@ -305,20 +305,6 @@ namespace SixLabors.Shapes
             return position;
         }
 
-        private int FindNextPoint(int polyCorners, int i)
-        {
-            int inc1 = 0;
-            int nxt = i;
-
-            nxt = i + 1;
-            if (this.closedPath && nxt == polyCorners)
-            {
-                nxt -= polyCorners;
-            }
-
-            return nxt;
-        }
-
         /// <summary>
         /// Ares the colliner.
         /// </summary>
@@ -330,7 +316,7 @@ namespace SixLabors.Shapes
         private bool AreColliner(Vector2 vector21, Vector2 vector22, Vector2 start, Vector2 end)
         {
             return CalulateOrientation(vector21, start, end) == Orientation.Colinear &&
-                CalulateOrientation(vector22, start, end) == Orientation.Colinear && 
+                CalulateOrientation(vector22, start, end) == Orientation.Colinear &&
                 DoIntersect(vector21, vector22, start, end);
         }
 
@@ -353,17 +339,17 @@ namespace SixLabors.Shapes
             }
 
             // if it hit any points then class it as inside
-            var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
+            Vector2[] buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
             try
             {
-                var intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, this.points.Length, 0);
+                int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, this.points.Length, 0);
                 if (intersection % 2 == 1)
                 {
                     return true;
                 }
 
                 // check if the point is on an intersection is it is then inside
-                for (var i = 0; i < intersection; i++)
+                for (int i = 0; i < intersection; i++)
                 {
                     if (buffer[i].Equivelent(point, Epsilon))
                     {
@@ -383,10 +369,10 @@ namespace SixLabors.Shapes
         {
             // Find the four orientations needed for general and
             // special cases
-            var o1 = CalulateOrientation(p1, q1, p2);
-            var o2 = CalulateOrientation(p1, q1, q2);
-            var o3 = CalulateOrientation(p2, q2, p1);
-            var o4 = CalulateOrientation(p2, q2, q1);
+            Orientation o1 = CalulateOrientation(p1, q1, p2);
+            Orientation o2 = CalulateOrientation(p1, q1, q2);
+            Orientation o3 = CalulateOrientation(p2, q2, p1);
+            Orientation o4 = CalulateOrientation(p2, q2, q1);
 
             // General case
             if (o1 != o2 && o3 != o4)
@@ -424,16 +410,20 @@ namespace SixLabors.Shapes
 
         private static bool IsOnSegment(Vector2 p, Vector2 q, Vector2 r)
         {
-            return (q.X-Epsilon2) <= Math.Max(p.X, r.X) && (q.X + Epsilon2) >= Math.Min(p.X, r.X) &&
-                (q.Y - Epsilon2) <= Math.Max(p.Y, r.Y) && (q.Y + Epsilon2) >= Math.Min(p.Y, r.Y);
+            return (q.X - Epsilon2) <= Math.Max(p.X, r.X) &&
+                    (q.X + Epsilon2) >= Math.Min(p.X, r.X) &&
+                    (q.Y - Epsilon2) <= Math.Max(p.Y, r.Y) &&
+                    (q.Y + Epsilon2) >= Math.Min(p.Y, r.Y);
         }
 
         private static Orientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
         {
             // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
             // for details of below formula.
-            float val = ((q.Y - p.Y) * (r.X - q.X)) -
-                      ((q.X - p.X) * (r.Y - q.Y));
+            Vector2 qp = q - p;
+            Vector2 rq = r - q;
+
+            float val = (qp.Y * rq.X) - (qp.X * rq.Y);
 
             if (val > -Epsilon && val < Epsilon)
             {
@@ -441,39 +431,6 @@ namespace SixLabors.Shapes
             }
 
             return (val > 0) ? Orientation.Clockwise : Orientation.Counterclockwise; // clock or counterclock wise
-        }
-
-        /// <summary>
-        /// Determines if the bounding box for 2 lines
-        /// described by <paramref name="line1Start" /> and <paramref name="line1End" />
-        /// and  <paramref name="line2Start" /> and <paramref name="line2End" /> overlap.
-        /// </summary>
-        /// <param name="line1Start">The line1 start.</param>
-        /// <param name="line1End">The line1 end.</param>
-        /// <param name="line2Start">The line2 start.</param>
-        /// <param name="line2End">The line2 end.</param>
-        /// <returns>Returns true it the bounding box of the 2 lines intersect</returns>
-        private static bool BoundingBoxesIntersect(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End)
-        {
-            Vector2 topLeft1 = Vector2.Min(line1Start, line1End);
-            Vector2 bottomRight1 = Vector2.Max(line1Start, line1End);
-
-            Vector2 topLeft2 = Vector2.Min(line2Start, line2End);
-            Vector2 bottomRight2 = Vector2.Max(line2Start, line2End);
-
-            float left1 = topLeft1.X - Epsilon;
-            float right1 = bottomRight1.X + Epsilon;
-            float top1 = topLeft1.Y - Epsilon;
-            float bottom1 = bottomRight1.Y + Epsilon;
-
-            float left2 = topLeft2.X - Epsilon;
-            float right2 = bottomRight2.X + Epsilon;
-            float top2 = topLeft2.Y - Epsilon;
-            float bottom2 = bottomRight2.Y + Epsilon;
-
-            return left1 <= right2 && right1 >= left2
-                &&
-                top1 <= bottom2 && bottom1 >= top2;
         }
 
         /// <summary>
@@ -501,7 +458,7 @@ namespace SixLabors.Shapes
             y1 = line1Start.Y;
             x2 = line1End.X;
             y2 = line1End.Y;
-            
+
             x3 = line2Start.X;
             y3 = line2Start.Y;
             x4 = line2End.X;
@@ -593,16 +550,16 @@ namespace SixLabors.Shapes
                 lastPoint = points[0];
             }
             float totalDist = 0;
-            for (var i = 1; i < polyCorners; i++)
+            for (int i = 1; i < polyCorners; i++)
             {
-                var next = (i + 1) % polyCorners;
-                var or = CalulateOrientation(lastPoint, points[i], points[next]);
-                if(or == Orientation.Colinear && next != 0)
+                int next = (i + 1) % polyCorners;
+                Orientation or = CalulateOrientation(lastPoint, points[i], points[next]);
+                if (or == Orientation.Colinear && next != 0)
                 {
                     continue;
                 }
 
-                var dist = Vector2.Distance(lastPoint, points[i]);
+                float dist = Vector2.Distance(lastPoint, points[i]);
                 totalDist += dist;
                 results.Add(
                     new PointData
