@@ -57,8 +57,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void GeneratesCorrectPath()
         {
-            float radius = 10;
-            float radius2 = 20;
+            float radius = 5;
+            float radius2 = 30;
             int pointsCount = new Random().Next(3, 20);
 
             var poly = new Star(Vector2.Zero, pointsCount, radius, radius2, 0);

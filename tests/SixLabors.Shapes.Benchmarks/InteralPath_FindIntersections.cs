@@ -19,28 +19,34 @@ namespace SixLabors.Shapes.Benchmarks
                 .First().Points.ToArray();
         }
 
-        [Benchmark]
+        [Benchmark(Baseline = true)]
         public Vector2[] InternalOld()
         {
-            var path = new InternalPath_Old(vectors, true);
-
-            Vector2[] buffer = new Vector2[path.PointCount*2];
-            for (var y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
+            Vector2[] buffer = new Vector2[vectors.Length];
+            for (var i = 0; i < 100; i++)
             {
-                path.FindIntersections(new Vector2(path.Bounds.Left - 1, y), new Vector2(path.Bounds.Right + 1, y), buffer, path.PointCount, 0);
+                var path = new InternalPath_Old(vectors, true);
+
+                for (var y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
+                {
+                    path.FindIntersections(new Vector2(path.Bounds.Left - 1, y), new Vector2(path.Bounds.Right + 1, y), buffer, path.PointCount, 0);
+                }
             }
             return buffer;
         }
 
-        [Benchmark]
+        [Benchmark()]
         public Vector2[] InternalNew()
         {
-            var path = new InternalPath(vectors, true);
-
-            Vector2[] buffer = new Vector2[path.PointCount*2];
-            for (var y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
+            Vector2[] buffer = new Vector2[vectors.Length];
+            for (var i = 0; i < 100; i++)
             {
-                path.FindIntersections(new Vector2(path.Bounds.Left - 1, y), new Vector2(path.Bounds.Right + 1, y), buffer, path.PointCount, 0);
+                var path = new InternalPath(vectors, true);
+
+                for (var y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
+                {
+                    path.FindIntersections(new Vector2(path.Bounds.Left - 1, y), new Vector2(path.Bounds.Right + 1, y), buffer, path.PointCount, 0);
+                }
             }
             return buffer;
         }

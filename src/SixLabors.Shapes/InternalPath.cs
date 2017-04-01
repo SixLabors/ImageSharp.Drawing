@@ -43,21 +43,6 @@ namespace SixLabors.Shapes
         private readonly bool closedPath;
 
         /// <summary>
-        /// The total distance.
-        /// </summary>
-        private readonly Lazy<float> totalDistance;
-
-        /// <summary>
-        /// The distances
-        /// </summary>
-        private float[] distance;
-
-        /// <summary>
-        /// The calculated.
-        /// </summary>
-        private bool calculated;
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="InternalPath"/> class.
         /// </summary>
         /// <param name="segments">The segments.</param>
@@ -189,7 +174,6 @@ namespace SixLabors.Shapes
         /// <returns>Returns the distance from the path</returns>
         public PointInfo DistanceFromPath(Vector2 point)
         {
-            this.CalculateConstants();
             PointInfoInternal internalInfo = default(PointInfoInternal);
             internalInfo.DistanceSquared = float.MaxValue; // Set it to max so that CalculateShorterDistance can reduce it back down
 
@@ -217,7 +201,7 @@ namespace SixLabors.Shapes
 
             return new PointInfo
             {
-                DistanceAlongPath = this.distance[closestPoint] + Vector2.Distance(this.points[closestPoint].Point, internalInfo.PointOnLine),
+                DistanceAlongPath = this.points[closestPoint].TotalLength + Vector2.Distance(this.points[closestPoint].Point, internalInfo.PointOnLine),
                 DistanceFromPath = (float)Math.Sqrt(internalInfo.DistanceSquared),
                 SearchPoint = point,
                 ClosestPointOnPath = internalInfo.PointOnLine
@@ -649,7 +633,8 @@ namespace SixLabors.Shapes
                             {
                                 Point = points[0],
                                 Orientation = Orientation.Colinear,
-                                Length = 0
+                                Length = 0,
+                                TotalLength = 0
                             });
                             return results.ToArray();
                         }
@@ -662,13 +647,14 @@ namespace SixLabors.Shapes
                 results.Add(new PointData
                 {
                     Point = points[0],
-                    Orientation =  CalulateOrientation(lastPoint, points[0], points[1]),
-                    Length = Vector2.Distance(lastPoint, points[0])
+                    Orientation = CalulateOrientation(lastPoint, points[0], points[1]),
+                    Length = Vector2.Distance(lastPoint, points[0]),
+                    TotalLength = 0
                 });
 
                 lastPoint = points[0];
             }
-
+            float totalDist = 0;
             for (var i = 1; i < polyCorners; i++)
             {
                 var next = (i + 1) % polyCorners;
@@ -677,12 +663,16 @@ namespace SixLabors.Shapes
                 {
                     continue;
                 }
+
+                var dist = Vector2.Distance(lastPoint, points[i]);
+                totalDist += dist;
                 results.Add(
                     new PointData
                     {
                         Point = points[i],
                         Orientation = or,
-                        Length = Vector2.Distance(lastPoint, points[i])
+                        Length = dist,
+                        TotalLength = totalDist
                     });
                 lastPoint = points[i];
             }
@@ -722,40 +712,6 @@ namespace SixLabors.Shapes
             }
 
             return length;
-        }
-
-        /// <summary>
-        /// Calculate the constants.
-        /// </summary>
-        private void CalculateConstants()
-        {
-            // http://alienryderflex.com/polygon/ source for point in polygon logic
-            if (this.calculated)
-            {
-                return;
-            }
-
-            lock (Locker)
-            {
-                if (this.calculated)
-                {
-                    return;
-                }
-
-                PointData[] poly = this.points;
-                int polyCorners = poly.Length;
-                this.distance = new float[polyCorners];
-
-                this.distance[0] = 0;
-
-                for (int i = 1; i < polyCorners; i++)
-                {
-                    int previousIndex = i - 1;
-                    this.distance[i] = this.distance[previousIndex] + Vector2.Distance(poly[i].Point, poly[previousIndex].Point);
-                }
-
-                this.calculated = true;
-            }
         }
 
         /// <summary>
@@ -827,6 +783,7 @@ namespace SixLabors.Shapes
             public Orientation Orientation;
 
             public float Length;
+            public float TotalLength;
         }
     }
 }
