@@ -50,22 +50,20 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             using (var img = new Image(dimensions, dimensions))
             {
                 img.Fill(Color.Black);
-                img.Fill(Color.FromHex("e1e1e1ff"), new ShapeRegion(new SixLabors.Shapes.Ellipse(center, 600f).Transform(scaler)));
-                img.Fill(Color.White, new ShapeRegion(new SixLabors.Shapes.Ellipse(center, 600f - 60).Transform(scaler)));
+                img.Fill(Color.FromHex("e1e1e1ff"), new SixLabors.Shapes.Ellipse(center, 600f).Transform(scaler));
+                img.Fill(Color.White, new SixLabors.Shapes.Ellipse(center, 600f - 60).Transform(scaler));
 
                 for (var i = 0; i < 6; i++)
                 {
-                    img.Fill(colors[i], new ShapeRegion(segments[i].Transform(scaler)));
+                    img.Fill(colors[i], segments[i].Transform(scaler));
                 }
 
-                img.Fill(new Color(0, 0, 0, 170), new ShapeRegion(new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f)).Transform(scaler)));
+                img.Fill(new Color(0, 0, 0, 170), new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f)).Transform(scaler));
 
                 var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 
                 img.Save(fullPath);
             }
-
-       
         }
     }
 }

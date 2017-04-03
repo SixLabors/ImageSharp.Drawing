@@ -79,7 +79,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        ImmutableArray<Vector2> ISimplePath.Points => this.innerPath.Points;
+        ImmutableArray<Vector2> ISimplePath.Points => this.innerPath.Points();
 
         /// <inheritdoc />
         public Rectangle Bounds => this.innerPath.Bounds;
@@ -92,7 +92,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
         /// </summary>
-        int IPath.MaxIntersections => this.innerPath.Points.Length;
+        int IPath.MaxIntersections => this.innerPath.PointCount;
 
         /// <inheritdoc />
         public PointInfo Distance(Vector2 point)

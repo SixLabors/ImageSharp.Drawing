@@ -23,10 +23,10 @@ namespace SixLabors.Shapes
         /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
         internal static IEnumerable<Vector2> FindIntersections(this InternalPath path, Vector2 start, Vector2 end)
         {
-            var buffer = ArrayPool<Vector2>.Shared.Rent(path.Points.Length);
+            var buffer = ArrayPool<Vector2>.Shared.Rent(path.PointCount);
             try
             {
-                var hits = path.FindIntersections(start, end, buffer, path.Points.Length, 0);
+                var hits = path.FindIntersections(start, end, buffer, path.PointCount, 0);
                 for (var i = 0; i < hits; i++)
                 {
                     yield return buffer[i];
