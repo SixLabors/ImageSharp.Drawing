@@ -15,7 +15,7 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Internal logic for integrating linear paths.
     /// </summary>
-    internal class InternalPath
+    internal class InternalPath_Proposal1
     {
         /// <summary>
         /// The epsilon for float comparison
@@ -48,7 +48,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="segments">The segments.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IEnumerable<ILineSegment> segments, bool isClosedPath)
+        internal InternalPath_Proposal1(IEnumerable<ILineSegment> segments, bool isClosedPath)
             : this(Simplify(segments, isClosedPath), isClosedPath)
         {
         }
@@ -58,7 +58,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="segment">The segment.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(ILineSegment segment, bool isClosedPath)
+        internal InternalPath_Proposal1(ILineSegment segment, bool isClosedPath)
             : this(segment?.Flatten() ?? Enumerable.Empty<Vector2>(), isClosedPath)
         {
         }
@@ -68,7 +68,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="points">The points.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IEnumerable<Vector2> points, bool isClosedPath)
+        internal InternalPath_Proposal1(IEnumerable<Vector2> points, bool isClosedPath)
             : this(Simplify(points, isClosedPath), isClosedPath)
         { }
 
@@ -77,7 +77,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="points">The points.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        private InternalPath(PointData[] points, bool isClosedPath)
+        private InternalPath_Proposal1(PointData[] points, bool isClosedPath)
         {
             this.points = points;
             this.closedPath = isClosedPath;
@@ -200,10 +200,7 @@ namespace SixLabors.Shapes
         /// <returns>number of intersections hit</returns>
         public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
-
             ClampPoints(ref start, ref end);
-
-            var target = new Segment(start, end);
 
             int polyCorners = this.points.Length;
 
@@ -219,6 +216,11 @@ namespace SixLabors.Shapes
 
             try
             {
+                float targetMinX = Math.Min(start.X, end.X);
+                float targetMaxX = Math.Max(start.X, end.X);
+                float targetMinY = Math.Min(start.Y, end.Y);
+                float targetMaxY = Math.Max(start.Y, end.Y);
+
                 int lastCorner = polyCorners - 1;
                 Orientation prevOrientation = CalulateOrientation(start, end, this.points[lastCorner].Point);
                 Orientation nextOrientation = CalulateOrientation(start, end, this.points[0].Point);
@@ -239,19 +241,21 @@ namespace SixLabors.Shapes
                                                   pointOrientation == Orientation.Colinear &&
                                                   nextPlus1Orientation != prevOrientation &&
                                                   (this.closedPath || i > 0) &&
-                                                  (IsOnSegment(target, edgeStart) || IsOnSegment(target, edgeEnd));
+                                                  (IsOnSegment(start, edgeStart, end) || IsOnSegment(start, edgeEnd, end));
 
                     bool doIntersect = false;
                     if (pointOrientation == Orientation.Colinear || pointOrientation != nextOrientation)
                     {
                         //intersect
-                        Vector2 edgeMin = Vector2.Min(edgeStart, edgeEnd);
-                        Vector2 edgeMax = Vector2.Max(edgeStart, edgeEnd);
+                        float edgeMinX = Math.Min(edgeStart.X, edgeEnd.X);
+                        float edgeMaxX = Math.Max(edgeStart.X, edgeEnd.X);
+                        float edgeMinY = Math.Min(edgeStart.Y, edgeEnd.Y);
+                        float edgeMaxY = Math.Max(edgeStart.Y, edgeEnd.Y);
 
-                        doIntersect = edgeMin.X - Epsilon <= target.Max.X &&
-                                      edgeMax.X + Epsilon >= target.Min.X &&
-                                      edgeMin.Y - Epsilon <= target.Max.Y &&
-                                      edgeMax.Y + Epsilon >= target.Min.Y;
+                        doIntersect = edgeMinX - Epsilon <= targetMaxX &&
+                                      edgeMaxX + Epsilon >= targetMinX &&
+                                      edgeMinY - Epsilon <= targetMaxY &&
+                                      edgeMaxY + Epsilon >= targetMinY;
                     }
 
                     precaclulate[i] = new PassPointData
@@ -270,7 +274,7 @@ namespace SixLabors.Shapes
 
                     if (precaclulate[prev].DoIntersect)
                     {
-                        lastPoint = FindIntersection(this.points[prev].Point, this.points[0].Point, target);
+                        lastPoint = FindIntersection(this.points[prev].Point, this.points[0].Point, start, end);
                     }
                 }
 
@@ -286,7 +290,7 @@ namespace SixLabors.Shapes
                     }
                     if (precaclulate[i].DoIntersect)
                     {
-                        Vector2 point = FindIntersection(this.points[i].Point, this.points[next].Point, target);
+                        Vector2 point = FindIntersection(this.points[i].Point, this.points[next].Point, start, end);
                         if (point != MaxVector)
                         {
                             if (lastPoint.Equivelent(point, Epsilon2))
@@ -429,25 +433,12 @@ namespace SixLabors.Shapes
             return false;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsOnSegment(Vector2 p, Vector2 q, Vector2 r)
         {
-            Vector2 min = Vector2.Min(p, r);
-            Vector2 max = Vector2.Max(p, r);
-
-            return (q.X - Epsilon2) <= max.X &&
-                    (q.X + Epsilon2) >= min.X &&
-                    (q.Y - Epsilon2) <= max.Y &&
-                    (q.Y + Epsilon2) >= min.Y;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsOnSegment(Segment seg, Vector2 q)
-        {
-            return (q.X - Epsilon2) <= seg.Max.X &&
-                    (q.X + Epsilon2) >= seg.Min.X &&
-                    (q.Y - Epsilon2) <= seg.Max.Y &&
-                    (q.Y + Epsilon2) >= seg.Min.Y;
+            return (q.X - Epsilon2) <= Math.Max(p.X, r.X) &&
+                    (q.X + Epsilon2) >= Math.Min(p.X, r.X) &&
+                    (q.Y - Epsilon2) <= Math.Max(p.Y, r.Y) &&
+                    (q.Y + Epsilon2) >= Math.Min(p.Y, r.Y);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -479,10 +470,13 @@ namespace SixLabors.Shapes
         /// <returns>
         /// the number of points on the line that it hit
         /// </returns>
-        private static Vector2 FindIntersection(Vector2 line1Start, Vector2 line1End, Segment target)
+        private static Vector2 FindIntersection(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End)
         {
-            Vector2 line2Start = target.Start;
-            Vector2 line2End = target.End;
+            // do bounding boxes overlap, if not then the lines can't and return fast.
+            //if (!DoIntersect(line1Start, line1End, line2Start, line2End))
+            // {
+            //    return MaxVector;
+            // }
 
             float x1, y1, x2, y2, x3, y3, x4, y4;
             x1 = line1Start.X;
@@ -724,23 +718,6 @@ namespace SixLabors.Shapes
             public bool RemoveLastIntersectionAndSkip;
             public Orientation RelativeOrientation;
             public bool DoIntersect;
-        }
-
-        private struct Segment
-        {
-            public Vector2 Start;
-            public Vector2 End;
-            public Vector2 Min;
-            public Vector2 Max;
-
-            public Segment(Vector2 start, Vector2 end)
-            {
-                this.Start = start;
-                this.End = end;
-
-                this.Min = Vector2.Min(start, end);
-                this.Max = Vector2.Max(start, end);
-            }
         }
     }
 }
