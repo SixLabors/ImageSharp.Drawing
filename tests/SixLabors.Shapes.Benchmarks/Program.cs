@@ -8,6 +8,13 @@ namespace SixLabors.Shapes.Benchmarks
     {
         static void Main(string[] args)
         {
+            //var p = new InteralPath_FindIntersections();
+            //for (var i = 0; i < 10; i++)
+            //{
+            //    p.InternalNew();
+            //    Console.WriteLine(i);
+            //}
+
             new BenchmarkSwitcher(typeof(Program).GetTypeInfo().Assembly).Run(args);
             Console.ReadKey();
         }

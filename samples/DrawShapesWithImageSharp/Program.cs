@@ -185,7 +185,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 img.Fill(Color.DarkBlue);
 
                 // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
-                img.Fill(Color.HotPink, shape, new ImageSharp.Drawing.GraphicsOptions(true) { AntialiasSubpixelDepth = 0, Antialias = false });
+                img.Fill(Color.HotPink, shape, new ImageSharp.Drawing.GraphicsOptions(true) { AntialiasSubpixelDepth = 0, Antialias = true });
                 // img.Draw(Color.LawnGreen, 1, new ShapePath(shape));
 
                 // Ensure directory exists

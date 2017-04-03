@@ -10,6 +10,7 @@ namespace SixLabors.Shapes
     using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
+    using System.Runtime.CompilerServices;
 
     /// <summary>
     /// Internal logic for integrating linear paths.
@@ -199,6 +200,8 @@ namespace SixLabors.Shapes
         /// <returns>number of intersections hit</returns>
         public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
+            ClampPoints(ref start, ref end);
+
             int polyCorners = this.points.Length;
 
             if (!this.closedPath)
@@ -208,116 +211,181 @@ namespace SixLabors.Shapes
 
             int position = 0;
             Vector2 lastPoint = MaxVector;
-            if (this.closedPath)
+
+            PassPointData[] precaclulate = ArrayPool<PassPointData>.Shared.Rent(this.points.Length);
+
+            try
             {
-                int prev = polyCorners - 1;
+                float targetMinX = Math.Min(start.X, end.X);
+                float targetMaxX = Math.Max(start.X, end.X);
+                float targetMinY = Math.Min(start.Y, end.Y);
+                float targetMaxY = Math.Max(start.Y, end.Y);
 
-                lastPoint = FindIntersection(this.points[prev].Point, this.points[0].Point, start, end);
-            }
+                int lastCorner = polyCorners - 1;
+                Orientation prevOrientation = CalulateOrientation(start, end, this.points[lastCorner].Point);
+                Orientation nextOrientation = CalulateOrientation(start, end, this.points[0].Point);
+                Orientation nextPlus1Orientation = CalulateOrientation(start, end, this.points[1].Point);
 
-            int inc = 0;
-            int lastCorner = polyCorners - 1;
-            for (int i = 0; i < polyCorners && count > 0; i++)
-            {
-                int next = (i + 1) % this.points.Length;
-
-                if (closedPath && AreColliner(this.points[i].Point, this.points[next].Point, start, end))
+                for (int i = 0; i < polyCorners && count > 0; i++)
                 {
-                    // lines are colinear and intersect
-                    // if this is the case we need to tell if this is an inflection or not
-                    Orientation nextSide = Orientation.Colinear;
-                    // keep going next untill we are no longer on the line
-                    while (nextSide == Orientation.Colinear)
+                    int next = (i + 1) % this.points.Length;
+                    int nextPlus1 = (next + 1) % this.points.Length;
+                    Vector2 edgeStart = this.points[i].Point;
+                    Vector2 edgeEnd = this.points[next].Point;
+
+                    var pointOrientation = nextOrientation;
+                    nextOrientation = nextPlus1Orientation;
+                    nextPlus1Orientation = CalulateOrientation(start, end, this.points[nextPlus1].Point);
+
+                    bool removeLastIntersection = nextOrientation == Orientation.Colinear && 
+                                                  pointOrientation == Orientation.Colinear &&
+                                                  nextPlus1Orientation != prevOrientation &&
+                                                  (this.closedPath || i > 0) &&
+                                                  (IsOnSegment(start, edgeStart, end) || IsOnSegment(start, edgeEnd, end));
+
+                    bool doIntersect = false;
+                    if (pointOrientation == Orientation.Colinear || pointOrientation != nextOrientation)
                     {
-                        int nextPlus1 = (next + 1) % this.points.Length;
-                        nextSide = CalulateOrientation(this.points[nextPlus1].Point, this.points[i].Point, this.points[next].Point);
-                        if (nextSide == Orientation.Colinear)
-                        {
-                            //skip a point
-                            next = nextPlus1;
-                            if (nextPlus1 > next)
-                            {
-                                inc += nextPlus1 - next;
-                            }
-                            else
-                            {
-                                inc++;
-                            }
-                        }
+                        //intersect
+                        float edgeMinX = Math.Min(edgeStart.X, edgeEnd.X);
+                        float edgeMaxX = Math.Max(edgeStart.X, edgeEnd.X);
+                        float edgeMinY = Math.Min(edgeStart.Y, edgeEnd.Y);
+                        float edgeMaxY = Math.Max(edgeStart.Y, edgeEnd.Y);
+
+                        doIntersect = edgeMinX - Epsilon <= targetMaxX &&
+                                      edgeMaxX + Epsilon >= targetMinX &&
+                                      edgeMinY - Epsilon <= targetMaxY &&
+                                      edgeMaxY + Epsilon >= targetMinY;
                     }
 
-                    Orientation prevSide = CalulateOrientation(this.points[lastCorner].Point, this.points[i].Point, this.points[next].Point);
-                    if (prevSide != nextSide)
+                    precaclulate[i] = new PassPointData
+                    {
+                        RemoveLastIntersectionAndSkip = removeLastIntersection,
+                        RelativeOrientation = pointOrientation,
+                        DoIntersect = doIntersect // DoIntersect(edgeStart, edgeEnd, start, end)
+                    };
+                    lastCorner = i;
+                    prevOrientation = pointOrientation;
+                }
+
+                if (this.closedPath)
+                {
+                    int prev = polyCorners - 1;
+
+                    if (precaclulate[prev].DoIntersect)
+                    {
+                        lastPoint = FindIntersection(this.points[prev].Point, this.points[0].Point, start, end);
+                    }
+                }
+
+                for (int i = 0; i < polyCorners && count > 0; i++)
+                {
+                    int next = (i + 1) % this.points.Length;
+
+                    if (precaclulate[i].RemoveLastIntersectionAndSkip)
                     {
                         position--;
                         count++;
                         continue;
                     }
-                }
+                    if (precaclulate[i].DoIntersect)
+                    {
+                        Vector2 point = FindIntersection(this.points[i].Point, this.points[next].Point, start, end);
+                        if (point != MaxVector)
+                        {
+                            if (lastPoint.Equivelent(point, Epsilon2))
+                            {
+                                lastPoint = MaxVector;
 
-                Vector2 point = FindIntersection(this.points[i].Point, this.points[next].Point, start, end);
-                if (point != MaxVector)
-                {
-                    if (lastPoint.Equivelent(point, Epsilon2))
+                                int last = (i - 1 + polyCorners) % polyCorners;
+
+                                // hit the same point a second time do we need to remove the old one if just clipping
+                                if (this.points[next].Point.Equivelent(point, Epsilon))
+                                {
+                                    next = i;
+                                }
+
+                                if (this.points[last].Point.Equivelent(point, Epsilon))
+                                {
+                                    last = i;
+                                }
+
+                                Orientation side = precaclulate[next].RelativeOrientation;
+                                Orientation side2 = precaclulate[last].RelativeOrientation;
+
+                                //if (side == Orientation.Colinear && side2 == Orientation.Colinear)
+                                //{
+                                //    position--;
+                                //    count++;
+                                //    continue;
+                                //}
+
+                                if (side != side2)
+                                {
+                                    // differnet side we skip adding as we are passing through it
+                                    continue;
+                                }
+                            }
+
+                            // we are not double crossing so just add it once
+                            buffer[position + offset] = point;
+                            position++;
+                            count--;
+                        }
+                        lastPoint = point;
+                    }
+                    else
                     {
                         lastPoint = MaxVector;
-
-                        int last = (i - 1 + polyCorners) % polyCorners;
-
-                        // hit the same point a second time do we need to remove the old one if just clipping
-                        if (this.points[next].Point.Equivelent(point, Epsilon))
-                        {
-                            next = i;
-                        }
-
-                        if (this.points[last].Point.Equivelent(point, Epsilon))
-                        {
-                            last = i;
-                        }
-
-                        Orientation side = CalulateOrientation(this.points[last].Point, start, end);
-                        Orientation side2 = CalulateOrientation(this.points[next].Point, start, end);
-
-                        if (side == Orientation.Colinear && side2 == Orientation.Colinear)
-                        {
-                            position--;
-                            count++;
-                            continue;
-                        }
-
-                        if (side != side2)
-                        {
-                            // differnet side we skip adding as we are passing through it
-                            continue;
-                        }
                     }
 
-                    // we are not double crossing so just add it once
-                    buffer[position + offset] = point;
-                    position++;
-                    count--;
+                    lastCorner = i;
                 }
 
-                lastPoint = point;
-                lastCorner = i;
+                return position;
             }
-
-            return position;
+            finally
+            {
+                ArrayPool<PassPointData>.Shared.Return(precaclulate);
+            }
         }
 
-        /// <summary>
-        /// Ares the colliner.
-        /// </summary>
-        /// <param name="vector21">The vector21.</param>
-        /// <param name="vector22">The vector22.</param>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <returns></returns>
-        private bool AreColliner(Vector2 vector21, Vector2 vector22, Vector2 start, Vector2 end)
+        private void ClampPoints(ref Vector2 start, ref Vector2 end)
         {
-            return CalulateOrientation(vector21, start, end) == Orientation.Colinear &&
-                CalulateOrientation(vector22, start, end) == Orientation.Colinear &&
-                DoIntersect(vector21, vector22, start, end);
+            // clean up start and end points
+            if (start.X == float.MaxValue)
+            {
+                start.X = this.Bounds.Right + 1;
+            }
+            if (start.X == float.MinValue)
+            {
+                start.X = this.Bounds.Left - 1;
+            }
+            if (end.X == float.MaxValue)
+            {
+                end.X = this.Bounds.Right + 1;
+            }
+            if (end.X == float.MinValue)
+            {
+                end.X = this.Bounds.Left - 1;
+            }
+
+            if (start.Y == float.MaxValue)
+            {
+                start.Y = this.Bounds.Bottom + 1;
+            }
+            if (start.Y == float.MinValue)
+            {
+                start.Y = this.Bounds.Top - 1;
+            }
+            if (end.Y == float.MaxValue)
+            {
+                end.Y = this.Bounds.Bottom + 1;
+            }
+            if (end.Y == float.MinValue)
+            {
+                end.Y = this.Bounds.Top - 1;
+            }
         }
 
         /// <summary>
@@ -365,49 +433,6 @@ namespace SixLabors.Shapes
             return false;
         }
 
-        private static bool DoIntersect(Vector2 p1, Vector2 q1, Vector2 p2, Vector2 q2)
-        {
-            // Find the four orientations needed for general and
-            // special cases
-            Orientation o1 = CalulateOrientation(p1, q1, p2);
-            Orientation o2 = CalulateOrientation(p1, q1, q2);
-            Orientation o3 = CalulateOrientation(p2, q2, p1);
-            Orientation o4 = CalulateOrientation(p2, q2, q1);
-
-            // General case
-            if (o1 != o2 && o3 != o4)
-            {
-                return true;
-            }
-
-            // Special Cases
-            // p1, q1 and p2 are colinear and p2 lies on segment p1q1
-            if (o1 == Orientation.Colinear && IsOnSegment(p1, p2, q1))
-            {
-                return true;
-            }
-
-            // p1, q1 and p2 are colinear and q2 lies on segment p1q1
-            if (o2 == Orientation.Colinear && IsOnSegment(p1, q2, q1))
-            {
-                return true;
-            }
-
-            // p2, q2 and p1 are colinear and p1 lies on segment p2q2
-            if (o3 == Orientation.Colinear && IsOnSegment(p2, p1, q2))
-            {
-                return true;
-            }
-
-            // p2, q2 and q1 are colinear and q1 lies on segment p2q2
-            if (o4 == Orientation.Colinear && IsOnSegment(p2, q1, q2))
-            {
-                return true;
-            }
-
-            return false; // Doesn't fall in any of the above cases
-        }
-
         private static bool IsOnSegment(Vector2 p, Vector2 q, Vector2 r)
         {
             return (q.X - Epsilon2) <= Math.Max(p.X, r.X) &&
@@ -416,6 +441,7 @@ namespace SixLabors.Shapes
                     (q.Y + Epsilon2) >= Math.Min(p.Y, r.Y);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Orientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
         {
             // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
@@ -441,17 +467,16 @@ namespace SixLabors.Shapes
         /// <param name="line1End">The line1 end.</param>
         /// <param name="line2Start">The line2 start.</param>
         /// <param name="line2End">The line2 end.</param>
-        /// <param name="buffer">The buffer.</param>
         /// <returns>
         /// the number of points on the line that it hit
         /// </returns>
         private static Vector2 FindIntersection(Vector2 line1Start, Vector2 line1End, Vector2 line2Start, Vector2 line2End)
         {
             // do bounding boxes overlap, if not then the lines can't and return fast.
-            if (!DoIntersect(line1Start, line1End, line2Start, line2End))
-            {
-                return MaxVector;
-            }
+            //if (!DoIntersect(line1Start, line1End, line2Start, line2End))
+           // {
+            //    return MaxVector;
+           // }
 
             float x1, y1, x2, y2, x3, y3, x4, y4;
             x1 = line1Start.X;
@@ -474,7 +499,14 @@ namespace SixLabors.Shapes
             float x = (((x2 - x1) * ((x3 * y4) - (x4 * y3))) - ((x4 - x3) * ((x1 * y2) - (x2 * y1)))) / inter;
             float y = (((y3 - y4) * ((x1 * y2) - (x2 * y1))) - ((y1 - y2) * ((x3 * y4) - (x4 * y3)))) / inter;
 
-            return new Vector2(x, y);
+            var point = new Vector2(x, y);
+
+            if(IsOnSegment(line1Start, point, line1End) && IsOnSegment(line2Start, point, line2End))
+            {
+                return point;
+            }
+
+            return MaxVector;
         }
 
         /// <summary>
@@ -679,6 +711,13 @@ namespace SixLabors.Shapes
 
             public float Length;
             public float TotalLength;
+        }
+
+        private struct PassPointData
+        {
+            public bool RemoveLastIntersectionAndSkip;
+            public Orientation RelativeOrientation;
+            public bool DoIntersect;
         }
     }
 }
