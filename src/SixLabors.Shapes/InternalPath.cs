@@ -200,7 +200,6 @@ namespace SixLabors.Shapes
         /// <returns>number of intersections hit</returns>
         public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
-
             ClampPoints(ref start, ref end);
 
             var target = new Segment(start, end);
@@ -219,58 +218,56 @@ namespace SixLabors.Shapes
 
             try
             {
-                int lastCorner = polyCorners - 1;
-                Orientation prevOrientation = CalulateOrientation(start, end, this.points[lastCorner].Point);
+                // pre calculate relative orientations X places ahead and behind
+                Orientation prevOrientation = CalulateOrientation(start, end, this.points[polyCorners - 1].Point);
                 Orientation nextOrientation = CalulateOrientation(start, end, this.points[0].Point);
                 Orientation nextPlus1Orientation = CalulateOrientation(start, end, this.points[1].Point);
 
+                // iterate over all points and precalculate data about each, pre cacluating it relative orientation
                 for (int i = 0; i < polyCorners && count > 0; i++)
                 {
-                    int next = (i + 1) % this.points.Length;
-                    int nextPlus1 = (next + 1) % this.points.Length;
-                    Vector2 edgeStart = this.points[i].Point;
-                    Vector2 edgeEnd = this.points[next].Point;
+                    Segment edge = this.points[i].Segment;
 
+                    // shift all orientations along but one place and fill in the last one
                     var pointOrientation = nextOrientation;
                     nextOrientation = nextPlus1Orientation;
-                    nextPlus1Orientation = CalulateOrientation(start, end, this.points[nextPlus1].Point);
+                    nextPlus1Orientation = CalulateOrientation(start, end, this.points[(i + 2) % this.points.Length].Point);
 
+                    // should this point cause the last matched point to be excluded
                     bool removeLastIntersection = nextOrientation == Orientation.Colinear &&
                                                   pointOrientation == Orientation.Colinear &&
                                                   nextPlus1Orientation != prevOrientation &&
                                                   (this.closedPath || i > 0) &&
-                                                  (IsOnSegment(target, edgeStart) || IsOnSegment(target, edgeEnd));
+                                                  (IsOnSegment(target, edge.Start) || IsOnSegment(target, edge.End));
 
+                    // is there any chance the segments will intersection (do their bounding boxes touch)
                     bool doIntersect = false;
                     if (pointOrientation == Orientation.Colinear || pointOrientation != nextOrientation)
                     {
-                        //intersect
-                        Vector2 edgeMin = Vector2.Min(edgeStart, edgeEnd);
-                        Vector2 edgeMax = Vector2.Max(edgeStart, edgeEnd);
-
-                        doIntersect = edgeMin.X - Epsilon <= target.Max.X &&
-                                      edgeMax.X + Epsilon >= target.Min.X &&
-                                      edgeMin.Y - Epsilon <= target.Max.Y &&
-                                      edgeMax.Y + Epsilon >= target.Min.Y;
+                        doIntersect = (edge.Min.X - Epsilon) <= target.Max.X &&
+                                      (edge.Max.X + Epsilon) >= target.Min.X &&
+                                      (edge.Min.Y - Epsilon) <= target.Max.Y &&
+                                      (edge.Max.Y + Epsilon) >= target.Min.Y;
                     }
 
                     precaclulate[i] = new PassPointData
                     {
                         RemoveLastIntersectionAndSkip = removeLastIntersection,
                         RelativeOrientation = pointOrientation,
-                        DoIntersect = doIntersect // DoIntersect(edgeStart, edgeEnd, start, end)
+                        DoIntersect = doIntersect
                     };
-                    lastCorner = i;
+
                     prevOrientation = pointOrientation;
                 }
 
+                // seed the last point for deduping at begining of closed line
                 if (this.closedPath)
                 {
                     int prev = polyCorners - 1;
 
                     if (precaclulate[prev].DoIntersect)
                     {
-                        lastPoint = FindIntersection(this.points[prev].Point, this.points[0].Point, target);
+                        lastPoint = FindIntersection(this.points[prev].Segment, target);
                     }
                 }
 
@@ -286,7 +283,7 @@ namespace SixLabors.Shapes
                     }
                     if (precaclulate[i].DoIntersect)
                     {
-                        Vector2 point = FindIntersection(this.points[i].Point, this.points[next].Point, target);
+                        Vector2 point = FindIntersection(this.points[i].Segment, target);
                         if (point != MaxVector)
                         {
                             if (lastPoint.Equivelent(point, Epsilon2))
@@ -309,13 +306,6 @@ namespace SixLabors.Shapes
                                 Orientation side = precaclulate[next].RelativeOrientation;
                                 Orientation side2 = precaclulate[last].RelativeOrientation;
 
-                                //if (side == Orientation.Colinear && side2 == Orientation.Colinear)
-                                //{
-                                //    position--;
-                                //    count++;
-                                //    continue;
-                                //}
-
                                 if (side != side2)
                                 {
                                     // differnet side we skip adding as we are passing through it
@@ -334,8 +324,6 @@ namespace SixLabors.Shapes
                     {
                         lastPoint = MaxVector;
                     }
-
-                    lastCorner = i;
                 }
 
                 return position;
@@ -469,18 +457,18 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Finds the point on line described by <paramref name="line1Start" /> and <paramref name="line1End" />
-        /// that intersects with line described by <paramref name="line2Start" /> and <paramref name="line2End" />
+        /// Finds the point on line described by <paramref name="source" /> 
+        /// that intersects with line described by <paramref name="target" /> 
         /// </summary>
-        /// <param name="line1Start">The line1 start.</param>
-        /// <param name="line1End">The line1 end.</param>
-        /// <param name="line2Start">The line2 start.</param>
-        /// <param name="line2End">The line2 end.</param>
+        /// <param name="source">The line1 start.</param>
+        /// <param name="target">The target line.</param>
         /// <returns>
-        /// the number of points on the line that it hit
+        /// The point on the line that it hit
         /// </returns>
-        private static Vector2 FindIntersection(Vector2 line1Start, Vector2 line1End, Segment target)
+        private static Vector2 FindIntersection(Segment source, Segment target)
         {
+            Vector2 line1Start = source.Start;
+            Vector2 line1End = source.End;
             Vector2 line2Start = target.Start;
             Vector2 line2End = target.End;
 
@@ -507,7 +495,7 @@ namespace SixLabors.Shapes
 
             var point = new Vector2(x, y);
 
-            if (IsOnSegment(line1Start, point, line1End) && IsOnSegment(line2Start, point, line2End))
+            if (IsOnSegment(source, point) && IsOnSegment(target, point))
             {
                 return point;
             }
@@ -566,6 +554,7 @@ namespace SixLabors.Shapes
                             {
                                 Point = points[0],
                                 Orientation = Orientation.Colinear,
+                                Segment = new Segment(points[0], points[1]),
                                 Length = 0,
                                 TotalLength = 0
                             });
@@ -609,12 +598,21 @@ namespace SixLabors.Shapes
                     });
                 lastPoint = points[i];
             }
+
             // walk back removing collinear points
             while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
             {
                 results.RemoveAt(results.Count - 1);
             }
-            return results.ToArray();
+
+            var data = results.ToArray();
+            for (var i = 0; i< data.Length; i++)
+            {
+                var next = (i + 1) % data.Length;
+                data[i].Segment = new Segment(data[i].Point, data[next].Point);
+            }
+
+            return data;
         }
 
         /// <summary>
@@ -717,6 +715,7 @@ namespace SixLabors.Shapes
 
             public float Length;
             public float TotalLength;
+            public Segment Segment;
         }
 
         private struct PassPointData
