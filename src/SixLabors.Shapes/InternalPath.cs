@@ -200,6 +200,11 @@ namespace SixLabors.Shapes
         /// <returns>number of intersections hit</returns>
         public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
         {
+            if(this.points.Length < 2)
+            {
+                return 0;
+            }
+
             ClampPoints(ref start, ref end);
 
             var target = new Segment(start, end);
