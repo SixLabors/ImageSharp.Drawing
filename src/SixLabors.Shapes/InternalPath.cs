@@ -282,8 +282,11 @@ namespace SixLabors.Shapes
 
                     if (precaclulate[i].RemoveLastIntersectionAndSkip)
                     {
-                        position--;
-                        count++;
+                        if (position > 0)
+                        {
+                            position--;
+                            count++;
+                        }
                         continue;
                     }
                     if (precaclulate[i].DoIntersect)

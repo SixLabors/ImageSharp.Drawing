@@ -33,8 +33,27 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawSerializedOPenSansLetterShape_a();
             DrawSerializedOPenSansLetterShape_o();
 
-            DrawFatL();
+            OutlineFatL();
+            OutlineSquare();
         }
+
+        private static void OutlineFatL()
+        {
+            var shape = new Path(new LinearLineSegment(new Vector2(8, 8),
+               new Vector2(64, 8),
+               new Vector2(64, 64),
+               new Vector2(120, 64),
+               new Vector2(120, 120),
+               new Vector2(8, 120))).GenerateOutline(3, new[] { 2f, 1f });
+            shape.SaveImage("Outline", "ClippedCorner.png");
+        }
+		
+        private static void OutlineSquare()
+        {
+            var p = new Rectangle(new Vector2(10, 10), new Size(30, 30)).GenerateOutline(3, new[] { 2f, 1f });
+            p.SaveImage("Outline", "Square.png");
+        }
+		
 
         private static void DrawFatL()
         {
@@ -80,7 +99,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                             .ToArray();
                 return new Polygon(new LinearLineSegment(points));
             }).ToArray();
-            var complex = new ComplexPolygon(polys);
+            var complex = new ComplexPolygon(polys).Scale(10).GenerateOutline(6, new float[] { 2, 1 }); ;
             complex.SaveImage("letter", "o.png");
         }
 
