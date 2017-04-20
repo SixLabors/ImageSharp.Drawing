@@ -233,7 +233,7 @@ namespace SixLabors.Shapes
                     Vector2 edgeStart = this.points[i].Point;
                     Vector2 edgeEnd = this.points[next].Point;
 
-                    var pointOrientation = nextOrientation;
+                    Orientation pointOrientation = nextOrientation;
                     nextOrientation = nextPlus1Orientation;
                     nextPlus1Orientation = CalulateOrientation(start, end, this.points[nextPlus1].Point);
 
@@ -499,7 +499,7 @@ namespace SixLabors.Shapes
             float x = (((x2 - x1) * ((x3 * y4) - (x4 * y3))) - ((x4 - x3) * ((x1 * y2) - (x2 * y1)))) / inter;
             float y = (((y3 - y4) * ((x1 * y2) - (x2 * y1))) - ((y1 - y2) * ((x3 * y4) - (x4 * y3)))) / inter;
 
-            var point = new Vector2(x, y);
+            Vector2 point = new Vector2(x, y);
 
             if (IsOnSegment(line1Start, point, line1End) && IsOnSegment(line2Start, point, line2End))
             {

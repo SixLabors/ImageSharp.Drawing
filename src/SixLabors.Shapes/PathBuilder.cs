@@ -179,7 +179,7 @@ namespace SixLabors.Shapes
         /// </summary>
         public void CloseAllFigures()
         {
-            foreach (var f in this.figures)
+            foreach (Figure f in this.figures)
             {
                 f.IsClosed = true;
             }
@@ -193,7 +193,7 @@ namespace SixLabors.Shapes
         /// <returns>The current set of operations as a complex polygon</returns>
         public IPath Build()
         {
-            var paths = this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray();
+            IPath[] paths = this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray();
             if (paths.Length == 1)
             {
                 return paths[0];

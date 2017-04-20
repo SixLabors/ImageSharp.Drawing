@@ -37,7 +37,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint[] controlPoints, TestPoint point, bool isInside)
         {
-            var shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (Vector2)x).ToArray()));
+            Polygon shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (Vector2)x).ToArray()));
             Assert.Equal(isInside, shape.Contains(point));
         }
 
@@ -67,7 +67,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(DistanceTheoryData))]
         public void Distance(TestPoint[] controlPoints, TestPoint point, float expected)
         {
-            var shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (Vector2)x).ToArray()));
+            Polygon shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (Vector2)x).ToArray()));
             Assert.Equal(expected, shape.Distance(point).DistanceFromPath);
         }
 
@@ -103,7 +103,7 @@ namespace SixLabors.Shapes.Tests
         public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
         {
             IPath path = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
-            var info = path.Distance(point);
+            PointInfo info = path.Distance(point);
             Assert.Equal(expectedDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
         }
@@ -111,8 +111,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void AsSimpleLinearPath()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
-            var paths = poly.Flatten()[0].Points;
+            Polygon poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
+            System.Collections.Immutable.ImmutableArray<Vector2> paths = poly.Flatten()[0].Points;
             Assert.Equal(3, paths.Length);
             Assert.Equal(new Vector2(0, 0), paths[0]);
             Assert.Equal(new Vector2(0, 10), paths[1]);
@@ -122,10 +122,10 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void FindIntersectionsBuffer()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0)));
-            var buffer = new Vector2[2];
+            Polygon poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0)));
+            Vector2[] buffer = new Vector2[2];
 
-            var hits = poly.FindIntersections(new Vector2(5, -5), new Vector2(5, 15), buffer, 2, 0);
+            int hits = poly.FindIntersections(new Vector2(5, -5), new Vector2(5, 15), buffer, 2, 0);
             Assert.Equal(2, hits);
             Assert.Contains(new Vector2(5, 10), buffer);
             Assert.Contains(new Vector2(5, 0), buffer);
@@ -134,9 +134,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void FindIntersectionsCollection()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0)));
+            Polygon poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0)));
 
-            var buffer = poly.FindIntersections(new Vector2(5, -5), new Vector2(5, 15)).ToArray();
+            Vector2[] buffer = poly.FindIntersections(new Vector2(5, -5), new Vector2(5, 15)).ToArray();
             Assert.Equal(2, buffer.Length);
             Assert.Contains(new Vector2(5, 10), buffer);
             Assert.Contains(new Vector2(5, 0), buffer);
@@ -145,8 +145,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ReturnsWrapperOfSelfASOwnPath_SingleSegment()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
-            var paths = poly.Flatten();
+            Polygon poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
+            System.Collections.Immutable.ImmutableArray<ISimplePath> paths = poly.Flatten();
             Assert.Equal(1, paths.Length);
             Assert.Equal(poly, paths[0]);
         }
@@ -154,8 +154,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ReturnsWrapperOfSelfASOwnPath_MultiSegment()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10)), new LinearLineSegment(new Vector2(2, 5), new Vector2(5, 5)));
-            var paths = poly.Flatten();
+            Polygon poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10)), new LinearLineSegment(new Vector2(2, 5), new Vector2(5, 5)));
+            System.Collections.Immutable.ImmutableArray<ISimplePath> paths = poly.Flatten();
             Assert.Equal(1, paths.Length);
             Assert.Equal(poly, paths[0]);
         }
@@ -163,8 +163,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
-            var bounds = poly.Bounds;
+            Polygon poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(5, 5)));
+            Rectangle bounds = poly.Bounds;
             Assert.Equal(0, bounds.Left);
             Assert.Equal(0, bounds.Top);
             Assert.Equal(5, bounds.Right);
@@ -174,7 +174,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MaxIntersections()
         {
-            var poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10)));
+            Polygon poly = new Polygon(new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10)));
 
             // with linear polygons its the number of points the segments have
             Assert.Equal(2, poly.MaxIntersections);
@@ -183,30 +183,30 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void FindBothIntersections()
         {
-            var poly = new Polygon(new LinearLineSegment(
+            Polygon poly = new Polygon(new LinearLineSegment(
                             new Vector2(10, 10),
                             new Vector2(200, 150),
                             new Vector2(50, 300)));
-            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 55), new Vector2(float.MaxValue, 55));
+            IEnumerable<Vector2> intersections = poly.FindIntersections(new Vector2(float.MinValue, 55), new Vector2(float.MaxValue, 55));
             Assert.Equal(2, intersections.Count());
         }
 
         [Fact]
         public void HandleClippingInnerCorner()
         {
-            var simplePath = new Polygon(new LinearLineSegment(
+            Polygon simplePath = new Polygon(new LinearLineSegment(
                              new Vector2(10, 10),
                              new Vector2(200, 150),
                              new Vector2(50, 300)));
 
-            var hole1 = new Polygon(new LinearLineSegment(
+            Polygon hole1 = new Polygon(new LinearLineSegment(
                             new Vector2(37, 85),
                             new Vector2(130, 40),
                             new Vector2(65, 137)));
 
-            var poly = simplePath.Clip(hole1);
+            IPath poly = simplePath.Clip(hole1);
 
-            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 137), new Vector2(float.MaxValue, 137));
+            IEnumerable<Vector2> intersections = poly.FindIntersections(new Vector2(float.MinValue, 137), new Vector2(float.MaxValue, 137));
 
             // returns an even number of points
             Assert.Equal(4, intersections.Count());
@@ -216,12 +216,12 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void CrossingCorner()
         {
-            var simplePath = new Polygon(new LinearLineSegment(
+            Polygon simplePath = new Polygon(new LinearLineSegment(
                              new Vector2(10, 10),
                              new Vector2(200, 150),
                              new Vector2(50, 300)));
 
-            var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 150), new Vector2(float.MaxValue, 150));
+            IEnumerable<Vector2> intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 150), new Vector2(float.MaxValue, 150));
 
             // returns an even number of points
             Assert.Equal(2, intersections.Count());
@@ -231,9 +231,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingEdgefromInside()
         {
-            var simplePath = new Rectangle(10, 10, 100, 100).Clip(new Rectangle(20, 0, 20, 20));
+            IPath simplePath = new Rectangle(10, 10, 100, 100).Clip(new Rectangle(20, 0, 20, 20));
 
-            var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 20), new Vector2(float.MaxValue, 20));
+            IEnumerable<Vector2> intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 20), new Vector2(float.MaxValue, 20));
 
             // returns an even number of points
             Assert.Equal(4, intersections.Count());
@@ -242,12 +242,12 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingEdgeFromOutside()
         {
-            var simplePath = new Polygon(new LinearLineSegment(
+            Polygon simplePath = new Polygon(new LinearLineSegment(
                              new Vector2(10, 10),
                              new Vector2(100, 10),
                              new Vector2(50, 300)));
 
-            var intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 10), new Vector2(float.MaxValue, 10));
+            IEnumerable<Vector2> intersections = simplePath.FindIntersections(new Vector2(float.MinValue, 10), new Vector2(float.MaxValue, 10));
 
             // returns an even number of points
             Assert.Equal(0, intersections.Count() % 2);
@@ -256,19 +256,19 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void HandleClippingOutterCorner()
         {
-            var simplePath = new Polygon(new LinearLineSegment(
+            Polygon simplePath = new Polygon(new LinearLineSegment(
                              new Vector2(10, 10),
                              new Vector2(200, 150),
                              new Vector2(50, 300)));
 
-            var hole1 = new Polygon(new LinearLineSegment(
+            Polygon hole1 = new Polygon(new LinearLineSegment(
                             new Vector2(37, 85),
                             new Vector2(130, 40),
                             new Vector2(65, 137)));
 
-            var poly = simplePath.Clip(hole1);
+            IPath poly = simplePath.Clip(hole1);
 
-            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 300), new Vector2(float.MaxValue, 300));
+            IEnumerable<Vector2> intersections = poly.FindIntersections(new Vector2(float.MinValue, 300), new Vector2(float.MaxValue, 300));
 
             // returns an even number of points
             Assert.Equal(2, intersections.Count());
@@ -277,19 +277,19 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MissingIntersection()
         {
-            var simplePath = new Polygon(new LinearLineSegment(
+            Polygon simplePath = new Polygon(new LinearLineSegment(
                              new Vector2(10, 10),
                              new Vector2(200, 150),
                              new Vector2(50, 300)));
 
-            var hole1 = new Polygon(new LinearLineSegment(
+            Polygon hole1 = new Polygon(new LinearLineSegment(
                             new Vector2(37, 85),
                             new Vector2(130, 40),
                             new Vector2(65, 137)));
 
-            var poly = simplePath.Clip(hole1);
+            IPath poly = simplePath.Clip(hole1);
 
-            var intersections = poly.FindIntersections(new Vector2(float.MinValue, 85), new Vector2(float.MaxValue, 85));
+            IEnumerable<Vector2> intersections = poly.FindIntersections(new Vector2(float.MinValue, 85), new Vector2(float.MaxValue, 85));
 
             // returns an even number of points
             Assert.Equal(4, intersections.Count());
@@ -309,9 +309,9 @@ namespace SixLabors.Shapes.Tests
                         new Vector2(300, 400)
             };
 
-            var poly = new Polygon(new BezierLineSegment(simplePath));
+            Polygon poly = new Polygon(new BezierLineSegment(simplePath));
 
-            var points = poly.FindIntersections(new Vector2(float.MinValue, y), new Vector2(float.MaxValue, y)).ToList();
+            List<Vector2> points = poly.FindIntersections(new Vector2(float.MinValue, y), new Vector2(float.MaxValue, y)).ToList();
 
             Assert.Equal(2, points.Count());
         }

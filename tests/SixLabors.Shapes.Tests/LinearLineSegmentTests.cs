@@ -13,8 +13,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void SingleSegmentConstructor()
         {
-            var segment = new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 10));
-            var flatPath = segment.Flatten();
+            LinearLineSegment segment = new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 10));
+            System.Collections.Immutable.ImmutableArray<Vector2> flatPath = segment.Flatten();
             Assert.Equal(2, flatPath.Length);
             Assert.Equal(new Vector2(0, 0), flatPath[0]);
             Assert.Equal(new Vector2(10, 10), flatPath[1]);
@@ -23,7 +23,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MustHaveAtleast2Points()
         {
-            var error = Assert.Throws<ArgumentOutOfRangeException>(() => new LinearLineSegment(new[] { new Vector2(0, 0) }));
+            ArgumentOutOfRangeException error = Assert.Throws<ArgumentOutOfRangeException>(() => new LinearLineSegment(new[] { new Vector2(0, 0) }));
         }
 
         [Fact]

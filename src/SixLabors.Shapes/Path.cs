@@ -48,6 +48,11 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
+        /// Gets the length of the path.
+        /// </summary>
+        public float Length => this.innerPath.Length;
+
+        /// <summary>
         /// Gets a value indicating whether this instance is a closed path.
         /// </summary>
         bool ISimplePath.IsClosed => this.IsClosed;
@@ -83,7 +88,7 @@ namespace SixLabors.Shapes
         /// <inheritdoc />
         public PointInfo Distance(Vector2 point)
         {
-            var dist = this.innerPath.DistanceFromPath(point);
+            PointInfo dist = this.innerPath.DistanceFromPath(point);
 
             if (this.IsClosed)
             {
@@ -111,9 +116,9 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            var segments = new ILineSegment[this.LineSegments.Length];
-            var i = 0;
-            foreach (var s in this.LineSegments)
+            ILineSegment[] segments = new ILineSegment[this.LineSegments.Length];
+            int i = 0;
+            foreach (ILineSegment s in this.LineSegments)
             {
                 segments[i++] = s.Transform(matrix);
             }
@@ -175,6 +180,18 @@ namespace SixLabors.Shapes
         public bool Contains(Vector2 point)
         {
             return this.innerPath.PointInPolygon(point);
+        }
+
+        /// <summary>
+        /// Calculates the the point a certain distance a path.
+        /// </summary>
+        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
+        /// <returns>
+        /// Returns details about a point along a path.
+        /// </returns>
+        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        {
+            return this.innerPath.PointAlongPath(distanceAlongPath);
         }
     }
 }

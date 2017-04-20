@@ -23,9 +23,9 @@ namespace SixLabors.Shapes.Benchmarks
         public Vector2[] Internal_Old()
         {
             Vector2[] buffer = new Vector2[vectors.Length];
-            var path = new InternalPath_Old(vectors, true);
+            InternalPath_Old path = new InternalPath_Old(vectors, true);
 
-            for (var y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
+            for (float y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
             {
                 path.FindIntersections(new Vector2(path.Bounds.Left - 1, y), new Vector2(path.Bounds.Right + 1, y), buffer, path.PointCount, 0);
             }
@@ -36,9 +36,9 @@ namespace SixLabors.Shapes.Benchmarks
         public Vector2[] Internal_Current()
         {
             Vector2[] buffer = new Vector2[vectors.Length];
-            var path = new InternalPath(vectors, true);
+            InternalPath path = new InternalPath(vectors, true);
 
-            for (var y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
+            for (float y = path.Bounds.Top; y < path.Bounds.Bottom; y += (1f / 32f))
             {
                 path.FindIntersections(new Vector2(path.Bounds.Left - 1, y), new Vector2(path.Bounds.Right + 1, y), buffer, path.PointCount, 0);
             }

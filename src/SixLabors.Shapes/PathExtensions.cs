@@ -96,12 +96,12 @@ namespace SixLabors.Shapes
         /// </returns>
         public static IEnumerable<Vector2> FindIntersections(this IPath path, Vector2 start, Vector2 end)
         {
-            var buffer = ArrayPool<Vector2>.Shared.Rent(path.MaxIntersections);
+            Vector2[] buffer = ArrayPool<Vector2>.Shared.Rent(path.MaxIntersections);
             try
             {
-                var hits = path.FindIntersections(start, end, buffer, path.MaxIntersections, 0);
-                var results = new Vector2[hits];
-                for (var i = 0; i < hits; i++)
+                int hits = path.FindIntersections(start, end, buffer, path.MaxIntersections, 0);
+                Vector2[] results = new Vector2[hits];
+                for (int i = 0; i < hits; i++)
                 {
                     results[i] = buffer[i];
                 }

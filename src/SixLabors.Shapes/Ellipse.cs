@@ -95,9 +95,12 @@ namespace SixLabors.Shapes
         int IPath.MaxIntersections => this.innerPath.PointCount;
 
         /// <inheritdoc />
+        public float Length => this.innerPath.Length;
+
+        /// <inheritdoc />
         public PointInfo Distance(Vector2 point)
         {
-            var dist = this.innerPath.DistanceFromPath(point);
+            PointInfo dist = this.innerPath.DistanceFromPath(point);
             bool isInside = this.innerPath.PointInPolygon(point);
             if (isInside)
             {
@@ -189,17 +192,17 @@ namespace SixLabors.Shapes
 
             const float kappa = 0.5522848f;
 
-            var sizeVector = size.ToVector2() / 2;
+            Vector2 sizeVector = size.ToVector2() / 2;
 
-            var rootLocation = location - sizeVector;
+            Vector2 rootLocation = location - sizeVector;
 
-            var pointO = sizeVector * kappa;
-            var pointE = location + sizeVector;
-            var pointM = location;
-            var pointMminusO = pointM - pointO;
-            var pointMplusO = pointM + pointO;
+            Vector2 pointO = sizeVector * kappa;
+            Vector2 pointE = location + sizeVector;
+            Vector2 pointM = location;
+            Vector2 pointMminusO = pointM - pointO;
+            Vector2 pointMplusO = pointM + pointO;
 
-            var points = new Vector2[]
+            Vector2[] points = new Vector2[]
             {
                 new Vector2(rootLocation.X, pointM.Y),
 
@@ -220,6 +223,13 @@ namespace SixLabors.Shapes
                 new Vector2(rootLocation.X, pointM.Y),
             };
             return new BezierLineSegment(points);
+        }
+
+        /// <inheritdoc /> 
+        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        {
+            // TODO switch this out to a calculated algorithum
+            return this.innerPath.PointAlongPath(distanceAlongPath);
         }
     }
 }

@@ -24,11 +24,11 @@ namespace SixLabors.Shapes
         internal static IEnumerable<Vector2> FindIntersections(this InternalPath path, Vector2 start, Vector2 end)
         {
             List<Vector2> results = new List<Vector2>();
-            var buffer = ArrayPool<Vector2>.Shared.Rent(path.PointCount);
+            Vector2[] buffer = ArrayPool<Vector2>.Shared.Rent(path.PointCount);
             try
             {
-                var hits = path.FindIntersections(start, end, buffer, path.PointCount, 0);
-                for (var i = 0; i < hits; i++)
+                int hits = path.FindIntersections(start, end, buffer, path.PointCount, 0);
+                for (int i = 0; i < hits; i++)
                 {
                     results.Add(buffer[i]);
                 }

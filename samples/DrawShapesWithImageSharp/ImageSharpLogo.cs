@@ -14,12 +14,12 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             // the point are based on a 1206x1206 shape so size requires scaling from there
 
             float scalingFactor = size / 1206;
-            
-            var center = new Vector2(603);
+
+            Vector2 center = new Vector2(603);
 
             // segment whoes cetner of rotation should be 
-            var segmentOffset = new Vector2(301.16968f, 301.16974f);
-            var segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
+            Vector2 segmentOffset = new Vector2(301.16968f, 301.16974f);
+            IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
                 new BezierLineSegment(new Vector2(5.8641942f, 361.46031f),
                 new Vector2(-11.715693f, 259.54052f),
                 new Vector2(24.441609f, 158.17478f),
@@ -28,10 +28,10 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             //we need to create 6 of theses all rotated about the center point
             List<IPath> segments = new List<IPath>();
-            for (var i = 0; i < 6; i++)
+            for (int i = 0; i < 6; i++)
             {
                 float angle = i * ((float)Math.PI / 3);
-                var s = segment.Transform(Matrix3x2.CreateRotation(angle, center));
+                IPath s = segment.Transform(Matrix3x2.CreateRotation(angle, center));
                 segments.Add(s);
             }
 
@@ -46,21 +46,21 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
 
-            var dimensions = (int)Math.Ceiling(size);
-            using (var img = new Image(dimensions, dimensions))
+            int dimensions = (int)Math.Ceiling(size);
+            using (Image img = new Image(dimensions, dimensions))
             {
                 img.Fill(Color.Black);
                 img.Fill(Color.FromHex("e1e1e1ff"), new SixLabors.Shapes.Ellipse(center, 600f).Transform(scaler));
                 img.Fill(Color.White, new SixLabors.Shapes.Ellipse(center, 600f - 60).Transform(scaler));
 
-                for (var i = 0; i < 6; i++)
+                for (int i = 0; i < 6; i++)
                 {
                     img.Fill(colors[i], segments[i].Transform(scaler));
                 }
 
                 img.Fill(new Color(0, 0, 0, 170), new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f)).Transform(scaler));
 
-                var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
+                string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 
                 img.Save(fullPath);
             }

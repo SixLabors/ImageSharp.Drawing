@@ -21,13 +21,13 @@ namespace SixLabors.Shapes.Tests
         {
             if (throws)
             {
-                var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new RegularPolygon(Vector2.Zero, points, 10f, 0));
+                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new RegularPolygon(Vector2.Zero, points, 10f, 0));
 
                 Assert.Equal("verticies", ex.ParamName);
             }
             else
             {
-                var p = new RegularPolygon(Vector2.Zero, points, 10f, 0);
+                RegularPolygon p = new RegularPolygon(Vector2.Zero, points, 10f, 0);
                 Assert.NotNull(p);
             }
         }
@@ -41,13 +41,13 @@ namespace SixLabors.Shapes.Tests
         {
             if (throws)
             {
-                var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new RegularPolygon(Vector2.Zero, 3, radius, 0));
+                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new RegularPolygon(Vector2.Zero, 3, radius, 0));
 
                 Assert.Equal("radius", ex.ParamName);
             }
             else
             {
-                var p = new RegularPolygon(Vector2.Zero, 3, radius, 0);
+                RegularPolygon p = new RegularPolygon(Vector2.Zero, 3, radius, 0);
                 Assert.NotNull(p);
             }
         }
@@ -58,23 +58,23 @@ namespace SixLabors.Shapes.Tests
             float radius = 10;
             int pointsCount = new Random().Next(3, 20);
 
-            var poly = new RegularPolygon(Vector2.Zero, pointsCount, radius, 0);
-            
-            var points = poly.Flatten()[0].Points;
+            RegularPolygon poly = new RegularPolygon(Vector2.Zero, pointsCount, radius, 0);
+
+            System.Collections.Immutable.ImmutableArray<Vector2> points = poly.Flatten()[0].Points;
 
             // calcualte baselineDistance
-            var baseline = Vector2.Distance(points[0], points[1]);
+            float baseline = Vector2.Distance(points[0], points[1]);
 
             // all points are extact the same distance away from the center
-            for (var i = 0; i < points.Length; i++)
+            for (int i = 0; i < points.Length; i++)
             {
-                var j = i - 1;
+                int j = i - 1;
                 if (i == 0)
                 {
                     j = points.Length - 1;
                 }
 
-                var actual = Vector2.Distance(points[i], points[j]);
+                float actual = Vector2.Distance(points[i], points[j]);
                 Assert.Equal(baseline, actual, 3);
                 Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
             }
@@ -87,10 +87,10 @@ namespace SixLabors.Shapes.Tests
             float radius = 10;
             double anAngle = new Random().NextDouble() * TwoPI;
 
-            var poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
-            var points = poly.Flatten()[0].Points;
+            RegularPolygon poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
+            System.Collections.Immutable.ImmutableArray<Vector2> points = poly.Flatten()[0].Points;
 
-            var allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
+            IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
             
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
@@ -100,8 +100,8 @@ namespace SixLabors.Shapes.Tests
         public void TriangleMissingIntersectionsDownCenter()
         {
 
-            var poly = new SixLabors.Shapes.RegularPolygon(50, 50, 3, 30);
-            var points = poly.FindIntersections(new Vector2(0, 50), new Vector2(100, 50)).ToArray();
+            RegularPolygon poly = new SixLabors.Shapes.RegularPolygon(50, 50, 3, 30);
+            Vector2[] points = poly.FindIntersections(new Vector2(0, 50), new Vector2(100, 50)).ToArray();
 
             Assert.Equal(2, points.Length);
         }
@@ -109,8 +109,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingCornerShouldReturn2Points()
         {
-            var poly = new RegularPolygon(50, 50, 7, 30, -(float)Math.PI);
-            var points = poly.FindIntersections(new Vector2(0, 20), new Vector2(100, 20)).ToArray();
+            RegularPolygon poly = new RegularPolygon(50, 50, 7, 30, -(float)Math.PI);
+            Vector2[] points = poly.FindIntersections(new Vector2(0, 20), new Vector2(100, 20)).ToArray();
 
             Assert.Equal(2, points.Length);
         }

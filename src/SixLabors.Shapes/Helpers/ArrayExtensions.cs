@@ -29,14 +29,14 @@ namespace SixLabors.Shapes
                 return source1;
             }
 
-            var target = new T[source1.Length + source2.Length];
+            T[] target = new T[source1.Length + source2.Length];
 
-            for (var i = 0; i < source1.Length; i++)
+            for (int i = 0; i < source1.Length; i++)
             {
                 target[i] = source1[i];
             }
 
-            for (var i = 0; i < source2.Length; i++)
+            for (int i = 0; i < source2.Length; i++)
             {
                 target[i + source1.Length] = source2[i];
             }

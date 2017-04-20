@@ -70,13 +70,13 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(polygonsTheoryData))]
         public void ShapeMissingEdgeHits(string name)
         {
-            var polygon = shapes[name];
-            var top = (int)Math.Ceiling(polygon.Bounds.Top);
-            var bottom = (int)Math.Floor(polygon.Bounds.Bottom);
+            IPath polygon = shapes[name];
+            int top = (int)Math.Ceiling(polygon.Bounds.Top);
+            int bottom = (int)Math.Floor(polygon.Bounds.Bottom);
 
-            for (var y = top; y <= bottom; y++)
+            for (int y = top; y <= bottom; y++)
             {
-                var intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, y), new Vector2(polygon.Bounds.Right + 1, y));
+                IEnumerable<Vector2> intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, y), new Vector2(polygon.Bounds.Right + 1, y));
                 if (intersections.Count() % 2 != 0)
                 {
                     Assert.True(false, $"crosssection of '{name}' at '{y}' produced {intersections.Count()} number of intersections");
@@ -105,9 +105,9 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(specificErrors))]
         public void SpecificMisses(string name, int yScanLine)
         {
-            var polygon = shapes[name];
+            IPath polygon = shapes[name];
 
-            var intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, yScanLine), new Vector2(polygon.Bounds.Right + 1, yScanLine)).Count();
+            int intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, yScanLine), new Vector2(polygon.Bounds.Right + 1, yScanLine)).Count();
 
             Assert.True(intersections % 2 == 0, $"crosssection of '{name}' at '{yScanLine}' produced {intersections} intersections");
         }

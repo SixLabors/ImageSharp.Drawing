@@ -2,6 +2,7 @@
 
 namespace SixLabors.Shapes.Tests
 {
+    using System;
     using System.Linq;
     using System.Numerics;
 
@@ -13,10 +14,10 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MultipleLineSegmentsSimplePathsAreMerged()
         {
-            var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(2, 2));
-            var seg2 = new LinearLineSegment(new Vector2(4, 4), new Vector2(5, 5));
+            LinearLineSegment seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(2, 2));
+            LinearLineSegment seg2 = new LinearLineSegment(new Vector2(4, 4), new Vector2(5, 5));
 
-            var path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
+            InternalPath path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
 
             Assert.Contains(new Vector2(0, 0), path.Points());
             Assert.DoesNotContain(new Vector2(2, 2), path.Points());
@@ -27,9 +28,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Length_Closed()
         {
-            var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 2));
+            LinearLineSegment seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 2));
 
-            var path = new InternalPath(seg1, true);
+            InternalPath path = new InternalPath(seg1, true);
 
             Assert.Equal(4, path.Length);
         }
@@ -37,9 +38,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Length_Open()
         {
-            var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 2));
+            LinearLineSegment seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 2));
 
-            var path = new InternalPath(seg1, false);
+            InternalPath path = new InternalPath(seg1, false);
 
             Assert.Equal(2, path.Length);
         }
@@ -47,10 +48,10 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds()
         {
-            var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(2, 2));
-            var seg2 = new LinearLineSegment(new Vector2(4, 4), new Vector2(5, 5));
+            LinearLineSegment seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(2, 2));
+            LinearLineSegment seg2 = new LinearLineSegment(new Vector2(4, 4), new Vector2(5, 5));
 
-            var path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
+            InternalPath path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
 
             Assert.Equal(0, path.Bounds.Left);
             Assert.Equal(5, path.Bounds.Right);
@@ -60,8 +61,8 @@ namespace SixLabors.Shapes.Tests
 
         private static InternalPath Create(Vector2 location, Size size, bool closed = true)
         {
-            var seg1 = new LinearLineSegment(location, location + new Vector2(size.Width, 0));
-            var seg2 = new LinearLineSegment(location + new Vector2(size.Width, size.Height), location + new Vector2(0, size.Height));
+            LinearLineSegment seg1 = new LinearLineSegment(location, location + new Vector2(size.Width, 0));
+            LinearLineSegment seg2 = new LinearLineSegment(location + new Vector2(size.Width, size.Height), location + new Vector2(0, size.Height));
 
             return new InternalPath(new ILineSegment[] { seg1, seg2 }, closed);
         }
@@ -118,28 +119,47 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
         {
-            var shape = Create(location, size);
+            InternalPath shape = Create(location, size);
             Assert.Equal(isInside, shape.PointInPolygon(point));
         }
 
         [Fact]
         public void PointInPolygon_OpenPath()
         {
-            var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0));
+            LinearLineSegment seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0));
 
-            var p = new InternalPath(seg1, false);
+            InternalPath p = new InternalPath(seg1, false);
             Assert.False(p.PointInPolygon(new Vector2(5, 5)));
 
-            var p2 = new InternalPath(seg1, true);
+            InternalPath p2 = new InternalPath(seg1, true);
             Assert.True(p2.PointInPolygon(new Vector2(5, 5f)));
+        }
+
+        const float HalfPi = (float)(Math.PI / 2);
+        const float Pi = (float)(Math.PI);
+
+        [Theory]
+        [InlineData(0, 50, 50, Pi)]
+        [InlineData(100, 150, 50, Pi)]
+        [InlineData(200, 250, 50, -HalfPi)]
+        [InlineData(259, 250, 109, -HalfPi)]
+        [InlineData(261, 249, 110, 0)]
+        [InlineData(620, 150, 50, Pi)] // wrap about end of path
+        public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
+        {
+            InternalPath shape = Create(new Vector2(50, 50), new Size(200, 60));
+            var point = shape.PointAlongPath(distance);
+            Assert.Equal(expectedX, point.Point.X, 4);
+            Assert.Equal(expectedY, point.Point.Y, 4);
+            Assert.Equal(expectedAngle, point.Angle, 4);
         }
 
         [Theory]
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
         {
-            var shape = Create(new Vector2(0, 0), new Size(10, 10));
-            var info = shape.DistanceFromPath(point);
+            InternalPath shape = Create(new Vector2(0, 0), new Size(10, 10));
+            PointInfo info = shape.DistanceFromPath(point);
             Assert.Equal(expectedDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
         }
@@ -147,8 +167,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void DistanceFromPath_Path_Closed()
         {
-            var shape = Create(new Vector2(0, 0), new Size(10, 10), false);
-            var info = shape.DistanceFromPath(new Vector2(5, 5));
+            InternalPath shape = Create(new Vector2(0, 0), new Size(10, 10), false);
+            PointInfo info = shape.DistanceFromPath(new Vector2(5, 5));
             Assert.Equal(5, info.DistanceFromPath);
             Assert.Equal(5, info.DistanceAlongPath);
         }
@@ -156,9 +176,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_buffer()
         {
-            var shape = Create(new Vector2(0, 0), new Size(10, 10));
-            var buffer = new Vector2[shape.PointCount];
-            var hits = shape.FindIntersections(new Vector2(5, -10), new Vector2(5, 20), buffer, 4, 0);
+            InternalPath shape = Create(new Vector2(0, 0), new Size(10, 10));
+            Vector2[] buffer = new Vector2[shape.PointCount];
+            int hits = shape.FindIntersections(new Vector2(5, -10), new Vector2(5, 20), buffer, 4, 0);
 
             Assert.Equal(2, hits);
             Assert.Equal(new Vector2(5, 0), buffer[0]);
@@ -168,8 +188,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_enumerabe()
         {
-            var shape = Create(new Vector2(0, 0), new Size(10, 10));
-            var buffer = shape.FindIntersections(new Vector2(5, -10), new Vector2(5, 20)).ToArray();
+            InternalPath shape = Create(new Vector2(0, 0), new Size(10, 10));
+            Vector2[] buffer = shape.FindIntersections(new Vector2(5, -10), new Vector2(5, 20)).ToArray();
 
             Assert.Equal(2, buffer.Length);
             Assert.Equal(new Vector2(5, 0), buffer[0]);
@@ -179,8 +199,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_enumerabe_openpath()
         {
-            var shape = Create(new Vector2(0, 0), new Size(10, 10), false);
-            var buffer = shape.FindIntersections(new Vector2(5, -10), new Vector2(5, 20)).ToArray();
+            InternalPath shape = Create(new Vector2(0, 0), new Size(10, 10), false);
+            Vector2[] buffer = shape.FindIntersections(new Vector2(5, -10), new Vector2(5, 20)).ToArray();
 
             Assert.Equal(2, buffer.Length);
             Assert.Equal(new Vector2(5, 0), buffer[0]);
@@ -190,9 +210,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_Diagonal()
         {
-            var shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 10)), false);
+            InternalPath shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 10)), false);
 
-            var buffer = shape.FindIntersections(new Vector2(0, 10), new Vector2(10, 0)).ToArray();
+            Vector2[] buffer = shape.FindIntersections(new Vector2(0, 10), new Vector2(10, 0)).ToArray();
 
             Assert.Equal(1, buffer.Length);
             Assert.Equal(new Vector2(5, 5), buffer[0]);
@@ -201,18 +221,18 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_Diagonal_NoHit()
         {
-            var shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(4, 4)), false);
+            InternalPath shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(4, 4)), false);
 
-            var buffer = shape.FindIntersections(new Vector2(0, 10), new Vector2(10, 0)).ToArray();
+            Vector2[] buffer = shape.FindIntersections(new Vector2(0, 10), new Vector2(10, 0)).ToArray();
 
             Assert.Equal(0, buffer.Length);
         }
         [Fact]
         public void Intersections_Diagonal_and_straight_Hit()
         {
-            var shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(4, 4)), false);
+            InternalPath shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(4, 4)), false);
 
-            var buffer = shape.FindIntersections(new Vector2(3, 10), new Vector2(3, 0)).ToArray();
+            Vector2[] buffer = shape.FindIntersections(new Vector2(3, 10), new Vector2(3, 0)).ToArray();
 
             Assert.Equal(1, buffer.Length);
             Assert.Equal(new Vector2(3, 3), buffer[0]);
@@ -220,9 +240,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_Diagonal_and_straight_NoHit()
         {
-            var shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(4, 4)), false);
+            InternalPath shape = new InternalPath(new LinearLineSegment(new Vector2(0, 0), new Vector2(4, 4)), false);
 
-            var buffer = shape.FindIntersections(new Vector2(3, 10), new Vector2(3, 3.5f)).ToArray();
+            Vector2[] buffer = shape.FindIntersections(new Vector2(3, 10), new Vector2(3, 3.5f)).ToArray();
 
             Assert.Equal(0, buffer.Length);
         }

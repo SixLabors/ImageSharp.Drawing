@@ -188,6 +188,41 @@ namespace SixLabors.Shapes
             };
         }
 
+        internal SegmentInfo PointAlongPath(float distanceAlongPath)
+        {
+            distanceAlongPath = distanceAlongPath % this.Length;
+            int pointCount = this.PointCount;
+            if (this.closedPath)
+            {
+                pointCount--;
+            }
+
+            for(int i = 0; i < pointCount; i++)
+            {
+                int next = (i + 1) % this.PointCount;
+                if(distanceAlongPath < this.points[next].Length)
+                {
+
+                    float t = distanceAlongPath / this.points[next].Length;
+                    Vector2 point = (this.points[i].Point * (1 - t)) + (this.points[next].Point * t);
+
+                    Vector2 diff = this.points[i].Point - this.points[next].Point;
+
+                    return new SegmentInfo
+                    {
+                        Point = point,
+                        Angle = (float)(Math.Atan2(diff.Y, diff.X) % (Math.PI * 2))
+                    };
+                }
+                else
+                {
+                    distanceAlongPath -= this.points[next].Length;
+                }
+            }
+
+            throw new InvalidOperationException("should alwys reach a point along the path");
+        }
+
         /// <summary>
         /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
         /// populates a buffer for all points on the path that the line intersects.
@@ -207,7 +242,7 @@ namespace SixLabors.Shapes
 
             ClampPoints(ref start, ref end);
 
-            var target = new Segment(start, end);
+            Segment target = new Segment(start, end);
 
             int polyCorners = this.points.Length;
 
@@ -234,7 +269,7 @@ namespace SixLabors.Shapes
                     Segment edge = this.points[i].Segment;
 
                     // shift all orientations along but one place and fill in the last one
-                    var pointOrientation = nextOrientation;
+                    Orientation pointOrientation = nextOrientation;
                     nextOrientation = nextPlus1Orientation;
                     nextPlus1Orientation = CalulateOrientation(start, end, this.points[(i + 2) % this.points.Length].Point);
 
@@ -501,7 +536,7 @@ namespace SixLabors.Shapes
             float x = (((x2 - x1) * ((x3 * y4) - (x4 * y3))) - ((x4 - x3) * ((x1 * y2) - (x2 * y1)))) / inter;
             float y = (((y3 - y4) * ((x1 * y2) - (x2 * y1))) - ((y1 - y2) * ((x3 * y4) - (x4 * y3)))) / inter;
 
-            var point = new Vector2(x, y);
+            Vector2 point = new Vector2(x, y);
 
             if (IsOnSegment(source, point) && IsOnSegment(target, point))
             {
@@ -515,6 +550,7 @@ namespace SixLabors.Shapes
         /// Simplifies the collection of segments.
         /// </summary>
         /// <param name="segments">The segments.</param>
+        /// <param name="isClosed">Weather the path is closed or open.</param>
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
@@ -613,10 +649,10 @@ namespace SixLabors.Shapes
                 results.RemoveAt(results.Count - 1);
             }
 
-            var data = results.ToArray();
-            for (var i = 0; i< data.Length; i++)
+            PointData[] data = results.ToArray();
+            for (int i = 0; i< data.Length; i++)
             {
-                var next = (i + 1) % data.Length;
+                int next = (i + 1) % data.Length;
                 data[i].Segment = new Segment(data[i].Point, data[next].Point);
             }
 
