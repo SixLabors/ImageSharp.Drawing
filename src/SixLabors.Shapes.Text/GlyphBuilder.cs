@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Numerics;
 
 using SixLabors.Fonts;
@@ -41,11 +42,20 @@ namespace SixLabors.Shapes.Text
         /// </summary>
         public IEnumerable<IPath> Paths => this.paths;
 
+        void IGlyphRenderer.EndText()
+        {
+        }
+
+        void IGlyphRenderer.BeginText(Vector2 location, Fonts.Size size)
+        {
+        }
+
         /// <summary>
         /// Begins the glyph.
         /// </summary>
         /// <param name="location">The offset that the glyph will be rendered at.</param>
-        void IGlyphRenderer.BeginGlyph(Vector2 location)
+        /// <param name="size">The size.</param>
+        void IGlyphRenderer.BeginGlyph(Vector2 location, SixLabors.Fonts.Size size)
         {
             this.builder.Clear();
         }
@@ -119,5 +129,6 @@ namespace SixLabors.Shapes.Text
             this.builder.AddBezier(this.currentPoint, c1, c2, point);
             this.currentPoint = point;
         }
+
     }
 }
