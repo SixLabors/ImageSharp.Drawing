@@ -35,30 +35,30 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 segments.Add(s);
             }
 
-            List<Color> colors = new List<Color>() {
-                Color.FromHex("35a849"),
-                Color.FromHex("fcee21"),
-                Color.FromHex("ed7124"),
-                Color.FromHex("cb202d"),
-                Color.FromHex("5f2c83"),
-                Color.FromHex("085ba7"),
+            List<Rgba32> colors = new List<Rgba32>() {
+                Rgba32.FromHex("35a849"),
+                Rgba32.FromHex("fcee21"),
+                Rgba32.FromHex("ed7124"),
+                Rgba32.FromHex("cb202d"),
+                Rgba32.FromHex("5f2c83"),
+                Rgba32.FromHex("085ba7"),
             };
 
             Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
 
             var dimensions = (int)Math.Ceiling(size);
-            using (var img = new Image(dimensions, dimensions))
+            using (var img = new Image<Rgba32>(dimensions, dimensions))
             {
-                img.Fill(Color.Black);
-                img.Fill(Color.FromHex("e1e1e1ff"), new SixLabors.Shapes.Ellipse(center, 600f).Transform(scaler));
-                img.Fill(Color.White, new SixLabors.Shapes.Ellipse(center, 600f - 60).Transform(scaler));
+                img.Fill(Rgba32.Black);
+                img.Fill(Rgba32.FromHex("e1e1e1ff"), new SixLabors.Shapes.Ellipse(center, 600f).Transform(scaler));
+                img.Fill(Rgba32.White, new SixLabors.Shapes.Ellipse(center, 600f - 60).Transform(scaler));
 
                 for (var i = 0; i < 6; i++)
                 {
                     img.Fill(colors[i], segments[i].Transform(scaler));
                 }
 
-                img.Fill(new Color(0, 0, 0, 170), new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f)).Transform(scaler));
+                img.Fill(new Rgba32(0, 0, 0, 170), new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f)).Transform(scaler));
 
                 var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 

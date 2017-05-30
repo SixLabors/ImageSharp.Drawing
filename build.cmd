@@ -18,6 +18,13 @@ if not "%GitVersion_NuGetVersion%" == "" (
 )ELSE ( 
     dotnet pack ./src/SixLabors.Shapes/ -c Release --output ../../artifacts --no-build
 )
+
+if not "%GitVersion_NuGetVersion%" == "" (
+    dotnet pack ./src/SixLabors.Shapes.Text/ -c Release --output ../../artifacts --no-build /p:packageversion=%GitVersion_NuGetVersion%
+)ELSE ( 
+    dotnet pack ./src/SixLabors.Shapes.Text/ -c Release --output ../../artifacts --no-build
+)
+
 if not "%errorlevel%"=="0" goto failure
 
 

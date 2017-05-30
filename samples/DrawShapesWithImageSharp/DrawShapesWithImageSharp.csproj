@@ -11,12 +11,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\SixLabors.Shapes.Text\SixLabors.Shapes.Text.csproj" />
     <ProjectReference Include="..\..\src\SixLabors.Shapes\SixLabors.Shapes.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ImageSharp.Drawing" Version="1.0.0-alpha5-00040" />
-    <PackageReference Include="ImageSharp" Version="1.0.0-alpha5-00046" />
+    <PackageReference Include="ImageSharp.Drawing" Version="1.0.0-alpha9-00084" />
+    <PackageReference Include="ImageSharp" Version="1.0.0-alpha9-00089" />
   </ItemGroup>
 
 </Project>
