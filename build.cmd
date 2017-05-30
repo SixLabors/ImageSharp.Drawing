@@ -1,6 +1,10 @@
 @echo Off
 
-dotnet restore 
+if not "%GitVersion_NuGetVersion%" == "" (
+    dotnet restore /p:packageversion=%GitVersion_NuGetVersion%
+)ELSE ( 
+	dotnet restore 
+)
 
 ECHO Building nuget packages
 if not "%GitVersion_NuGetVersion%" == "" (
