@@ -30,7 +30,7 @@ namespace SixLabors.Shapes.Tests
                 {
                     //validate matrix in here
 
-                    var targetMatrix = Matrix3x2.CreateRotation(angle, bounds.Center);
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(angle, bounds.Center);
 
                     Assert.Equal(targetMatrix, m);
 
@@ -50,9 +50,9 @@ namespace SixLabors.Shapes.Tests
                 .Callback<Matrix3x2>(m =>
                 {
                     //validate matrix in here
-                    var radians = (float)(Math.PI * angle / 180.0);
+                    float radians = (float)(Math.PI * angle / 180.0);
 
-                    var targetMatrix = Matrix3x2.CreateRotation(radians, bounds.Center);
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(radians, bounds.Center);
 
                     Assert.Equal(targetMatrix, m);
 
@@ -73,7 +73,7 @@ namespace SixLabors.Shapes.Tests
                 {
                     //validate matrix in here
 
-                    var targetMatrix = Matrix3x2.CreateTranslation(point);
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateTranslation(point);
 
                     Assert.Equal(targetMatrix, m);
 
@@ -95,7 +95,7 @@ namespace SixLabors.Shapes.Tests
                 {
                     //validate matrix in here
 
-                    var targetMatrix = Matrix3x2.CreateTranslation(new Vector2(x, y));
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateTranslation(new Vector2(x, y));
 
                     Assert.Equal(targetMatrix, m);
 

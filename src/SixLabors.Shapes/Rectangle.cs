@@ -137,6 +137,9 @@ namespace SixLabors.Shapes
         /// </value>
         Rectangle IPath.Bounds => this;
 
+        /// <inheritdoc />
+        float IPath.Length => this.length;
+
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
         /// </summary>
@@ -265,6 +268,59 @@ namespace SixLabors.Shapes
 
             // rectangles may be rotated and skewed which means they will then nedd representing by a polygon
             return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
+        }
+
+
+        /// <inheritdoc /> 
+        SegmentInfo IPath.PointAlongPath(float distanceAlongPath)
+        {
+            distanceAlongPath = distanceAlongPath % this.length;
+
+            if (distanceAlongPath < this.Width)
+            {
+                // we are on the top stretch
+                return new SegmentInfo
+                {
+                    Point = new Vector2(this.Left + distanceAlongPath, this.Top),
+                    Angle = (float)Math.PI
+                };
+            }
+            else
+            {
+                distanceAlongPath -= this.Width;
+                if (distanceAlongPath < this.Height)
+                {
+                    // down on right
+                    return new SegmentInfo
+                    {
+                        Point = new Vector2(this.Right, this.Top + distanceAlongPath),
+                        Angle = -(float)Math.PI / 2
+                    };
+                }
+                else
+                {
+                    distanceAlongPath -= this.Height;
+                    if (distanceAlongPath < this.Width)
+                    {
+                        // botom right to left
+                        return new SegmentInfo
+                        {
+                            Point = new Vector2(this.Right - distanceAlongPath, this.Bottom),
+                            Angle = 0
+                        };
+                    }
+                    else
+                    {
+
+                        distanceAlongPath -= this.Width;
+                        return new SegmentInfo
+                        {
+                            Point = new Vector2(this.Left, this.Bottom - distanceAlongPath),
+                            Angle = (float)(Math.PI / 2)
+                        };
+                    }
+                }
+            }
         }
 
         /// <summary>

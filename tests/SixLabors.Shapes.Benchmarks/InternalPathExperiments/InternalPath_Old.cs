@@ -277,11 +277,11 @@ namespace SixLabors.Shapes
                 {
                     // lines are colinear and intersect
                     // if this is the case we need to tell if this is an inflection or not
-                    var nextSide = Side.Same;
+                    Side nextSide = Side.Same;
                     // keep going next untill we are no longer on the line
                     while (nextSide == Side.Same)
                     {
-                        var nextPlus1 = FindNextPoint(polyCorners, next);
+                        int nextPlus1 = FindNextPoint(polyCorners, next);
                         nextSide = SideOfLine(this.points[nextPlus1], this.points[i], this.points[next]);
                         if (nextSide == Side.Same)
                         {
@@ -298,7 +298,7 @@ namespace SixLabors.Shapes
                         }
                     }
 
-                    var prevSide = SideOfLine(this.points[lastCorner], this.points[i], this.points[next]);
+                    Side prevSide = SideOfLine(this.points[lastCorner], this.points[i], this.points[next]);
                     if (prevSide != nextSide)
                     {
                         position--;
@@ -327,8 +327,8 @@ namespace SixLabors.Shapes
                             last = i;
                         }
 
-                        var side = SideOfLine(this.points[last], start, end);
-                        var side2 = SideOfLine(this.points[next], start, end);
+                        Side side = SideOfLine(this.points[last], start, end);
+                        Side side2 = SideOfLine(this.points[next], start, end);
 
                         if (side == Side.Same && side2 == Side.Same)
                         {
@@ -406,17 +406,17 @@ namespace SixLabors.Shapes
             }
 
             // if it hit any points then class it as inside
-            var buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
+            Vector2[] buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
             try
             {
-                var intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, this.points.Length, 0);
+                int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, this.points.Length, 0);
                 if (intersection % 2 == 1)
                 {
                     return true;
                 }
 
                 // check if the point is on an intersection is it is then inside
-                for (var i = 0; i < intersection; i++)
+                for (int i = 0; i < intersection; i++)
                 {
                     if (buffer[i].Equivelent(point, Epsilon))
                     {
@@ -434,8 +434,8 @@ namespace SixLabors.Shapes
 
         private static Side SideOfLine(Vector2 test, Vector2 lineStart, Vector2 lineEnd)
         {
-            var testDiff = test - lineStart;
-            var lineDiff = lineEnd - lineStart;
+            Vector2 testDiff = test - lineStart;
+            Vector2 lineDiff = lineEnd - lineStart;
             if (float.IsInfinity(lineDiff.X))
             {
                 if (lineDiff.X > 0)
@@ -460,7 +460,7 @@ namespace SixLabors.Shapes
                 }
             }
 
-            var crossProduct = (lineDiff.X * testDiff.Y) - (lineDiff.Y * testDiff.X);
+            float crossProduct = (lineDiff.X * testDiff.Y) - (lineDiff.Y * testDiff.X);
 
             if (crossProduct > -Epsilon && crossProduct < Epsilon)
             {
@@ -479,10 +479,10 @@ namespace SixLabors.Shapes
         {
             // Find the four orientations needed for general and
             // special cases
-            var o1 = CalulateOrientation(p1, q1, p2);
-            var o2 = CalulateOrientation(p1, q1, q2);
-            var o3 = CalulateOrientation(p2, q2, p1);
-            var o4 = CalulateOrientation(p2, q2, q1);
+            Orientation o1 = CalulateOrientation(p1, q1, p2);
+            Orientation o2 = CalulateOrientation(p1, q1, q2);
+            Orientation o3 = CalulateOrientation(p2, q2, p1);
+            Orientation o4 = CalulateOrientation(p2, q2, q1);
 
             // General case
             if (o1 != o2 && o3 != o4)

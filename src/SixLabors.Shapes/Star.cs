@@ -78,12 +78,12 @@ namespace SixLabors.Shapes
             Vector2 distanceVectorInner = new Vector2(0, innerRadii);
             Vector2 distanceVectorOuter = new Vector2(0, outerRadii);
 
-            var verticies = prongs * 2;
+            int verticies = prongs * 2;
             float anglePerSegemnts = (float)((2 * Math.PI) / verticies);
             float current = angle;
             Vector2[] points = new Vector2[verticies];
-            var distance = distanceVectorInner;
-            for (var i = 0; i < verticies; i++)
+            Vector2 distance = distanceVectorInner;
+            for (int i = 0; i < verticies; i++)
             {
                 if (distance == distanceVectorInner)
                 {

@@ -72,9 +72,9 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            var segments = new ILineSegment[this.LineSegments.Length];
-            var i = 0;
-            foreach (var s in this.LineSegments)
+            ILineSegment[] segments = new ILineSegment[this.LineSegments.Length];
+            int i = 0;
+            foreach (ILineSegment s in this.LineSegments)
             {
                 segments[i++] = s.Transform(matrix);
             }

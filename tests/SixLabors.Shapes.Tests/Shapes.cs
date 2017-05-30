@@ -10,9 +10,9 @@ namespace SixLabors.Shapes.Tests
     {
         public static IPath IrisSegment(int rotationPos)
         {
-            var center = new Vector2(603);
-            var segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
-            var segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
+            Vector2 center = new Vector2(603);
+            Vector2 segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
+            IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
                 new BezierLineSegment(new Vector2(5.8641942f, 361.46031f),
                 new Vector2(-11.715693f, 259.54052f),
                 new Vector2(24.441609f, 158.17478f),
@@ -27,9 +27,9 @@ namespace SixLabors.Shapes.Tests
 
             float scalingFactor = size / 1206;
 
-            var center = new Vector2(603);
-            var segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
-            var segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
+            Vector2 center = new Vector2(603);
+            Vector2 segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
+            IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
                 new BezierLineSegment(new Vector2(5.8641942f, 361.46031f),
                 new Vector2(-11.715693f, 259.54052f),
                 new Vector2(24.441609f, 158.17478f),
@@ -37,10 +37,10 @@ namespace SixLabors.Shapes.Tests
 
             float angle = rotationPos * ((float)Math.PI / 3);
 
-            var rotated = segment.Transform(Matrix3x2.CreateRotation(angle, center));
+            IPath rotated = segment.Transform(Matrix3x2.CreateRotation(angle, center));
 
             Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
-            var scaled = rotated.Transform(scaler);
+            IPath scaled = rotated.Transform(scaler);
 
             return scaled;
         }
@@ -49,7 +49,7 @@ namespace SixLabors.Shapes.Tests
         public static IPath HourGlass()
         {
             // center the shape outerRadii + 10 px away from edges
-            var sb = new PathBuilder();
+            PathBuilder sb = new PathBuilder();
 
             // overlay rectangle
             sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));

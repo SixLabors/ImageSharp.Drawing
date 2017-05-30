@@ -64,10 +64,10 @@ namespace SixLabors.Shapes.PolygonClipper
             }
 
             IPath[] shapes = new IPath[results.Count];
-            for (var i = 0; i < results.Count; i++)
+            for (int i = 0; i < results.Count; i++)
             {
-                var source = results[i].Source;
-                var path = source as IPath;
+                object source = results[i].Source;
+                IPath path = source as IPath;
 
                 if (path != null)
                 {
@@ -75,10 +75,10 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
                 else
                 {
-                    var points = new Vector2[results[i].Contour.Count];
-                    for (var j = 0; j < results[i].Contour.Count; j++)
+                    Vector2[] points = new Vector2[results[i].Contour.Count];
+                    for (int j = 0; j < results[i].Contour.Count; j++)
                     {
-                        var p = results[i].Contour[j];
+                        IntPoint p = results[i].Contour[j];
 
                         // to make the floating point polygons compatable with clipper we had
                         // to scale them up to make them ints but still retain some level of precision
@@ -107,7 +107,7 @@ namespace SixLabors.Shapes.PolygonClipper
         public void AddPaths(IEnumerable<ClipablePath> paths)
         {
             Guard.NotNull(paths, nameof(paths));
-            foreach (var p in paths)
+            foreach (ClipablePath p in paths)
             {
                 this.AddPath(p.Path, p.Type);
             }
@@ -121,7 +121,7 @@ namespace SixLabors.Shapes.PolygonClipper
         public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
             Guard.NotNull(paths, nameof(paths));
-            foreach (var p in paths)
+            foreach (IPath p in paths)
             {
                 this.AddPath(p, clippingType);
             }
@@ -135,7 +135,7 @@ namespace SixLabors.Shapes.PolygonClipper
         public void AddPath(IPath path, ClippingType clippingType)
         {
             Guard.NotNull(path, nameof(path));
-            foreach (var p in path.Flatten())
+            foreach (ISimplePath p in path.Flatten())
             {
                 this.AddPath(p, clippingType);
             }
@@ -149,9 +149,9 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
-            var vectors = path.Points;
+            ImmutableArray<Vector2> vectors = path.Points;
             List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Length);
-            foreach (var v in vectors)
+            foreach (Vector2 v in vectors)
             {
                 points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
             }

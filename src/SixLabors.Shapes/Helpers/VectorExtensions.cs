@@ -27,7 +27,7 @@ namespace SixLabors.Shapes
         /// </returns>
         public static bool Equivelent(this Vector2 source1, Vector2 source2, float threshold)
         {
-            var abs = Vector2.Abs(source1 - source2);
+            Vector2 abs = Vector2.Abs(source1 - source2);
 
             return abs.X < threshold && abs.Y < threshold;
         }

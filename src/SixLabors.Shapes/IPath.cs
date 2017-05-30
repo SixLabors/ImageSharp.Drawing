@@ -29,6 +29,20 @@ namespace SixLabors.Shapes
         int MaxIntersections { get; }
 
         /// <summary>
+        /// Gets the length of the path.
+        /// </summary>
+        float Length { get; }
+
+        /// <summary>
+        /// Calculates the the point a certain distance a path.
+        /// </summary>
+        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
+        /// <returns>
+        /// Returns details about a point along a path.
+        /// </returns>
+        SegmentInfo PointAlongPath(float distanceAlongPath);
+        
+        /// <summary>
         /// Calculates the distance along and away from the path for a specified point.
         /// </summary>
         /// <param name="point">The point along the path.</param>

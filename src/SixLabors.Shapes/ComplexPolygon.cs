@@ -35,49 +35,63 @@ namespace SixLabors.Shapes
         /// <param name="paths">The paths.</param>
         public ComplexPolygon(ImmutableArray<IPath> paths)
         {
-            float minX = float.MaxValue;
-            float maxX = float.MinValue;
-            float minY = float.MaxValue;
-            float maxY = float.MinValue;
-
-            foreach (IPath s in paths)
-            {
-                if (s.Bounds.Left < minX)
-                {
-                    minX = s.Bounds.Left;
-                }
-
-                if (s.Bounds.Right > maxX)
-                {
-                    maxX = s.Bounds.Right;
-                }
-
-                if (s.Bounds.Top < minY)
-                {
-                    minY = s.Bounds.Top;
-                }
-
-                if (s.Bounds.Bottom > maxY)
-                {
-                    maxY = s.Bounds.Bottom;
-                }
-
-                this.MaxIntersections += s.MaxIntersections;
-            }
+           
 
             if (paths.Length == 1)
             {
+                this.Length = paths[0].Length;
+                this.Bounds = paths[0].Bounds;
                 this.PathType = paths[0].PathType;
+                this.MaxIntersections = paths[0].MaxIntersections;
             }
             else
             {
+                float minX = float.MaxValue;
+                float maxX = float.MinValue;
+                float minY = float.MaxValue;
+                float maxY = float.MinValue;
+                float length = 0;
+                int intersections = 0;
+
+                foreach (IPath s in paths)
+                {
+                    length += s.Length;
+                    if (s.Bounds.Left < minX)
+                    {
+                        minX = s.Bounds.Left;
+                    }
+
+                    if (s.Bounds.Right > maxX)
+                    {
+                        maxX = s.Bounds.Right;
+                    }
+
+                    if (s.Bounds.Top < minY)
+                    {
+                        minY = s.Bounds.Top;
+                    }
+
+                    if (s.Bounds.Bottom > maxY)
+                    {
+                        maxY = s.Bounds.Bottom;
+                    }
+
+                    intersections += s.MaxIntersections;
+                }
+
+                this.MaxIntersections = intersections;
+                this.Length = length;
+                this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
                 this.PathType = PathTypes.Mixed;
             }
 
             this.Paths = paths;
-
-            this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
         }
+
+        /// <summary>
+        /// Gets the length of the path.
+        /// </summary>
+        public float Length { get; }
 
         /// <summary>
         /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
@@ -123,11 +137,11 @@ namespace SixLabors.Shapes
         public PointInfo Distance(Vector2 point)
         {
             float dist = float.MaxValue;
-            var pointInfo = default(PointInfo);
+            PointInfo pointInfo = default(PointInfo);
             bool inside = false;
             foreach (IPath shape in this.Paths)
             {
-                var d = shape.Distance(point);
+                PointInfo d = shape.Distance(point);
 
                 if (d.DistanceFromPath <= 0)
                 {
@@ -189,7 +203,7 @@ namespace SixLabors.Shapes
         public bool Contains(Vector2 point)
         {
             bool inside = false;
-            foreach (var shape in this.Paths)
+            foreach (IPath shape in this.Paths)
             {
                 if (shape.Contains(point))
                 {
@@ -215,9 +229,9 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            var shapes = new IPath[this.Paths.Length];
-            var i = 0;
-            foreach (var s in this.Paths)
+            IPath[] shapes = new IPath[this.Paths.Length];
+            int i = 0;
+            foreach (IPath s in this.Paths)
             {
                 shapes[i++] = s.Transform(matrix);
             }
@@ -233,8 +247,8 @@ namespace SixLabors.Shapes
         /// </returns>
         public ImmutableArray<ISimplePath> Flatten()
         {
-            var paths = new List<ISimplePath>();
-            foreach (var path in this.Paths)
+            List<ISimplePath> paths = new List<ISimplePath>();
+            foreach (IPath path in this.Paths)
             {
                 paths.AddRange(path.Flatten());
             }
@@ -257,13 +271,40 @@ namespace SixLabors.Shapes
             else
             {
                 IPath[] paths = new IPath[this.Paths.Length];
-                for (var i = 0; i < this.Paths.Length; i++)
+                for (int i = 0; i < this.Paths.Length; i++)
                 {
                     paths[i] = this.Paths[i].AsClosedPath();
                 }
 
                 return new ComplexPolygon(paths);
             }
+        }
+
+        /// <summary>
+        /// Calculates the the point a certain distance a path.
+        /// </summary>
+        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
+        /// <returns>
+        /// Returns details about a point along a path.
+        /// </returns>
+        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        {
+            distanceAlongPath  = distanceAlongPath % this.Length;
+
+            foreach(IPath p in this.Paths)
+            {
+                if(p.Length >= distanceAlongPath)
+                {
+                    return p.PointAlongPath(distanceAlongPath);
+                }
+                else
+                {
+                    //reduce it before trying the next path
+                    distanceAlongPath -= p.Length;
+                }
+            }
+
+            throw new InvalidOperationException("Should not be possible to reach this line");
         }
     }
 }

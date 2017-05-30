@@ -19,13 +19,13 @@ namespace SixLabors.Shapes.Tests
         {
             if (throws)
             {
-                var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Ellipse(0,0, width, 99));
+                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Ellipse(0,0, width, 99));
 
                 Assert.Equal("width", ex.ParamName);
             }
             else
             {
-                var p = new Ellipse(0, 0, width, 99);
+                Ellipse p = new Ellipse(0, 0, width, 99);
                 Assert.NotNull(p);
             }
         }
@@ -39,13 +39,13 @@ namespace SixLabors.Shapes.Tests
         {
             if (throws)
             {
-                var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Ellipse(0,0,99, height));
+                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new Ellipse(0,0,99, height));
 
                 Assert.Equal("height", ex.ParamName);
             }
             else
             {
-                var p = new Ellipse(0, 0, 99, height);
+                Ellipse p = new Ellipse(0, 0, 99, height);
                 Assert.NotNull(p);
             }
         }
@@ -53,8 +53,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingCornerShouldReturn2Points()
         {
-            var poly = new Ellipse(50, 50, 30, 50);
-            var points = poly.FindIntersections(new Vector2(0, 75), new Vector2(100, 75)).ToArray();
+            Ellipse poly = new Ellipse(50, 50, 30, 50);
+            Vector2[] points = poly.FindIntersections(new Vector2(0, 75), new Vector2(100, 75)).ToArray();
 
             Assert.Equal(2, points.Length);
         }
@@ -62,8 +62,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void AcrossEllipsShouldReturn2()
         {
-            var poly = new Ellipse(50, 50, 30, 50);
-            var points = poly.FindIntersections(new Vector2(0, 49), new Vector2(100, 49)).ToArray();
+            Ellipse poly = new Ellipse(50, 50, 30, 50);
+            Vector2[] points = poly.FindIntersections(new Vector2(0, 49), new Vector2(100, 49)).ToArray();
 
             Assert.Equal(2, points.Length);
         }
@@ -71,11 +71,11 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void AcrossEllipseShouldReturn2()
         {
-            var poly = new Ellipse(0, 0, 10, 20).Scale(5);
+            IPath poly = new Ellipse(0, 0, 10, 20).Scale(5);
             poly = poly.Translate(poly.Bounds.Location * -1) // touch top left
                .Translate(new Vector2(10)); // move in from top left
 
-            var points = poly.FindIntersections(new Vector2(0, 10), new Vector2(100, 10)).ToArray();
+            Vector2[] points = poly.FindIntersections(new Vector2(0, 10), new Vector2(100, 10)).ToArray();
 
             Assert.Equal(2, points.Length);
         }

@@ -35,12 +35,12 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
 
         private ImmutableArray<IPath> Clip(IPath shape, params IPath[] hole)
         {
-            var clipper = new Clipper();
+            Clipper clipper = new Clipper();
 
             clipper.AddPath(shape, ClippingType.Subject);
             if (hole != null)
             {
-                foreach (var s in hole)
+                foreach (IPath s in hole)
                 {
                     clipper.AddPath(s, ClippingType.Clip);
                 }
@@ -52,11 +52,11 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void OverlappingTriangles()
         {
-            var shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
+            ImmutableArray<IPath> shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
             Assert.Equal(1, shapes.Length);
-            var path = shapes.Single().Flatten()[0].Points;
+            ImmutableArray<Vector2> path = shapes.Single().Flatten()[0].Points;
             Assert.Equal(7, path.Length);
-            foreach (var p in this.BigTriangle.Flatten()[0].Points)
+            foreach (Vector2 p in this.BigTriangle.Flatten()[0].Points)
             {
                 Assert.Contains(p, path);
             }
@@ -65,7 +65,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void NonOverlapping()
         {
-            var shapes = this.Clip(this.TopLeft, this.TopRight);
+            ImmutableArray<IPath> shapes = this.Clip(this.TopLeft, this.TopRight);
             Assert.Equal(1, shapes.Length);
             Assert.Contains(this.TopLeft, shapes);
             Assert.DoesNotContain(this.TopRight, shapes);
@@ -74,7 +74,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void OverLappingReturns1NewShape()
         {
-            var shapes = this.Clip(this.BigSquare, this.TopLeft);
+            ImmutableArray<IPath> shapes = this.Clip(this.BigSquare, this.TopLeft);
             Assert.Equal(1, shapes.Length);
             Assert.DoesNotContain(this.BigSquare, shapes);
             Assert.DoesNotContain(this.TopLeft, shapes);
@@ -83,7 +83,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void OverlappingButNotCrossingRetuensOrigionalShapes()
         {
-            var shapes = this.Clip(this.BigSquare, this.Hole);
+            ImmutableArray<IPath> shapes = this.Clip(this.BigSquare, this.Hole);
             Assert.Equal(2, shapes.Length);
             Assert.Contains(this.BigSquare, shapes);
             Assert.Contains(this.Hole, shapes);
@@ -92,7 +92,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void TouchingButNotOverlapping()
         {
-            var shapes = this.Clip(this.TopMiddle, this.TopLeft);
+            ImmutableArray<IPath> shapes = this.Clip(this.TopMiddle, this.TopLeft);
             Assert.Equal(1, shapes.Length);
             Assert.DoesNotContain(this.TopMiddle, shapes);
             Assert.DoesNotContain(this.TopLeft, shapes);
@@ -101,9 +101,9 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void ClippingRectanglesCreateCorrectNumberOfPoints()
         {
-            var paths = new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20)).Flatten();
+            ImmutableArray<ISimplePath> paths = new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20)).Flatten();
             Assert.Equal(1, paths.Length);
-            var points = paths[0].Points;
+            ImmutableArray<Vector2> points = paths[0].Points;
 
             Assert.Equal(8, points.Length);
         }

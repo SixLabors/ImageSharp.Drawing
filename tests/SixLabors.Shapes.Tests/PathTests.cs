@@ -13,10 +13,10 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds()
         {
-            var seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(2, 2));
-            var seg2 = new LinearLineSegment(new Vector2(4, 4), new Vector2(5, 5));
+            LinearLineSegment seg1 = new LinearLineSegment(new Vector2(0, 0), new Vector2(2, 2));
+            LinearLineSegment seg2 = new LinearLineSegment(new Vector2(4, 4), new Vector2(5, 5));
 
-            var path = new Path(seg1, seg2);
+            Path path = new Path(seg1, seg2);
 
             Assert.Equal(0, path.Bounds.Left);
             Assert.Equal(5, path.Bounds.Right);
@@ -55,8 +55,8 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
         {
-            var path = new Path(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
-            var info = path.Distance(point);
+            Path path = new Path(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
+            PointInfo info = path.Distance(point);
             Assert.Equal(expectedDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
         }
@@ -64,8 +64,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void SimplePath()
         {
-            var path = new Path(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
-            var points = path.Flatten().Single().Points;
+            Path path = new Path(new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 10), new Vector2(0, 10)));
+            System.Collections.Immutable.ImmutableArray<Vector2> points = path.Flatten().Single().Points;
 
             Assert.Equal(4, points.Length);
             Assert.Equal(new Vector2(0, 0), points[0]);

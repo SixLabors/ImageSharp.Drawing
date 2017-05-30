@@ -99,9 +99,9 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            var points = new Vector2[this.points.Length];
-            var i = 0;
-            foreach (var p in this.points)
+            Vector2[] points = new Vector2[this.points.Length];
+            int i = 0;
+            foreach (Vector2 p in this.points)
             {
                 points[i++] = Vector2.Transform(p, matrix);
             }

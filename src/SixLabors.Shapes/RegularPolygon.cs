@@ -75,7 +75,7 @@ namespace SixLabors.Shapes
             float anglePerSegemnts = (float)((2 * Math.PI) / verticies);
             float current = angle;
             Vector2[] points = new Vector2[verticies];
-            for (var i = 0; i < verticies; i++)
+            for (int i = 0; i < verticies; i++)
             {
                 Vector2 rotated = Vector2.Transform(distanceVector, Matrix3x2.CreateRotation(current));
 
