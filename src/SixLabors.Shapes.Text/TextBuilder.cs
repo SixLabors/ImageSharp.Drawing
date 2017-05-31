@@ -27,7 +27,7 @@ namespace SixLabors.Shapes
 
             renderer.RenderText(text, style);
 
-            return new PathCollection(glyphBuilder.Paths);
+            return glyphBuilder.Paths;
         }
 
         /// <summary>
@@ -40,6 +40,23 @@ namespace SixLabors.Shapes
         {
             return GenerateGlyphs(text, Vector2.Zero, style);
         }
-    }
 
+        /// <summary>
+        /// Generates the shapes corresponding the glyphs described by the font and with the setting in within the FontSpan along the described path.
+        /// </summary>
+        /// <param name="text">The text to generate glyphs for</param>
+        /// <param name="path">The path to draw the text in relation to</param>
+        /// <param name="style">The style and settings to use while rendering the glyphs</param>
+        /// <returns></returns>
+        public static IPathCollection GenerateGlyphs(string text, IPath path, FontSpan style)
+        {
+            var glyphBuilder = new PathGlyphBuilder(path);
+
+            TextRenderer renderer = new TextRenderer(glyphBuilder);
+
+            renderer.RenderText(text, style);
+
+            return glyphBuilder.Paths;
+        }
+    }
 }

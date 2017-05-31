@@ -37,8 +37,15 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawFatL();
 
             DrawText("Hello World");
+            DrawText("Hello World Hello World Hello World Hello World Hello World Hello World Hello World",  new Path(new BezierLineSegment(
+                new Vector2(0, 0),
+                new Vector2(150, -150),
+                new Vector2(250, -150),
+                new Vector2(400, 0)
+                )));
 
         }
+
         private static void DrawText(string text)
         {
             var fam = SixLabors.Fonts.FontCollection.SystemFonts.Find("Arial");
@@ -47,6 +54,21 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             var glyphs = SixLabors.Shapes.TextBuilder.GenerateGlyphs(text, style);
 
             glyphs.SaveImage("Text", text + ".png");
+        }
+
+        private static void DrawText(string text, IPath path)
+        {
+            var fam = SixLabors.Fonts.FontCollection.SystemFonts.Find("Arial");
+            var font = new Font(fam, 30);
+            var style = new FontSpan(font, 72)
+            {
+                WrappingWidth = path.Length,
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            var glyphs = SixLabors.Shapes.TextBuilder.GenerateGlyphs(text, path, style);
+
+            glyphs.SaveImage("Text-Path", text + ".png");
         }
 
         private static void DrawFatL()
