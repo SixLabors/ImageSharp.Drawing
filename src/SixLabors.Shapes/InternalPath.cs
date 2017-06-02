@@ -643,10 +643,13 @@ namespace SixLabors.Shapes
                 lastPoint = points[i];
             }
 
-            // walk back removing collinear points
-            while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
+            if (isClosed)
             {
-                results.RemoveAt(results.Count - 1);
+                // walk back removing collinear points
+                while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
+                {
+                    results.RemoveAt(results.Count - 1);
+                }
             }
 
             PointData[] data = results.ToArray();
