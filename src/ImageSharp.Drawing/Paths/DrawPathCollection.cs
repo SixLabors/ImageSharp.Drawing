@@ -8,8 +8,8 @@ namespace ImageSharp
     using Drawing;
     using Drawing.Brushes;
     using Drawing.Pens;
-    using Drawing.Processors;
     using ImageSharp.PixelFormats;
+    using SixLabors.Shapes;
 
     /// <summary>
     /// Extension methods for the <see cref="Image{TPixel}"/> type.
@@ -17,18 +17,23 @@ namespace ImageSharp
     public static partial class ImageExtensions
     {
         /// <summary>
-        /// Draws the outline of the region with the provided pen.
+        /// Draws the outline of the polygon with the provided pen.
         /// </summary>
         /// <typeparam name="TPixel">The type of the color.</typeparam>
         /// <param name="source">The image this method extends.</param>
         /// <param name="pen">The pen.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="paths">The paths.</param>
         /// <param name="options">The options.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IPen<TPixel> pen, Drawable path, GraphicsOptions options)
+        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IPen<TPixel> pen, IPathCollection paths, GraphicsOptions options)
            where TPixel : struct, IPixel<TPixel>
         {
-            return source.Apply(new DrawPathProcessor<TPixel>(pen, path, options));
+            foreach (IPath path in paths)
+            {
+                source.Draw(pen, path, options);
+            }
+
+            return source;
         }
 
         /// <summary>
@@ -37,12 +42,12 @@ namespace ImageSharp
         /// <typeparam name="TPixel">The type of the color.</typeparam>
         /// <param name="source">The image this method extends.</param>
         /// <param name="pen">The pen.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="paths">The paths.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IPen<TPixel> pen, Drawable path)
+        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IPen<TPixel> pen, IPathCollection paths)
            where TPixel : struct, IPixel<TPixel>
         {
-            return source.Draw(pen, path, GraphicsOptions.Default);
+            return source.Draw(pen, paths, GraphicsOptions.Default);
         }
 
         /// <summary>
@@ -52,13 +57,13 @@ namespace ImageSharp
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="paths">The shapes.</param>
         /// <param name="options">The options.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IBrush<TPixel> brush, float thickness, Drawable path, GraphicsOptions options)
+        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IBrush<TPixel> brush, float thickness, IPathCollection paths, GraphicsOptions options)
            where TPixel : struct, IPixel<TPixel>
         {
-            return source.Draw(new Pen<TPixel>(brush, thickness), path, options);
+            return source.Draw(new Pen<TPixel>(brush, thickness), paths, options);
         }
 
         /// <summary>
@@ -68,12 +73,12 @@ namespace ImageSharp
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="paths">The paths.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IBrush<TPixel> brush, float thickness, Drawable path)
+        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, IBrush<TPixel> brush, float thickness, IPathCollection paths)
            where TPixel : struct, IPixel<TPixel>
         {
-            return source.Draw(new Pen<TPixel>(brush, thickness), path);
+            return source.Draw(new Pen<TPixel>(brush, thickness), paths);
         }
 
         /// <summary>
@@ -83,13 +88,13 @@ namespace ImageSharp
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="paths">The paths.</param>
         /// <param name="options">The options.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, TPixel color, float thickness, Drawable path, GraphicsOptions options)
+        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, TPixel color, float thickness, IPathCollection paths, GraphicsOptions options)
            where TPixel : struct, IPixel<TPixel>
         {
-            return source.Draw(new SolidBrush<TPixel>(color), thickness, path, options);
+            return source.Draw(new SolidBrush<TPixel>(color), thickness, paths, options);
         }
 
         /// <summary>
@@ -99,12 +104,12 @@ namespace ImageSharp
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="paths">The paths.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, TPixel color, float thickness, Drawable path)
+        public static Image<TPixel> Draw<TPixel>(this Image<TPixel> source, TPixel color, float thickness, IPathCollection paths)
            where TPixel : struct, IPixel<TPixel>
         {
-            return source.Draw(new SolidBrush<TPixel>(color), thickness, path);
+            return source.Draw(new SolidBrush<TPixel>(color), thickness, paths);
         }
     }
 }
