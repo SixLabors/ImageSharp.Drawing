@@ -10,6 +10,7 @@ namespace SixLabors.Shapes.PolygonClipper
     using System.Diagnostics;
     using System.Numerics;
     using ClipperLib;
+    using SixLabors.Primitives;
 
     /// <summary>
     /// Library to clip polygons.
@@ -75,7 +76,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
                 else
                 {
-                    Vector2[] points = new Vector2[results[i].Contour.Count];
+                    PointF[] points = new PointF[results[i].Contour.Count];
                     for (int j = 0; j < results[i].Contour.Count; j++)
                     {
                         IntPoint p = results[i].Contour[j];
@@ -149,9 +150,9 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
-            ImmutableArray<Vector2> vectors = path.Points;
+            ImmutableArray<PointF> vectors = path.Points;
             List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Length);
-            foreach (Vector2 v in vectors)
+            foreach (PointF v in vectors)
             {
                 points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
             }

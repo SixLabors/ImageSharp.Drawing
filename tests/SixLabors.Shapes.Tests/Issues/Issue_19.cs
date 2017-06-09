@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SixLabors.Primitives;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -16,7 +17,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void LoosingPartOfLineIfSelfIntersects()
         {
-            var line1 = new Vector2[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
+            var line1 = new PointF[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
             var path = new Path(new LinearLineSegment(line1));
 
             var outline = path.GenerateOutline(5f);
@@ -30,7 +31,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void PAthLoosingSelfIntersectingPoint()
         {
-            var line1 = new Vector2[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
+            var line1 = new PointF[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
             var path = new Path(new LinearLineSegment(line1));
             var pathPoints = path.Flatten()[0].Points;
 
@@ -44,7 +45,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void InternalPathLoosingSelfIntersectingPoint()
         {
-            var line1 = new Vector2[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
+            var line1 = new PointF[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
             var path = new InternalPath(new LinearLineSegment(line1), false);
             var pathPoints = path.Points();
 

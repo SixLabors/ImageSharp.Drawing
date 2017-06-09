@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SixLabors.Primitives;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -13,15 +14,15 @@ namespace SixLabors.Shapes.Tests
             new TheoryData<TestPoint, TestSize, TestPoint, bool>
             {
                {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(10,10), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(10,10), // test
                     true
                 }, //corner is inside
                 {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(9,9), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(9,9), // test
                     false
                 }, //corner is inside
             };
@@ -29,39 +30,39 @@ namespace SixLabors.Shapes.Tests
             new TheoryData<TestPoint, TestSize, TestPoint, float>
             {
                {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(10,10), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(10,10), // test
                     0f
                 }, //corner is inside
                 {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(9,10), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(9,10), // test
                     1f
                 },
                 {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(10,13), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(10,13), // test
                     0f
                 },
                 {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(14,13), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(14,13), // test
                     -3f
                 },
                 {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(13,14), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(13,14), // test
                     -3f
                 },
                 {
-                    new Vector2(10,10), // loc
-                    new Size(100,100), // size
-                    new Vector2(7,6), // test
+                    new PointF(10,10), // loc
+                    new SizeF(100,100), // size
+                    new PointF(7,6), // test
                     5f
                 },
             };
@@ -69,41 +70,41 @@ namespace SixLabors.Shapes.Tests
         public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
             new TheoryData<TestPoint, float, float>
             {
-               { new Vector2(0,0), 0f, 0f },
-               { new Vector2(1,0), 0f, 1f },
-               { new Vector2(9,0), 0f, 9f },
-               { new Vector2(10,0), 0f, 10f },
-               { new Vector2(10, 1), 0f, 11f },
-               { new Vector2(10,9), 0f, 19f },
-               { new Vector2(10,10), 0f, 20f },
-               { new Vector2(9,10), 0f, 21f },
-               { new Vector2(1,10), 0f, 29f },
-               { new Vector2(0,10), 0f, 30f },
-               { new Vector2(0,9), 0f, 31f },
-               { new Vector2(0,1), 0f, 39f },
+               { new PointF(0,0), 0f, 0f },
+               { new PointF(1,0), 0f, 1f },
+               { new PointF(9,0), 0f, 9f },
+               { new PointF(10,0), 0f, 10f },
+               { new PointF(10, 1), 0f, 11f },
+               { new PointF(10,9), 0f, 19f },
+               { new PointF(10,10), 0f, 20f },
+               { new PointF(9,10), 0f, 21f },
+               { new PointF(1,10), 0f, 29f },
+               { new PointF(0,10), 0f, 30f },
+               { new PointF(0,9), 0f, 31f },
+               { new PointF(0,1), 0f, 39f },
 
-               { new Vector2(4,3), -3f, 4f },
-               { new Vector2(3, 4), -3f, 36f },
+               { new PointF(4,3), -3f, 4f },
+               { new PointF(3, 4), -3f, 36f },
 
-               { new Vector2(-1,0), 1f, 0f },
-               { new Vector2(1,-1), 1f, 1f },
-               { new Vector2(9,-1), 1f, 9f },
-               { new Vector2(11,0), 1f, 10f },
-               { new Vector2(11, 1), 1f, 11f },
-               { new Vector2(11,9), 1f, 19f },
-               { new Vector2(11,10), 1f, 20f },
-               { new Vector2(9,11), 1f, 21f },
-               { new Vector2(1,11), 1f, 29f },
-               { new Vector2(-1,10), 1f, 30f },
-               { new Vector2(-1,9), 1f, 31f },
-               { new Vector2(-1,1), 1f, 39f },
+               { new PointF(-1,0), 1f, 0f },
+               { new PointF(1,-1), 1f, 1f },
+               { new PointF(9,-1), 1f, 9f },
+               { new PointF(11,0), 1f, 10f },
+               { new PointF(11, 1), 1f, 11f },
+               { new PointF(11,9), 1f, 19f },
+               { new PointF(11,10), 1f, 20f },
+               { new PointF(9,11), 1f, 21f },
+               { new PointF(1,11), 1f, 29f },
+               { new PointF(-1,10), 1f, 30f },
+               { new PointF(-1,9), 1f, 31f },
+               { new PointF(-1,1), 1f, 39f },
             };
 
         [Theory]
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
         {
-            Rectangle shape = new Rectangle(location, size);
+            RectangularePolygon shape = new RectangularePolygon(location, size);
             Assert.Equal(isInside, shape.Contains(point));
         }
 
@@ -111,7 +112,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(DistanceTheoryData))]
         public void Distance(TestPoint location, TestSize size, TestPoint point, float expectecDistance)
         {
-            IPath shape = new Rectangle(location, size);
+            IPath shape = new RectangularePolygon(location, size);
 
             Assert.Equal(expectecDistance, shape.Distance(point).DistanceFromPath);
         }
@@ -120,7 +121,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectecDistance, float alongPath)
         {
-            IPath shape = new Rectangle(0, 0, 10, 10).AsPath();
+            IPath shape = new RectangularePolygon(0, 0, 10, 10).AsPath();
             PointInfo info = shape.Distance(point);
             Assert.Equal(expectecDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
@@ -129,35 +130,35 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Left()
         {
-            Rectangle shape = new Rectangle(10, 11, 12, 13);
+            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
             Assert.Equal(10, shape.Left);
         }
 
         [Fact]
         public void Right()
         {
-            Rectangle shape = new Rectangle(10, 11, 12, 13);
+            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
             Assert.Equal(22, shape.Right);
         }
 
         [Fact]
         public void Top()
         {
-            Rectangle shape = new Rectangle(10, 11, 12, 13);
+            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
             Assert.Equal(11, shape.Top);
         }
 
         [Fact]
         public void Bottom()
         {
-            Rectangle shape = new Rectangle(10, 11, 12, 13);
+            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
             Assert.Equal(24, shape.Bottom);
         }
 
         [Fact]
-        public void Size()
+        public void SizeF()
         {
-            Rectangle shape = new Rectangle(10, 11, 12, 13);
+            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
             Assert.Equal(12, shape.Size.Width);
             Assert.Equal(13, shape.Size.Height);
         }
@@ -165,7 +166,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds_Shape()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13);
+            IPath shape = new RectangularePolygon(10, 11, 12, 13);
             Assert.Equal(10, shape.Bounds.Left);
             Assert.Equal(22, shape.Bounds.Right);
             Assert.Equal(11, shape.Bounds.Top);
@@ -175,40 +176,40 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void LienearSegements()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13).AsPath();
-            System.Collections.Immutable.ImmutableArray<Vector2> segemnts = shape.Flatten()[0].Points;
-            Assert.Equal(new Vector2(10, 11), segemnts[0]);
-            Assert.Equal(new Vector2(22, 11), segemnts[1]);
-            Assert.Equal(new Vector2(22, 24), segemnts[2]);
-            Assert.Equal(new Vector2(10, 24), segemnts[3]);
+            IPath shape = new RectangularePolygon(10, 11, 12, 13).AsPath();
+            System.Collections.Immutable.ImmutableArray<PointF> segemnts = shape.Flatten()[0].Points;
+            Assert.Equal(new PointF(10, 11), segemnts[0]);
+            Assert.Equal(new PointF(22, 11), segemnts[1]);
+            Assert.Equal(new PointF(22, 24), segemnts[2]);
+            Assert.Equal(new PointF(10, 24), segemnts[3]);
         }
 
         [Fact]
         public void Intersections_2()
         {
-            IPath shape = new Rectangle(1, 1, 10, 10);
-            IEnumerable<Vector2> intersections = shape.FindIntersections(new Vector2(0, 5), new Vector2(20, 5));
+            IPath shape = new RectangularePolygon(1, 1, 10, 10);
+            IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(20, 5));
 
             Assert.Equal(2, intersections.Count());
-            Assert.Equal(new Vector2(1, 5), intersections.First());
-            Assert.Equal(new Vector2(11, 5), intersections.Last());
+            Assert.Equal(new PointF(1, 5), intersections.First());
+            Assert.Equal(new PointF(11, 5), intersections.Last());
         }
 
         [Fact]
         public void Intersections_1()
         {
-            IPath shape = new Rectangle(1, 1, 10, 10);
-            IEnumerable<Vector2> intersections = shape.FindIntersections(new Vector2(0, 5), new Vector2(5, 5));
+            IPath shape = new RectangularePolygon(1, 1, 10, 10);
+            IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(5, 5));
 
             Assert.Equal(1, intersections.Count());
-            Assert.Equal(new Vector2(1, 5), intersections.First());
+            Assert.Equal(new PointF(1, 5), intersections.First());
         }
 
         [Fact]
         public void Intersections_0()
         {
-            IPath shape = new Rectangle(1, 1, 10, 10);
-            IEnumerable<Vector2> intersections = shape.FindIntersections(new Vector2(0, 5), new Vector2(-5, 5));
+            IPath shape = new RectangularePolygon(1, 1, 10, 10);
+            IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(-5, 5));
 
             Assert.Equal(0, intersections.Count());
         }
@@ -216,7 +217,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds_Path()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13).AsPath();
+            IPath shape = new RectangularePolygon(10, 11, 12, 13).AsPath();
             Assert.Equal(10, shape.Bounds.Left);
             Assert.Equal(22, shape.Bounds.Right);
             Assert.Equal(11, shape.Bounds.Top);
@@ -226,14 +227,14 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MaxIntersections_Shape()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13);
+            IPath shape = new RectangularePolygon(10, 11, 12, 13);
             Assert.Equal(4, shape.MaxIntersections);
         }
 
         [Fact]
         public void ShapePaths()
         {
-            IPath shape = new Rectangle(10, 11, 12, 13);
+            IPath shape = new RectangularePolygon(10, 11, 12, 13);
 
             Assert.Equal(shape, shape.AsClosedPath());
         }
@@ -242,7 +243,7 @@ namespace SixLabors.Shapes.Tests
         public void TransformIdnetityReturnsSahpeObject()
         {
 
-            IPath shape = new Rectangle(0, 0, 200, 60);
+            IPath shape = new RectangularePolygon(0, 0, 200, 60);
             IPath transformdShape =  shape.Transform(Matrix3x2.Identity);
 
             Assert.Same(shape, transformdShape);
@@ -251,20 +252,20 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Transform()
         {
-            IPath shape = new Rectangle(0, 0, 200, 60);
+            IPath shape = new RectangularePolygon(0, 0, 200, 60);
 
             IPath newShape = shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
 
-            Assert.Equal(new Vector2(20, 2), newShape.Bounds.Location);
-            Assert.Equal(new Size(60, 200), newShape.Bounds.Size);
+            Assert.Equal(new PointF(20, 2), newShape.Bounds.Location);
+            Assert.Equal(new SizeF(60, 200), newShape.Bounds.Size);
         }
 
         [Fact]
         public void Center()
         {
-            Rectangle shape = new Rectangle(50, 50, 200, 60);
+            RectangularePolygon shape = new RectangularePolygon(50, 50, 200, 60);
 
-            Assert.Equal(new Vector2(150, 80), shape.Center);
+            Assert.Equal(new PointF(150, 80), shape.Center);
         }
 
         const float HalfPi = (float)(Math.PI / 2);
@@ -279,7 +280,7 @@ namespace SixLabors.Shapes.Tests
         [InlineData(620, 150, 50, Pi)] // wrap about end of path
         public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
         {
-            IPath shape = new Rectangle(50, 50, 200, 60);
+            IPath shape = new RectangularePolygon(50, 50, 200, 60);
             var point = shape.PointAlongPath(distance);
             Assert.Equal(expectedX, point.Point.X);
             Assert.Equal(expectedY, point.Point.Y);

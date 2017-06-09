@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SixLabors.Primitives;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -31,11 +32,11 @@ namespace SixLabors.Shapes.Tests
             info.AddValue("height", Height);
         }
 
-        public static implicit operator Size(TestSize p)
+        public static implicit operator SizeF(TestSize p)
         {
-            return new Size(p.Width, p.Height);
+            return new SizeF(p.Width, p.Height);
         }
-        public static implicit operator TestSize(Size p)
+        public static implicit operator TestSize(SizeF p)
         {
             return new TestSize(p.Width, p.Height);
         }

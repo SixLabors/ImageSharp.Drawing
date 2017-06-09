@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Buffers;
     using System.Collections.Generic;
@@ -25,7 +26,7 @@ namespace SixLabors.Shapes
         /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
         public static IPathCollection Rotate(this IPathCollection path, float radians)
         {
-            return path.Transform(Matrix3x2.CreateRotation(radians, path.Bounds.Center));
+            return path.Transform(Matrix3x2Extensions.CreateRotation(radians, RectangleF.Center(path.Bounds)));
         }
 
         /// <summary>
@@ -45,7 +46,7 @@ namespace SixLabors.Shapes
         /// <param name="path">The path to translate.</param>
         /// <param name="position">The translation position.</param>
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
-        public static IPathCollection Translate(this IPathCollection path, Vector2 position)
+        public static IPathCollection Translate(this IPathCollection path, PointF position)
         {
             return path.Transform(Matrix3x2.CreateTranslation(position));
         }
@@ -59,7 +60,7 @@ namespace SixLabors.Shapes
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
         public static IPathCollection Translate(this IPathCollection path, float x, float y)
         {
-            return path.Translate(new Vector2(x, y));
+            return path.Translate(new PointF(x, y));
         }
 
         /// <summary>
@@ -71,7 +72,7 @@ namespace SixLabors.Shapes
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
         public static IPathCollection Scale(this IPathCollection path, float scaleX, float scaleY)
         {
-            return path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, path.Bounds.Center));
+            return path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, RectangleF.Center(path.Bounds)));
         }
 
         /// <summary>
@@ -82,7 +83,7 @@ namespace SixLabors.Shapes
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
         public static IPathCollection Scale(this IPathCollection path, float scale)
         {
-            return path.Transform(Matrix3x2.CreateScale(scale, path.Bounds.Center));
+            return path.Transform(Matrix3x2.CreateScale(scale, RectangleF.Center(path.Bounds)));
         }
 
         /// <summary>
@@ -93,7 +94,7 @@ namespace SixLabors.Shapes
         /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
         public static IPath Rotate(this IPath path, float radians)
         {
-            return path.Transform(Matrix3x2.CreateRotation(radians, path.Bounds.Center));
+            return path.Transform(Matrix3x2.CreateRotation(radians, RectangleF.Center(path.Bounds)));
         }
 
         /// <summary>
@@ -113,7 +114,7 @@ namespace SixLabors.Shapes
         /// <param name="path">The path to translate.</param>
         /// <param name="position">The translation position.</param>
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
-        public static IPath Translate(this IPath path, Vector2 position)
+        public static IPath Translate(this IPath path, PointF position)
         {
             return path.Transform(Matrix3x2.CreateTranslation(position));
         }
@@ -139,7 +140,7 @@ namespace SixLabors.Shapes
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
         public static IPath Scale(this IPath path, float scaleX, float scaleY)
         {
-            return path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, path.Bounds.Center));
+            return path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, RectangleF.Center(path.Bounds)));
         }
 
         /// <summary>
@@ -150,7 +151,7 @@ namespace SixLabors.Shapes
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
         public static IPath Scale(this IPath path, float scale)
         {
-            return path.Transform(Matrix3x2.CreateScale(scale, path.Bounds.Center));
+            return path.Transform(Matrix3x2.CreateScale(scale, RectangleF.Center(path.Bounds)));
         }
 
         /// <summary>
@@ -162,13 +163,14 @@ namespace SixLabors.Shapes
         /// <returns>
         /// The points along the line the intersect with the boundaries of the polygon.
         /// </returns>
-        public static IEnumerable<Vector2> FindIntersections(this IPath path, Vector2 start, Vector2 end)
+        public static IEnumerable<PointF> FindIntersections(this IPath path, PointF start, PointF end)
         {
-            Vector2[] buffer = ArrayPool<Vector2>.Shared.Rent(path.MaxIntersections);
+            PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.MaxIntersections);
             try
             {
-                int hits = path.FindIntersections(start, end, buffer, path.MaxIntersections, 0);
-                Vector2[] results = new Vector2[hits];
+                var span = new Span<PointF>(buffer);
+                int hits = path.FindIntersections(start, end, span);
+                PointF[] results = new PointF[hits];
                 for (int i = 0; i < hits; i++)
                 {
                     results[i] = buffer[i];
@@ -178,7 +180,7 @@ namespace SixLabors.Shapes
             }
             finally
             {
-                ArrayPool<Vector2>.Shared.Return(buffer);
+                ArrayPool<PointF>.Shared.Return(buffer);
             }
         }
     }

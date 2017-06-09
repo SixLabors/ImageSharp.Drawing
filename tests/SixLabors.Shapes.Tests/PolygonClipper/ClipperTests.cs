@@ -14,14 +14,15 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
     using Xunit;
     using ClipperLib;
     using Clipper = SixLabors.Shapes.PolygonClipper.Clipper;
+    using SixLabors.Primitives;
 
     public class ClipperTests
     {
-        private Rectangle BigSquare = new Rectangle(10, 10, 40, 40);
-        private Rectangle Hole = new Rectangle(20, 20, 10, 10);
-        private Rectangle TopLeft = new Rectangle(0, 0, 20, 20);
-        private Rectangle TopRight = new Rectangle(30, 0, 20, 20);
-        private Rectangle TopMiddle = new Rectangle(20, 0, 10, 20);
+        private RectangularePolygon BigSquare = new RectangularePolygon(10, 10, 40, 40);
+        private RectangularePolygon Hole = new RectangularePolygon(20, 20, 10, 10);
+        private RectangularePolygon TopLeft = new RectangularePolygon(0, 0, 20, 20);
+        private RectangularePolygon TopRight = new RectangularePolygon(30, 0, 20, 20);
+        private RectangularePolygon TopMiddle = new RectangularePolygon(20, 0, 10, 20);
 
         private Polygon BigTriangle = new Polygon(new LinearLineSegment(
                          new Vector2(10, 10),
@@ -54,7 +55,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         {
             ImmutableArray<IPath> shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
             Assert.Equal(1, shapes.Length);
-            ImmutableArray<Vector2> path = shapes.Single().Flatten()[0].Points;
+            ImmutableArray<PointF> path = shapes.Single().Flatten()[0].Points;
             Assert.Equal(7, path.Length);
             foreach (Vector2 p in this.BigTriangle.Flatten()[0].Points)
             {
@@ -101,9 +102,9 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void ClippingRectanglesCreateCorrectNumberOfPoints()
         {
-            ImmutableArray<ISimplePath> paths = new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20)).Flatten();
+            ImmutableArray<ISimplePath> paths = new RectangularePolygon(10, 10, 40, 40).Clip(new RectangularePolygon(20, 0, 20, 20)).Flatten();
             Assert.Equal(1, paths.Length);
-            ImmutableArray<Vector2> points = paths[0].Points;
+            ImmutableArray<PointF> points = paths[0].Points;
 
             Assert.Equal(8, points.Length);
         }

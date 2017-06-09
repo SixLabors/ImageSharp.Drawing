@@ -1,4 +1,5 @@
 ﻿using ClipperLib;
+using SixLabors.Primitives;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -138,7 +139,7 @@ namespace SixLabors.Shapes
             System.Collections.Immutable.ImmutableArray<ISimplePath> paths = path.Flatten();
             foreach (ISimplePath p in paths)
             {
-                System.Collections.Immutable.ImmutableArray<Vector2> vectors = p.Points;
+                System.Collections.Immutable.ImmutableArray<PointF> vectors = p.Points;
                 List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Length);
                 foreach (Vector2 v in vectors)
                 {
@@ -161,11 +162,16 @@ namespace SixLabors.Shapes
             List<Polygon> polygons = new List<Polygon>();
             foreach (List<IntPoint> pt in tree)
             {
-                Vector2[] points = pt.Select(p => new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
+                PointF[] points = pt.Select(p => new PointF(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
                 polygons.Add(new Polygon(new LinearLineSegment(points)));
             }
 
             return new ComplexPolygon(polygons.ToArray());
+        }
+
+        private static IntPoint ToPoint(this PointF vector)
+        {
+            return new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
         }
 
         private static IntPoint ToPoint(this Vector2 vector)

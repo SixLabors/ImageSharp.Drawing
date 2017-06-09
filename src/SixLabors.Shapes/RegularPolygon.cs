@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections;
     using System.Collections.Generic;
@@ -24,7 +25,7 @@ namespace SixLabors.Shapes
         /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
         /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
-        public RegularPolygon(Vector2 location, int verticies, float radius, float angle)
+        public RegularPolygon(PointF location, int verticies, float radius, float angle)
             : base(CreateSegment(location, radius, verticies, angle))
         {
         }
@@ -35,7 +36,7 @@ namespace SixLabors.Shapes
         /// <param name="location">The location the center of the polygon will be placed.</param>
         /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
-        public RegularPolygon(Vector2 location, int verticies, float radius)
+        public RegularPolygon(PointF location, int verticies, float radius)
             : this(location, verticies, radius, 0)
         {
         }
@@ -49,7 +50,7 @@ namespace SixLabors.Shapes
         /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
         public RegularPolygon(float x, float y, int verticies, float radius, float angle)
-            : this(new Vector2(x, y), verticies, radius, angle)
+            : this(new PointF(x, y), verticies, radius, angle)
         {
         }
 
@@ -61,23 +62,23 @@ namespace SixLabors.Shapes
         /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
         public RegularPolygon(float x, float y, int verticies, float radius)
-            : this(new Vector2(x, y), verticies, radius)
+            : this(new PointF(x, y), verticies, radius)
         {
         }
 
-        private static LinearLineSegment CreateSegment(Vector2 location, float radius, int verticies, float angle)
+        private static LinearLineSegment CreateSegment(PointF location, float radius, int verticies, float angle)
         {
             Guard.MustBeGreaterThan(verticies, 2, nameof(verticies));
             Guard.MustBeGreaterThan(radius, 0, nameof(radius));
 
-            Vector2 distanceVector = new Vector2(0, radius);
+            PointF distanceVector = new PointF(0, radius);
 
             float anglePerSegemnts = (float)((2 * Math.PI) / verticies);
             float current = angle;
-            Vector2[] points = new Vector2[verticies];
+            PointF[] points = new PointF[verticies];
             for (int i = 0; i < verticies; i++)
             {
-                Vector2 rotated = Vector2.Transform(distanceVector, Matrix3x2.CreateRotation(current));
+                PointF rotated = PointF.Transform(distanceVector, Matrix3x2.CreateRotation(current));
 
                 points[i] = rotated + location;
 

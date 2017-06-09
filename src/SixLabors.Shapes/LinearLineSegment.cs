@@ -5,7 +5,9 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
+    using System.Collections.Generic;
     using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
@@ -19,14 +21,14 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The collection of points.
         /// </summary>
-        private readonly ImmutableArray<Vector2> points;
+        private readonly ImmutableArray<PointF> points;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
         /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
-        public LinearLineSegment(Vector2 start, Vector2 end)
+        public LinearLineSegment(PointF start, PointF end)
             : this(new[] { start, end })
         {
         }
@@ -37,8 +39,8 @@ namespace SixLabors.Shapes
         /// <param name="point1">The point1.</param>
         /// <param name="point2">The point2.</param>
         /// <param name="additionalPoints">Additional points</param>
-        public LinearLineSegment(Vector2 point1, Vector2 point2, params Vector2[] additionalPoints)
-            : this(new[] { point1, point2 }.Merge(additionalPoints))
+        public LinearLineSegment(PointF point1, PointF point2, params PointF[] additionalPoints)
+            : this(new[] { point1, point2 }.Concat(additionalPoints))
         {
         }
 
@@ -46,17 +48,16 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public LinearLineSegment(Vector2[] points)
-            : this(ImmutableArray.Create(points))
+        public LinearLineSegment(IEnumerable<PointF> points)
+            : this(points?.ToImmutableArray() ?? throw new ArgumentNullException(nameof(points)) )
         {
-            Guard.NotNull(points, nameof(points));
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public LinearLineSegment(ImmutableArray<Vector2> points)
+        public LinearLineSegment(ImmutableArray<PointF> points)
         {
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 2, nameof(points));
 
@@ -71,7 +72,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The end point.
         /// </value>
-        public Vector2 EndPoint { get; private set; }
+        public PointF EndPoint { get; private set; }
 
         /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
@@ -79,7 +80,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Vector2> Flatten()
+        public ImmutableArray<PointF> Flatten()
         {
             return this.points;
         }
@@ -99,11 +100,11 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            Vector2[] points = new Vector2[this.points.Length];
+            PointF[] points = new PointF[this.points.Length];
             int i = 0;
-            foreach (Vector2 p in this.points)
+            foreach (PointF p in this.points)
             {
-                points[i++] = Vector2.Transform(p, matrix);
+                points[i++] = PointF.Transform(p, matrix);
             }
 
             return new LinearLineSegment(points);

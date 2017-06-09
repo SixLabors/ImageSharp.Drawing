@@ -6,6 +6,7 @@ using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
+    using SixLabors.Primitives;
     using System.Numerics;
 
     public class RegularPolygonTests
@@ -60,7 +61,7 @@ namespace SixLabors.Shapes.Tests
 
             RegularPolygon poly = new RegularPolygon(Vector2.Zero, pointsCount, radius, 0);
 
-            System.Collections.Immutable.ImmutableArray<Vector2> points = poly.Flatten()[0].Points;
+            System.Collections.Immutable.ImmutableArray<PointF> points = poly.Flatten()[0].Points;
 
             // calcualte baselineDistance
             float baseline = Vector2.Distance(points[0], points[1]);
@@ -88,7 +89,7 @@ namespace SixLabors.Shapes.Tests
             double anAngle = new Random().NextDouble() * TwoPI;
 
             RegularPolygon poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
-            System.Collections.Immutable.ImmutableArray<Vector2> points = poly.Flatten()[0].Points;
+            System.Collections.Immutable.ImmutableArray<PointF> points = poly.Flatten()[0].Points;
 
             IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
@@ -101,7 +102,7 @@ namespace SixLabors.Shapes.Tests
         {
 
             RegularPolygon poly = new SixLabors.Shapes.RegularPolygon(50, 50, 3, 30);
-            Vector2[] points = poly.FindIntersections(new Vector2(0, 50), new Vector2(100, 50)).ToArray();
+            PointF[] points = poly.FindIntersections(new PointF(0, 50), new PointF(100, 50)).ToArray();
 
             Assert.Equal(2, points.Length);
         }
@@ -110,7 +111,7 @@ namespace SixLabors.Shapes.Tests
         public void ClippingCornerShouldReturn2Points()
         {
             RegularPolygon poly = new RegularPolygon(50, 50, 7, 30, -(float)Math.PI);
-            Vector2[] points = poly.FindIntersections(new Vector2(0, 20), new Vector2(100, 20)).ToArray();
+            PointF[] points = poly.FindIntersections(new PointF(0, 20), new PointF(100, 20)).ToArray();
 
             Assert.Equal(2, points.Length);
         }

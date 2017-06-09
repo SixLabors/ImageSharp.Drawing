@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections.Generic;
     using System.Linq;
@@ -55,7 +56,7 @@ namespace SixLabors.Shapes
         /// Sets the origin all subsequent point should be relative to.
         /// </summary>
         /// <param name="origin">The origin.</param>
-        public void SetOrigin(Vector2 origin)
+        public void SetOrigin(PointF origin)
         {
             // the new origin should be transofrmed based on the default transform
             this.setTransform.Translation = origin;
@@ -85,10 +86,10 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
-        public void AddLine(Vector2 start, Vector2 end)
+        public void AddLine(PointF start, PointF end)
         {
-            end = Vector2.Transform(end, this.currentTransform);
-            start = Vector2.Transform(start, this.currentTransform);
+            end = PointF.Transform(end, this.currentTransform);
+            start = PointF.Transform(start, this.currentTransform);
             this.currentFigure.AddSegment(new LinearLineSegment(start, end));
         }
 
@@ -101,14 +102,14 @@ namespace SixLabors.Shapes
         /// <param name="y2">The y2.</param>
         public void AddLine(float x1, float y1, float x2, float y2)
         {
-            this.AddLine(new Vector2(x1, y1), new Vector2(x2, y2));
+            this.AddLine(new PointF(x1, y1), new PointF(x2, y2));
         }
 
         /// <summary>
         /// Adds a series of line segments connecting the current point to the new points.
         /// </summary>
         /// <param name="points">The points.</param>
-        public void AddLines(IEnumerable<Vector2> points)
+        public void AddLines(IEnumerable<PointF> points)
         {
             Guard.NotNull(points, nameof(points));
 
@@ -119,7 +120,7 @@ namespace SixLabors.Shapes
         /// Adds a series of line segments connecting the current point to the new points.
         /// </summary>
         /// <param name="points">The points.</param>
-        public void AddLines(params Vector2[] points)
+        public void AddLines(params PointF[] points)
         {
             this.AddSegment(new LinearLineSegment(points));
         }
@@ -140,7 +141,7 @@ namespace SixLabors.Shapes
         /// <param name="controlPoint1">The control point1.</param>
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="endPoint">The end point.</param>
-        public void AddBezier(Vector2 startPoint, Vector2 controlPoint1, Vector2 controlPoint2, Vector2 endPoint)
+        public void AddBezier(PointF startPoint, PointF controlPoint1, PointF controlPoint2, PointF endPoint)
         {
             this.currentFigure.AddSegment(new BezierLineSegment(
                 Vector2.Transform(startPoint, this.currentTransform),

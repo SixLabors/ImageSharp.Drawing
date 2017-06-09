@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System.Numerics;
 
     /// <summary>
@@ -15,7 +16,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The search point
         /// </summary>
-        public Vector2 SearchPoint;
+        public PointF SearchPoint;
 
         /// <summary>
         /// The distance along path <see cref="ClosestPointOnPath"/> is away from the start of the path
@@ -30,6 +31,6 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The closest point to <see cref="SearchPoint"/> that lies on the path.
         /// </summary>
-        public Vector2 ClosestPointOnPath;
+        public PointF ClosestPointOnPath;
     }
 }

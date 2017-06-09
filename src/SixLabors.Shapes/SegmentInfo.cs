@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System.Numerics;
 
     /// <summary>
@@ -15,7 +16,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The point on the path
         /// </summary>
-        public Vector2 Point;
+        public PointF Point;
 
         /// <summary>
         /// The angle of the segment.

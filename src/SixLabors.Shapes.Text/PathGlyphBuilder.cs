@@ -39,7 +39,7 @@ namespace SixLabors.Shapes.Text
         {
             var point = this.path.PointAlongPath(location.X);
 
-            var targetPoint = point.Point + new Vector2(0, (location.Y - this.yOffset));
+            var targetPoint = (Vector2)point.Point + new Vector2(0, (location.Y - this.yOffset));
 
             // due to how matrix combining works you have to combine thins in the revers order of operation
             // this one rotates the glype then moves it.

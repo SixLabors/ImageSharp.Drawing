@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections;
     using System.Collections.Generic;
@@ -15,56 +16,56 @@ namespace SixLabors.Shapes
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
-    public class Ellipse : IPath, ISimplePath
+    public class EllipsePolygon : IPath, ISimplePath
     {
         private readonly InternalPath innerPath;
         private readonly ImmutableArray<ISimplePath> flatPath;
         private readonly BezierLineSegment segment;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Ellipse" /> class.
+        /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
         /// </summary>
         /// <param name="location">The location the center of the ellipse will be placed.</param>
         /// <param name="size">The width/hight of the final ellipse.</param>
-        public Ellipse(Vector2 location, Size size)
+        public EllipsePolygon(PointF location, SizeF size)
             : this(CreateSegment(location, size))
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Ellipse" /> class.
+        /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
         /// </summary>
         /// <param name="location">The location the center of the circle will be placed.</param>
         /// <param name="radius">The radius final circle.</param>
-        public Ellipse(Vector2 location, float radius)
-            : this(location, new Size(radius * 2))
+        public EllipsePolygon(PointF location, float radius)
+            : this(location, new SizeF(radius * 2, radius * 2))
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Ellipse" /> class.
+        /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
         /// </summary>
         /// <param name="x">The X coordinate of the center of the ellipse.</param>
         /// <param name="y">The Y coordinate of the center of the ellipse.</param>
         /// <param name="width">The width the ellipse should have.</param>
         /// <param name="height">The height the ellipse should have.</param>
-        public Ellipse(float x, float y, float width, float height)
-            : this(new Vector2(x, y), new Size(width, height))
+        public EllipsePolygon(float x, float y, float width, float height)
+            : this(new PointF(x, y), new SizeF(width, height))
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Ellipse" /> class.
+        /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
         /// </summary>
         /// <param name="x">The X coordinate of the center of the circle.</param>
         /// <param name="y">The Y coordinate of the center of the circle.</param>
         /// <param name="radius">The radius final circle.</param>
-        public Ellipse(float x, float y, float radius)
-            : this(new Vector2(x, y), new Size(radius * 2))
+        public EllipsePolygon(float x, float y, float radius)
+            : this(new PointF(x, y), new SizeF(radius * 2, radius * 2))
         {
         }
 
-        private Ellipse(BezierLineSegment segment)
+        private EllipsePolygon(BezierLineSegment segment)
         {
             this.segment = segment;
             this.innerPath = new InternalPath(segment, true);
@@ -79,10 +80,10 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        ImmutableArray<Vector2> ISimplePath.Points => this.innerPath.Points();
+        ImmutableArray<PointF> ISimplePath.Points => this.innerPath.Points();
 
         /// <inheritdoc />
-        public Rectangle Bounds => this.innerPath.Bounds;
+        public RectangleF Bounds => this.innerPath.Bounds;
 
         /// <summary>
         /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
@@ -98,7 +99,7 @@ namespace SixLabors.Shapes
         public float Length => this.innerPath.Length;
 
         /// <inheritdoc />
-        public PointInfo Distance(Vector2 point)
+        public PointInfo Distance(PointF point)
         {
             PointInfo dist = this.innerPath.DistanceFromPath(point);
             bool isInside = this.innerPath.PointInPolygon(point);
@@ -117,14 +118,14 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new path with the matrix applied to it.
         /// </returns>
-        public Ellipse Transform(Matrix3x2 matrix)
+        public EllipsePolygon Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
                 return this;
             }
 
-            return new Ellipse(this.segment.Transform(matrix));
+            return new EllipsePolygon(this.segment.Transform(matrix));
         }
 
         /// <summary>
@@ -163,14 +164,12 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="count">The count.</param>
-        /// <param name="offset">The offset.</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        int IPath.FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
+        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
-            return this.innerPath.FindIntersections(start, end, buffer, count, offset);
+            return this.innerPath.FindIntersections(start, end, buffer);
         }
 
         /// <summary>
@@ -180,19 +179,20 @@ namespace SixLabors.Shapes
         /// <returns>
         ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(Vector2 point)
+        public bool Contains(PointF point)
         {
             return this.innerPath.PointInPolygon(point);
         }
 
-        private static BezierLineSegment CreateSegment(Vector2 location, Size size)
+        private static BezierLineSegment CreateSegment(Vector2 location, SizeF size)
         {
             Guard.MustBeGreaterThan(size.Width, 0, "width");
             Guard.MustBeGreaterThan(size.Height, 0, "height");
 
             const float kappa = 0.5522848f;
 
-            Vector2 sizeVector = size.ToVector2() / 2;
+            Vector2 sizeVector = size;
+            sizeVector /= 2;
 
             Vector2 rootLocation = location - sizeVector;
 
@@ -202,7 +202,7 @@ namespace SixLabors.Shapes
             Vector2 pointMminusO = pointM - pointO;
             Vector2 pointMplusO = pointM + pointO;
 
-            Vector2[] points = new Vector2[]
+            PointF[] points = new PointF[]
             {
                 new Vector2(rootLocation.X, pointM.Y),
 

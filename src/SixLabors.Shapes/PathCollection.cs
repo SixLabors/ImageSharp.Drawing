@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections;
     using System.Collections.Generic;
@@ -25,7 +26,7 @@ namespace SixLabors.Shapes
             this.paths = paths;
             if (paths.Length == 0)
             {
-                this.Bounds = new Rectangle(0, 0, 0, 0);
+                this.Bounds = new RectangleF(0, 0, 0, 0);
             }
             else
             {
@@ -36,7 +37,7 @@ namespace SixLabors.Shapes
                 float minY = paths.Min(x => x.Bounds.Top);
                 float maxY = paths.Max(x => x.Bounds.Bottom);
 
-                this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
+                this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
         }
 
@@ -51,7 +52,7 @@ namespace SixLabors.Shapes
         }
 
         /// <inheritdoc />
-        public Rectangle Bounds { get; }
+        public RectangleF Bounds { get; }
 
         /// <inheritdoc />
         public IEnumerator<IPath> GetEnumerator() => ((IEnumerable<IPath>)this.paths).GetEnumerator();

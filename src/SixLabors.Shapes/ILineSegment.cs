@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System.Collections.Immutable;
     using System.Numerics;
 
@@ -19,13 +20,13 @@ namespace SixLabors.Shapes
         /// <value>
         /// The end point.
         /// </value>
-        Vector2 EndPoint { get; }
+        PointF EndPoint { get; }
 
         /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="ILineSegment" /> as simple linear path.</returns>
-        ImmutableArray<Vector2> Flatten();
+        ImmutableArray<PointF> Flatten();
 
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.

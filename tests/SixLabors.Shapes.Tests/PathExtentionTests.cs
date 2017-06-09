@@ -5,17 +5,18 @@ using System.Numerics;
 using System.Threading.Tasks;
 using Moq;
 using Xunit;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes.Tests
 {
     public class PathExtentionTests
     {
-        private Rectangle bounds;
+        private RectangleF bounds;
         private readonly Mock<IPath> mockPath;
 
         public PathExtentionTests()
         {
-            this.bounds = new Rectangle(10, 10, 20, 20);
+            this.bounds = new RectangleF(10, 10, 20, 20);
             mockPath = new Mock<IPath>();
             mockPath.Setup(x => x.Bounds).Returns(() => bounds);
         }
@@ -30,7 +31,7 @@ namespace SixLabors.Shapes.Tests
                 {
                     //validate matrix in here
 
-                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(angle, bounds.Center);
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(angle, RectangleF.Center(bounds));
 
                     Assert.Equal(targetMatrix, m);
 
@@ -52,7 +53,7 @@ namespace SixLabors.Shapes.Tests
                     //validate matrix in here
                     float radians = (float)(Math.PI * angle / 180.0);
 
-                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(radians, bounds.Center);
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(radians, RectangleF.Center(bounds));
 
                     Assert.Equal(targetMatrix, m);
 

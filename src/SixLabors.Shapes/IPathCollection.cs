@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections.Generic;
     using System.Collections.Immutable;
@@ -18,7 +19,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the bounds enclosing the path
         /// </summary>
-        Rectangle Bounds { get; }
+        RectangleF Bounds { get; }
 
         /// <summary>
         /// Transforms the path using the specified matrix.

@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System.Collections.Immutable;
     using System.Numerics;
 
@@ -21,6 +22,6 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make this up as a simple linear path.
         /// </summary>
-        ImmutableArray<Vector2> Points { get; }
+        ImmutableArray<PointF> Points { get; }
     }
 }

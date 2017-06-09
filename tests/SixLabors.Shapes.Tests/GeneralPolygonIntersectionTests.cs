@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SixLabors.Primitives;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -11,8 +12,8 @@ namespace SixLabors.Shapes.Tests
     {
 
         static Dictionary<string, IPath> shapes = new Dictionary<string, IPath> {
-            {"ellispeWithHole", new ComplexPolygon(new SixLabors.Shapes.Ellipse(new Vector2(603), 161f), new SixLabors.Shapes.Ellipse(new Vector2(603), 61f)) },
-            { "largeEllipse", new SixLabors.Shapes.Ellipse(new Vector2(603), 603f-60) },
+            {"ellispeWithHole", new ComplexPolygon(new SixLabors.Shapes.EllipsePolygon(new Vector2(603), 161f), new SixLabors.Shapes.EllipsePolygon(new Vector2(603), 61f)) },
+            { "largeEllipse", new SixLabors.Shapes.EllipsePolygon(new Vector2(603), 603f-60) },
             { "iris_0", Shapes.IrisSegment(0) },
             { "iris_1", Shapes.IrisSegment(1) },
             { "iris_2", Shapes.IrisSegment(2) },
@@ -29,7 +30,7 @@ namespace SixLabors.Shapes.Tests
             { "scaled_300_iris_5", Shapes.IrisSegment(300, 5) },
             { "scaled_300_iris_6", Shapes.IrisSegment(300, 6) },
 
-            { "clippedRect",   new Rectangle(10, 10, 40, 40).Clip(new Rectangle(20, 0, 20, 20))     },
+            { "clippedRect",   new RectangularePolygon(10, 10, 40, 40).Clip(new RectangularePolygon(20, 0, 20, 20))     },
 
             { "hourGlass", Shapes.HourGlass().AsClosedPath() },
             { "BigCurve", new Polygon(new BezierLineSegment( new Vector2(10, 400), new Vector2(30, 10), new Vector2(240, 30), new Vector2(300, 400))) },
@@ -76,7 +77,7 @@ namespace SixLabors.Shapes.Tests
 
             for (int y = top; y <= bottom; y++)
             {
-                IEnumerable<Vector2> intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, y), new Vector2(polygon.Bounds.Right + 1, y));
+                IEnumerable<PointF> intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, y), new Vector2(polygon.Bounds.Right + 1, y));
                 if (intersections.Count() % 2 != 0)
                 {
                     Assert.True(false, $"crosssection of '{name}' at '{y}' produced {intersections.Count()} number of intersections");

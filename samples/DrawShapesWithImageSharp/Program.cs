@@ -94,7 +94,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 var points = pl.Select(p => p.Split('x'))
                             .Select(p =>
                             {
-                                return new Vector2(float.Parse(p[0]), float.Parse(p[1]));
+                                return new SixLabors.Primitives.PointF(float.Parse(p[0]), float.Parse(p[1]));
                             })
                             .ToArray();
                 return new Polygon(new LinearLineSegment(points));
@@ -114,7 +114,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 var points = pl.Select(p => p.Split('x'))
                             .Select(p =>
                             {
-                                return new Vector2(float.Parse(p[0]), float.Parse(p[1]));
+                                return new SixLabors.Primitives.PointF(float.Parse(p[0]), float.Parse(p[1]));
                             })
                             .ToArray();
                 return new Polygon(new LinearLineSegment(points));
@@ -125,16 +125,16 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void DrawOval()
         {
-            new Ellipse(0, 0, 10, 20).Scale(5).SaveImage("Curves", "Ellipse.png");
+            new EllipsePolygon(0, 0, 10, 20).Scale(5).SaveImage("Curves", "Ellipse.png");
         }
 
         private static void DrawArc()
         {
-            new Polygon(new BezierLineSegment(new[] {
-                        new Vector2(10, 400),
-                        new Vector2(30, 10),
-                        new Vector2(240, 30),
-                        new Vector2(300, 400)
+            new Polygon(new BezierLineSegment(new SixLabors.Primitives.PointF[] {
+                        new SixLabors.Primitives.PointF(10, 400),
+                        new SixLabors.Primitives.PointF(30, 10),
+                        new SixLabors.Primitives.PointF(240, 30),
+                        new SixLabors.Primitives.PointF(300, 400)
             })).SaveImage(500, 500, "Curves", "Arc.png");
         }
 
@@ -183,8 +183,8 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void OutputClippedRectangle()
         {
-            var rect1 = new Rectangle(10, 10, 40, 40);
-            var rect2 = new Rectangle(20, 0, 20, 20);
+            var rect1 = new RectangularePolygon(10, 10, 40, 40);
+            var rect2 = new RectangularePolygon(20, 0, 20, 20);
             var paths = rect1.Clip(rect2);
 
             paths.SaveImage("Clipping", "RectangleWithTopClipped.png");
@@ -196,7 +196,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         }
         public static void SaveImage(this IPathCollection shape, params string[] path)
         {
-            shape = shape.Translate(shape.Bounds.Location * -1) // touch top left
+            shape = shape.Translate(-shape.Bounds.Location) // touch top left
                     .Translate(new Vector2(10)); // move in from top left
 
             var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 
 namespace SixLabors.Shapes.Tests
 {
+    using SixLabors.Primitives;
     using System.Numerics;
 
     using Xunit;
@@ -127,7 +128,7 @@ namespace SixLabors.Shapes.Tests
             Vector2 point3 = new Vector2(50, 50);
             PathBuilder builder = new PathBuilder();
 
-            builder.AddLines(new List<Vector2> { point1, point2, point3});
+            builder.AddLines(new List<PointF> { point1, point2, point3});
             Path shape = Assert.IsType<Path>(builder.Build());
             Assert.Equal(10, shape.Bounds.Left);
         }
@@ -143,7 +144,7 @@ namespace SixLabors.Shapes.Tests
             builder.StartFigure();
             builder.StartFigure();
             builder.StartFigure();
-            builder.AddLines(new List<Vector2> { point1, point2, point3 });
+            builder.AddLines(new List<PointF> { point1, point2, point3 });
             Path shape = Assert.IsType<Path>(builder.Build());
         }
 

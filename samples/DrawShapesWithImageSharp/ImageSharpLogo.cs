@@ -50,15 +50,15 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             using (var img = new Image<Rgba32>(dimensions, dimensions))
             {
                 img.Fill(Rgba32.Black);
-                img.Fill(Rgba32.FromHex("e1e1e1ff"), new SixLabors.Shapes.Ellipse(center, 600f).Transform(scaler));
-                img.Fill(Rgba32.White, new SixLabors.Shapes.Ellipse(center, 600f - 60).Transform(scaler));
+                img.Fill(Rgba32.FromHex("e1e1e1ff"), new SixLabors.Shapes.EllipsePolygon(center, 600f).Transform(scaler));
+                img.Fill(Rgba32.White, new SixLabors.Shapes.EllipsePolygon(center, 600f - 60).Transform(scaler));
 
                 for (var i = 0; i < 6; i++)
                 {
                     img.Fill(colors[i], segments[i].Transform(scaler));
                 }
 
-                img.Fill(new Rgba32(0, 0, 0, 170), new ComplexPolygon(new SixLabors.Shapes.Ellipse(center, 161f), new SixLabors.Shapes.Ellipse(center, 61f)).Transform(scaler));
+                img.Fill(new Rgba32(0, 0, 0, 170), new ComplexPolygon(new SixLabors.Shapes.EllipsePolygon(center, 161f), new SixLabors.Shapes.EllipsePolygon(center, 61f)).Transform(scaler));
 
                 var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 

@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections.Immutable;
     using System.Numerics;
@@ -60,10 +61,10 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        ImmutableArray<Vector2> ISimplePath.Points => this.innerPath.Points();
+        ImmutableArray<PointF> ISimplePath.Points => this.innerPath.Points();
 
         /// <inheritdoc />
-        public Rectangle Bounds => this.innerPath.Bounds;
+        public RectangleF Bounds => this.innerPath.Bounds;
 
         /// <summary>
         /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
@@ -86,7 +87,7 @@ namespace SixLabors.Shapes
         protected virtual bool IsClosed => false;
 
         /// <inheritdoc />
-        public PointInfo Distance(Vector2 point)
+        public PointInfo Distance(PointF point)
         {
             PointInfo dist = this.innerPath.DistanceFromPath(point);
 
@@ -160,14 +161,12 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="count">The count.</param>
-        /// <param name="offset">The offset.</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
-            return this.innerPath.FindIntersections(start, end, buffer, count, offset);
+            return this.innerPath.FindIntersections(start, end, buffer);
         }
 
         /// <summary>
@@ -177,7 +176,7 @@ namespace SixLabors.Shapes
         /// <returns>
         ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(Vector2 point)
+        public bool Contains(PointF point)
         {
             return this.innerPath.PointInPolygon(point);
         }

@@ -13,6 +13,7 @@ namespace SixLabors.Shapes
     using System.Numerics;
 
     using PolygonClipper;
+    using SixLabors.Primitives;
 
     /// <summary>
     /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
@@ -81,7 +82,7 @@ namespace SixLabors.Shapes
 
                 this.MaxIntersections = intersections;
                 this.Length = length;
-                this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
+                this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
                 this.PathType = PathTypes.Mixed;
             }
 
@@ -112,7 +113,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The bounds.
         /// </value>
-        public Rectangle Bounds { get; }
+        public RectangleF Bounds { get; }
 
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
@@ -134,7 +135,7 @@ namespace SixLabors.Shapes
         /// therefore for a point to be in more that one we must be in a hole of another, theoretically this could
         /// then flip again to be in a outline inside a hole inside an outline :)
         /// </remarks>
-        public PointInfo Distance(Vector2 point)
+        public PointInfo Distance(PointF point)
         {
             float dist = float.MaxValue;
             PointInfo pointInfo = default(PointInfo);
@@ -173,19 +174,16 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="count">The count.</param>
-        /// <param name="offset">The offset.</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
             int totalAdded = 0;
             for (int i = 0; i < this.Paths.Length; i++)
             {
-                int added = this.Paths[i].FindIntersections(start, end, buffer, count, offset);
-                count -= added;
-                offset += added;
+                var sliced = buffer.Slice(totalAdded);
+                int added = this.Paths[i].FindIntersections(start, end, sliced);
                 totalAdded += added;
             }
 
@@ -200,7 +198,7 @@ namespace SixLabors.Shapes
         /// <returns>
         ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(Vector2 point)
+        public bool Contains(PointF point)
         {
             bool inside = false;
             foreach (IPath shape in this.Paths)

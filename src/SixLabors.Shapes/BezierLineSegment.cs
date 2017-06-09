@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections.Generic;
     using System.Collections.Immutable;
@@ -24,14 +25,14 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The line points.
         /// </summary>
-        private readonly ImmutableArray<Vector2> linePoints;
-        private readonly Vector2[] controlPoints;
+        private readonly ImmutableArray<PointF> linePoints;
+        private readonly PointF[] controlPoints;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(ImmutableArray<Vector2> points)
+        public BezierLineSegment(ImmutableArray<PointF> points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
@@ -52,7 +53,7 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(Vector2[] points)
+        public BezierLineSegment(PointF[] points)
             : this(ImmutableArray.Create(points))
         {
         }
@@ -65,8 +66,8 @@ namespace SixLabors.Shapes
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="end">The end.</param>
         /// <param name="additionalPoints">The additional points.</param>
-        public BezierLineSegment(Vector2 start, Vector2 controlPoint1, Vector2 controlPoint2, Vector2 end, params Vector2[] additionalPoints)
-            : this(new[] { start, controlPoint1, controlPoint2, end }.Merge(additionalPoints))
+        public BezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end, params PointF[] additionalPoints)
+            : this(new[] { start, controlPoint1, controlPoint2, end }.Concat(additionalPoints).ToImmutableArray())
         {
         }
 
@@ -76,7 +77,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The end point.
         /// </value>
-        public Vector2 EndPoint { get; private set; }
+        public PointF EndPoint { get; private set; }
 
         /// <summary>
         /// Returns the current <see cref="ILineSegment" /> a simple linear path.
@@ -84,7 +85,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<Vector2> Flatten()
+        public ImmutableArray<PointF> Flatten()
         {
             return this.linePoints;
         }
@@ -102,11 +103,11 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            Vector2[] points = new Vector2[this.controlPoints.Length];
+            PointF[] points = new PointF[this.controlPoints.Length];
             int i = 0;
-            foreach (Vector2 p in this.controlPoints)
+            foreach (PointF p in this.controlPoints)
             {
-                points[i++] = Vector2.Transform(p, matrix);
+                points[i++] = PointF.Transform(p, matrix);
             }
 
             return new BezierLineSegment(points);
@@ -119,14 +120,14 @@ namespace SixLabors.Shapes
         /// <returns>A line segment with the matrix applied to it.</returns>
         ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
-        private static ImmutableArray<Vector2> GetDrawingPoints(ImmutableArray<Vector2> controlPoints)
+        private static ImmutableArray<PointF> GetDrawingPoints(ImmutableArray<PointF> controlPoints)
         {
-            List<Vector2> drawingPoints = new List<Vector2>();
+            List<PointF> drawingPoints = new List<PointF>();
             int curveCount = (controlPoints.Length - 1) / 3;
 
             for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
             {
-                List<Vector2> bezierCurveDrawingPoints = FindDrawingPoints(curveIndex, controlPoints);
+                List<PointF> bezierCurveDrawingPoints = FindDrawingPoints(curveIndex, controlPoints);
 
                 if (curveIndex != 0)
                 {
@@ -140,9 +141,9 @@ namespace SixLabors.Shapes
             return drawingPoints.ToImmutableArray();
         }
 
-        private static List<Vector2> FindDrawingPoints(int curveIndex, ImmutableArray<Vector2> controlPoints)
+        private static List<PointF> FindDrawingPoints(int curveIndex, ImmutableArray<PointF> controlPoints)
         {
-            List<Vector2> pointList = new List<Vector2>();
+            List<PointF> pointList = new List<PointF>();
 
             Vector2 left = CalculateBezierPoint(curveIndex, 0, controlPoints);
             Vector2 right = CalculateBezierPoint(curveIndex, 1, controlPoints);
@@ -159,9 +160,9 @@ namespace SixLabors.Shapes
             int curveIndex,
             float t0,
             float t1,
-            List<Vector2> pointList,
+            List<PointF> pointList,
             int insertionIndex,
-            ImmutableArray<Vector2> controlPoints,
+            ImmutableArray<PointF> controlPoints,
             int depth)
         {
             // max recursive depth for control points, means this is approx the max number of points discoverable
@@ -199,7 +200,7 @@ namespace SixLabors.Shapes
             return 0;
         }
 
-        private static Vector2 CalculateBezierPoint(int curveIndex, float t, ImmutableArray<Vector2> controlPoints)
+        private static PointF CalculateBezierPoint(int curveIndex, float t, ImmutableArray<PointF> controlPoints)
         {
             int nodeIndex = curveIndex * 3;
 

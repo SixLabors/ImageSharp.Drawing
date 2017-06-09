@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System.Collections.Immutable;
     using System.Numerics;
 
@@ -21,7 +22,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the bounds enclosing the path
         /// </summary>
-        Rectangle Bounds { get; }
+        RectangleF Bounds { get; }
 
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
@@ -49,7 +50,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns details about the point and its distance away from the path.
         /// </returns>
-        PointInfo Distance(Vector2 point);
+        PointInfo Distance(PointF point);
 
         /// <summary>
         /// Converts the <see cref="IPath" /> into a simple linear path..
@@ -64,12 +65,10 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="count">The count.</param>
-        /// <param name="offset">The offset.</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset);
+        int FindIntersections(PointF start, PointF end, System.Span<PointF> buffer);
 
         /// <summary>
         /// Determines whether the <see cref="IPath"/> contains the specified point
@@ -78,7 +77,7 @@ namespace SixLabors.Shapes
         /// <returns>
         ///   <c>true</c> if the <see cref="IPath"/> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        bool Contains(Vector2 point);
+        bool Contains(PointF point);
 
         /// <summary>
         /// Transforms the path using the specified matrix.
