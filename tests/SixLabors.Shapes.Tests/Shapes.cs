@@ -13,7 +13,7 @@ namespace SixLabors.Shapes.Tests
             Vector2 center = new Vector2(603);
             Vector2 segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
             IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
-                new BezierLineSegment(new Vector2(5.8641942f, 361.46031f),
+                new CubicBezierLineSegment(new Vector2(5.8641942f, 361.46031f),
                 new Vector2(-11.715693f, 259.54052f),
                 new Vector2(24.441609f, 158.17478f),
                 new Vector2(78.26f, 97.0461f))).Translate(center - segmentRotationCenter);
@@ -30,7 +30,7 @@ namespace SixLabors.Shapes.Tests
             Vector2 center = new Vector2(603);
             Vector2 segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
             IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
-                new BezierLineSegment(new Vector2(5.8641942f, 361.46031f),
+                new CubicBezierLineSegment(new Vector2(5.8641942f, 361.46031f),
                 new Vector2(-11.715693f, 259.54052f),
                 new Vector2(24.441609f, 158.17478f),
                 new Vector2(78.26f, 97.0461f))).Translate(center - segmentRotationCenter);

@@ -20,7 +20,7 @@ namespace SixLabors.Shapes
     {
         private readonly InternalPath innerPath;
         private readonly ImmutableArray<ISimplePath> flatPath;
-        private readonly BezierLineSegment segment;
+        private readonly CubicBezierLineSegment segment;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
@@ -65,7 +65,7 @@ namespace SixLabors.Shapes
         {
         }
 
-        private EllipsePolygon(BezierLineSegment segment)
+        private EllipsePolygon(CubicBezierLineSegment segment)
         {
             this.segment = segment;
             this.innerPath = new InternalPath(segment, true);
@@ -184,7 +184,7 @@ namespace SixLabors.Shapes
             return this.innerPath.PointInPolygon(point);
         }
 
-        private static BezierLineSegment CreateSegment(Vector2 location, SizeF size)
+        private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
         {
             Guard.MustBeGreaterThan(size.Width, 0, "width");
             Guard.MustBeGreaterThan(size.Height, 0, "height");
@@ -222,7 +222,7 @@ namespace SixLabors.Shapes
                 new Vector2(rootLocation.X, pointMplusO.Y),
                 new Vector2(rootLocation.X, pointM.Y),
             };
-            return new BezierLineSegment(points);
+            return new CubicBezierLineSegment(points);
         }
 
         /// <inheritdoc /> 

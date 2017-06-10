@@ -13,10 +13,10 @@ namespace SixLabors.Shapes
     using System.Numerics;
 
     /// <summary>
-    /// Represents a line segment that colonists of control points that will be rendered as a cubic bezier curve
+    /// Represents a line segment that contains a lists of control points that will be rendered as a cubic bezier curve
     /// </summary>
     /// <seealso cref="SixLabors.Shapes.ILineSegment" />
-    public class BezierLineSegment : ILineSegment
+    public class CubicBezierLineSegment : ILineSegment
     {
         // code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
         private const float MinimumSqrDistance = 1.75f;
@@ -29,10 +29,10 @@ namespace SixLabors.Shapes
         private readonly PointF[] controlPoints;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
+        /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(ImmutableArray<PointF> points)
+        public CubicBezierLineSegment(ImmutableArray<PointF> points)
         {
             Guard.NotNull(points, nameof(points));
             Guard.MustBeGreaterThanOrEqualTo(points.Length, 4, nameof(points));
@@ -50,23 +50,23 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
+        /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public BezierLineSegment(PointF[] points)
+        public CubicBezierLineSegment(PointF[] points)
             : this(ImmutableArray.Create(points))
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="BezierLineSegment"/> class.
+        /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
         /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="controlPoint1">The control point1.</param>
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="end">The end.</param>
         /// <param name="additionalPoints">The additional points.</param>
-        public BezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end, params PointF[] additionalPoints)
+        public CubicBezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end, params PointF[] additionalPoints)
             : this(new[] { start, controlPoint1, controlPoint2, end }.Concat(additionalPoints).ToImmutableArray())
         {
         }
@@ -95,7 +95,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="matrix">The matrix.</param>
         /// <returns>A line segment with the matrix applied to it.</returns>
-        public BezierLineSegment Transform(Matrix3x2 matrix)
+        public CubicBezierLineSegment Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -110,7 +110,7 @@ namespace SixLabors.Shapes
                 points[i++] = PointF.Transform(p, matrix);
             }
 
-            return new BezierLineSegment(points);
+            return new CubicBezierLineSegment(points);
         }
 
         /// <summary>

@@ -37,7 +37,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawFatL();
 
             DrawText("Hello World");
-            DrawText("Hello World Hello World Hello World Hello World Hello World Hello World Hello World",  new Path(new BezierLineSegment(
+            DrawText("Hello World Hello World Hello World Hello World Hello World Hello World Hello World",  new Path(new CubicBezierLineSegment(
                 new Vector2(0, 0),
                 new Vector2(150, -150),
                 new Vector2(250, -150),
@@ -130,7 +130,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void DrawArc()
         {
-            new Polygon(new BezierLineSegment(new SixLabors.Primitives.PointF[] {
+            new Polygon(new CubicBezierLineSegment(new SixLabors.Primitives.PointF[] {
                         new SixLabors.Primitives.PointF(10, 400),
                         new SixLabors.Primitives.PointF(30, 10),
                         new SixLabors.Primitives.PointF(240, 30),

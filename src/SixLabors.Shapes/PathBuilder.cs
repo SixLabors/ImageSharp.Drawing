@@ -135,7 +135,25 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Adds a bezier curve to the current figure joining the last point to the endPoint.
+        /// Adds a quadratic bezier curve to the current figure joining the last point to the endPoint.
+        /// </summary>
+        /// <param name="startPoint">The start point.</param>
+        /// <param name="controlPoint">The control point1.</param>
+        /// <param name="endPoint">The end point.</param>
+        public void AddBezier(PointF startPoint, PointF controlPoint, PointF endPoint)
+        {
+            Vector2 startPointVector = startPoint;
+            Vector2 controlPointVector = controlPoint;
+            Vector2 endPointVector = endPoint;
+
+            Vector2 c1 = (((controlPointVector - startPointVector) * 2) / 3) + startPointVector;
+            Vector2 c2 = (((controlPointVector - endPointVector) * 2) / 3) + endPointVector;
+
+            this.AddBezier(startPointVector, c1, c2, endPoint);
+        }
+
+        /// <summary>
+        /// Adds a cubic bezier curve to the current figure joining the last point to the endPoint.
         /// </summary>
         /// <param name="startPoint">The start point.</param>
         /// <param name="controlPoint1">The control point1.</param>
@@ -143,11 +161,11 @@ namespace SixLabors.Shapes
         /// <param name="endPoint">The end point.</param>
         public void AddBezier(PointF startPoint, PointF controlPoint1, PointF controlPoint2, PointF endPoint)
         {
-            this.currentFigure.AddSegment(new BezierLineSegment(
-                Vector2.Transform(startPoint, this.currentTransform),
-                 Vector2.Transform(controlPoint1, this.currentTransform),
-                 Vector2.Transform(controlPoint2, this.currentTransform),
-                Vector2.Transform(endPoint, this.currentTransform)));
+            this.currentFigure.AddSegment(new CubicBezierLineSegment(
+                PointF.Transform(startPoint, this.currentTransform),
+                PointF.Transform(controlPoint1, this.currentTransform),
+                PointF.Transform(controlPoint2, this.currentTransform),
+                PointF.Transform(endPoint, this.currentTransform)));
         }
 
         /// <summary>

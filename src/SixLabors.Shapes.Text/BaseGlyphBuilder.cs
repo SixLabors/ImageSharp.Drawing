@@ -123,10 +123,7 @@ namespace SixLabors.Shapes.Text
         /// <param name="point">The point.</param>
         void IGlyphRenderer.QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
         {
-            Vector2 c1 = (((secondControlPoint - this.currentPoint) * 2) / 3) + this.currentPoint;
-            Vector2 c2 = (((secondControlPoint - point) * 2) / 3) + point;
-
-            this.builder.AddBezier(this.currentPoint, c1, c2, point);
+            this.builder.AddBezier(this.currentPoint, secondControlPoint, point);
             this.currentPoint = point;
         }
 

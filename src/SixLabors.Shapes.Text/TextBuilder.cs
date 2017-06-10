@@ -1,4 +1,5 @@
 ﻿using SixLabors.Fonts;
+using SixLabors.Primitives;
 using SixLabors.Shapes.Text;
 using System;
 using System.Collections.Generic;
@@ -19,7 +20,7 @@ namespace SixLabors.Shapes
         /// <param name="location">The location</param>
         /// <param name="style">The style and settings to use while rendering the glyphs</param>
         /// <returns></returns>
-        public static IPathCollection GenerateGlyphs(string text, Vector2 location, FontSpan style)
+        public static IPathCollection GenerateGlyphs(string text, PointF location, FontSpan style)
         {
             var glyphBuilder = new GlyphBuilder(location);
 
@@ -38,7 +39,7 @@ namespace SixLabors.Shapes
         /// <returns></returns>
         public static IPathCollection GenerateGlyphs(string text, FontSpan style)
         {
-            return GenerateGlyphs(text, Vector2.Zero, style);
+            return GenerateGlyphs(text, PointF.Empty, style);
         }
 
         /// <summary>

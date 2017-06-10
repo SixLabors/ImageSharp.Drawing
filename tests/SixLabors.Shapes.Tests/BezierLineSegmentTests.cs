@@ -14,7 +14,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void SingleSegmentConstructor()
         {
-            BezierLineSegment segment = new BezierLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 0), new Vector2(20, 0));
+            CubicBezierLineSegment segment = new CubicBezierLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 0), new Vector2(20, 0));
             System.Collections.Immutable.ImmutableArray<PointF> points = segment.Flatten();
             Assert.Contains(new Vector2(0, 0), points);
             Assert.Contains(new Vector2(10, 0), points);
@@ -24,7 +24,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MustHaveAtleast4Points()
         {
-            ArgumentOutOfRangeException error = Assert.Throws<ArgumentOutOfRangeException>(() => new BezierLineSegment(new[] { new PointF(0, 0) }));
+            ArgumentOutOfRangeException error = Assert.Throws<ArgumentOutOfRangeException>(() => new CubicBezierLineSegment(new[] { new PointF(0, 0) }));
         }
     }
 }

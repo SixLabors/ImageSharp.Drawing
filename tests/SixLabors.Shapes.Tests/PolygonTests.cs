@@ -310,7 +310,7 @@ namespace SixLabors.Shapes.Tests
                         new PointF(300, 400)
             };
 
-            Polygon poly = new Polygon(new BezierLineSegment(simplePath));
+            Polygon poly = new Polygon(new CubicBezierLineSegment(simplePath));
 
             List<PointF> points = poly.FindIntersections(new PointF(float.MinValue, y), new PointF(float.MaxValue, y)).ToList();
 

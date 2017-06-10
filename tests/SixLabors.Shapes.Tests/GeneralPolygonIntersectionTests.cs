@@ -33,7 +33,7 @@ namespace SixLabors.Shapes.Tests
             { "clippedRect",   new RectangularePolygon(10, 10, 40, 40).Clip(new RectangularePolygon(20, 0, 20, 20))     },
 
             { "hourGlass", Shapes.HourGlass().AsClosedPath() },
-            { "BigCurve", new Polygon(new BezierLineSegment( new Vector2(10, 400), new Vector2(30, 10), new Vector2(240, 30), new Vector2(300, 400))) },
+            { "BigCurve", new Polygon(new CubicBezierLineSegment( new Vector2(10, 400), new Vector2(30, 10), new Vector2(240, 30), new Vector2(300, 400))) },
             { "ChopCorner", new Polygon(new LinearLineSegment(new Vector2( 8, 8 ),
                 new Vector2( 64, 8 ),
                 new Vector2( 64, 64 ),
