@@ -6,7 +6,7 @@
 namespace SixLabors.Shapes
 {
     using SixLabors.Primitives;
-    using System.Collections.Immutable;
+    using System.Collections.Generic;
     using System.Numerics;
 
     /// <summary>
@@ -35,7 +35,7 @@ namespace SixLabors.Shapes
         float Length { get; }
 
         /// <summary>
-        /// Calculates the the point a certain distance a path.
+        /// Calculates the the point a certain distance along a path.
         /// </summary>
         /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
         /// <returns>
@@ -56,7 +56,7 @@ namespace SixLabors.Shapes
         /// Converts the <see cref="IPath" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
-        ImmutableArray<ISimplePath> Flatten();
+        IEnumerable<ISimplePath> Flatten();
 
         /// <summary>
         /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
@@ -87,7 +87,7 @@ namespace SixLabors.Shapes
         IPath Transform(Matrix3x2 matrix);
 
         /// <summary>
-        /// Converts a path to a closed path.
+        /// Returns this path with all figures closed.
         /// </summary>
         /// <returns>Returns the path as a closed path.</returns>
         IPath AsClosedPath();

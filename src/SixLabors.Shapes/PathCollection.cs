@@ -9,7 +9,6 @@ namespace SixLabors.Shapes
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -19,12 +18,14 @@ namespace SixLabors.Shapes
     /// <seealso cref="IPath" />
     public class PathCollection : IPathCollection
     {
-        public ImmutableArray<IPath> paths;
+        public IPath[] paths;
 
-        internal PathCollection(ImmutableArray<IPath> paths)
+        public PathCollection(IEnumerable<IPath> paths)
         {
-            this.paths = paths;
-            if (paths.Length == 0)
+            Guard.NotNull(paths, nameof(paths));
+
+            this.paths = paths.ToArray();
+            if (this.paths.Length == 0)
             {
                 this.Bounds = new RectangleF(0, 0, 0, 0);
             }
@@ -40,14 +41,9 @@ namespace SixLabors.Shapes
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
         }
-
-        public PathCollection(IEnumerable<IPath> paths)
-            : this(paths.ToImmutableArray())
-        {
-        }
-
+        
         public PathCollection(params IPath[] paths)
-            : this(paths.ToImmutableArray())
+            : this((IEnumerable<IPath>)paths)
         {
         }
 

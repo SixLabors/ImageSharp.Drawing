@@ -6,7 +6,7 @@
 namespace SixLabors.Shapes
 {
     using SixLabors.Primitives;
-    using System.Collections.Immutable;
+    using System.Collections.Generic;
     using System.Numerics;
 
     /// <summary>
@@ -26,7 +26,7 @@ namespace SixLabors.Shapes
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="ILineSegment" /> as simple linear path.</returns>
-        ImmutableArray<PointF> Flatten();
+        IReadOnlyList<PointF> Flatten();
 
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.

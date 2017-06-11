@@ -66,9 +66,9 @@ namespace SixLabors.Shapes.Tests
         public void SimplePath()
         {
             Path path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
-            System.Collections.Immutable.ImmutableArray<PointF> points = path.Flatten().Single().Points;
+            var points = path.Flatten().Single().Points;
 
-            Assert.Equal(4, points.Length);
+            Assert.Equal(4, points.Count);
             Assert.Equal(new PointF(0, 0), points[0]);
             Assert.Equal(new PointF(10, 0), points[1]);
             Assert.Equal(new PointF(10, 10), points[2]);

@@ -8,7 +8,6 @@ namespace SixLabors.Shapes
     using System;
     using System.Buffers;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
     using System.Runtime.CompilerServices;
@@ -146,7 +145,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The points.
         /// </value>
-        internal ImmutableArray<PointF> Points() => this.points.Select(X => (PointF)X.Point).ToImmutableArray();
+        internal IReadOnlyList<PointF> Points() => this.points.Select(X => (PointF)X.Point).ToArray();
 
         /// <summary>
         /// Calculates the distance from the path.

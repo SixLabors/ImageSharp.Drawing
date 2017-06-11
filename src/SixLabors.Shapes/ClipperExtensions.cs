@@ -29,7 +29,7 @@ namespace SixLabors.Shapes
 
             clipper.AddPath(shape, ClippingType.Subject);
             clipper.AddPaths(holes, ClippingType.Clip);
-            System.Collections.Immutable.ImmutableArray<IPath> result = clipper.GenerateClippedShapes();
+            IEnumerable<IPath> result = clipper.GenerateClippedShapes();
             return new ComplexPolygon(result);
         }
 

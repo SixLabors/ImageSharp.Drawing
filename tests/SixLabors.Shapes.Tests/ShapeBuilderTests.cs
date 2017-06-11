@@ -57,9 +57,10 @@ namespace SixLabors.Shapes.Tests
             builder.AddLine(10, 90, 50, 50);
 
             ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
-            Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Path>(shape.Paths[0]);
-            Assert.IsType<Path>(shape.Paths[1]);
+            var p = shape.Paths.ToArray();
+            Assert.Equal(2, p.Length);
+            Assert.IsType<Path>(p[0]);
+            Assert.IsType<Path>(p[1]);
         }
         [Fact]
         public void DrawLinesOpenThenClosedFigures()
@@ -73,10 +74,11 @@ namespace SixLabors.Shapes.Tests
             builder.AddLine(10, 90, 50, 50);
             builder.CloseFigure();
             ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
+            var p = shape.Paths.ToArray();
 
-            Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Path>(shape.Paths[0]);
-            Assert.IsType<Polygon>(shape.Paths[1]);
+            Assert.Equal(2, p.Length);
+            Assert.IsType<Path>(p[0]);
+            Assert.IsType<Polygon>(p[1]);
         }
 
         [Fact]
@@ -91,9 +93,10 @@ namespace SixLabors.Shapes.Tests
             builder.AddLine(10, 90, 50, 50);
             ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-            Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0]);
-            Assert.IsType<Path>(shape.Paths[1]);
+            var p = shape.Paths.ToArray();
+            Assert.Equal(2, p.Length);
+            Assert.IsType<Polygon>(p[0]);
+            Assert.IsType<Path>(p[1]);
         }
 
         [Fact]
@@ -108,16 +111,18 @@ namespace SixLabors.Shapes.Tests
             builder.AddLine(10, 90, 50, 50);
             ComplexPolygon shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-            Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Path>(shape.Paths[0]);
-            Assert.IsType<Path>(shape.Paths[1]);
+            var p = shape.Paths.ToArray();
+            Assert.Equal(2, p.Length);
+            Assert.IsType<Path>(p[0]);
+            Assert.IsType<Path>(p[1]);
 
             builder.CloseAllFigures();
             shape = Assert.IsType<ComplexPolygon>(builder.Build());
 
-            Assert.Equal(2, shape.Paths.Length);
-            Assert.IsType<Polygon>(shape.Paths[0]);
-            Assert.IsType<Polygon>(shape.Paths[1]);
+            p = shape.Paths.ToArray();
+            Assert.Equal(2, p.Length);
+            Assert.IsType<Polygon>(p[0]);
+            Assert.IsType<Polygon>(p[1]);
         }
 
         [Fact]
@@ -179,7 +184,7 @@ namespace SixLabors.Shapes.Tests
             builder.ResetOrigin();
             builder.AddLines(point1, point2, point3);
 
-            System.Collections.Immutable.ImmutableArray<IPath> shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths;
+            var shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths.ToArray();
             Assert.Equal(10, shape[0].Bounds.Left);
             Assert.Equal(110, shape[1].Bounds.Left);
             Assert.Equal(10, shape[0].Bounds.Left);
@@ -199,7 +204,7 @@ namespace SixLabors.Shapes.Tests
             builder.SetOrigin(origin); //new origin is scaled by default transform
             builder.StartFigure();
             builder.AddLines(point1, point2, point3);
-            System.Collections.Immutable.ImmutableArray<IPath> shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths;
+            var shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths.ToArray();
             Assert.Equal(100, shape[0].Bounds.Left);
             Assert.Equal(-400, shape[1].Bounds.Left);
         }

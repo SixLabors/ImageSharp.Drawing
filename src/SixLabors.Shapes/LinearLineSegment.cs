@@ -8,7 +8,6 @@ namespace SixLabors.Shapes
     using SixLabors.Primitives;
     using System;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -21,7 +20,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// The collection of points.
         /// </summary>
-        private readonly ImmutableArray<PointF> points;
+        private readonly PointF[] points;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
@@ -49,21 +48,14 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="points">The points.</param>
         public LinearLineSegment(IEnumerable<PointF> points)
-            : this(points?.ToImmutableArray() ?? throw new ArgumentNullException(nameof(points)) )
         {
-        }
+            Guard.NotNull(points, nameof(points));
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
-        /// </summary>
-        /// <param name="points">The points.</param>
-        public LinearLineSegment(ImmutableArray<PointF> points)
-        {
-            Guard.MustBeGreaterThanOrEqualTo(points.Length, 2, nameof(points));
+            this.points = points.ToArray();
 
-            this.points = points;
+            Guard.MustBeGreaterThanOrEqualTo(this.points.Length, 2, nameof(points));
 
-            this.EndPoint = points[points.Length - 1];
+            this.EndPoint = this.points[this.points.Length - 1];
         }
 
         /// <summary>
@@ -80,7 +72,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<PointF> Flatten()
+        public IReadOnlyList<PointF> Flatten()
         {
             return this.points;
         }

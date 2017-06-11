@@ -7,7 +7,8 @@ namespace SixLabors.Shapes
 {
     using SixLabors.Primitives;
     using System;
-    using System.Collections.Immutable;
+    using System.Collections.Generic;
+    using System.Linq;
     using System.Numerics;
 
     /// <summary>
@@ -16,15 +17,17 @@ namespace SixLabors.Shapes
     /// <seealso cref="IPath" />
     public class Path : IPath, ISimplePath
     {
-        private readonly InternalPath innerPath;
-        private readonly ImmutableArray<ISimplePath> flatPath;
+        private InternalPath _innerPath;
+        private InternalPath innerPath => _innerPath ?? (_innerPath = new InternalPath(lineSegments, IsClosed));
+
+        private readonly ILineSegment[] lineSegments;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Path"/> class.
         /// </summary>
         /// <param name="segment">The segment.</param>
         public Path(params ILineSegment[] segment)
-            : this(ImmutableArray.Create(segment))
+            : this((IEnumerable<ILineSegment>)segment)
         {
         }
 
@@ -41,11 +44,9 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="Path"/> class.
         /// </summary>
         /// <param name="segments">The segments.</param>
-        public Path(ImmutableArray<ILineSegment> segments)
+        public Path(IEnumerable<ILineSegment> segments)
         {
-            this.innerPath = new InternalPath(segments, this.IsClosed);
-            this.LineSegments = segments;
-            this.flatPath = ImmutableArray.Create<ISimplePath>(this);
+            this.lineSegments = segments.ToArray();
         }
 
         /// <summary>
@@ -61,7 +62,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        ImmutableArray<PointF> ISimplePath.Points => this.innerPath.Points();
+        IReadOnlyList<PointF> ISimplePath.Points => this.innerPath.Points();
 
         /// <inheritdoc />
         public RectangleF Bounds => this.innerPath.Bounds;
@@ -79,7 +80,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the line segments
         /// </summary>
-        public ImmutableArray<ILineSegment> LineSegments { get; }
+        public IReadOnlyList<ILineSegment> LineSegments => this.lineSegments;
 
         /// <summary>
         /// Gets a value indicating whether this instance is a closed path.
@@ -117,7 +118,7 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            ILineSegment[] segments = new ILineSegment[this.LineSegments.Length];
+            ILineSegment[] segments = new ILineSegment[this.lineSegments.Length];
             int i = 0;
             foreach (ILineSegment s in this.LineSegments)
             {
@@ -149,9 +150,9 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="IPath" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<ISimplePath> Flatten()
+        public IEnumerable<ISimplePath> Flatten()
         {
-            return this.flatPath;
+            yield return this;
         }
 
         /// <summary>

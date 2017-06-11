@@ -9,7 +9,6 @@ namespace SixLabors.Shapes
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -19,7 +18,6 @@ namespace SixLabors.Shapes
     public class EllipsePolygon : IPath, ISimplePath
     {
         private readonly InternalPath innerPath;
-        private readonly ImmutableArray<ISimplePath> flatPath;
         private readonly CubicBezierLineSegment segment;
 
         /// <summary>
@@ -69,7 +67,6 @@ namespace SixLabors.Shapes
         {
             this.segment = segment;
             this.innerPath = new InternalPath(segment, true);
-            this.flatPath = ImmutableArray.Create<ISimplePath>(this);
         }
 
         /// <summary>
@@ -80,7 +77,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        ImmutableArray<PointF> ISimplePath.Points => this.innerPath.Points();
+        IReadOnlyList<PointF> ISimplePath.Points => this.innerPath.Points();
 
         /// <inheritdoc />
         public RectangleF Bounds => this.innerPath.Bounds;
@@ -152,9 +149,9 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="IPath" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<ISimplePath> Flatten()
+        public IEnumerable<ISimplePath> Flatten()
         {
-            return this.flatPath;
+            yield return this;
         }
 
         /// <summary>

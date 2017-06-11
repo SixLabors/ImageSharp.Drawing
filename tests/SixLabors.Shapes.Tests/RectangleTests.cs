@@ -177,7 +177,7 @@ namespace SixLabors.Shapes.Tests
         public void LienearSegements()
         {
             IPath shape = new RectangularePolygon(10, 11, 12, 13).AsPath();
-            System.Collections.Immutable.ImmutableArray<PointF> segemnts = shape.Flatten()[0].Points;
+            var segemnts = shape.Flatten().ToArray()[0].Points;
             Assert.Equal(new PointF(10, 11), segemnts[0]);
             Assert.Equal(new PointF(22, 11), segemnts[1]);
             Assert.Equal(new PointF(22, 24), segemnts[2]);

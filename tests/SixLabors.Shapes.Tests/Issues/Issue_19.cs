@@ -33,7 +33,7 @@ namespace SixLabors.Shapes.Tests
         {
             var line1 = new PointF[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
             var path = new Path(new LinearLineSegment(line1));
-            var pathPoints = path.Flatten()[0].Points;
+            var pathPoints = path.Flatten().First().Points;
 
             // all points must not be in the outline;
             foreach (var v in line1)

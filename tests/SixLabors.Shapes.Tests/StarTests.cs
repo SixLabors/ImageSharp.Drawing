@@ -64,7 +64,7 @@ namespace SixLabors.Shapes.Tests
 
             Star poly = new Star(Vector2.Zero, pointsCount, radius, radius2, 0);
 
-            System.Collections.Immutable.ImmutableArray<PointF> points = poly.Flatten()[0].Points;
+            var points = poly.Flatten().ToArray()[0].Points.ToArray();
 
             // calcualte baselineDistance
             float baseline = Vector2.Distance(points[0], points[1]);
@@ -101,7 +101,7 @@ namespace SixLabors.Shapes.Tests
             double anAngle = new Random().NextDouble() * TwoPI;
 
             Star poly = new Star(Vector2.Zero, 3, radius, radius2, (float)anAngle);
-            System.Collections.Immutable.ImmutableArray<ISimplePath> points = poly.Flatten();
+            ISimplePath[] points = poly.Flatten().ToArray();
 
             IEnumerable<double> allAngles = points[0].Points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI

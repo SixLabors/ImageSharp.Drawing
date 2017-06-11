@@ -8,7 +8,6 @@ namespace SixLabors.Shapes
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -21,12 +20,14 @@ namespace SixLabors.Shapes
     /// <seealso cref="SixLabors.Shapes.IPath" />
     public sealed class ComplexPolygon : IPath
     {
+        private readonly IPath[] paths;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
         /// <param name="paths">The paths.</param>
         public ComplexPolygon(params IPath[] paths)
-            : this(ImmutableArray.Create(paths))
+            : this((IEnumerable<IPath>)paths)
         {
         }
 
@@ -34,59 +35,48 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
         /// <param name="paths">The paths.</param>
-        public ComplexPolygon(ImmutableArray<IPath> paths)
+        public ComplexPolygon(IEnumerable<IPath> paths)
         {
-           
+            this.paths = paths.ToArray();
 
-            if (paths.Length == 1)
-            {
-                this.Length = paths[0].Length;
-                this.Bounds = paths[0].Bounds;
-                this.PathType = paths[0].PathType;
-                this.MaxIntersections = paths[0].MaxIntersections;
-            }
-            else
-            {
-                float minX = float.MaxValue;
-                float maxX = float.MinValue;
-                float minY = float.MaxValue;
-                float maxY = float.MinValue;
-                float length = 0;
-                int intersections = 0;
+            float minX = float.MaxValue;
+            float maxX = float.MinValue;
+            float minY = float.MaxValue;
+            float maxY = float.MinValue;
+            float length = 0;
+            int intersections = 0;
 
-                foreach (IPath s in paths)
+            foreach (IPath s in this.paths)
+            {
+                length += s.Length;
+                if (s.Bounds.Left < minX)
                 {
-                    length += s.Length;
-                    if (s.Bounds.Left < minX)
-                    {
-                        minX = s.Bounds.Left;
-                    }
-
-                    if (s.Bounds.Right > maxX)
-                    {
-                        maxX = s.Bounds.Right;
-                    }
-
-                    if (s.Bounds.Top < minY)
-                    {
-                        minY = s.Bounds.Top;
-                    }
-
-                    if (s.Bounds.Bottom > maxY)
-                    {
-                        maxY = s.Bounds.Bottom;
-                    }
-
-                    intersections += s.MaxIntersections;
+                    minX = s.Bounds.Left;
                 }
 
-                this.MaxIntersections = intersections;
-                this.Length = length;
-                this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
-                this.PathType = PathTypes.Mixed;
+                if (s.Bounds.Right > maxX)
+                {
+                    maxX = s.Bounds.Right;
+                }
+
+                if (s.Bounds.Top < minY)
+                {
+                    minY = s.Bounds.Top;
+                }
+
+                if (s.Bounds.Bottom > maxY)
+                {
+                    maxY = s.Bounds.Bottom;
+                }
+
+                intersections += s.MaxIntersections;
             }
 
-            this.Paths = paths;
+            this.MaxIntersections = intersections;
+            this.Length = length;
+            this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+            this.PathType = PathTypes.Mixed;
+
         }
 
         /// <summary>
@@ -105,7 +95,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The paths.
         /// </value>
-        public ImmutableArray<IPath> Paths { get; }
+        public IEnumerable<IPath> Paths => this.paths;
 
         /// <summary>
         /// Gets the bounding box of this shape.
@@ -180,10 +170,10 @@ namespace SixLabors.Shapes
         public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
             int totalAdded = 0;
-            for (int i = 0; i < this.Paths.Length; i++)
+            for (int i = 0; i < this.paths.Length; i++)
             {
                 var sliced = buffer.Slice(totalAdded);
-                int added = this.Paths[i].FindIntersections(start, end, sliced);
+                int added = this.paths[i].FindIntersections(start, end, sliced);
                 totalAdded += added;
             }
 
@@ -227,7 +217,7 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            IPath[] shapes = new IPath[this.Paths.Length];
+            IPath[] shapes = new IPath[this.paths.Length];
             int i = 0;
             foreach (IPath s in this.Paths)
             {
@@ -243,7 +233,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="IPath" /> as simple linear path.
         /// </returns>
-        public ImmutableArray<ISimplePath> Flatten()
+        public IEnumerable<ISimplePath> Flatten()
         {
             List<ISimplePath> paths = new List<ISimplePath>();
             foreach (IPath path in this.Paths)
@@ -251,7 +241,7 @@ namespace SixLabors.Shapes
                 paths.AddRange(path.Flatten());
             }
 
-            return ImmutableArray.Create(paths.ToArray());
+            return paths.ToArray();
         }
 
         /// <summary>
@@ -268,10 +258,10 @@ namespace SixLabors.Shapes
             }
             else
             {
-                IPath[] paths = new IPath[this.Paths.Length];
-                for (int i = 0; i < this.Paths.Length; i++)
+                IPath[] paths = new IPath[this.paths.Length];
+                for (int i = 0; i < this.paths.Length; i++)
                 {
-                    paths[i] = this.Paths[i].AsClosedPath();
+                    paths[i] = this.paths[i].AsClosedPath();
                 }
 
                 return new ComplexPolygon(paths);
@@ -287,11 +277,11 @@ namespace SixLabors.Shapes
         /// </returns>
         public SegmentInfo PointAlongPath(float distanceAlongPath)
         {
-            distanceAlongPath  = distanceAlongPath % this.Length;
+            distanceAlongPath = distanceAlongPath % this.Length;
 
-            foreach(IPath p in this.Paths)
+            foreach (IPath p in this.Paths)
             {
-                if(p.Length >= distanceAlongPath)
+                if (p.Length >= distanceAlongPath)
                 {
                     return p.PointAlongPath(distanceAlongPath);
                 }

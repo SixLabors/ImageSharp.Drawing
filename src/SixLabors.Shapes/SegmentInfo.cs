@@ -9,7 +9,7 @@ namespace SixLabors.Shapes
     using System.Numerics;
 
     /// <summary>
-    /// Returns meta data about the nearest point on a path from a vector
+    /// Returns metadata about the point along a path.
     /// </summary>
     public struct SegmentInfo
     {

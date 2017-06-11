@@ -113,8 +113,8 @@ namespace SixLabors.Shapes.Tests
         public void AsSimpleLinearPath()
         {
             Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
-            System.Collections.Immutable.ImmutableArray<PointF> paths = poly.Flatten()[0].Points;
-            Assert.Equal(3, paths.Length);
+            var paths = poly.Flatten().First().Points;
+            Assert.Equal(3, paths.Count);
             Assert.Equal(new PointF(0, 0), paths[0]);
             Assert.Equal(new PointF(0, 10), paths[1]);
             Assert.Equal(new PointF(5, 5), paths[2]);
@@ -147,7 +147,7 @@ namespace SixLabors.Shapes.Tests
         public void ReturnsWrapperOfSelfASOwnPath_SingleSegment()
         {
             Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
-            System.Collections.Immutable.ImmutableArray<ISimplePath> paths = poly.Flatten();
+            var paths = poly.Flatten().ToArray();
             Assert.Equal(1, paths.Length);
             Assert.Equal(poly, paths[0]);
         }
@@ -156,7 +156,7 @@ namespace SixLabors.Shapes.Tests
         public void ReturnsWrapperOfSelfASOwnPath_MultiSegment()
         {
             Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10)), new LinearLineSegment(new PointF(2, 5), new PointF(5, 5)));
-            System.Collections.Immutable.ImmutableArray<ISimplePath> paths = poly.Flatten();
+            var paths = poly.Flatten().ToArray();
             Assert.Equal(1, paths.Length);
             Assert.Equal(poly, paths[0]);
         }

@@ -9,7 +9,6 @@ namespace SixLabors.Shapes
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
     using System.Threading.Tasks;
@@ -22,8 +21,7 @@ namespace SixLabors.Shapes
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
-        private readonly ImmutableArray<PointF> points;
-        private readonly ImmutableArray<ISimplePath> flatPath;
+        private readonly PointF[] points;
         private readonly float halfLength;
         private readonly float length;
         private readonly RectangleF bounds;
@@ -52,18 +50,16 @@ namespace SixLabors.Shapes
             this.bottomRight = bottomRight;
             this.Size = new SizeF(bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
 
-            this.points = ImmutableArray.Create(new PointF[4]
+            this.points = new PointF[4]
             {
                 this.topLeft,
                 new Vector2(this.bottomRight.X, this.topLeft.Y),
                 this.bottomRight,
                 new Vector2(this.topLeft.X, this.bottomRight.Y)
-            });
+            };
 
             this.halfLength = this.Size.Width + this.Size.Height;
             this.length = this.halfLength * 2;
-            this.flatPath = ImmutableArray.Create<ISimplePath>(this);
-
             this.bounds = new RectangleF(this.Location, this.Size);
         }
 
@@ -169,7 +165,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make this up as a simple linear path.
         /// </summary>
-        ImmutableArray<PointF> ISimplePath.Points => this.points;
+        IReadOnlyList<PointF> ISimplePath.Points => this.points;
 
         /// <summary>
         /// Gets the size.
@@ -229,12 +225,10 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="count">The count.</param>
-        /// <param name="offset">The offset.</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
             int offset = 0;
             int discovered = 0;
@@ -273,7 +267,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        IPath IPath.Transform(Matrix3x2 matrix)
+        public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -286,7 +280,7 @@ namespace SixLabors.Shapes
 
 
         /// <inheritdoc /> 
-        SegmentInfo IPath.PointAlongPath(float distanceAlongPath)
+        public SegmentInfo PointAlongPath(float distanceAlongPath)
         {
             distanceAlongPath = distanceAlongPath % this.length;
 
@@ -344,7 +338,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns details about the point and its distance away from the path.
         /// </returns>
-        PointInfo IPath.Distance(PointF point)
+        public PointInfo Distance(PointF point)
         {
             Vector2 vectorPoint = point;
             // point in rectangle
@@ -444,9 +438,9 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="IPath" /> as simple linear path.
         /// </returns>
-        ImmutableArray<ISimplePath> IPath.Flatten()
+        public IEnumerable<ISimplePath> Flatten()
         {
-            return this.flatPath;
+            yield return this;
         }
 
         /// <summary>

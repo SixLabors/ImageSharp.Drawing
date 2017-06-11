@@ -6,7 +6,6 @@ namespace SixLabors.Shapes.PolygonClipper
 {
     using System;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Diagnostics;
     using System.Numerics;
     using ClipperLib;
@@ -56,7 +55,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <returns>
         /// Returns the <see cref="IPath" /> array containing the converted polygons.
         /// </returns>
-        public ImmutableArray<IPath> GenerateClippedShapes()
+        public IEnumerable<IPath> GenerateClippedShapes()
         {
             List<PolyNode> results = new List<PolyNode>();
             lock (this.syncRoot)
@@ -98,7 +97,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
             }
 
-            return ImmutableArray.Create(shapes);
+            return shapes;
         }
 
         /// <summary>
@@ -150,8 +149,9 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
-            ImmutableArray<PointF> vectors = path.Points;
-            List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Length);
+            IReadOnlyList<PointF> vectors = path.Points;
+            
+            List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Count);
             foreach (PointF v in vectors)
             {
                 points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));

@@ -61,18 +61,18 @@ namespace SixLabors.Shapes.Tests
 
             RegularPolygon poly = new RegularPolygon(Vector2.Zero, pointsCount, radius, 0);
 
-            System.Collections.Immutable.ImmutableArray<PointF> points = poly.Flatten()[0].Points;
+            var points = poly.Flatten().ToArray()[0].Points;
 
             // calcualte baselineDistance
             float baseline = Vector2.Distance(points[0], points[1]);
 
             // all points are extact the same distance away from the center
-            for (int i = 0; i < points.Length; i++)
+            for (int i = 0; i < points.Count; i++)
             {
                 int j = i - 1;
                 if (i == 0)
                 {
-                    j = points.Length - 1;
+                    j = points.Count - 1;
                 }
 
                 float actual = Vector2.Distance(points[i], points[j]);
@@ -89,7 +89,7 @@ namespace SixLabors.Shapes.Tests
             double anAngle = new Random().NextDouble() * TwoPI;
 
             RegularPolygon poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
-            System.Collections.Immutable.ImmutableArray<PointF> points = poly.Flatten()[0].Points;
+            var points = poly.Flatten().ToArray()[0].Points;
 
             IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
