@@ -4,6 +4,7 @@ using System.Numerics;
 
 using SixLabors.Fonts;
 using SixLabors.Shapes;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes.Text
 {
@@ -30,20 +31,20 @@ namespace SixLabors.Shapes.Text
             this.path = path;
         }
 
-        protected override void BeginText(Vector2 location, Fonts.Size size)
+        protected override void BeginText(RectangleF rect)
         {
-            this.yOffset = size.Height;
+            this.yOffset = rect.Height;
         }
 
-        protected override void BeginGlyph(Vector2 location, Fonts.Size size)
+        protected override void BeginGlyph(RectangleF rect)
         {
-            var point = this.path.PointAlongPath(location.X);
+            var point = this.path.PointAlongPath(rect.Left);
 
-            var targetPoint = (Vector2)point.Point + new Vector2(0, (location.Y - this.yOffset));
+            PointF targetPoint = point.Point + new PointF(0, (rect.Top - this.yOffset));
 
             // due to how matrix combining works you have to combine thins in the revers order of operation
             // this one rotates the glype then moves it.
-            var matrix = Matrix3x2.CreateTranslation(targetPoint - location) * Matrix3x2.CreateRotation(point.Angle - Pi, point.Point);
+            var matrix = Matrix3x2.CreateTranslation(targetPoint - rect.Location) * Matrix3x2.CreateRotation(point.Angle - Pi, point.Point);
             this.builder.SetTransform(matrix);
         }
     }

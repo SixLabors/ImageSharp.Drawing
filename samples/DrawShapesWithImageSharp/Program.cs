@@ -48,9 +48,9 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void DrawText(string text)
         {
-            var fam = SixLabors.Fonts.FontCollection.SystemFonts.Find("Arial");
+            var fam = SixLabors.Fonts.SystemFonts.Find("Arial");
             var font = new Font(fam, 30);
-            var style = new FontSpan(font, 72);
+            var style = new RendererOptions(font, 72);
             var glyphs = SixLabors.Shapes.TextBuilder.GenerateGlyphs(text, style);
 
             glyphs.SaveImage("Text", text + ".png");
@@ -58,9 +58,9 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void DrawText(string text, IPath path)
         {
-            var fam = SixLabors.Fonts.FontCollection.SystemFonts.Find("Arial");
+            var fam = SixLabors.Fonts.SystemFonts.Find("Arial");
             var font = new Font(fam, 30);
-            var style = new FontSpan(font, 72)
+            var style = new RendererOptions(font, 72)
             {
                 WrappingWidth = path.Length,
                 VerticalAlignment = VerticalAlignment.Top,
