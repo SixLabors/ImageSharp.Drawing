@@ -6,6 +6,7 @@ using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
+    using SixLabors.Primitives;
     using System.Buffers;
     using System.Numerics;
 
@@ -16,14 +17,14 @@ namespace SixLabors.Shapes.Tests
         {
             float[] data = new float[6];
             Polygon simplePath = new Polygon(new LinearLineSegment(
-                              new Vector2(10, 10),
-                              new Vector2(200, 150),
-                              new Vector2(50, 300)));
+                              new PointF(10, 10),
+                              new PointF(200, 150),
+                              new PointF(50, 300)));
 
             Polygon hole1 = new Polygon(new LinearLineSegment(
-                            new Vector2(65, 137),
-                            new Vector2(37, 85),
-                            new Vector2(93, 85)));
+                            new PointF(65, 137),
+                            new PointF(37, 85),
+                            new PointF(93, 85)));
 
             int intersections1 = ScanY(hole1, 137, data, 6, 0);
             Assert.Equal(2, intersections1);
@@ -37,12 +38,13 @@ namespace SixLabors.Shapes.Tests
 
         public int ScanY(IPath shape, int y, float[] buffer, int length, int offset)
         {
-            Vector2 start = new Vector2(shape.Bounds.Left - 1, y);
-            Vector2 end = new Vector2(shape.Bounds.Right + 1, y);
-            Vector2[] innerbuffer = ArrayPool<Vector2>.Shared.Rent(length);
+            PointF start = new PointF(shape.Bounds.Left - 1, y);
+            PointF end = new PointF(shape.Bounds.Right + 1, y);
+            PointF[] innerbuffer = ArrayPool<PointF>.Shared.Rent(length);
+            Span<PointF> span = new Span<PointF>(innerbuffer);
             try
             {
-                int count = shape.FindIntersections(start, end, innerbuffer, length, 0);
+                int count = shape.FindIntersections(start, end, span);
 
                 for (int i = 0; i < count; i++)
                 {
@@ -53,7 +55,7 @@ namespace SixLabors.Shapes.Tests
             }
             finally
             {
-                ArrayPool<Vector2>.Shared.Return(innerbuffer);
+                ArrayPool<PointF>.Shared.Return(innerbuffer);
             }
         }
 
@@ -66,9 +68,9 @@ namespace SixLabors.Shapes.Tests
             Polygon[] polys = paths.Select(line => {
                 string[] pl = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                Vector2[] points = pl.Select(p => p.Split('x'))
+                PointF[] points = pl.Select(p => p.Split('x'))
                             .Select(p => {
-                                return new Vector2(float.Parse(p[0]), float.Parse(p[1]));
+                                return new PointF(float.Parse(p[0]), float.Parse(p[1]));
                             })
                             .ToArray();
                 return new Polygon(new LinearLineSegment(points));
@@ -91,9 +93,9 @@ namespace SixLabors.Shapes.Tests
             Polygon[] polys = paths.Select(line => {
                 string[] pl = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                Vector2[] points = pl.Select(p => p.Split('x'))
+                PointF[] points = pl.Select(p => p.Split('x'))
                             .Select(p => {
-                                return new Vector2(float.Parse(p[0]), float.Parse(p[1]));
+                                return new PointF(float.Parse(p[0]), float.Parse(p[1]));
                             })
                             .ToArray();
                 return new Polygon(new LinearLineSegment(points));

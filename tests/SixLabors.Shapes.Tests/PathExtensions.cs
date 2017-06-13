@@ -5,6 +5,7 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Buffers;
     using System.Collections.Generic;
@@ -21,13 +22,13 @@ namespace SixLabors.Shapes
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
         /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
-        internal static IEnumerable<Vector2> FindIntersections(this InternalPath path, Vector2 start, Vector2 end)
+        internal static IEnumerable<PointF> FindIntersections(this InternalPath path, Vector2 start, Vector2 end)
         {
-            List<Vector2> results = new List<Vector2>();
-            Vector2[] buffer = ArrayPool<Vector2>.Shared.Rent(path.PointCount);
+            List<PointF> results = new List<PointF>();
+            PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.PointCount);
             try
             {
-                int hits = path.FindIntersections(start, end, buffer, path.PointCount, 0);
+                int hits = path.FindIntersections(start, end, buffer);
                 for (int i = 0; i < hits; i++)
                 {
                     results.Add(buffer[i]);
@@ -35,7 +36,7 @@ namespace SixLabors.Shapes
             }
             finally
             {
-                ArrayPool<Vector2>.Shared.Return(buffer);
+                ArrayPool<PointF>.Shared.Return(buffer);
             }
 
             return results;

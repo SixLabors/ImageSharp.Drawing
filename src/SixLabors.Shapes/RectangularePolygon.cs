@@ -1,14 +1,14 @@
-﻿// <copyright file="Rectangle.cs" company="Scott Williams">
+﻿// <copyright file="RectangularePolygon.cs" company="Scott Williams">
 // Copyright (c) Scott Williams and contributors.
 // Licensed under the Apache License, Version 2.0.
 // </copyright>
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
     using System.Threading.Tasks;
@@ -17,59 +17,68 @@ namespace SixLabors.Shapes
     /// A way of optimizing drawing rectangles.
     /// </summary>
     /// <seealso cref="SixLabors.Shapes.IPath" />
-    public class Rectangle : IPath, ISimplePath
+    public class RectangularePolygon : IPath, ISimplePath
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
-        private readonly ImmutableArray<Vector2> points;
-        private readonly ImmutableArray<ISimplePath> flatPath;
+        private readonly PointF[] points;
         private readonly float halfLength;
         private readonly float length;
+        private readonly RectangleF bounds;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Rectangle" /> class.
+        /// Initializes a new instance of the <see cref="RectangularePolygon" /> class.
         /// </summary>
         /// <param name="x">The x.</param>
         /// <param name="y">The y.</param>
         /// <param name="width">The width.</param>
         /// <param name="height">The height.</param>
-        public Rectangle(float x, float y, float width, float height)
-            : this(new Vector2(x, y), new Size(width, height))
+        public RectangularePolygon(float x, float y, float width, float height)
+            : this(new PointF(x, y), new SizeF(width, height))
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Rectangle" /> class.
+        /// Initializes a new instance of the <see cref="RectangularePolygon" /> class.
         /// </summary>
         /// <param name="topLeft">The top left.</param>
         /// <param name="bottomRight">The bottom right.</param>
-        public Rectangle(Vector2 topLeft, Vector2 bottomRight)
+        public RectangularePolygon(PointF topLeft, PointF bottomRight)
         {
             this.Location = topLeft;
             this.topLeft = topLeft;
             this.bottomRight = bottomRight;
-            this.Size = new Size(bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
+            this.Size = new SizeF(bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
 
-            this.points = ImmutableArray.Create(new Vector2[4]
+            this.points = new PointF[4]
             {
                 this.topLeft,
                 new Vector2(this.bottomRight.X, this.topLeft.Y),
                 this.bottomRight,
                 new Vector2(this.topLeft.X, this.bottomRight.Y)
-            });
+            };
 
             this.halfLength = this.Size.Width + this.Size.Height;
             this.length = this.halfLength * 2;
-            this.flatPath = ImmutableArray.Create<ISimplePath>(this);
+            this.bounds = new RectangleF(this.Location, this.Size);
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Rectangle"/> class.
+        /// Initializes a new instance of the <see cref="RectangularePolygon"/> class.
         /// </summary>
         /// <param name="location">The location.</param>
         /// <param name="size">The size.</param>
-        public Rectangle(Vector2 location, Size size)
-            : this(location, location + size.ToVector2())
+        public RectangularePolygon(PointF location, SizeF size)
+            : this(location, location + size)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RectangularePolygon"/> class.
+        /// </summary>
+        /// <param name="rectangle">The rectangle.</param>
+        public RectangularePolygon(RectangleF rectangle)
+            : this(rectangle.Location, rectangle.Location + rectangle.Size)
         {
         }
 
@@ -79,7 +88,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The location.
         /// </value>
-        public Vector2 Location { get; }
+        public PointF Location { get; }
 
         /// <summary>
         /// Gets the left.
@@ -135,7 +144,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The bounds.
         /// </value>
-        Rectangle IPath.Bounds => this;
+        RectangleF IPath.Bounds => this.bounds;
 
         /// <inheritdoc />
         float IPath.Length => this.length;
@@ -156,7 +165,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make this up as a simple linear path.
         /// </summary>
-        ImmutableArray<Vector2> ISimplePath.Points => this.points;
+        IReadOnlyList<PointF> ISimplePath.Points => this.points;
 
         /// <summary>
         /// Gets the size.
@@ -164,7 +173,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The size.
         /// </value>
-        public Size Size { get; private set; }
+        public SizeF Size { get; private set; }
 
         /// <summary>
         /// Gets the size.
@@ -193,42 +202,41 @@ namespace SixLabors.Shapes
         /// <value>
         /// The center.
         /// </value>
-        public Vector2 Center => (this.topLeft + this.bottomRight) / 2;
+        public PointF Center => (this.topLeft + this.bottomRight) / 2;
 
         /// <summary>
         /// Determines if the specified point is contained within the rectangular region defined by
-        /// this <see cref="Rectangle" />.
+        /// this <see cref="RectangularePolygon" />.
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>
         /// The <see cref="bool" />
         /// </returns>
-        public bool Contains(Vector2 point)
+        public bool Contains(PointF point)
         {
-            return Vector2.Clamp(point, this.topLeft, this.bottomRight) == point;
+            return Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
         }
 
         /// <summary>
         /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the edges of the <see cref="Rectangle"/>
+        /// populate a buffer for all points on the edges of the <see cref="RectangularePolygon"/>
         /// that the line intersects.
         /// </summary>
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="count">The count.</param>
-        /// <param name="offset">The offset.</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        int IPath.FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
+            int offset = 0;
             int discovered = 0;
             Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
             Vector2 endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
 
             // start doesn't change when its inside the shape thus not crossing
-            if (startPoint != start)
+            if (startPoint != (Vector2)start)
             {
                 if (startPoint == Vector2.Clamp(startPoint, start, end))
                 {
@@ -239,7 +247,7 @@ namespace SixLabors.Shapes
             }
 
             // end didn't change it must not intercept with an edge
-            if (endPoint != end)
+            if (endPoint != (Vector2)end)
             {
                 if (endPoint == Vector2.Clamp(endPoint, start, end))
                 {
@@ -259,7 +267,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// A new shape with the matrix applied to it.
         /// </returns>
-        IPath IPath.Transform(Matrix3x2 matrix)
+        public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
@@ -272,7 +280,7 @@ namespace SixLabors.Shapes
 
 
         /// <inheritdoc /> 
-        SegmentInfo IPath.PointAlongPath(float distanceAlongPath)
+        public SegmentInfo PointAlongPath(float distanceAlongPath)
         {
             distanceAlongPath = distanceAlongPath % this.length;
 
@@ -330,12 +338,13 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns details about the point and its distance away from the path.
         /// </returns>
-        PointInfo IPath.Distance(Vector2 point)
+        public PointInfo Distance(PointF point)
         {
+            Vector2 vectorPoint = point;
             // point in rectangle
             // if after its clamped by the extreams its still the same then it must be inside :)
             Vector2 clamped = Vector2.Clamp(point, this.topLeft, this.bottomRight);
-            bool isInside = clamped == point;
+            bool isInside = clamped == vectorPoint;
 
             float distanceFromEdge = float.MaxValue;
             float distanceAlongEdge = 0f;
@@ -343,8 +352,8 @@ namespace SixLabors.Shapes
             if (isInside)
             {
                 // get the absolute distances from the extreams
-                Vector2 topLeftDist = Vector2.Abs(point - this.topLeft);
-                Vector2 bottomRightDist = Vector2.Abs(point - this.bottomRight);
+                Vector2 topLeftDist = Vector2.Abs(vectorPoint - this.topLeft);
+                Vector2 bottomRightDist = Vector2.Abs(vectorPoint - this.bottomRight);
 
                 // get the min components
                 Vector2 minDists = Vector2.Min(topLeftDist, bottomRightDist);
@@ -385,7 +394,7 @@ namespace SixLabors.Shapes
             else
             {
                 // clamped is the point on the path thats closest no matter what
-                distanceFromEdge = (clamped - point).Length();
+                distanceFromEdge = (clamped - vectorPoint).Length();
 
                 // we need to figure out whats the cloests edge now and thus what distance/poitn is closest
                 if (this.topLeft.X == clamped.X)
@@ -429,9 +438,9 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="IPath" /> as simple linear path.
         /// </returns>
-        ImmutableArray<ISimplePath> IPath.Flatten()
+        public IEnumerable<ISimplePath> Flatten()
         {
-            return this.flatPath;
+            yield return this;
         }
 
         /// <summary>

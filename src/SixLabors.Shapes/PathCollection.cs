@@ -5,10 +5,10 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -18,14 +18,16 @@ namespace SixLabors.Shapes
     /// <seealso cref="IPath" />
     public class PathCollection : IPathCollection
     {
-        public ImmutableArray<IPath> paths;
+        public IPath[] paths;
 
-        internal PathCollection(ImmutableArray<IPath> paths)
+        public PathCollection(IEnumerable<IPath> paths)
         {
-            this.paths = paths;
-            if (paths.Length == 0)
+            Guard.NotNull(paths, nameof(paths));
+
+            this.paths = paths.ToArray();
+            if (this.paths.Length == 0)
             {
-                this.Bounds = new Rectangle(0, 0, 0, 0);
+                this.Bounds = new RectangleF(0, 0, 0, 0);
             }
             else
             {
@@ -36,22 +38,17 @@ namespace SixLabors.Shapes
                 float minY = paths.Min(x => x.Bounds.Top);
                 float maxY = paths.Max(x => x.Bounds.Bottom);
 
-                this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
+                this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
         }
-
-        public PathCollection(IEnumerable<IPath> paths)
-            : this(paths.ToImmutableArray())
-        {
-        }
-
+        
         public PathCollection(params IPath[] paths)
-            : this(paths.ToImmutableArray())
+            : this((IEnumerable<IPath>)paths)
         {
         }
 
         /// <inheritdoc />
-        public Rectangle Bounds { get; }
+        public RectangleF Bounds { get; }
 
         /// <inheritdoc />
         public IEnumerator<IPath> GetEnumerator() => ((IEnumerable<IPath>)this.paths).GetEnumerator();

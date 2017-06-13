@@ -5,17 +5,18 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System.Numerics;
 
     /// <summary>
-    /// Returns meta data about the nearest point on a path from a vector
+    /// Returns metadata about the point along a path.
     /// </summary>
     public struct SegmentInfo
     {
         /// <summary>
         /// The point on the path
         /// </summary>
-        public Vector2 Point;
+        public PointF Point;
 
         /// <summary>
         /// The angle of the segment.

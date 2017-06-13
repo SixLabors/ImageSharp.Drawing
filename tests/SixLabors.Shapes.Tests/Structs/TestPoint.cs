@@ -6,6 +6,7 @@ using Xunit.Abstractions;
 
 namespace SixLabors.Shapes.Tests
 {
+    using SixLabors.Primitives;
     using System.Numerics;
 
     public class TestPoint : IXunitSerializable
@@ -38,11 +39,11 @@ namespace SixLabors.Shapes.Tests
             return $"({X}, {Y})";
         }
 
-        public static implicit operator Vector2(TestPoint p)
+        public static implicit operator PointF(TestPoint p)
         {
             return new Vector2(p.X, p.Y);
         }
-        public static implicit operator TestPoint(Vector2 p)
+        public static implicit operator TestPoint(PointF p)
         {
             return new TestPoint(p.X, p.Y);
         }

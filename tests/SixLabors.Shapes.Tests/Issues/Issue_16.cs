@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SixLabors.Primitives;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -16,9 +17,9 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void IndexOutoufRangeException()
         {
-            InternalPath p = new InternalPath(new[] { new Vector2(0, 0), new Vector2(0.000000001f, 0), new Vector2(0, 0.000000001f) }, true);
+            InternalPath p = new InternalPath(new PointF[] { new Vector2(0, 0), new Vector2(0.000000001f, 0), new Vector2(0, 0.000000001f) }, true);
 
-            IEnumerable<Vector2> inter = p.FindIntersections(Vector2.One, Vector2.Zero);
+            IEnumerable<PointF> inter = p.FindIntersections(Vector2.One, Vector2.Zero);
 
             // if simplified to single point then we should never have an intersection
             Assert.Equal(0, inter.Count());

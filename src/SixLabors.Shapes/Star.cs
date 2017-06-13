@@ -5,10 +5,10 @@
 
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -25,7 +25,7 @@ namespace SixLabors.Shapes
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
-        public Star(Vector2 location, int prongs, float innerRadii, float outerRadii, float angle)
+        public Star(PointF location, int prongs, float innerRadii, float outerRadii, float angle)
             : base(CreateSegment(location, innerRadii, outerRadii, prongs, angle))
         {
         }
@@ -37,7 +37,7 @@ namespace SixLabors.Shapes
         /// <param name="prongs">The number of verticies the <see cref="Star" /> should have.</param>
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
-        public Star(Vector2 location, int prongs, float innerRadii, float outerRadii)
+        public Star(PointF location, int prongs, float innerRadii, float outerRadii)
             : this(location, prongs, innerRadii, outerRadii, 0)
         {
         }
@@ -52,7 +52,7 @@ namespace SixLabors.Shapes
         /// <param name="outerRadii">The outer radii.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
         public Star(float x, float y, int prongs, float innerRadii, float outerRadii, float angle)
-            : this(new Vector2(x, y), prongs, innerRadii, outerRadii, angle)
+            : this(new PointF(x, y), prongs, innerRadii, outerRadii, angle)
         {
         }
 
@@ -65,7 +65,7 @@ namespace SixLabors.Shapes
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
         public Star(float x, float y, int prongs, float innerRadii, float outerRadii)
-            : this(new Vector2(x, y), prongs, innerRadii, outerRadii)
+            : this(new PointF(x, y), prongs, innerRadii, outerRadii)
         {
         }
 
@@ -81,7 +81,7 @@ namespace SixLabors.Shapes
             int verticies = prongs * 2;
             float anglePerSegemnts = (float)((2 * Math.PI) / verticies);
             float current = angle;
-            Vector2[] points = new Vector2[verticies];
+            PointF[] points = new PointF[verticies];
             Vector2 distance = distanceVectorInner;
             for (int i = 0; i < verticies; i++)
             {

@@ -1,7 +1,7 @@
 ﻿using ClipperLib;
+using SixLabors.Primitives;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -42,7 +42,7 @@ namespace SixLabors.Shapes
                 return path.GenerateOutline(width);
             }
 
-            ImmutableArray<ISimplePath> paths = path.Flatten();
+            IEnumerable<ISimplePath> paths = path.Flatten();
 
             ClipperOffset offset = new ClipperOffset();
 
@@ -53,7 +53,7 @@ namespace SixLabors.Shapes
                 float targetLength = pattern[0] * width;
                 int patternPos = 0;
                 // create a new list of points representing the new outline
-                int pCount = p.Points.Length;
+                int pCount = p.Points.Count;
                 if (!p.IsClosed)
                 {
                     pCount--;
@@ -63,7 +63,7 @@ namespace SixLabors.Shapes
                 
                 while (i < pCount)
                 {
-                    int next = (i + 1) % p.Points.Length;
+                    int next = (i + 1) % p.Points.Count;
                     Vector2 targetPoint = p.Points[next];
                     float distToNext = Vector2.Distance(currentPoint, targetPoint);
                     if (distToNext > targetLength)
@@ -135,11 +135,11 @@ namespace SixLabors.Shapes
             ClipperOffset offset = new ClipperLib.ClipperOffset();
 
             //pattern can be applied to the path by cutting it into segments
-            System.Collections.Immutable.ImmutableArray<ISimplePath> paths = path.Flatten();
+            IEnumerable<ISimplePath> paths = path.Flatten();
             foreach (ISimplePath p in paths)
             {
-                System.Collections.Immutable.ImmutableArray<Vector2> vectors = p.Points;
-                List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Length);
+                IReadOnlyList<PointF> vectors = p.Points;
+                List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Count);
                 foreach (Vector2 v in vectors)
                 {
                     points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
@@ -161,11 +161,16 @@ namespace SixLabors.Shapes
             List<Polygon> polygons = new List<Polygon>();
             foreach (List<IntPoint> pt in tree)
             {
-                Vector2[] points = pt.Select(p => new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
+                PointF[] points = pt.Select(p => new PointF(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
                 polygons.Add(new Polygon(new LinearLineSegment(points)));
             }
 
             return new ComplexPolygon(polygons.ToArray());
+        }
+
+        private static IntPoint ToPoint(this PointF vector)
+        {
+            return new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
         }
 
         private static IntPoint ToPoint(this Vector2 vector)

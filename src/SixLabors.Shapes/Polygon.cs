@@ -8,7 +8,6 @@ namespace SixLabors.Shapes
     using System;
     using System.Collections;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
 
@@ -22,7 +21,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="segments">The segments.</param>
         public Polygon(params ILineSegment[] segments)
-            : base(ImmutableArray.Create(segments))
+            : base((IEnumerable<ILineSegment>)segments)
         {
         }
 
@@ -30,7 +29,7 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="Polygon"/> class.
         /// </summary>
         /// <param name="segments">The segments.</param>
-        public Polygon(ImmutableArray<ILineSegment> segments)
+        public Polygon(IEnumerable<ILineSegment> segments)
             : base(segments)
         {
         }
@@ -72,7 +71,7 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            ILineSegment[] segments = new ILineSegment[this.LineSegments.Length];
+            ILineSegment[] segments = new ILineSegment[this.LineSegments.Count];
             int i = 0;
             foreach (ILineSegment s in this.LineSegments)
             {

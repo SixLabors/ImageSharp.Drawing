@@ -4,10 +4,10 @@
 // </copyright>
 namespace SixLabors.Shapes
 {
+    using SixLabors.Primitives;
     using System;
     using System.Buffers;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Linq;
     using System.Numerics;
     using System.Runtime.CompilerServices;
@@ -59,7 +59,7 @@ namespace SixLabors.Shapes
         /// <param name="segment">The segment.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(ILineSegment segment, bool isClosedPath)
-            : this(segment?.Flatten() ?? Enumerable.Empty<Vector2>(), isClosedPath)
+            : this(segment?.Flatten() ?? Enumerable.Empty<PointF>(), isClosedPath)
         {
         }
 
@@ -68,7 +68,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="points">The points.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IEnumerable<Vector2> points, bool isClosedPath)
+        internal InternalPath(IEnumerable<PointF> points, bool isClosedPath)
             : this(Simplify(points, isClosedPath), isClosedPath)
         { }
 
@@ -87,7 +87,7 @@ namespace SixLabors.Shapes
             float minY = this.points.Min(x => x.Point.Y);
             float maxY = this.points.Max(x => x.Point.Y);
 
-            this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
+            this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             this.Length = this.points.Sum(x => x.Length);
         }
 
@@ -118,7 +118,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The bounds.
         /// </value>
-        public Rectangle Bounds
+        public RectangleF Bounds
         {
             get;
         }
@@ -145,14 +145,14 @@ namespace SixLabors.Shapes
         /// <value>
         /// The points.
         /// </value>
-        internal ImmutableArray<Vector2> Points() => this.points.Select(X => X.Point).ToImmutableArray();
+        internal IReadOnlyList<PointF> Points() => this.points.Select(X => (PointF)X.Point).ToArray();
 
         /// <summary>
         /// Calculates the distance from the path.
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>Returns the distance from the path</returns>
-        public PointInfo DistanceFromPath(Vector2 point)
+        public PointInfo DistanceFromPath(PointF point)
         {
             PointInfoInternal internalInfo = default(PointInfoInternal);
             internalInfo.DistanceSquared = float.MaxValue; // Set it to max so that CalculateShorterDistance can reduce it back down
@@ -233,9 +233,13 @@ namespace SixLabors.Shapes
         /// <param name="count">The count.</param>
         /// <param name="offset">The offset.</param>
         /// <returns>number of intersections hit</returns>
-        public int FindIntersections(Vector2 start, Vector2 end, Vector2[] buffer, int count, int offset)
+        public int FindIntersections(Vector2 start, Vector2 end, Span<PointF> buffer)
         {
-            if(this.points.Length < 2)
+            // TODO remove the need for these 2 vars if possible
+            int offset = 0;
+            int count = buffer.Length;
+
+            if (this.points.Length < 2)
             {
                 return 0;
             }
@@ -420,7 +424,7 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>Returns true if the point is inside the closed path.</returns>
-        public bool PointInPolygon(Vector2 point)
+        public bool PointInPolygon(PointF point)
         {
             // You can only be inside a path if its "closed"
             if (!this.closedPath)
@@ -434,10 +438,11 @@ namespace SixLabors.Shapes
             }
 
             // if it hit any points then class it as inside
-            Vector2[] buffer = ArrayPool<Vector2>.Shared.Rent(this.points.Length);
+            PointF[] buffer = ArrayPool<PointF>.Shared.Rent(this.points.Length);
             try
             {
-                int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, this.points.Length, 0);
+                var bufferSpan = new Span<PointF>(buffer);
+                int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), bufferSpan);
                 if (intersection % 2 == 1)
                 {
                     return true;
@@ -454,7 +459,7 @@ namespace SixLabors.Shapes
             }
             finally
             {
-                ArrayPool<Vector2>.Shared.Return(buffer);
+                ArrayPool<PointF>.Shared.Return(buffer);
             }
 
             return false;
@@ -556,7 +561,7 @@ namespace SixLabors.Shapes
         /// </returns>
         private static PointData[] Simplify(IEnumerable<ILineSegment> segments, bool isClosed)
         {
-            List<Vector2> simplified = new List<Vector2>();
+            List<PointF> simplified = new List<PointF>();
             foreach (ILineSegment seg in segments)
             {
                 simplified.AddRange(seg.Flatten());
@@ -565,9 +570,9 @@ namespace SixLabors.Shapes
             return Simplify(simplified, isClosed);
         }
 
-        private static PointData[] Simplify(IEnumerable<Vector2> vectors, bool isClosed)
+        private static PointData[] Simplify(IEnumerable<PointF> vectors, bool isClosed)
         {
-            Vector2[] points = vectors.ToArray();
+            PointF[] points = vectors.ToArray();
             List<PointData> results = new List<PointData>();
 
             int polyCorners = points.Length;

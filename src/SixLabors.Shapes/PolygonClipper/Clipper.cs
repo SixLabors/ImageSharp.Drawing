@@ -6,10 +6,10 @@ namespace SixLabors.Shapes.PolygonClipper
 {
     using System;
     using System.Collections.Generic;
-    using System.Collections.Immutable;
     using System.Diagnostics;
     using System.Numerics;
     using ClipperLib;
+    using SixLabors.Primitives;
 
     /// <summary>
     /// Library to clip polygons.
@@ -55,7 +55,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <returns>
         /// Returns the <see cref="IPath" /> array containing the converted polygons.
         /// </returns>
-        public ImmutableArray<IPath> GenerateClippedShapes()
+        public IEnumerable<IPath> GenerateClippedShapes()
         {
             List<PolyNode> results = new List<PolyNode>();
             lock (this.syncRoot)
@@ -75,7 +75,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
                 else
                 {
-                    Vector2[] points = new Vector2[results[i].Contour.Count];
+                    PointF[] points = new PointF[results[i].Contour.Count];
                     for (int j = 0; j < results[i].Contour.Count; j++)
                     {
                         IntPoint p = results[i].Contour[j];
@@ -97,7 +97,7 @@ namespace SixLabors.Shapes.PolygonClipper
                 }
             }
 
-            return ImmutableArray.Create(shapes);
+            return shapes;
         }
 
         /// <summary>
@@ -149,9 +149,10 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
-            ImmutableArray<Vector2> vectors = path.Points;
-            List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Length);
-            foreach (Vector2 v in vectors)
+            IReadOnlyList<PointF> vectors = path.Points;
+            
+            List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Count);
+            foreach (PointF v in vectors)
             {
                 points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
             }
