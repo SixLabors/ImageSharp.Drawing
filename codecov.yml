@@ -1,5 +1,4 @@
 codecov:
-  branch: develop
   notify:
     require_ci_to_pass: true
 comment: off
