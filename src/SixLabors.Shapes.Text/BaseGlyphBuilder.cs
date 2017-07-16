@@ -46,15 +46,11 @@ namespace SixLabors.Shapes.Text
         {
         }
 
-        /// <summary>
-        /// Begins the glyph.
-        /// </summary>
-        /// <param name="location">The offset that the glyph will be rendered at.</param>
-        /// <param name="size">The size.</param>
-        void IGlyphRenderer.BeginGlyph(RectangleF rect)
+        bool IGlyphRenderer.BeginGlyph(RectangleF rect, int hashCode)
         {
             this.builder.Clear();
             BeginGlyph(rect);
+            return true;
         }
 
         protected virtual void BeginGlyph(RectangleF rect)

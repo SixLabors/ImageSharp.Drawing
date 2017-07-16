@@ -3,7 +3,7 @@
 
 **SixLabors.Shapes** is a new cross-platform 2D polygon manipulation AP.
 
-[![Build status](https://ci.appveyor.com/api/projects/status/nvsaxcjb80cgp898/branch/master?svg=true)](https://ci.appveyor.com/project/tocsoft/shaper2d/branch/master)
+[![Build status](https://ci.appveyor.com/api/projects/status/3tqmmb43c7trq43e/branch/master?svg=true)](https://ci.appveyor.com/project/six-labors/shapes/branch/master)
 [![codecov](https://codecov.io/gh/SixLabors/Shapes/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/Shapes)
 [![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/SixLabors/Shapes/master/LICENSE.txt)
 
