@@ -225,12 +225,12 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
+        /// <param name="offset"></param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
-            int offset = 0;
             int discovered = 0;
             Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
             Vector2 endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);

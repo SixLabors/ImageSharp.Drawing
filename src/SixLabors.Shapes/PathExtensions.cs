@@ -168,8 +168,7 @@ namespace SixLabors.Shapes
             PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.MaxIntersections);
             try
             {
-                var span = new Span<PointF>(buffer);
-                int hits = path.FindIntersections(start, end, span);
+                int hits = path.FindIntersections(start, end, buffer, 0);
                 PointF[] results = new PointF[hits];
                 for (int i = 0; i < hits; i++)
                 {

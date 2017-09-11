@@ -18,7 +18,7 @@ namespace SixLabors.Shapes
     public class Path : IPath, ISimplePath
     {
         private InternalPath _innerPath;
-        private InternalPath innerPath => _innerPath ?? (_innerPath = new InternalPath(lineSegments, IsClosed));
+        private InternalPath innerPath => this._innerPath ?? (this._innerPath = new InternalPath(this.lineSegments, this.IsClosed));
 
         private readonly ILineSegment[] lineSegments;
 
@@ -162,12 +162,13 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
+        /// <param name="offset"></param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
-            return this.innerPath.FindIntersections(start, end, buffer);
+            return this.innerPath.FindIntersections(start, end, buffer, offset);
         }
 
         /// <summary>

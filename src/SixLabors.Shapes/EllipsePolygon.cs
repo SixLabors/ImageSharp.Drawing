@@ -154,19 +154,10 @@ namespace SixLabors.Shapes
             yield return this;
         }
 
-        /// <summary>
-        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+     
+        int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
-            return this.innerPath.FindIntersections(start, end, buffer);
+            return this.innerPath.FindIntersections(start, end, buffer, offset);
         }
 
         /// <summary>

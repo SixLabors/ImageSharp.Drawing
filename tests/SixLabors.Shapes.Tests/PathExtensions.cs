@@ -28,7 +28,7 @@ namespace SixLabors.Shapes
             PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.PointCount);
             try
             {
-                int hits = path.FindIntersections(start, end, buffer);
+                int hits = path.FindIntersections(start, end, buffer, 0);
                 for (int i = 0; i < hits; i++)
                 {
                     results.Add(buffer[i]);

@@ -126,7 +126,7 @@ namespace SixLabors.Shapes.Tests
             Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0)));
             PointF[] buffer = new PointF[2];
 
-            int hits = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15), buffer);
+            int hits = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15), buffer, 0);
             Assert.Equal(2, hits);
             Assert.Contains(new PointF(5, 10), buffer);
             Assert.Contains(new PointF(5, 0), buffer);

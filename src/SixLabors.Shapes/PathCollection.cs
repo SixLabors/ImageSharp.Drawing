@@ -56,8 +56,8 @@ namespace SixLabors.Shapes
         /// <inheritdoc />
         public IPathCollection Transform(Matrix3x2 matrix)
         {
-            var result = new IPath[this.paths.Length];
-            for(var i = 0; i < this.paths.Length && i < result.Length; i++)
+            IPath[] result = new IPath[this.paths.Length];
+            for(int i = 0; i < this.paths.Length && i < result.Length; i++)
             {
                 result[i] = this.paths[i].Transform(matrix);
             }

@@ -164,16 +164,17 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
+        /// <param name="offset"></param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
             int totalAdded = 0;
             for (int i = 0; i < this.paths.Length; i++)
             {
-                var sliced = buffer.Slice(totalAdded);
-                int added = this.paths[i].FindIntersections(start, end, sliced);
+                offset += totalAdded;
+                int added = this.paths[i].FindIntersections(start, end, buffer, offset);
                 totalAdded += added;
             }
 

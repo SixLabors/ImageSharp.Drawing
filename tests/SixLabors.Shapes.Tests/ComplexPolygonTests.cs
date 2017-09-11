@@ -41,10 +41,9 @@ namespace SixLabors.Shapes.Tests
             PointF start = new PointF(shape.Bounds.Left - 1, y);
             PointF end = new PointF(shape.Bounds.Right + 1, y);
             PointF[] innerbuffer = ArrayPool<PointF>.Shared.Rent(length);
-            Span<PointF> span = new Span<PointF>(innerbuffer);
             try
             {
-                int count = shape.FindIntersections(start, end, span);
+                int count = shape.FindIntersections(start, end, innerbuffer, 0);
 
                 for (int i = 0; i < count; i++)
                 {

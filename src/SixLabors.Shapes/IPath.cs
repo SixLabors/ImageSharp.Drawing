@@ -65,10 +65,11 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
+        /// <param name="offset">The offset within the buffer to start.</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
-        int FindIntersections(PointF start, PointF end, System.Span<PointF> buffer);
+        int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset);
 
         /// <summary>
         /// Determines whether the <see cref="IPath"/> contains the specified point
