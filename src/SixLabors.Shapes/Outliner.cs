@@ -148,7 +148,7 @@ namespace SixLabors.Shapes
                 EndType type = p.IsClosed ? EndType.etClosedLine : EndType.etOpenButt;
 
 
-                offset.AddPath(points, JoinType.jtMiter, type);
+                offset.AddPath(points, JoinType.jtSquare, type);
             }
 
             return ExecuteOutliner(width, offset);

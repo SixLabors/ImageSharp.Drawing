@@ -173,8 +173,7 @@ namespace SixLabors.Shapes
             int totalAdded = 0;
             for (int i = 0; i < this.paths.Length; i++)
             {
-                offset += totalAdded;
-                int added = this.paths[i].FindIntersections(start, end, buffer, offset);
+                int added = this.paths[i].FindIntersections(start, end, buffer, totalAdded + offset);
                 totalAdded += added;
             }
 
