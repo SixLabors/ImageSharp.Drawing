@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFramework>netcoreapp1.1</TargetFramework>
     <DebugType>portable</DebugType>
     <AssemblyName>DrawShapesWithImageSharp</AssemblyName>
     <OutputType>Exe</OutputType>
@@ -15,8 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ImageSharp.Drawing" Version="1.0.0-alpha9-00134" />
-    <PackageReference Include="ImageSharp" Version="1.0.0-alpha9-00139" />
+    <PackageReference Include="ImageSharp.Drawing" Version="1.0.0-alpha9-00189" />
+    <PackageReference Include="ImageSharp" Version="1.0.0-alpha9-00194" />
+    <PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
   </ItemGroup>
 
 </Project>
