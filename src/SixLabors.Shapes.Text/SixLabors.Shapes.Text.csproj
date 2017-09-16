@@ -34,7 +34,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0001" />
+    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0002" />
   </ItemGroup>
 
   <ItemGroup>
