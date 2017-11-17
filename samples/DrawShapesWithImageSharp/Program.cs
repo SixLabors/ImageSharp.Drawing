@@ -1,4 +1,4 @@
-﻿using ImageSharp;
+﻿using SixLabors.ImageSharp;
 using System;
 using System.IO;
 
@@ -206,12 +206,12 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             using (var img = new Image<Rgba32>(width, height))
             {
-                img.Fill(Rgba32.DarkBlue);
+                img.Mutate(i => i.Fill(Rgba32.DarkBlue));
 
                 foreach (var s in shape)
                 {
                     // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
-                    img.Fill(Rgba32.HotPink, s, new ImageSharp.GraphicsOptions(true));
+                    img.Mutate(i => i.Fill(Rgba32.HotPink, s, new GraphicsOptions(true)));
                 }
                 // img.Draw(Color.LawnGreen, 1, new ShapePath(shape));
 
@@ -232,13 +232,13 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             using (var img = new Image<Rgba32>(width, height))
             {
-                img.Fill(Rgba32.DarkBlue);
+                img.Mutate(i => i.Fill(Rgba32.DarkBlue));
 
                 // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
                 foreach (var s in shape)
                 {
                     // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
-                    img.Fill(Rgba32.HotPink, s, new ImageSharp.GraphicsOptions(true));
+                    img.Mutate(i => i.Fill(Rgba32.HotPink, s, new GraphicsOptions(true)));
                 }
 
                 // img.Draw(Color.LawnGreen, 1, new ShapePath(shape));

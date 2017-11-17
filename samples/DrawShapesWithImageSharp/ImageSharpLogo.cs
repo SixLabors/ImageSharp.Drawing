@@ -1,9 +1,7 @@
-﻿using ImageSharp;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
-using System.Threading.Tasks;
+using SixLabors.ImageSharp;
 
 namespace SixLabors.Shapes.DrawShapesWithImageSharp
 {
@@ -14,7 +12,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             // the point are based on a 1206x1206 shape so size requires scaling from there
 
             float scalingFactor = size / 1206;
-            
+
             var center = new Vector2(603);
 
             // segment whoes cetner of rotation should be 
@@ -49,16 +47,16 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             var dimensions = (int)Math.Ceiling(size);
             using (var img = new Image<Rgba32>(dimensions, dimensions))
             {
-                img.Fill(Rgba32.Black);
-                img.Fill(Rgba32.FromHex("e1e1e1ff"), new SixLabors.Shapes.EllipsePolygon(center, 600f).Transform(scaler));
-                img.Fill(Rgba32.White, new SixLabors.Shapes.EllipsePolygon(center, 600f - 60).Transform(scaler));
+                img.Mutate(i => i.Fill(Rgba32.Black));
+                img.Mutate(i => i.Fill(Rgba32.FromHex("e1e1e1ff"), new EllipsePolygon(center, 600f).Transform(scaler)));
+                img.Mutate(i => i.Fill(Rgba32.White, new EllipsePolygon(center, 600f - 60).Transform(scaler)));
 
-                for (var i = 0; i < 6; i++)
+                for (var s = 0; s < 6; s++)
                 {
-                    img.Fill(colors[i], segments[i].Transform(scaler));
+                    img.Mutate(i => i.Fill(colors[s], segments[s].Transform(scaler)));
                 }
 
-                img.Fill(new Rgba32(0, 0, 0, 170), new ComplexPolygon(new SixLabors.Shapes.EllipsePolygon(center, 161f), new SixLabors.Shapes.EllipsePolygon(center, 61f)).Transform(scaler));
+                img.Mutate(i => i.Fill(new Rgba32(0, 0, 0, 170), new ComplexPolygon(new EllipsePolygon(center, 161f), new EllipsePolygon(center, 61f)).Transform(scaler)));
 
                 var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 
