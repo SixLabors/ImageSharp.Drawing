@@ -5,8 +5,8 @@
     <AssemblyTitle>SixLabors.Shapes.Text</AssemblyTitle>
     <VersionPrefix Condition="$(packageversion) != ''">$(packageversion)</VersionPrefix>
     <VersionPrefix Condition="$(packageversion) == ''">0.1.0-alpha1</VersionPrefix>
-    <Authors>Scott Williams and contributors</Authors>
-    <TargetFramework>netstandard1.1</TargetFramework>
+    <Authors>Six Labors and contributors</Authors>
+    <TargetFrameworks>netstandard1.1;netstandard2.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyName>SixLabors.Shapes.Text</AssemblyName>
@@ -34,7 +34,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0002" />
+    <!--TODO: Add StyleCop; No time just now-->
+    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0003" />
   </ItemGroup>
 
   <ItemGroup>

@@ -18,6 +18,7 @@ namespace SixLabors.Shapes.Text
 
         private float yOffset = 0;
 
+        // TODO: Change to MathF on next release. AssemblyInfo.cs in Core did not list this project
         const float Pi = (float)Math.PI;
         const float HalfPi = Pi / 2f;
 

@@ -3,12 +3,12 @@
   <PropertyGroup>
     <Description>Polygon manipulation/merging and interrogation library. 
 
-Its a fully manged netstandard library so should work everywhere.</Description>
+It's a fully managed netstandard library so should work everywhere.</Description>
     <AssemblyTitle>SixLabors.Shapes</AssemblyTitle>
     <VersionPrefix Condition="$(packageversion) != ''">$(packageversion)</VersionPrefix>
     <VersionPrefix Condition="$(packageversion) == ''">0.1.0-alpha1</VersionPrefix>
-    <Authors>Scott Williams and contributors</Authors>
-    <TargetFramework>netstandard1.1</TargetFramework>
+    <Authors>Six Labors and contributors</Authors>
+    <TargetFrameworks>netstandard1.1;netstandard2.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <AssemblyName>SixLabors.Shapes</AssemblyName>
@@ -35,8 +35,8 @@ Its a fully manged netstandard library so should work everywhere.</Description>
     <Compile Include="..\Shared\*.cs" Exclude="bin\**;obj\**;**\*.xproj;packages\**" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SixLabors.Core" Version="1.0.0-beta0003" />
+      <!--TODO: Add StyleCop; No time just now-->
+    <PackageReference Include="SixLabors.Core" Version="1.0.0-beta0004" />
     <PackageReference Include="System.Buffers" Version="4.4.0" />
   </ItemGroup>
-
 </Project>
