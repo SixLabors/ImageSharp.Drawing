@@ -14,7 +14,7 @@ namespace SixLabors.Shapes
     public static class TextBuilder
     {
         /// <summary>
-        /// Generates the shapes corresponding the glyphs described by the font and with the setting ing withing the FontSpan
+        /// Generates the shapes corresponding the glyphs described by the font and with the settings withing the FontSpan
         /// </summary>
         /// <param name="text">The text to generate glyphs for</param>
         /// <param name="location">The location</param>
@@ -32,7 +32,7 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Generates the shapes corresponding the glyphs described by the font and with the setting ing withing the FontSpan
+        /// Generates the shapes corresponding the glyphs described by the font and with the settings withing the FontSpan
         /// </summary>
         /// <param name="text">The text to generate glyphs for</param>
         /// <param name="style">The style and settings to use while rendering the glyphs</param>
