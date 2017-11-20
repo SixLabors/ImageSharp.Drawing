@@ -71,7 +71,6 @@ namespace SixLabors.Shapes
             this.Length = length;
             this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             this.PathType = PathTypes.Mixed;
-
         }
 
         /// <summary>
@@ -159,7 +158,7 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset"></param>
+        /// <param name="offset">The offset within the buffer</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
@@ -280,11 +279,9 @@ namespace SixLabors.Shapes
                 {
                     return p.PointAlongPath(distanceAlongPath);
                 }
-                else
-                {
-                    //reduce it before trying the next path
-                    distanceAlongPath -= p.Length;
-                }
+
+                // reduce it before trying the next path
+                distanceAlongPath -= p.Length;
             }
 
             throw new InvalidOperationException("Should not be possible to reach this line");

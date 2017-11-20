@@ -53,15 +53,17 @@ namespace SixLabors.Shapes
                 bool online = !startOff;
                 float targetLength = pattern[0] * width;
                 int patternPos = 0;
-                // create a new list of points representing the new outline
+
+                // Create a new list of points representing the new outline
                 int pCount = p.Points.Count;
                 if (!p.IsClosed)
                 {
                     pCount--;
                 }
+
                 int i = 0;
                 Vector2 currentPoint = p.Points[0];
-                
+
                 while (i < pCount)
                 {
                     int next = (i + 1) % p.Points.Count;
@@ -69,28 +71,28 @@ namespace SixLabors.Shapes
                     float distToNext = Vector2.Distance(currentPoint, targetPoint);
                     if (distToNext > targetLength)
                     {
-                        // find a point between the 2 
+                        // find a point between the 2
                         float t = targetLength / distToNext;
 
                         Vector2 point = (currentPoint * (1 - t)) + (targetPoint * t);
                         buffer.Add(currentPoint.ToPoint());
                         buffer.Add(point.ToPoint());
-                        // we now inset a line joining 
 
+                        // we now inset a line joining
                         if (online)
                         {
                             offset.AddPath(buffer, JoinType.jtSquare, EndType.etOpenButt);
                         }
+
                         online = !online;
 
                         buffer.Clear();
 
                         currentPoint = point;
-                        
-                        // next length 
+
+                        // next length
                         patternPos = (patternPos + 1) % pattern.Length;
                         targetLength = pattern[patternPos] * width;
-
                     }
                     else if (distToNext <= targetLength)
                     {
@@ -100,6 +102,7 @@ namespace SixLabors.Shapes
                         targetLength -= distToNext;
                     }
                 }
+
                 if (buffer.Count > 0)
                 {
                     if (p.IsClosed)
@@ -115,6 +118,7 @@ namespace SixLabors.Shapes
                     {
                         offset.AddPath(buffer, JoinType.jtSquare, EndType.etOpenButt);
                     }
+
                     online = !online;
 
                     buffer.Clear();
@@ -125,6 +129,7 @@ namespace SixLabors.Shapes
 
             return ExecuteOutliner(width, offset);
         }
+
         /// <summary>
         /// Generates a solid outline of the path.
         /// </summary>
@@ -135,7 +140,7 @@ namespace SixLabors.Shapes
         {
             ClipperOffset offset = new ClipperLib.ClipperOffset();
 
-            //pattern can be applied to the path by cutting it into segments
+            // Pattern can be applied to the path by cutting it into segments
             IEnumerable<ISimplePath> paths = path.Flatten();
             foreach (ISimplePath p in paths)
             {
@@ -147,7 +152,6 @@ namespace SixLabors.Shapes
                 }
 
                 EndType type = p.IsClosed ? EndType.etClosedLine : EndType.etOpenButt;
-
 
                 offset.AddPath(points, JoinType.jtSquare, type);
             }

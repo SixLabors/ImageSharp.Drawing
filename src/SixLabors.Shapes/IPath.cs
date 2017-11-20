@@ -40,7 +40,7 @@ namespace SixLabors.Shapes
         /// Returns details about a point along a path.
         /// </returns>
         SegmentInfo PointAlongPath(float distanceAlongPath);
-        
+
         /// <summary>
         /// Calculates the distance along and away from the path for a specified point.
         /// </summary>

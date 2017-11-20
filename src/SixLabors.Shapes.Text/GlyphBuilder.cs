@@ -5,13 +5,11 @@ using System.Numerics;
 
 namespace SixLabors.Shapes.Text
 {
-
     /// <summary>
     /// rendering surface that Fonts can use to generate Shapes.
     /// </summary>
     internal class GlyphBuilder : BaseGlyphBuilder
     {
-
         /// <summary>
         /// Initializes a new instance of the <see cref="GlyphBuilder"/> class.
         /// </summary>

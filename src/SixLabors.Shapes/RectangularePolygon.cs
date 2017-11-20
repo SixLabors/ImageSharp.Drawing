@@ -220,7 +220,7 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset"></param>
+        /// <param name="offset">The starting offset within the buffer</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
@@ -273,8 +273,7 @@ namespace SixLabors.Shapes
             return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
         }
 
-
-        /// <inheritdoc /> 
+        /// <inheritdoc />
         public SegmentInfo PointAlongPath(float distanceAlongPath)
         {
             distanceAlongPath = distanceAlongPath % this.length;
@@ -314,7 +313,6 @@ namespace SixLabors.Shapes
                     }
                     else
                     {
-
                         distanceAlongPath -= this.Width;
                         return new SegmentInfo
                         {
@@ -336,8 +334,8 @@ namespace SixLabors.Shapes
         public PointInfo Distance(PointF point)
         {
             Vector2 vectorPoint = point;
-            // point in rectangle
-            // if after its clamped by the extreams its still the same then it must be inside :)
+
+            // Point in rectangle if after its clamped by the extremes its still the same then it must be inside :)
             Vector2 clamped = Vector2.Clamp(point, this.topLeft, this.bottomRight);
             bool isInside = clamped == vectorPoint;
 

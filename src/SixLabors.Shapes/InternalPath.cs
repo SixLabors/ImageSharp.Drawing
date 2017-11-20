@@ -69,7 +69,8 @@ namespace SixLabors.Shapes
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(IEnumerable<PointF> points, bool isClosedPath)
             : this(Simplify(points, isClosedPath), isClosedPath)
-        { }
+        {
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="InternalPath" /> class.
@@ -133,18 +134,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the length.
         /// </summary>
-        /// <value>
-        /// The length.
-        /// </value>
         public int PointCount => this.points.Length;
-
-        /// <summary>
-        /// Gets the points.
-        /// </summary>
-        /// <value>
-        /// The points.
-        /// </value>
-        internal IReadOnlyList<PointF> Points() => this.points.Select(X => (PointF)X.Point).ToArray();
 
         /// <summary>
         /// Calculates the distance from the path.
@@ -187,41 +177,6 @@ namespace SixLabors.Shapes
             };
         }
 
-        internal SegmentInfo PointAlongPath(float distanceAlongPath)
-        {
-            distanceAlongPath = distanceAlongPath % this.Length;
-            int pointCount = this.PointCount;
-            if (this.closedPath)
-            {
-                pointCount--;
-            }
-
-            for(int i = 0; i < pointCount; i++)
-            {
-                int next = (i + 1) % this.PointCount;
-                if(distanceAlongPath < this.points[next].Length)
-                {
-
-                    float t = distanceAlongPath / this.points[next].Length;
-                    Vector2 point = (this.points[i].Point * (1 - t)) + (this.points[next].Point * t);
-
-                    Vector2 diff = this.points[i].Point - this.points[next].Point;
-
-                    return new SegmentInfo
-                    {
-                        Point = point,
-                        Angle = (float)(Math.Atan2(diff.Y, diff.X) % (Math.PI * 2))
-                    };
-                }
-                else
-                {
-                    distanceAlongPath -= this.points[next].Length;
-                }
-            }
-
-            throw new InvalidOperationException("should alwys reach a point along the path");
-        }
-
         /// <summary>
         /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
         /// populates a buffer for all points on the path that the line intersects.
@@ -240,7 +195,7 @@ namespace SixLabors.Shapes
                 return 0;
             }
 
-            ClampPoints(ref start, ref end);
+            this.ClampPoints(ref start, ref end);
 
             Segment target = new Segment(start, end);
 
@@ -322,8 +277,10 @@ namespace SixLabors.Shapes
                             position--;
                             count++;
                         }
+
                         continue;
                     }
+
                     if (precaclulate[i].DoIntersect)
                     {
                         Vector2 point = FindIntersection(this.points[i].Segment, target);
@@ -361,6 +318,7 @@ namespace SixLabors.Shapes
                             position++;
                             count--;
                         }
+
                         lastPoint = point;
                     }
                     else
@@ -374,44 +332,6 @@ namespace SixLabors.Shapes
             finally
             {
                 ArrayPool<PassPointData>.Shared.Return(precaclulate);
-            }
-        }
-
-        private void ClampPoints(ref Vector2 start, ref Vector2 end)
-        {
-            // clean up start and end points
-            if (start.X == float.MaxValue)
-            {
-                start.X = this.Bounds.Right + 1;
-            }
-            if (start.X == float.MinValue)
-            {
-                start.X = this.Bounds.Left - 1;
-            }
-            if (end.X == float.MaxValue)
-            {
-                end.X = this.Bounds.Right + 1;
-            }
-            if (end.X == float.MinValue)
-            {
-                end.X = this.Bounds.Left - 1;
-            }
-
-            if (start.Y == float.MaxValue)
-            {
-                start.Y = this.Bounds.Bottom + 1;
-            }
-            if (start.Y == float.MinValue)
-            {
-                start.Y = this.Bounds.Top - 1;
-            }
-            if (end.Y == float.MaxValue)
-            {
-                end.Y = this.Bounds.Bottom + 1;
-            }
-            if (end.Y == float.MinValue)
-            {
-                end.Y = this.Bounds.Top - 1;
             }
         }
 
@@ -460,6 +380,53 @@ namespace SixLabors.Shapes
             return false;
         }
 
+        /// <summary>
+        /// Gets the points.
+        /// </summary>
+        /// <returns>The <see cref="IReadOnlyCollection{PointF}"/></returns>
+        internal IReadOnlyList<PointF> Points() => this.points.Select(x => (PointF)x.Point).ToArray();
+
+        /// <summary>
+        /// Calculates the the point a certain distance a path.
+        /// </summary>
+        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
+        /// <returns>
+        /// Returns details about a point along a path.
+        /// </returns>
+        internal SegmentInfo PointAlongPath(float distanceAlongPath)
+        {
+            distanceAlongPath = distanceAlongPath % this.Length;
+            int pointCount = this.PointCount;
+            if (this.closedPath)
+            {
+                pointCount--;
+            }
+
+            for (int i = 0; i < pointCount; i++)
+            {
+                int next = (i + 1) % this.PointCount;
+                if (distanceAlongPath < this.points[next].Length)
+                {
+                    float t = distanceAlongPath / this.points[next].Length;
+                    Vector2 point = (this.points[i].Point * (1 - t)) + (this.points[next].Point * t);
+
+                    Vector2 diff = this.points[i].Point - this.points[next].Point;
+
+                    return new SegmentInfo
+                    {
+                        Point = point,
+                        Angle = (float)(Math.Atan2(diff.Y, diff.X) % (Math.PI * 2))
+                    };
+                }
+                else
+                {
+                    distanceAlongPath -= this.points[next].Length;
+                }
+            }
+
+            throw new InvalidOperationException("should alwys reach a point along the path");
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsOnSegment(Vector2 p, Vector2 q, Vector2 r)
         {
@@ -500,8 +467,8 @@ namespace SixLabors.Shapes
         }
 
         /// <summary>
-        /// Finds the point on line described by <paramref name="source" /> 
-        /// that intersects with line described by <paramref name="target" /> 
+        /// Finds the point on line described by <paramref name="source" />
+        /// that intersects with line described by <paramref name="target" />
         /// </summary>
         /// <param name="source">The line1 start.</param>
         /// <param name="target">The target line.</param>
@@ -620,6 +587,7 @@ namespace SixLabors.Shapes
 
                 lastPoint = points[0];
             }
+
             float totalDist = 0;
             for (int i = 1; i < polyCorners; i++)
             {
@@ -653,13 +621,57 @@ namespace SixLabors.Shapes
             }
 
             PointData[] data = results.ToArray();
-            for (int i = 0; i< data.Length; i++)
+            for (int i = 0; i < data.Length; i++)
             {
                 int next = (i + 1) % data.Length;
                 data[i].Segment = new Segment(data[i].Point, data[next].Point);
             }
 
             return data;
+        }
+
+        private void ClampPoints(ref Vector2 start, ref Vector2 end)
+        {
+            // clean up start and end points
+            if (start.X == float.MaxValue)
+            {
+                start.X = this.Bounds.Right + 1;
+            }
+
+            if (start.X == float.MinValue)
+            {
+                start.X = this.Bounds.Left - 1;
+            }
+
+            if (end.X == float.MaxValue)
+            {
+                end.X = this.Bounds.Right + 1;
+            }
+
+            if (end.X == float.MinValue)
+            {
+                end.X = this.Bounds.Left - 1;
+            }
+
+            if (start.Y == float.MaxValue)
+            {
+                start.Y = this.Bounds.Bottom + 1;
+            }
+
+            if (start.Y == float.MinValue)
+            {
+                start.Y = this.Bounds.Top - 1;
+            }
+
+            if (end.Y == float.MaxValue)
+            {
+                end.Y = this.Bounds.Bottom + 1;
+            }
+
+            if (end.Y == float.MinValue)
+            {
+                end.Y = this.Bounds.Top - 1;
+            }
         }
 
         /// <summary>
