@@ -1,18 +1,14 @@
-﻿// <copyright file="PathExtensions.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System;
-    using System.Buffers;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-    using System.Threading.Tasks;
-
     /// <summary>
     /// Conveniance methods that can be applied to shapes and paths
     /// </summary>

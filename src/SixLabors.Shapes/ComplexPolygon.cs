@@ -1,19 +1,14 @@
-﻿// <copyright file="ComplexPolygon.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-
-    using PolygonClipper;
-    using SixLabors.Primitives;
-
     /// <summary>
     /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
     /// </summary>

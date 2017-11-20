@@ -1,14 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Numerics;
+﻿// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
 
-using SixLabors.Fonts;
-using SixLabors.Shapes;
+using System;
+using System.Numerics;
 using SixLabors.Primitives;
 
 namespace SixLabors.Shapes.Text
 {
-
     /// <summary>
     /// rendering surface that Fonts can use to generate Shapes by following a path
     /// </summary>

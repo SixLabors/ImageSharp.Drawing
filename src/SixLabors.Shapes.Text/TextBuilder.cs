@@ -1,10 +1,9 @@
-﻿using SixLabors.Fonts;
+﻿// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using SixLabors.Fonts;
 using SixLabors.Primitives;
 using SixLabors.Shapes.Text;
-using System;
-using System.Collections.Generic;
-using System.Numerics;
-using System.Text;
 
 namespace SixLabors.Shapes
 {

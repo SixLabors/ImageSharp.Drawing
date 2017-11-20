@@ -1,15 +1,8 @@
-﻿// <copyright file="ClipablePath.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
 
 namespace SixLabors.Shapes.PolygonClipper
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Threading.Tasks;
-
     /// <summary>
     /// Represents a shape and its type for when clipping is applies.
     /// </summary>
