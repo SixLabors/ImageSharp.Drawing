@@ -1,7 +1,5 @@
-﻿// <copyright file="AssemblyInfo.Common.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
 
 using System.Reflection;
 using System.Resources;
@@ -10,11 +8,11 @@ using System.Runtime.CompilerServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyDescription("A cross-platform library for processing of image files; written in C#")]
+[assembly: AssemblyDescription("A Net Standard geometry/shape manipulation library, can be used to merge/split shapes")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Scott Williams")]
 [assembly: AssemblyProduct("SixLabors.Shapes")]
-[assembly: AssemblyCopyright("Copyright (c) Scott Williams and contributors.")]
+[assembly: AssemblyCopyright("Copyright (c) Six Labors and contributors.")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 [assembly: NeutralResourcesLanguage("en")]
