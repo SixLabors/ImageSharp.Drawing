@@ -1,13 +1,10 @@
-﻿// <copyright file="PointInfo.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     /// <summary>
     /// Returns meta data about the nearest point on a path from a vector
     /// </summary>

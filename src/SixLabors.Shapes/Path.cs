@@ -1,26 +1,21 @@
-﻿// <copyright file="Path.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-
     /// <summary>
     /// A aggregate of <see cref="ILineSegment"/>s making a single logical path
     /// </summary>
     /// <seealso cref="IPath" />
     public class Path : IPath, ISimplePath
     {
-        private InternalPath _innerPath;
-        private InternalPath innerPath => this._innerPath ?? (this._innerPath = new InternalPath(this.lineSegments, this.IsClosed));
-
         private readonly ILineSegment[] lineSegments;
+        private InternalPath innerPath;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Path"/> class.
@@ -52,7 +47,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the length of the path.
         /// </summary>
-        public float Length => this.innerPath.Length;
+        public float Length => this.InnerPath.Length;
 
         /// <summary>
         /// Gets a value indicating whether this instance is a closed path.
@@ -62,10 +57,10 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        IReadOnlyList<PointF> ISimplePath.Points => this.innerPath.Points();
+        IReadOnlyList<PointF> ISimplePath.Points => this.InnerPath.Points();
 
         /// <inheritdoc />
-        public RectangleF Bounds => this.innerPath.Bounds;
+        public RectangleF Bounds => this.InnerPath.Bounds;
 
         /// <summary>
         /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
@@ -75,7 +70,7 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
         /// </summary>
-        public int MaxIntersections => this.innerPath.PointCount;
+        public int MaxIntersections => this.InnerPath.PointCount;
 
         /// <summary>
         /// Gets the line segments
@@ -87,14 +82,16 @@ namespace SixLabors.Shapes
         /// </summary>
         protected virtual bool IsClosed => false;
 
+        private InternalPath InnerPath => this.innerPath ?? (this.innerPath = new InternalPath(this.lineSegments, this.IsClosed));
+
         /// <inheritdoc />
         public PointInfo Distance(PointF point)
         {
-            PointInfo dist = this.innerPath.DistanceFromPath(point);
+            PointInfo dist = this.InnerPath.DistanceFromPath(point);
 
             if (this.IsClosed)
             {
-                bool isInside = this.innerPath.PointInPolygon(point);
+                bool isInside = this.InnerPath.PointInPolygon(point);
                 if (isInside)
                 {
                     dist.DistanceFromPath *= -1;
@@ -162,13 +159,13 @@ namespace SixLabors.Shapes
         /// <param name="start">The start point of the line.</param>
         /// <param name="end">The end point of the line.</param>
         /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset"></param>
+        /// <param name="offset">The offset within the buffer</param>
         /// <returns>
         /// The number of intersections populated into the buffer.
         /// </returns>
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
-            return this.innerPath.FindIntersections(start, end, buffer, offset);
+            return this.InnerPath.FindIntersections(start, end, buffer, offset);
         }
 
         /// <summary>
@@ -180,7 +177,7 @@ namespace SixLabors.Shapes
         /// </returns>
         public bool Contains(PointF point)
         {
-            return this.innerPath.PointInPolygon(point);
+            return this.InnerPath.PointInPolygon(point);
         }
 
         /// <summary>
@@ -192,7 +189,7 @@ namespace SixLabors.Shapes
         /// </returns>
         public SegmentInfo PointAlongPath(float distanceAlongPath)
         {
-            return this.innerPath.PointAlongPath(distanceAlongPath);
+            return this.InnerPath.PointAlongPath(distanceAlongPath);
         }
     }
 }

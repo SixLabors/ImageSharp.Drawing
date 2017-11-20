@@ -1,16 +1,13 @@
-﻿// <copyright file="LinearLineSegment.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-
     /// <summary>
     /// Represents a series of control points that will be joined by straight lines
     /// </summary>

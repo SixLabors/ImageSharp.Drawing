@@ -1,16 +1,11 @@
-﻿// <copyright file="Polygon.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Collections.Generic;
+using System.Numerics;
 
 namespace SixLabors.Shapes
 {
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>

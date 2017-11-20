@@ -1,14 +1,12 @@
-﻿// <copyright file="IPath.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Collections.Generic;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System.Collections.Generic;
-    using System.Numerics;
-
     /// <summary>
     /// Represents a logic path that can be drawn
     /// </summary>
@@ -42,7 +40,7 @@ namespace SixLabors.Shapes
         /// Returns details about a point along a path.
         /// </returns>
         SegmentInfo PointAlongPath(float distanceAlongPath);
-        
+
         /// <summary>
         /// Calculates the distance along and away from the path for a specified point.
         /// </summary>

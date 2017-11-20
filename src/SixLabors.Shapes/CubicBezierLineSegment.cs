@@ -1,16 +1,14 @@
-﻿// <copyright file="BezierLineSegment.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-
     /// <summary>
     /// Represents a line segment that contains a lists of control points that will be rendered as a cubic bezier curve
     /// </summary>

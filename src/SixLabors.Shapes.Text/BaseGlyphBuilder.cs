@@ -1,25 +1,31 @@
-﻿using System;
+﻿// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
 using System.Collections.Generic;
 using System.Numerics;
 
 using SixLabors.Fonts;
-using SixLabors.Shapes;
 using SixLabors.Primitives;
 
 namespace SixLabors.Shapes.Text
 {
-
     /// <summary>
     /// rendering surface that Fonts can use to generate Shapes.
     /// </summary>
     internal class BaseGlyphBuilder : IGlyphRenderer
     {
-        protected readonly PathBuilder builder = new PathBuilder();
+#pragma warning disable SA1401 // Fields should be private
+        /// <summary>
+        /// The builder. TODO: Should this be a property?
+        /// </summary>
+        // ReSharper disable once InconsistentNaming
+        protected readonly PathBuilder builder;
+#pragma warning restore SA1401 // Fields should be private
         private readonly List<IPath> paths = new List<IPath>();
         private Vector2 currentPoint = default(Vector2);
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="GlyphBuilder"/> class.
+        /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
         /// </summary>
         public BaseGlyphBuilder()
         {
@@ -27,34 +33,28 @@ namespace SixLabors.Shapes.Text
             this.builder = new PathBuilder();
         }
 
-
         /// <summary>
         /// Gets the paths that have been rendered by this.
         /// </summary>
         public IPathCollection Paths => new PathCollection(this.paths);
 
+        /// <inheritdoc/>
         void IGlyphRenderer.EndText()
         {
         }
 
+        /// <inheritdoc/>
         void IGlyphRenderer.BeginText(RectangleF rect)
         {
-            BeginText(rect);
+            this.BeginText(rect);
         }
 
-        protected virtual void BeginText(RectangleF rect)
-        {
-        }
-
+        /// <inheritdoc/>
         bool IGlyphRenderer.BeginGlyph(RectangleF rect, int hashCode)
         {
             this.builder.Clear();
-            BeginGlyph(rect);
+            this.BeginGlyph(rect);
             return true;
-        }
-
-        protected virtual void BeginGlyph(RectangleF rect)
-        {
         }
 
         /// <summary>
@@ -124,5 +124,16 @@ namespace SixLabors.Shapes.Text
             this.currentPoint = point;
         }
 
+        /// <summary>Called before any glyphs have been rendered.</summary>
+        /// <param name="rect">The bounds the text will be rendered at and at whats size.</param>
+        protected virtual void BeginText(RectangleF rect)
+        {
+        }
+
+        /// <summary>Begins the glyph.</summary>
+        /// <param name="rect">The bounds the glyph will be rendered at and at what size.</param>
+        protected virtual void BeginGlyph(RectangleF rect)
+        {
+        }
     }
 }

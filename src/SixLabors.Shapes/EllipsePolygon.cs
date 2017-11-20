@@ -1,17 +1,12 @@
-﻿// <copyright file="Ellipse.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Collections.Generic;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
@@ -154,7 +149,7 @@ namespace SixLabors.Shapes
             yield return this;
         }
 
-     
+        /// <inheritdoc/>
         int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
             return this.innerPath.FindIntersections(start, end, buffer, offset);
@@ -170,6 +165,13 @@ namespace SixLabors.Shapes
         public bool Contains(PointF point)
         {
             return this.innerPath.PointInPolygon(point);
+        }
+
+        /// <inheritdoc />
+        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        {
+            // TODO switch this out to a calculated algorithum
+            return this.innerPath.PointAlongPath(distanceAlongPath);
         }
 
         private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
@@ -190,7 +192,7 @@ namespace SixLabors.Shapes
             Vector2 pointMminusO = pointM - pointO;
             Vector2 pointMplusO = pointM + pointO;
 
-            PointF[] points = new PointF[]
+            PointF[] points =
             {
                 new Vector2(rootLocation.X, pointM.Y),
 
@@ -210,14 +212,8 @@ namespace SixLabors.Shapes
                 new Vector2(rootLocation.X, pointMplusO.Y),
                 new Vector2(rootLocation.X, pointM.Y),
             };
-            return new CubicBezierLineSegment(points);
-        }
 
-        /// <inheritdoc /> 
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
-        {
-            // TODO switch this out to a calculated algorithum
-            return this.innerPath.PointAlongPath(distanceAlongPath);
+            return new CubicBezierLineSegment(points);
         }
     }
 }

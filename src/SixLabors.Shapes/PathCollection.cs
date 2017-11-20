@@ -1,25 +1,26 @@
-﻿// <copyright file="Path.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-    using System.Linq;
-    using System.Numerics;
-
     /// <summary>
     /// A aggregate of <see cref="IPath"/>s to apply common operations to them.
     /// </summary>
     /// <seealso cref="IPath" />
     public class PathCollection : IPathCollection
     {
-        public IPath[] paths;
+        private readonly IPath[] paths;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PathCollection"/> class.
+        /// </summary>
+        /// <param name="paths">The collection of paths</param>
         public PathCollection(IEnumerable<IPath> paths)
         {
             Guard.NotNull(paths, nameof(paths));
@@ -31,17 +32,20 @@ namespace SixLabors.Shapes
             }
             else
             {
+                float minX = this.paths.Min(x => x.Bounds.Left);
+                float maxX = this.paths.Max(x => x.Bounds.Right);
 
-                float minX = paths.Min(x => x.Bounds.Left);
-                float maxX = paths.Max(x => x.Bounds.Right);
-
-                float minY = paths.Min(x => x.Bounds.Top);
-                float maxY = paths.Max(x => x.Bounds.Bottom);
+                float minY = this.paths.Min(x => x.Bounds.Top);
+                float maxY = this.paths.Max(x => x.Bounds.Bottom);
 
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
         }
-        
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PathCollection"/> class.
+        /// </summary>
+        /// <param name="paths">The collection of paths</param>
         public PathCollection(params IPath[] paths)
             : this((IEnumerable<IPath>)paths)
         {
@@ -57,7 +61,7 @@ namespace SixLabors.Shapes
         public IPathCollection Transform(Matrix3x2 matrix)
         {
             IPath[] result = new IPath[this.paths.Length];
-            for(int i = 0; i < this.paths.Length && i < result.Length; i++)
+            for (int i = 0; i < this.paths.Length && i < result.Length; i++)
             {
                 result[i] = this.paths[i].Transform(matrix);
             }

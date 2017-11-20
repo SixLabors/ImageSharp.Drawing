@@ -1,16 +1,13 @@
-﻿// <copyright file="Clipper.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Collections.Generic;
+using System.Numerics;
+using ClipperLib;
+using SixLabors.Primitives;
+
 namespace SixLabors.Shapes.PolygonClipper
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Numerics;
-    using ClipperLib;
-    using SixLabors.Primitives;
-
     /// <summary>
     /// Library to clip polygons.
     /// </summary>
@@ -150,7 +147,7 @@ namespace SixLabors.Shapes.PolygonClipper
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
             IReadOnlyList<PointF> vectors = path.Points;
-            
+
             List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Count);
             foreach (PointF v in vectors)
             {

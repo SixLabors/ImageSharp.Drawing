@@ -1,45 +1,51 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <Description>Allows generating glyphs for text and a font for manipulation using SixLabors.Shapes</Description>
-    <AssemblyTitle>SixLabors.Shapes.Text</AssemblyTitle>
-    <VersionPrefix Condition="$(packageversion) != ''">$(packageversion)</VersionPrefix>
-    <VersionPrefix Condition="$(packageversion) == ''">0.1.0-alpha1</VersionPrefix>
-    <Authors>Six Labors and contributors</Authors>
-    <TargetFrameworks>netstandard1.1;netstandard2.0</TargetFrameworks>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <AssemblyName>SixLabors.Shapes.Text</AssemblyName>
-    <PackageId>SixLabors.Shapes.Text</PackageId>
-    <PackageTags>shapes;text;</PackageTags>
-    <PackageIconUrl>https://raw.githubusercontent.com/SixLabors/Shapes/master/icons/icon.png</PackageIconUrl>
-    <PackageProjectUrl>https://github.com/SixLabors/Shapes</PackageProjectUrl>
-    <PackageLicenseUrl>http://www.apache.org/licenses/LICENSE-2.0</PackageLicenseUrl>
-    <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/SixLabors/Shapes</RepositoryUrl>
-    <GenerateAssemblyDescriptionAttribute>false</GenerateAssemblyDescriptionAttribute>
-    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
-    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
-    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
-    <GenerateAssemblyCopyrightAttribute>false</GenerateAssemblyCopyrightAttribute>
-    <GenerateNeutralResourcesLanguageAttribute>false</GenerateNeutralResourcesLanguageAttribute>
-    <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
-    <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
-    <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
-    <DebugType Condition="$(codecov) == 'true'">full</DebugType>
-  </PropertyGroup>
+    <PropertyGroup>
+        <Description>Allows generating glyphs for text and a font for manipulation using SixLabors.Shapes</Description>
+        <AssemblyTitle>SixLabors.Shapes.Text</AssemblyTitle>
+        <VersionPrefix Condition="$(packageversion) != ''">$(packageversion)</VersionPrefix>
+        <VersionPrefix Condition="$(packageversion) == ''">0.1.0-alpha1</VersionPrefix>
+        <Authors>Six Labors and contributors</Authors>
+        <TargetFrameworks>netstandard1.1;netstandard2.0</TargetFrameworks>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <AssemblyName>SixLabors.Shapes.Text</AssemblyName>
+        <PackageId>SixLabors.Shapes.Text</PackageId>
+        <PackageTags>shapes;text;</PackageTags>
+        <PackageIconUrl>https://raw.githubusercontent.com/SixLabors/Shapes/master/icons/icon.png</PackageIconUrl>
+        <PackageProjectUrl>https://github.com/SixLabors/Shapes</PackageProjectUrl>
+        <PackageLicenseUrl>http://www.apache.org/licenses/LICENSE-2.0</PackageLicenseUrl>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryUrl>https://github.com/SixLabors/Shapes</RepositoryUrl>
+        <GenerateAssemblyDescriptionAttribute>false</GenerateAssemblyDescriptionAttribute>
+        <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
+        <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
+        <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
+        <GenerateAssemblyCopyrightAttribute>false</GenerateAssemblyCopyrightAttribute>
+        <GenerateNeutralResourcesLanguageAttribute>false</GenerateNeutralResourcesLanguageAttribute>
+        <GenerateAssemblyVersionAttribute>false</GenerateAssemblyVersionAttribute>
+        <GenerateAssemblyFileVersionAttribute>false</GenerateAssemblyFileVersionAttribute>
+        <GenerateAssemblyInformationalVersionAttribute>false</GenerateAssemblyInformationalVersionAttribute>
+        <DebugType Condition="$(codecov) == 'true'">full</DebugType>
+    </PropertyGroup>
+    <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="..\Shared\*.cs" Exclude="bin\**;obj\**;**\*.xproj;packages\**" />
+    </ItemGroup>
+    <ItemGroup>
+        <AdditionalFiles Include="..\..\stylecop.json" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta004">
+            <PrivateAssets>All</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0003" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <Compile Include="..\Shared\*.cs" Exclude="bin\**;obj\**;**\*.xproj;packages\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!--TODO: Add StyleCop; No time just now-->
-    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0003" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\SixLabors.Shapes\SixLabors.Shapes.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\SixLabors.Shapes\SixLabors.Shapes.csproj" />
+    </ItemGroup>
 
 </Project>
