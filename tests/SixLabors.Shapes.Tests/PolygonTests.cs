@@ -232,7 +232,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingEdgefromInside()
         {
-            IPath simplePath = new RectangularePolygon(10, 10, 100, 100).Clip(new RectangularePolygon(20, 0, 20, 20));
+            IPath simplePath = new RectangularPolygon(10, 10, 100, 100).Clip(new RectangularPolygon(20, 0, 20, 20));
 
             IEnumerable<PointF> intersections = simplePath.FindIntersections(new PointF(float.MinValue, 20), new PointF(float.MaxValue, 20));
 
