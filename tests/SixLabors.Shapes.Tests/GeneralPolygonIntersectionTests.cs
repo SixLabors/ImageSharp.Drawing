@@ -30,7 +30,7 @@ namespace SixLabors.Shapes.Tests
             { "scaled_300_iris_5", Shapes.IrisSegment(300, 5) },
             { "scaled_300_iris_6", Shapes.IrisSegment(300, 6) },
 
-            { "clippedRect",   new RectangularePolygon(10, 10, 40, 40).Clip(new RectangularePolygon(20, 0, 20, 20))     },
+            { "clippedRect",   new RectangularPolygon(10, 10, 40, 40).Clip(new RectangularPolygon(20, 0, 20, 20))     },
 
             { "hourGlass", Shapes.HourGlass().AsClosedPath() },
             { "BigCurve", new Polygon(new CubicBezierLineSegment( new Vector2(10, 400), new Vector2(30, 10), new Vector2(240, 30), new Vector2(300, 400))) },

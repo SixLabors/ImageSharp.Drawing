@@ -183,8 +183,8 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void OutputClippedRectangle()
         {
-            var rect1 = new RectangularePolygon(10, 10, 40, 40);
-            var rect2 = new RectangularePolygon(20, 0, 20, 20);
+            var rect1 = new RectangularPolygon(10, 10, 40, 40);
+            var rect2 = new RectangularPolygon(20, 0, 20, 20);
             var paths = rect1.Clip(rect2);
 
             paths.SaveImage("Clipping", "RectangleWithTopClipped.png");

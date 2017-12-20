@@ -104,7 +104,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
         {
-            RectangularePolygon shape = new RectangularePolygon(location, size);
+            RectangularPolygon shape = new RectangularPolygon(location, size);
             Assert.Equal(isInside, shape.Contains(point));
         }
 
@@ -112,7 +112,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(DistanceTheoryData))]
         public void Distance(TestPoint location, TestSize size, TestPoint point, float expectecDistance)
         {
-            IPath shape = new RectangularePolygon(location, size);
+            IPath shape = new RectangularPolygon(location, size);
 
             Assert.Equal(expectecDistance, shape.Distance(point).DistanceFromPath);
         }
@@ -121,7 +121,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectecDistance, float alongPath)
         {
-            IPath shape = new RectangularePolygon(0, 0, 10, 10).AsPath();
+            IPath shape = new RectangularPolygon(0, 0, 10, 10).AsPath();
             PointInfo info = shape.Distance(point);
             Assert.Equal(expectecDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
@@ -130,35 +130,35 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Left()
         {
-            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
+            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(10, shape.Left);
         }
 
         [Fact]
         public void Right()
         {
-            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
+            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(22, shape.Right);
         }
 
         [Fact]
         public void Top()
         {
-            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
+            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(11, shape.Top);
         }
 
         [Fact]
         public void Bottom()
         {
-            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
+            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(24, shape.Bottom);
         }
 
         [Fact]
         public void SizeF()
         {
-            RectangularePolygon shape = new RectangularePolygon(10, 11, 12, 13);
+            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(12, shape.Size.Width);
             Assert.Equal(13, shape.Size.Height);
         }
@@ -166,7 +166,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds_Shape()
         {
-            IPath shape = new RectangularePolygon(10, 11, 12, 13);
+            IPath shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(10, shape.Bounds.Left);
             Assert.Equal(22, shape.Bounds.Right);
             Assert.Equal(11, shape.Bounds.Top);
@@ -176,7 +176,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void LienearSegements()
         {
-            IPath shape = new RectangularePolygon(10, 11, 12, 13).AsPath();
+            IPath shape = new RectangularPolygon(10, 11, 12, 13).AsPath();
             var segemnts = shape.Flatten().ToArray()[0].Points;
             Assert.Equal(new PointF(10, 11), segemnts[0]);
             Assert.Equal(new PointF(22, 11), segemnts[1]);
@@ -187,7 +187,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_2()
         {
-            IPath shape = new RectangularePolygon(1, 1, 10, 10);
+            IPath shape = new RectangularPolygon(1, 1, 10, 10);
             IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(20, 5));
 
             Assert.Equal(2, intersections.Count());
@@ -198,7 +198,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_1()
         {
-            IPath shape = new RectangularePolygon(1, 1, 10, 10);
+            IPath shape = new RectangularPolygon(1, 1, 10, 10);
             IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(5, 5));
 
             Assert.Equal(1, intersections.Count());
@@ -208,7 +208,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Intersections_0()
         {
-            IPath shape = new RectangularePolygon(1, 1, 10, 10);
+            IPath shape = new RectangularPolygon(1, 1, 10, 10);
             IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(-5, 5));
 
             Assert.Equal(0, intersections.Count());
@@ -217,7 +217,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds_Path()
         {
-            IPath shape = new RectangularePolygon(10, 11, 12, 13).AsPath();
+            IPath shape = new RectangularPolygon(10, 11, 12, 13).AsPath();
             Assert.Equal(10, shape.Bounds.Left);
             Assert.Equal(22, shape.Bounds.Right);
             Assert.Equal(11, shape.Bounds.Top);
@@ -227,14 +227,14 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MaxIntersections_Shape()
         {
-            IPath shape = new RectangularePolygon(10, 11, 12, 13);
+            IPath shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(4, shape.MaxIntersections);
         }
 
         [Fact]
         public void ShapePaths()
         {
-            IPath shape = new RectangularePolygon(10, 11, 12, 13);
+            IPath shape = new RectangularPolygon(10, 11, 12, 13);
 
             Assert.Equal(shape, shape.AsClosedPath());
         }
@@ -243,7 +243,7 @@ namespace SixLabors.Shapes.Tests
         public void TransformIdnetityReturnsSahpeObject()
         {
 
-            IPath shape = new RectangularePolygon(0, 0, 200, 60);
+            IPath shape = new RectangularPolygon(0, 0, 200, 60);
             IPath transformdShape =  shape.Transform(Matrix3x2.Identity);
 
             Assert.Same(shape, transformdShape);
@@ -252,7 +252,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Transform()
         {
-            IPath shape = new RectangularePolygon(0, 0, 200, 60);
+            IPath shape = new RectangularPolygon(0, 0, 200, 60);
 
             IPath newShape = shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
 
@@ -263,7 +263,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Center()
         {
-            RectangularePolygon shape = new RectangularePolygon(50, 50, 200, 60);
+            RectangularPolygon shape = new RectangularPolygon(50, 50, 200, 60);
 
             Assert.Equal(new PointF(150, 80), shape.Center);
         }
@@ -280,7 +280,7 @@ namespace SixLabors.Shapes.Tests
         [InlineData(620, 150, 50, Pi)] // wrap about end of path
         public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
         {
-            IPath shape = new RectangularePolygon(50, 50, 200, 60);
+            IPath shape = new RectangularPolygon(50, 50, 200, 60);
             var point = shape.PointAlongPath(distance);
             Assert.Equal(expectedX, point.Point.X);
             Assert.Equal(expectedY, point.Point.Y);

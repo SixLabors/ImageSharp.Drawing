@@ -7,7 +7,7 @@ namespace SixLabors.Shapes.Tests
 {
     public static class Extensions
     {
-        public static IPath AsPath(this RectangularePolygon rect)
+        public static IPath AsPath(this RectangularPolygon rect)
         {
             return ((IPath)rect);
         }
