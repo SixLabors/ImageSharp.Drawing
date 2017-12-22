@@ -10,7 +10,7 @@ using SixLabors.Primitives;
 namespace SixLabors.Shapes
 {
     /// <summary>
-    /// Conveniance methods that can be applied to shapes and paths
+    /// Convenience methods that can be applied to shapes and paths
     /// </summary>
     public static class PathExtensions
     {
