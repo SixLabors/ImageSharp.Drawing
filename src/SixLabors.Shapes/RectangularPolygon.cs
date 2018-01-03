@@ -200,6 +200,15 @@ namespace SixLabors.Shapes
         public PointF Center => (this.topLeft + this.bottomRight) / 2;
 
         /// <summary>
+        /// Converts the polygon to a rectangular polygon from its bounds.
+        /// </summary>
+        /// <param name="polygon">The polygon to convert.</param>
+        public static explicit operator RectangularPolygon(Polygon polygon)
+        {
+            return new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
+        }
+
+        /// <summary>
         /// Determines if the specified point is contained within the rectangular region defined by
         /// this <see cref="RectangularPolygon" />.
         /// </summary>
@@ -445,6 +454,40 @@ namespace SixLabors.Shapes
         IPath IPath.AsClosedPath()
         {
             return this;
+        }
+
+        /// <summary>
+        /// Equality comparer for two RectangularPolygons
+        /// </summary>
+        /// <param name="obj">The polygon to compare to.</param>
+        /// <returns>Returns a value indicating if the rectangles are equal.</returns>
+        public override bool Equals(object obj)
+        {
+            if (obj == null || this.GetType() != obj.GetType())
+            {
+                return false;
+            }
+
+            var otherRectangle = (RectangularPolygon)obj;
+
+            return this.X == otherRectangle.X &&
+                this.Y == otherRectangle.Y &&
+                this.Height == otherRectangle.Height &&
+                this.Width == otherRectangle.Width;
+        }
+
+        /// <summary>
+        ///     Serves as the default hash function.
+        /// </summary>
+        /// <returns>A hash code for the current object.</returns>
+        public override int GetHashCode()
+        {
+            var hashCode = -1073544145;
+            hashCode = (hashCode * -1521134295) + this.X.GetHashCode();
+            hashCode = (hashCode * -1521134295) + this.Y.GetHashCode();
+            hashCode = (hashCode * -1521134295) + this.Width.GetHashCode();
+            hashCode = (hashCode * -1521134295) + this.Height.GetHashCode();
+            return hashCode;
         }
     }
 }

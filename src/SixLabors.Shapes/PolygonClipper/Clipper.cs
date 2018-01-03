@@ -63,34 +63,24 @@ namespace SixLabors.Shapes.PolygonClipper
             IPath[] shapes = new IPath[results.Count];
             for (int i = 0; i < results.Count; i++)
             {
-                object source = results[i].Source;
-                IPath path = source as IPath;
-
-                if (path != null)
+                PointF[] points = new PointF[results[i].Contour.Count];
+                for (int j = 0; j < results[i].Contour.Count; j++)
                 {
-                    shapes[i] = path;
+                    IntPoint p = results[i].Contour[j];
+
+                    // to make the floating point polygons compatable with clipper we had
+                    // to scale them up to make them ints but still retain some level of precision
+                    // thus we have to scale them back down
+                    points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
+                }
+
+                if (results[i].IsOpen)
+                {
+                    shapes[i] = new Path(new LinearLineSegment(points));
                 }
                 else
                 {
-                    PointF[] points = new PointF[results[i].Contour.Count];
-                    for (int j = 0; j < results[i].Contour.Count; j++)
-                    {
-                        IntPoint p = results[i].Contour[j];
-
-                        // to make the floating point polygons compatable with clipper we had
-                        // to scale them up to make them ints but still retain some level of precision
-                        // thus we have to scale them back down
-                        points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
-                    }
-
-                    if (results[i].IsOpen)
-                    {
-                        shapes[i] = new Path(new LinearLineSegment(points));
-                    }
-                    else
-                    {
-                        shapes[i] = new Polygon(new LinearLineSegment(points));
-                    }
+                    shapes[i] = new Polygon(new LinearLineSegment(points));
                 }
             }
 
@@ -157,7 +147,7 @@ namespace SixLabors.Shapes.PolygonClipper
             PolyType type = clippingType == ClippingType.Clip ? PolyType.ptClip : PolyType.ptSubject;
             lock (this.syncRoot)
             {
-                this.innerClipper.AddPath(points, type, path.IsClosed, path);
+                this.innerClipper.AddPath(points, type, path.IsClosed);
             }
         }
     }
