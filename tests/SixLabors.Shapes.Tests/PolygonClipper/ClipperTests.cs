@@ -51,6 +51,25 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         }
 
         [Fact]
+        public void OverlappingTriangleCutRightSide()
+        {
+            var triangle = new Polygon(new LinearLineSegment(
+                new Vector2(0, 50),
+                new Vector2(70, 0),
+                new Vector2(50, 100)));
+
+            var cutout = new Polygon(new LinearLineSegment(
+                new Vector2(20, 0),
+                new Vector2(70, 0),
+                new Vector2(70, 100),
+                new Vector2(20, 100)));
+
+            var shapes = this.Clip(triangle, cutout);
+            Assert.Equal(1, shapes.Count());
+            Assert.DoesNotContain(triangle, shapes);
+        }
+
+        [Fact]
         public void OverlappingTriangles()
         {
             var shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
@@ -66,9 +85,12 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void NonOverlapping()
         {
-            var shapes = this.Clip(this.TopLeft, this.TopRight);
+            var shapes = this.Clip(this.TopLeft, this.TopRight)
+                .OfType<Polygon>().Select(x => (RectangularPolygon)x);
+
             Assert.Equal(1, shapes.Count());
             Assert.Contains(this.TopLeft, shapes);
+
             Assert.DoesNotContain(this.TopRight, shapes);
         }
 
@@ -76,6 +98,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         public void OverLappingReturns1NewShape()
         {
             var shapes = this.Clip(this.BigSquare, this.TopLeft);
+
             Assert.Equal(1, shapes.Count());
             Assert.DoesNotContain(this.BigSquare, shapes);
             Assert.DoesNotContain(this.TopLeft, shapes);
@@ -84,7 +107,9 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void OverlappingButNotCrossingRetuensOrigionalShapes()
         {
-            var shapes = this.Clip(this.BigSquare, this.Hole);
+            var shapes = this.Clip(this.BigSquare, this.Hole)
+                .OfType<Polygon>().Select(x => (RectangularPolygon)x);
+
             Assert.Equal(2, shapes.Count());
             Assert.Contains(this.BigSquare, shapes);
             Assert.Contains(this.Hole, shapes);
