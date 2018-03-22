@@ -1,7 +1,11 @@
+<h1 align="center">
 
-#  <img src="icons/icon.png" width="52" height="52" /> SixLabors.Shapes
+<img src="https://raw.githubusercontent.com/SixLabors/Branding/master/icons/shapes/sixlabors.shapes.512.png" alt="SixLabors.Shapes" width="256"/>
+<br/>
+SixLabors.Shapes
+</h1>
 
-**SixLabors.Shapes** is a new cross-platform 2D polygon manipulation AP.
+<div align="center">
 
 [![Build status](https://ci.appveyor.com/api/projects/status/3tqmmb43c7trq43e/branch/master?svg=true)](https://ci.appveyor.com/project/six-labors/shapes/branch/master)
 [![codecov](https://codecov.io/gh/SixLabors/Shapes/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/Shapes)
@@ -11,6 +15,11 @@
 [![GitHub issues](https://img.shields.io/github/issues/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/issues)
 [![GitHub stars](https://img.shields.io/github/stars/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/network)
+
+</div>
+
+
+**SixLabors.Shapes** is a new cross-platform 2D polygon manipulation API.
 
 ### Installation
 
@@ -45,11 +54,11 @@ git clone https://github.com/SixLabors/Shapes.git
 - Polygons
    - With Linear line segments
    - With Beziear curve line segments
-   - Mixture of both Linear & beziear segments
+   - Mixture of both Linear & bezier segments
 - Paths
    - With Linear line segments
-   - With Beziear curve line segments
-   - Mixture of both Linear & beziear segments
+   - With Bezier curve line segments
+   - Mixture of both Linear & bezier segments
 
 ### How can you help?
 
@@ -57,9 +66,14 @@ Please... Spread the word, contribute algorithms, submit performance improvement
 
 ### Projects using SixLabors.Shapes
 
-* [ImageSharp](https://github.com/jimBobSquarePants/ImageSharp) - cross platform, fully manged, image manipultion and drawing library.
+* [SixLabors.ImageSharp](https://github.com/SixLabors/ImageSharp) - cross platform, fully managed, image manipulation and drawing library.
 
 ### The SixLabors.Shapes Team
 
 Lead
 - [Scott Williams](https://github.com/tocsoft)
+
+Core Team
+- [Dirk Lemstra](https://github.com/dlemstra)
+- [Anton Firsov](https://github.com/antonfirsov)
+- [James Jackson-South](https://github.com/jimbobsquarepants)
