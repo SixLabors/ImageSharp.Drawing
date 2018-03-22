@@ -15,7 +15,7 @@
         <AssemblyName>SixLabors.Shapes</AssemblyName>
         <PackageId>SixLabors.Shapes</PackageId>
         <PackageTags>polygon;rectangle;point in polygon;complex polygons;shape;2D</PackageTags>
-        <PackageIconUrl>https://raw.githubusercontent.com/SixLabors/Shapes/master/icons/icon.png</PackageIconUrl>
+        <PackageIconUrl>https://raw.githubusercontent.com/SixLabors/Branding/master/icons/shapes/sixlabors.shapes.128.png</PackageIconUrl>
         <PackageProjectUrl>https://github.com/SixLabors/Shapes</PackageProjectUrl>
         <PackageLicenseUrl>http://www.apache.org/licenses/LICENSE-2.0</PackageLicenseUrl>
         <RepositoryType>git</RepositoryType>

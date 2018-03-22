@@ -12,7 +12,7 @@
         <AssemblyName>SixLabors.Shapes.Text</AssemblyName>
         <PackageId>SixLabors.Shapes.Text</PackageId>
         <PackageTags>shapes;text;</PackageTags>
-        <PackageIconUrl>https://raw.githubusercontent.com/SixLabors/Shapes/master/icons/icon.png</PackageIconUrl>
+        <PackageIconUrl>https://raw.githubusercontent.com/SixLabors/Branding/master/icons/shapes/sixlabors.shapes.128.png</PackageIconUrl>
         <PackageProjectUrl>https://github.com/SixLabors/Shapes</PackageProjectUrl>
         <PackageLicenseUrl>http://www.apache.org/licenses/LICENSE-2.0</PackageLicenseUrl>
         <RepositoryType>git</RepositoryType>
