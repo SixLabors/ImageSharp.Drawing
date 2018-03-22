@@ -30,7 +30,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Initializes a new instance of the <see cref="Clipper"/> class.
         /// </summary>
         /// <param name="shapes">The shapes.</param>
-        public Clipper(IEnumerable<ClipablePath> shapes)
+        public Clipper(IEnumerable<ClippablePath> shapes)
             : this()
         {
             this.AddPaths(shapes);
@@ -40,7 +40,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Initializes a new instance of the <see cref="Clipper" /> class.
         /// </summary>
         /// <param name="shapes">The shapes.</param>
-        public Clipper(params ClipablePath[] shapes)
+        public Clipper(params ClippablePath[] shapes)
             : this()
         {
             this.AddPaths(shapes);
@@ -91,10 +91,10 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Adds the paths.
         /// </summary>
         /// <param name="paths">The paths.</param>
-        public void AddPaths(IEnumerable<ClipablePath> paths)
+        public void AddPaths(IEnumerable<ClippablePath> paths)
         {
             Guard.NotNull(paths, nameof(paths));
-            foreach (ClipablePath p in paths)
+            foreach (ClippablePath p in paths)
             {
                 this.AddPath(p.Path, p.Type);
             }
