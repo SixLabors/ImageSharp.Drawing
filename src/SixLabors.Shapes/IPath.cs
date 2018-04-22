@@ -51,7 +51,7 @@ namespace SixLabors.Shapes
         PointInfo Distance(PointF point);
 
         /// <summary>
-        /// Converts the <see cref="IPath" /> into a simple linear path..
+        /// Converts the <see cref="IPath" /> into a simple linear path.
         /// </summary>
         /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
         IEnumerable<ISimplePath> Flatten();
