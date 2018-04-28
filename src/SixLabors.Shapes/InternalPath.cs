@@ -188,12 +188,12 @@ namespace SixLabors.Shapes
         /// <returns>number of intersections hit</returns>
         public int FindIntersections(Vector2 start, Vector2 end, PointF[] buffer, int offset)
         {
-            int count = buffer.Length;
-
             if (this.points.Length < 2)
             {
                 return 0;
             }
+
+            int count = buffer.Length;
 
             this.ClampPoints(ref start, ref end);
 
@@ -214,9 +214,10 @@ namespace SixLabors.Shapes
             try
             {
                 // pre calculate relative orientations X places ahead and behind
-                Orientation prevOrientation = CalulateOrientation(start, end, this.points[polyCorners - 1].Point);
-                Orientation nextOrientation = CalulateOrientation(start, end, this.points[0].Point);
-                Orientation nextPlus1Orientation = CalulateOrientation(start, end, this.points[1].Point);
+                Vector2 startToEnd = end - start;
+                Orientation prevOrientation = CalulateOrientation(startToEnd, this.points[polyCorners - 1].Point - end);
+                Orientation nextOrientation = CalulateOrientation(startToEnd, this.points[0].Point - end);
+                Orientation nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[1].Point - end);
 
                 // iterate over all points and precalculate data about each, pre cacluating it relative orientation
                 for (int i = 0; i < polyCorners && count > 0; i++)
@@ -226,7 +227,7 @@ namespace SixLabors.Shapes
                     // shift all orientations along but one place and fill in the last one
                     Orientation pointOrientation = nextOrientation;
                     nextOrientation = nextPlus1Orientation;
-                    nextPlus1Orientation = CalulateOrientation(start, end, this.points[(i + 2) % this.points.Length].Point);
+                    nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[WrapArrayIndex(i + 2, this.points.Length)].Point - end);
 
                     // should this point cause the last matched point to be excluded
                     bool removeLastIntersection = nextOrientation == Orientation.Colinear &&
@@ -268,7 +269,7 @@ namespace SixLabors.Shapes
 
                 for (int i = 0; i < polyCorners && count > 0; i++)
                 {
-                    int next = (i + 1) % this.points.Length;
+                    int next = WrapArrayIndex(i + 1, this.points.Length);
 
                     if (precaclulate[i].RemoveLastIntersectionAndSkip)
                     {
@@ -290,7 +291,7 @@ namespace SixLabors.Shapes
                             {
                                 lastPoint = MaxVector;
 
-                                int last = (i - 1 + polyCorners) % polyCorners;
+                                int last = WrapArrayIndex(i - 1 + polyCorners, polyCorners);
 
                                 // hit the same point a second time do we need to remove the old one if just clipping
                                 if (this.points[next].Point.Equivelent(point, Epsilon))
@@ -358,7 +359,7 @@ namespace SixLabors.Shapes
             try
             {
                 int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, 0);
-                if (intersection % 2 == 1)
+                if ((intersection & 1) == 1)
                 {
                     return true;
                 }
@@ -404,7 +405,7 @@ namespace SixLabors.Shapes
 
             for (int i = 0; i < pointCount; i++)
             {
-                int next = (i + 1) % this.PointCount;
+                int next = WrapArrayIndex(i + 1, this.PointCount);
                 if (distanceAlongPath < this.points[next].Length)
                 {
                     float t = distanceAlongPath / this.points[next].Length;
@@ -448,6 +449,13 @@ namespace SixLabors.Shapes
                     (q.Y + Epsilon2) >= seg.Min.Y;
         }
 
+        // Modulo is a very slow operation.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int WrapArrayIndex(int i, int arrayLength)
+        {
+            return i < arrayLength ? i : i - arrayLength;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Orientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
         {
@@ -455,7 +463,21 @@ namespace SixLabors.Shapes
             // for details of below formula.
             Vector2 qp = q - p;
             Vector2 rq = r - q;
+            float val = (qp.Y * rq.X) - (qp.X * rq.Y);
 
+            if (val > -Epsilon && val < Epsilon)
+            {
+                return Orientation.Colinear;  // colinear
+            }
+
+            return (val > 0) ? Orientation.Clockwise : Orientation.Counterclockwise; // clock or counterclock wise
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Orientation CalulateOrientation(Vector2 qp, Vector2 rq)
+        {
+            // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
+            // for details of below formula.
             float val = (qp.Y * rq.X) - (qp.X * rq.Y);
 
             if (val > -Epsilon && val < Epsilon)
@@ -591,7 +613,7 @@ namespace SixLabors.Shapes
             float totalDist = 0;
             for (int i = 1; i < polyCorners; i++)
             {
-                int next = (i + 1) % polyCorners;
+                int next = WrapArrayIndex(i + 1, polyCorners);
                 Orientation or = CalulateOrientation(lastPoint, points[i], points[next]);
                 if (or == Orientation.Colinear && next != 0)
                 {
@@ -623,7 +645,7 @@ namespace SixLabors.Shapes
             PointData[] data = results.ToArray();
             for (int i = 0; i < data.Length; i++)
             {
-                int next = (i + 1) % data.Length;
+                int next = WrapArrayIndex(i + 1, data.Length);
                 data[i].Segment = new Segment(data[i].Point, data[next].Point);
             }
 
