@@ -92,7 +92,7 @@ namespace SixLabors.Shapes
         private enum Orientation
         {
             /// <summary>
-            /// POint is colienier
+            /// Point is colienear
             /// </summary>
             Colinear = 0,
 
@@ -181,7 +181,7 @@ namespace SixLabors.Shapes
         /// <param name="buffer">The buffer.</param>
         /// <param name="offset">The offset.</param>
         /// <returns>number of intersections hit</returns>
-        public int FindIntersections(Vector2 start, Vector2 end, PointF[] buffer, int offset)
+        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
             if (this.points.Length < 2)
             {
@@ -647,7 +647,7 @@ namespace SixLabors.Shapes
             return data;
         }
 
-        private void ClampPoints(ref Vector2 start, ref Vector2 end)
+        private void ClampPoints(ref PointF start, ref PointF end)
         {
             // clean up start and end points
             if (start.X == float.MaxValue)
@@ -781,12 +781,12 @@ namespace SixLabors.Shapes
             /// <summary>
             /// The point on the current line.
             /// </summary>
-            public Vector2 PointOnLine;
+            public PointF PointOnLine;
         }
 
         private struct PointData
         {
-            public Vector2 Point;
+            public PointF Point;
             public Orientation Orientation;
 
             public float Length;
@@ -803,12 +803,12 @@ namespace SixLabors.Shapes
 
         private struct Segment
         {
-            public Vector2 Start;
-            public Vector2 End;
-            public Vector2 Min;
-            public Vector2 Max;
+            public PointF Start;
+            public PointF End;
+            public PointF Min;
+            public PointF Max;
 
-            public Segment(Vector2 start, Vector2 end)
+            public Segment(PointF start, PointF end)
             {
                 this.Start = start;
                 this.End = end;
