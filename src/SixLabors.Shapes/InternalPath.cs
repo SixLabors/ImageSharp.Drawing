@@ -28,11 +28,6 @@ namespace SixLabors.Shapes
         private static readonly Vector2 MaxVector = new Vector2(float.MaxValue);
 
         /// <summary>
-        /// The locker.
-        /// </summary>
-        private static readonly object Locker = new object();
-
-        /// <summary>
         /// The points.
         /// </summary>
         private readonly PointData[] points;
@@ -574,38 +569,38 @@ namespace SixLabors.Shapes
             }
             else
             {
-                if (isClosed)
+                int prev = polyCorners;
+                do
                 {
-                    int prev = polyCorners;
-                    do
+                    prev--;
+                    if (prev == 0)
                     {
-                        prev--;
-                        if (prev == 0)
-                        {
-                            // all points are common, shouldn't match anything
-                            results.Add(new PointData
-                            {
-                                Point = points[0],
-                                Orientation = Orientation.Colinear,
-                                Segment = new Segment(points[0], points[1]),
-                                Length = 0,
-                                TotalLength = 0
-                            });
-                            return results.ToArray();
-                        }
+                        // all points are common, shouldn't match anything
+                        results.Add(
+                            new PointData
+                                {
+                                    Point = points[0],
+                                    Orientation = Orientation.Colinear,
+                                    Segment = new Segment(points[0], points[1]),
+                                    Length = 0,
+                                    TotalLength = 0
+                                });
+                        return results.ToArray();
                     }
-                    while (points[0].Equivelent(points[prev], Epsilon2)); // skip points too close together
-                    polyCorners = prev + 1;
-                    lastPoint = points[prev];
                 }
+                while (points[0].Equivelent(points[prev], Epsilon2)); // skip points too close together
 
-                results.Add(new PointData
-                {
-                    Point = points[0],
-                    Orientation = CalulateOrientation(lastPoint, points[0], points[1]),
-                    Length = Vector2.Distance(lastPoint, points[0]),
-                    TotalLength = 0
-                });
+                polyCorners = prev + 1;
+                lastPoint = points[prev];
+
+                results.Add(
+                    new PointData
+                        {
+                            Point = points[0],
+                            Orientation = CalulateOrientation(lastPoint, points[0], points[1]),
+                            Length = Vector2.Distance(lastPoint, points[0]),
+                            TotalLength = 0
+                        });
 
                 lastPoint = points[0];
             }
