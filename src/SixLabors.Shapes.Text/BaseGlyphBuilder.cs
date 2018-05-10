@@ -22,7 +22,7 @@ namespace SixLabors.Shapes.Text
         protected readonly PathBuilder builder;
 #pragma warning restore SA1401 // Fields should be private
         private readonly List<IPath> paths = new List<IPath>();
-        private Vector2 currentPoint = default(Vector2);
+        private PointF currentPoint = default(PointF);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
