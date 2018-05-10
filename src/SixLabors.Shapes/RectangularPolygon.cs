@@ -272,7 +272,6 @@ namespace SixLabors.Shapes
             return discovered;
         }
 
-
         /// <summary>
         /// Transforms the rectangle using specified matrix.
         /// </summary>
