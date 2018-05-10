@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -165,7 +166,14 @@ namespace SixLabors.Shapes
         /// </returns>
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
-            return this.InnerPath.FindIntersections(start, end, buffer, offset);
+            Span<PointF> subBuffer = buffer.AsSpan(offset);
+            return this.InnerPath.FindIntersections(start, end, subBuffer);
+        }
+
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        {
+            return this.InnerPath.FindIntersections(start, end, buffer);
         }
 
         /// <summary>

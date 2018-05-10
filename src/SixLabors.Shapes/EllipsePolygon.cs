@@ -7,6 +7,8 @@ using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
+    using System;
+
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
@@ -152,7 +154,14 @@ namespace SixLabors.Shapes
         /// <inheritdoc/>
         int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
-            return this.innerPath.FindIntersections(start, end, buffer, offset);
+            Span<PointF> subBuffer = buffer.AsSpan(offset);
+            return this.innerPath.FindIntersections(start, end, subBuffer);
+        }
+
+        /// <inheritdoc/>
+        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        {
+            return this.innerPath.FindIntersections(start, end, buffer);
         }
 
         /// <summary>

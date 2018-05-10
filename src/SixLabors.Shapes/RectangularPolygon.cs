@@ -235,6 +235,14 @@ namespace SixLabors.Shapes
         /// </returns>
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
+            Span<PointF> subBuffer = buffer.AsSpan(offset);
+            return this.FindIntersections(start, end, subBuffer);
+        }
+
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        {
+            int offset = 0;
             int discovered = 0;
             Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
             Vector2 endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
@@ -263,6 +271,7 @@ namespace SixLabors.Shapes
 
             return discovered;
         }
+
 
         /// <summary>
         /// Transforms the rectangle using specified matrix.
