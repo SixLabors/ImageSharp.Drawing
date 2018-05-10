@@ -443,6 +443,36 @@ namespace SixLabors.Shapes
                     (q.Y + Epsilon2) >= seg.Min.Y;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool IsOnSegments(Segment seg1, Segment seg2, Vector2 q)
+        {
+            float t = q.X - Epsilon2;
+            if (t > seg1.Max.X || t > seg2.Max.X)
+            {
+                return false;
+            }
+
+            t = q.X + Epsilon2;
+            if (t < seg1.Min.X || t < seg2.Min.X)
+            {
+                return false;
+            }
+
+            t = q.Y - Epsilon2;
+            if (t > seg1.Max.Y || t > seg2.Max.Y)
+            {
+                return false;
+            }
+
+            t = q.Y + Epsilon2;
+            if (t < seg1.Min.Y || t < seg2.Min.Y)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         // Modulo is a very slow operation.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int WrapArrayIndex(int i, int arrayLength)
@@ -484,7 +514,7 @@ namespace SixLabors.Shapes
 
         /// <summary>
         /// Finds the point on line described by <paramref name="source" />
-        /// that intersects with line described by <paramref name="target" />
+        /// that intersects with line described by <paramref name="target" />.
         /// </summary>
         /// <param name="source">The line1 start.</param>
         /// <param name="target">The target line.</param>
@@ -509,19 +539,25 @@ namespace SixLabors.Shapes
             x4 = line2End.X;
             y4 = line2End.Y;
 
-            float inter = ((x1 - x2) * (y3 - y4)) - ((y1 - y2) * (x3 - x4));
+            float x12 = x1 - x2;
+            float y12 = y1 - y2;
+            float x34 = x3 - x4;
+            float y34 = y3 - y4;
+            float inter = (x12 * y34) - (y12 * x34);
 
             if (inter > -Epsilon && inter < Epsilon)
             {
                 return MaxVector;
             }
 
-            float x = (((x2 - x1) * ((x3 * y4) - (x4 * y3))) - ((x4 - x3) * ((x1 * y2) - (x2 * y1)))) / inter;
-            float y = (((y3 - y4) * ((x1 * y2) - (x2 * y1))) - ((y1 - y2) * ((x3 * y4) - (x4 * y3)))) / inter;
+            float u = (x1 * y2) - (x2 * y1);
+            float v = (x3 * y4) - (x4 * y3);
+            float x = ((x34 * u) - (x12 * v)) / inter;
+            float y = ((y34 * u) - (y12 * v)) / inter;
 
             Vector2 point = new Vector2(x, y);
 
-            if (IsOnSegment(source, point) && IsOnSegment(target, point))
+            if (IsOnSegments(source, target, point))
             {
                 return point;
             }
