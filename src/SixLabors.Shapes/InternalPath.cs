@@ -179,9 +179,8 @@ namespace SixLabors.Shapes
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
         /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
         /// <returns>number of intersections hit</returns>
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
             if (this.points.Length < 2)
             {
@@ -310,7 +309,7 @@ namespace SixLabors.Shapes
                             }
 
                             // we are not double crossing so just add it once
-                            buffer[position + offset] = point;
+                            buffer[position] = point;
                             position++;
                             count--;
                         }
@@ -353,7 +352,7 @@ namespace SixLabors.Shapes
             PointF[] buffer = ArrayPool<PointF>.Shared.Rent(this.points.Length);
             try
             {
-                int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer, 0);
+                int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer);
                 if ((intersection & 1) == 1)
                 {
                     return true;

@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.Primitives;
@@ -68,6 +69,18 @@ namespace SixLabors.Shapes
         /// The number of intersections populated into the buffer.
         /// </returns>
         int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset);
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
+        /// populate a buffer for all points on the polygon that the line intersects.
+        /// </summary>
+        /// <param name="start">The start point of the line.</param>
+        /// <param name="end">The end point of the line.</param>
+        /// <param name="buffer">The buffer that will be populated with intersections.</param>
+        /// <returns>
+        /// The number of intersections populated into the buffer.
+        /// </returns>
+        int FindIntersections(PointF start, PointF end, Span<PointF> buffer);
 
         /// <summary>
         /// Determines whether the <see cref="IPath"/> contains the specified point

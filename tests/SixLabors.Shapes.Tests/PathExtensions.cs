@@ -6,16 +6,13 @@
 namespace SixLabors.Shapes
 {
     using SixLabors.Primitives;
-    using System;
+
     using System.Buffers;
     using System.Collections.Generic;
-    using System.Linq;
     using System.Numerics;
-    using System.Threading.Tasks;
 
     internal static class InternalPathExtensions
     {
-
         /// <summary>
         /// Finds the intersections.
         /// </summary>
@@ -28,7 +25,7 @@ namespace SixLabors.Shapes
             PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.PointCount);
             try
             {
-                int hits = path.FindIntersections(start, end, buffer, 0);
+                int hits = path.FindIntersections(start, end, buffer);
                 for (int i = 0; i < hits; i++)
                 {
                     results.Add(buffer[i]);

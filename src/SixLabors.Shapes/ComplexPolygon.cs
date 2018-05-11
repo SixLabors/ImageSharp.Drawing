@@ -164,10 +164,18 @@ namespace SixLabors.Shapes
         /// </returns>
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
+            Span<PointF> subBuffer = buffer.AsSpan(offset);
+            return this.FindIntersections(start, end, subBuffer);
+        }
+
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        {
             int totalAdded = 0;
             for (int i = 0; i < this.paths.Length; i++)
             {
-                int added = this.paths[i].FindIntersections(start, end, buffer, totalAdded + offset);
+                Span<PointF> subBuffer = buffer.Slice(totalAdded);
+                int added = this.paths[i].FindIntersections(start, end, subBuffer);
                 totalAdded += added;
             }
 

@@ -179,7 +179,7 @@ namespace SixLabors.Shapes.Tests
         {
             InternalPath shape = Create(new PointF(0, 0), new Size(10, 10));
             PointF[] buffer = new PointF[shape.PointCount];
-            int hits = shape.FindIntersections(new PointF(5, -10), new PointF(5, 20), buffer, 0);
+            int hits = shape.FindIntersections(new PointF(5, -10), new PointF(5, 20), buffer);
 
             Assert.Equal(2, hits);
             Assert.Equal(new PointF(5, 0), buffer[0]);
