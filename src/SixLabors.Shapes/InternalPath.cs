@@ -532,6 +532,8 @@ namespace SixLabors.Shapes
             // This is still symptom fighting though, and probably the intersection finding algorithm
             // should be looked over in the future (making the segments fat using epsilons doesn't truely fix the
             // robustness problem).
+            // Future potential improvement: the precision problem will be reduced if the center of the bitmap is used as origin (0, 0),
+            // this will keep coordinates smaller and relatively precision will be larger.
             double x1, y1, x2, y2, x3, y3, x4, y4;
             x1 = line1Start.X;
             y1 = line1Start.Y;
