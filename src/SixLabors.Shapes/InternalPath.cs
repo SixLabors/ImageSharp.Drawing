@@ -521,7 +521,8 @@ namespace SixLabors.Shapes
         /// <returns>
         /// The point on the line that it hit
         /// </returns>
-        private static Vector2 FindIntersection(Segment source, Segment target) {
+        private static Vector2 FindIntersection(Segment source, Segment target)
+        {
             Vector2 line1Start = source.Start;
             Vector2 line1End = source.End;
             Vector2 line2Start = target.Start;
@@ -551,7 +552,8 @@ namespace SixLabors.Shapes
             double y34 = y3 - y4;
             double inter = (x12 * y34) - (y12 * x34);
 
-            if (inter > -Epsilon && inter < Epsilon) {
+            if (inter > -Epsilon && inter < Epsilon)
+            {
                 return MaxVector;
             }
 
@@ -562,7 +564,8 @@ namespace SixLabors.Shapes
 
             Vector2 point = new Vector2((float)x, (float)y);
 
-            if (IsOnSegments(source, target, point)) {
+            if (IsOnSegments(source, target, point))
+            {
                 return point;
             }
 
