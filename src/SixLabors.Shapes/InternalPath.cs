@@ -521,14 +521,18 @@ namespace SixLabors.Shapes
         /// <returns>
         /// The point on the line that it hit
         /// </returns>
-        private static Vector2 FindIntersection(Segment source, Segment target)
-        {
+        private static Vector2 FindIntersection(Segment source, Segment target) {
             Vector2 line1Start = source.Start;
             Vector2 line1End = source.End;
             Vector2 line2Start = target.Start;
             Vector2 line2End = target.End;
 
-            float x1, y1, x2, y2, x3, y3, x4, y4;
+            // Use double precision for the intermediate calculations, because single precision calculations
+            // easily gets over the Epsilon2 threshold for bitmap sizes larger than about 1500.
+            // This is still symptom fighting though, and probably the intersection finding algorithm
+            // should be looked over in the future (making the segments fat using epsilons doesn't truely fix the
+            // robustness problem).
+            double x1, y1, x2, y2, x3, y3, x4, y4;
             x1 = line1Start.X;
             y1 = line1Start.Y;
             x2 = line1End.X;
@@ -539,26 +543,24 @@ namespace SixLabors.Shapes
             x4 = line2End.X;
             y4 = line2End.Y;
 
-            float x12 = x1 - x2;
-            float y12 = y1 - y2;
-            float x34 = x3 - x4;
-            float y34 = y3 - y4;
-            float inter = (x12 * y34) - (y12 * x34);
+            double x12 = x1 - x2;
+            double y12 = y1 - y2;
+            double x34 = x3 - x4;
+            double y34 = y3 - y4;
+            double inter = (x12 * y34) - (y12 * x34);
 
-            if (inter > -Epsilon && inter < Epsilon)
-            {
+            if (inter > -Epsilon && inter < Epsilon) {
                 return MaxVector;
             }
 
-            float u = (x1 * y2) - (x2 * y1);
-            float v = (x3 * y4) - (x4 * y3);
-            float x = ((x34 * u) - (x12 * v)) / inter;
-            float y = ((y34 * u) - (y12 * v)) / inter;
+            double u = (x1 * y2) - (x2 * y1);
+            double v = (x3 * y4) - (x4 * y3);
+            double x = ((x34 * u) - (x12 * v)) / inter;
+            double y = ((y34 * u) - (y12 * v)) / inter;
 
-            Vector2 point = new Vector2(x, y);
+            Vector2 point = new Vector2((float)x, (float)y);
 
-            if (IsOnSegments(source, target, point))
-            {
+            if (IsOnSegments(source, target, point)) {
                 return point;
             }
 
