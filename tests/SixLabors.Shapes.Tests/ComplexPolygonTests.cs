@@ -5,9 +5,13 @@ using Xunit;
 using SixLabors.Primitives;
 using System.Buffers;
 using Xunit.Abstractions;
+// ReSharper disable InconsistentNaming
 
 namespace SixLabors.Shapes.Tests
 {
+    using System.Globalization;
+    using System.Numerics;
+
     public class ComplexPolygonTests
     {
         public ComplexPolygonTests(ITestOutputHelper output)
@@ -31,11 +35,11 @@ namespace SixLabors.Shapes.Tests
                             new PointF(37, 85),
                             new PointF(93, 85)));
 
-            int intersections1 = ScanY(hole1, 137, data, 6, 0);
+            int intersections1 = this.ScanY(hole1, 137, data, 6, 0);
             Assert.Equal(2, intersections1);
             IPath poly = simplePath.Clip(hole1);
 
-            int intersections = ScanY(poly, 137, data, 6, 0);
+            int intersections = this.ScanY(poly, 137, data, 6, 0);
 
             // returns an even number of points
             Assert.Equal(4, intersections);
@@ -99,7 +103,9 @@ namespace SixLabors.Shapes.Tests
 
                 PointF[] points = pl.Select(p => p.Split('x'))
                             .Select(p => {
-                                return new PointF(float.Parse(p[0]), float.Parse(p[1]));
+                            return new PointF(
+                                float.Parse(p[0], CultureInfo.InvariantCulture),
+                                float.Parse(p[1], CultureInfo.InvariantCulture));
                             })
                             .ToArray();
                 return new Polygon(new LinearLineSegment(points));
@@ -108,13 +114,17 @@ namespace SixLabors.Shapes.Tests
 
 
             float[] data = new float[complex.MaxIntersections];
-            int intersections = ScanY(complex, 30, data, complex.MaxIntersections, 0);
+            int intersections = this.ScanY(complex, 30, data, complex.MaxIntersections, 0);
 
             Assert.True(data[1] < 28, $"second intersection should be > 28 but was {data[1]}");
 
             Assert.True(intersections % 2 == 0, $"even number of intersections expected but found {intersections}");
         }
 
+        /// <summary>
+        /// Test is based on @woutware's the idea and drawing logic in opening comment:
+        /// https://github.com/SixLabors/Shapes/pull/43#issue-189141926
+        /// </summary>
         [Theory]
         [InlineData(100, 100, 10, 3)]
         [InlineData(800, 600, 8, 2)]
@@ -154,6 +164,52 @@ namespace SixLabors.Shapes.Tests
 
                 Assert.True(false);
             }
+        }
+
+        /// <summary>
+        /// Test is based on @woutware's the idea in another issue comment:
+        /// https://github.com/SixLabors/Shapes/pull/43#issuecomment-390358702
+        /// </summary>
+        [Theory]
+        [InlineData(0, 0, 0)]
+        [InlineData(1500, 1500, 0)]
+        [InlineData(3000, 3000, 0)]
+        [InlineData(8000, 8000, 0)]
+        [InlineData(20000, 20000, 0)]
+
+        [InlineData(0, 0, 42)]
+        [InlineData(1500, 1500, 42)]
+        [InlineData(3000, 3000, 42)]
+        [InlineData(8000, 8000, 42)]
+        [InlineData(20000, 20000, 42)]
+
+        [InlineData(0, 0, 123)]
+        [InlineData(1500, 1500, 123)]
+        [InlineData(3000, 3000, 123)]
+        [InlineData(8000, 8000, 123)]
+        [InlineData(20000, 20000, 123)]
+        public void OffsetingIntersectingSegments_ShouldPreserveIntersection(float dx, float dy, int noiseSeed)
+        {
+            Vector2 offset = new Vector2(dx, dy);
+
+            // Let's randomize the input data, while still keeping the test reproducible
+            if (noiseSeed > 0)
+            {
+                Random rnd = new Random(noiseSeed);
+                offset.X += (float)rnd.NextDouble();
+                offset.Y += (float)rnd.NextDouble();
+            }
+            
+            PointF a = new Vector2(21.904f, 78.48f) + offset;
+            PointF b = new Vector2(22.026f, 79.8f) + offset;
+
+            PointF c = new Vector2(48f, 78.5f) + offset;
+            PointF d = new Vector2(20f, 78.5f) + offset;
+
+            Path path = new Path(new LinearLineSegment(a, b));
+
+            int count = path.FindIntersections(c, d, new PointF[1]);
+            Assert.Equal(1, count);
         }
     }
 }
