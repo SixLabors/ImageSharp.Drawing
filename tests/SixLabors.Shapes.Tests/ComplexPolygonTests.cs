@@ -1,17 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using Xunit;
+using SixLabors.Primitives;
+using System.Buffers;
+using Xunit.Abstractions;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Buffers;
-    using System.Numerics;
-
     public class ComplexPolygonTests
     {
+        public ComplexPolygonTests(ITestOutputHelper output)
+        {
+            this.Output = output;
+        }
+
+        private ITestOutputHelper Output { get; }
+
         [Fact]
         public void MissingIntersection()
         {
@@ -110,6 +115,45 @@ namespace SixLabors.Shapes.Tests
             Assert.True(intersections % 2 == 0, $"even number of intersections expected but found {intersections}");
         }
 
-       
+        [Theory]
+        [InlineData(100, 100, 10, 3)]
+        [InlineData(800, 600, 8, 2)]
+        [InlineData(1500, 1500, 10, 3)]
+        [InlineData(4000, 4000, 8, 2)]
+        public void SmallRingAtLargeCoords_HorizontalScansShouldFind4IntersectionPoints(int w, int h, int r, int thickness)
+        {
+            int cx = w - 2 * r;
+            int cy = h - 2 * 3;
+
+            EllipsePolygon ellipse = new EllipsePolygon(cx, cy, r);
+            IPath path = ellipse.GenerateOutline(thickness);
+
+            int yMin = cy - r + thickness + 1;
+            int yMax = cy + r - thickness;
+
+            PointF[] buffer = new PointF[16];
+
+            List<int> badPositions = new List<int>();
+
+            for (int y = yMin; y < yMax; y++)
+            {
+                PointF start = new PointF(-1, y);
+                PointF end = new PointF(w + 1, y);
+
+                int intersectionCount = path.FindIntersections(start, end, buffer);
+                if (intersectionCount != 4)
+                {
+                    badPositions.Add(y);
+                }
+            }
+
+            if (badPositions.Any())
+            {
+                string badPoz = string.Join(',', badPositions);
+                this.Output.WriteLine($"BAD: {badPositions.Count} of {yMax - yMin}: {badPoz}");
+
+                Assert.True(false);
+            }
+        }
     }
 }
