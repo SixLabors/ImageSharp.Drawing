@@ -64,7 +64,7 @@ namespace SixLabors.Shapes.Tests
 
             Star poly = new Star(Vector2.Zero, pointsCount, radius, radius2, 0);
 
-            var points = poly.Flatten().ToArray()[0].Points.ToArray();
+            PointF[] points = poly.Flatten().ToArray()[0].Points.ToArray();
 
             // calcualte baselineDistance
             float baseline = Vector2.Distance(points[0], points[1]);

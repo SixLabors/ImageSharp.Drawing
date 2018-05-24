@@ -22,8 +22,8 @@ namespace SixLabors.Shapes.Tests.Issues
                             new PointF(93, 85),
                             new PointF(65, 137)));
 
-            var clippedPath = simplePath.Clip(hole1);
-            var outline = clippedPath.GenerateOutline(5, new[] { 1f });
+            IPath clippedPath = simplePath.Clip(hole1);
+            IPath outline = clippedPath.GenerateOutline(5, new[] { 1f });
 
             Assert.False(outline.Contains(new PointF(74, 97)));
         }
@@ -41,15 +41,15 @@ namespace SixLabors.Shapes.Tests.Issues
                             new PointF(93, 85),
                             new PointF(65, 137)));
 
-            var clippedPath = simplePath.Clip(hole1);
-            var outline = clippedPath.GenerateOutline(5, new[] { 1f });
-            var buffer = new PointF[20];
+            IPath clippedPath = simplePath.Clip(hole1);
+            IPath outline = clippedPath.GenerateOutline(5, new[] { 1f });
+            PointF[] buffer = new PointF[20];
 
-            var start = new PointF(outline.Bounds.Left - 1, 102);
-            var end = new PointF(outline.Bounds.Right + 1, 102);
+            PointF start = new PointF(outline.Bounds.Left - 1, 102);
+            PointF end = new PointF(outline.Bounds.Right + 1, 102);
 
-            var matches = outline.FindIntersections(start, end, buffer, 0);
-            var maxIndex = buffer.Select((x, i) => new { x, i }).Where(x => x.x.X > 0).Select(x=>x.i).Last();
+            int matches = outline.FindIntersections(start, end, buffer, 0);
+            int maxIndex = buffer.Select((x, i) => new { x, i }).Where(x => x.x.X > 0).Select(x=>x.i).Last();
             Assert.Equal(matches-1, maxIndex);
         }
     }

@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Processing.Drawing;
 
 namespace SixLabors.Shapes.DrawShapesWithImageSharp
 {
@@ -13,11 +16,11 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             float scalingFactor = size / 1206;
 
-            var center = new Vector2(603);
+            Vector2 center = new Vector2(603);
 
             // segment whoes cetner of rotation should be 
-            var segmentOffset = new Vector2(301.16968f, 301.16974f);
-            var segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
+            Vector2 segmentOffset = new Vector2(301.16968f, 301.16974f);
+            IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
                 new CubicBezierLineSegment(new Vector2(5.8641942f, 361.46031f),
                 new Vector2(-11.715693f, 259.54052f),
                 new Vector2(24.441609f, 158.17478f),
@@ -26,10 +29,10 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             //we need to create 6 of theses all rotated about the center point
             List<IPath> segments = new List<IPath>();
-            for (var i = 0; i < 6; i++)
+            for (int i = 0; i < 6; i++)
             {
                 float angle = i * ((float)Math.PI / 3);
-                var s = segment.Transform(Matrix3x2.CreateRotation(angle, center));
+                IPath s = segment.Transform(Matrix3x2.CreateRotation(angle, center));
                 segments.Add(s);
             }
 
@@ -44,21 +47,21 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
 
-            var dimensions = (int)Math.Ceiling(size);
-            using (var img = new Image<Rgba32>(dimensions, dimensions))
+            int dimensions = (int)Math.Ceiling(size);
+            using (Image<Rgba32> img = new Image<Rgba32>(dimensions, dimensions))
             {
                 img.Mutate(i => i.Fill(Rgba32.Black));
                 img.Mutate(i => i.Fill(Rgba32.FromHex("e1e1e1ff"), new EllipsePolygon(center, 600f).Transform(scaler)));
                 img.Mutate(i => i.Fill(Rgba32.White, new EllipsePolygon(center, 600f - 60).Transform(scaler)));
 
-                for (var s = 0; s < 6; s++)
+                for (int s = 0; s < 6; s++)
                 {
                     img.Mutate(i => i.Fill(colors[s], segments[s].Transform(scaler)));
                 }
 
                 img.Mutate(i => i.Fill(new Rgba32(0, 0, 0, 170), new ComplexPolygon(new EllipsePolygon(center, 161f), new EllipsePolygon(center, 61f)).Transform(scaler)));
 
-                var fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
+                string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 
                 img.Save(fullPath);
             }

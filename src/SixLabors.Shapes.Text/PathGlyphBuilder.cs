@@ -36,13 +36,13 @@ namespace SixLabors.Shapes.Text
         /// <inheritdoc/>
         protected override void BeginGlyph(RectangleF rect)
         {
-            var point = this.path.PointAlongPath(rect.Left);
+            SegmentInfo point = this.path.PointAlongPath(rect.Left);
 
             PointF targetPoint = point.Point + new PointF(0, rect.Top - this.yOffset);
 
             // due to how matrix combining works you have to combine thins in the revers order of operation
             // this one rotates the glype then moves it.
-            var matrix = Matrix3x2.CreateTranslation(targetPoint - rect.Location) * Matrix3x2.CreateRotation(point.Angle - Pi, point.Point);
+            Matrix3x2 matrix = Matrix3x2.CreateTranslation(targetPoint - rect.Location) * Matrix3x2.CreateRotation(point.Angle - Pi, point.Point);
             this.builder.SetTransform(matrix);
         }
     }

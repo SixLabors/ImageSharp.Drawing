@@ -177,7 +177,7 @@ namespace SixLabors.Shapes.Tests
         public void LienearSegements()
         {
             IPath shape = new RectangularPolygon(10, 11, 12, 13).AsPath();
-            var segemnts = shape.Flatten().ToArray()[0].Points;
+            IReadOnlyList<PointF> segemnts = shape.Flatten().ToArray()[0].Points;
             Assert.Equal(new PointF(10, 11), segemnts[0]);
             Assert.Equal(new PointF(22, 11), segemnts[1]);
             Assert.Equal(new PointF(22, 24), segemnts[2]);
@@ -281,7 +281,7 @@ namespace SixLabors.Shapes.Tests
         public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
         {
             IPath shape = new RectangularPolygon(50, 50, 200, 60);
-            var point = shape.PointAlongPath(distance);
+            SegmentInfo point = shape.PointAlongPath(distance);
             Assert.Equal(expectedX, point.Point.X);
             Assert.Equal(expectedY, point.Point.Y);
             Assert.Equal(expectedAngle, point.Angle);

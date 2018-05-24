@@ -21,7 +21,7 @@ namespace SixLabors.Shapes
         /// <returns>The <see cref="IPathCollection"/></returns>
         public static IPathCollection GenerateGlyphs(string text, PointF location, RendererOptions style)
         {
-            var glyphBuilder = new GlyphBuilder(location);
+            GlyphBuilder glyphBuilder = new GlyphBuilder(location);
 
             TextRenderer renderer = new TextRenderer(glyphBuilder);
 
@@ -50,7 +50,7 @@ namespace SixLabors.Shapes
         /// <returns>The <see cref="IPathCollection"/></returns>
         public static IPathCollection GenerateGlyphs(string text, IPath path, RendererOptions style)
         {
-            var glyphBuilder = new PathGlyphBuilder(path);
+            PathGlyphBuilder glyphBuilder = new PathGlyphBuilder(path);
 
             TextRenderer renderer = new TextRenderer(glyphBuilder);
 

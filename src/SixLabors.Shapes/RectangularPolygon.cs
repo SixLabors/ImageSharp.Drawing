@@ -476,7 +476,7 @@ namespace SixLabors.Shapes
                 return false;
             }
 
-            var otherRectangle = (RectangularPolygon)obj;
+            RectangularPolygon otherRectangle = (RectangularPolygon)obj;
 
             return this.X == otherRectangle.X &&
                 this.Y == otherRectangle.Y &&
@@ -490,7 +490,7 @@ namespace SixLabors.Shapes
         /// <returns>A hash code for the current object.</returns>
         public override int GetHashCode()
         {
-            var hashCode = -1073544145;
+            int hashCode = -1073544145;
             hashCode = (hashCode * -1521134295) + this.X.GetHashCode();
             hashCode = (hashCode * -1521134295) + this.Y.GetHashCode();
             hashCode = (hashCode * -1521134295) + this.Width.GetHashCode();

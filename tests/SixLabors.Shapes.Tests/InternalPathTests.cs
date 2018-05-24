@@ -149,7 +149,7 @@ namespace SixLabors.Shapes.Tests
         public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
         {
             InternalPath shape = Create(new PointF(50, 50), new Size(200, 60));
-            var point = shape.PointAlongPath(distance);
+            SegmentInfo point = shape.PointAlongPath(distance);
             Assert.Equal(expectedX, point.Point.X, 4);
             Assert.Equal(expectedY, point.Point.Y, 4);
             Assert.Equal(expectedAngle, point.Angle, 4);
