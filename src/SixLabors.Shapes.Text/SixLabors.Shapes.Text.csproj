@@ -41,7 +41,7 @@
         <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta004">
             <PrivateAssets>All</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0003" />
+        <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0005" />
     </ItemGroup>
 
     <ItemGroup>
