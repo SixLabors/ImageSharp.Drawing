@@ -7,6 +7,7 @@ using Xunit.Abstractions;
 
 namespace SixLabors.Shapes.Tests
 {
+    [Serializable]
     public class TestSize : IXunitSerializable
     {
         public TestSize() { }

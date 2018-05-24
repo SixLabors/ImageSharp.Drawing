@@ -9,6 +9,7 @@ namespace SixLabors.Shapes.Tests
     using SixLabors.Primitives;
     using System.Numerics;
 
+    [Serializable]
     public class TestPoint : IXunitSerializable
     {
         public TestPoint() { }
