@@ -215,7 +215,7 @@ namespace SixLabors.Shapes.Tests
 
             PointF[] buffer = shape.FindIntersections(new PointF(0, 10), new PointF(10, 0)).ToArray();
 
-            Assert.Equal(1, buffer.Length);
+            Assert.Single(buffer);
             Assert.Equal(new PointF(5, 5), buffer[0]);
         }
 
@@ -226,7 +226,7 @@ namespace SixLabors.Shapes.Tests
 
             PointF[] buffer = shape.FindIntersections(new PointF(0, 10), new PointF(10, 0)).ToArray();
 
-            Assert.Equal(0, buffer.Length);
+            Assert.Empty(buffer);
         }
         [Fact]
         public void Intersections_Diagonal_and_straight_Hit()
@@ -235,7 +235,7 @@ namespace SixLabors.Shapes.Tests
 
             PointF[] buffer = shape.FindIntersections(new PointF(3, 10), new PointF(3, 0)).ToArray();
 
-            Assert.Equal(1, buffer.Length);
+            Assert.Single(buffer);
             Assert.Equal(new PointF(3, 3), buffer[0]);
         }
         [Fact]
@@ -245,7 +245,7 @@ namespace SixLabors.Shapes.Tests
 
             PointF[] buffer = shape.FindIntersections(new PointF(3, 10), new PointF(3, 3.5f)).ToArray();
 
-            Assert.Equal(0, buffer.Length);
+            Assert.Empty(buffer);
         }
     }
 }

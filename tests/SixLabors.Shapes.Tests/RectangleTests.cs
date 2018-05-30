@@ -201,7 +201,7 @@ namespace SixLabors.Shapes.Tests
             IPath shape = new RectangularPolygon(1, 1, 10, 10);
             IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(5, 5));
 
-            Assert.Equal(1, intersections.Count());
+            Assert.Single(intersections);
             Assert.Equal(new PointF(1, 5), intersections.First());
         }
 
@@ -211,7 +211,7 @@ namespace SixLabors.Shapes.Tests
             IPath shape = new RectangularPolygon(1, 1, 10, 10);
             IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(-5, 5));
 
-            Assert.Equal(0, intersections.Count());
+            Assert.Empty(intersections);
         }
 
         [Fact]

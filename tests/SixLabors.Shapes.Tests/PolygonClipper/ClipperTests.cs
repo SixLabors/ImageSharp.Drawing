@@ -65,7 +65,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
                 new Vector2(20, 100)));
 
             IEnumerable<IPath> shapes = this.Clip(triangle, cutout);
-            Assert.Equal(1, shapes.Count());
+            Assert.Single(shapes);
             Assert.DoesNotContain(triangle, shapes);
         }
 
@@ -73,7 +73,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         public void OverlappingTriangles()
         {
             IEnumerable<IPath> shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
-            Assert.Equal(1, shapes.Count());
+            Assert.Single(shapes);
             IReadOnlyList<PointF> path = shapes.Single().Flatten().First().Points;
             Assert.Equal(7, path.Count);
             foreach (Vector2 p in this.BigTriangle.Flatten().First().Points)
@@ -88,7 +88,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
             IEnumerable<RectangularPolygon> shapes = this.Clip(this.TopLeft, this.TopRight)
                 .OfType<Polygon>().Select(x => (RectangularPolygon)x);
 
-            Assert.Equal(1, shapes.Count());
+            Assert.Single(shapes);
             Assert.Contains(this.TopLeft, shapes);
 
             Assert.DoesNotContain(this.TopRight, shapes);
@@ -99,7 +99,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         {
             IEnumerable<IPath> shapes = this.Clip(this.BigSquare, this.TopLeft);
 
-            Assert.Equal(1, shapes.Count());
+            Assert.Single(shapes);
             Assert.DoesNotContain(this.BigSquare, shapes);
             Assert.DoesNotContain(this.TopLeft, shapes);
         }
@@ -119,7 +119,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         public void TouchingButNotOverlapping()
         {
             IEnumerable<IPath> shapes = this.Clip(this.TopMiddle, this.TopLeft);
-            Assert.Equal(1, shapes.Count());
+            Assert.Single(shapes);
             Assert.DoesNotContain(this.TopMiddle, shapes);
             Assert.DoesNotContain(this.TopLeft, shapes);
         }
@@ -128,7 +128,7 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         public void ClippingRectanglesCreateCorrectNumberOfPoints()
         {
             IEnumerable<ISimplePath> paths = new RectangularPolygon(10, 10, 40, 40).Clip(new RectangularPolygon(20, 0, 20, 20)).Flatten();
-            Assert.Equal(1, paths.Count());
+            Assert.Single(paths);
             IReadOnlyList<PointF> points = paths.First().Points;
 
             Assert.Equal(8, points.Count);

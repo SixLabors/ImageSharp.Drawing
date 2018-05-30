@@ -17,8 +17,8 @@ namespace SixLabors.Shapes.Tests
         public PathExtentionTests()
         {
             this.bounds = new RectangleF(10, 10, 20, 20);
-            mockPath = new Mock<IPath>();
-            mockPath.Setup(x => x.Bounds).Returns(() => bounds);
+            this.mockPath = new Mock<IPath>();
+            this.mockPath.Setup(x => x.Bounds).Returns(() => this.bounds);
         }
 
         [Fact]
@@ -26,20 +26,20 @@ namespace SixLabors.Shapes.Tests
         {
             float angle = (float)Math.PI;
 
-            mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
+            this.mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
                 .Callback<Matrix3x2>(m =>
                 {
                     //validate matrix in here
 
-                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(angle, RectangleF.Center(bounds));
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(angle, RectangleF.Center(this.bounds));
 
                     Assert.Equal(targetMatrix, m);
 
-                }).Returns(mockPath.Object);
+                }).Returns(this.mockPath.Object);
 
-            mockPath.Object.Rotate(angle);
+            this.mockPath.Object.Rotate(angle);
 
-            mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
+            this.mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
         }
 
         [Fact]
@@ -47,21 +47,21 @@ namespace SixLabors.Shapes.Tests
         {
             float angle = 90;
 
-            mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
+            this.mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
                 .Callback<Matrix3x2>(m =>
                 {
                     //validate matrix in here
                     float radians = (float)(Math.PI * angle / 180.0);
 
-                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(radians, RectangleF.Center(bounds));
+                    Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(radians, RectangleF.Center(this.bounds));
 
                     Assert.Equal(targetMatrix, m);
 
-                }).Returns(mockPath.Object);
+                }).Returns(this.mockPath.Object);
 
-            mockPath.Object.RotateDegree(angle);
+            this.mockPath.Object.RotateDegree(angle);
 
-            mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
+            this.mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
         }
 
         [Fact]
@@ -69,7 +69,7 @@ namespace SixLabors.Shapes.Tests
         {
             Vector2 point = new Vector2(98, 120);
 
-            mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
+            this.mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
                 .Callback<Matrix3x2>(m =>
                 {
                     //validate matrix in here
@@ -78,11 +78,11 @@ namespace SixLabors.Shapes.Tests
 
                     Assert.Equal(targetMatrix, m);
 
-                }).Returns(mockPath.Object);
+                }).Returns(this.mockPath.Object);
 
-            mockPath.Object.Translate(point);
+            this.mockPath.Object.Translate(point);
 
-            mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
+            this.mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
         }
 
         [Fact]
@@ -91,7 +91,7 @@ namespace SixLabors.Shapes.Tests
             float x = 76;
             float y = 7;
 
-            mockPath.Setup(p => p.Transform(It.IsAny<Matrix3x2>()))
+            this.mockPath.Setup(p => p.Transform(It.IsAny<Matrix3x2>()))
                 .Callback<Matrix3x2>(m =>
                 {
                     //validate matrix in here
@@ -100,11 +100,11 @@ namespace SixLabors.Shapes.Tests
 
                     Assert.Equal(targetMatrix, m);
 
-                }).Returns(mockPath.Object);
+                }).Returns(this.mockPath.Object);
 
-            mockPath.Object.Translate(x, y);
+            this.mockPath.Object.Translate(x, y);
 
-            mockPath.Verify(p => p.Transform(It.IsAny<Matrix3x2>()), Times.Once);
+            this.mockPath.Verify(p => p.Transform(It.IsAny<Matrix3x2>()), Times.Once);
         }
     }
 }

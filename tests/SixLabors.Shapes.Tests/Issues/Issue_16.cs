@@ -22,7 +22,7 @@ namespace SixLabors.Shapes.Tests
             IEnumerable<PointF> inter = p.FindIntersections(Vector2.One, Vector2.Zero);
 
             // if simplified to single point then we should never have an intersection
-            Assert.Equal(0, inter.Count());
+            Assert.Empty(inter);
         }
     }
 }

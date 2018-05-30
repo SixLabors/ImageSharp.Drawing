@@ -148,7 +148,7 @@ namespace SixLabors.Shapes.Tests
         {
             Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
             ISimplePath[] paths = poly.Flatten().ToArray();
-            Assert.Equal(1, paths.Length);
+            Assert.Single(paths);
             Assert.Equal(poly, paths[0]);
         }
 
@@ -157,7 +157,7 @@ namespace SixLabors.Shapes.Tests
         {
             Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10)), new LinearLineSegment(new PointF(2, 5), new PointF(5, 5)));
             ISimplePath[] paths = poly.Flatten().ToArray();
-            Assert.Equal(1, paths.Length);
+            Assert.Single(paths);
             Assert.Equal(poly, paths[0]);
         }
 

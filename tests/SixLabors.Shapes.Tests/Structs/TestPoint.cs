@@ -31,13 +31,13 @@ namespace SixLabors.Shapes.Tests
 
         public void Serialize(IXunitSerializationInfo info)
         {
-            info.AddValue("X", X);
-            info.AddValue("Y", Y);
+            info.AddValue("X", this.X);
+            info.AddValue("Y", this.Y);
         }
 
         public override string ToString()
         {
-            return $"({X}, {Y})";
+            return $"({this.X}, {this.Y})";
         }
 
         public static implicit operator PointF(TestPoint p)
