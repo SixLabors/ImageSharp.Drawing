@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -24,6 +25,16 @@ namespace SixLabors.Shapes
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <returns>A new path representing the outline.</returns>
         public static IPath GenerateOutline(this IPath path, float width, float[] pattern)
+            => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern));
+
+        /// <summary>
+        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// </summary>
+        /// <param name="path">the path to outline</param>
+        /// <param name="width">The final width outline</param>
+        /// <param name="pattern">The pattern made of multiples of the width.</param>
+        /// <returns>A new path representing the outline.</returns>
+        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern)
         {
             return path.GenerateOutline(width, pattern, false);
         }
@@ -37,6 +48,17 @@ namespace SixLabors.Shapes
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
         public static IPath GenerateOutline(this IPath path, float width, float[] pattern, bool startOff)
+            => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern), startOff);
+
+        /// <summary>
+        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// </summary>
+        /// <param name="path">the path to outline</param>
+        /// <param name="width">The final width outline</param>
+        /// <param name="pattern">The pattern made of multiples of the width.</param>
+        /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
+        /// <returns>A new path representing the outline.</returns>
+        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
         {
             if (pattern == null || pattern.Length < 2)
             {
