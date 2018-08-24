@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -36,7 +37,7 @@ namespace SixLabors.Shapes
         /// <param name="point2">The point2.</param>
         /// <param name="additionalPoints">Additional points</param>
         public LinearLineSegment(PointF point1, PointF point2, params PointF[] additionalPoints)
-            : this(new[] { point1, point2 }.Concat(additionalPoints))
+            : this(new[] { point1, point2 }.Merge(additionalPoints))
         {
         }
 
@@ -44,11 +45,9 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="LinearLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public LinearLineSegment(IEnumerable<PointF> points)
+        public LinearLineSegment(PointF[] points)
         {
-            Guard.NotNull(points, nameof(points));
-
-            this.points = points.ToArray();
+            this.points = points ?? throw new ArgumentNullException(nameof(points));
 
             Guard.MustBeGreaterThanOrEqualTo(this.points.Length, 2, nameof(points));
 
