@@ -113,10 +113,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The bounds.
         /// </value>
-        public RectangleF Bounds
-        {
-            get;
-        }
+        public RectangleF Bounds { get; }
 
         /// <summary>
         /// Gets the length.
@@ -138,7 +135,7 @@ namespace SixLabors.Shapes
         /// <returns>Returns the distance from the path</returns>
         public PointInfo DistanceFromPath(PointF point)
         {
-            PointInfoInternal internalInfo = default(PointInfoInternal);
+            PointInfoInternal internalInfo = default;
             internalInfo.DistanceSquared = float.MaxValue; // Set it to max so that CalculateShorterDistance can reduce it back down
 
             int polyCorners = this.points.Length;
@@ -191,7 +188,7 @@ namespace SixLabors.Shapes
 
             this.ClampPoints(ref start, ref end);
 
-            Segment target = new Segment(start, end);
+            var target = new Segment(start, end);
 
             int polyCorners = this.points.Length;
 
@@ -216,7 +213,7 @@ namespace SixLabors.Shapes
                 // iterate over all points and precalculate data about each, pre cacluating it relative orientation
                 for (int i = 0; i < polyCorners && count > 0; i++)
                 {
-                    Segment edge = this.points[i].Segment;
+                    ref Segment edge = ref this.points[i].Segment;
 
                     // shift all orientations along but one place and fill in the last one
                     Orientation pointOrientation = nextOrientation;
@@ -521,7 +518,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// The point on the line that it hit
         /// </returns>
-        private static Vector2 FindIntersection(Segment source, Segment target)
+        private static Vector2 FindIntersection(in Segment source, in Segment target)
         {
             Vector2 line1Start = source.Start;
             Vector2 line1End = source.End;
@@ -843,12 +840,12 @@ namespace SixLabors.Shapes
             public bool DoIntersect;
         }
 
-        private struct Segment
+        private readonly struct Segment
         {
-            public PointF Start;
-            public PointF End;
-            public PointF Min;
-            public PointF Max;
+            public readonly PointF Start;
+            public readonly PointF End;
+            public readonly PointF Min;
+            public readonly PointF Max;
 
             public Segment(PointF start, PointF end)
             {
