@@ -12,8 +12,8 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Represents a line segment that contains a lists of control points that will be rendered as a cubic bezier curve
     /// </summary>
-    /// <seealso cref="SixLabors.Shapes.ILineSegment" />
-    public class CubicBezierLineSegment : ILineSegment
+    /// <seealso cref="ILineSegment" />
+    public sealed class CubicBezierLineSegment : ILineSegment
     {
         // code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
         private const float MinimumSqrDistance = 1.75f;
@@ -100,7 +100,7 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            PointF[] points = new PointF[this.controlPoints.Length];
+            var points = new PointF[this.controlPoints.Length];
             int i = 0;
             foreach (PointF p in this.controlPoints)
             {
@@ -119,7 +119,7 @@ namespace SixLabors.Shapes
 
         private static List<PointF> GetDrawingPoints(PointF[] controlPoints)
         {
-            List<PointF> drawingPoints = new List<PointF>();
+            var drawingPoints = new List<PointF>();
             int curveCount = (controlPoints.Length - 1) / 3;
 
             for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
@@ -140,7 +140,7 @@ namespace SixLabors.Shapes
 
         private static List<PointF> FindDrawingPoints(int curveIndex, PointF[] controlPoints)
         {
-            List<PointF> pointList = new List<PointF>();
+            var pointList = new List<PointF>();
 
             Vector2 left = CalculateBezierPoint(curveIndex, 0, controlPoints);
             Vector2 right = CalculateBezierPoint(curveIndex, 1, controlPoints);

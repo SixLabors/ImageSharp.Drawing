@@ -12,7 +12,7 @@ namespace SixLabors.Shapes
     /// Represents a series of control points that will be joined by straight lines
     /// </summary>
     /// <seealso cref="ILineSegment" />
-    public class LinearLineSegment : ILineSegment
+    public sealed class LinearLineSegment : ILineSegment
     {
         /// <summary>
         /// The collection of points.
@@ -89,7 +89,7 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            PointF[] points = new PointF[this.points.Length];
+            var points = new PointF[this.points.Length];
             int i = 0;
             foreach (PointF p in this.points)
             {
