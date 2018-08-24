@@ -23,13 +23,17 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="paths">The collection of paths</param>
         public PathCollection(IEnumerable<IPath> paths)
+            : this(paths?.ToArray())
         {
-            if (paths is null)
-            {
-                throw new ArgumentNullException(nameof(paths));
-            }
+        }
 
-            this.paths = paths as IPath[] ?? paths.ToArray();
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PathCollection"/> class.
+        /// </summary>
+        /// <param name="paths">The collection of paths</param>
+        public PathCollection(params IPath[] paths)
+        {
+            this.paths = paths ?? throw new ArgumentNullException(nameof(paths));
 
             if (this.paths.Length == 0)
             {
@@ -45,15 +49,6 @@ namespace SixLabors.Shapes
 
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PathCollection"/> class.
-        /// </summary>
-        /// <param name="paths">The collection of paths</param>
-        public PathCollection(params IPath[] paths)
-            : this((IEnumerable<IPath>)paths)
-        {
         }
 
         /// <inheritdoc />
