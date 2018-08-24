@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using SixLabors.Primitives;
 
@@ -29,10 +28,10 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public CubicBezierLineSegment(IEnumerable<PointF> points)
+        public CubicBezierLineSegment(PointF[] points)
         {
-            Guard.NotNull(points, nameof(points));
-            this.controlPoints = points.ToArray();
+            this.controlPoints = points ?? throw new ArgumentNullException(nameof(points));
+
             Guard.MustBeGreaterThanOrEqualTo(this.controlPoints.Length, 4, nameof(points));
 
             int correctPointCount = (this.controlPoints.Length - 1) % 3;
@@ -49,22 +48,13 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
         /// </summary>
-        /// <param name="points">The points.</param>
-        public CubicBezierLineSegment(PointF[] points)
-            : this((IEnumerable<PointF>)points)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
-        /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="controlPoint1">The control point1.</param>
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="end">The end.</param>
         /// <param name="additionalPoints">The additional points.</param>
         public CubicBezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end, params PointF[] additionalPoints)
-            : this(new[] { start, controlPoint1, controlPoint2, end }.Concat(additionalPoints))
+            : this(new[] { start, controlPoint1, controlPoint2, end }.Merge(additionalPoints))
         {
         }
 
