@@ -67,9 +67,9 @@ namespace SixLabors.Shapes
 
             IEnumerable<ISimplePath> paths = path.Flatten();
 
-            ClipperOffset offset = new ClipperOffset();
+            var offset = new ClipperOffset();
 
-            List<IntPoint> buffer = new List<IntPoint>(3);
+            var buffer = new List<IntPoint>(3);
             foreach (ISimplePath p in paths)
             {
                 bool online = !startOff;
@@ -160,14 +160,14 @@ namespace SixLabors.Shapes
         /// <returns>A new path representing the outline.</returns>
         public static IPath GenerateOutline(this IPath path, float width)
         {
-            ClipperOffset offset = new ClipperLib.ClipperOffset();
+            var offset = new ClipperOffset();
 
             // Pattern can be applied to the path by cutting it into segments
             IEnumerable<ISimplePath> paths = path.Flatten();
             foreach (ISimplePath p in paths)
             {
                 IReadOnlyList<PointF> vectors = p.Points;
-                List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Count);
+                var points = new List<IntPoint>(vectors.Count);
                 foreach (Vector2 v in vectors)
                 {
                     points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
@@ -183,9 +183,9 @@ namespace SixLabors.Shapes
 
         private static IPath ExecuteOutliner(float width, ClipperOffset offset)
         {
-            List<List<IntPoint>> tree = new List<List<IntPoint>>();
+            var tree = new List<List<IntPoint>>();
             offset.Execute(ref tree, width * ScalingFactor / 2);
-            List<Polygon> polygons = new List<Polygon>();
+            var polygons = new List<Polygon>();
             foreach (List<IntPoint> pt in tree)
             {
                 PointF[] points = pt.Select(p => new PointF(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
