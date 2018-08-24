@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -23,7 +24,10 @@ namespace SixLabors.Shapes
         /// <param name="paths">The collection of paths</param>
         public PathCollection(IEnumerable<IPath> paths)
         {
-            Guard.NotNull(paths, nameof(paths));
+            if (paths is null)
+            {
+                throw new ArgumentNullException(nameof(paths));
+            }
 
             this.paths = paths as IPath[] ?? paths.ToArray();
 
