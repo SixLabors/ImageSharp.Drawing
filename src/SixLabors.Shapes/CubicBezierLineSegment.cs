@@ -64,7 +64,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The end point.
         /// </value>
-        public PointF EndPoint { get; private set; }
+        public PointF EndPoint { get; }
 
         /// <summary>
         /// Returns the current <see cref="ILineSegment" /> a simple linear path.
@@ -90,14 +90,14 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            var points = new PointF[this.controlPoints.Length];
-            int i = 0;
-            foreach (PointF p in this.controlPoints)
+            var transformedPoints = new PointF[this.controlPoints.Length];
+
+            for (int i = 0; i < this.controlPoints.Length; i++)
             {
-                points[i++] = PointF.Transform(p, matrix);
+                transformedPoints[i] = PointF.Transform(this.controlPoints[i], matrix);
             }
 
-            return new CubicBezierLineSegment(points);
+            return new CubicBezierLineSegment(transformedPoints);
         }
 
         /// <summary>
