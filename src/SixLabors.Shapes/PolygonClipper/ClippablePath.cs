@@ -6,7 +6,7 @@ namespace SixLabors.Shapes.PolygonClipper
     /// <summary>
     /// Represents a shape and its type for when clipping is applies.
     /// </summary>
-    public struct ClippablePath
+    public readonly struct ClippablePath
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="ClippablePath" /> struct.
@@ -22,7 +22,7 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <summary>
         /// Gets the path.
         /// </summary>
-        public IPath Path { get; private set; }
+        public IPath Path { get; }
 
         /// <summary>
         /// Gets the type.
@@ -30,6 +30,6 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <value>
         /// The type.
         /// </value>
-        public ClippingType Type { get; private set; }
+        public ClippingType Type { get; }
     }
 }
