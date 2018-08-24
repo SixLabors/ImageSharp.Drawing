@@ -25,7 +25,8 @@ namespace SixLabors.Shapes
         {
             Guard.NotNull(paths, nameof(paths));
 
-            this.paths = paths.ToArray();
+            this.paths = paths as IPath[] ?? paths.ToArray();
+
             if (this.paths.Length == 0)
             {
                 this.Bounds = new RectangleF(0, 0, 0, 0);
@@ -60,7 +61,8 @@ namespace SixLabors.Shapes
         /// <inheritdoc />
         public IPathCollection Transform(Matrix3x2 matrix)
         {
-            IPath[] result = new IPath[this.paths.Length];
+            var result = new IPath[this.paths.Length];
+
             for (int i = 0; i < this.paths.Length && i < result.Length; i++)
             {
                 result[i] = this.paths[i].Transform(matrix);
