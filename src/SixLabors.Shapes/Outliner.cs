@@ -60,7 +60,7 @@ namespace SixLabors.Shapes
         /// <returns>A new path representing the outline.</returns>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
         {
-            if (pattern == null || pattern.Length < 2)
+            if (pattern.Length < 2)
             {
                 return path.GenerateOutline(width);
             }
