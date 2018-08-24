@@ -67,14 +67,9 @@ namespace SixLabors.Shapes.PolygonClipper
                     points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
                 }
 
-                if (results[i].IsOpen)
-                {
-                    shapes[i] = new Path(new LinearLineSegment(points));
-                }
-                else
-                {
-                    shapes[i] = new Polygon(new LinearLineSegment(points));
-                }
+                shapes[i] = results[i].IsOpen
+                    ? new Path(new LinearLineSegment(points))
+                    : new Polygon(new LinearLineSegment(points));
             }
 
             return shapes;
