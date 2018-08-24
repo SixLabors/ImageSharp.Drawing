@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 
 namespace SixLabors.Shapes
 {
@@ -26,47 +24,6 @@ namespace SixLabors.Shapes
             if (target is null)
             {
                 throw new ArgumentNullException(parameterName);
-            }
-        }
-
-        /// <summary>
-        /// Verifies, that the string method parameter with specified object value and message
-        /// is not null, not empty and does not contain only blanks and throws an exception
-        /// if the object is null.
-        /// </summary>
-        /// <param name="target">The target string, which should be checked against being null or empty.</param>
-        /// <param name="parameterName">Name of the parameter.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="target"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="target"/> is empty or contains only blanks.</exception>
-        public static void NotNullOrEmpty(string target, string parameterName)
-        {
-            if (target is null)
-            {
-                throw new ArgumentNullException(nameof(target));
-            }
-
-            if (string.IsNullOrWhiteSpace(target))
-            {
-                throw new ArgumentException("Value cannot be null or empty and cannot contain only blanks.", parameterName);
-            }
-        }
-
-        /// <summary>
-        /// Verifies, that the enumeration is not null and not empty.
-        /// </summary>
-        /// <typeparam name="T">The type of objects in the <paramref name="target"/></typeparam>
-        /// <param name="target">The target enumeration, which should be checked against being null or empty.</param>
-        /// <param name="parameterName">Name of the parameter.</param>
-        /// <param name="message">The error message, if any to add to the exception.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="target"/> is null.</exception>
-        /// <exception cref="ArgumentException"><paramref name="target"/> is empty.</exception>
-        public static void NotNullOrEmpty<T>(IEnumerable<T> target, string parameterName)
-        {
-            NotNull(target, parameterName);
-
-            if (!target.Any())
-            {
-                throw new ArgumentException("Value cannot be empty.", parameterName);
             }
         }
 
@@ -170,48 +127,6 @@ namespace SixLabors.Shapes
             if (value.CompareTo(min) < 0 || value.CompareTo(max) > 0)
             {
                 throw new ArgumentOutOfRangeException(parameterName, $"Value must be greater than or equal to {min} and less than or equal to {max}.");
-            }
-        }
-
-        /// <summary>
-        /// Verifies, that the method parameter with specified target value is true
-        /// and throws an exception if it is found to be so.
-        /// </summary>
-        /// <param name="target">
-        /// The target value, which cannot be false.
-        /// </param>
-        /// <param name="parameterName">
-        /// The name of the parameter that is to be checked.
-        /// </param>
-        /// <param name="message">
-        /// The error message, if any to add to the exception.
-        /// </param>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="target"/> is false
-        /// </exception>
-        public static void IsTrue(bool target, string parameterName, string message)
-        {
-            if (!target)
-            {
-                throw new ArgumentException(message, parameterName);
-            }
-        }
-
-        /// <summary>
-        /// Verifies, that the method parameter with specified target value is false
-        /// and throws an exception if it is found to be so.
-        /// </summary>
-        /// <param name="target">The target value, which cannot be true.</param>
-        /// <param name="parameterName">The name of the parameter that is to be checked.</param>
-        /// <param name="message">The error message, if any to add to the exception.</param>
-        /// <exception cref="ArgumentException">
-        /// <paramref name="target"/> is true
-        /// </exception>
-        public static void IsFalse(bool target, string parameterName, string message)
-        {
-            if (target)
-            {
-                throw new ArgumentException(message, parameterName);
             }
         }
     }
