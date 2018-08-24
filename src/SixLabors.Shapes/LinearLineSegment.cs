@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using SixLabors.Primitives;
 
@@ -60,7 +59,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The end point.
         /// </value>
-        public PointF EndPoint { get; private set; }
+        public PointF EndPoint { get; }
 
         /// <summary>
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
@@ -68,10 +67,7 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public IReadOnlyList<PointF> Flatten()
-        {
-            return this.points;
-        }
+        public IReadOnlyList<PointF> Flatten() => this.points;
 
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.
@@ -88,14 +84,14 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            var points = new PointF[this.points.Length];
-            int i = 0;
-            foreach (PointF p in this.points)
+            var transformedPoints = new PointF[this.points.Length];
+
+            for (int i = 0; i < this.points.Length; i++)
             {
-                points[i++] = PointF.Transform(p, matrix);
+                transformedPoints[i] = PointF.Transform(this.points[i], matrix);
             }
 
-            return new LinearLineSegment(points);
+            return new LinearLineSegment(transformedPoints);
         }
 
         /// <summary>
