@@ -21,9 +21,9 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Initializes a new instance of the <see cref="Path"/> class.
         /// </summary>
-        /// <param name="segment">The segment.</param>
-        public Path(params ILineSegment[] segment)
-            : this((IEnumerable<ILineSegment>)segment)
+        /// <param name="segments">The segments.</param>
+        public Path(IEnumerable<ILineSegment> segments)
+            : this(segments?.ToArray())
         {
         }
 
@@ -40,9 +40,9 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="Path"/> class.
         /// </summary>
         /// <param name="segments">The segments.</param>
-        public Path(IEnumerable<ILineSegment> segments)
+        public Path(params ILineSegment[] segments)
         {
-            this.lineSegments = segments.ToArray();
+            this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
         }
 
         /// <summary>
@@ -116,11 +116,11 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            ILineSegment[] segments = new ILineSegment[this.lineSegments.Length];
-            int i = 0;
-            foreach (ILineSegment s in this.LineSegments)
+            var segments = new ILineSegment[this.lineSegments.Length];
+
+            for (int i = 0; i < this.LineSegments.Count; i++)
             {
-                segments[i++] = s.Transform(matrix);
+                segments[i] = this.lineSegments[i].Transform(matrix);
             }
 
             return new Path(segments);
@@ -166,8 +166,7 @@ namespace SixLabors.Shapes
         /// </returns>
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.InnerPath.FindIntersections(start, end, subBuffer);
+            return this.InnerPath.FindIntersections(start, end, buffer);
         }
 
         /// <inheritdoc />
