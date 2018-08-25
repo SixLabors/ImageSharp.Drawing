@@ -11,7 +11,7 @@ namespace SixLabors.Shapes
     /// <summary>
     /// A way of optimizing drawing rectangles.
     /// </summary>
-    /// <seealso cref="SixLabors.Shapes.IPath" />
+    /// <seealso cref="IPath" />
     public class RectangularPolygon : IPath, ISimplePath
     {
         private readonly Vector2 topLeft;
@@ -168,7 +168,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The size.
         /// </value>
-        public SizeF Size { get; private set; }
+        public SizeF Size { get; }
 
         /// <summary>
         /// Gets the size.
@@ -459,9 +459,20 @@ namespace SixLabors.Shapes
         /// <returns>
         /// Returns the path as a closed path.
         /// </returns>
-        IPath IPath.AsClosedPath()
+        IPath IPath.AsClosedPath() => this;
+
+        /// <summary>
+        /// Returns whether the rectangles are equal.
+        /// </summary>
+        /// <param name="other">The other recentalge.</param>
+        /// <returns>Returns a value indicating if the rectangles are equal.</returns>
+        public bool Equals(RectangularPolygon other)
         {
-            return this;
+            return other != null &&
+                this.X == other.X &&
+                this.Y == other.Y &&
+                this.Height == other.Height &&
+                this.Width == other.Width;
         }
 
         /// <summary>
@@ -471,17 +482,7 @@ namespace SixLabors.Shapes
         /// <returns>Returns a value indicating if the rectangles are equal.</returns>
         public override bool Equals(object obj)
         {
-            if (obj == null || this.GetType() != obj.GetType())
-            {
-                return false;
-            }
-
-            RectangularPolygon otherRectangle = (RectangularPolygon)obj;
-
-            return this.X == otherRectangle.X &&
-                this.Y == otherRectangle.Y &&
-                this.Height == otherRectangle.Height &&
-                this.Width == otherRectangle.Width;
+            return obj is RectangularPolygon other && this.Equals(other);
         }
 
         /// <summary>

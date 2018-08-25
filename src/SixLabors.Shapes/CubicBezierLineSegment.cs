@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using SixLabors.Primitives;
 
@@ -12,8 +11,8 @@ namespace SixLabors.Shapes
     /// <summary>
     /// Represents a line segment that contains a lists of control points that will be rendered as a cubic bezier curve
     /// </summary>
-    /// <seealso cref="SixLabors.Shapes.ILineSegment" />
-    public class CubicBezierLineSegment : ILineSegment
+    /// <seealso cref="ILineSegment" />
+    public sealed class CubicBezierLineSegment : ILineSegment
     {
         // code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
         private const float MinimumSqrDistance = 1.75f;
@@ -29,10 +28,10 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
         /// </summary>
         /// <param name="points">The points.</param>
-        public CubicBezierLineSegment(IEnumerable<PointF> points)
+        public CubicBezierLineSegment(PointF[] points)
         {
-            Guard.NotNull(points, nameof(points));
-            this.controlPoints = points.ToArray();
+            this.controlPoints = points ?? throw new ArgumentNullException(nameof(points));
+
             Guard.MustBeGreaterThanOrEqualTo(this.controlPoints.Length, 4, nameof(points));
 
             int correctPointCount = (this.controlPoints.Length - 1) % 3;
@@ -49,22 +48,13 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
         /// </summary>
-        /// <param name="points">The points.</param>
-        public CubicBezierLineSegment(PointF[] points)
-            : this((IEnumerable<PointF>)points)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CubicBezierLineSegment"/> class.
-        /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="controlPoint1">The control point1.</param>
         /// <param name="controlPoint2">The control point2.</param>
         /// <param name="end">The end.</param>
         /// <param name="additionalPoints">The additional points.</param>
         public CubicBezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end, params PointF[] additionalPoints)
-            : this(new[] { start, controlPoint1, controlPoint2, end }.Concat(additionalPoints))
+            : this(new[] { start, controlPoint1, controlPoint2, end }.Merge(additionalPoints))
         {
         }
 
@@ -74,7 +64,7 @@ namespace SixLabors.Shapes
         /// <value>
         /// The end point.
         /// </value>
-        public PointF EndPoint { get; private set; }
+        public PointF EndPoint { get; }
 
         /// <summary>
         /// Returns the current <see cref="ILineSegment" /> a simple linear path.
@@ -100,14 +90,14 @@ namespace SixLabors.Shapes
                 return this;
             }
 
-            PointF[] points = new PointF[this.controlPoints.Length];
-            int i = 0;
-            foreach (PointF p in this.controlPoints)
+            var transformedPoints = new PointF[this.controlPoints.Length];
+
+            for (int i = 0; i < this.controlPoints.Length; i++)
             {
-                points[i++] = PointF.Transform(p, matrix);
+                transformedPoints[i] = PointF.Transform(this.controlPoints[i], matrix);
             }
 
-            return new CubicBezierLineSegment(points);
+            return new CubicBezierLineSegment(transformedPoints);
         }
 
         /// <summary>
@@ -119,7 +109,7 @@ namespace SixLabors.Shapes
 
         private static List<PointF> GetDrawingPoints(PointF[] controlPoints)
         {
-            List<PointF> drawingPoints = new List<PointF>();
+            var drawingPoints = new List<PointF>();
             int curveCount = (controlPoints.Length - 1) / 3;
 
             for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
@@ -140,7 +130,7 @@ namespace SixLabors.Shapes
 
         private static List<PointF> FindDrawingPoints(int curveIndex, PointF[] controlPoints)
         {
-            List<PointF> pointList = new List<PointF>();
+            var pointList = new List<PointF>();
 
             Vector2 left = CalculateBezierPoint(curveIndex, 0, controlPoints);
             Vector2 right = CalculateBezierPoint(curveIndex, 1, controlPoints);

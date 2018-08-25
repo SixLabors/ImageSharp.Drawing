@@ -10,7 +10,7 @@ namespace SixLabors.Shapes
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
-    public class Star : Polygon
+    public sealed class Star : Polygon
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="Star" /> class.
@@ -70,13 +70,13 @@ namespace SixLabors.Shapes
             Guard.MustBeGreaterThan(innerRadii, 0, nameof(innerRadii));
             Guard.MustBeGreaterThan(outerRadii, 0, nameof(outerRadii));
 
-            Vector2 distanceVectorInner = new Vector2(0, innerRadii);
-            Vector2 distanceVectorOuter = new Vector2(0, outerRadii);
+            var distanceVectorInner = new Vector2(0, innerRadii);
+            var distanceVectorOuter = new Vector2(0, outerRadii);
 
             int verticies = prongs * 2;
             float anglePerSegemnts = (float)((2 * Math.PI) / verticies);
             float current = angle;
-            PointF[] points = new PointF[verticies];
+            var points = new PointF[verticies];
             Vector2 distance = distanceVectorInner;
             for (int i = 0; i < verticies; i++)
             {

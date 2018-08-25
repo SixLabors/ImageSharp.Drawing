@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
@@ -125,7 +126,10 @@ namespace SixLabors.Shapes
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddLines(IEnumerable<PointF> points)
         {
-            Guard.NotNull(points, nameof(points));
+            if (points is null)
+            {
+                throw new ArgumentNullException(nameof(points));
+            }
 
             this.AddLines(points.ToArray());
 

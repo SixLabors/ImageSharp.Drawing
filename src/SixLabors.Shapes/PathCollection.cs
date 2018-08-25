@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -22,10 +23,18 @@ namespace SixLabors.Shapes
         /// </summary>
         /// <param name="paths">The collection of paths</param>
         public PathCollection(IEnumerable<IPath> paths)
+            : this(paths?.ToArray())
         {
-            Guard.NotNull(paths, nameof(paths));
+        }
 
-            this.paths = paths.ToArray();
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PathCollection"/> class.
+        /// </summary>
+        /// <param name="paths">The collection of paths</param>
+        public PathCollection(params IPath[] paths)
+        {
+            this.paths = paths ?? throw new ArgumentNullException(nameof(paths));
+
             if (this.paths.Length == 0)
             {
                 this.Bounds = new RectangleF(0, 0, 0, 0);
@@ -42,15 +51,6 @@ namespace SixLabors.Shapes
             }
         }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PathCollection"/> class.
-        /// </summary>
-        /// <param name="paths">The collection of paths</param>
-        public PathCollection(params IPath[] paths)
-            : this((IEnumerable<IPath>)paths)
-        {
-        }
-
         /// <inheritdoc />
         public RectangleF Bounds { get; }
 
@@ -60,7 +60,8 @@ namespace SixLabors.Shapes
         /// <inheritdoc />
         public IPathCollection Transform(Matrix3x2 matrix)
         {
-            IPath[] result = new IPath[this.paths.Length];
+            var result = new IPath[this.paths.Length];
+
             for (int i = 0; i < this.paths.Length && i < result.Length; i++)
             {
                 result[i] = this.paths[i].Transform(matrix);

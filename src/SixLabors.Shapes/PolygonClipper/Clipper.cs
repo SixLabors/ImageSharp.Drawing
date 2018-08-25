@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using ClipperLib;
@@ -16,7 +17,7 @@ namespace SixLabors.Shapes.PolygonClipper
         private const float ScalingFactor = 1000.0f;
 
         private readonly ClipperLib.Clipper innerClipper;
-        private object syncRoot = new object();
+        private readonly object syncRoot = new object();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Clipper"/> class.
@@ -24,16 +25,6 @@ namespace SixLabors.Shapes.PolygonClipper
         public Clipper()
         {
             this.innerClipper = new ClipperLib.Clipper();
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Clipper"/> class.
-        /// </summary>
-        /// <param name="shapes">The shapes.</param>
-        public Clipper(IEnumerable<ClippablePath> shapes)
-            : this()
-        {
-            this.AddPaths(shapes);
         }
 
         /// <summary>
@@ -54,16 +45,18 @@ namespace SixLabors.Shapes.PolygonClipper
         /// </returns>
         public IEnumerable<IPath> GenerateClippedShapes()
         {
-            List<PolyNode> results = new List<PolyNode>();
+            var results = new List<PolyNode>();
             lock (this.syncRoot)
             {
                 this.innerClipper.Execute(ClipType.ctDifference, results);
             }
 
-            IPath[] shapes = new IPath[results.Count];
+            var shapes = new IPath[results.Count];
+
             for (int i = 0; i < results.Count; i++)
             {
-                PointF[] points = new PointF[results[i].Contour.Count];
+                var points = new PointF[results[i].Contour.Count];
+
                 for (int j = 0; j < results[i].Contour.Count; j++)
                 {
                     IntPoint p = results[i].Contour[j];
@@ -74,14 +67,9 @@ namespace SixLabors.Shapes.PolygonClipper
                     points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
                 }
 
-                if (results[i].IsOpen)
-                {
-                    shapes[i] = new Path(new LinearLineSegment(points));
-                }
-                else
-                {
-                    shapes[i] = new Polygon(new LinearLineSegment(points));
-                }
+                shapes[i] = results[i].IsOpen
+                    ? new Path(new LinearLineSegment(points))
+                    : new Polygon(new LinearLineSegment(points));
             }
 
             return shapes;
@@ -91,11 +79,17 @@ namespace SixLabors.Shapes.PolygonClipper
         /// Adds the paths.
         /// </summary>
         /// <param name="paths">The paths.</param>
-        public void AddPaths(IEnumerable<ClippablePath> paths)
+        public void AddPaths(ClippablePath[] paths)
         {
-            Guard.NotNull(paths, nameof(paths));
-            foreach (ClippablePath p in paths)
+            if (paths == null)
             {
+                throw new ArgumentNullException(nameof(paths));
+            }
+
+            for (int i = 0; i < paths.Length; i++)
+            {
+                ref ClippablePath p = ref paths[i];
+
                 this.AddPath(p.Path, p.Type);
             }
         }
@@ -107,7 +101,11 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="clippingType">The clipping type.</param>
         public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
-            Guard.NotNull(paths, nameof(paths));
+            if (paths is null)
+            {
+                throw new ArgumentNullException(nameof(paths));
+            }
+
             foreach (IPath p in paths)
             {
                 this.AddPath(p, clippingType);
@@ -121,7 +119,11 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <param name="clippingType">The clipping type.</param>
         public void AddPath(IPath path, ClippingType clippingType)
         {
-            Guard.NotNull(path, nameof(path));
+            if (path is null)
+            {
+                throw new ArgumentNullException(nameof(path));
+            }
+
             foreach (ISimplePath p in path.Flatten())
             {
                 this.AddPath(p, clippingType);
@@ -138,7 +140,7 @@ namespace SixLabors.Shapes.PolygonClipper
         {
             IReadOnlyList<PointF> vectors = path.Points;
 
-            List<IntPoint> points = new List<ClipperLib.IntPoint>(vectors.Count);
+            var points = new List<IntPoint>(vectors.Count);
             foreach (PointF v in vectors)
             {
                 points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));

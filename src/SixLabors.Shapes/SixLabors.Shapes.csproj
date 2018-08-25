@@ -10,6 +10,7 @@
         <VersionPrefix Condition="$(packageversion) == ''">0.1.0-alpha1</VersionPrefix>
         <Authors>Six Labors and contributors</Authors>
         <TargetFrameworks>netstandard1.1;netstandard2.0</TargetFrameworks>
+        <LangVersion>7.3</LangVersion>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <AssemblyName>SixLabors.Shapes</AssemblyName>
