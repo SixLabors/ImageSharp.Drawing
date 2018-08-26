@@ -579,7 +579,7 @@ namespace SixLabors.Shapes
         /// </returns>
         private static PointData[] Simplify(IEnumerable<ILineSegment> segments, bool isClosed)
         {
-            List<PointF> simplified = new List<PointF>();
+            var simplified = new List<PointF>();
             foreach (ILineSegment seg in segments)
             {
                 simplified.AddRange(seg.Flatten());
@@ -591,7 +591,7 @@ namespace SixLabors.Shapes
         private static PointData[] Simplify(IEnumerable<PointF> vectors, bool isClosed)
         {
             PointF[] points = vectors.ToArray();
-            List<PointData> results = new List<PointData>();
+            var results = new List<PointData>();
 
             int polyCorners = points.Length;
 
