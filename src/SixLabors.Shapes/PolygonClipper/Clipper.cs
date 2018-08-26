@@ -43,9 +43,10 @@ namespace SixLabors.Shapes.PolygonClipper
         /// <returns>
         /// Returns the <see cref="IPath" /> array containing the converted polygons.
         /// </returns>
-        public IEnumerable<IPath> GenerateClippedShapes()
+        public IPath[] GenerateClippedShapes()
         {
             var results = new List<PolyNode>();
+
             lock (this.syncRoot)
             {
                 this.innerClipper.Execute(ClipType.ctDifference, results);
