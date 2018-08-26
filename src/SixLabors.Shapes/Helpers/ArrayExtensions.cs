@@ -17,7 +17,7 @@ namespace SixLabors.Shapes
         /// <returns>the Merged arrays</returns>
         public static T[] Merge<T>(this T[] source1, T[] source2)
         {
-            if (source2 == null)
+            if (source2 is null)
             {
                 return source1;
             }

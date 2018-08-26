@@ -19,11 +19,13 @@ namespace SixLabors.Shapes
         /// <returns>Returns a new shape with the holes cliped out out the shape.</returns>
         public static IPath Clip(this IPath shape, IEnumerable<IPath> holes)
         {
-            Clipper clipper = new PolygonClipper.Clipper();
+            var clipper = new Clipper();
 
             clipper.AddPath(shape, ClippingType.Subject);
             clipper.AddPaths(holes, ClippingType.Clip);
-            IEnumerable<IPath> result = clipper.GenerateClippedShapes();
+
+            IPath[] result = clipper.GenerateClippedShapes();
+
             return new ComplexPolygon(result);
         }
 
