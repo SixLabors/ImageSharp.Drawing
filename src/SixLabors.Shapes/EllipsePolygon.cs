@@ -113,12 +113,9 @@ namespace SixLabors.Shapes
         /// </returns>
         public EllipsePolygon Transform(Matrix3x2 matrix)
         {
-            if (matrix.IsIdentity)
-            {
-                return this;
-            }
-
-            return new EllipsePolygon(this.segment.Transform(matrix));
+            return matrix.IsIdentity
+                ? this
+                : new EllipsePolygon(this.segment.Transform(matrix));
         }
 
         /// <summary>
@@ -134,10 +131,7 @@ namespace SixLabors.Shapes
         /// Returns this polygon as a path
         /// </summary>
         /// <returns>This polygon as a path</returns>
-        IPath IPath.AsClosedPath()
-        {
-            return this;
-        }
+        IPath IPath.AsClosedPath() => this;
 
         /// <summary>
         /// Converts the <see cref="IPath" /> into a simple linear path..
