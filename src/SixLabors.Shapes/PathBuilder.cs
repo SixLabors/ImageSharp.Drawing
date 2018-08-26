@@ -299,12 +299,9 @@ namespace SixLabors.Shapes
 
             public IPath Build()
             {
-                if (this.IsClosed)
-                {
-                    return new Polygon(this.segments.ToArray());
-                }
-
-                return new Path(this.segments.ToArray());
+                return this.IsClosed
+                    ? new Polygon(this.segments.ToArray())
+                    : new Path(this.segments.ToArray());
             }
         }
     }
