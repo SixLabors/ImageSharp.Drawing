@@ -21,8 +21,8 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
         /// <param name="paths">The paths.</param>
-        public ComplexPolygon(params IPath[] paths)
-            : this((IEnumerable<IPath>)paths)
+        public ComplexPolygon(IEnumerable<IPath> paths)
+            : this(paths?.ToArray())
         {
         }
 
@@ -30,9 +30,9 @@ namespace SixLabors.Shapes
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
         /// <param name="paths">The paths.</param>
-        public ComplexPolygon(IEnumerable<IPath> paths)
+        public ComplexPolygon(params IPath[] paths)
         {
-            this.paths = paths.ToArray();
+            this.paths = paths ?? throw new ArgumentNullException(nameof(paths));
 
             float minX = float.MaxValue;
             float maxX = float.MinValue;
