@@ -44,16 +44,16 @@ namespace SixLabors.Shapes.Text
         }
 
         /// <inheritdoc/>
-        void IGlyphRenderer.BeginText(RectangleF rect)
+        void IGlyphRenderer.BeginText(RectangleF bounds)
         {
-            this.BeginText(rect);
+            this.BeginText(bounds);
         }
 
         /// <inheritdoc/>
-        bool IGlyphRenderer.BeginGlyph(RectangleF rect, GlyphRendererParameters glyphDetails)
+        bool IGlyphRenderer.BeginGlyph(RectangleF bounds, GlyphRendererParameters paramaters)
         {
             this.builder.Clear();
-            this.BeginGlyph(rect);
+            this.BeginGlyph(bounds);
             return true;
         }
 
