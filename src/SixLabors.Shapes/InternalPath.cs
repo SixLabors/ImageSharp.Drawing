@@ -432,7 +432,7 @@ namespace SixLabors.Shapes
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsOnSegment(Segment seg, Vector2 q)
+        private static bool IsOnSegment(in Segment seg, Vector2 q)
         {
             return (q.X - Epsilon2) <= seg.Max.X &&
                     (q.X + Epsilon2) >= seg.Min.X &&
@@ -441,7 +441,7 @@ namespace SixLabors.Shapes
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool IsOnSegments(Segment seg1, Segment seg2, Vector2 q)
+        private static bool IsOnSegments(in Segment seg1, in Segment seg2, Vector2 q)
         {
             float t = q.X - Epsilon2;
             if (t > seg1.Max.X || t > seg2.Max.X)
