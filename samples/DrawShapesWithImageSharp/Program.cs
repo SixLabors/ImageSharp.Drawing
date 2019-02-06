@@ -25,7 +25,6 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             OutputStarOutline(5, 150, 250, width: 20, jointStyle: JointStyle.Round);
             OutputStarOutline(5, 150, 250, width: 20, jointStyle: JointStyle.Square);
 
-
             OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: JointStyle.Square, cap: EndCapStyle.Butt);
             OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: JointStyle.Round, cap: EndCapStyle.Round);
             OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: JointStyle.Square, cap: EndCapStyle.Square);

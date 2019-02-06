@@ -268,6 +268,5 @@ namespace SixLabors.Shapes
                     return EndType.etOpenButt;
             }
         }
-
     }
 }
