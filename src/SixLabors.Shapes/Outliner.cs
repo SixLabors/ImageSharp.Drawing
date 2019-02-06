@@ -15,6 +15,7 @@ namespace SixLabors.Shapes
     /// </summary>
     public static class Outliner
     {
+        private const double MiterOffsetDelta = 20;
         private const float ScalingFactor = 1000.0f;
 
         /// <summary>
@@ -59,15 +60,34 @@ namespace SixLabors.Shapes
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
+            => GenerateOutline(path, width, pattern, startOff, JointStyle.Square, EndCapStyle.Butt);
+
+        /// <summary>
+        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// </summary>
+        /// <param name="path">the path to outline</param>
+        /// <param name="width">The final width outline</param>
+        /// <param name="pattern">The pattern made of multiples of the width.</param>
+        /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
+        /// <param name="jointStyle">The style to render the joints.</param>
+        /// <param name="patternSectionCapStyle">The style to render between sections of the specified pattern.</param>
+        /// <returns>A new path representing the outline.</returns>
+        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle = JointStyle.Square, EndCapStyle patternSectionCapStyle = EndCapStyle.Butt)
         {
             if (pattern.Length < 2)
             {
                 return path.GenerateOutline(width);
             }
 
+            var style = Convert(jointStyle);
+            var patternSectionCap = Convert(patternSectionCapStyle);
+
             IEnumerable<ISimplePath> paths = path.Flatten();
 
-            var offset = new ClipperOffset();
+            var offset = new ClipperOffset()
+            {
+                MiterLimit = MiterOffsetDelta
+            };
 
             var buffer = new List<IntPoint>(3);
             foreach (ISimplePath p in paths)
@@ -103,7 +123,7 @@ namespace SixLabors.Shapes
                         // we now inset a line joining
                         if (online)
                         {
-                            offset.AddPath(buffer, JoinType.jtSquare, EndType.etOpenButt);
+                            offset.AddPath(buffer, style, patternSectionCap);
                         }
 
                         online = !online;
@@ -138,7 +158,7 @@ namespace SixLabors.Shapes
 
                     if (online)
                     {
-                        offset.AddPath(buffer, JoinType.jtSquare, EndType.etOpenButt);
+                        offset.AddPath(buffer, style, patternSectionCap);
                     }
 
                     online = !online;
@@ -158,9 +178,25 @@ namespace SixLabors.Shapes
         /// <param name="path">the path to outline</param>
         /// <param name="width">The final width outline</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width)
+        public static IPath GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, JointStyle.Square, EndCapStyle.Butt);
+
+        /// <summary>
+        /// Generates a solid outline of the path.
+        /// </summary>
+        /// <param name="path">the path to outline</param>
+        /// <param name="width">The final width outline</param>
+        /// <param name="jointStyle">The style to render the joints.</param>
+        /// <param name="endCapStyle">The style to render the end caps of open paths (ignored on closed paths).</param>
+        /// <returns>A new path representing the outline.</returns>
+        public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Butt)
         {
-            var offset = new ClipperOffset();
+            var offset = new ClipperOffset()
+            {
+                MiterLimit = MiterOffsetDelta
+            };
+
+            var style = Convert(jointStyle);
+            var openEndCapStyle = Convert(endCapStyle);
 
             // Pattern can be applied to the path by cutting it into segments
             IEnumerable<ISimplePath> paths = path.Flatten();
@@ -173,9 +209,9 @@ namespace SixLabors.Shapes
                     points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
                 }
 
-                EndType type = p.IsClosed ? EndType.etClosedLine : EndType.etOpenButt;
+                EndType type = p.IsClosed ? EndType.etClosedLine : openEndCapStyle;
 
-                offset.AddPath(points, JoinType.jtSquare, type);
+                offset.AddPath(points, style, type);
             }
 
             return ExecuteOutliner(width, offset);
@@ -203,6 +239,34 @@ namespace SixLabors.Shapes
         private static IntPoint ToPoint(this Vector2 vector)
         {
             return new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
+        }
+
+        private static JoinType Convert(JointStyle style)
+        {
+            switch (style)
+            {
+                case JointStyle.Round:
+                    return JoinType.jtRound;
+                case JointStyle.Miter:
+                    return JoinType.jtMiter;
+                case JointStyle.Square:
+                default:
+                    return JoinType.jtSquare;
+            }
+        }
+
+        private static EndType Convert(EndCapStyle style)
+        {
+            switch (style)
+            {
+                case EndCapStyle.Round:
+                    return EndType.etOpenRound;
+                case EndCapStyle.Square:
+                    return EndType.etOpenSquare;
+                case EndCapStyle.Butt:
+                default:
+                    return EndType.etOpenButt;
+            }
         }
     }
 }

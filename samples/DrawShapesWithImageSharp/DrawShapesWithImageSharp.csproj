@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="1.0.0-dev001425" />
+    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="1.0.0-dev002362" />
     <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
     <PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
   </ItemGroup>
