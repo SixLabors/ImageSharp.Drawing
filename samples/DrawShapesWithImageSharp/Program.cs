@@ -6,7 +6,6 @@ using System.Linq;
 using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Processing.Drawing;
 
 namespace SixLabors.Shapes.DrawShapesWithImageSharp
 {
@@ -22,6 +21,15 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void OutputStars()
         {
+            OutputStarOutline(5, 150, 250, width: 20, jointStyle: JointStyle.Miter);
+            OutputStarOutline(5, 150, 250, width: 20, jointStyle: JointStyle.Round);
+            OutputStarOutline(5, 150, 250, width: 20, jointStyle: JointStyle.Square);
+
+
+            OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: JointStyle.Square, cap: EndCapStyle.Butt);
+            OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: JointStyle.Round, cap: EndCapStyle.Round);
+            OutputStarOutlineDashed(5, 150, 250, width: 20, jointStyle: JointStyle.Square, cap: EndCapStyle.Square);
+
             OutputStar(3, 5);
             OutputStar(4);
             OutputStar(5);
@@ -39,7 +47,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawFatL();
 
             DrawText("Hello World");
-            DrawText("Hello World Hello World Hello World Hello World Hello World Hello World Hello World",  new Path(new CubicBezierLineSegment(
+            DrawText("Hello World Hello World Hello World Hello World Hello World Hello World Hello World", new Path(new CubicBezierLineSegment(
                 new Vector2(0, 0),
                 new Vector2(150, -150),
                 new Vector2(250, -150),
@@ -174,6 +182,25 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"HourGlass.png");
         }
 
+        private static void OutputStarOutline(int points, float inner = 10, float outer = 20, float width = 5, JointStyle jointStyle = JointStyle.Miter)
+        {
+            // center the shape outerRadii + 10 px away from edges
+            float offset = outer + 10;
+
+            Star star = new Star(offset, offset, points, inner, outer);
+            var outline = Outliner.GenerateOutline(star, width, jointStyle);
+            outline.SaveImage("Stars", $"StarOutline_{points}_{jointStyle}.png");
+        }
+        private static void OutputStarOutlineDashed(int points, float inner = 10, float outer = 20, float width = 5, JointStyle jointStyle = JointStyle.Miter, EndCapStyle cap = EndCapStyle.Butt)
+        {
+            // center the shape outerRadii + 10 px away from edges
+            float offset = outer + 10;
+
+            Star star = new Star(offset, offset, points, inner, outer);
+            var outline = Outliner.GenerateOutline(star, width, new float[] { 3, 3 }, false, jointStyle, cap);
+            outline.SaveImage("Stars", $"StarOutlineDashed_{points}_{jointStyle}_{cap}.png");
+        }
+
         private static void OutputStar(int points, float inner = 10, float outer = 20)
         {
             // center the shape outerRadii + 10 px away from edges
@@ -228,7 +255,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         {
             new PathCollection(shape).SaveImage(width, height, path);
         }
-            public static void SaveImage(this IPathCollection shape, int width, int height, params string[] path)
+        public static void SaveImage(this IPathCollection shape, int width, int height, params string[] path)
         {
             string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", System.IO.Path.Combine(path)));
 
