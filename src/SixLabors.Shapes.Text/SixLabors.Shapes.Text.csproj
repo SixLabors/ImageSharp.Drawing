@@ -44,8 +44,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="StyleCop.Analyzers" Version="1.1.1-beta.61" PrivateAssets="All"/>
-    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0008" />
+    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118" PrivateAssets="All" />
+    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0009" />
   </ItemGroup>
 
   <ItemGroup>
