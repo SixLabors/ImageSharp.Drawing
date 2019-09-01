@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.ImageSharp;
@@ -12,22 +12,20 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         public static void SaveLogo(float size, string path)
         {
             // the point are based on a 1206x1206 shape so size requires scaling from there
-
             float scalingFactor = size / 1206;
 
-            Vector2 center = new Vector2(603);
+            var center = new Vector2(603);
 
-            // segment whoes cetner of rotation should be 
-            Vector2 segmentOffset = new Vector2(301.16968f, 301.16974f);
+            // segment whose center of rotation should be 
+            var segmentOffset = new Vector2(301.16968f, 301.16974f);
             IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
                 new CubicBezierLineSegment(new Vector2(5.8641942f, 361.46031f),
                 new Vector2(-11.715693f, 259.54052f),
                 new Vector2(24.441609f, 158.17478f),
                 new Vector2(78.26f, 97.0461f))).Translate(center - segmentOffset);
 
-
-            //we need to create 6 of theses all rotated about the center point
-            List<IPath> segments = new List<IPath>();
+            // we need to create 6 of theses all rotated about the center point
+            var segments = new List<IPath>();
             for (int i = 0; i < 6; i++)
             {
                 float angle = i * ((float)Math.PI / 3);
@@ -35,7 +33,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 segments.Add(s);
             }
 
-            List<Rgba32> colors = new List<Rgba32>() {
+            var colors = new List<Rgba32>() {
                 Rgba32.FromHex("35a849"),
                 Rgba32.FromHex("fcee21"),
                 Rgba32.FromHex("ed7124"),
@@ -44,10 +42,10 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 Rgba32.FromHex("085ba7"),
             };
 
-            Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
+            var scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
 
             int dimensions = (int)Math.Ceiling(size);
-            using (Image<Rgba32> img = new Image<Rgba32>(dimensions, dimensions))
+            using (var img = new Image<Rgba32>(dimensions, dimensions))
             {
                 img.Mutate(i => i.Fill(Rgba32.Black));
                 img.Mutate(i => i.Fill(Rgba32.FromHex("e1e1e1ff"), new EllipsePolygon(center, 600f).Transform(scaler)));

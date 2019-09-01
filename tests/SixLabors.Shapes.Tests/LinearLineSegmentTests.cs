@@ -1,20 +1,20 @@
-﻿using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Numerics;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     public class LinearLineSegmentTests
     {
         [Fact]
         public void SingleSegmentConstructor()
         {
-            LinearLineSegment segment = new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 10));
+            var segment = new LinearLineSegment(new Vector2(0, 0), new Vector2(10, 10));
             IReadOnlyList<PointF> flatPath = segment.Flatten();
             Assert.Equal(2, flatPath.Count);
             Assert.Equal(new PointF(0, 0), flatPath[0]);
@@ -30,9 +30,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void NullPointsArrayThrowsCountException()
         {
-            Assert.ThrowsAny<ArgumentNullException>(() => {
-                new LinearLineSegment((PointF[])null);
-            });
+            Assert.ThrowsAny<ArgumentNullException>(() => new LinearLineSegment(null));
         }
     }
 }

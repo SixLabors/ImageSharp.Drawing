@@ -1,11 +1,12 @@
-﻿using Xunit;
+﻿// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using System.Linq;
+using SixLabors.Primitives;
+using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Linq;
-    using System.Numerics;
-
     /// <summary>
     /// The internal path tests.
     /// </summary>
@@ -14,10 +15,10 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds()
         {
-            LinearLineSegment seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(2, 2));
-            LinearLineSegment seg2 = new LinearLineSegment(new PointF(4, 4), new PointF(5, 5));
+            var seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(2, 2));
+            var seg2 = new LinearLineSegment(new PointF(4, 4), new PointF(5, 5));
 
-            Path path = new Path(seg1, seg2);
+            var path = new Path(seg1, seg2);
 
             Assert.Equal(0, path.Bounds.Left);
             Assert.Equal(5, path.Bounds.Right);
@@ -56,7 +57,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
         {
-            Path path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
+            var path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
             PointInfo info = path.Distance(point);
             Assert.Equal(expectedDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
@@ -65,7 +66,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void SimplePath()
         {
-            Path path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
+            var path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
             System.Collections.Generic.IReadOnlyList<PointF> points = path.Flatten().Single().Points;
 
             Assert.Equal(4, points.Count);

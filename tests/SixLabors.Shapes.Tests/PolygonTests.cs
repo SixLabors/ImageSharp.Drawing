@@ -1,44 +1,46 @@
-﻿using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     public class PolygonTests
     {
         public static TheoryData<TestPoint[], TestPoint, bool> PointInPolygonTheoryData =
             new TheoryData<TestPoint[], TestPoint, bool>
             {
                 {
-                    new TestPoint[] {new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10)},
+                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
+
                     // loc
                     new PointF(10, 10), // test
                     true
-                }, //corner is inside
+                }, // corner is inside
                 {
-                    new TestPoint[] {new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10)},
+                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
+
                     // loc
                     new PointF(10, 11), // test
                     true
-                }, //on line
+                }, // on line
                 {
-                    new TestPoint[] {new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10)},
+                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
+
                     // loc
                     new PointF(9, 9), // test
                     false
-                }, //corner is inside
+                }, // corner is inside
             };
 
         [Theory]
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint[] controlPoints, TestPoint point, bool isInside)
         {
-            Polygon shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
+            var shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
             Assert.Equal(isInside, shape.Contains(point));
         }
 
@@ -46,19 +48,19 @@ namespace SixLabors.Shapes.Tests
            new TheoryData<TestPoint[], TestPoint, float>
            {
                 {
-                    new TestPoint[] {new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10)},
+                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
                     new PointF(10, 10),
                     0
                 },
-               {
+                {
                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
                    new PointF(10, 11), 0
-               },
-               {
+                },
+                {
                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
                    new PointF(11, 11), -1
                 },
-               {
+                {
                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
                    new PointF(9, 10), 1
                 },
@@ -68,7 +70,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(DistanceTheoryData))]
         public void Distance(TestPoint[] controlPoints, TestPoint point, float expected)
         {
-            Polygon shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
+            var shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
             Assert.Equal(expected, shape.Distance(point).DistanceFromPath);
         }
 
@@ -112,7 +114,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void AsSimpleLinearPath()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
+            var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
             IReadOnlyList<PointF> paths = poly.Flatten().First().Points;
             Assert.Equal(3, paths.Count);
             Assert.Equal(new PointF(0, 0), paths[0]);
@@ -123,8 +125,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void FindIntersectionsBuffer()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0)));
-            PointF[] buffer = new PointF[2];
+            var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0)));
+            var buffer = new PointF[2];
 
             int hits = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15), buffer, 0);
             Assert.Equal(2, hits);
@@ -135,7 +137,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void FindIntersectionsCollection()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0)));
+            var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0)));
 
             PointF[] buffer = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15)).ToArray();
             Assert.Equal(2, buffer.Length);
@@ -146,7 +148,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ReturnsWrapperOfSelfASOwnPath_SingleSegment()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
+            var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
             ISimplePath[] paths = poly.Flatten().ToArray();
             Assert.Single(paths);
             Assert.Equal(poly, paths[0]);
@@ -155,7 +157,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ReturnsWrapperOfSelfASOwnPath_MultiSegment()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10)), new LinearLineSegment(new PointF(2, 5), new PointF(5, 5)));
+            var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10)), new LinearLineSegment(new PointF(2, 5), new PointF(5, 5)));
             ISimplePath[] paths = poly.Flatten().ToArray();
             Assert.Single(paths);
             Assert.Equal(poly, paths[0]);
@@ -164,7 +166,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
+            var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
             RectangleF bounds = poly.Bounds;
             Assert.Equal(0, bounds.Left);
             Assert.Equal(0, bounds.Top);
@@ -175,7 +177,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MaxIntersections()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10)));
+            var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10)));
 
             // with linear polygons its the number of points the segments have
             Assert.Equal(2, poly.MaxIntersections);
@@ -184,7 +186,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void FindBothIntersections()
         {
-            Polygon poly = new Polygon(new LinearLineSegment(
+            var poly = new Polygon(new LinearLineSegment(
                             new PointF(10, 10),
                             new PointF(200, 150),
                             new PointF(50, 300)));
@@ -195,12 +197,12 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void HandleClippingInnerCorner()
         {
-            Polygon simplePath = new Polygon(new LinearLineSegment(
+            var simplePath = new Polygon(new LinearLineSegment(
                              new PointF(10, 10),
                              new PointF(200, 150),
                              new PointF(50, 300)));
 
-            Polygon hole1 = new Polygon(new LinearLineSegment(
+            var hole1 = new Polygon(new LinearLineSegment(
                             new PointF(37, 85),
                             new PointF(130, 40),
                             new PointF(65, 137)));
@@ -213,11 +215,10 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(4, intersections.Count());
         }
 
-
         [Fact]
         public void CrossingCorner()
         {
-            Polygon simplePath = new Polygon(new LinearLineSegment(
+            var simplePath = new Polygon(new LinearLineSegment(
                              new PointF(10, 10),
                              new PointF(200, 150),
                              new PointF(50, 300)));
@@ -227,7 +228,6 @@ namespace SixLabors.Shapes.Tests
             // returns an even number of points
             Assert.Equal(2, intersections.Count());
         }
-
 
         [Fact]
         public void ClippingEdgefromInside()
@@ -243,7 +243,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingEdgeFromOutside()
         {
-            Polygon simplePath = new Polygon(new LinearLineSegment(
+            var simplePath = new Polygon(new LinearLineSegment(
                              new PointF(10, 10),
                              new PointF(100, 10),
                              new PointF(50, 300)));
@@ -257,12 +257,12 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void HandleClippingOutterCorner()
         {
-            Polygon simplePath = new Polygon(new LinearLineSegment(
+            var simplePath = new Polygon(new LinearLineSegment(
                              new PointF(10, 10),
                              new PointF(200, 150),
                              new PointF(50, 300)));
 
-            Polygon hole1 = new Polygon(new LinearLineSegment(
+            var hole1 = new Polygon(new LinearLineSegment(
                             new PointF(37, 85),
                             new PointF(130, 40),
                             new PointF(65, 137)));
@@ -278,12 +278,12 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MissingIntersection()
         {
-            Polygon simplePath = new Polygon(new LinearLineSegment(
+            var simplePath = new Polygon(new LinearLineSegment(
                              new PointF(10, 10),
                              new PointF(200, 150),
                              new PointF(50, 300)));
 
-            Polygon hole1 = new Polygon(new LinearLineSegment(
+            var hole1 = new Polygon(new LinearLineSegment(
                             new PointF(37, 85),
                             new PointF(130, 40),
                             new PointF(65, 137)));
@@ -303,18 +303,19 @@ namespace SixLabors.Shapes.Tests
         public void BezierPolygonReturning2Points(int y)
         {
             // missing bands in test from ImageSharp
-            PointF[] simplePath = new[] {
+            PointF[] simplePath = new[]
+            {
                         new PointF(10, 400),
                         new PointF(30, 10),
                         new PointF(240, 30),
                         new PointF(300, 400)
             };
 
-            Polygon poly = new Polygon(new CubicBezierLineSegment(simplePath));
+            var poly = new Polygon(new CubicBezierLineSegment(simplePath));
 
-            List<PointF> points = poly.FindIntersections(new PointF(float.MinValue, y), new PointF(float.MaxValue, y)).ToList();
+            var points = poly.FindIntersections(new PointF(float.MinValue, y), new PointF(float.MaxValue, y)).ToList();
 
-            Assert.Equal(2, points.Count());
+            Assert.Equal(2, points.Count);
         }
     }
 }

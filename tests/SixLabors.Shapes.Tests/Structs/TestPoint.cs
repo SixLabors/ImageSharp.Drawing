@@ -1,18 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using System;
+using System.Numerics;
+using SixLabors.Primitives;
 using Xunit.Abstractions;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     [Serializable]
     public class TestPoint : IXunitSerializable
     {
-        public TestPoint() { }
+        public TestPoint()
+        {
+        }
 
         public TestPoint(float x, float y)
         {
@@ -21,6 +22,7 @@ namespace SixLabors.Shapes.Tests
         }
 
         public float X { get; private set; }
+
         public float Y { get; private set; }
 
         public void Deserialize(IXunitSerializationInfo info)
@@ -44,6 +46,7 @@ namespace SixLabors.Shapes.Tests
         {
             return new Vector2(p.X, p.Y);
         }
+
         public static implicit operator TestPoint(PointF p)
         {
             return new TestPoint(p.X, p.Y);

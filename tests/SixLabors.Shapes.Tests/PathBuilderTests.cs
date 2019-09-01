@@ -1,54 +1,52 @@
-﻿using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Numerics;
+using SixLabors.Primitives;
+using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
-    using Xunit;
-
     public class PathBuilderTests
     {
         [Fact]
         public void DrawLinesClosedFigure()
         {
-            PathBuilder builder = new PathBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
             builder.CloseFigure();
 
-            Polygon shape = Assert.IsType<Polygon>(builder.Build());            
+            Assert.IsType<Polygon>(builder.Build());
         }
-
 
         [Fact]
         public void AddBezier()
         {
-            PathBuilder builder = new PathBuilder();
+            var builder = new PathBuilder();
 
             builder.AddBezier(new Vector2(10, 10), new Vector2(20, 20), new Vector2(20, 30), new Vector2(10, 40));
 
-            Path shape = Assert.IsType<Path>(builder.Build());
+            Assert.IsType<Path>(builder.Build());
         }
 
         [Fact]
         public void DrawLinesOpenFigure()
         {
-            PathBuilder builder = new PathBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
-            Path shape = Assert.IsType<Path>(builder.Build());
+            Assert.IsType<Path>(builder.Build());
         }
 
         [Fact]
         public void DrawLines2OpenFigures()
         {
-            PathBuilder builder = new PathBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -62,10 +60,11 @@ namespace SixLabors.Shapes.Tests
             Assert.IsType<Path>(p[0]);
             Assert.IsType<Path>(p[1]);
         }
+
         [Fact]
         public void DrawLinesOpenThenClosedFigures()
         {
-            PathBuilder builder = new PathBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -84,7 +83,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void DrawLinesClosedThenOpenFigures()
         {
-            PathBuilder builder = new PathBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -102,7 +101,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void DrawLinesCloseAllFigures()
         {
-            PathBuilder builder = new PathBuilder();
+            var builder = new PathBuilder();
 
             builder.AddLine(10, 10, 10, 90);
             builder.AddLine(10, 90, 50, 50);
@@ -128,12 +127,12 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void EnumerableAddLines()
         {
-            Vector2 point1 = new Vector2(10, 10);
-            Vector2 point2 = new Vector2(10, 90);
-            Vector2 point3 = new Vector2(50, 50);
-            PathBuilder builder = new PathBuilder();
+            var point1 = new Vector2(10, 10);
+            var point2 = new Vector2(10, 90);
+            var point3 = new Vector2(50, 50);
+            var builder = new PathBuilder();
 
-            builder.AddLines(new List<PointF> { point1, point2, point3});
+            builder.AddLines(new List<PointF> { point1, point2, point3 });
             Path shape = Assert.IsType<Path>(builder.Build());
             Assert.Equal(10, shape.Bounds.Left);
         }
@@ -141,26 +140,26 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void MultipleStartFiguresDoesntCreateEmptyPaths()
         {
-            Vector2 point1 = new Vector2(10, 10);
-            Vector2 point2 = new Vector2(10, 90);
-            Vector2 point3 = new Vector2(50, 50);
-            PathBuilder builder = new PathBuilder();
+            var point1 = new Vector2(10, 10);
+            var point2 = new Vector2(10, 90);
+            var point3 = new Vector2(50, 50);
+            var builder = new PathBuilder();
             builder.StartFigure();
             builder.StartFigure();
             builder.StartFigure();
             builder.StartFigure();
             builder.AddLines(new List<PointF> { point1, point2, point3 });
-            Path shape = Assert.IsType<Path>(builder.Build());
+            Assert.IsType<Path>(builder.Build());
         }
 
         [Fact]
         public void DefaultTransform()
         {
-            Vector2 point1 = new Vector2(10, 10);
-            Vector2 point2 = new Vector2(10, 90);
-            Vector2 point3 = new Vector2(50, 50);
-            Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(5, 5));
-            PathBuilder builder = new PathBuilder(matrix);
+            var point1 = new Vector2(10, 10);
+            var point2 = new Vector2(10, 90);
+            var point3 = new Vector2(50, 50);
+            var matrix = Matrix3x2.CreateTranslation(new Vector2(5, 5));
+            var builder = new PathBuilder(matrix);
 
             builder.AddLines(point1, point2, point3);
             IPath shape = builder.Build();
@@ -170,11 +169,11 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void SetTransform()
         {
-            Vector2 point1 = new Vector2(10, 10);
-            Vector2 point2 = new Vector2(10, 90);
-            Vector2 point3 = new Vector2(50, 50);
-            Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(100, 100));
-            PathBuilder builder = new PathBuilder();
+            var point1 = new Vector2(10, 10);
+            var point2 = new Vector2(10, 90);
+            var point3 = new Vector2(50, 50);
+            var matrix = Matrix3x2.CreateTranslation(new Vector2(100, 100));
+            var builder = new PathBuilder();
 
             builder.AddLines(point1, point2, point3);
             builder.SetTransform(matrix);
@@ -193,15 +192,15 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void SetOriginLeaveMatrix()
         {
-            Vector2 point1 = new Vector2(10, 10);
-            Vector2 point2 = new Vector2(10, 90);
-            Vector2 point3 = new Vector2(50, 50);
-            Vector2 origin = new Vector2(-50, -100);
-            PathBuilder builder = new PathBuilder(Matrix3x2.CreateScale(10));
+            var point1 = new Vector2(10, 10);
+            var point2 = new Vector2(10, 90);
+            var point3 = new Vector2(50, 50);
+            var origin = new Vector2(-50, -100);
+            var builder = new PathBuilder(Matrix3x2.CreateScale(10));
 
             builder.AddLines(point1, point2, point3);
 
-            builder.SetOrigin(origin); //new origin is scaled by default transform
+            builder.SetOrigin(origin); // new origin is scaled by default transform
             builder.StartFigure();
             builder.AddLines(point1, point2, point3);
             IPath[] shape = Assert.IsType<ComplexPolygon>(builder.Build()).Paths.ToArray();

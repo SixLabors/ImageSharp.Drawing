@@ -1,16 +1,13 @@
-﻿// <copyright file="PathExtensions.cs" company="Scott Williams">
-// Copyright (c) Scott Williams and contributors.
+﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
-// </copyright>
+
+using System.Buffers;
+using System.Collections.Generic;
+using System.Numerics;
+using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
 {
-    using SixLabors.Primitives;
-
-    using System.Buffers;
-    using System.Collections.Generic;
-    using System.Numerics;
-
     internal static class InternalPathExtensions
     {
         /// <summary>
@@ -21,7 +18,7 @@ namespace SixLabors.Shapes
         /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
         internal static IEnumerable<PointF> FindIntersections(this InternalPath path, Vector2 start, Vector2 end)
         {
-            List<PointF> results = new List<PointF>();
+            var results = new List<PointF>();
             PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.PointCount);
             try
             {
@@ -38,6 +35,5 @@ namespace SixLabors.Shapes
 
             return results;
         }
-
     }
 }
