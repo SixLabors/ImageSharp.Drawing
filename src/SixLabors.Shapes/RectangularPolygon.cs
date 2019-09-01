@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -301,7 +301,7 @@ namespace SixLabors.Shapes
                 return new SegmentInfo
                 {
                     Point = new Vector2(this.Left + distanceAlongPath, this.Top),
-                    Angle = (float)Math.PI
+                    Angle = MathF.PI
                 };
             }
             else
@@ -313,7 +313,7 @@ namespace SixLabors.Shapes
                     return new SegmentInfo
                     {
                         Point = new Vector2(this.Right, this.Top + distanceAlongPath),
-                        Angle = -(float)Math.PI / 2
+                        Angle = -MathF.PI / 2
                     };
                 }
                 else

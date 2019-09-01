@@ -31,6 +31,15 @@
     <Compile Include="..\Shared\*.cs" Exclude="bin\**;obj\**;**\*.xproj;packages\**" />
   </ItemGroup>
 
+  <!-- TODO: Include .NETSTANDARD2.1 when released-->
+  <PropertyGroup Condition=" $(TargetFramework.StartsWith('netcoreapp2')) ">
+    <DefineConstants>$(DefineConstants);SUPPORTS_MATHF</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" $(TargetFramework.StartsWith('netcoreapp2.1')) ">
+    <DefineConstants>$(DefineConstants);SUPPORTS_HASHCODE</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="..\..\shared-infrastructure\**\*.cs" />
   </ItemGroup>
@@ -42,9 +51,9 @@
   <ItemGroup>
     <AdditionalFiles Include="..\..\shared-infrastructure\stylecop.json" />
   </ItemGroup>
-  
+
   <ItemGroup>
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.118" PrivateAssets="All" />
-    <PackageReference Include="SixLabors.Core" Version="1.0.0-dev000137" />
+    <PackageReference Include="SixLabors.Core" Version="1.0.0-dev000141" />
   </ItemGroup>
 </Project>

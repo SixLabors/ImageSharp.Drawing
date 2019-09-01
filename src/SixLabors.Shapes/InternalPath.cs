@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -163,7 +163,7 @@ namespace SixLabors.Shapes
             return new PointInfo
             {
                 DistanceAlongPath = this.points[closestPoint].TotalLength + Vector2.Distance(this.points[closestPoint].Point, internalInfo.PointOnLine),
-                DistanceFromPath = (float)Math.Sqrt(internalInfo.DistanceSquared),
+                DistanceFromPath = MathF.Sqrt(internalInfo.DistanceSquared),
                 SearchPoint = point,
                 ClosestPointOnPath = internalInfo.PointOnLine
             };
@@ -617,13 +617,13 @@ namespace SixLabors.Shapes
                         // all points are common, shouldn't match anything
                         results.Add(
                             new PointData
-                                {
-                                    Point = points[0],
-                                    Orientation = Orientation.Colinear,
-                                    Segment = new Segment(points[0], points[1]),
-                                    Length = 0,
-                                    TotalLength = 0
-                                });
+                            {
+                                Point = points[0],
+                                Orientation = Orientation.Colinear,
+                                Segment = new Segment(points[0], points[1]),
+                                Length = 0,
+                                TotalLength = 0
+                            });
                         return results.ToArray();
                     }
                 }
@@ -634,12 +634,12 @@ namespace SixLabors.Shapes
 
                 results.Add(
                     new PointData
-                        {
-                            Point = points[0],
-                            Orientation = CalulateOrientation(lastPoint, points[0], points[1]),
-                            Length = Vector2.Distance(lastPoint, points[0]),
-                            TotalLength = 0
-                        });
+                    {
+                        Point = points[0],
+                        Orientation = CalulateOrientation(lastPoint, points[0], points[1]),
+                        Length = Vector2.Distance(lastPoint, points[0]),
+                        TotalLength = 0
+                    });
 
                 lastPoint = points[0];
             }
