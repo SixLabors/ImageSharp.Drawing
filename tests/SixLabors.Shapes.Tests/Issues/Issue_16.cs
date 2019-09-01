@@ -1,23 +1,23 @@
-﻿using SixLabors.Primitives;
-using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
-using System.Text;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
     /// <summary>
     /// see https://github.com/SixLabors/Shapes/issues/16
-    /// Also for furter details see https://github.com/SixLabors/Fonts/issues/22 
+    /// Also for furter details see https://github.com/SixLabors/Fonts/issues/22
     /// </summary>
     public class Issue_16
     {
         [Fact]
         public void IndexOutoufRangeException()
         {
-            InternalPath p = new InternalPath(new PointF[] { new Vector2(0, 0), new Vector2(0.000000001f, 0), new Vector2(0, 0.000000001f) }, true);
+            var p = new InternalPath(new PointF[] { new Vector2(0, 0), new Vector2(0.000000001f, 0), new Vector2(0, 0.000000001f) }, true);
 
             IEnumerable<PointF> inter = p.FindIntersections(Vector2.One, Vector2.Zero);
 

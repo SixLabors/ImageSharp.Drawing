@@ -1,9 +1,11 @@
-﻿using SixLabors.Primitives;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Threading.Tasks;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
@@ -14,97 +16,96 @@ namespace SixLabors.Shapes.Tests
             new TheoryData<TestPoint, TestSize, TestPoint, bool>
             {
                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(10,10), // test
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(10, 10), // test
                     true
-                }, //corner is inside
-                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(9,9), // test
+               }, // corner is inside
+               {
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(9, 9), // test
                     false
-                }, //corner is inside
+               }, // corner is inside
             };
+
         public static TheoryData<TestPoint, TestSize, TestPoint, float> DistanceTheoryData =
             new TheoryData<TestPoint, TestSize, TestPoint, float>
             {
                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(10,10), // test
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(10, 10), // test
                     0f
-                }, //corner is inside
-                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(9,10), // test
+               }, // corner is inside
+               {
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(9, 10), // test
                     1f
-                },
-                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(10,13), // test
+               },
+               {
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(10, 13), // test
                     0f
-                },
-                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(14,13), // test
+               },
+               {
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(14, 13), // test
                     -3f
-                },
-                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(13,14), // test
+               },
+               {
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(13, 14), // test
                     -3f
-                },
-                {
-                    new PointF(10,10), // loc
-                    new SizeF(100,100), // size
-                    new PointF(7,6), // test
+               },
+               {
+                    new PointF(10, 10), // loc
+                    new SizeF(100, 100), // size
+                    new PointF(7, 6), // test
                     5f
-                },
+               },
             };
 
         public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
             new TheoryData<TestPoint, float, float>
             {
-               { new PointF(0,0), 0f, 0f },
-               { new PointF(1,0), 0f, 1f },
-               { new PointF(9,0), 0f, 9f },
-               { new PointF(10,0), 0f, 10f },
+               { new PointF(0, 0), 0f, 0f },
+               { new PointF(1, 0), 0f, 1f },
+               { new PointF(9, 0), 0f, 9f },
+               { new PointF(10, 0), 0f, 10f },
                { new PointF(10, 1), 0f, 11f },
-               { new PointF(10,9), 0f, 19f },
-               { new PointF(10,10), 0f, 20f },
-               { new PointF(9,10), 0f, 21f },
-               { new PointF(1,10), 0f, 29f },
-               { new PointF(0,10), 0f, 30f },
-               { new PointF(0,9), 0f, 31f },
-               { new PointF(0,1), 0f, 39f },
-
-               { new PointF(4,3), -3f, 4f },
+               { new PointF(10, 9), 0f, 19f },
+               { new PointF(10, 10), 0f, 20f },
+               { new PointF(9, 10), 0f, 21f },
+               { new PointF(1, 10), 0f, 29f },
+               { new PointF(0, 10), 0f, 30f },
+               { new PointF(0, 9), 0f, 31f },
+               { new PointF(0, 1), 0f, 39f },
+               { new PointF(4, 3), -3f, 4f },
                { new PointF(3, 4), -3f, 36f },
-
-               { new PointF(-1,0), 1f, 0f },
-               { new PointF(1,-1), 1f, 1f },
-               { new PointF(9,-1), 1f, 9f },
-               { new PointF(11,0), 1f, 10f },
+               { new PointF(-1, 0), 1f, 0f },
+               { new PointF(1, -1), 1f, 1f },
+               { new PointF(9, -1), 1f, 9f },
+               { new PointF(11, 0), 1f, 10f },
                { new PointF(11, 1), 1f, 11f },
-               { new PointF(11,9), 1f, 19f },
-               { new PointF(11,10), 1f, 20f },
-               { new PointF(9,11), 1f, 21f },
-               { new PointF(1,11), 1f, 29f },
-               { new PointF(-1,10), 1f, 30f },
-               { new PointF(-1,9), 1f, 31f },
-               { new PointF(-1,1), 1f, 39f },
+               { new PointF(11, 9), 1f, 19f },
+               { new PointF(11, 10), 1f, 20f },
+               { new PointF(9, 11), 1f, 21f },
+               { new PointF(1, 11), 1f, 29f },
+               { new PointF(-1, 10), 1f, 30f },
+               { new PointF(-1, 9), 1f, 31f },
+               { new PointF(-1, 1), 1f, 39f },
             };
 
         [Theory]
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
         {
-            RectangularPolygon shape = new RectangularPolygon(location, size);
+            var shape = new RectangularPolygon(location, size);
             Assert.Equal(isInside, shape.Contains(point));
         }
 
@@ -121,7 +122,7 @@ namespace SixLabors.Shapes.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectecDistance, float alongPath)
         {
-            IPath shape = new RectangularPolygon(0, 0, 10, 10).AsPath();
+            IPath shape = new RectangularPolygon(0, 0, 10, 10);
             PointInfo info = shape.Distance(point);
             Assert.Equal(expectecDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
@@ -130,35 +131,35 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Left()
         {
-            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
+            var shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(10, shape.Left);
         }
 
         [Fact]
         public void Right()
         {
-            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
+            var shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(22, shape.Right);
         }
 
         [Fact]
         public void Top()
         {
-            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
+            var shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(11, shape.Top);
         }
 
         [Fact]
         public void Bottom()
         {
-            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
+            var shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(24, shape.Bottom);
         }
 
         [Fact]
         public void SizeF()
         {
-            RectangularPolygon shape = new RectangularPolygon(10, 11, 12, 13);
+            var shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(12, shape.Size.Width);
             Assert.Equal(13, shape.Size.Height);
         }
@@ -176,7 +177,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void LienearSegements()
         {
-            IPath shape = new RectangularPolygon(10, 11, 12, 13).AsPath();
+            IPath shape = new RectangularPolygon(10, 11, 12, 13);
             IReadOnlyList<PointF> segemnts = shape.Flatten().ToArray()[0].Points;
             Assert.Equal(new PointF(10, 11), segemnts[0]);
             Assert.Equal(new PointF(22, 11), segemnts[1]);
@@ -217,13 +218,13 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Bounds_Path()
         {
-            IPath shape = new RectangularPolygon(10, 11, 12, 13).AsPath();
+            IPath shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(10, shape.Bounds.Left);
             Assert.Equal(22, shape.Bounds.Right);
             Assert.Equal(11, shape.Bounds.Top);
             Assert.Equal(24, shape.Bounds.Bottom);
         }
-        
+
         [Fact]
         public void MaxIntersections_Shape()
         {
@@ -242,9 +243,8 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void TransformIdnetityReturnsSahpeObject()
         {
-
             IPath shape = new RectangularPolygon(0, 0, 200, 60);
-            IPath transformdShape =  shape.Transform(Matrix3x2.Identity);
+            IPath transformdShape = shape.Transform(Matrix3x2.Identity);
 
             Assert.Same(shape, transformdShape);
         }
@@ -263,13 +263,13 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void Center()
         {
-            RectangularPolygon shape = new RectangularPolygon(50, 50, 200, 60);
+            var shape = new RectangularPolygon(50, 50, 200, 60);
 
             Assert.Equal(new PointF(150, 80), shape.Center);
         }
 
-        const float HalfPi = (float)(Math.PI / 2);
-        const float Pi = (float)(Math.PI);
+        private const float HalfPi = (float)(Math.PI / 2);
+        private const float Pi = (float)Math.PI;
 
         [Theory]
         [InlineData(0, 50, 50, Pi)]
@@ -286,7 +286,5 @@ namespace SixLabors.Shapes.Tests
             Assert.Equal(expectedY, point.Point.Y);
             Assert.Equal(expectedAngle, point.Angle);
         }
-
-
     }
 }

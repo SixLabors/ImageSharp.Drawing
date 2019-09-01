@@ -32,16 +32,19 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="..\..\standards\stylecop.json" />
+    <Compile Include="..\..\shared-infrastructure\**\*.cs" />
   </ItemGroup>
 
   <PropertyGroup>
-    <CodeAnalysisRuleSet>..\..\standards\SixLabors.ruleset</CodeAnalysisRuleSet>
-    <Version>1.0.0</Version>
+    <CodeAnalysisRuleSet>..\..\shared-infrastructure\SixLabors.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="StyleCop.Analyzers" Version="1.1.1-beta.61" PrivateAssets="All" />
-    <PackageReference Include="SixLabors.Core" Version="1.0.0-beta0007" />
+    <AdditionalFiles Include="..\..\shared-infrastructure\stylecop.json" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118" PrivateAssets="All" />
+    <PackageReference Include="SixLabors.Core" Version="1.0.0-dev000137" />
   </ItemGroup>
 </Project>

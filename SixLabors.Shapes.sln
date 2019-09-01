@@ -1,17 +1,18 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.26430.6
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29215.179
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionItems", "{C317F1B1-D75E-4C6D-83EB-80367343E0D7}"
 	ProjectSection(SolutionItems) = preProject
-		standards\.editorconfig = standards\.editorconfig
+		shared-infrastructure\.editorconfig = shared-infrastructure\.editorconfig
 		appveyor.yml = appveyor.yml
 		build.cmd = build.cmd
 		NuGet.config = NuGet.config
 		README.md = README.md
-		standards\SixLabors.ruleset = standards\SixLabors.ruleset
-		standards\stylecop.json = standards\stylecop.json
+		shared-infrastructure\SixLabors.ruleset = shared-infrastructure\SixLabors.ruleset
+		shared-infrastructure\SixLabors.Tests.ruleset = shared-infrastructure\SixLabors.Tests.ruleset
+		shared-infrastructure\stylecop.json = shared-infrastructure\stylecop.json
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{815C0625-CD3D-440F-9F80-2D83856AB7AE}"
@@ -21,7 +22,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared", "Shared", "{9E574A07-F879-4811-9C41-5CBDC6BAFDB7}"
 	ProjectSection(SolutionItems) = preProject
 		src\Shared\AssemblyInfo.Common.cs = src\Shared\AssemblyInfo.Common.cs
-		src\Shared\stylecop.json = src\Shared\stylecop.json
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Samples", "Samples", "{9F33164A-9EA9-4CB4-A384-A8A0A6DCA35D}"

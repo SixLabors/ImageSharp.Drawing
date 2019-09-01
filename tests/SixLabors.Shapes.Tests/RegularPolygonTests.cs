@@ -1,17 +1,17 @@
-﻿using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Numerics;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     public class RegularPolygonTests
     {
-
         [Theory]
         [InlineData(0, true)]
         [InlineData(1, true)]
@@ -28,7 +28,7 @@ namespace SixLabors.Shapes.Tests
             }
             else
             {
-                RegularPolygon p = new RegularPolygon(Vector2.Zero, points, 10f, 0);
+                var p = new RegularPolygon(Vector2.Zero, points, 10f, 0);
                 Assert.NotNull(p);
             }
         }
@@ -48,7 +48,7 @@ namespace SixLabors.Shapes.Tests
             }
             else
             {
-                RegularPolygon p = new RegularPolygon(Vector2.Zero, 3, radius, 0);
+                var p = new RegularPolygon(Vector2.Zero, 3, radius, 0);
                 Assert.NotNull(p);
             }
         }
@@ -56,10 +56,10 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void GeneratesCorrectPath()
         {
-            float radius = 10;
+            const float Radius = 10;
             int pointsCount = new Random().Next(3, 20);
 
-            RegularPolygon poly = new RegularPolygon(Vector2.Zero, pointsCount, radius, 0);
+            var poly = new RegularPolygon(Vector2.Zero, pointsCount, Radius, 0);
 
             IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points;
 
@@ -77,7 +77,7 @@ namespace SixLabors.Shapes.Tests
 
                 float actual = Vector2.Distance(points[i], points[j]);
                 Assert.Equal(baseline, actual, 3);
-                Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
             }
         }
 
@@ -85,23 +85,22 @@ namespace SixLabors.Shapes.Tests
         public void AngleChangesOnePointToStartAtThatPosition()
         {
             const double TwoPI = 2 * Math.PI;
-            float radius = 10;
+            const float Radius = 10;
             double anAngle = new Random().NextDouble() * TwoPI;
 
-            RegularPolygon poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
+            var poly = new RegularPolygon(Vector2.Zero, 3, Radius, (float)anAngle);
             IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points;
 
             IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
-            
+
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
         }
 
         [Fact]
         public void TriangleMissingIntersectionsDownCenter()
         {
-
-            RegularPolygon poly = new SixLabors.Shapes.RegularPolygon(50, 50, 3, 30);
+            var poly = new SixLabors.Shapes.RegularPolygon(50, 50, 3, 30);
             PointF[] points = poly.FindIntersections(new PointF(0, 50), new PointF(100, 50)).ToArray();
 
             Assert.Equal(2, points.Length);
@@ -110,7 +109,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingCornerShouldReturn2Points()
         {
-            RegularPolygon poly = new RegularPolygon(50, 50, 7, 30, -(float)Math.PI);
+            var poly = new RegularPolygon(50, 50, 7, 30, -(float)Math.PI);
             PointF[] points = poly.FindIntersections(new PointF(0, 20), new PointF(100, 20)).ToArray();
 
             Assert.Equal(2, points.Length);

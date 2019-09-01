@@ -1,42 +1,37 @@
-﻿using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
-using Moq;
+using System.Numerics;
+using SixLabors.Primitives;
+using SixLabors.Shapes.PolygonClipper;
+using Xunit;
+using Clipper = SixLabors.Shapes.PolygonClipper.Clipper;
 
 namespace SixLabors.Shapes.Tests.PolygonClipper
 {
-    using System.Collections.Immutable;
-    using System.Numerics;
-
-    using SixLabors.Shapes.PolygonClipper;
-
-    using Xunit;
-    using ClipperLib;
-    using Clipper = SixLabors.Shapes.PolygonClipper.Clipper;
-    using SixLabors.Primitives;
-
     public class ClipperTests
     {
-        private RectangularPolygon BigSquare = new RectangularPolygon(10, 10, 40, 40);
-        private RectangularPolygon Hole = new RectangularPolygon(20, 20, 10, 10);
-        private RectangularPolygon TopLeft = new RectangularPolygon(0, 0, 20, 20);
-        private RectangularPolygon TopRight = new RectangularPolygon(30, 0, 20, 20);
-        private RectangularPolygon TopMiddle = new RectangularPolygon(20, 0, 10, 20);
+        private readonly RectangularPolygon bigSquare = new RectangularPolygon(10, 10, 40, 40);
+        private readonly RectangularPolygon hole = new RectangularPolygon(20, 20, 10, 10);
+        private readonly RectangularPolygon topLeft = new RectangularPolygon(0, 0, 20, 20);
+        private readonly RectangularPolygon topRight = new RectangularPolygon(30, 0, 20, 20);
+        private readonly RectangularPolygon topMiddle = new RectangularPolygon(20, 0, 10, 20);
 
-        private Polygon BigTriangle = new Polygon(new LinearLineSegment(
+        private readonly Polygon bigTriangle = new Polygon(new LinearLineSegment(
                          new Vector2(10, 10),
                          new Vector2(200, 150),
                          new Vector2(50, 300)));
 
-        private Polygon LittleTriangle = new Polygon(new LinearLineSegment(
+        private readonly Polygon littleTriangle = new Polygon(new LinearLineSegment(
                         new Vector2(37, 85),
                         new Vector2(130, 40),
                         new Vector2(65, 137)));
 
         private IEnumerable<IPath> Clip(IPath shape, params IPath[] hole)
         {
-            Clipper clipper = new Clipper();
+            var clipper = new Clipper();
 
             clipper.AddPath(shape, ClippingType.Subject);
             if (hole != null)
@@ -53,12 +48,12 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void OverlappingTriangleCutRightSide()
         {
-            Polygon triangle = new Polygon(new LinearLineSegment(
+            var triangle = new Polygon(new LinearLineSegment(
                 new Vector2(0, 50),
                 new Vector2(70, 0),
                 new Vector2(50, 100)));
 
-            Polygon cutout = new Polygon(new LinearLineSegment(
+            var cutout = new Polygon(new LinearLineSegment(
                 new Vector2(20, 0),
                 new Vector2(70, 0),
                 new Vector2(70, 100),
@@ -72,11 +67,11 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void OverlappingTriangles()
         {
-            IEnumerable<IPath> shapes = this.Clip(this.BigTriangle, this.LittleTriangle);
+            IEnumerable<IPath> shapes = this.Clip(this.bigTriangle, this.littleTriangle);
             Assert.Single(shapes);
             IReadOnlyList<PointF> path = shapes.Single().Flatten().First().Points;
             Assert.Equal(7, path.Count);
-            foreach (Vector2 p in this.BigTriangle.Flatten().First().Points)
+            foreach (Vector2 p in this.bigTriangle.Flatten().First().Points)
             {
                 Assert.Contains(p, path);
             }
@@ -85,43 +80,43 @@ namespace SixLabors.Shapes.Tests.PolygonClipper
         [Fact]
         public void NonOverlapping()
         {
-            IEnumerable<RectangularPolygon> shapes = this.Clip(this.TopLeft, this.TopRight)
+            IEnumerable<RectangularPolygon> shapes = this.Clip(this.topLeft, this.topRight)
                 .OfType<Polygon>().Select(x => (RectangularPolygon)x);
 
             Assert.Single(shapes);
-            Assert.Contains(this.TopLeft, shapes);
+            Assert.Contains(this.topLeft, shapes);
 
-            Assert.DoesNotContain(this.TopRight, shapes);
+            Assert.DoesNotContain(this.topRight, shapes);
         }
 
         [Fact]
         public void OverLappingReturns1NewShape()
         {
-            IEnumerable<IPath> shapes = this.Clip(this.BigSquare, this.TopLeft);
+            IEnumerable<IPath> shapes = this.Clip(this.bigSquare, this.topLeft);
 
             Assert.Single(shapes);
-            Assert.DoesNotContain(this.BigSquare, shapes);
-            Assert.DoesNotContain(this.TopLeft, shapes);
+            Assert.DoesNotContain(this.bigSquare, shapes);
+            Assert.DoesNotContain(this.topLeft, shapes);
         }
 
         [Fact]
         public void OverlappingButNotCrossingRetuensOrigionalShapes()
         {
-            IEnumerable<RectangularPolygon> shapes = this.Clip(this.BigSquare, this.Hole)
+            IEnumerable<RectangularPolygon> shapes = this.Clip(this.bigSquare, this.hole)
                 .OfType<Polygon>().Select(x => (RectangularPolygon)x);
 
             Assert.Equal(2, shapes.Count());
-            Assert.Contains(this.BigSquare, shapes);
-            Assert.Contains(this.Hole, shapes);
+            Assert.Contains(this.bigSquare, shapes);
+            Assert.Contains(this.hole, shapes);
         }
 
         [Fact]
         public void TouchingButNotOverlapping()
         {
-            IEnumerable<IPath> shapes = this.Clip(this.TopMiddle, this.TopLeft);
+            IEnumerable<IPath> shapes = this.Clip(this.topMiddle, this.topLeft);
             Assert.Single(shapes);
-            Assert.DoesNotContain(this.TopMiddle, shapes);
-            Assert.DoesNotContain(this.TopLeft, shapes);
+            Assert.DoesNotContain(this.topMiddle, shapes);
+            Assert.DoesNotContain(this.topLeft, shapes);
         }
 
         [Fact]

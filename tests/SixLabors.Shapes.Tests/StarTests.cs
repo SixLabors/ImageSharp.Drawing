@@ -1,17 +1,17 @@
-﻿using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Numerics;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     public class StarTests
     {
-
         [Theory]
         [InlineData(0, true)]
         [InlineData(1, true)]
@@ -28,7 +28,7 @@ namespace SixLabors.Shapes.Tests
             }
             else
             {
-                Star p = new Star(Vector2.Zero, points, 10f, 20f, 0);
+                var p = new Star(Vector2.Zero, points, 10f, 20f, 0);
                 Assert.NotNull(p);
             }
         }
@@ -50,7 +50,7 @@ namespace SixLabors.Shapes.Tests
             }
             else
             {
-                Star p = new Star(Vector2.Zero, 3, radius, radius, 0);
+                var p = new Star(Vector2.Zero, 3, radius, radius, 0);
                 Assert.NotNull(p);
             }
         }
@@ -58,11 +58,11 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void GeneratesCorrectPath()
         {
-            float radius = 5;
-            float radius2 = 30;
+            const float Radius = 5;
+            const float Radius2 = 30;
             int pointsCount = new Random().Next(3, 20);
 
-            Star poly = new Star(Vector2.Zero, pointsCount, radius, radius2, 0);
+            var poly = new Star(Vector2.Zero, pointsCount, Radius, Radius2, 0);
 
             PointF[] points = poly.Flatten().ToArray()[0].Points.ToArray();
 
@@ -83,11 +83,11 @@ namespace SixLabors.Shapes.Tests
                 Assert.Equal(baseline, actual, 3);
                 if (i % 2 == 1)
                 {
-                    Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                    Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
                 }
                 else
                 {
-                    Assert.Equal(radius2, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                    Assert.Equal(Radius2, Vector2.Distance(Vector2.Zero, points[i]), 3);
                 }
             }
         }
@@ -96,11 +96,11 @@ namespace SixLabors.Shapes.Tests
         public void AngleChangesOnePointToStartAtThatPosition()
         {
             const double TwoPI = 2 * Math.PI;
-            float radius = 10;
-            float radius2 = 20;
+            const float Radius = 10;
+            const float Radius2 = 20;
             double anAngle = new Random().NextDouble() * TwoPI;
 
-            Star poly = new Star(Vector2.Zero, 3, radius, radius2, (float)anAngle);
+            var poly = new Star(Vector2.Zero, 3, Radius, Radius2, (float)anAngle);
             ISimplePath[] points = poly.Flatten().ToArray();
 
             IEnumerable<double> allAngles = points[0].Points.Select(b => Math.Atan2(b.Y, b.X))
@@ -112,8 +112,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void TriangleMissingIntersectionsDownCenter()
         {
-
-            Star poly = new SixLabors.Shapes.Star(50, 50, 3, 50, 30);
+            var poly = new SixLabors.Shapes.Star(50, 50, 3, 50, 30);
             PointF[] points = poly.FindIntersections(new Vector2(0, 50), new Vector2(100, 50)).ToArray();
 
             Assert.Equal(2, points.Length);
@@ -122,7 +121,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingCornerShouldReturn2Points()
         {
-            Star star = new Star(40, 40, 3, 10, 20);
+            var star = new Star(40, 40, 3, 10, 20);
             PointF[] points = star.FindIntersections(new Vector2(0, 30), new Vector2(100, 30)).ToArray();
 
             Assert.True(points.Length % 2 == 0, "Should have even number of intersection points");

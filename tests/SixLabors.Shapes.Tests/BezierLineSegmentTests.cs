@@ -1,20 +1,20 @@
-﻿using System;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Numerics;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     public class BezierLineSegmentTests
     {
         [Fact]
         public void SingleSegmentConstructor()
         {
-            CubicBezierLineSegment segment = new CubicBezierLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 0), new Vector2(20, 0));
+            var segment = new CubicBezierLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 0), new Vector2(20, 0));
             IReadOnlyList<PointF> points = segment.Flatten();
             Assert.Contains(new Vector2(0, 0), points);
             Assert.Contains(new Vector2(10, 0), points);

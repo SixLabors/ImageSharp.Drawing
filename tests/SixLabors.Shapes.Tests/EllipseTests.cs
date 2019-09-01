@@ -1,14 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
+// Copyright (c) Six Labors and contributors.
+// Licensed under the Apache License, Version 2.0.
+
+using System;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Numerics;
+using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.Shapes.Tests
 {
-    using SixLabors.Primitives;
-    using System.Numerics;
-
     public class EllipseTests
     {
         [Theory]
@@ -20,13 +20,13 @@ namespace SixLabors.Shapes.Tests
         {
             if (throws)
             {
-                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new EllipsePolygon(0,0, width, 99));
+                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new EllipsePolygon(0, 0, width, 99));
 
                 Assert.Equal("width", ex.ParamName);
             }
             else
             {
-                EllipsePolygon p = new EllipsePolygon(0, 0, width, 99);
+                var p = new EllipsePolygon(0, 0, width, 99);
                 Assert.NotNull(p);
             }
         }
@@ -40,13 +40,13 @@ namespace SixLabors.Shapes.Tests
         {
             if (throws)
             {
-                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new EllipsePolygon(0,0,99, height));
+                ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new EllipsePolygon(0, 0, 99, height));
 
                 Assert.Equal("height", ex.ParamName);
             }
             else
             {
-                EllipsePolygon p = new EllipsePolygon(0, 0, 99, height);
+                var p = new EllipsePolygon(0, 0, 99, height);
                 Assert.NotNull(p);
             }
         }
@@ -54,7 +54,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void ClippingCornerShouldReturn2Points()
         {
-            EllipsePolygon poly = new EllipsePolygon(50, 50, 30, 50);
+            var poly = new EllipsePolygon(50, 50, 30, 50);
             PointF[] points = poly.FindIntersections(new Vector2(0, 75), new Vector2(100, 75)).ToArray();
 
             Assert.Equal(2, points.Length);
@@ -63,7 +63,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void AcrossEllipsShouldReturn2()
         {
-            EllipsePolygon poly = new EllipsePolygon(50, 50, 30, 50);
+            var poly = new EllipsePolygon(50, 50, 30, 50);
             PointF[] points = poly.FindIntersections(new Vector2(0, 49), new Vector2(100, 49)).ToArray();
 
             Assert.Equal(2, points.Length);
@@ -80,7 +80,5 @@ namespace SixLabors.Shapes.Tests
 
             Assert.Equal(2, points.Length);
         }
-
-
     }
 }

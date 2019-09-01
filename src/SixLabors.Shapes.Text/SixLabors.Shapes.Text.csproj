@@ -31,12 +31,16 @@
     <Compile Include="..\Shared\*.cs" Exclude="bin\**;obj\**;**\*.xproj;packages\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\..\shared-infrastructure\**\*.cs" />
+  </ItemGroup>
+
   <PropertyGroup>
-    <CodeAnalysisRuleSet>..\..\standards\SixLabors.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet>..\..\shared-infrastructure\SixLabors.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="..\..\standards\stylecop.json" />
+    <AdditionalFiles Include="..\..\shared-infrastructure\stylecop.json" />
   </ItemGroup>
 
   <ItemGroup>
