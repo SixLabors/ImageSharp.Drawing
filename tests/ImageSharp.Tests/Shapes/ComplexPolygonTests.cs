@@ -190,7 +190,8 @@ namespace SixLabors.Shapes.Tests
 
             if (badPositions.Count > 0)
             {
-                string badPoz = string.Join(',', badPositions);
+                // The char overload is causing mysterious build failures in Visual Studio
+                string badPoz = string.Join(",", badPositions);
                 this.Output.WriteLine($"BAD: {badPositions.Count} of {yMax - yMin}: {badPoz}");
 
                 Assert.True(false);
