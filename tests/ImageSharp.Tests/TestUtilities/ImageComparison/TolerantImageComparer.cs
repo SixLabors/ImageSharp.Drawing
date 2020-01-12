@@ -22,8 +22,6 @@ namespace SixLabors.ImageSharp.Tests.TestUtilities.ImageComparison
         /// <param name="perPixelManhattanThreshold">Gets the threshold of the individual pixels before they accumulate towards the overall difference.</param>
         public TolerantImageComparer(float imageThreshold, int perPixelManhattanThreshold = 0)
         {
-            Guard.MustBeGreaterThanOrEqualTo(imageThreshold, 0, nameof(imageThreshold));
-
             this.ImageThreshold = imageThreshold;
             this.PerPixelManhattanThreshold = perPixelManhattanThreshold;
         }

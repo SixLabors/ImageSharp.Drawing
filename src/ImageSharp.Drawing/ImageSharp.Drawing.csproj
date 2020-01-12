@@ -2,7 +2,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>SixLabors.ImageSharp.Drawing</AssemblyName>
+    <!-- using a slightly off AssemblyName until ImageSharp stops exposing internals to this assembly-->
+    <AssemblyName>SixLabors.ImageSharp.Drawing2</AssemblyName>
     <AssemblyTitle>SixLabors.ImageSharp.Drawing</AssemblyTitle>
     <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
     <PackageId>SixLabors.ImageSharp.Drawing</PackageId>
@@ -11,6 +12,9 @@
 
     <TargetFrameworks>netcoreapp2.1;netstandard2.0;netstandard1.3</TargetFrameworks>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\shared-infrastructure\**\*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" />

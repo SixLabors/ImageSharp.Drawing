@@ -95,7 +95,6 @@ namespace SixLabors.ImageSharp.Tests.Memory
             /// <param name="length">The length of the buffer</param>
             public BasicArrayBuffer(T[] array, int length)
             {
-                DebugGuard.MustBeLessThanOrEqualTo(length, array.Length, nameof(length));
                 this.Array = array;
                 this.Length = length;
             }

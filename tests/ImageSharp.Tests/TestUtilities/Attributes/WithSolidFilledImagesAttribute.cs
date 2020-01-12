@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -131,8 +131,6 @@ namespace SixLabors.ImageSharp.Tests
             params object[] additionalParameters)
             : base(memberData, width, height, pixelTypes, additionalParameters)
         {
-            Guard.NotNull(colorName, nameof(colorName));
-
             Rgba32 c = TestUtils.GetPixelOfNamedColor<Rgba32>(colorName);
             this.R = c.R;
             this.G = c.G;

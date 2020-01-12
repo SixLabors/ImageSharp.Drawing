@@ -41,8 +41,6 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
             float opacity)
             : base(configuration, source, sourceRectangle)
         {
-            Guard.MustBeBetweenOrEqualTo(opacity, 0, 1, nameof(opacity));
-
             this.Image = image;
             this.Opacity = opacity;
             this.Blender = PixelOperations<TPixelBg>.Instance.GetPixelBlender(colorBlendingMode, alphaCompositionMode);
