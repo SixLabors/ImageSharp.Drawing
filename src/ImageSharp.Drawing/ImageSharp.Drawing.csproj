@@ -14,11 +14,8 @@
 
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.0-dev003209" />
     <PackageReference Include="SixLabors.Shapes" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\ImageSharp\ImageSharp.csproj" />
   </ItemGroup>
 
 </Project>
