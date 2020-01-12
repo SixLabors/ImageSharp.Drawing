@@ -1,30 +1,36 @@
 version: "{build}"
 image: Visual Studio 2017
 
+# prevent the double build when a branch has an active PR
+skip_branch_with_pr: true
 install:
 
 before_build:
   - git submodule -q update --init
-  - cmd: dotnet --version
+  - cmd: dotnet --info
+  
+
 
 build_script:
-  - cmd: build.cmd
-  - cmd: tests\CodeCoverage\CodeCoverage.cmd
+- cmd: build.cmd
+
+test_script:
+- ps: .\run-tests.ps1 $env:target_framework $env:is_32bit
 
 after_build:
-  - cmd: appveyor PushArtifact "artifacts\SixLabors.Shapes.%APPVEYOR_BUILD_VERSION%.nupkg"
-  - cmd: appveyor PushArtifact "artifacts\SixLabors.Shapes.Text.%APPVEYOR_BUILD_VERSION%.nupkg"
+  - cmd: appveyor PushArtifact "artifacts\SixLabors.ImageSharp.Drawing.%APPVEYOR_BUILD_VERSION%.nupkg"
 
-deploy:
-  - provider: NuGet
-    server: https://www.myget.org/F/sixlabors/api/v2/package
-    symbol_server: https://www.myget.org/F/sixlabors/symbols/api/v2/package
-    api_key:
-      secure: V/lEHP0UeMWIpWd0fiNlY2IgbCnJKQlGdRksECdJbOBdaE20Fl0RNL7WyqHe02o4
-    artifact: /.*\.nupkg/
-    on:
-      branch: master
-      
+# deploy:
+#     # MyGet Deployment for builds & releases
+#   - provider: NuGet
+#     server: https://www.myget.org/F/sixlabors/api/v2/package
+#     symbol_server: https://www.myget.org/F/sixlabors/symbols/api/v2/package
+#     api_key:
+#       secure: V/lEHP0UeMWIpWd0fiNlY2IgbCnJKQlGdRksECdJbOBdaE20Fl0RNL7WyqHe02o4
+#     artifact: /.*\.nupkg/
+#     on:
+#       branch: master
+
 # prevent the double build when a branch has an active PR
 skip_branch_with_pr: true
 
