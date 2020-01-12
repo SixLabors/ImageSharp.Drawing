@@ -14,15 +14,16 @@
 
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.0-dev003209" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\SixLabors.Shapes\SixLabors.Shapes.csproj" />
+    <PackageReference Include="SixLabors.ImageSharp" />
   </ItemGroup>
   
   <ItemGroup>
     <InternalsVisibleTo Include="SixLabors.ImageSharp.Tests" />
+    <InternalsVisibleTo Include="SixLabors.Shapes.Tests" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Folder Include="Shapes\Text\" />
   </ItemGroup>
 
 </Project>
