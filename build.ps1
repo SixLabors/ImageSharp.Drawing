@@ -170,7 +170,7 @@ if("$env:APPVEYOR_API_URL" -ne ""){
 Write-Host "Building version '${version}'"
 dotnet restore /p:packageversion=$version /p:DisableImplicitNuGetFallbackFolder=true /p:skipFullFramework=$skipFullFramework
 
-$repositoryUrl = "https://github.com/SixLabors/ImageSharp/"
+$repositoryUrl = "https://github.com/SixLabors/ImageSharp.Drawing/"
 
 if("$env:GITHUB_REPOSITORY" -ne ""){
     $repositoryUrl = "https://github.com/$env:GITHUB_REPOSITORY"
@@ -195,8 +195,6 @@ if ($LASTEXITCODE ){ Exit $LASTEXITCODE }
 if ($LASTEXITCODE ){ Exit $LASTEXITCODE }
 
 Write-Host "Packaging projects"
-dotnet pack ./src/ImageSharp/ -c Release --output "$PSScriptRoot/artifacts" --no-build  /p:packageversion=$version /p:skipFullFramework=$skipFullFramework /p:RepositoryUrl=$repositoryUrl
-if ($LASTEXITCODE ){ Exit $LASTEXITCODE }
 
 dotnet pack ./src/ImageSharp.Drawing/ -c Release --output "$PSScriptRoot/artifacts" --no-build  /p:packageversion=$version /p:skipFullFramework=$skipFullFramework /p:RepositoryUrl=$repositoryUrl
 if ($LASTEXITCODE ){ Exit $LASTEXITCODE }
