@@ -352,37 +352,17 @@ EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
-		Debug|x64 = Debug|x64
-		Debug|x86 = Debug|x86
 		Release|Any CPU = Release|Any CPU
-		Release|x64 = Release|x64
-		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|x64.Build.0 = Debug|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Debug|x86.Build.0 = Debug|Any CPU
 		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|Any CPU.Build.0 = Release|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|x64.ActiveCfg = Release|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|x64.Build.0 = Release|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|x86.ActiveCfg = Release|Any CPU
-		{2E33181E-6E28-4662-A801-E2E7DC206029}.Release|x86.Build.0 = Release|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|x64.Build.0 = Debug|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|x86.Build.0 = Debug|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|x64.ActiveCfg = Release|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|x64.Build.0 = Release|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|x86.ActiveCfg = Release|Any CPU
-		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
