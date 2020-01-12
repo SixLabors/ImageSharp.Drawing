@@ -8,7 +8,7 @@ nuget restore packages.config -PackagesDirectory .
 cd ..
 cd ..
 
-dotnet restore ImageSharp.sln
+dotnet restore ImageSharp.Drawing.sln
 rem Clean the solution to force a rebuild with /p:codecov=true
 dotnet clean ImageSharp.sln -c Release
 rem The -threshold options prevents this taking ages...
