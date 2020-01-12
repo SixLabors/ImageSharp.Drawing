@@ -84,6 +84,8 @@ jobs:
     if : github.event_name == 'push'
     steps:      
     - uses: actions/checkout@v1
+    - name : install nuget
+      uses: NuGet/setup-nuget@v1
     
     - name: Enable long file paths
       run: git config --global core.longpaths true
@@ -97,9 +99,6 @@ jobs:
         $DebugPreference = "Continue"
         ./build.ps1
 
-    - name : install nuget
-      if: success()
-      uses: warrenbuckley/Setup-Nuget@v1
 
    
     - name: Publish to nightly feed -myget
