@@ -9,8 +9,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		.gitattributes = .gitattributes
 		.gitignore = .gitignore
 		.gitmodules = .gitmodules
-		.travis.yml = .travis.yml
-		appveyor.yml = appveyor.yml
 		build.cmd = build.cmd
 		build.ps1 = build.ps1
 		codecov.yml = codecov.yml
@@ -347,7 +345,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Png", "Png", "{E1C42A6F-913
 		tests\Images\Input\Png\zlib-overflow.png = tests\Images\Input\Png\zlib-overflow.png
 	EndProjectSection
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing.Tests", "tests\ImageSharp.Tests\ImageSharp.Drawing.Tests.csproj", "{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing.Tests", "tests\ImageSharp.Drawing.Tests\ImageSharp.Drawing.Tests.csproj", "{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing.Benchmarks", "tests\ImageSharp.Drawing.Benchmarks\ImageSharp.Drawing.Benchmarks.csproj", "{59804113-1DD4-4F80-8D06-35FF71652508}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -363,6 +363,10 @@ Global
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -387,6 +391,7 @@ Global
 		{39F5197B-CF6C-41A5-9739-7F97E78BB104} = {6458AFCB-A159-47D5-8F2B-50C95C0915E0}
 		{E1C42A6F-913B-4A7B-B1A8-2BB62843B254} = {9DA226A1-8656-49A8-A58A-A8B5C081AD66}
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
+		{59804113-1DD4-4F80-8D06-35FF71652508} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F8B9D1F-CD8B-4CC5-8216-D531E25BD795}

@@ -16,6 +16,10 @@
   </PropertyGroup>
 
   <PropertyGroup>
+    <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)..\shared-infrastructure\SixLabors.Tests.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+
+  <PropertyGroup>
     <NoWarn>CS0618;$(NoWarn)</NoWarn>
   </PropertyGroup>
 
@@ -23,8 +27,14 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" IsImplicitlyDefined="true" />
+    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="All" />
+    <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="xunit" IsImplicitlyDefined="true" />
     <PackageReference Include="xunit.runner.visualstudio" IsImplicitlyDefined="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)..\shared-infrastructure\stylecop.json" />
   </ItemGroup>
 
 </Project>
