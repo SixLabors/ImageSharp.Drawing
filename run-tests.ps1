@@ -44,7 +44,7 @@ if ( ($targetFramework -eq "netcoreapp2.1") -and ($env:CI -eq "True") -and ($is3
   $testRunnerCmd = ".\tests\CodeCoverage\CodeCoverage.cmd"
 }
 else {
-  Set-Location .\tests\ImageSharp.Tests
+  Set-Location .\tests\ImageSharp.Drawing.Tests
   $xunitArgs = "-nobuild -c Release -framework $targetFramework"
 
   if ($targetFramework -eq "netcoreapp2.1") {
