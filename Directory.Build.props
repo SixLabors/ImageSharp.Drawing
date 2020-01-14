@@ -61,22 +61,13 @@
     <DefineConstants>$(DefineConstants);SUPPORTS_EXTENDED_INTRINSICS</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-  </PropertyGroup>
-
-  <!--TODO: Check what this is testing for and why does it fail?-->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
-  </PropertyGroup>
-
   <!-- Default settings that explicitly differ from the Sdk.targets defaults-->
   <PropertyGroup>
     <Authors>Six Labors and contributors</Authors>
     <BaseOutputPath>$(BaseArtifactsPath)bin/$(BaseArtifactsPathSuffix)/</BaseOutputPath>
     <Company>Six Labors</Company>
     <PackageOutputPath>$(BaseArtifactsPath)pkg/$(BaseArtifactsPathSuffix)/$(Configuration)/</PackageOutputPath>
-    <Product>SixLabors.ImageSharp</Product>
+    <Product>SixLabors.ImageSharp.Drawing</Product>
     <VersionPrefix>0.0.1</VersionPrefix>
     <VersionPrefix Condition="'$(packageversion)' != ''">$(PackageVersion)</VersionPrefix>
     <VersionSuffix></VersionSuffix>
@@ -91,7 +82,8 @@
     <LangVersion>7.3</LangVersion>
     <NeutralLanguage>en</NeutralLanguage>
     <OverwriteReadOnlyFiles>true</OverwriteReadOnlyFiles>
-    <PackageIconUrl>https://raw.githubusercontent.com/SixLabors/Branding/master/icons/imagesharp/sixlabors.imagesharp.128.png</PackageIconUrl>
+    <!--Icon source is set in src folder props file-->
+    <PackageIcon>icon.png</PackageIcon>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
     <ProduceReferenceAssembly>true</ProduceReferenceAssembly>

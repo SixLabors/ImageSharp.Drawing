@@ -9,8 +9,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 		.gitattributes = .gitattributes
 		.gitignore = .gitignore
 		.gitmodules = .gitmodules
-		.travis.yml = .travis.yml
-		appveyor.yml = appveyor.yml
 		build.cmd = build.cmd
 		build.ps1 = build.ps1
 		codecov.yml = codecov.yml
@@ -24,6 +22,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionIt
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{1799C43E-5C54-4A8F-8D64-B1475241DB0D}"
 	ProjectSection(SolutionItems) = preProject
+		.github\workflows\build-and-test.yml = .github\workflows\build-and-test.yml
 		.github\CONTRIBUTING.md = .github\CONTRIBUTING.md
 		.github\PULL_REQUEST_TEMPLATE.md = .github\PULL_REQUEST_TEMPLATE.md
 	EndProjectSection
@@ -35,30 +34,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ISSUE_TEMPLATE", "ISSUE_TEM
 		.github\ISSUE_TEMPLATE\feature-request.md = .github\ISSUE_TEMPLATE\feature-request.md
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{0274D4CF-9932-47CC-8E89-54DC05B8F06E}"
-	ProjectSection(SolutionItems) = preProject
-		.vscode\launch.json = .vscode\launch.json
-		.vscode\tasks.json = .vscode\tasks.json
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{E919DF0B-2607-4462-8FC0-5C98FE50F8C9}"
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "icons", "icons", "{2B02E303-7CC6-4E15-97EE-DBE86B287553}"
-	ProjectSection(SolutionItems) = preProject
-		build\icons\imagesharp-logo-128.png = build\icons\imagesharp-logo-128.png
-		build\icons\imagesharp-logo-256.png = build\icons\imagesharp-logo-256.png
-		build\icons\imagesharp-logo-32.png = build\icons\imagesharp-logo-32.png
-		build\icons\imagesharp-logo-512.png = build\icons\imagesharp-logo-512.png
-		build\icons\imagesharp-logo-64.png = build\icons\imagesharp-logo-64.png
-		build\icons\imagesharp-logo.png = build\icons\imagesharp-logo.png
-		build\icons\imagesharp-logo.svg = build\icons\imagesharp-logo.svg
-	EndProjectSection
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{815C0625-CD3D-440F-9F80-2D83856AB7AE}"
 	ProjectSection(SolutionItems) = preProject
 		src\Directory.Build.props = src\Directory.Build.props
 		src\Directory.Build.targets = src\Directory.Build.targets
-		src\README.md = src\README.md
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing", "src\ImageSharp.Drawing\ImageSharp.Drawing.csproj", "{2E33181E-6E28-4662-A801-E2E7DC206029}"
@@ -347,7 +326,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Png", "Png", "{E1C42A6F-913
 		tests\Images\Input\Png\zlib-overflow.png = tests\Images\Input\Png\zlib-overflow.png
 	EndProjectSection
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing.Tests", "tests\ImageSharp.Tests\ImageSharp.Drawing.Tests.csproj", "{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing.Tests", "tests\ImageSharp.Drawing.Tests\ImageSharp.Drawing.Tests.csproj", "{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing.Benchmarks", "tests\ImageSharp.Drawing.Benchmarks\ImageSharp.Drawing.Benchmarks.csproj", "{59804113-1DD4-4F80-8D06-35FF71652508}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -363,13 +344,16 @@ Global
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{59804113-1DD4-4F80-8D06-35FF71652508}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{FBE8C1AD-5AEC-4514-9B64-091D8E145865} = {1799C43E-5C54-4A8F-8D64-B1475241DB0D}
-		{2B02E303-7CC6-4E15-97EE-DBE86B287553} = {E919DF0B-2607-4462-8FC0-5C98FE50F8C9}
 		{2E33181E-6E28-4662-A801-E2E7DC206029} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 		{D4C5EC58-F8E6-4636-B9EE-C99D2578E5C6} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
 		{FA55F5DE-11A6-487D-ABA4-BC93A02717DD} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
@@ -387,6 +371,7 @@ Global
 		{39F5197B-CF6C-41A5-9739-7F97E78BB104} = {6458AFCB-A159-47D5-8F2B-50C95C0915E0}
 		{E1C42A6F-913B-4A7B-B1A8-2BB62843B254} = {9DA226A1-8656-49A8-A58A-A8B5C081AD66}
 		{EA3000E9-2A91-4EC4-8A68-E566DEBDC4F6} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
+		{59804113-1DD4-4F80-8D06-35FF71652508} = {56801022-D71A-4FBE-BC5B-CBA08E2284EC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F8B9D1F-CD8B-4CC5-8216-D531E25BD795}
