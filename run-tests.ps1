@@ -1,4 +1,5 @@
 param(
+  [string]$os,
   [string]$targetFramework,
   [string]$is32Bit = "False"
 )
@@ -39,8 +40,8 @@ function CheckSubmoduleStatus() {
   }
 }
 
-if ( ($targetFramework -eq "netcoreapp2.1") -and ($env:CI -eq "True") -and ($is32Bit -ne "True")) {
-  # We execute CodeCoverage.cmd only for one specific job on CI (netcoreapp2.1 + 64bit )
+if (($os -eq "windows-latest") -and ($targetFramework -eq "netcoreapp2.1") -and ($env:CI -eq "True") -and ($is32Bit -ne "True")) {
+  # We execute CodeCoverage.cmd only for one specific job on CI (windows + netcoreapp2.1 + 64bit )
   $testRunnerCmd = ".\tests\CodeCoverage\CodeCoverage.cmd"
 }
 else {

@@ -80,7 +80,7 @@ jobs:
 
     - name: Test
       shell: pwsh
-      run: ./run-tests.ps1 "${{matrix.options.framework}}" "${{matrix.options.is32Bit}}" true
+      run: ./run-tests.ps1 "${{ matrix.options.os }}" "${{matrix.options.framework}}" "${{matrix.options.is32Bit}}" true
       env:
         CI : True
   
@@ -110,4 +110,4 @@ jobs:
       if: success()
       run: nuget.exe push .\artifacts\*.nupkg ${{secrets.MYGET_TOKEN}} -Source https://www.myget.org/F/sixlabors/api/v2/package
     
-    # todo if github.ref starts with 'refs/tags' then it was tag push and we can optionally push out package to nuget.org
+    # TODO: if github.ref starts with 'refs/tags' then it was tag push and we can optionally push out package to nuget.org
