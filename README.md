@@ -1,8 +1,8 @@
 <h1 align="center">
 
-<img src="https://raw.githubusercontent.com/SixLabors/Branding/master/icons/imagesharp/sixlabors.imagesharp.512.png" alt="SixLabors.ImageSharp" width="256"/>
+<img src="https://raw.githubusercontent.com/SixLabors/Branding/master/icons/imagesharp.drawing/sixlabors.imagesharp.drawing.512.png" alt="SixLabors.ImageSharp.Drawing" width="256"/>
 <br/>
-SixLabors.ImageSharp
+SixLabors.ImageSharp.Drawing
 </h1>
 
 
@@ -16,16 +16,14 @@ SixLabors.ImageSharp
 
 </div>
 
-### **ImageSharp** is a new, fully featured, fully managed, cross-platform, 2D graphics API. 
+### **ImageSharp.Drawing** is and extensions to ImageSharp containing a cross-platform 2D polygon manipulation API and drawing operations.
 
-Designed to democratize image processing, ImageSharp brings you an incredibly powerful yet beautifully simple API.
+Designed to democratize image processing, ImageSharp.Drawing brings you an incredibly powerful yet beautifully simple API.
 
-Compared to `System.Drawing` we have been able to develop something much more flexible, easier to code against, and much, much less prone to memory leaks. Gone are system-wide process-locks; ImageSharp images are thread-safe and fully supported in web environments.
-
-Built against .NET Standard 1.3, ImageSharp can be used in device, cloud, and embedded/IoT scenarios. 
+Built against .NET Standard 1.3, ImageSharp.Drawing can be used in device, cloud, and embedded/IoT scenarios. 
 
 ### Documentation
-For all SixLabors projects, including ImageSharp:
+For all SixLabors projects, including ImageSharp.Drawing:
 https://sixlabors.github.io/docs/
 
 ### Installation
@@ -34,19 +32,24 @@ Install stable releases via Nuget; development releases are available via MyGet.
 
 | Package Name                   | Release (NuGet) | Nightly (MyGet) |
 |--------------------------------|-----------------|-----------------|
-| `SixLabors.ImageSharp`         | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp/) | [![MyGet](https://img.shields.io/myget/sixlabors/v/SixLabors.ImageSharp.svg)](https://www.myget.org/feed/sixlabors/package/nuget/SixLabors.ImageSharp) |
 | `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![MyGet](https://img.shields.io/myget/sixlabors/v/SixLabors.ImageSharp.Drawing.svg)](https://www.myget.org/feed/sixlabors/package/nuget/SixLabors.ImageSharp.Drawing) |
 
-### Packages
-
-The **ImageSharp** library is made up of multiple packages:
-- **SixLabors.ImageSharp**
-  - Contains the generic `Image<TPixel>` class, PixelFormats, Primitives, Configuration, and other core functionality
-  - The `IImageFormat` interface, Jpeg, Png, Bmp, and Gif formats
-  - Transform methods like Resize, Crop, Skew, Rotate - anything that alters the dimensions of the image
-  - Non-transform methods like Gaussian Blur, Pixelate, Edge Detection - anything that maintains the original image dimensions
-
-- **SixLabors.ImageSharp.Drawing**
+- Point in Polygon
+- Line Intersections
+- Complex Polygons
+- Simple polygon clipping
+- Regular Polygons (triangles, squares, pentagons etc, any number of sides)
+- Ellipses (and therfore circles)
+- Shape Builder api - for creating shapes declaratively 
+- Polygons
+   - With Linear line segments
+   - With Beziear curve line segments
+   - Mixture of both Linear & bezier segments
+- Paths
+   - With Linear line segments
+   - With Bezier curve line segments
+   - Mixture of both Linear & bezier segments
+- Drawing
   - Brushes and various drawing algorithms, including drawing images
   - Various vector drawing methods for drawing paths, polygons etc.
   - Text drawing
@@ -67,51 +70,9 @@ The **ImageSharp** library is made up of multiple packages:
 This project has adopted the code of conduct defined by the [Contributor Covenant](https://contributor-covenant.org/) to clarify expected behavior in our community.
 For more information, see the [.NET Foundation Code of Conduct](https://dotnetfoundation.org/code-of-conduct).
 
-### API 
-
-Our API is designed to be simple to consume. Here's an example of the code required to resize an image using the default Bicubic resampler then turn the colors into their grayscale equivalent using the BT709 standard matrix.
-
-On platforms supporting netstandard 1.3+
-
-```csharp
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-
-// Image.Load(string path) is a shortcut for our default type. 
-// Other pixel formats use Image.Load<TPixel>(string path))
-using (Image<Rgba32> image = Image.Load("foo.jpg"))
-{
-    image.Mutate(x => x
-         .Resize(image.Width / 2, image.Height / 2)
-         .Grayscale());
-    image.Save("bar.jpg"); // Automatic encoder selected based on extension.
-}
-```
-
-Setting individual pixel values can be performed as follows:
-
-```csharp
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-
-// Individual pixels
-using (var image = new Image<Rgba32>(400, 400))
-{
-    image[200, 200] = Rgba32.White;
-}
-```
-
-`Rgba32` is our default PixelFormat, equivalent to `System.Drawing Color`. For advanced pixel format usage there are multiple [PixelFormat implementations](https://github.com/SixLabors/ImageSharp/tree/master/src/ImageSharp/PixelFormats) available allowing developers to implement their own color models in the same manner as Microsoft XNA Game Studio and MonoGame. 
-
-For more examples check out: 
-- [Our Documentation](https://sixlabors.github.io/docs/)
-- Our [Samples Repository](https://github.com/SixLabors/Samples/tree/master/ImageSharp)
-- The [beta1 blog post](https://sixlabors.com/blog/announcing-imagesharp-beta-1/)
-
 ### Manual build
 
-If you prefer, you can compile ImageSharp yourself (please do and help!)
+If you prefer, you can compile ImageSharp.Drawing yourself (please do and help!)
 
 - Using [Visual Studio 2017](https://visualstudio.microsoft.com/vs/)
   - Make sure you have the latest version installed
@@ -125,7 +86,7 @@ Alternatively, you can work from command line and/or with a lightweight editor o
 To clone ImageSharp locally, click the "Clone in [YOUR_OS]" button above or run the following git commands:
 
 ```bash
-git clone https://github.com/SixLabors/ImageSharp
+git clone https://github.com/SixLabors/ImageSharp.Drawing
 ```
 
 If working with Windows please ensure that you have enabled log file paths in git (run as Administrator).
@@ -144,17 +105,17 @@ git submodule update --init --recursive
 
 ### How can you help?
 
-Please... Spread the word, contribute algorithms, submit performance improvements, unit tests, no input is too little. Make sure to read our [Contribution Guide](https://github.com/SixLabors/ImageSharp/blob/master/.github/CONTRIBUTING.md) before opening a PR.
+Please... Spread the word, contribute algorithms, submit performance improvements, unit tests, no input is too little. Make sure to read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/master/.github/CONTRIBUTING.md) before opening a PR.
 
 ### The ImageSharp Team
 
-Grand High Eternal Dictator
-- [James Jackson-South](https://github.com/jimbobsquarepants)
+Lead
+- [Scott Williams](https://github.com/tocsoft)
 
 Core Team
+- [James Jackson-South](https://github.com/jimbobsquarepants)
 - [Dirk Lemstra](https://github.com/dlemstra)
 - [Anton Firsov](https://github.com/antonfirsov)
-- [Scott Williams](https://github.com/tocsoft)
 - [Brian Popow](https://github.com/brianpopow)
 
 ### Backers
@@ -226,82 +187,3 @@ Become a sponsor and get your logo on our README on Github with a link to your s
 <a href="https://opencollective.com/imagesharp/sponsor/27/website" target="_blank"><img src="https://opencollective.com/imagesharp/sponsor/27/avatar.svg"></a>
 <a href="https://opencollective.com/imagesharp/sponsor/28/website" target="_blank"><img src="https://opencollective.com/imagesharp/sponsor/28/avatar.svg"></a>
 <a href="https://opencollective.com/imagesharp/sponsor/29/website" target="_blank"><img src="https://opencollective.com/imagesharp/sponsor/29/avatar.svg"></a>
-<h1 align="center">
-
-<img src="https://raw.githubusercontent.com/SixLabors/Branding/master/icons/shapes/sixlabors.shapes.512.png" alt="SixLabors.Shapes" width="256"/>
-<br/>
-SixLabors.Shapes
-</h1>
-
-<div align="center">
-
-[![Build status](https://ci.appveyor.com/api/projects/status/3tqmmb43c7trq43e/branch/master?svg=true)](https://ci.appveyor.com/project/six-labors/shapes/branch/master)
-[![codecov](https://codecov.io/gh/SixLabors/Shapes/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/Shapes)
-[![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/SixLabors/Shapes/master/LICENSE.txt)
-
-[![Join the chat at https://gitter.im/SixLabors/Shapes](https://badges.gitter.im/SixLabors/Shapes.svg)](https://gitter.im/SixLabors/Shapes?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-[![GitHub issues](https://img.shields.io/github/issues/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/issues)
-[![GitHub stars](https://img.shields.io/github/stars/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/SixLabors/Shapes.svg)](https://github.com/SixLabors/Shapes/network)
-
-</div>
-
-
-**SixLabors.Shapes** is a new cross-platform 2D polygon manipulation API.
-
-### Installation
-
-**Pre-release downloads**
-
-At present the code is pre-release we have initial pre-releases availible on [nuget](https://www.nuget.org/packages/SixLabors.Shapes/).
-
-We also have a [MyGet package repository](https://www.myget.org/gallery/SixLabors) - for bleeding-edge / development NuGet releases.
-
-### Manual build
-
-If you prefer, you can compile SixLabors.Shapes yourself (please do and help!), you'll need:
-
-- [Visual Studio 2017](https://www.visualstudio.com/en-us/news/releasenotes/vs2017-relnotes)
-- The [.NET Core 2.1 SDK Installer](https://www.microsoft.com/net/core#windows) - Non VSCode link.
-
-To clone it locally click the "Clone in Windows" button above or run the following git commands.
-
-```bash
-git clone https://github.com/SixLabors/Shapes.git
-```
-
-### Features
-
-- Point in Polygon
-- Line Intersections
-- Complex Polygons
-- Simple polygon clipping
-- Regular Polygons (triangles, squares, pentagons etc, any number of sides)
-- Ellipses (and therfore circles)
-- Shape Builder api - for creating shapes declaratively 
-- Polygons
-   - With Linear line segments
-   - With Beziear curve line segments
-   - Mixture of both Linear & bezier segments
-- Paths
-   - With Linear line segments
-   - With Bezier curve line segments
-   - Mixture of both Linear & bezier segments
-
-### How can you help?
-
-Please... Spread the word, contribute algorithms, submit performance improvements, unit tests. 
-
-### Projects using SixLabors.Shapes
-
-* [SixLabors.ImageSharp](https://github.com/SixLabors/ImageSharp) - cross platform, fully managed, image manipulation and drawing library.
-
-### The SixLabors.Shapes Team
-
-Lead
-- [Scott Williams](https://github.com/tocsoft)
-
-Core Team
-- [Dirk Lemstra](https://github.com/dlemstra)
-- [Anton Firsov](https://github.com/antonfirsov)
-- [James Jackson-South](https://github.com/jimbobsquarepants)
