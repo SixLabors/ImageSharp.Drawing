@@ -5,3 +5,6 @@
 	path = tests/Images/External
 	url = https://github.com/SixLabors/Imagesharp.Tests.Images.git
 	branch = master
+[submodule "branding"]
+	path = branding
+	url = https://github.com/SixLabors/Branding

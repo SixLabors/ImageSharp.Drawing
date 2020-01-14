@@ -26,6 +26,11 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!--Nuget package icon source-->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)..\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="\icon.png"/>
+  </ItemGroup>
+  
   <ItemGroup>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)..\shared-infrastructure\stylecop.json" />
   </ItemGroup>
