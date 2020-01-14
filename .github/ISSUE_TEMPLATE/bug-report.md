@@ -20,7 +20,7 @@ about: Create a report to help us improve
 ### System Configuration
 <!-- Tell us about the environment where you are experiencing the bug -->
 
-- ImageSharp version:
+- ImageSharp.Drawing version:
 - Other ImageSharp packages and versions:
 - Environment (Operating system, version and so on):
 - .NET Framework version:

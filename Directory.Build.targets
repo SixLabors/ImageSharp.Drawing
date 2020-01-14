@@ -29,7 +29,7 @@
     <PackageReference Update="Microsoft.NET.Test.Sdk" Version="16.2.0" />
     <PackageReference Update="Moq" Version="4.10.0" />
     <PackageReference Update="SixLabors.Fonts" Version="1.0.0-beta0009" />
-    <PackageReference Update="SixLabors.ImageSharp" Version="1.0.0-dev003209" />
+    <PackageReference Update="SixLabors.ImageSharp" Version="1.0.0-dev003222" />
     <PackageReference Update="StyleCop.Analyzers" Version="1.1.118" />
     <PackageReference Update="System.Drawing.Common" Version="4.7.0" />
     <PackageReference Update="System.IO.Compression" Version="4.3.0" />

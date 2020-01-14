@@ -19,15 +19,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
         private static IEnumerable<object[]> GetAllModeCombinations()
         {
-            foreach (var composition in Enum.GetValues(typeof(PixelAlphaCompositionMode)))
+            foreach (object composition in Enum.GetValues(typeof(PixelAlphaCompositionMode)))
             {
-                foreach (var blending in Enum.GetValues(typeof(PixelColorBlendingMode)))
+                foreach (object blending in Enum.GetValues(typeof(PixelColorBlendingMode)))
                 {
                     yield return new object[] { blending, composition };
                 }
             }
         }
-
 
         [Theory]
         [WithBlankImages(nameof(modes), 250, 250, PixelTypes.Rgba32)]
@@ -110,7 +109,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         Color.HotPink,
                         new Rectangle(20 * scaleX, 0, 30 * scaleX, 100 * scaleY)));
 
-                var transparentRed = Color.Red.WithAlpha(0.5f);
+                Color transparentRed = Color.Red.WithAlpha(0.5f);
 
                 img.Mutate(
                     x => x.Fill(
@@ -133,8 +132,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             using (Image<TPixel> dstImg = provider.GetImage(), srcImg = provider.GetImage())
             {
-                int scaleX = (dstImg.Width / 100);
-                int scaleY = (dstImg.Height / 100);
+                int scaleX = dstImg.Width / 100;
+                int scaleY = dstImg.Height / 100;
 
                 dstImg.Mutate(
                     x => x.Fill(
@@ -147,8 +146,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new Shapes.EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY)));
 
                 dstImg.Mutate(
-                    x => x.DrawImage(srcImg, new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition })
-                    );
+                    x => x.DrawImage(srcImg, new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }));
 
                 VerifyImage(provider, blending, composition, dstImg);
             }

@@ -111,7 +111,7 @@ else {
         $buildNumber = ToBuildNumber
     }
 
-    $buildNumber = "$buildNumber".Trim().Trim('0').PadLeft(12, "0");
+    $buildNumber = "$buildNumber".Trim().PadLeft(12, "0");
 
     Write-Debug "Building a branch commit"
 

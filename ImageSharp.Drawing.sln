@@ -34,12 +34,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ISSUE_TEMPLATE", "ISSUE_TEM
 		.github\ISSUE_TEMPLATE\feature-request.md = .github\ISSUE_TEMPLATE\feature-request.md
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".vscode", ".vscode", "{0274D4CF-9932-47CC-8E89-54DC05B8F06E}"
-	ProjectSection(SolutionItems) = preProject
-		.vscode\launch.json = .vscode\launch.json
-		.vscode\tasks.json = .vscode\tasks.json
-	EndProjectSection
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{E919DF0B-2607-4462-8FC0-5C98FE50F8C9}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "icons", "icons", "{2B02E303-7CC6-4E15-97EE-DBE86B287553}"
@@ -57,7 +51,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{815C0625-CD3
 	ProjectSection(SolutionItems) = preProject
 		src\Directory.Build.props = src\Directory.Build.props
 		src\Directory.Build.targets = src\Directory.Build.targets
-		src\README.md = src\README.md
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ImageSharp.Drawing", "src\ImageSharp.Drawing\ImageSharp.Drawing.csproj", "{2E33181E-6E28-4662-A801-E2E7DC206029}"
