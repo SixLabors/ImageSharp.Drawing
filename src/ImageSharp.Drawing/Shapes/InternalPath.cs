@@ -178,6 +178,18 @@ namespace SixLabors.Shapes
         /// <param name="buffer">The buffer.</param>
         /// <returns>number of intersections hit</returns>
         public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+            => this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populates a buffer for all points on the path that the line intersects.
+        /// </summary>
+        /// <param name="start">The start.</param>
+        /// <param name="end">The end.</param>
+        /// <param name="buffer">The buffer.</param>
+        /// <param name="intersectionRule">Intersection rule types</param>
+        /// <returns>number of intersections hit</returns>
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
         {
             if (this.points.Length < 2)
             {

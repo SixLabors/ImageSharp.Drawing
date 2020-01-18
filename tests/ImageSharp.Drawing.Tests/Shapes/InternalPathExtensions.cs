@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System.Buffers;
@@ -16,13 +16,13 @@ namespace SixLabors.Shapes
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
         /// <returns>The points along the line the intersect with the boundaries of the polygon.</returns>
-        internal static IEnumerable<PointF> FindIntersections(this InternalPath path, Vector2 start, Vector2 end)
+        internal static IEnumerable<PointF> FindIntersections(this InternalPath path, Vector2 start, Vector2 end, IntersectionRule intersectionRule = IntersectionRule.OddEven)
         {
             var results = new List<PointF>();
             PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.PointCount);
             try
             {
-                int hits = path.FindIntersections(start, end, buffer);
+                int hits = path.FindIntersections(start, end, buffer, intersectionRule);
                 for (int i = 0; i < hits; i++)
                 {
                     results.Add(buffer[i]);
