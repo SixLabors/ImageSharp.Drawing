@@ -2,12 +2,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp2.1</TargetFrameworks>
-    <TargetFrameworks Condition="$(skipFullFramework) != 'true'">$(TargetFrameworks);net462;net472</TargetFrameworks>
+    <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;net472</TargetFrameworks>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
-    <DebugType Condition="$(codecov) != ''">full</DebugType>
-    <DebugType Condition="$(codecov) == ''">portable</DebugType>
     <DebugSymbols>True</DebugSymbols>
     <AssemblyName>SixLabors.ImageSharp.Tests</AssemblyName>
     <Platforms>AnyCPU;x64;x86</Platforms>
@@ -15,14 +12,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Magick.NET-Q16-AnyCPU" />
-    <PackageReference Include="Moq" />
-    <PackageReference Include="System.Drawing.Common" />
-    <PackageReference Include="xunit.runner.console" />
+    <DotNetCliToolReference Include="dotnet-xunit" />
   </ItemGroup>
 
   <ItemGroup>
-    <DotNetCliToolReference Include="dotnet-xunit" />
+    <PackageReference Include="Magick.NET-Q16-AnyCPU" />
+    <PackageReference Include="Moq" />
+    <PackageReference Include="System.Drawing.Common" />
   </ItemGroup>
 
   <ItemGroup>

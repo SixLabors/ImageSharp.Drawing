@@ -2,20 +2,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- using a slightly off AssemblyName until ImageSharp stops exposing internals to this assembly-->
-    <AssemblyName>SixLabors.ImageSharp.Drawing2</AssemblyName>
+    <AssemblyName>SixLabors.ImageSharp.Drawing</AssemblyName>
     <AssemblyTitle>SixLabors.ImageSharp.Drawing</AssemblyTitle>
     <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
     <PackageId>SixLabors.ImageSharp.Drawing</PackageId>
     <PackageTags>Image Draw Shape Path Font</PackageTags>
     <RootNamespace>SixLabors.ImageSharp</RootNamespace>
 
-    <TargetFrameworks>netcoreapp2.1;netstandard2.0;netstandard1.3</TargetFrameworks>
+    <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;netstandard2.1;netstandard2.0;netstandard1.3;net472</TargetFrameworks>
   </PropertyGroup>
-
-  <ItemGroup>
-    <Compile Include="..\..\shared-infrastructure\**\*.cs" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" />
@@ -26,5 +21,7 @@
     <InternalsVisibleTo Include="SixLabors.ImageSharp.Tests" />
     <InternalsVisibleTo Include="SixLabors.Shapes.Tests" />
   </ItemGroup>
+
+  <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 
 </Project>

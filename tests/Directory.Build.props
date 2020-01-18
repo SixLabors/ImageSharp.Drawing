@@ -20,21 +20,19 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <NoWarn>CS0618;$(NoWarn)</NoWarn>
+    <CodeAnalysisRuleSet>$(MSBuildThisFileDirectory)..\shared-infrastructure\SixLabors.Tests.ruleset</CodeAnalysisRuleSet>
+    <!--TODO: We should remove all obsolete code from the solution-->
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.props" />
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" IsImplicitlyDefined="true" />
-    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="All" />
-    <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="xunit" IsImplicitlyDefined="true" />
     <PackageReference Include="xunit.runner.visualstudio" IsImplicitlyDefined="true" />
+    <PackageReference Include="coverlet.collector" IsImplicitlyDefined="true" />
+    <PackageReference Include="coverlet.msbuild" IsImplicitlyDefined="true" />
   </ItemGroup>
-
-  <ItemGroup>
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)..\shared-infrastructure\stylecop.json" />
-  </ItemGroup>
-
+  
 </Project>

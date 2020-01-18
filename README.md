@@ -16,7 +16,7 @@ SixLabors.ImageSharp.Drawing
 
 </div>
 
-### **ImageSharp.Drawing** is and extensions to ImageSharp containing a cross-platform 2D polygon manipulation API and drawing operations.
+### **ImageSharp.Drawing** provides extensions to ImageSharp containing a cross-platform 2D polygon manipulation API and drawing operations.
 
 Designed to democratize image processing, ImageSharp.Drawing brings you an incredibly powerful yet beautifully simple API.
 
@@ -56,10 +56,9 @@ Install stable releases via Nuget; development releases are available via MyGet.
 
 ### Build Status
 
-|             |Build Status|Code Coverage|
-|-------------|:----------:|:-----------:|
-|**Linux/Mac**|[![Build Status](https://travis-ci.org/SixLabors/ImageSharp.svg)](https://travis-ci.org/SixLabors/ImageSharp)|[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp)|
-|**Windows**  |[![Build Status](https://ci.appveyor.com/api/projects/status/m9pn907xdah3ca39/branch/master?svg=true)](https://ci.appveyor.com/project/six-labors/imagesharp/branch/master)|[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp)|
+|Build Status|Code Coverage|
+|:----------:|:-----------:|
+|[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/master)](https://github.com/SixLabors/ImageSharp.Drawing/actions)|[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp)|
 
 ### Questions?
 
