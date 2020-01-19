@@ -727,7 +727,7 @@ namespace SixLabors.Shapes
 
             if (isClosed)
             {
-                //walk back removing collinear points
+                // walk back removing collinear points
                 while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
                 {
                     results.RemoveAt(results.Count - 1);
