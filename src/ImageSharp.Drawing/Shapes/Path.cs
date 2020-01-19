@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -153,17 +153,7 @@ namespace SixLabors.Shapes
             yield return this;
         }
 
-        /// <summary>
-        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The offset within the buffer</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
+        /// <inheritdoc />
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
             return this.InnerPath.FindIntersections(start, end, buffer.AsSpan(offset));
@@ -173,6 +163,18 @@ namespace SixLabors.Shapes
         public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
             return this.InnerPath.FindIntersections(start, end, buffer);
+        }
+
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
+        {
+            return this.InnerPath.FindIntersections(start, end, buffer.AsSpan(offset), intersectionRule);
+        }
+
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
+        {
+            return this.InnerPath.FindIntersections(start, end, buffer, intersectionRule);
         }
 
         /// <summary>

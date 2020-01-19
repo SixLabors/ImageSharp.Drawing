@@ -6,6 +6,7 @@ using System.Numerics;
 
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.Primitives;
 using SixLabors.Shapes;
 
 using Xunit;
@@ -149,6 +150,69 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 c => c.Fill(color, polygon),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(60, 60, "Blue", PixelTypes.Rgba32)]
+        public void Fill_IntersectionRules_OddEven<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : struct, IPixel<TPixel>
+        {
+            using (var img = provider.GetImage())
+            {
+                img.Mutate(c => c.FillPolygon(
+                    new ShapeGraphicsOptions
+                    {
+                        IntersectionRule = IntersectionRule.OddEven,
+                    },
+                    Color.HotPink,
+                    new PointF(10, 30),
+                    new PointF(10, 20),
+                    new PointF(50, 20),
+                    new PointF(50, 50),
+                    new PointF(20, 50),
+                    new PointF(20, 10),
+                    new PointF(30, 10),
+                    new PointF(30, 40),
+                    new PointF(40, 40),
+                    new PointF(30, 40)));
+
+                Assert.Equal(Color.HotPink.ToPixel<TPixel>(), img[35, 35]);
+
+                provider.Utility.SaveTestOutputFile(img);
+            }
+        }
+
+        [Theory]
+        [WithSolidFilledImages(60, 60, "Blue", PixelTypes.Rgba32)]
+        public void Fill_IntersectionRules_Nonzero<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : struct, IPixel<TPixel>
+        {
+            using (var img = provider.GetImage())
+            {
+                var poly = new Polygon(new LinearLineSegment(
+                    new PointF(10, 30),
+                    new PointF(10, 20)), new LinearLineSegment(
+                    new PointF(50, 20),
+                    new PointF(50, 50)), new LinearLineSegment(
+                    new PointF(20, 50),
+                    new PointF(20, 10)), new LinearLineSegment(
+                    new PointF(30, 10),
+                    new PointF(30, 40)), new LinearLineSegment(
+                    new PointF(40, 40),
+                    new PointF(30, 40),
+                    new PointF(10, 30)));
+                img.Mutate(c => c.Fill(
+                    new ShapeGraphicsOptions
+                    {
+                        IntersectionRule = IntersectionRule.Nonzero,
+                    },
+                    Color.HotPink,
+                    poly));
+
+                provider.Utility.SaveTestOutputFile(img);
+
+                Assert.Equal(Color.Blue.ToPixel<TPixel>(), img[35, 35]);
+            }
         }
     }
 }

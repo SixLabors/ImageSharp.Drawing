@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext DrawBeziers(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IBrush brush,
             float thickness,
             params PointF[] points) =>
@@ -69,7 +69,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext DrawBeziers(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             Color color,
             float thickness,
             params PointF[] points) =>
@@ -85,7 +85,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext DrawBeziers(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IPen pen,
             params PointF[] points) =>
             source.Draw(options, pen, new Path(new CubicBezierLineSegment(points)));

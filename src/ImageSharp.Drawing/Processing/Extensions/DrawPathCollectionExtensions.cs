@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.Shapes;
@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IPen pen,
             IPathCollection paths)
         {
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext
             Draw(this IImageProcessingContext source, IPen pen, IPathCollection paths) =>
-            source.Draw(new GraphicsOptions(), pen, paths);
+            source.Draw(new ShapeGraphicsOptions(), pen, paths);
 
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IBrush brush,
             float thickness,
             IPathCollection paths) =>
@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             Color color,
             float thickness,
             IPathCollection paths) =>

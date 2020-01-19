@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -145,16 +145,29 @@ namespace SixLabors.Shapes
         }
 
         /// <inheritdoc/>
+        int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
+        {
+            Span<PointF> subBuffer = buffer.AsSpan(offset);
+            return this.innerPath.FindIntersections(start, end, subBuffer, intersectionRule);
+        }
+
+        /// <inheritdoc/>
+        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
+        {
+            return this.innerPath.FindIntersections(start, end, buffer, intersectionRule);
+        }
+
+        /// <inheritdoc/>
         int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
             Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.innerPath.FindIntersections(start, end, subBuffer);
+            return this.innerPath.FindIntersections(start, end, subBuffer, IntersectionRule.OddEven);
         }
 
         /// <inheritdoc/>
         int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer)
         {
-            return this.innerPath.FindIntersections(start, end, buffer);
+            return this.innerPath.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
         }
 
         /// <summary>

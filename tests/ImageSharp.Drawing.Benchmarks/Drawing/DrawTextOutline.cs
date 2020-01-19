@@ -99,7 +99,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
                 Shapes.IPathCollection glyphs = Shapes.TextBuilder.GenerateGlyphs(text, style);
 
-                var pathOptions = (GraphicsOptions)options;
+                var pathOptions = new ShapeGraphicsOptions((GraphicsOptions)options);
                 if (brush != null)
                 {
                     source.Fill(pathOptions, brush, glyphs);

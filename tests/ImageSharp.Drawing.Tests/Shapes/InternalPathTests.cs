@@ -246,18 +246,18 @@ namespace SixLabors.Shapes.Tests
         public void Intersections_IntersectionRule_OddEven()
         {
             var shape = new InternalPath(new LinearLineSegment(
-                new PointF(3, 1),
-                new PointF(2, 1),
-                new PointF(2, 5),
-                new PointF(5, 5),
-                new PointF(5, 2),
-                new PointF(1, 2),
                 new PointF(1, 3),
-                new PointF(4, 3),
+                new PointF(1, 2),
+                new PointF(5, 2),
+                new PointF(5, 5),
+                new PointF(2, 5),
+                new PointF(2, 1),
+                new PointF(3, 1),
+                new PointF(3, 4),
                 new PointF(4, 4),
-                new PointF(4, 3)), true);
+                new PointF(3, 4)), true);
 
-            PointF[] buffer = shape.FindIntersections(new PointF(2.5f, 0), new PointF(2.5f, 6), IntersectionRule.OddEven).ToArray();
+            PointF[] buffer = shape.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.OddEven).ToArray();
 
             Assert.Equal(4, buffer.Length);
         }
@@ -266,18 +266,18 @@ namespace SixLabors.Shapes.Tests
         public void Intersections_IntersectionRule_Nonezero()
         {
             var shape = new InternalPath(new LinearLineSegment(
-                new PointF(3, 1),
-                new PointF(2, 1),
-                new PointF(2, 5),
-                new PointF(5, 5),
-                new PointF(5, 2),
-                new PointF(1, 2),
                 new PointF(1, 3),
-                new PointF(4, 3),
+                new PointF(1, 2),
+                new PointF(5, 2),
+                new PointF(5, 5),
+                new PointF(2, 5),
+                new PointF(2, 1),
+                new PointF(3, 1),
+                new PointF(3, 4),
                 new PointF(4, 4),
-                new PointF(4, 3)), true);
+                new PointF(3, 4)), true);
 
-            PointF[] buffer = shape.FindIntersections(new PointF(2.5f, 0), new PointF(2.5f, 6), IntersectionRule.Nonzero).ToArray();
+            PointF[] buffer = shape.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.Nonzero).ToArray();
 
             Assert.Equal(2, buffer.Length);
         }

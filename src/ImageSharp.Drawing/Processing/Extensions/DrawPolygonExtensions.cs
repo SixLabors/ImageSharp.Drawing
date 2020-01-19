@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.Primitives;
@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IBrush brush,
             float thickness,
             params PointF[] points) =>
@@ -69,7 +69,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             Color color,
             float thickness,
             params PointF[] points) =>
@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Processing
             this IImageProcessingContext source,
             IPen pen,
             params PointF[] points) =>
-            source.Draw(new GraphicsOptions(), pen, new Polygon(new LinearLineSegment(points)));
+            source.Draw(new ShapeGraphicsOptions(), pen, new Polygon(new LinearLineSegment(points)));
 
         /// <summary>
         /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
@@ -98,7 +98,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IPen pen,
             params PointF[] points) =>
             source.Draw(options, pen, new Polygon(new LinearLineSegment(points)));

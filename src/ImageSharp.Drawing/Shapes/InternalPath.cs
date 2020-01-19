@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Utils;
 using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
@@ -213,6 +214,9 @@ namespace SixLabors.Shapes
             Vector2 lastPoint = MaxVector;
 
             PassPointData[] precaclulate = ArrayPool<PassPointData>.Shared.Rent(this.points.Length);
+            Orientation[] orientations = ArrayPool<Orientation>.Shared.Rent(this.points.Length);
+            Span<Orientation> orientationsSpan = orientations.AsSpan(0, this.points.Length);
+            Span<PassPointData> precaclulateSpan = precaclulate.AsSpan(0, this.points.Length);
 
             try
             {
@@ -249,7 +253,7 @@ namespace SixLabors.Shapes
                                       (edge.Max.Y + Epsilon) >= target.Min.Y;
                     }
 
-                    precaclulate[i] = new PassPointData
+                    precaclulateSpan[i] = new PassPointData
                     {
                         RemoveLastIntersectionAndSkip = removeLastIntersection,
                         RelativeOrientation = pointOrientation,
@@ -264,7 +268,7 @@ namespace SixLabors.Shapes
                 {
                     int prev = polyCorners - 1;
 
-                    if (precaclulate[prev].DoIntersect)
+                    if (precaclulateSpan[prev].DoIntersect)
                     {
                         lastPoint = FindIntersection(this.points[prev].Segment, target);
                     }
@@ -274,7 +278,7 @@ namespace SixLabors.Shapes
                 {
                     int next = WrapArrayIndex(i + 1, this.points.Length);
 
-                    if (precaclulate[i].RemoveLastIntersectionAndSkip)
+                    if (precaclulateSpan[i].RemoveLastIntersectionAndSkip)
                     {
                         if (position > 0)
                         {
@@ -285,7 +289,7 @@ namespace SixLabors.Shapes
                         continue;
                     }
 
-                    if (precaclulate[i].DoIntersect)
+                    if (precaclulateSpan[i].DoIntersect)
                     {
                         Vector2 point = FindIntersection(this.points[i].Segment, target);
                         if (point != MaxVector)
@@ -307,8 +311,8 @@ namespace SixLabors.Shapes
                                     last = i;
                                 }
 
-                                Orientation side = precaclulate[next].RelativeOrientation;
-                                Orientation side2 = precaclulate[last].RelativeOrientation;
+                                Orientation side = precaclulateSpan[next].RelativeOrientation;
+                                Orientation side2 = precaclulateSpan[last].RelativeOrientation;
 
                                 if (side != side2)
                                 {
@@ -317,7 +321,8 @@ namespace SixLabors.Shapes
                                 }
                             }
 
-                            // we are not double crossing so just add it once
+                            // only need to track this during odd non zero rulings
+                            orientationsSpan[position] = precaclulateSpan[i].RelativeOrientation;
                             buffer[position] = point;
                             position++;
                             count--;
@@ -331,10 +336,51 @@ namespace SixLabors.Shapes
                     }
                 }
 
+                Vector2 startVector = start;
+                Span<float> distances = stackalloc float[position];
+                for (int i = 0; i < position; i++)
+                {
+                    distances[i] = Vector2.DistanceSquared(startVector, buffer[i]);
+                }
+
+                QuickSort.Sort(distances, buffer.Slice(0, position), orientationsSpan.Slice(0, position));
+
+                // intersection rules only really apply to closed paths
+                if (intersectionRule == IntersectionRule.Nonzero && this.closedPath)
+                {
+                    int newpositions = 0;
+                    int tracker = 0;
+                    for (int i = 0; i < position; i++)
+                    {
+                        bool include = tracker == 0;
+                        switch (orientationsSpan[i])
+                        {
+                            case Orientation.Clockwise:
+                                tracker++;
+                                break;
+                            case Orientation.Counterclockwise:
+                                tracker--;
+                                break;
+                            case Orientation.Colinear:
+                            default:
+                                break;
+                        }
+
+                        if (include || tracker == 0)
+                        {
+                            buffer[newpositions] = buffer[i];
+                            newpositions++;
+                        }
+                    }
+
+                    position = newpositions;
+                }
+
                 return position;
             }
             finally
             {
+                ArrayPool<Orientation>.Shared.Return(orientations);
                 ArrayPool<PassPointData>.Shared.Return(precaclulate);
             }
         }
@@ -434,8 +480,8 @@ namespace SixLabors.Shapes
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsOnSegment(Vector2 p, Vector2 q, Vector2 r)
         {
-            Vector2 min = Vector2.Min(p, r);
-            Vector2 max = Vector2.Max(p, r);
+            var min = Vector2.Min(p, r);
+            var max = Vector2.Max(p, r);
 
             return (q.X - Epsilon2) <= max.X &&
                     (q.X + Epsilon2) >= min.X &&
@@ -682,10 +728,10 @@ namespace SixLabors.Shapes
             if (isClosed)
             {
                 // walk back removing collinear points
-                while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
-                {
-                    results.RemoveAt(results.Count - 1);
-                }
+                //while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
+                //{
+                //    results.RemoveAt(results.Count - 1);
+                //}
             }
 
             PointData[] data = results.ToArray();

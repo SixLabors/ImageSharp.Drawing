@@ -1,8 +1,9 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
 using SixLabors.Primitives;
+using SixLabors.Shapes;
 
 namespace SixLabors.ImageSharp.Primitives
 {
@@ -30,7 +31,8 @@ namespace SixLabors.ImageSharp.Primitives
         /// <param name="y">The position along the y axis to find intersections.</param>
         /// <param name="buffer">The buffer.</param>
         /// <param name="configuration">A <see cref="Configuration"/> instance in the context of the caller.</param>
+        /// <param name="intersectionRule">How intersections are handled.</param>
         /// <returns>The number of intersections found.</returns>
-        public abstract int Scan(float y, Span<float> buffer, Configuration configuration);
+        public abstract int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule);
     }
 }

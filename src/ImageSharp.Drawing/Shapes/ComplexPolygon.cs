@@ -1,10 +1,11 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using SixLabors.ImageSharp.Utils;
 using SixLabors.Primitives;
 
 namespace SixLabors.Shapes
@@ -163,23 +164,50 @@ namespace SixLabors.Shapes
         /// The number of intersections populated into the buffer.
         /// </returns>
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.FindIntersections(start, end, subBuffer);
-        }
+            => this.FindIntersections(start, end, buffer, offset, IntersectionRule.OddEven);
 
         /// <inheritdoc />
         public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+            => this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
+        /// populate a buffer for all points on all the polygons, that make up this complex shape,
+        /// that the line intersects.
+        /// </summary>
+        /// <param name="start">The start point of the line.</param>
+        /// <param name="end">The end point of the line.</param>
+        /// <param name="buffer">The buffer that will be populated with intersections.</param>
+        /// <param name="offset">The offset within the buffer</param>
+        /// <param name="intersectionRule">The intersection rule to use</param>
+        /// <returns>
+        /// The number of intersections populated into the buffer.
+        /// </returns>
+        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
+        {
+            Span<PointF> subBuffer = buffer.AsSpan(offset);
+            return this.FindIntersections(start, end, subBuffer, intersectionRule);
+        }
+
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
         {
             int totalAdded = 0;
             for (int i = 0; i < this.paths.Length; i++)
             {
                 Span<PointF> subBuffer = buffer.Slice(totalAdded);
-                int added = this.paths[i].FindIntersections(start, end, subBuffer);
+                int added = this.paths[i].FindIntersections(start, end, subBuffer, intersectionRule);
                 totalAdded += added;
             }
 
-            // TODO we should sort by distance from start
+            Span<float> distances = stackalloc float[totalAdded];
+            for (int i = 0; i < totalAdded; i++)
+            {
+                distances[i] = Vector2.DistanceSquared(start, buffer[i]);
+            }
+
+            QuickSort.Sort(distances, buffer.Slice(0, totalAdded));
+
             return totalAdded;
         }
 

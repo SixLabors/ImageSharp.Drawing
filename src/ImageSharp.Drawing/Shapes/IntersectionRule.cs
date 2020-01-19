@@ -11,11 +11,11 @@ namespace SixLabors.Shapes
         /// <summary>
         /// Use odd/even intersection rules, self intersection will cause holes.
         /// </summary>
-        OddEven,
+        OddEven = 0,
 
         /// <summary>
         /// Nonzero rule treats intersecting holes as inside the path thus being ignored by intersections.
         /// </summary>
-        Nonzero
+        Nonzero = 1
     }
 }

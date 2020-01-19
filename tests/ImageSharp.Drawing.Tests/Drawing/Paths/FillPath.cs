@@ -15,9 +15,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class FillPath : BaseImageOperationsExtensionTest
     {
-        private static readonly GraphicsOptionsComparer graphicsOptionsComparer = new GraphicsOptionsComparer();
+        private static readonly ShapeGraphicsOptionsComparer graphicsOptionsComparer = new ShapeGraphicsOptionsComparer();
 
-        GraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
+        ShapeGraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
         Color color = Color.HotPink;
         SolidBrush brush = Brushes.Solid(Rgba32.HotPink);
         IPath path = new Path(new LinearLineSegment(new SixLabors.Primitives.PointF[] {
@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             this.operations.Fill(this.nonDefault, this.brush, this.path);
             var processor = this.Verify<FillRegionProcessor>();
 
-            Assert.Equal(this.nonDefault, processor.Options, graphicsOptionsComparer);
+            Assert.Equal(this.nonDefault, processor.ShapeOptions, graphicsOptionsComparer);
 
             ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
             Polygon polygon = Assert.IsType<Polygon>(region.Shape);

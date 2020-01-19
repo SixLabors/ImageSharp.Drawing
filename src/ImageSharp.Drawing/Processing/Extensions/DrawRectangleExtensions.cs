@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.Primitives;
@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IPen pen,
             RectangleF shape) =>
             source.Draw(options, pen, new RectangularPolygon(shape.X, shape.Y, shape.Width, shape.Height));
@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <param name="shape">The shape.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(this IImageProcessingContext source, IPen pen, RectangleF shape) =>
-            source.Draw(new GraphicsOptions(), pen, shape);
+            source.Draw(new ShapeGraphicsOptions(), pen, shape);
 
         /// <summary>
         /// Draws the outline of the rectangle with the provided brush at the provided thickness.
@@ -47,7 +47,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IBrush brush,
             float thickness,
             RectangleF shape) =>
@@ -79,7 +79,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             Color color,
             float thickness,
             RectangleF shape) =>
