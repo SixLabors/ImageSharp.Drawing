@@ -4,11 +4,8 @@
 using System;
 
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Primitives;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-using SixLabors.Primitives;
-using SixLabors.Shapes;
 
 using Xunit;
 

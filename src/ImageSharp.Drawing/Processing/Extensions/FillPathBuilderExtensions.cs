@@ -3,8 +3,6 @@
 
 using System;
 
-using SixLabors.Shapes;
-
 namespace SixLabors.ImageSharp.Processing
 {
     /// <summary>

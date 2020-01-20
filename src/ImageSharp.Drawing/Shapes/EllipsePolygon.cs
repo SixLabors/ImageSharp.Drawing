@@ -4,9 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using SixLabors.Primitives;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s

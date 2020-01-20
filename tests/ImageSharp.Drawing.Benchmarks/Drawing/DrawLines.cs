@@ -8,6 +8,7 @@ using System.Numerics;
 using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SDPoint = System.Drawing.Point;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
@@ -26,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 {
                     graphics.DrawLines(
                         pen,
-                        new[] { new PointF(10, 10), new PointF(550, 50), new PointF(200, 400) });
+                        new[] { new SDPoint(10, 10), new SDPoint(550, 50), new SDPoint(200, 400) });
                 }
 
                 using (var stream = new MemoryStream())

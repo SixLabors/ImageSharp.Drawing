@@ -16,8 +16,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
     using SixLabors.ImageSharp.Advanced;
     using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-    using SixLabors.Primitives;
-    using SixLabors.Shapes;
 
     [GroupOutput("Drawing/GradientBrushes")]
     public class FillLinearGradientBrushTests
@@ -34,8 +32,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 Color red = Color.Red;
 
                 var unicolorLinearGradientBrush = new LinearGradientBrush(
-                    new SixLabors.Primitives.Point(0, 0),
-                    new SixLabors.Primitives.Point(10, 0),
+                    new Point(0, 0),
+                    new Point(10, 0),
                     GradientRepetitionMode.None,
                     new ColorStop(0, red),
                     new ColorStop(1, red));
@@ -61,8 +59,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 image =>
                     {
                         var unicolorLinearGradientBrush = new LinearGradientBrush(
-                            new SixLabors.Primitives.Point(0, 0),
-                            new SixLabors.Primitives.Point(image.Width, 0),
+                            new Point(0, 0),
+                            new Point(image.Width, 0),
                             GradientRepetitionMode.None,
                             new ColorStop(0, Color.Blue),
                             new ColorStop(1, Color.Yellow));
@@ -85,8 +83,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         Color yellow = Color.Yellow;
 
                         var unicolorLinearGradientBrush = new LinearGradientBrush(
-                            new SixLabors.Primitives.Point(0, 0),
-                            new SixLabors.Primitives.Point(image.Width, 0),
+                            new Point(0, 0),
+                            new Point(image.Width, 0),
                             GradientRepetitionMode.None,
                             new ColorStop(0, red),
                             new ColorStop(1, yellow));
@@ -115,8 +113,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         Color yellow = Color.Yellow;
 
                         var unicolorLinearGradientBrush = new LinearGradientBrush(
-                            new SixLabors.Primitives.Point(0, 0),
-                            new SixLabors.Primitives.Point(image.Width / 10, 0),
+                            new Point(0, 0),
+                            new Point(image.Width / 10, 0),
                             repetitionMode,
                             new ColorStop(0, red),
                             new ColorStop(1, yellow));
@@ -162,8 +160,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             {
                 var unicolorLinearGradientBrush =
                     new LinearGradientBrush(
-                        new SixLabors.Primitives.Point(0, 0),
-                        new SixLabors.Primitives.Point(image.Width, 0),
+                        new Point(0, 0),
+                        new Point(image.Width, 0),
                         GradientRepetitionMode.None,
                         colorStops);
 
@@ -203,8 +201,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         Color yellow = Color.Yellow;
 
                         var unicolorLinearGradientBrush = new LinearGradientBrush(
-                            new SixLabors.Primitives.Point(0, 0),
-                            new SixLabors.Primitives.Point(0, image.Height),
+                            new Point(0, 0),
+                            new Point(0, image.Height),
                             GradientRepetitionMode.None,
                             new ColorStop(0, red),
                             new ColorStop(1, yellow));
@@ -262,8 +260,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
                 var unicolorLinearGradientBrush =
                     new LinearGradientBrush(
-                        new SixLabors.Primitives.Point(startX, startY),
-                        new SixLabors.Primitives.Point(endX, endY),
+                        new Point(startX, startY),
+                        new Point(endX, endY),
                         GradientRepetitionMode.None,
                         new ColorStop(0, red),
                         new ColorStop(1, yellow));
@@ -337,8 +335,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 image =>
                 {
                     var unicolorLinearGradientBrush = new LinearGradientBrush(
-                        new SixLabors.Primitives.Point(startX, startY),
-                        new SixLabors.Primitives.Point(endX, endY),
+                        new Point(startX, startY),
+                        new Point(endX, endY),
                         GradientRepetitionMode.None,
                         colorStops);
 
@@ -383,8 +381,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 image =>
                 {
                     var unicolorLinearGradientBrush = new LinearGradientBrush(
-                        new SixLabors.Primitives.Point(startX, startY),
-                        new SixLabors.Primitives.Point(endX, endY),
+                        new Point(startX, startY),
+                        new Point(endX, endY),
                         GradientRepetitionMode.None,
                         colorStops);
 

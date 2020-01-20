@@ -4,7 +4,6 @@
 using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.Shapes;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
@@ -17,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void FilledBezier<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : struct, IPixel<TPixel>
         {
-            SixLabors.Primitives.PointF[] simplePath = {
+            PointF[] simplePath = {
                         new Vector2(10, 400),
                         new Vector2(30, 10),
                         new Vector2(240, 30),
@@ -42,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void OverlayByFilledPolygonOpacity<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : struct, IPixel<TPixel>
         {
-            SixLabors.Primitives.PointF[] simplePath = {
+            PointF[] simplePath = {
                         new Vector2(10, 400),
                         new Vector2(30, 10),
                         new Vector2(240, 30),

@@ -7,7 +7,7 @@ using System.Linq;
 using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Processing.Processors.Text;
+using SDRectangleF = System.Drawing.RectangleF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                         this.TextToRender,
                         font,
                         System.Drawing.Brushes.HotPink,
-                        new RectangleF(10, 10, 780, 780));
+                        new SDRectangleF(10, 10, 780, 780));
                 }
             }
         }
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     this.TextToRender,
                     font,
                     Processing.Brushes.Solid(Rgba32.HotPink),
-                    new SixLabors.Primitives.PointF(10, 10)));
+                    new PointF(10, 10)));
             }
         }
 
@@ -68,7 +68,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     font,
                     Processing.Brushes.Solid(Color.HotPink),
                     null,
-                    new SixLabors.Primitives.PointF(10, 10)));
+                    new PointF(10, 10)));
             }
 
             IImageProcessingContext DrawTextOldVersion(
@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 Fonts.Font font,
                 IBrush brush,
                 IPen pen,
-                SixLabors.Primitives.PointF location)
+                PointF location)
             {
                 const float dpiX = 72;
                 const float dpiY = 72;
@@ -92,7 +92,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     VerticalAlignment = options.VerticalAlignment
                 };
 
-                Shapes.IPathCollection glyphs = Shapes.TextBuilder.GenerateGlyphs(text, style);
+                IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, style);
 
                 var pathOptions = new ShapeGraphicsOptions((GraphicsOptions)options);
                 if (brush != null)

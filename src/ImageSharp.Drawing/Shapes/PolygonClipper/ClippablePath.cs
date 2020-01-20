@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-namespace SixLabors.Shapes.PolygonClipper
+namespace SixLabors.ImageSharp.PolygonClipper
 {
     /// <summary>
     /// Represents a shape and its type for when clipping is applies.

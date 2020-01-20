@@ -9,6 +9,7 @@ using System.Numerics;
 using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SDPointF = System.Drawing.PointF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
@@ -27,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 {
                     graphics.DrawBeziers(
                         pen,
-                        new[] { new PointF(10, 500), new PointF(30, 10), new PointF(240, 30), new PointF(300, 500) });
+                        new[] { new SDPointF(10, 500), new SDPointF(30, 10), new SDPointF(240, 30), new SDPointF(300, 500) });
                 }
 
                 using (var stream = new MemoryStream())

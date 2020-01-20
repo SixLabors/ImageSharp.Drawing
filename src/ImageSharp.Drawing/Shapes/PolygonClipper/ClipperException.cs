@@ -3,7 +3,7 @@
 
 using System;
 
-namespace SixLabors.Shapes.PolygonClipper
+namespace SixLabors.ImageSharp.PolygonClipper
 {
     /// <summary>
     /// Clipper Exception

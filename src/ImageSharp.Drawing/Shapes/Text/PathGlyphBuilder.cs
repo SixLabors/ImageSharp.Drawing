@@ -1,19 +1,18 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
 using System.Numerics;
-using SixLabors.Primitives;
+using SixLabors.Fonts;
 
-namespace SixLabors.Shapes.Text
+namespace SixLabors.ImageSharp.Text
 {
     /// <summary>
     /// rendering surface that Fonts can use to generate Shapes by following a path
     /// </summary>
     internal class PathGlyphBuilder : GlyphBuilder
     {
-        // TODO: Change to MathF on next release. AssemblyInfo.cs in Core did not list this project
-        private const float Pi = (float)Math.PI;
+        private const float Pi = MathF.PI;
         private readonly IPath path;
         private float yOffset;
 
@@ -28,17 +27,17 @@ namespace SixLabors.Shapes.Text
         }
 
         /// <inheritdoc/>
-        protected override void BeginText(RectangleF rect)
+        protected override void BeginText(FontRectangle rect)
         {
             this.yOffset = rect.Height;
         }
 
         /// <inheritdoc/>
-        protected override void BeginGlyph(RectangleF rect)
+        protected override void BeginGlyph(FontRectangle rect)
         {
             SegmentInfo point = this.path.PointAlongPath(rect.Left);
 
-            PointF targetPoint = point.Point + new PointF(0, rect.Top - this.yOffset);
+            Vector2 targetPoint = point.Point + new PointF(0, rect.Top - this.yOffset);
 
             // due to how matrix combining works you have to combine thins in the revers order of operation
             // this one rotates the glype then moves it.

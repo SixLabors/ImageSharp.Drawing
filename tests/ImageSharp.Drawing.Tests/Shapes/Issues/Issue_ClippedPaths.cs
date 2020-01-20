@@ -2,10 +2,9 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System.Linq;
-using SixLabors.Primitives;
 using Xunit;
 
-namespace SixLabors.Shapes.Tests.Issues
+namespace SixLabors.ImageSharp.Tests.Issues
 {
     public class Issue_ClippedPaths
     {

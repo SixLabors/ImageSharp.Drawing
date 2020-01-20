@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Utils
     /// <summary>
     /// Optimized quick sort implementation for Span{float} input
     /// </summary>
-    internal class QuickSort
+    internal static class QuickSort
     {
         /// <summary>
         /// Sorts the elements of <paramref name="data"/> in ascending order

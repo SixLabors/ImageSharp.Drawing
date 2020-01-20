@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -8,6 +8,7 @@ using System.IO;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
+using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -59,12 +60,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <summary>
         /// The file name.
         /// </summary>
-        public string FileName => Path.GetFileName(this.FullPath);
+        public string FileName => IOPath.GetFileName(this.FullPath);
 
         /// <summary>
         /// The file name without extension.
         /// </summary>
-        public string FileNameWithoutExtension => Path.GetFileNameWithoutExtension(this.FullPath);
+        public string FileNameWithoutExtension => IOPath.GetFileNameWithoutExtension(this.FullPath);
 
         /// <summary>
         /// Gets the image with lazy initialization.
@@ -87,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </returns>
         public static string GetInputFileFullPath(string file)
         {
-            return Path.Combine(InputImagesDirectory, file).Replace('\\', Path.DirectorySeparatorChar);
+            return IOPath.Combine(InputImagesDirectory, file).Replace('\\', IOPath.DirectorySeparatorChar);
         }
 
         /// <summary>
@@ -111,7 +112,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </returns>
         public string GetFileName(object value)
         {
-            return $"{this.FileNameWithoutExtension}-{value}{Path.GetExtension(this.FullPath)}";
+            return $"{this.FileNameWithoutExtension}-{value}{IOPath.GetExtension(this.FullPath)}";
         }
 
         /// <summary>

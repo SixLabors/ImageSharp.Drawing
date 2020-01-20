@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.IO;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.Formats.Gif;
@@ -10,6 +9,7 @@ using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Formats.Tga;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs;
+using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         internal static IImageFormat GetImageFormat(string filePath)
         {
-            string extension = Path.GetExtension(filePath);
+            string extension = IOPath.GetExtension(filePath);
 
             return Configuration.ImageFormatsManager.FindFormatByFileExtension(extension);
         }

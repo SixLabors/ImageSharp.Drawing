@@ -8,40 +8,40 @@ using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-using CoreRectangle = SixLabors.Primitives.Rectangle;
-using CoreSize = SixLabors.Primitives.Size;
+using SDRectangle = System.Drawing.Rectangle;
+using SDSize = System.Drawing.Size;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     public class FillRectangle
     {
         [Benchmark(Baseline = true, Description = "System.Drawing Fill Rectangle")]
-        public Size FillRectangleSystemDrawing()
+        public SDSize FillRectangleSystemDrawing()
         {
             using (var destination = new Bitmap(800, 800))
             using (var graphics = Graphics.FromImage(destination))
             {
                 graphics.InterpolationMode = InterpolationMode.Default;
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                graphics.FillRectangle(System.Drawing.Brushes.HotPink, new Rectangle(10, 10, 190, 140));
+                graphics.FillRectangle(System.Drawing.Brushes.HotPink, new SDRectangle(10, 10, 190, 140));
 
                 return destination.Size;
             }
         }
 
         [Benchmark(Description = "ImageSharp Fill Rectangle")]
-        public CoreSize FillRectangleCore()
+        public Size FillRectangleCore()
         {
             using (var image = new Image<Rgba32>(800, 800))
             {
-                image.Mutate(x => x.Fill(Rgba32.HotPink, new CoreRectangle(10, 10, 190, 140)));
+                image.Mutate(x => x.Fill(Rgba32.HotPink, new Rectangle(10, 10, 190, 140)));
 
-                return new CoreSize(image.Width, image.Height);
+                return new Size(image.Width, image.Height);
             }
         }
 
         [Benchmark(Description = "ImageSharp Fill Rectangle - As Polygon")]
-        public CoreSize FillPolygonCore()
+        public Size FillPolygonCore()
         {
             using (var image = new Image<Rgba32>(800, 800))
             {
@@ -52,7 +52,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     new Vector2(200, 150),
                     new Vector2(10, 150)));
 
-                return new CoreSize(image.Width, image.Height);
+                return new Size(image.Width, image.Height);
             }
         }
     }

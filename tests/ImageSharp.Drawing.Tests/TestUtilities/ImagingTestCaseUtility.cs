@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -9,6 +9,7 @@ using System.Reflection;
 
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
+using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -53,12 +54,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             }
 
             string fn = appendSourceFileOrDescription
-                            ? Path.GetFileNameWithoutExtension(this.SourceFileOrDescription)
+                            ? IOPath.GetFileNameWithoutExtension(this.SourceFileOrDescription)
                             : "";
 
             if (string.IsNullOrWhiteSpace(extension))
             {
-                extension = Path.GetExtension(this.SourceFileOrDescription);
+                extension = IOPath.GetExtension(this.SourceFileOrDescription);
             }
 
             if (string.IsNullOrWhiteSpace(extension))
@@ -264,11 +265,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         internal string GetTestOutputDir()
         {
-            string testGroupName = Path.GetFileNameWithoutExtension(this.TestGroupName);
+            string testGroupName = IOPath.GetFileNameWithoutExtension(this.TestGroupName);
 
             if (!string.IsNullOrEmpty(this.OutputSubfolderName))
             {
-                testGroupName = Path.Combine(this.OutputSubfolderName, testGroupName);
+                testGroupName = IOPath.Combine(this.OutputSubfolderName, testGroupName);
             }
 
             return TestEnvironment.CreateOutputDirectory(testGroupName);

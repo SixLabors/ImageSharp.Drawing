@@ -3,10 +3,9 @@
 
 using System;
 using System.Numerics;
-using SixLabors.Primitives;
 using Xunit.Abstractions;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     [Serializable]
     public class TestPoint : IXunitSerializable

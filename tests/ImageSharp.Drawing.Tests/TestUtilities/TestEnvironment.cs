@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -75,9 +76,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             return directory.FullName;
         }
 
-        private static string GetFullPath(string relativePath) => 
-            Path.Combine(SolutionDirectoryFullPath, relativePath)
-            .Replace('\\', Path.DirectorySeparatorChar);
+        private static string GetFullPath(string relativePath) =>
+            IOPath.Combine(SolutionDirectoryFullPath, relativePath)
+            .Replace('\\', IOPath.DirectorySeparatorChar);
 
         /// <summary>
         /// Gets the correct full path to the Input Images directory.
@@ -97,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         internal static string ToolsDirectoryFullPath => GetFullPath(ToolsDirectoryRelativePath);
 
         internal static string GetReferenceOutputFileName(string actualOutputFileName) =>
-            actualOutputFileName.Replace("ActualOutput", @"External\ReferenceOutput").Replace('\\', Path.DirectorySeparatorChar);
+            actualOutputFileName.Replace("ActualOutput", @"External\ReferenceOutput").Replace('\\', IOPath.DirectorySeparatorChar);
 
         internal static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
         
@@ -117,11 +118,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </returns>
         internal static string CreateOutputDirectory(string path, params string[] pathParts)
         {
-            path = Path.Combine(ActualOutputDirectoryFullPath, path);
+            path = IOPath.Combine(ActualOutputDirectoryFullPath, path);
 
             if (pathParts != null && pathParts.Length > 0)
             {
-                path = Path.Combine(path, Path.Combine(pathParts));
+                path = IOPath.Combine(path, IOPath.Combine(pathParts));
             }
 
             if (!Directory.Exists(path))
