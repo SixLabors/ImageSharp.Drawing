@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -29,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </returns>
         public static string GetPath(string file)
         {
-            return Path.Combine(FormatsDirectory, file);
+            return IOPath.Combine(FormatsDirectory, file);
         }
 
         /// <summary>
@@ -49,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             directories = directories.SelectMany(x => new[]
                                      {
-                                         Path.GetFullPath(x)
+                                         IOPath.GetFullPath(x)
                                      }).ToList();
 
             AddFormatsDirectoryFromTestAssemblyPath(directories);
@@ -73,12 +74,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         private static void AddFormatsDirectoryFromTestAssemblyPath(List<string> directories)
         {
             string assemblyLocation = typeof(TestFile).GetTypeInfo().Assembly.Location;
-            assemblyLocation = Path.GetDirectoryName(assemblyLocation);
+            assemblyLocation = IOPath.GetDirectoryName(assemblyLocation);
 
             if (assemblyLocation != null)
             {
-                string dirFromAssemblyLocation = Path.Combine(assemblyLocation, "../../../TestFonts/");
-                dirFromAssemblyLocation = Path.GetFullPath(dirFromAssemblyLocation);
+                string dirFromAssemblyLocation = IOPath.Combine(assemblyLocation, "../../../TestFonts/");
+                dirFromAssemblyLocation = IOPath.GetFullPath(dirFromAssemblyLocation);
                 directories.Add(dirFromAssemblyLocation);
             }
         }

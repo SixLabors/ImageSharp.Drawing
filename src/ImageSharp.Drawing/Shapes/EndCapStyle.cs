@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// The style to apply to the end cap when generating an outline.

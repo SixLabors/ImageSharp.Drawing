@@ -6,11 +6,8 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.Memory;
-using SixLabors.Primitives;
-using SixLabors.Shapes;
 
 namespace SixLabors.ImageSharp.Processing
 {

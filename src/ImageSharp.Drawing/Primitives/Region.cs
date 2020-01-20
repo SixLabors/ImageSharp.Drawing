@@ -2,10 +2,8 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using SixLabors.Primitives;
-using SixLabors.Shapes;
 
-namespace SixLabors.ImageSharp.Primitives
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// Represents a region of an image.

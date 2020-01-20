@@ -4,11 +4,7 @@
 using System;
 using System.Buffers;
 
-using SixLabors.ImageSharp.Memory;
-using SixLabors.Primitives;
-using SixLabors.Shapes;
-
-namespace SixLabors.ImageSharp.Primitives
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// A mapping between a <see cref="IPath"/> and a region.

@@ -1,8 +1,8 @@
-﻿using System.IO;
 
 using SixLabors.ImageSharp.PixelFormats;
 
 using Xunit;
+using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void GetTestOutputDir_ShouldDefineSubfolder<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : struct, IPixel<TPixel>
         {
-            string expected = $"{Path.DirectorySeparatorChar}Foo{Path.DirectorySeparatorChar}";
+            string expected = $"{IOPath.DirectorySeparatorChar}Foo{IOPath.DirectorySeparatorChar}";
             Assert.Contains(expected, provider.Utility.GetTestOutputDir());
         }
     }

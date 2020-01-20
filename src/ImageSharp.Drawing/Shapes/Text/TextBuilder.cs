@@ -2,10 +2,9 @@
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.Fonts;
-using SixLabors.Primitives;
-using SixLabors.Shapes.Text;
+using SixLabors.ImageSharp.Text;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// Text drawing extensions for a PathBuilder

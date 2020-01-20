@@ -82,7 +82,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             Pen pen)
             where TPixel : struct, IPixel<TPixel>
         {
-            SixLabors.Primitives.PointF[] simplePath = { new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300) };
+            PointF[] simplePath = { new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300) };
 
             GraphicsOptions options = new GraphicsOptions { Antialias = antialias };
 

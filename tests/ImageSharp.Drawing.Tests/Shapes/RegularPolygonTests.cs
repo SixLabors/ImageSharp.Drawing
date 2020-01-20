@@ -5,10 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.Primitives;
 using Xunit;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     public class RegularPolygonTests
     {
@@ -100,7 +99,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void TriangleMissingIntersectionsDownCenter()
         {
-            var poly = new SixLabors.Shapes.RegularPolygon(50, 50, 3, 30);
+            var poly = new RegularPolygon(50, 50, 3, 30);
             PointF[] points = poly.FindIntersections(new PointF(0, 50), new PointF(100, 50)).ToArray();
 
             Assert.Equal(2, points.Length);

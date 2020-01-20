@@ -8,7 +8,7 @@ using System.Numerics;
 using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.Shapes;
+using SDPoint = System.Drawing.Point;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 graphics.FillPolygon(
                     System.Drawing.Brushes.HotPink,
-                    new[] { new Point(10, 10), new Point(550, 50), new Point(200, 400) });
+                    new[] { new SDPoint(10, 10), new SDPoint(550, 50), new SDPoint(200, 400) });
 
                 using (var stream = new MemoryStream())
                 {

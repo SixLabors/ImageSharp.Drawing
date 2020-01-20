@@ -3,8 +3,6 @@
 
 using System;
 using System.IO;
-
-using SixLabors.ImageSharp.Common.Helpers;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.Formats.Gif;
@@ -14,6 +12,7 @@ using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs;
 
 using Xunit;
 using Xunit.Abstractions;
+using IOPath = System.IO.Path;
 // ReSharper disable InconsistentNaming
 
 namespace SixLabors.ImageSharp.Drawing.Tests
@@ -54,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void GetReferenceOutputFileName()
         {
-            string actual = Path.Combine(TestEnvironment.ActualOutputDirectoryFullPath, @"foo\bar\lol.jpeg");
+            string actual = IOPath.Combine(TestEnvironment.ActualOutputDirectoryFullPath, @"foo\bar\lol.jpeg");
             string expected = TestEnvironment.GetReferenceOutputFileName(actual);
 
             this.Output.WriteLine(expected);

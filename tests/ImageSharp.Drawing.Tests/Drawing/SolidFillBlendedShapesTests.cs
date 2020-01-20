@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-using SixLabors.Primitives;
 using Xunit;
 
 // ReSharper disable InconsistentNaming
@@ -80,7 +79,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     x => x.Fill(
                         new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition },
                         Color.Transparent,
-                        new Shapes.EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY))
+                        new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY))
                     );
 
                 VerifyImage(provider, blending, composition, img);
@@ -115,7 +114,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     x => x.Fill(
                         new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition },
                         transparentRed,
-                        new Shapes.EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY))
+                        new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY))
                     );
 
                 VerifyImage(provider, blending, composition, img); ;
@@ -143,7 +142,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 srcImg.Mutate(
                     x => x.Fill(
                         Color.Black,
-                        new Shapes.EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY)));
+                        new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY)));
 
                 dstImg.Mutate(
                     x => x.DrawImage(srcImg, new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }));

@@ -4,9 +4,8 @@
 using System.Buffers;
 using System.Collections.Generic;
 using System.Numerics;
-using SixLabors.Primitives;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     internal static class InternalPathExtensions
     {

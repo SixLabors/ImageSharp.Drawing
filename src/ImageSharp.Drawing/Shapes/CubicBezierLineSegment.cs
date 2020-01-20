@@ -4,9 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using SixLabors.Primitives;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// Represents a line segment that contains a lists of control points that will be rendered as a cubic bezier curve

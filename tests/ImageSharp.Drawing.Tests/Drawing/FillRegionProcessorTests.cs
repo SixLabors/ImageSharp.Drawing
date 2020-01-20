@@ -6,13 +6,10 @@ using System.Numerics;
 using Moq;
 using System;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Primitives;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors;
-using SixLabors.Primitives;
 using Xunit;
 using SixLabors.ImageSharp.Processing.Processors.Drawing;
-using SixLabors.Shapes;
 using SixLabors.ImageSharp.Advanced;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing

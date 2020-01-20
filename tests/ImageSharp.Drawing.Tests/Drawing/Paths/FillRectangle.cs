@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Primitives;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
@@ -18,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         private GraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
         private Color color = Color.HotPink;
         private SolidBrush brush = Brushes.Solid(Rgba32.HotPink);
-        private SixLabors.Primitives.Rectangle rectangle = new SixLabors.Primitives.Rectangle(10, 10, 77, 76);
+        private Rectangle rectangle = new Rectangle(10, 10, 77, 76);
 
         [Fact]
         public void CorrectlySetsBrushAndRectangle()
@@ -29,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(new GraphicsOptions(), processor.Options, graphicsOptionsComparer);
 
             ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-            Shapes.RectangularPolygon rect = Assert.IsType<Shapes.RectangularPolygon>(region.Shape);
+            RectangularPolygon rect = Assert.IsType<RectangularPolygon>(region.Shape);
             Assert.Equal(rect.Location.X, this.rectangle.X);
             Assert.Equal(rect.Location.Y, this.rectangle.Y);
             Assert.Equal(rect.Size.Width, this.rectangle.Width);
@@ -47,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(this.nonDefault, processor.Options, graphicsOptionsComparer);
 
             ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-            Shapes.RectangularPolygon rect = Assert.IsType<Shapes.RectangularPolygon>(region.Shape);
+            RectangularPolygon rect = Assert.IsType<RectangularPolygon>(region.Shape);
             Assert.Equal(rect.Location.X, this.rectangle.X);
             Assert.Equal(rect.Location.Y, this.rectangle.Y);
             Assert.Equal(rect.Size.Width, this.rectangle.Width);
@@ -65,7 +64,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(new GraphicsOptions(), processor.Options, graphicsOptionsComparer);
 
             ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-            Shapes.RectangularPolygon rect = Assert.IsType<Shapes.RectangularPolygon>(region.Shape);
+            RectangularPolygon rect = Assert.IsType<RectangularPolygon>(region.Shape);
             Assert.Equal(rect.Location.X, this.rectangle.X);
             Assert.Equal(rect.Location.Y, this.rectangle.Y);
             Assert.Equal(rect.Size.Width, this.rectangle.Width);
@@ -84,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(this.nonDefault, processor.Options, graphicsOptionsComparer);
 
             ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-            Shapes.RectangularPolygon rect = Assert.IsType<Shapes.RectangularPolygon>(region.Shape);
+            RectangularPolygon rect = Assert.IsType<RectangularPolygon>(region.Shape);
             Assert.Equal(rect.Location.X, this.rectangle.X);
             Assert.Equal(rect.Location.Y, this.rectangle.Y);
             Assert.Equal(rect.Size.Width, this.rectangle.Width);

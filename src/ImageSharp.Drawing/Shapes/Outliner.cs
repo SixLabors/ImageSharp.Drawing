@@ -6,9 +6,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using ClipperLib;
-using SixLabors.Primitives;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// Path extensions to generate outlines of paths.

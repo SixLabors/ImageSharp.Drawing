@@ -4,9 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using SixLabors.Primitives;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// Represents a logic path that can be drawn

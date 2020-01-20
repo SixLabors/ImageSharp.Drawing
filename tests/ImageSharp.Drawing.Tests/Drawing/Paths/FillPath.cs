@@ -3,12 +3,10 @@
 
 using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Primitives;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
-using SixLabors.Shapes;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
@@ -20,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         ShapeGraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
         Color color = Color.HotPink;
         SolidBrush brush = Brushes.Solid(Rgba32.HotPink);
-        IPath path = new Path(new LinearLineSegment(new SixLabors.Primitives.PointF[] {
+        IPath path = new Path(new LinearLineSegment(new PointF[] {
                     new Vector2(10,10),
                     new Vector2(20,10),
                     new Vector2(20,10),

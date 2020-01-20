@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
                 var unicolorRadialGradientBrush =
                     new RadialGradientBrush(
-                        new SixLabors.Primitives.Point(0, 0),
+                        new Point(0, 0),
                         100,
                         GradientRepetitionMode.None,
                         new ColorStop(0, red),
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 image =>
                     {
                         var brush = new RadialGradientBrush(
-                            new SixLabors.Primitives.Point(centerX, centerY),
+                            new Point(centerX, centerY),
                             image.Width / 2f,
                             GradientRepetitionMode.None,
                             new ColorStop(0, Color.Red),

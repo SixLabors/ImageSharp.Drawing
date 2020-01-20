@@ -4,15 +4,11 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-
+using System.Numerics;
 using SixLabors.Fonts;
-using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Utils;
-using SixLabors.Memory;
-using SixLabors.Primitives;
-using SixLabors.Shapes;
 
 namespace SixLabors.ImageSharp.Processing.Processors.Text
 {
@@ -190,7 +186,7 @@ namespace SixLabors.ImageSharp.Processing.Processors.Text
                 this.builder.StartFigure();
             }
 
-            public bool BeginGlyph(RectangleF bounds, GlyphRendererParameters parameters)
+            public bool BeginGlyph(FontRectangle bounds, GlyphRendererParameters parameters)
             {
                 this.currentRenderPosition = Point.Truncate(bounds.Location);
                 PointF subPixelOffset = bounds.Location - this.currentRenderPosition;
@@ -219,14 +215,14 @@ namespace SixLabors.ImageSharp.Processing.Processors.Text
                 return true;
             }
 
-            public void BeginText(RectangleF bounds)
+            public void BeginText(FontRectangle bounds)
             {
                 // not concerned about this one
                 this.OutlineOperations?.Clear();
                 this.FillOperations?.Clear();
             }
 
-            public void CubicBezierTo(PointF secondControlPoint, PointF thirdControlPoint, PointF point)
+            public void CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
             {
                 this.builder.AddBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
                 this.currentPoint = point;
@@ -418,19 +414,19 @@ namespace SixLabors.ImageSharp.Processing.Processors.Text
             {
             }
 
-            public void LineTo(PointF point)
+            public void LineTo(Vector2 point)
             {
                 this.builder.AddLine(this.currentPoint, point);
                 this.currentPoint = point;
             }
 
-            public void MoveTo(PointF point)
+            public void MoveTo(Vector2 point)
             {
                 this.builder.StartFigure();
                 this.currentPoint = point;
             }
 
-            public void QuadraticBezierTo(PointF secondControlPoint, PointF point)
+            public void QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
             {
                 this.builder.AddBezier(this.currentPoint, secondControlPoint, point);
                 this.currentPoint = point;

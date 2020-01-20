@@ -1,13 +1,10 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-using SixLabors.ImageSharp.Primitives;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Moq;
-using SixLabors.Primitives;
-using SixLabors.Shapes;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths

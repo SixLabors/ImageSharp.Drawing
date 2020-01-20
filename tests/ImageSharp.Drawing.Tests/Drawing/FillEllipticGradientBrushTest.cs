@@ -29,8 +29,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             {
                 var unicolorLinearGradientBrush =
                     new EllipticGradientBrush(
-                        new SixLabors.Primitives.Point(0, 0),
-                        new SixLabors.Primitives.Point(10, 0),
+                        new Point(0, 0),
+                        new Point(10, 0),
                         1.0f,
                         GradientRepetitionMode.None,
                         new ColorStop(0, red),
@@ -67,8 +67,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 image =>
                     {
                         var unicolorLinearGradientBrush = new EllipticGradientBrush(
-                            new SixLabors.Primitives.Point(image.Width / 2, image.Height / 2),
-                            new SixLabors.Primitives.Point(image.Width / 2, (image.Width * 2) / 3),
+                            new Point(image.Width / 2, image.Height / 2),
+                            new Point(image.Width / 2, (image.Width * 2) / 3),
                             ratio,
                             GradientRepetitionMode.None,
                             new ColorStop(0, yellow),
@@ -118,7 +118,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         Color red = Color.Red;
                         Color black = Color.Black;
 
-                        var center = new SixLabors.Primitives.Point(image.Width / 2, image.Height / 2);
+                        var center = new Point(image.Width / 2, image.Height / 2);
 
                         double rotation = (Math.PI * rotationInDegree) / 180.0;
                         double cos = Math.Cos(rotation);
@@ -130,7 +130,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
                         var unicolorLinearGradientBrush = new EllipticGradientBrush(
                             center,
-                            new SixLabors.Primitives.Point(axisX, axisY),
+                            new Point(axisX, axisY),
                             ratio,
                             GradientRepetitionMode.None,
                             new ColorStop(0, yellow),

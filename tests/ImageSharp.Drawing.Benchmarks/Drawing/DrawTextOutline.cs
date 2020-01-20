@@ -9,6 +9,8 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Text;
 
+using SDRectangleF = System.Drawing.RectangleF;
+
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     [MemoryDiagnoser]
@@ -38,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                         font.FontFamily,
                         (int)font.Style,
                         font.Size,
-                        new RectangleF(10, 10, 780, 780),
+                        new SDRectangleF(10, 10, 780, 780),
                         new StringFormat());
 
                     graphics.DrawPath(pen, gp);
@@ -58,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     this.TextToRender,
                     font,
                     Processing.Pens.Solid(Rgba32.HotPink, 10),
-                    new SixLabors.Primitives.PointF(10, 10)));
+                    new PointF(10, 10)));
             }
         }
 
@@ -76,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                         font,
                         null,
                         Processing.Pens.Solid(Rgba32.HotPink, 10),
-                        new SixLabors.Primitives.PointF(10, 10)));
+                        new PointF(10, 10)));
             }
 
             IImageProcessingContext DrawTextOldVersion(
@@ -86,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 SixLabors.Fonts.Font font,
                 IBrush brush,
                 IPen pen,
-                SixLabors.Primitives.PointF location)
+                PointF location)
             {
                 var style = new SixLabors.Fonts.RendererOptions(font, options.DpiX, options.DpiY, location)
                 {
@@ -97,7 +99,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     VerticalAlignment = options.VerticalAlignment
                 };
 
-                Shapes.IPathCollection glyphs = Shapes.TextBuilder.GenerateGlyphs(text, style);
+                IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, style);
 
                 var pathOptions = new ShapeGraphicsOptions((GraphicsOptions)options);
                 if (brush != null)

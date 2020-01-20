@@ -2,10 +2,9 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System.Linq;
-using SixLabors.Primitives;
 using Xunit;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     /// <summary>
     /// The internal path tests.

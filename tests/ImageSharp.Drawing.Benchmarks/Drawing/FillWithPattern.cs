@@ -8,6 +8,7 @@ using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
+using SDRectangle = System.Drawing.Rectangle;
 using CoreBrushes = SixLabors.ImageSharp.Processing.Brushes;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
@@ -24,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
                 using (var brush = new HatchBrush(HatchStyle.BackwardDiagonal, System.Drawing.Color.HotPink))
                 {
-                    graphics.FillRectangle(brush, new Rectangle(0, 0, 800, 800)); // can't find a way to flood fill with a brush
+                    graphics.FillRectangle(brush, new SDRectangle(0, 0, 800, 800)); // can't find a way to flood fill with a brush
                 }
 
                 using (var stream = new MemoryStream())

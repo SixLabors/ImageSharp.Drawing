@@ -2,10 +2,9 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using SixLabors.Primitives;
 using Xunit.Abstractions;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     [Serializable]
     public class TestSize : IXunitSerializable

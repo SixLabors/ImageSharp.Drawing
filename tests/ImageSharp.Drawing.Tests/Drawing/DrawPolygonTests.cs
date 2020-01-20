@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void DrawPolygon<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
             where TPixel : struct, IPixel<TPixel>
         {
-            SixLabors.Primitives.PointF[] simplePath =
+            PointF[] simplePath =
                 {
                     new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
                 };

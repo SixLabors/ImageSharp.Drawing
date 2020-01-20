@@ -5,10 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.Primitives;
 using Xunit;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     public class StarTests
     {
@@ -112,7 +111,7 @@ namespace SixLabors.Shapes.Tests
         [Fact]
         public void TriangleMissingIntersectionsDownCenter()
         {
-            var poly = new SixLabors.Shapes.Star(50, 50, 3, 50, 30);
+            var poly = new Star(50, 50, 3, 50, 30);
             PointF[] points = poly.FindIntersections(new Vector2(0, 50), new Vector2(100, 50)).ToArray();
 
             Assert.Equal(2, points.Length);

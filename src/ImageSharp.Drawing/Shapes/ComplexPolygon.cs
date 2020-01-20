@@ -6,9 +6,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using SixLabors.ImageSharp.Utils;
-using SixLabors.Primitives;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.

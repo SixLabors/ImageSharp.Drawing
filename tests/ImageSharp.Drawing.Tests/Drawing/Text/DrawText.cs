@@ -6,7 +6,6 @@ using SixLabors.Fonts;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Text;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.Primitives;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text

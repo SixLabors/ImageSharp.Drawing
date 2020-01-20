@@ -3,10 +3,9 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using SixLabors.Primitives;
 using Xunit;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     public class PolygonTests
     {

@@ -5,7 +5,6 @@ using System;
 
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.Primitives;
 
 namespace SixLabors.ImageSharp.Processing.Processors.Text
 {

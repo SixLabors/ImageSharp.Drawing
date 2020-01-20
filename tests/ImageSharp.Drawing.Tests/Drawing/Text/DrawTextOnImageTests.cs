@@ -8,7 +8,6 @@ using SixLabors.Fonts;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-using SixLabors.Primitives;
 
 using Xunit;
 using Xunit.Abstractions;
@@ -46,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             using (var img = provider.GetImage())
             {
                 // measure the text size
-                SizeF size = TextMeasurer.Measure(text, new RendererOptions(font));
+                var size = TextMeasurer.Measure(text, new RendererOptions(font));
 
                 //find out how much we need to scale the text to fill the space (up or down)
                 float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);

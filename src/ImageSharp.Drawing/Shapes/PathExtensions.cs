@@ -5,9 +5,8 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Numerics;
-using SixLabors.Primitives;
 
-namespace SixLabors.Shapes
+namespace SixLabors.ImageSharp
 {
     /// <summary>
     /// Convenience methods that can be applied to shapes and paths

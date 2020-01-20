@@ -7,11 +7,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
-using SixLabors.Primitives;
+using SixLabors.ImageSharp;
 using Xunit;
 using Xunit.Abstractions;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     public class ComplexPolygonTests
     {
@@ -155,7 +155,7 @@ namespace SixLabors.Shapes.Tests
         }
 
         // Test is based on @woutware's the idea and drawing logic in opening comment:
-        // https://github.com/SixLabors/Shapes/pull/43#issue-189141926
+        // https://github.com/pull/43#issue-189141926
         [Theory]
         [InlineData(100, 100, 10, 3)]
         [InlineData(800, 600, 8, 2)]
@@ -199,7 +199,7 @@ namespace SixLabors.Shapes.Tests
         }
 
         // Test is based on @woutware's the idea in another issue comment:
-        // https://github.com/SixLabors/Shapes/pull/43#issuecomment-390358702
+        // https://github.com/pull/43#issuecomment-390358702
         [Theory]
         [MemberData(nameof(CommonOffsetData))]
         public void OffsetingIntersectingSegments_ShouldPreserveIntersection(int dx, int dy, int noiseSeed)

@@ -3,7 +3,7 @@
 
 using System.Numerics;
 
-namespace SixLabors.Shapes.Text
+namespace SixLabors.ImageSharp.Text
 {
     /// <summary>
     /// rendering surface that Fonts can use to generate Shapes.

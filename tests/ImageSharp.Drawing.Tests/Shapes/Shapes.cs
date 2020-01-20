@@ -4,7 +4,7 @@
 using System;
 using System.Numerics;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     public static class Shapes
     {

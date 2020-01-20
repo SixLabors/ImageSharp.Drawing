@@ -6,8 +6,6 @@ using System.Numerics;
 
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.Primitives;
-using SixLabors.Shapes;
 
 using Xunit;
 
@@ -24,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void FillPolygon_Solid<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, bool antialias)
             where TPixel : struct, IPixel<TPixel>
         {
-            SixLabors.Primitives.PointF[] simplePath =
+            PointF[] simplePath =
                 {
                     new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
                 };
@@ -46,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void FillPolygon_Concave<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : struct, IPixel<TPixel>
         {
-            var points = new SixLabors.Primitives.PointF[]
+            var points = new PointF[]
                              {
                                  new Vector2(8, 8),
                                  new Vector2(64, 8),
@@ -69,7 +67,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void FillPolygon_Pattern<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : struct, IPixel<TPixel>
         {
-            SixLabors.Primitives.PointF[] simplePath =
+            PointF[] simplePath =
                 {
                     new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
                 };
@@ -88,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void FillPolygon_ImageBrush<TPixel>(TestImageProvider<TPixel> provider, string brushImageName)
             where TPixel : struct, IPixel<TPixel>
         {
-            SixLabors.Primitives.PointF[] simplePath =
+            PointF[] simplePath =
                 {
                     new Vector2(10, 10), new Vector2(200, 50), new Vector2(50, 200)
                 };
@@ -109,7 +107,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void Fill_RectangularPolygon<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : struct, IPixel<TPixel>
         {
-            var polygon = new SixLabors.Shapes.RectangularPolygon(10, 10, 190, 140);
+            var polygon = new RectangularPolygon(10, 10, 190, 140);
             var color = Color.White;
 
             provider.RunValidatingProcessorTest(

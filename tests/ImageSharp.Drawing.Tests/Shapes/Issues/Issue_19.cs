@@ -4,13 +4,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.Primitives;
 using Xunit;
 
-namespace SixLabors.Shapes.Tests
+namespace SixLabors.ImageSharp.Tests
 {
     /// <summary>
-    /// see https://github.com/SixLabors/Shapes/issues/19
+    /// see https://github.com/issues/19
     /// Also for furter details see https://github.com/SixLabors/Fonts/issues/22
     /// </summary>
     public class Issue_19
