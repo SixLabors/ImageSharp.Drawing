@@ -221,18 +221,13 @@ namespace SixLabors.Shapes
             return Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
         }
 
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the edges of the <see cref="RectangularPolygon"/>
-        /// that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The starting offset within the buffer</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
+        {
+            return this.FindIntersections(start, end, buffer.AsSpan(offset), intersectionRule);
+        }
+
+        /// <inheritdoc />
         public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
         {
             Span<PointF> subBuffer = buffer.AsSpan(offset);
@@ -240,7 +235,7 @@ namespace SixLabors.Shapes
         }
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
         {
             int offset = 0;
             int discovered = 0;
@@ -270,6 +265,12 @@ namespace SixLabors.Shapes
             }
 
             return discovered;
+        }
+
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
+        {
+            return this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
         }
 
         /// <summary>

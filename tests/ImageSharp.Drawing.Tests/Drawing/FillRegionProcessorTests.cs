@@ -119,7 +119,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             public override Rectangle Bounds => new Rectangle(-100, -10, 10, 10);
 
-            public override int Scan(float y, Span<float> buffer, Configuration configuration)
+            public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
             {
                 if (y < 5)
                 {
@@ -146,7 +146,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             public int ScanInvocationCounter { get; private set; }
 
-            public override int Scan(float y, Span<float> buffer, Configuration configuration)
+            public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
             {
                 this.ScanInvocationCounter++;
                 return 0;

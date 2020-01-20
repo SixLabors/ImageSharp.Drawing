@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Primitives
         public override Rectangle Bounds { get; }
 
         /// <inheritdoc/>
-        public override int Scan(float y, Span<float> buffer, Configuration configuration)
+        public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
         {
             var start = new PointF(this.Bounds.Left - 1, y);
             var end = new PointF(this.Bounds.Right + 1, y);
@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Primitives
             using (IMemoryOwner<PointF> tempBuffer = configuration.MemoryAllocator.Allocate<PointF>(buffer.Length))
             {
                 Span<PointF> innerBuffer = tempBuffer.Memory.Span;
-                int count = this.Shape.FindIntersections(start, end, innerBuffer);
+                int count = this.Shape.FindIntersections(start, end, innerBuffer, intersectionRule);
 
                 for (int i = 0; i < count; i++)
                 {

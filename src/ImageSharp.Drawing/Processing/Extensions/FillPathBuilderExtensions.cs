@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IBrush brush,
             Action<PathBuilder> path)
         {
@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Processing
             this IImageProcessingContext source,
             IBrush brush,
             Action<PathBuilder> path) =>
-            source.Fill(new GraphicsOptions(), brush, path);
+            source.Fill(new ShapeGraphicsOptions(), brush, path);
 
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
@@ -55,7 +55,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             Color color,
             Action<PathBuilder> path) =>
             source.Fill(options, new SolidBrush(color), path);

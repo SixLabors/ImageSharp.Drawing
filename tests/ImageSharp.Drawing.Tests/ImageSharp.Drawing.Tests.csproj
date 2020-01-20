@@ -3,12 +3,15 @@
 
   <PropertyGroup>
     <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;net472</TargetFrameworks>
+    <TargetFrameworks Condition="'$(Configuration)' == 'Debug'">netcoreapp3.1</TargetFrameworks>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <DebugSymbols>True</DebugSymbols>
     <AssemblyName>SixLabors.ImageSharp.Tests</AssemblyName>
     <Platforms>AnyCPU;x64;x86</Platforms>
     <RootNamespace>SixLabors.ImageSharp.Drawing.Tests</RootNamespace>
+    <!--Used to show test project to dotnet test-->
+    <IsTestProject>true</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>

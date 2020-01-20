@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.Primitives;
@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             IBrush brush,
             RectangleF shape) =>
             source.Fill(options, brush, new RectangularPolygon(shape.X, shape.Y, shape.Width, shape.Height));
@@ -47,7 +47,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            ShapeGraphicsOptions options,
             Color color,
             RectangleF shape) =>
             source.Fill(options, new SolidBrush(color), shape);

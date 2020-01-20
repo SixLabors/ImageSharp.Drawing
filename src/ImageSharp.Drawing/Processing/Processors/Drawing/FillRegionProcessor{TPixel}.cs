@@ -34,6 +34,7 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
         {
             Configuration configuration = this.Configuration;
             GraphicsOptions options = this.definition.Options;
+            ShapeGraphicsOptions shapeOptions = this.definition.ShapeOptions;
             IBrush brush = this.definition.Brush;
             Region region = this.definition.Region;
             Rectangle rect = region.Bounds;
@@ -98,14 +99,12 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
                         float yPlusOne = y + 1;
                         for (float subPixel = y; subPixel < yPlusOne; subPixel += subpixelFraction)
                         {
-                            int pointsFound = region.Scan(subPixel + offset, buffer, configuration);
+                            int pointsFound = region.Scan(subPixel + offset, buffer, configuration, shapeOptions.IntersectionRule);
                             if (pointsFound == 0)
                             {
                                 // nothing on this line, skip
                                 continue;
                             }
-
-                            QuickSort.Sort(buffer.Slice(0, pointsFound));
 
                             for (int point = 0; point < pointsFound && point < buffer.Length - 1; point += 2)
                             {

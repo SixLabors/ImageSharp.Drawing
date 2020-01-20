@@ -28,12 +28,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             public abstract int MaxIntersections { get; }
             public abstract float Length { get; }
 
-            public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
+
+            public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
             {
                 return this.FindIntersections(start, end, buffer, 0);
             }
 
-            public int FindIntersections(PointF s, PointF e, Span<PointF> buffer)
+            public int FindIntersections(PointF s, PointF e, Span<PointF> buffer, IntersectionRule intersectionRule)
             {
                 Assert.Equal(this.TestYToScan, s.Y);
                 Assert.Equal(this.TestYToScan, e.Y);
@@ -44,6 +45,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
                 return this.TestFindIntersectionsResult;
             }
+
+            public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
+                => FindIntersections(start, end, buffer, offset, IntersectionRule.OddEven);
+
+            public int FindIntersections(PointF s, PointF e, Span<PointF> buffer)
+                => FindIntersections(s, e, buffer, IntersectionRule.OddEven);
 
             public int TestFindIntersectionsInvocationCounter { get; private set; }
             public virtual int TestYToScan => 10;
@@ -97,7 +104,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             int yToScan = path.TestYToScan;
             var region = new ShapeRegion(path);
 
-            int i = region.Scan(yToScan, new float[path.TestFindIntersectionsResult], Configuration.Default);
+            int i = region.Scan(yToScan, new float[path.TestFindIntersectionsResult], Configuration.Default, IntersectionRule.OddEven);
 
             Assert.Equal(path.TestFindIntersectionsResult, i);
             Assert.Equal(1, path.TestFindIntersectionsInvocationCounter);
