@@ -81,7 +81,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             this.operations.Fill(this.nonDefault, this.color, this.path);
             var processor = this.Verify<FillRegionProcessor>();
 
-            Assert.Equal(this.nonDefault, processor.Options);
+            Assert.Equal(this.nonDefault, processor.ShapeOptions);
 
             ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
             Polygon polygon = Assert.IsType<Polygon>(region.Shape);
