@@ -83,7 +83,7 @@ namespace SixLabors.ImageSharp.Processing
         /// <remarks>scanlineBuffer will be > scanlineWidth but provide and offset in case we want to share a larger buffer across runs.</remarks>
         internal virtual void Apply(Span<float> scanline, int x, int y)
         {
-            MemoryAllocator memoryAllocator = this.Target.MemoryAllocator;
+            MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
 
             using (IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length))
             using (IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length))

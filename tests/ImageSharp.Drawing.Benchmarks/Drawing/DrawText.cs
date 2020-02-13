@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     new TextGraphicsOptions { Antialias = true, WrapTextWidth = 780 },
                     this.TextToRender,
                     font,
-                    Processing.Brushes.Solid(Rgba32.HotPink),
+                    Processing.Brushes.Solid(Color.HotPink),
                     new PointF(10, 10)));
             }
         }

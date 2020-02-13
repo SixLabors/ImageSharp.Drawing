@@ -5,6 +5,7 @@ using System;
 using System.Buffers;
 
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Processing
@@ -140,8 +141,9 @@ namespace SixLabors.ImageSharp.Processing
             internal override void Apply(Span<float> scanline, int x, int y)
             {
                 // Create a span for colors
-                using (IMemoryOwner<float> amountBuffer = this.Target.MemoryAllocator.Allocate<float>(scanline.Length))
-                using (IMemoryOwner<TPixel> overlay = this.Target.MemoryAllocator.Allocate<TPixel>(scanline.Length))
+                MemoryAllocator allocator = this.Configuration.MemoryAllocator;
+                using (IMemoryOwner<float> amountBuffer = allocator.Allocate<float>(scanline.Length))
+                using (IMemoryOwner<TPixel> overlay = allocator.Allocate<TPixel>(scanline.Length))
                 {
                     Span<float> amountSpan = amountBuffer.Memory.Span;
                     Span<TPixel> overlaySpan = overlay.Memory.Span;

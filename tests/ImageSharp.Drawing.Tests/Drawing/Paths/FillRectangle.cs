@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
         private GraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
         private Color color = Color.HotPink;
-        private SolidBrush brush = Brushes.Solid(Rgba32.HotPink);
+        private SolidBrush brush = Brushes.Solid(Color.HotPink);
         private Rectangle rectangle = new Rectangle(10, 10, 77, 76);
 
         [Fact]

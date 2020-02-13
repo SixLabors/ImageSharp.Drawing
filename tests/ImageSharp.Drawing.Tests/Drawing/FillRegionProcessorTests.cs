@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             using (var img = new Image<Rgba32>(10, 10))
             {
-                img.Mutate(x => x.DrawLines(new Pen(Rgba32.Black, 10),
+                img.Mutate(x => x.DrawLines(new Pen(Color.Black, 10),
                     new Vector2(-10, 5),
                     new Vector2(20, 5)));
             }
@@ -72,12 +72,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var rectText = new RectangleF(0, 0, 2000, 2000);
             using (var img = new Image<Rgba32>((int)rectText.Width, (int)rectText.Height))
             {
-                img.Mutate(x => x.Fill(Rgba32.Transparent));
+                img.Mutate(x => x.Fill(Color.Transparent));
 
                 img.Mutate(ctx =>
                 {
                     ctx.DrawLines(
-                        Rgba32.Red,
+                        Color.Red,
                         0.984252f,
                         new PointF(104.762581f, 1074.99365f),
                         new PointF(104.758667f, 1075.01721f),
@@ -106,7 +106,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
                 image.Mutate(ctx =>
                 {
-                    ctx.Fill(Rgba32.White, path);
+                    ctx.Fill(Color.White, path);
                 });
             }
         }

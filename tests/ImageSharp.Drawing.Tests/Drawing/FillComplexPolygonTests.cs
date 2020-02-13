@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System.Numerics;
@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 new Vector2(65, 137)));
             IPath clipped = simplePath.Clip(hole1);
 
-            Rgba32 colorRgba = Rgba32.HotPink;
+            Rgba32 colorRgba = Color.HotPink;
             if (transparent)
             {
                 colorRgba.A = 150;

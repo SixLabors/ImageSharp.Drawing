@@ -24,7 +24,7 @@
 
     <!--Src Dependencies-->
     <PackageReference Update="SixLabors.Fonts" Version="1.0.0-unstable0024" />
-    <PackageReference Update="SixLabors.ImageSharp" Version="1.0.0-unstable0542" />
+    <PackageReference Update="SixLabors.ImageSharp" Version="1.0.0-unstable0702" />
   </ItemGroup>
 
 </Project>

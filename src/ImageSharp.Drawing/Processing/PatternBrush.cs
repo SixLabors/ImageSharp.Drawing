@@ -145,7 +145,7 @@ namespace SixLabors.ImageSharp.Processing
             internal override void Apply(Span<float> scanline, int x, int y)
             {
                 int patternY = y % this.pattern.Rows;
-                MemoryAllocator memoryAllocator = this.Target.MemoryAllocator;
+                MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
 
                 using (IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length))
                 using (IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length))

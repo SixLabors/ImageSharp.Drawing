@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             using (var image = new Image<Rgba32>(800, 800))
             {
                 image.Mutate(x => x.DrawBeziers(
-                    Rgba32.HotPink,
+                    Color.HotPink,
                     10,
                     new Vector2(10, 500),
                     new Vector2(30, 10),

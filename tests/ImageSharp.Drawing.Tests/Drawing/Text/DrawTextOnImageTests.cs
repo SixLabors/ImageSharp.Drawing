@@ -75,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 Font font = CreateFont("OpenSans-Regular.ttf", 39);
                 string text = new string('a', 10000); // exception
                                                       // string text = "Hello"; // no exception
-                Rgba32 color = Rgba32.Black;
+                Rgba32 color = Color.Black;
                 var point = new PointF(100, 100);
 
                 img.Mutate(ctx => ctx.DrawText(text, font, color, point));

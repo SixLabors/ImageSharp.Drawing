@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             using (var image = new Image<Rgba32>(800, 800))
             {
                 image.Mutate(x => x.FillPolygon(
-                    Rgba32.HotPink,
+                    Color.HotPink,
                     new Vector2(10, 10),
                     new Vector2(550, 50),
                     new Vector2(200, 400)));
@@ -67,7 +67,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             using (var image = new Image<Rgba32>(800, 800))
             {
                 image.Mutate(x => x.Fill(
-                    Rgba32.HotPink,
+                    Color.HotPink,
                     this.shape));
 
                 using (var stream = new MemoryStream())

@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 new Vector2(65, 137)));
             IPath clipped = simplePath.Clip(hole1);
 
-            Rgba32 colorRgba = Rgba32.White;
+            Rgba32 colorRgba = Color.White;
             if (transparent)
             {
                 colorRgba.A = 150;
