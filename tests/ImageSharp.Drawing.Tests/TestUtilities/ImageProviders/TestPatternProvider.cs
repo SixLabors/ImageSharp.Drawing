@@ -152,9 +152,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 int bottom = pixels.Height;
                 int height = (int)Math.Ceiling(pixels.Height / 6f);
 
-                Vector4 red = Rgba32.Red.ToVector4(); // use real color so we can see har it translates in the test pattern
-                Vector4 green = Rgba32.Green.ToVector4(); // use real color so we can see har it translates in the test pattern
-                Vector4 blue = Rgba32.Blue.ToVector4(); // use real color so we can see har it translates in the test pattern
+                Vector4 red = Color.Red.ToVector4(); // use real color so we can see har it translates in the test pattern
+                Vector4 green = Color.Green.ToVector4(); // use real color so we can see har it translates in the test pattern
+                Vector4 blue = Color.Blue.ToVector4(); // use real color so we can see har it translates in the test pattern
 
                 TPixel c = default(TPixel);
 

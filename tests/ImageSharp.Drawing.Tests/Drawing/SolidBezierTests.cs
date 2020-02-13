@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System.Numerics;
@@ -48,12 +48,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new Vector2(300, 400)
             };
 
-            var color = new Rgba32(Rgba32.HotPink.R, Rgba32.HotPink.G, Rgba32.HotPink.B, 150);
+            Rgba32 color = Color.HotPink;
+            color.A = 150;
 
             using (var image = provider.GetImage() as Image<Rgba32>)
             {
-                image.Mutate(x => x.BackgroundColor(Rgba32.Blue));
-                
+                image.Mutate(x => x.BackgroundColor(Color.Blue));
                 image.Mutate(x => x.Fill(color, new Polygon(new CubicBezierLineSegment(simplePath))));
                 image.DebugSave(provider);
                 image.CompareToReferenceOutput(provider);

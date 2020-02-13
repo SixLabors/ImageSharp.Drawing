@@ -5,16 +5,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
-
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Advanced;
-using SixLabors.ImageSharp.Advanced.ParallelUtils;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
@@ -695,22 +693,45 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 Rectangle sourceRectangle = this.SourceRectangle;
                 Configuration configuration = this.Configuration;
-                ParallelHelper.IterateRowsWithTempBuffer<Vector4>(sourceRectangle, configuration,
-                    (rows, temp) =>
+
+                var operation = new RowIntervalOperation(configuration, sourceRectangle, source);
+                ParallelRowIterator.IterateRows<RowIntervalOperation, Vector4>(
+                    configuration,
+                    sourceRectangle,
+                    in operation);
+            }
+
+            private readonly struct RowIntervalOperation : IRowIntervalOperation<Vector4>
+            {
+                private readonly Configuration configuration;
+                private readonly Rectangle bounds;
+                private readonly ImageFrame<TPixel> source;
+
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public RowIntervalOperation(Configuration configuration, Rectangle bounds, ImageFrame<TPixel> source)
+                {
+                    this.configuration = configuration;
+                    this.bounds = bounds;
+                    this.source = source;
+                }
+
+                /// <inheritdoc/>
+                [MethodImpl(MethodImplOptions.AggressiveInlining)]
+                public void Invoke(in RowInterval rows, Span<Vector4> span)
+                {
+                    for (int y = rows.Min; y < rows.Max; y++)
+                    {
+                        Span<TPixel> rowSpan = this.source.GetPixelRowSpan(y).Slice(this.bounds.Left, this.bounds.Width);
+                        PixelOperations<TPixel>.Instance.ToVector4(this.configuration, rowSpan, span, PixelConversionModifiers.Scale);
+                        for (int i = 0; i < span.Length; i++)
                         {
-                            Span<Vector4> tempSpan = temp.Span;
-                            for (int y = rows.Min; y < rows.Max; y++)
-                            {
-                                Span<TPixel> rowSpan = source.GetPixelRowSpan(y).Slice(sourceRectangle.Left, sourceRectangle.Width);
-                                PixelOperations<TPixel>.Instance.ToVector4(configuration, rowSpan, tempSpan, PixelConversionModifiers.Scale);
-                                for (int i = 0; i < tempSpan.Length; i++)
-                                {
-                                    ref Vector4 v = ref tempSpan[i];
-                                    v.W = 1F;
-                                }
-                                PixelOperations<TPixel>.Instance.FromVector4Destructive(configuration, tempSpan, rowSpan, PixelConversionModifiers.Scale);
-                            }
-                        });
+                            ref Vector4 v = ref span[i];
+                            v.W = 1F;
+                        }
+
+                        PixelOperations<TPixel>.Instance.FromVector4Destructive(this.configuration, span, rowSpan, PixelConversionModifiers.Scale);
+                    }
+                }
             }
         }
     }

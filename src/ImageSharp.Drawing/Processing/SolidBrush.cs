@@ -62,7 +62,7 @@ namespace SixLabors.ImageSharp.Processing
                 TPixel color)
                 : base(configuration, options, source)
             {
-                this.Colors = source.MemoryAllocator.Allocate<TPixel>(source.Width);
+                this.Colors = configuration.MemoryAllocator.Allocate<TPixel>(source.Width);
                 this.Colors.Memory.Span.Fill(color);
             }
 
@@ -106,8 +106,8 @@ namespace SixLabors.ImageSharp.Processing
                     scanline = scanline.Slice(0, destinationRow.Length);
                 }
 
-                MemoryAllocator memoryAllocator = this.Target.MemoryAllocator;
                 Configuration configuration = this.Configuration;
+                MemoryAllocator memoryAllocator = configuration.MemoryAllocator;
 
                 if (this.Options.BlendPercentage == 1f)
                 {

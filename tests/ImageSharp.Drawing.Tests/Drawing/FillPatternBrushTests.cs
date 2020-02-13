@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -55,14 +55,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Percent10",
-                Rgba32.Blue,
-                Brushes.Percent10(Rgba32.HotPink, Rgba32.LimeGreen),
-                new[,]
+                Color.Blue,
+                Brushes.Percent10(Color.HotPink, Color.LimeGreen),
+                new Rgba32[,]
                     {
-                        { Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen }
+                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
                     });
         }
 
@@ -71,14 +71,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Percent10_Transparent",
-                Rgba32.Blue,
-                Brushes.Percent10(Rgba32.HotPink),
+                Color.Blue,
+                Brushes.Percent10(Color.HotPink),
                 new Rgba32[,]
                     {
-                        { Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue }
+                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
                     });
         }
 
@@ -87,14 +87,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Percent20",
-                Rgba32.Blue,
-                Brushes.Percent20(Rgba32.HotPink, Rgba32.LimeGreen),
+                Color.Blue,
+                Brushes.Percent20(Color.HotPink, Color.LimeGreen),
                 new Rgba32[,]
                     {
-                        { Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen },
-                        { Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen }
+                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen }
                     });
         }
 
@@ -103,14 +103,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Percent20_Transparent",
-                Rgba32.Blue,
-                Brushes.Percent20(Rgba32.HotPink),
+                Color.Blue,
+                Brushes.Percent20(Color.HotPink),
                 new Rgba32[,]
                     {
-                        { Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue },
-                        { Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue }
+                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue }
                     });
         }
 
@@ -119,14 +119,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Horizontal",
-                Rgba32.Blue,
-                Brushes.Horizontal(Rgba32.HotPink, Rgba32.LimeGreen),
+                Color.Blue,
+                Brushes.Horizontal(Color.HotPink, Color.LimeGreen),
                 new Rgba32[,]
                     {
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen }
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
                     });
         }
 
@@ -135,14 +135,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Horizontal_Transparent",
-                Rgba32.Blue,
-                Brushes.Horizontal(Rgba32.HotPink),
+                Color.Blue,
+                Brushes.Horizontal(Color.HotPink),
                 new Rgba32[,]
                     {
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue }
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
                     });
         }
 
@@ -151,14 +151,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Min",
-                Rgba32.Blue,
-                Brushes.Min(Rgba32.HotPink, Rgba32.LimeGreen),
+                Color.Blue,
+                Brushes.Min(Color.HotPink, Color.LimeGreen),
                 new Rgba32[,]
                     {
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink }
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink }
                     });
         }
 
@@ -167,14 +167,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Min_Transparent",
-                Rgba32.Blue,
-                Brushes.Min(Rgba32.HotPink),
+                Color.Blue,
+                Brushes.Min(Color.HotPink),
                 new Rgba32[,]
                     {
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink, Rgba32.HotPink },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
                     });
         }
 
@@ -183,14 +183,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Vertical",
-                Rgba32.Blue,
-                Brushes.Vertical(Rgba32.HotPink, Rgba32.LimeGreen),
+                Color.Blue,
+                Brushes.Vertical(Color.HotPink, Color.LimeGreen),
                 new Rgba32[,]
                     {
-                        { Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen }
+                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen }
                     });
         }
 
@@ -199,14 +199,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "Vertical_Transparent",
-                Rgba32.Blue,
-                Brushes.Vertical(Rgba32.HotPink),
+                Color.Blue,
+                Brushes.Vertical(Color.HotPink),
                 new Rgba32[,]
                     {
-                        { Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue }
+                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue }
                     });
         }
 
@@ -215,14 +215,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "ForwardDiagonal",
-                Rgba32.Blue,
-                Brushes.ForwardDiagonal(Rgba32.HotPink, Rgba32.LimeGreen),
+                Color.Blue,
+                Brushes.ForwardDiagonal(Color.HotPink, Color.LimeGreen),
                 new Rgba32[,]
                     {
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.HotPink },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen }
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink },
+                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
                     });
         }
 
@@ -231,14 +231,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "ForwardDiagonal_Transparent",
-                Rgba32.Blue,
-                Brushes.ForwardDiagonal(Rgba32.HotPink),
+                Color.Blue,
+                Brushes.ForwardDiagonal(Color.HotPink),
                 new Rgba32[,]
                     {
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.HotPink },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue }
+                        { Color.Blue, Color.Blue, Color.Blue, Color.HotPink },
+                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue }
                     });
         }
 
@@ -247,14 +247,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "BackwardDiagonal",
-                Rgba32.Blue,
-                Brushes.BackwardDiagonal(Rgba32.HotPink, Rgba32.LimeGreen),
+                Color.Blue,
+                Brushes.BackwardDiagonal(Color.HotPink, Color.LimeGreen),
                 new Rgba32[,]
                     {
-                        { Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.HotPink, Rgba32.LimeGreen },
-                        { Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.LimeGreen, Rgba32.HotPink }
+                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink }
                     });
         }
 
@@ -263,14 +263,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             this.Test(
                 "BackwardDiagonal_Transparent",
-                Rgba32.Blue,
-                Brushes.BackwardDiagonal(Rgba32.HotPink),
+                Color.Blue,
+                Brushes.BackwardDiagonal(Color.HotPink),
                 new Rgba32[,]
                     {
-                        { Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.HotPink, Rgba32.Blue },
-                        { Rgba32.Blue, Rgba32.Blue, Rgba32.Blue, Rgba32.HotPink }
+                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                        { Color.Blue, Color.Blue, Color.Blue, Color.HotPink }
                     });
         }
     }

@@ -40,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         {
             using (var image = new Image<Rgba32>(800, 800))
             {
-                image.Mutate(x => x.Fill(CoreBrushes.BackwardDiagonal(Rgba32.HotPink)));
+                image.Mutate(x => x.Fill(CoreBrushes.BackwardDiagonal(Color.HotPink)));
 
                 using (var stream = new MemoryStream())
                 {

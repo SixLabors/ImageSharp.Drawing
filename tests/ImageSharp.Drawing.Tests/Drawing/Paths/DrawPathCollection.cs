@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
         GraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
         Color color = Color.HotPink;
-        Pen pen = Pens.Solid(Rgba32.HotPink, 1);
+        Pen pen = Pens.Solid(Color.HotPink, 1);
         IPath path1 = new Path(new LinearLineSegment(new PointF[] {
                     new Vector2(10,10),
                     new Vector2(20,10),

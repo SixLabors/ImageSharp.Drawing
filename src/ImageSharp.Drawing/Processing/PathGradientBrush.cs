@@ -283,7 +283,7 @@ namespace SixLabors.ImageSharp.Processing
             {
                 (Edge edge, Intersection? info) closest = default;
 
-                MemoryAllocator allocator = this.Target.MemoryAllocator;
+                MemoryAllocator allocator = this.Configuration.MemoryAllocator;
                 foreach (Edge edge in this.edges)
                 {
                     Intersection? intersection = edge.FindIntersection(start, end, allocator);

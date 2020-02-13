@@ -3,9 +3,9 @@
 
 using System;
 using System.Buffers;
-
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Advanced;
-using SixLabors.ImageSharp.Advanced.ParallelUtils;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Processing.Processors.Drawing
@@ -28,25 +28,10 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
         /// <inheritdoc/>
         protected override void OnFrameApply(ImageFrame<TPixel> source)
         {
-            Rectangle sourceRectangle = this.SourceRectangle;
             Configuration configuration = this.Configuration;
-            int startX = sourceRectangle.X;
-            int endX = sourceRectangle.Right;
-            int startY = sourceRectangle.Y;
-            int endY = sourceRectangle.Bottom;
-
-            // Align start/end positions.
-            int minX = Math.Max(0, startX);
-            int maxX = Math.Min(source.Width, endX);
-            int minY = Math.Max(0, startY);
-            int maxY = Math.Min(source.Height, endY);
-
-            int width = maxX - minX;
-
-            var workingRect = Rectangle.FromLTRB(minX, minY, maxX, maxY);
-
             IBrush brush = this.definition.Brush;
             GraphicsOptions options = this.definition.Options;
+            var interest = Rectangle.Intersect(this.SourceRectangle, source.Bounds());
 
             // If there's no reason for blending, then avoid it.
             if (this.IsSolidBrushWithoutBlending(out SolidBrush solidBrush))
@@ -56,54 +41,29 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
 
                 TPixel colorPixel = solidBrush.Color.ToPixel<TPixel>();
 
-                ParallelHelper.IterateRows(
-                    workingRect,
+                var solidOperation = new SolidBrushRowIntervalOperation(interest, source, colorPixel);
+                ParallelRowIterator.IterateRows(
+                    interest,
                     parallelSettings,
-                    rows =>
-                        {
-                            for (int y = rows.Min; y < rows.Max; y++)
-                            {
-                                source.GetPixelRowSpan(y).Slice(minX, width).Fill(colorPixel);
-                            }
-                        });
+                    in solidOperation);
+
+                return;
             }
-            else
-            {
-                // Reset offset if necessary.
-                if (minX > 0)
-                {
-                    startX = 0;
-                }
 
-                if (minY > 0)
-                {
-                    startY = 0;
-                }
+            using IMemoryOwner<float> amount = configuration.MemoryAllocator.Allocate<float>(interest.Width);
+            using BrushApplicator<TPixel> applicator = brush.CreateApplicator(
+                configuration,
+                options,
+                source,
+                interest);
 
-                using (IMemoryOwner<float> amount = source.MemoryAllocator.Allocate<float>(width))
-                using (BrushApplicator<TPixel> applicator = brush.CreateApplicator(
-                    configuration,
-                    options,
-                    source,
-                    sourceRectangle))
-                {
-                    amount.Memory.Span.Fill(1F);
+            amount.Memory.Span.Fill(1F);
 
-                    ParallelHelper.IterateRows(
-                        workingRect,
-                        configuration,
-                        rows =>
-                            {
-                                for (int y = rows.Min; y < rows.Max; y++)
-                                {
-                                    int offsetY = y - startY;
-                                    int offsetX = minX - startX;
-
-                                    applicator.Apply(amount.Memory.Span, offsetX, offsetY);
-                                }
-                            });
-                }
-            }
+            var operation = new RowIntervalOperation(interest, applicator, amount.Memory);
+            ParallelRowIterator.IterateRows(
+                configuration,
+                interest,
+                in operation);
         }
 
         private bool IsSolidBrushWithoutBlending(out SolidBrush solidBrush)
@@ -116,6 +76,58 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
             }
 
             return this.definition.Options.IsOpaqueColorWithoutBlending(solidBrush.Color);
+        }
+
+        private readonly struct SolidBrushRowIntervalOperation : IRowIntervalOperation
+        {
+            private readonly Rectangle bounds;
+            private readonly ImageFrame<TPixel> source;
+            private readonly TPixel color;
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public SolidBrushRowIntervalOperation(Rectangle bounds, ImageFrame<TPixel> source, TPixel color)
+            {
+                this.bounds = bounds;
+                this.source = source;
+                this.color = color;
+            }
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Invoke(in RowInterval rows)
+            {
+                for (int y = rows.Min; y < rows.Max; y++)
+                {
+                    this.source.GetPixelRowSpan(y).Slice(this.bounds.X, this.bounds.Width).Fill(this.color);
+                }
+            }
+        }
+
+        private readonly struct RowIntervalOperation : IRowIntervalOperation
+        {
+            private readonly Memory<float> amount;
+            private readonly Rectangle bounds;
+            private readonly BrushApplicator<TPixel> applicator;
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public RowIntervalOperation(Rectangle bounds, BrushApplicator<TPixel> applicator, Memory<float> amount)
+            {
+                this.bounds = bounds;
+                this.applicator = applicator;
+                this.amount = amount;
+            }
+
+            /// <inheritdoc/>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public void Invoke(in RowInterval rows)
+            {
+                Span<float> amountSpan = this.amount.Span;
+                int x = this.bounds.X;
+                for (int y = rows.Min; y < rows.Max; y++)
+                {
+                    this.applicator.Apply(amountSpan, x, y);
+                }
+            }
         }
     }
 }
