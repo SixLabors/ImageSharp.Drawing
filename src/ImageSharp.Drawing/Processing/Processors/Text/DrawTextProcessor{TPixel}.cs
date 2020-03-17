@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Processing.Processors.Text
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
-        where TPixel : struct, IPixel<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         private CachingGlyphRenderer textRenderer;
 

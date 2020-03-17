@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Processing
             GraphicsOptions options,
             ImageFrame<TPixel> source,
             RectangleF region)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             if (this.image is Image<TPixel> specificImage)
             {
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Processing
         /// The image brush applicator.
         /// </summary>
         private class ImageBrushApplicator<TPixel> : BrushApplicator<TPixel>
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             private ImageFrame<TPixel> sourceFrame;
 

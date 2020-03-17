@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [WithSolidFilledImages(10, 10, 0, 0, 255, PixelTypes.Rgba32)]
         public void CompareToReferenceOutput_WhenReferenceOutputMatches_ShouldNotThrow<TPixel>(
             TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [WithSolidFilledImages(10, 10, 0, 0, 255, PixelTypes.Rgba32)]
         public void CompareToReferenceOutput_WhenReferenceOutputDoesNotMatch_Throws<TPixel>(
             TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [WithSolidFilledImages(10, 10, 0, 0, 255, PixelTypes.Rgba32)]
         public void CompareToReferenceOutput_DoNotAppendPixelType<TPixel>(
             TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Theory]
         [WithSolidFilledImages(10, 10, 0, 0, 255, PixelTypes.Rgba32)]
         public void CompareToReferenceOutput_WhenReferenceFileMissing_Throws<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -62,7 +62,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Theory]
         [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Rgba32)]
         public void CompareToOriginal_WhenSimilar<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Theory]
         [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Rgba32)]
         public void CompareToOriginal_WhenDifferent_Throws<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -92,7 +92,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Theory]
         [WithBlankImages(10, 10, PixelTypes.Rgba32)]
         public void CompareToOriginal_WhenInputIsNotFromFile_Throws<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {

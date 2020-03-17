@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     internal class FillProcessor<TPixel> : ImageProcessor<TPixel>
-        where TPixel : struct, IPixel<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly FillProcessor definition;
 
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
                 TPixel colorPixel = solidBrush.Color.ToPixel<TPixel>();
 
                 var solidOperation = new SolidBrushRowIntervalOperation(interest, source, colorPixel);
-                ParallelRowIterator.IterateRows(
+                ParallelRowIterator.IterateRowIntervals(
                     interest,
                     parallelSettings,
                     in solidOperation);
@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
             amount.Memory.Span.Fill(1F);
 
             var operation = new RowIntervalOperation(interest, applicator, amount.Memory);
-            ParallelRowIterator.IterateRows(
+            ParallelRowIterator.IterateRowIntervals(
                 configuration,
                 interest,
                 in operation);

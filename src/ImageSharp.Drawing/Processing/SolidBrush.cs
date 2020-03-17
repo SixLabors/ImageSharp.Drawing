@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Processing
             GraphicsOptions options,
             ImageFrame<TPixel> source,
             RectangleF region)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             return new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
         }
@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Processing
         /// The solid brush applicator.
         /// </summary>
         private class SolidBrushApplicator<TPixel> : BrushApplicator<TPixel>
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             private bool isDisposed;
 

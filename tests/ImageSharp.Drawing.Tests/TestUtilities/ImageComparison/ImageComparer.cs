@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
         public abstract ImageSimilarityReport<TPixelA, TPixelB> CompareImagesOrFrames<TPixelA, TPixelB>(
             ImageFrame<TPixelA> expected,
             ImageFrame<TPixelB> actual)
-            where TPixelA : struct, IPixel<TPixelA> where TPixelB : struct, IPixel<TPixelB>;
+            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>;
     }
 
     public static class ImageComparerExtensions
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             this ImageComparer comparer,
             Image<TPixelA> expected,
             Image<TPixelB> actual)
-            where TPixelA : struct, IPixel<TPixelA> where TPixelB : struct, IPixel<TPixelB>
+            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>
         {
             return comparer.CompareImagesOrFrames(expected.Frames.RootFrame, actual.Frames.RootFrame);
         }
@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             this ImageComparer comparer,
             Image<TPixelA> expected,
             Image<TPixelB> actual)
-            where TPixelA : struct, IPixel<TPixelA> where TPixelB : struct, IPixel<TPixelB>
+            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>
         {
             var result = new List<ImageSimilarityReport<TPixelA, TPixelB>>();
 
@@ -74,7 +74,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             this ImageComparer comparer,
             Image<TPixelA> expected,
             Image<TPixelB> actual)
-            where TPixelA : struct, IPixel<TPixelA> where TPixelB : struct, IPixel<TPixelB>
+            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>
         {
             if (expected.Size() != actual.Size())
             {
@@ -98,8 +98,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             Image<TPixelA> expected,
             Image<TPixelB> actual,
             Rectangle ignoredRegion)
-            where TPixelA : struct, IPixel<TPixelA>
-            where TPixelB : struct, IPixel<TPixelB>
+            where TPixelA : unmanaged, IPixel<TPixelA>
+            where TPixelB : unmanaged, IPixel<TPixelB>
         {
             if (expected.Size() != actual.Size())
             {

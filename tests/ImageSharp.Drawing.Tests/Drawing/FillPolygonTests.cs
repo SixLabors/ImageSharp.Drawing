@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1f, false)]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Bgr24, "Yellow", 1f, true)]
         public void FillPolygon_Solid<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, bool antialias)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             PointF[] simplePath =
                 {
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32)]
         public void FillPolygon_Concave<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             var points = new PointF[]
                              {
@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32)]
         public void FillPolygon_Pattern<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             PointF[] simplePath =
                 {
@@ -84,14 +84,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, TestImages.Png.Ducky)]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, TestImages.Bmp.Car)]
         public void FillPolygon_ImageBrush<TPixel>(TestImageProvider<TPixel> provider, string brushImageName)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             PointF[] simplePath =
                 {
                     new Vector2(10, 10), new Vector2(200, 50), new Vector2(50, 200)
                 };
 
-            using (Image<TPixel> brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes))
+            using (var brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes))
             {
                 var brush = new ImageBrush(brushImage);
 
@@ -105,7 +105,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithBasicTestPatternImages(250, 250, PixelTypes.Rgba32)]
         public void Fill_RectangularPolygon<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             var polygon = new RectangularPolygon(10, 10, 190, 140);
             var color = Color.White;
@@ -122,7 +122,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32, 5, 70, 0f)]
         [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32, 7, 80, -180f)]
         public void Fill_RegularPolygon<TPixel>(TestImageProvider<TPixel> provider, int vertices, float radius, float angleDeg)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             float angle = GeometryUtilities.DegreeToRadian(angleDeg);
             var polygon = new RegularPolygon(100, 100, vertices, radius, angle);
@@ -139,7 +139,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32)]
         public void Fill_EllipsePolygon<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             var polygon = new EllipsePolygon(100, 100, 80, 120);
             var color = Color.Azure;
@@ -153,7 +153,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithSolidFilledImages(60, 60, "Blue", PixelTypes.Rgba32)]
         public void Fill_IntersectionRules_OddEven<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (var img = provider.GetImage())
             {
@@ -188,7 +188,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithSolidFilledImages(60, 60, "Blue", PixelTypes.Rgba32)]
         public void Fill_IntersectionRules_Nonzero<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             Configuration.Default.MaxDegreeOfParallelism = 1;
             using (var img = provider.GetImage())

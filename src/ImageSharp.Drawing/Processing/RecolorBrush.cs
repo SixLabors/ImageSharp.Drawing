@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Processing
             GraphicsOptions options,
             ImageFrame<TPixel> source,
             RectangleF region)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             return new RecolorBrushApplicator<TPixel>(
                 configuration,
@@ -64,7 +64,7 @@ namespace SixLabors.ImageSharp.Processing
         /// The recolor brush applicator.
         /// </summary>
         private class RecolorBrushApplicator<TPixel> : BrushApplicator<TPixel>
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             /// <summary>
             /// The source color.

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     public static class VectorAssert
     {
         public static void Equal<TPixel>(TPixel expected, TPixel actual, int precision = int.MaxValue)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             Equal(expected.ToVector4(), actual.ToVector4(), precision);
         }
@@ -62,10 +62,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             public bool Equals(Vector4 x, Vector4 y)
             {
-                return Equals(x.W, y.W) &&
-                    Equals(x.X, y.X) &&
-                    Equals(x.Y, y.Y) &&
-                    Equals(x.Z, y.Z);
+                return this.Equals(x.W, y.W) &&
+                    this.Equals(x.X, y.X) &&
+                    this.Equals(x.Y, y.Y) &&
+                    this.Equals(x.Z, y.Z);
 
             }
 

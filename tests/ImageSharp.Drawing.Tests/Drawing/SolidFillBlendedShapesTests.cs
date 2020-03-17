@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             TestImageProvider<TPixel> provider,
             PixelColorBlendingMode blending,
             PixelAlphaCompositionMode composition)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> img = provider.GetImage())
             {
@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             TestImageProvider<TPixel> provider,
             PixelColorBlendingMode blending,
             PixelAlphaCompositionMode composition)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> img = provider.GetImage())
             {
@@ -92,7 +92,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             TestImageProvider<TPixel> provider,
             PixelColorBlendingMode blending,
             PixelAlphaCompositionMode composition)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> img = provider.GetImage())
             {
@@ -127,7 +127,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             TestImageProvider<TPixel> provider,
             PixelColorBlendingMode blending,
             PixelAlphaCompositionMode composition)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> dstImg = provider.GetImage(), srcImg = provider.GetImage())
             {
@@ -156,7 +156,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             PixelColorBlendingMode blending,
             PixelAlphaCompositionMode composition,
             Image<TPixel> img)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             img.DebugSave(
                 provider,
