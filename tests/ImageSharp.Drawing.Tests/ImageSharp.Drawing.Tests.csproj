@@ -12,6 +12,7 @@
     <RootNamespace>SixLabors.ImageSharp.Drawing.Tests</RootNamespace>
     <!--Used to show test project to dotnet test-->
     <IsTestProject>true</IsTestProject>
+    <SignAssembly>true</SignAssembly>
   </PropertyGroup>
 
   <ItemGroup>
