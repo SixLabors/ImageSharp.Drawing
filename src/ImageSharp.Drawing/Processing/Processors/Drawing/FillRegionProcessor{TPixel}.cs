@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Processing.Processors.Drawing
     /// <typeparam name="TPixel">The type of the color.</typeparam>
     /// <seealso cref="ImageProcessor{TPixel}" />
     internal class FillRegionProcessor<TPixel> : ImageProcessor<TPixel>
-        where TPixel : struct, IPixel<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly FillRegionProcessor definition;
 

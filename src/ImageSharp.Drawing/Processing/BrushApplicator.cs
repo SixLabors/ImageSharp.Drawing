@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Processing
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <seealso cref="IDisposable" />
     public abstract class BrushApplicator<TPixel> : IDisposable
-        where TPixel : struct, IPixel<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="BrushApplicator{TPixel}"/> class.

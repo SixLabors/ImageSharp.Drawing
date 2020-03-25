@@ -93,7 +93,7 @@ namespace SixLabors.ImageSharp.Processing
             GraphicsOptions options,
             ImageFrame<TPixel> source,
             RectangleF region)
-            where TPixel : struct, IPixel<TPixel> =>
+            where TPixel : unmanaged, IPixel<TPixel> =>
             new PatternBrushApplicator<TPixel>(
                 configuration,
                 options,
@@ -104,7 +104,7 @@ namespace SixLabors.ImageSharp.Processing
         /// The pattern brush applicator.
         /// </summary>
         private class PatternBrushApplicator<TPixel> : BrushApplicator<TPixel>
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             /// <summary>
             /// The pattern.

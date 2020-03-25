@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
         public static MagickReferenceDecoder Instance { get; } = new MagickReferenceDecoder();
 
         public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (var magickImage = new MagickImage(stream))
             {

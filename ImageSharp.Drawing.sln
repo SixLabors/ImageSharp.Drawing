@@ -327,6 +327,7 @@ Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "SharedInfrastructure", "sha
 EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{2e33181e-6e28-4662-a801-e2e7dc206029}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{68a8cc40-6aed-4e96-b524-31b1158fdeea}*SharedItemsImports = 13
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

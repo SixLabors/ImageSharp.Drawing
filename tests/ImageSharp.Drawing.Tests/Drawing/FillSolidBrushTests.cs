@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithBlankImages(33, 32, PixelTypes.Rgba32)]
         [WithBlankImages(400, 500, PixelTypes.Rgba32)]
         public void DoesNotDependOnSize<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithBlankImages(16, 16, PixelTypes.Rgba32 | PixelTypes.Argb32 | PixelTypes.RgbaVector)]
         public void DoesNotDependOnSinglePixelType<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -56,7 +56,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void WhenColorIsOpaque_OverridePreviousColor<TPixel>(
             TestImageProvider<TPixel> provider,
             string newColorName)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, 5, 7, 3, 8)]
         [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, 8, 5, 6, 4)]
         public void FillRegion<TPixel>(TestImageProvider<TPixel> provider, int x0, int y0, int w, int h)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             FormattableString testDetails = $"(x{x0},y{y0},w{w},h{h})";
             var region = new RectangleF(x0, y0, w, h);
@@ -94,7 +94,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             int y0,
             int w,
             int h)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             FormattableString testDetails = $"(x{x0},y{y0},w{w},h{h})";
             var region = new RectangleF(x0, y0, w, h);
@@ -145,7 +145,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             float alpha,
             PixelColorBlendingMode blenderMode,
             float blendPercentage)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             Color fillColor = TestUtils.GetColorByName(newColorName).WithAlpha(alpha);
 

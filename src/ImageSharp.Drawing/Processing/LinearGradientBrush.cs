@@ -55,7 +55,7 @@ namespace SixLabors.ImageSharp.Processing
         /// The linear gradient brush applicator.
         /// </summary>
         private sealed class LinearGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             private readonly PointF start;
 

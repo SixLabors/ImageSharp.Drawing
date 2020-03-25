@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1f, 5, false)]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Bgr24, "Yellow", 1f, 10, true)]
         public void DrawPolygon<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             PointF[] simplePath =
                 {
@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 };
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
 
-            GraphicsOptions options = new GraphicsOptions { Antialias = antialias };
+            var options = new GraphicsOptions { Antialias = antialias };
 
             string aa = antialias ? "" : "_NoAntialias";
             FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";

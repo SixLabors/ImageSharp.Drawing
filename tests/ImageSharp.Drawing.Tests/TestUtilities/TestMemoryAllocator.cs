@@ -21,7 +21,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Memory
         /// </summary>
         public byte DirtyValue { get; }
 
+        public int BufferCapacityInBytes { get; set; } = int.MaxValue;
+
         public IList<AllocationRequest> AllocationLog => this.allocationLog;
+
+        protected internal override int GetBufferCapacityInBytes() => this.BufferCapacityInBytes;
 
         public override IMemoryOwner<T> Allocate<T>(int length, AllocationOptions options = AllocationOptions.None)
         {

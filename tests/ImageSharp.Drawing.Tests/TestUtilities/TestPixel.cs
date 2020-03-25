@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -10,7 +10,7 @@ using Xunit.Abstractions;
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
 {
     public class TestPixel<TPixel> : IXunitSerializable
-        where TPixel : struct, IPixel<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         public TestPixel()
         {

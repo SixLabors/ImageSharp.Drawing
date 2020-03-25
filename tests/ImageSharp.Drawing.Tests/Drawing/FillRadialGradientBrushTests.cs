@@ -1,4 +1,4 @@
-﻿using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
 using Xunit;
@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithBlankImages(200, 200, PixelTypes.Rgba32)]
         public void WithEqualColorsReturnsUnicolorImage<TPixel>(
             TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             TestImageProvider<TPixel> provider,
             int centerX,
             int centerY)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             provider.VerifyOperation(
                 TolerantComparer,

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     /// </summary>
     /// <typeparam name="TPixel">The pixel format of the image</typeparam>
     public abstract partial class TestImageProvider<TPixel>
-        where TPixel : struct, IPixel<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         private class LambdaProvider : TestImageProvider<TPixel>
         {

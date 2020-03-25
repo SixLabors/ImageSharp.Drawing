@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithBlankImages(10, 10, PixelTypes.Rgba32)]
         public void WithEqualColorsReturnsUnicolorImage<TPixel>(
             TestImageProvider<TPixel> provider)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             Color red = Color.Red;
 
@@ -56,7 +56,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void AxisParallelEllipsesWithDifferentRatio<TPixel>(
             TestImageProvider<TPixel> provider,
             float ratio)
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             Color yellow = Color.Yellow;
             Color red = Color.Red;
@@ -106,7 +106,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             TestImageProvider<TPixel> provider,
             float ratio,
             float rotationInDegree)
-            where TPixel: struct, IPixel<TPixel>
+            where TPixel: unmanaged, IPixel<TPixel>
         {
             FormattableString variant = $"{ratio:F2}_AT_{rotationInDegree:00}deg";
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -82,8 +82,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
     }
 
     public class ImageSimilarityReport<TPixelA, TPixelB> : ImageSimilarityReport
-        where TPixelA : struct, IPixel<TPixelA>
-        where TPixelB : struct, IPixel<TPixelB>
+        where TPixelA : unmanaged, IPixel<TPixelA>
+        where TPixelB : unmanaged, IPixel<TPixelB>
     {
         public ImageSimilarityReport(
             ImageFrame<TPixelA> expectedImage,

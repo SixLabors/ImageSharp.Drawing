@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Processing
 
         /// <inheritdoc />
         private sealed class RadialGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
-            where TPixel : struct, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             private readonly PointF center;
 

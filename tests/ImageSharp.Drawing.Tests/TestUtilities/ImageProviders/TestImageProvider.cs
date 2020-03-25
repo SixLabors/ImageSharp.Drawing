@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     /// </summary>
     /// <typeparam name="TPixel">The pixel format of the image</typeparam>
     public abstract partial class TestImageProvider<TPixel> : ITestImageProvider
-        where TPixel : struct, IPixel<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         public PixelTypes PixelType { get; private set; } = typeof(TPixel).GetPixelType();
 
