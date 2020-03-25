@@ -17,10 +17,6 @@
     <PackageReference Include="SixLabors.ImageSharp" />
   </ItemGroup>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="SixLabors.ImageSharp.Tests" />
-  </ItemGroup>
-
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 
 </Project>
