@@ -1,10 +1,11 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.Fonts;
-using SixLabors.ImageSharp.Processing.Processors.Text;
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
+using SixLabors.ImageSharp.Processing;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Adds extensions that allow the drawing of text to the <see cref="Image{TPixel}"/> type.
@@ -12,7 +13,7 @@ namespace SixLabors.ImageSharp.Processing
     public static class DrawTextExtensions
     {
         /// <summary>
-        /// Draws the text onto the the image filled via the brush.
+        /// Draws the text onto the image filled via the brush.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="text">The text.</param>
@@ -31,7 +32,7 @@ namespace SixLabors.ImageSharp.Processing
             source.DrawText(new TextGraphicsOptions(), text, font, color, location);
 
         /// <summary>
-        /// Draws the text onto the the image filled via the brush.
+        /// Draws the text onto the image filled via the brush.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
@@ -52,7 +53,7 @@ namespace SixLabors.ImageSharp.Processing
             source.DrawText(options, text, font, Brushes.Solid(color), null, location);
 
         /// <summary>
-        /// Draws the text onto the the image filled via the brush.
+        /// Draws the text onto the image filled via the brush.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="text">The text.</param>
@@ -71,7 +72,7 @@ namespace SixLabors.ImageSharp.Processing
             source.DrawText(new TextGraphicsOptions(), text, font, brush, location);
 
         /// <summary>
-        /// Draws the text onto the the image filled via the brush.
+        /// Draws the text onto the image filled via the brush.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
@@ -92,7 +93,7 @@ namespace SixLabors.ImageSharp.Processing
             source.DrawText(options, text, font, brush, null, location);
 
         /// <summary>
-        /// Draws the text onto the the image outlined via the pen.
+        /// Draws the text onto the image outlined via the pen.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="text">The text.</param>
@@ -111,7 +112,7 @@ namespace SixLabors.ImageSharp.Processing
             source.DrawText(new TextGraphicsOptions(), text, font, pen, location);
 
         /// <summary>
-        /// Draws the text onto the the image outlined via the pen.
+        /// Draws the text onto the image outlined via the pen.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
@@ -132,7 +133,7 @@ namespace SixLabors.ImageSharp.Processing
             source.DrawText(options, text, font, null, pen, location);
 
         /// <summary>
-        /// Draws the text onto the the image filled via the brush then outlined via the pen.
+        /// Draws the text onto the image filled via the brush then outlined via the pen.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="text">The text.</param>
@@ -153,7 +154,7 @@ namespace SixLabors.ImageSharp.Processing
             source.DrawText(new TextGraphicsOptions(), text, font, brush, pen, location);
 
         /// <summary>
-        /// Draws the text using the default resolution of <value>72dpi</value> onto the the image filled via the brush then outlined via the pen.
+        /// Draws the text using the default resolution of <value>72dpi</value> onto the image filled via the brush then outlined via the pen.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>

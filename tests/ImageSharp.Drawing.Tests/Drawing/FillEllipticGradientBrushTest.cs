@@ -10,6 +10,7 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
+    using SixLabors.ImageSharp.Drawing.Processing;
     using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 
     [GroupOutput("Drawing/GradientBrushes")]
@@ -106,7 +107,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             TestImageProvider<TPixel> provider,
             float ratio,
             float rotationInDegree)
-            where TPixel: unmanaged, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             FormattableString variant = $"{ratio:F2}_AT_{rotationInDegree:00}deg";
 

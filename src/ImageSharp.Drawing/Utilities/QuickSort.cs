@@ -4,7 +4,7 @@
 using System;
 using System.Runtime.CompilerServices;
 
-namespace SixLabors.ImageSharp.Utils
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Optimized quick sort implementation for Span{float} input

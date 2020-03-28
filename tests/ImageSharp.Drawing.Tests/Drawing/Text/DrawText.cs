@@ -3,8 +3,8 @@
 
 using System.Numerics;
 using SixLabors.Fonts;
-using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Processing.Processors.Text;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
 using Xunit;
 

@@ -6,21 +6,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
     using System;
     using System.Linq;
 
-    using SixLabors.ImageSharp.Utils;
-
     using Xunit;
 
     public class QuickSortTests
     {
-        public static readonly TheoryData<float[]> Data = new TheoryData<float[]>
-                                                              {
-                                                                  new float[]{ 3, 2, 1 },
-                                                                  new float[0],
-                                                                  new float[] { 42},
-                                                                  new float[] { 1, 2},
-                                                                  new float[] { 2, 1},
-                                                                  new float[] { 5, 1, 2, 3, 0}
-                                                              };
+        public static readonly TheoryData<float[]> Data =
+            new TheoryData<float[]>
+            {
+                new float[]{ 3, 2, 1 },
+                new float[0],
+                new float[] { 42},
+                new float[] { 1, 2},
+                new float[] { 2, 1},
+                new float[] { 5, 1, 2, 3, 0}
+            };
 
         [Theory]
         [MemberData(nameof(Data))]

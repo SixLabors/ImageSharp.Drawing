@@ -3,7 +3,7 @@
 
 using System;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Interface representing the pattern and size of the stroke to apply with a Pen.

@@ -7,6 +7,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Numerics;
 using BenchmarkDotNet.Attributes;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SDPointF = System.Drawing.PointF;

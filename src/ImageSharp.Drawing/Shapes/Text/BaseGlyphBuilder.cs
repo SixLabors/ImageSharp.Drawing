@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.Fonts;
 
-namespace SixLabors.ImageSharp.Text
+namespace SixLabors.ImageSharp.Drawing.Text
 {
     /// <summary>
     /// rendering surface that Fonts can use to generate Shapes.

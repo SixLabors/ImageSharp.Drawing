@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// A aggregate of <see cref="ILineSegment"/>s making a single logical path
@@ -189,7 +189,7 @@ namespace SixLabors.ImageSharp
         }
 
         /// <summary>
-        /// Calculates the the point a certain distance a path.
+        /// Calculates the point a certain distance a path.
         /// </summary>
         /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
         /// <returns>

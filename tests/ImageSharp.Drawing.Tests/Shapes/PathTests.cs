@@ -4,7 +4,7 @@
 using System.Linq;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests
 {
     /// <summary>
     /// The internal path tests.

@@ -5,7 +5,7 @@ using System;
 using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Base class for Gradient brushes

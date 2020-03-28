@@ -4,7 +4,7 @@
 using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Extensions methods fpor the <see cref="GraphicsOptions"/> class.

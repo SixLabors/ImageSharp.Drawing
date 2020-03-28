@@ -7,9 +7,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp.Utils;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Internal logic for integrating linear paths.
@@ -436,7 +435,7 @@ namespace SixLabors.ImageSharp
         internal IReadOnlyList<PointF> Points() => this.points.Select(x => (PointF)x.Point).ToArray();
 
         /// <summary>
-        /// Calculates the the point a certain distance a path.
+        /// Calculates the point a certain distance a path.
         /// </summary>
         /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
         /// <returns>
@@ -616,7 +615,7 @@ namespace SixLabors.ImageSharp
             double x = ((x34 * u) - (x12 * v)) / inter;
             double y = ((y34 * u) - (y12 * v)) / inter;
 
-            Vector2 point = new Vector2((float)x, (float)y);
+            var point = new Vector2((float)x, (float)y);
 
             if (IsOnSegments(source, target, point))
             {

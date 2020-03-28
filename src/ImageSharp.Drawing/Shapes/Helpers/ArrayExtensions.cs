@@ -1,7 +1,7 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Extensions on arrays.
@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp
                 return source1;
             }
 
-            T[] target = new T[source1.Length + source2.Length];
+            var target = new T[source1.Length + source2.Length];
 
             for (int i = 0; i < source1.Length; i++)
             {

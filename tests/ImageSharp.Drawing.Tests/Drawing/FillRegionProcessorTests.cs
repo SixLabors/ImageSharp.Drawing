@@ -1,16 +1,16 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Numerics;
-
-using Moq;
 using System;
+using System.Numerics;
+using Moq;
+using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors;
 using Xunit;
-using SixLabors.ImageSharp.Processing.Processors.Drawing;
-using SixLabors.ImageSharp.Advanced;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {

@@ -15,6 +15,7 @@ using Xunit;
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
     using SixLabors.ImageSharp.Advanced;
+    using SixLabors.ImageSharp.Drawing.Processing;
     using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 
     [GroupOutput("Drawing/GradientBrushes")]

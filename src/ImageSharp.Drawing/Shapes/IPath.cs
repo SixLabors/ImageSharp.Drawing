@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Represents a logic path that can be drawn
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp
         float Length { get; }
 
         /// <summary>
-        /// Calculates the the point a certain distance along a path.
+        /// Calculates the point a certain distance along a path.
         /// </summary>
         /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
         /// <returns>

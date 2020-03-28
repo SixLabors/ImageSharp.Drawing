@@ -1,9 +1,9 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Extensions on arrays.
@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp
         /// </returns>
         public static bool Equivelent(this PointF source1, PointF source2, float threshold)
         {
-            Vector2 abs = Vector2.Abs(source1 - source2);
+            var abs = Vector2.Abs(source1 - source2);
 
             return abs.X < threshold && abs.Y < threshold;
         }
@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp
         /// </returns>
         public static bool Equivelent(this Vector2 source1, Vector2 source2, float threshold)
         {
-            Vector2 abs = Vector2.Abs(source1 - source2);
+            var abs = Vector2.Abs(source1 - source2);
 
             return abs.X < threshold && abs.Y < threshold;
         }

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using ClipperLib;
 
-namespace SixLabors.ImageSharp.PolygonClipper
+namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
     /// <summary>
     /// Library to clip polygons.

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -7,7 +7,7 @@ using System.Linq;
 using System.Numerics;
 using ClipperLib;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Path extensions to generate outlines of paths.
@@ -78,8 +78,8 @@ namespace SixLabors.ImageSharp
                 return path.GenerateOutline(width);
             }
 
-            var style = Convert(jointStyle);
-            var patternSectionCap = Convert(patternSectionCapStyle);
+            JoinType style = Convert(jointStyle);
+            EndType patternSectionCap = Convert(patternSectionCapStyle);
 
             IEnumerable<ISimplePath> paths = path.Flatten();
 
@@ -194,8 +194,8 @@ namespace SixLabors.ImageSharp
                 MiterLimit = MiterOffsetDelta
             };
 
-            var style = Convert(jointStyle);
-            var openEndCapStyle = Convert(endCapStyle);
+            JoinType style = Convert(jointStyle);
+            EndType openEndCapStyle = Convert(endCapStyle);
 
             // Pattern can be applied to the path by cutting it into segments
             IEnumerable<ISimplePath> paths = path.Flatten();

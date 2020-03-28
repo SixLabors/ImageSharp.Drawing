@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System.Collections.Generic;
-using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Drawing.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
 {
@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
                 && x.AntialiasSubpixelDepth == y.AntialiasSubpixelDepth
                 && x.BlendPercentage == y.BlendPercentage
                 && x.ColorBlendingMode == y.ColorBlendingMode
-                && x.IntersectionRule  == y.IntersectionRule;
+                && x.IntersectionRule == y.IntersectionRule;
         }
 
         public int GetHashCode(ShapeGraphicsOptions obj) => obj.GetHashCode();

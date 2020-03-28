@@ -1,10 +1,10 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
@@ -64,14 +64,14 @@ namespace SixLabors.ImageSharp
             Guard.MustBeGreaterThan(verticies, 2, nameof(verticies));
             Guard.MustBeGreaterThan(radius, 0, nameof(radius));
 
-            PointF distanceVector = new PointF(0, radius);
+            var distanceVector = new PointF(0, radius);
 
             float anglePerSegments = (float)((2 * Math.PI) / verticies);
             float current = angle;
             var points = new PointF[verticies];
             for (int i = 0; i < verticies; i++)
             {
-                PointF rotated = PointF.Transform(distanceVector, Matrix3x2.CreateRotation(current));
+                var rotated = PointF.Transform(distanceVector, Matrix3x2.CreateRotation(current));
 
                 points[i] = rotated + location;
 
