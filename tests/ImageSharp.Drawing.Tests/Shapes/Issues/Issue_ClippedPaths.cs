@@ -4,7 +4,7 @@
 using System.Linq;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Tests.Issues
+namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 {
     public class Issue_ClippedPaths
     {

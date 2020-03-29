@@ -4,7 +4,7 @@
 using System;
 using System.Buffers;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// A mapping between a <see cref="IPath"/> and a region.

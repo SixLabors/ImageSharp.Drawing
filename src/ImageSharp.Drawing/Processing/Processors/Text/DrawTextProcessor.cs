@@ -2,11 +2,11 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing.Processors;
 
-namespace SixLabors.ImageSharp.Processing.Processors.Text
+namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 {
     /// <summary>
     /// Defines a processor to draw text on an <see cref="Image"/>.

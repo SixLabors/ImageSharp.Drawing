@@ -1,10 +1,10 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp
                     distance = distanceVectorInner;
                 }
 
-                Vector2 rotated = Vector2.Transform(distance, Matrix3x2.CreateRotation(current));
+                var rotated = Vector2.Transform(distance, Matrix3x2.CreateRotation(current));
 
                 points[i] = rotated + location;
 

@@ -5,11 +5,11 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using BenchmarkDotNet.Attributes;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-
+using CoreBrushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using SDRectangle = System.Drawing.Rectangle;
-using CoreBrushes = SixLabors.ImageSharp.Processing.Brushes;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {

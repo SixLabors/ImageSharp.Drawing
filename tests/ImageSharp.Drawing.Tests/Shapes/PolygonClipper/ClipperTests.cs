@@ -4,10 +4,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.ImageSharp.PolygonClipper;
+using SixLabors.ImageSharp.Drawing.PolygonClipper;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Tests.PolygonClipper
+namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
 {
     public class ClipperTests
     {

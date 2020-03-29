@@ -5,7 +5,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     internal static class InternalPathExtensions
     {

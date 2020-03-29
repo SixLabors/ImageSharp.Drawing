@@ -2,8 +2,9 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using SixLabors.ImageSharp.Processing;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Adds extensions that allow the filling of polygons with various brushes to the <see cref="Image{TPixel}"/> type.

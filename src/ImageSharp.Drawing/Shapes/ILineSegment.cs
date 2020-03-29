@@ -4,7 +4,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Represents a simple path segment

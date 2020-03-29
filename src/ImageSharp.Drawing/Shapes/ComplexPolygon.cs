@@ -5,9 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.ImageSharp.Utils;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
@@ -298,7 +297,7 @@ namespace SixLabors.ImageSharp
         }
 
         /// <summary>
-        /// Calculates the the point a certain distance a path.
+        /// Calculates the point a certain distance a path.
         /// </summary>
         /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
         /// <returns>

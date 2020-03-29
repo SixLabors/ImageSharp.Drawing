@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Allow you to derivatively build shapes and paths.

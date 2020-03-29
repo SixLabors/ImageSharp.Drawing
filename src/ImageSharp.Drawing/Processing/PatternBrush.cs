@@ -8,7 +8,7 @@ using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Provides an implementation of a pattern brush for painting patterns.
@@ -155,7 +155,7 @@ namespace SixLabors.ImageSharp.Processing
 
                     for (int i = 0; i < scanline.Length; i++)
                     {
-                        amountSpan[i] = NumberUtils.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
+                        amountSpan[i] = NumberUtilities.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
 
                         int patternX = (x + i) % this.pattern.Columns;
                         overlaySpan[i] = this.pattern[patternY, patternX];

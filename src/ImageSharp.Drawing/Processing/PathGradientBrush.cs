@@ -9,7 +9,7 @@ using System.Numerics;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Provides an implementation of a brush for painting gradients between multiple color positions in 2D coordinates.

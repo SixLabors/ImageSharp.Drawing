@@ -3,7 +3,7 @@
 
 using System;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Provides a pen that can apply a pattern to a line with a set brush and thickness
@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Processing
     /// section 1 will be width long (making a square) and will be filled by the brush
     /// section 2 will be width * 2 long and will be empty
     /// section 3 will be width/2 long and will be filled
-    /// the the pattern will immediately repeat without gap.
+    /// the pattern will immediately repeat without gap.
     /// </remarks>
     public class Pen : IPen
     {

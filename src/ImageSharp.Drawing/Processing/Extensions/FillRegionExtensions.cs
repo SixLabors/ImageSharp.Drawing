@@ -1,9 +1,10 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-using SixLabors.ImageSharp.Processing.Processors.Drawing;
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+using SixLabors.ImageSharp.Processing;
 
-namespace SixLabors.ImageSharp.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Adds extensions that allow the filling of regions with various brushes to the <see cref="Image{TPixel}"/> type.

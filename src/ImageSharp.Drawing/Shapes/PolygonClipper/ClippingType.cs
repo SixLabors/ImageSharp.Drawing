@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-namespace SixLabors.ImageSharp.PolygonClipper
+namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
     /// <summary>
     /// Poly Type

@@ -5,10 +5,10 @@ using System;
 using System.Linq;
 using System.Text;
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-
 using Xunit;
 using Xunit.Abstractions;
 

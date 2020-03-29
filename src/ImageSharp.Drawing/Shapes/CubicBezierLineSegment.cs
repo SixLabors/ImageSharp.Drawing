@@ -1,11 +1,11 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Represents a line segment that contains a lists of control points that will be rendered as a cubic bezier curve
@@ -168,8 +168,8 @@ namespace SixLabors.ImageSharp
             float midT = (t0 + t1) / 2;
             Vector2 mid = CalculateBezierPoint(curveIndex, midT, controlPoints);
 
-            Vector2 leftDirection = Vector2.Normalize(left - mid);
-            Vector2 rightDirection = Vector2.Normalize(right - mid);
+            var leftDirection = Vector2.Normalize(left - mid);
+            var rightDirection = Vector2.Normalize(right - mid);
 
             if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
             {

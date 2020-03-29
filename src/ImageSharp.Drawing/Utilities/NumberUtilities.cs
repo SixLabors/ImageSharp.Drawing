@@ -3,12 +3,12 @@
 
 using System.Runtime.CompilerServices;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Utility methods for numeric primitives.
     /// </summary>
-    internal static class NumberUtils
+    internal static class NumberUtilities
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float ClampFloat(float value, float min, float max)

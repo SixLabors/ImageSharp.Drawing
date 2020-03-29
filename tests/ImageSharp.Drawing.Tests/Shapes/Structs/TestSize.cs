@@ -4,7 +4,7 @@
 using System;
 using Xunit.Abstractions;
 
-namespace SixLabors.ImageSharp.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests
 {
     [Serializable]
     public class TestSize : IXunitSerializable

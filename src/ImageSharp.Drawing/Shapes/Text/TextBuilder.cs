@@ -1,10 +1,10 @@
-﻿// Copyright (c) Six Labors and contributors.
+// Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.Fonts;
-using SixLabors.ImageSharp.Text;
+using SixLabors.ImageSharp.Drawing.Text;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Text drawing extensions for a PathBuilder
@@ -20,9 +20,9 @@ namespace SixLabors.ImageSharp
         /// <returns>The <see cref="IPathCollection"/></returns>
         public static IPathCollection GenerateGlyphs(string text, PointF location, RendererOptions style)
         {
-            GlyphBuilder glyphBuilder = new GlyphBuilder(location);
+            var glyphBuilder = new GlyphBuilder(location);
 
-            TextRenderer renderer = new TextRenderer(glyphBuilder);
+            var renderer = new TextRenderer(glyphBuilder);
 
             renderer.RenderText(text, style);
 

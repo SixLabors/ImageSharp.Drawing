@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// A aggregate of <see cref="IPath"/>s to apply common operations to them.

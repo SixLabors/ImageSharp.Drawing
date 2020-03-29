@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -26,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 }
             }
         }
-        
+
         [Theory]
         [WithTestPatternImages(200, 200, PixelTypes.Rgba32 | PixelTypes.Bgra32)]
         public void UseBrushOfDifferentPixelType<TPixel>(TestImageProvider<TPixel> provider)
@@ -41,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 var brush = new ImageBrush(overlay);
                 background.Mutate(c => c.Fill(brush));
 
-                background.DebugSave(provider, appendSourceFileOrDescription : false);
+                background.DebugSave(provider, appendSourceFileOrDescription: false);
                 background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
             }
         }

@@ -1,7 +1,9 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
-namespace SixLabors.ImageSharp.Processing
+using SixLabors.ImageSharp.Processing;
+
+namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Adds extensions that allow the drawing of closed linear polygons to the <see cref="Image{TPixel}"/> type.

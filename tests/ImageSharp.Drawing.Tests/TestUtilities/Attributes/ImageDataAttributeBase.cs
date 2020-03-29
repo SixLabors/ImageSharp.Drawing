@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </summary>
         public Type MemberType { get; set; }
 
-        /// <summary>Returns the data to be used to test the theory.</summary>
+        /// <summary>Returns the data to be used to test theory.</summary>
         /// <param name="testMethod">The method that is being tested</param>
         /// <returns>One or more sets of theory data. Each invocation of the test method
         /// is represented by a single object array.</returns>
