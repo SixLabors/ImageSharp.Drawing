@@ -87,6 +87,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                             int startY = operation.Location.Y;
                             int startX = operation.Location.X;
                             int offsetSpan = 0;
+
+                            if (startX + buffer.Height < 0)
+                            {
+                                continue;
+                            }
+
+                            if (startX + buffer.Width < 0)
+                            {
+                                continue;
+                            }
+
                             if (startX < 0)
                             {
                                 offsetSpan = -startX;
@@ -335,7 +346,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         {
                             var start = new PointF(path.Bounds.Left - 1, subPixel);
                             var end = new PointF(path.Bounds.Right + 1, subPixel);
-                            int pointsFound = path.FindIntersections(start, end, intersectionSpan);
+                            int pointsFound = path.FindIntersections(start, end, intersectionSpan, IntersectionRule.Nonzero);
 
                             if (pointsFound == 0)
                             {

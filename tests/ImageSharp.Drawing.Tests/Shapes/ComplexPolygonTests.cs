@@ -43,6 +43,58 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         private ITestOutputHelper Output { get; }
 
         [Fact]
+        public void NonezeroFindIntersections()
+        {
+            var simplePath1 = new Polygon(new LinearLineSegment(
+                              new PointF(2, 1),
+                              new PointF(2, 5),
+                              new PointF(3, 5),
+                              new PointF(3, 1)));
+
+            var simplePath2 = new Polygon(new LinearLineSegment(
+                            new PointF(1, 2),
+                            new PointF(1, 3),
+                            new PointF(4, 3),
+                            new PointF(4, 2)));
+
+            var complex = new ComplexPolygon(simplePath1, simplePath2);
+
+            var buffer = new PointF[10];
+            var points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.Nonzero);
+
+            Assert.Equal(2, points);
+            Assert.Equal(1, buffer[0].X);
+            Assert.Equal(4, buffer[1].X);
+        }
+
+        [Fact]
+        public void OddEvenFindIntersections()
+        {
+            var simplePath1 = new Polygon(new LinearLineSegment(
+                              new PointF(2, 1),
+                              new PointF(2, 5),
+                              new PointF(3, 5),
+                              new PointF(3, 1)));
+
+            var simplePath2 = new Polygon(new LinearLineSegment(
+                            new PointF(1, 2),
+                            new PointF(1, 3),
+                            new PointF(4, 3),
+                            new PointF(4, 2)));
+
+            var complex = new ComplexPolygon(simplePath1, simplePath2);
+
+            var buffer = new PointF[10];
+            var points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.OddEven);
+
+            Assert.Equal(4, points);
+            Assert.Equal(1, buffer[0].X);
+            Assert.Equal(2, buffer[1].X);
+            Assert.Equal(3, buffer[2].X);
+            Assert.Equal(4, buffer[3].X);
+        }
+
+        [Fact]
         public void MissingIntersection()
         {
             float[] data = new float[6];

@@ -84,6 +84,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
 
         [Theory]
+        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32)]
+        public void OpenSansJWithNoneZeroShouldntExtendPastGlyphe<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            using (Image<TPixel> img = provider.GetImage())
+            {
+                Font font = CreateFont("OpenSans-Regular.ttf", 50);
+                Color color = Color.Black;
+
+                img.Mutate(ctx => ctx.DrawText(TestText, font, Color.Black, new PointF(-50, 2)));
+
+                Assert.Equal(Color.White.ToPixel<TPixel>(), img[173, 2]);
+            }
+        }
+
+        [Theory]
         [WithSolidFilledImages(200, 100, "White", PixelTypes.Rgba32, 50, 0, 0, "SixLaborsSampleAB.woff", AB)]
         [WithSolidFilledImages(900, 100, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", TestText)]
         [WithSolidFilledImages(400, 40, "White", PixelTypes.Rgba32, 20, 0, 0, "OpenSans-Regular.ttf", TestText)]
