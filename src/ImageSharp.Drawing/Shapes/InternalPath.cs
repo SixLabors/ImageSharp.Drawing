@@ -206,7 +206,6 @@ namespace SixLabors.ImageSharp.Drawing
                 }
 
                 return position;
-
             }
             finally
             {
@@ -420,7 +419,6 @@ namespace SixLabors.ImageSharp.Drawing
 
             return newpositions;
         }
-
 
         /// <summary>
         /// Determines if the specified point is inside or outside the path.

@@ -193,18 +193,18 @@ namespace SixLabors.ImageSharp.Drawing
         /// <inheritdoc />
         public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
         {
-            if (internalPaths == null)
+            if (this.internalPaths == null)
             {
-                lock (paths)
+                lock (this.paths)
                 {
-                    internalPaths = new List<InternalPath>(paths.Length);
+                    this.internalPaths = new List<InternalPath>(this.paths.Length);
 
                     foreach (var p in this.paths)
                     {
                         foreach (var s in p.Flatten())
                         {
                             var ip = new InternalPath(s.Points, s.IsClosed);
-                            internalPaths.Add(ip);
+                            this.internalPaths.Add(ip);
                         }
                     }
                 }
