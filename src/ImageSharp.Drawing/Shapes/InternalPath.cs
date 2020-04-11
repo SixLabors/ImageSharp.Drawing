@@ -248,8 +248,6 @@ namespace SixLabors.ImageSharp.Drawing
 
             PassPointData[] precaclulate = ArrayPool<PassPointData>.Shared.Rent(this.points.Length);
 
-            //Orientation[] orientations = ArrayPool<Orientation>.Shared.Rent(this.points.Length);
-            //Span<Orientation> orientationsSpan = orientations.AsSpan(0, this.points.Length);
             Span<PassPointData> precaclulateSpan = precaclulate.AsSpan(0, this.points.Length);
 
             try
