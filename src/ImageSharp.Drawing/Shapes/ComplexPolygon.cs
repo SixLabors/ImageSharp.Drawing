@@ -197,14 +197,17 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 lock (this.paths)
                 {
-                    this.internalPaths = new List<InternalPath>(this.paths.Length);
-
-                    foreach (var p in this.paths)
+                    if (this.internalPaths == null)
                     {
-                        foreach (var s in p.Flatten())
+                        this.internalPaths = new List<InternalPath>(this.paths.Length);
+
+                        foreach (var p in this.paths)
                         {
-                            var ip = new InternalPath(s.Points, s.IsClosed);
-                            this.internalPaths.Add(ip);
+                            foreach (var s in p.Flatten())
+                            {
+                                var ip = new InternalPath(s.Points, s.IsClosed);
+                                this.internalPaths.Add(ip);
+                            }
                         }
                     }
                 }
