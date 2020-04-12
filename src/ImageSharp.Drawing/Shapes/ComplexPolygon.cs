@@ -193,25 +193,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <inheritdoc />
         public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
         {
-            if (this.internalPaths == null)
-            {
-                lock (this.paths)
-                {
-                    if (this.internalPaths == null)
-                    {
-                        this.internalPaths = new List<InternalPath>(this.paths.Length);
-
-                        foreach (var p in this.paths)
-                        {
-                            foreach (var s in p.Flatten())
-                            {
-                                var ip = new InternalPath(s.Points, s.IsClosed);
-                                this.internalPaths.Add(ip);
-                            }
-                        }
-                    }
-                }
-            }
+            this.EnsureInternalPathsInitalized();
 
             int totalAdded = 0;
             Orientation[] orientations = ArrayPool<Orientation>.Shared.Rent(buffer.Length); // the largest number of intersections of any sub path of the set is the max size with need for this buffer.
@@ -248,6 +230,29 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             return totalAdded;
+        }
+
+        private void EnsureInternalPathsInitalized()
+        {
+            if (this.internalPaths == null)
+            {
+                lock (this.paths)
+                {
+                    if (this.internalPaths == null)
+                    {
+                        this.internalPaths = new List<InternalPath>(this.paths.Length);
+
+                        foreach (var p in this.paths)
+                        {
+                            foreach (var s in p.Flatten())
+                            {
+                                var ip = new InternalPath(s.Points, s.IsClosed);
+                                this.internalPaths.Add(ip);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         /// <summary>
