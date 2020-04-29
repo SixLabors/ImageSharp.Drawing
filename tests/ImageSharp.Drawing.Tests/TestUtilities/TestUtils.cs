@@ -12,6 +12,7 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
+using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -255,7 +256,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             using (Image<TPixel> image0 = provider.GetImage())
             {
-                var mmg = TestMemoryManager<TPixel>.CreateAsCopyOf(image0.GetPixelSpan());
+                Assert.True(image0.TryGetSinglePixelSpan(out Span<TPixel> imageSpan));
+                var mmg = TestMemoryManager<TPixel>.CreateAsCopyOf(imageSpan);
 
                 using (var image1 = Image.WrapMemory(mmg.Memory, image0.Width, image0.Height))
                 {

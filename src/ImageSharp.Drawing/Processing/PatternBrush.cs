@@ -142,7 +142,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             }
 
             /// <inheritdoc />
-            internal override void Apply(Span<float> scanline, int x, int y)
+            public override void Apply(Span<float> scanline, int x, int y)
             {
                 int patternY = y % this.pattern.Rows;
                 MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;

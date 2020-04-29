@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Collections.Generic;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -24,6 +25,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TextGraphicsOptions"/> class.
+        /// </summary>
+        /// <param name="source">The source to clone from.</param>
+        public TextGraphicsOptions(GraphicsOptions source)
+        {
+            this.AlphaCompositionMode = source.AlphaCompositionMode;
+            this.Antialias = source.Antialias;
+            this.AntialiasSubpixelDepth = source.AntialiasSubpixelDepth;
+            this.BlendPercentage = source.BlendPercentage;
+            this.ColorBlendingMode = source.ColorBlendingMode;
+        }
+
         private TextGraphicsOptions(TextGraphicsOptions source)
         {
             this.AlphaCompositionMode = source.AlphaCompositionMode;
@@ -32,12 +46,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this.ApplyKerning = source.ApplyKerning;
             this.BlendPercentage = source.BlendPercentage;
             this.ColorBlendingMode = source.ColorBlendingMode;
+
             this.DpiX = source.DpiX;
             this.DpiY = source.DpiY;
             this.HorizontalAlignment = source.HorizontalAlignment;
             this.TabWidth = source.TabWidth;
             this.WrapTextWidth = source.WrapTextWidth;
             this.VerticalAlignment = source.VerticalAlignment;
+            this.FallbackFonts.AddRange(source.FallbackFonts);
         }
 
         /// <summary>
@@ -172,6 +188,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Defaults to <see cref="VerticalAlignment.Top"/>.
         /// </summary>
         public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Top;
+
+        /// <summary>
+        /// Gets the list of fallback font families to apply to the text drawing operation.
+        /// Defaults to <see cref="VerticalAlignment.Top"/>.
+        /// </summary>
+        public List<FontFamily> FallbackFonts { get; } = new List<FontFamily>();
+
+        /// <summary>
+        /// Gets or sets a value indicating whether we should render color(emoji) fonts.
+        /// Defaults to true.
+        /// </summary>
+        public bool RenderColorFonts { get; set; } = true;
 
         /// <summary>
         /// Performs an implicit conversion from <see cref="GraphicsOptions"/> to <see cref="TextGraphicsOptions"/>.

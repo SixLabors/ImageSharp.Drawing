@@ -19,6 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             using (Image<TPixel> image = provider.GetImage())
             {
+                image.DebugSave(provider);
                 image.CompareToReferenceOutput(provider);
             }
         }

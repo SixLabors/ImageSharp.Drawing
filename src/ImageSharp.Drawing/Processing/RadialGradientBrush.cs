@@ -93,7 +93,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 return distance / this.radius;
             }
 
-            internal override void Apply(Span<float> scanline, int x, int y)
+            public override void Apply(Span<float> scanline, int x, int y)
             {
                 // TODO: each row is symmetric across center, so we can calculate half of it and mirror it to improve performance.
                 base.Apply(scanline, x, y);

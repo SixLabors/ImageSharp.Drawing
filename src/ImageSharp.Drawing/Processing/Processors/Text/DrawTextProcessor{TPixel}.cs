@@ -52,10 +52,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 TabWidth = this.Options.TabWidth,
                 WrappingWidth = this.Options.WrapTextWidth,
                 HorizontalAlignment = this.Options.HorizontalAlignment,
-                VerticalAlignment = this.Options.VerticalAlignment
+                VerticalAlignment = this.Options.VerticalAlignment,
+                FallbackFontFamilies = this.Options.FallbackFonts,
+                ColorFontSupport = this.definition.Options.RenderColorFonts ? ColorFontSupport.MicrosoftColrFormat : ColorFontSupport.None,
             };
 
             this.textRenderer = new CachingGlyphRenderer(this.Configuration.MemoryAllocator, this.Text.Length, this.Pen, this.Brush != null);
+
             this.textRenderer.Options = (GraphicsOptions)this.Options;
             var renderer = new TextRenderer(this.textRenderer);
             renderer.RenderText(this.Text, style);
@@ -79,10 +82,28 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 if (operations?.Count > 0)
                 {
+                    var brushes = new Dictionary<Color, BrushApplicator<TPixel>>();
+                    foreach (DrawingOperation operation in operations)
+                    {
+                        if (operation.Color.HasValue)
+                        {
+                            if (!brushes.TryGetValue(operation.Color.Value, out _))
+                            {
+                                brushes[operation.Color.Value] = new SolidBrush(operation.Color.Value).CreateApplicator(this.Configuration, this.textRenderer.Options, source, this.SourceRectangle);
+                            }
+                        }
+                    }
+
                     using (BrushApplicator<TPixel> app = brush.CreateApplicator(this.Configuration, this.textRenderer.Options, source, this.SourceRectangle))
                     {
                         foreach (DrawingOperation operation in operations)
                         {
+                            var currentApp = app;
+                            if (operation.Color != null)
+                            {
+                                brushes.TryGetValue(operation.Color.Value, out currentApp);
+                            }
+
                             Buffer2D<float> buffer = operation.Map;
                             int startY = operation.Location.Y;
                             int startX = operation.Location.X;
@@ -122,9 +143,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                             {
                                 int y = startY + row;
                                 Span<float> span = buffer.GetRowSpan(row).Slice(offsetSpan);
-                                app.Apply(span, startX, y);
+                                currentApp.Apply(span, startX, y);
                             }
                         }
+                    }
+
+                    foreach (var app in brushes.Values)
+                    {
+                        app.Dispose();
                     }
                 }
             }
@@ -135,9 +161,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             public Buffer2D<float> Map { get; set; }
 
             public Point Location { get; set; }
+
+            public Color? Color { get; set; }
         }
 
-        private class CachingGlyphRenderer : IGlyphRenderer, IDisposable
+        private class CachingGlyphRenderer : IColorGlyphRenderer, IDisposable
         {
             // just enough accuracy to allow for 1/8 pixel differences which
             // later are accumulated while rendering, but do not grow into full pixel offsets
@@ -152,6 +180,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private (GlyphRendererParameters glyph, PointF subPixelOffset) currentGlyphRenderParams;
             private readonly int offset;
             private PointF currentPoint;
+            private Color? currentColor;
 
             private readonly Dictionary<(GlyphRendererParameters glyph, PointF subPixelOffset), GlyphRenderData>
                 glyphData = new Dictionary<(GlyphRendererParameters glyph, PointF subPixelOffset), GlyphRenderData>();
@@ -192,6 +221,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public GraphicsOptions Options { get; internal set; }
 
+            protected void SetLayerColor(Color color)
+            {
+                this.currentColor = color;
+            }
+
+            public void SetColor(GlyphColor color)
+            {
+                this.SetLayerColor(new Color(new Rgba32(color.Red, color.Green, color.Blue, color.Alpha)));
+            }
+
             public void BeginFigure()
             {
                 this.builder.StartFigure();
@@ -199,6 +238,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public bool BeginGlyph(FontRectangle bounds, GlyphRendererParameters parameters)
             {
+                this.currentColor = null;
                 this.currentRenderPosition = Point.Truncate(bounds.Location);
                 PointF subPixelOffset = bounds.Location - this.currentRenderPosition;
 
@@ -263,12 +303,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 {
                     IPath path = this.builder.Build();
 
-                    if (this.renderFill)
+                    // if we are using the fonts color layers we ignore the request to draw an outline only
+                    // cause that wont really work and instead force drawing with fill with the requested color
+                    // if color fonts disabled then this.currentColor will always be null
+                    if (this.renderFill || this.currentColor != null)
                     {
                         renderData.FillMap = this.Render(path);
+                        renderData.Color = this.currentColor;
                     }
 
-                    if (this.renderOutline)
+                    if (this.renderOutline && this.currentColor == null)
                     {
                         if (this.Pen.StrokePattern.Length == 0)
                         {
@@ -289,16 +333,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     renderData = this.glyphData[this.currentGlyphRenderParams];
                 }
 
-                if (this.renderFill)
+                if (renderData.FillMap != null)
                 {
                     this.FillOperations.Add(new DrawingOperation
                     {
                         Location = this.currentRenderPosition,
-                        Map = renderData.FillMap
+                        Map = renderData.FillMap,
+                        Color = renderData.Color
                     });
                 }
 
-                if (this.renderOutline)
+                if (renderData.OutlineMap != null)
                 {
                     this.OutlineOperations.Add(new DrawingOperation
                     {
@@ -445,6 +490,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             private struct GlyphRenderData : IDisposable
             {
+                public Color? Color;
+
                 public Buffer2D<float> FillMap;
 
                 public Buffer2D<float> OutlineMap;
