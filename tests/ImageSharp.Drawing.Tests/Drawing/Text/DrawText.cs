@@ -33,7 +33,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 null,
                 Vector2.Zero);
 
-            this.Verify<DrawTextProcessor>(0);
+            var processor = this.Verify<DrawTextProcessor>(0);
+            Assert.NotEqual(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -41,7 +42,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             this.operations.DrawText("123", this.Font, Brushes.Solid(Color.Red), null, Vector2.Zero);
 
-            this.Verify<DrawTextProcessor>(0);
+            var processor = this.Verify<DrawTextProcessor>(0);
+            Assert.Equal(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -49,7 +51,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             this.operations.DrawText(new TextGraphicsOptions { Antialias = true }, "123", this.Font, Brushes.Solid(Color.Red), Vector2.Zero);
 
-            this.Verify<DrawTextProcessor>(0);
+            var processor = this.Verify<DrawTextProcessor>(0);
+            Assert.NotEqual(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -57,7 +60,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             this.operations.DrawText("123", this.Font, Brushes.Solid(Color.Red), Vector2.Zero);
 
-            this.Verify<DrawTextProcessor>(0);
+            var processor = this.Verify<DrawTextProcessor>(0);
+            Assert.Equal(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -69,6 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
+            Assert.NotEqual(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -80,6 +85,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
+            Assert.Equal(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -93,7 +99,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 Pens.Dash(Color.Red, 1),
                 Vector2.Zero);
 
-            this.Verify<DrawTextProcessor>(0);
+            var processor = this.Verify<DrawTextProcessor>(0);
+            Assert.NotEqual(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -101,7 +108,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             this.operations.DrawText("123", this.Font, null, Pens.Dash(Color.Red, 1), Vector2.Zero);
 
-            this.Verify<DrawTextProcessor>(0);
+            var processor = this.Verify<DrawTextProcessor>(0);
+            Assert.Equal(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -109,7 +117,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             this.operations.DrawText(new TextGraphicsOptions { Antialias = true }, "123", this.Font, Pens.Dash(Color.Red, 1), Vector2.Zero);
 
-            this.Verify<DrawTextProcessor>(0);
+            var processor = this.Verify<DrawTextProcessor>(0);
+            Assert.NotEqual(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -125,6 +134,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.Equal(Color.Red, penBrush.Color);
             Assert.Equal(1, processor.Pen.StrokeWidth);
             Assert.Equal(PointF.Empty, processor.Location);
+            Assert.Equal(this.textOptions, processor.Options);
         }
 
         [Fact]
@@ -148,6 +158,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             var penBrush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, penBrush.Color);
             Assert.Equal(1, processor.Pen.StrokeWidth);
+            Assert.NotEqual(this.textOptions, processor.Options);
         }
     }
 }
