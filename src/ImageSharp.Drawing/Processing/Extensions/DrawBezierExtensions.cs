@@ -11,6 +11,34 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public static class DrawBezierExtensions
     {
         /// <summary>
+        /// Draws the provided points as an open Bezier path with the supplied pen
+        /// </summary>
+        /// <param name="source">The image this method extends.</param>
+        /// <param name="options">The options.</param>
+        /// <param name="pen">The pen.</param>
+        /// <param name="points">The points.</param>
+        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        public static IImageProcessingContext DrawBeziers(
+            this IImageProcessingContext source,
+            ShapeGraphicsOptions options,
+            IPen pen,
+            params PointF[] points) =>
+            source.Draw(options, pen, new Path(new CubicBezierLineSegment(points)));
+
+        /// <summary>
+        /// Draws the provided points as an open Bezier path with the supplied pen
+        /// </summary>
+        /// <param name="source">The image this method extends.</param>
+        /// <param name="pen">The pen.</param>
+        /// <param name="points">The points.</param>
+        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        public static IImageProcessingContext DrawBeziers(
+            this IImageProcessingContext source,
+            IPen pen,
+            params PointF[] points) =>
+            source.Draw(pen, new Path(new CubicBezierLineSegment(points)));
+
+        /// <summary>
         /// Draws the provided points as an open Bezier path at the provided thickness with the supplied brush
         /// </summary>
         /// <param name="source">The image this method extends.</param>
@@ -73,33 +101,5 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             float thickness,
             params PointF[] points) =>
             source.DrawBeziers(options, new SolidBrush(color), thickness, points);
-
-        /// <summary>
-        /// Draws the provided points as an open Bezier path with the supplied pen
-        /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="options">The options.</param>
-        /// <param name="pen">The pen.</param>
-        /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static IImageProcessingContext DrawBeziers(
-            this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
-            IPen pen,
-            params PointF[] points) =>
-            source.Draw(options, pen, new Path(new CubicBezierLineSegment(points)));
-
-        /// <summary>
-        /// Draws the provided points as an open Bezier path with the supplied pen
-        /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="pen">The pen.</param>
-        /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static IImageProcessingContext DrawBeziers(
-            this IImageProcessingContext source,
-            IPen pen,
-            params PointF[] points) =>
-            source.Draw(pen, new Path(new CubicBezierLineSegment(points)));
     }
 }

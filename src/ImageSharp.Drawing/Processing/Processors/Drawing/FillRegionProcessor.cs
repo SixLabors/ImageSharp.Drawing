@@ -22,8 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         {
             this.Region = region;
             this.Brush = brush;
-            this.ShapeOptions = options;
-            this.Options = (GraphicsOptions)options;
+            this.Options = options;
         }
 
         /// <summary>
@@ -39,12 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <summary>
         /// Gets the <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.
         /// </summary>
-        public ShapeGraphicsOptions ShapeOptions { get; }
-
-        /// <summary>
-        /// Gets the <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.
-        /// </summary>
-        public GraphicsOptions Options { get; }
+        public ShapeGraphicsOptions Options { get; }
 
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)

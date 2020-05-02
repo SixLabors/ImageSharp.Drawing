@@ -11,29 +11,32 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
-    public class DrawPolygon : BaseImageOperationsExtensionTest
+    public class DrawBezier : BaseImageOperationsExtensionTest
     {
         IPen pen = Pens.Solid(Color.HotPink, 2);
 
-        PointF[] points = new[] {
+        PointF[] points = new PointF[]{
             new PointF(10, 10),
-            new PointF(10, 20),
             new PointF(20, 20),
-            new PointF(25, 25),
-            new PointF(25, 10),
-        };
+            new PointF(20, 50),
+            new PointF(50, 10)
+            };
 
         private void VerifyPoints(PointF[] expectedPoints, IPath path)
         {
+            var innerPath = Assert.IsType<Path>(path);
+            var segment = Assert.Single(innerPath.LineSegments);
+            var bezierSegment = Assert.IsType<CubicBezierLineSegment>(segment);
+            Assert.Equal(expectedPoints, bezierSegment.ControlPoints.ToArray());
+
             var simplePath = Assert.Single(path.Flatten());
-            Assert.True(simplePath.IsClosed);
-            Assert.Equal(expectedPoints, simplePath.Points.ToArray());
+            Assert.False(simplePath.IsClosed);
         }
 
         [Fact]
         public void Pen()
         {
-            this.operations.DrawPolygon(new ShapeGraphicsOptions(), this.pen, this.points);
+            this.operations.DrawBeziers(new ShapeGraphicsOptions(), this.pen, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -45,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void PenDefaultOptions()
         {
-            this.operations.DrawPolygon(this.pen, this.points);
+            this.operations.DrawBeziers(this.pen, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -57,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void BrushAndThickness()
         {
-            this.operations.DrawPolygon(new ShapeGraphicsOptions(), this.pen.StrokeFill, 10, this.points);
+            this.operations.DrawBeziers(new ShapeGraphicsOptions(), this.pen.StrokeFill, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -70,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void BrushAndThicknessDefaultOptions()
         {
-            this.operations.DrawPolygon(this.pen.StrokeFill, 10, this.points);
+            this.operations.DrawBeziers(this.pen.StrokeFill, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -83,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorAndThickness()
         {
-            this.operations.DrawPolygon(new ShapeGraphicsOptions(), Color.Red, 10, this.points);
+            this.operations.DrawBeziers(new ShapeGraphicsOptions(), Color.Red, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -97,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorAndThicknessDefaultOptions()
         {
-            this.operations.DrawPolygon(Color.Red, 10, this.points);
+            this.operations.DrawBeziers(Color.Red, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 

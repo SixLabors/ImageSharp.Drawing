@@ -58,6 +58,14 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
+        /// Gets the control points.
+        /// </summary>
+        /// <value>
+        /// The control points.
+        /// </value>
+        public IReadOnlyList<PointF> ControlPoints => this.controlPoints;
+
+        /// <summary>
         /// Gets the end point.
         /// </summary>
         /// <value>

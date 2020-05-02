@@ -30,11 +30,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         protected override void OnFrameApply(ImageFrame<TPixel> source)
         {
             Configuration configuration = this.Configuration;
-            GraphicsOptions options = this.definition.Options;
-            ShapeGraphicsOptions shapeOptions = this.definition.ShapeOptions;
+            ShapeGraphicsOptions shapeOptions = this.definition.Options;
+            GraphicsOptions forApplicator = (GraphicsOptions)shapeOptions;
             IBrush brush = this.definition.Brush;
             Region region = this.definition.Region;
             Rectangle rect = region.Bounds;
+
+            bool isSolidBrushWithoutBlending = IsSolidBrushWithoutBlending(forApplicator, this.definition.Brush, out SolidBrush solidBrush);
+            TPixel solidBrushColor = isSolidBrushWithoutBlending ? solidBrush.Color.ToPixel<TPixel>() : default;
 
             // Align start/end positions.
             int minX = Math.Max(0, rect.Left);
@@ -59,17 +62,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             // and this can cause missed fills when not using antialiasing.so we offset the pixel grid by 0.5 in the x & y direction thus causing the#
             // region to align with the pixel grid.
             float offset = 0.5f;
-            if (options.Antialias)
+            if (shapeOptions.Antialias)
             {
                 offset = 0f; // we are antialiasing skip offsetting as real antialiasing should take care of offset.
-                subpixelCount = options.AntialiasSubpixelDepth;
+                subpixelCount = shapeOptions.AntialiasSubpixelDepth;
                 if (subpixelCount < 4)
                 {
                     subpixelCount = 4;
                 }
             }
 
-            using (BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, options, source, rect))
+            using (BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, forApplicator, source, rect))
             {
                 int scanlineWidth = maxX - minX;
                 MemoryAllocator allocator = this.Configuration.MemoryAllocator;
@@ -82,9 +85,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
                     Span<float> buffer = bBuffer.Memory.Span;
                     Span<float> scanline = bScanline.Memory.Span;
-
-                    bool isSolidBrushWithoutBlending = this.IsSolidBrushWithoutBlending(out SolidBrush solidBrush);
-                    TPixel solidBrushColor = isSolidBrushWithoutBlending ? solidBrush.Color.ToPixel<TPixel>() : default;
 
                     for (int y = minY; y < maxY; y++)
                     {
@@ -143,7 +143,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
                         if (scanlineDirty)
                         {
-                            if (!options.Antialias)
+                            if (!shapeOptions.Antialias)
                             {
                                 bool hasOnes = false;
                                 bool hasZeros = false;
@@ -179,16 +179,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             }
         }
 
-        private bool IsSolidBrushWithoutBlending(out SolidBrush solidBrush)
+        private static bool IsSolidBrushWithoutBlending(GraphicsOptions options, IBrush inputBrush, out SolidBrush solidBrush)
         {
-            solidBrush = this.definition.Brush as SolidBrush;
+            solidBrush = inputBrush as SolidBrush;
 
             if (solidBrush == null)
             {
                 return false;
             }
 
-            return this.definition.Options.IsOpaqueColorWithoutBlending(solidBrush.Color);
+            return options.IsOpaqueColorWithoutBlending(solidBrush.Color);
         }
     }
 }
