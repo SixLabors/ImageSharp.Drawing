@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
@@ -12,16 +13,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class Fill : BaseImageOperationsExtensionTest
     {
+        GraphicsOptions nonDefaultOptions = new GraphicsOptions();
         IBrush brush = new SolidBrush(Color.HotPink);
 
         [Fact]
         public void Brush()
         {
-            this.operations.Fill(new GraphicsOptions(), this.brush);
+            this.operations.Fill(this.nonDefaultOptions, this.brush);
 
             FillProcessor processor = this.Verify<FillProcessor>();
 
-            Assert.NotEqual(this.options, processor.Options);
+            var expectedOptions = this.nonDefaultOptions;
+            Assert.Equal(expectedOptions, processor.Options);
+            Assert.Equal(expectedOptions.BlendPercentage, processor.Options.BlendPercentage);
+            Assert.Equal(expectedOptions.AlphaCompositionMode, processor.Options.AlphaCompositionMode);
+            Assert.Equal(expectedOptions.ColorBlendingMode, processor.Options.ColorBlendingMode);
+
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -32,18 +39,29 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             FillProcessor processor = this.Verify<FillProcessor>();
 
-            Assert.Equal(this.options, processor.Options);
+            var expectedOptions = this.options;
+            Assert.Equal(expectedOptions, processor.Options);
+            Assert.Equal(expectedOptions.BlendPercentage, processor.Options.BlendPercentage);
+            Assert.Equal(expectedOptions.AlphaCompositionMode, processor.Options.AlphaCompositionMode);
+            Assert.Equal(expectedOptions.ColorBlendingMode, processor.Options.ColorBlendingMode);
+
             Assert.Equal(this.brush, processor.Brush);
         }
 
         [Fact]
         public void ColorSet()
         {
-            this.operations.Fill(new GraphicsOptions(), Color.Red);
+            this.operations.Fill(this.nonDefaultOptions, Color.Red);
 
             FillProcessor processor = this.Verify<FillProcessor>();
 
-            Assert.NotEqual(this.options, processor.Options);
+
+            var expectedOptions = this.nonDefaultOptions;
+            Assert.Equal(expectedOptions, processor.Options);
+            Assert.Equal(expectedOptions.BlendPercentage, processor.Options.BlendPercentage);
+            Assert.Equal(expectedOptions.AlphaCompositionMode, processor.Options.AlphaCompositionMode);
+            Assert.Equal(expectedOptions.ColorBlendingMode, processor.Options.ColorBlendingMode);
+
             var solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, solidBrush.Color);
         }
@@ -55,7 +73,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             FillProcessor processor = this.Verify<FillProcessor>();
 
-            Assert.Equal(this.options, processor.Options);
+            var expectedOptions = this.options;
+            Assert.Equal(expectedOptions, processor.Options);
+            Assert.Equal(expectedOptions.BlendPercentage, processor.Options.BlendPercentage);
+            Assert.Equal(expectedOptions.AlphaCompositionMode, processor.Options.AlphaCompositionMode);
+            Assert.Equal(expectedOptions.ColorBlendingMode, processor.Options.ColorBlendingMode);
+
             var solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, solidBrush.Color);
         }

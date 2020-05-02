@@ -25,7 +25,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 
         public BaseImageOperationsExtensionTest()
         {
-            this.options = new GraphicsOptions { Antialias = false };
+            this.options = new GraphicsOptions
+            {
+                AntialiasSubpixelDepth = 99,
+                Antialias = false,
+                BlendPercentage = 0.9f,
+                AlphaCompositionMode = PixelAlphaCompositionMode.DestOut,
+                ColorBlendingMode = PixelColorBlendingMode.Multiply
+            };
             this.textOptions = new TextOptions
             {
                 TabWidth = 99
