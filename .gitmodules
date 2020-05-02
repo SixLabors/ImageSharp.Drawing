@@ -1,7 +1,3 @@
 [submodule "shared-infrastructure"]
 	path = shared-infrastructure
 	url = https://github.com/SixLabors/SharedInfrastructure
-[submodule "tests/Images/External"]
-	path = tests/Images/External
-	url = https://github.com/SixLabors/Imagesharp.Tests.Images.git
-	branch = master
