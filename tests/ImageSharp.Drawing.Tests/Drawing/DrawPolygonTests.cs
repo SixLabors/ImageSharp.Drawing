@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
 
             provider.RunValidatingProcessorTest(
-                c => c.DrawPolygon(options, color, thickness, simplePath),
+                c => c.SetGraphicsOptions(options).DrawPolygon(color, thickness, simplePath),
                 outputDetails,
                 appendSourceFileOrDescription: false);
         }

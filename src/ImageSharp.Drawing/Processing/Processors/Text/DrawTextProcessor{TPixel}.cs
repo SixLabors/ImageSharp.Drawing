@@ -46,20 +46,20 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             base.BeforeImageApply();
 
             // do everything at the image level as we are delegating the processing down to other processors
-            var style = new RendererOptions(this.Font, this.Options.DpiX, this.Options.DpiY, this.Location)
+            var style = new RendererOptions(this.Font, this.Options.TextOptions.DpiX, this.Options.TextOptions.DpiY, this.Location)
             {
-                ApplyKerning = this.Options.ApplyKerning,
-                TabWidth = this.Options.TabWidth,
-                WrappingWidth = this.Options.WrapTextWidth,
-                HorizontalAlignment = this.Options.HorizontalAlignment,
-                VerticalAlignment = this.Options.VerticalAlignment,
-                FallbackFontFamilies = this.Options.FallbackFonts,
-                ColorFontSupport = this.definition.Options.RenderColorFonts ? ColorFontSupport.MicrosoftColrFormat : ColorFontSupport.None,
+                ApplyKerning = this.Options.TextOptions.ApplyKerning,
+                TabWidth = this.Options.TextOptions.TabWidth,
+                WrappingWidth = this.Options.TextOptions.WrapTextWidth,
+                HorizontalAlignment = this.Options.TextOptions.HorizontalAlignment,
+                VerticalAlignment = this.Options.TextOptions.VerticalAlignment,
+                FallbackFontFamilies = this.Options.TextOptions.FallbackFonts,
+                ColorFontSupport = this.definition.Options.TextOptions.RenderColorFonts ? ColorFontSupport.MicrosoftColrFormat : ColorFontSupport.None,
             };
 
             this.textRenderer = new CachingGlyphRenderer(this.Configuration.MemoryAllocator, this.Text.Length, this.Pen, this.Brush != null);
 
-            this.textRenderer.Options = (GraphicsOptions)this.Options;
+            this.textRenderer.Options = this.Options.GraphicsOptions;
             var renderer = new TextRenderer(this.textRenderer);
             renderer.RenderText(this.Text, style);
         }

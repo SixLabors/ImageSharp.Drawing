@@ -8,74 +8,74 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 {
-    public class ShapeGraphicsOptionsDefaultsExtensionsTests
+    public class ShapeOptionsDefaultsExtensionsTests
     {
         [Fact]
         public void SetDefaultOptionsOnProcessingContext()
         {
-            var option = new ShapeGraphicsOptions();
+            var option = new ShapeOptions();
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            context.SetShapeGraphicsOptions(option);
+            context.SetShapeOptions(option);
 
             // sets the prop on the processing context not on the configuration
-            Assert.Equal(option, context.Properties[typeof(ShapeGraphicsOptions)]);
-            Assert.DoesNotContain(typeof(ShapeGraphicsOptions), config.Properties.Keys);
+            Assert.Equal(option, context.Properties[typeof(ShapeOptions)]);
+            Assert.DoesNotContain(typeof(ShapeOptions), config.Properties.Keys);
         }
 
         [Fact]
         public void UpdateDefaultOptionsOnProcessingContext_AlwaysNewInstance()
         {
-            var option = new ShapeGraphicsOptions()
+            var option = new ShapeOptions()
             {
-                BlendPercentage = 0.9f
+                IntersectionRule = IntersectionRule.Nonzero
             };
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
-            context.SetShapeGraphicsOptions(option);
+            context.SetShapeOptions(option);
 
-            context.SetShapeGraphicsOptions(o =>
+            context.SetShapeOptions(o =>
             {
-                Assert.Equal(0.9f, o.BlendPercentage); // has origional values
-                o.BlendPercentage = 0.4f;
+                Assert.Equal(IntersectionRule.Nonzero, o.IntersectionRule); // has origional values
+                o.IntersectionRule = IntersectionRule.OddEven;
             });
 
-            var returnedOption = context.GetShapeGraphicsOptions();
-            Assert.Equal(0.4f, returnedOption.BlendPercentage);
-            Assert.Equal(0.9f, option.BlendPercentage); // hasn't been mutated
+            var returnedOption = context.GetShapeOptions();
+            Assert.Equal(IntersectionRule.OddEven, returnedOption.IntersectionRule);
+            Assert.Equal(IntersectionRule.Nonzero, option.IntersectionRule); // hasn't been mutated
         }
 
         [Fact]
         public void SetDefaultOptionsOnConfiguration()
         {
-            var option = new ShapeGraphicsOptions();
+            var option = new ShapeOptions();
             var config = new Configuration();
 
-            config.SetShapeGraphicsOptions(option);
+            config.SetShapeOptions(option);
 
-            Assert.Equal(option, config.Properties[typeof(ShapeGraphicsOptions)]);
+            Assert.Equal(option, config.Properties[typeof(ShapeOptions)]);
         }
 
         [Fact]
         public void UpdateDefaultOptionsOnConfiguration_AlwaysNewInstance()
         {
-            var option = new ShapeGraphicsOptions()
+            var option = new ShapeOptions()
             {
-                BlendPercentage = 0.9f
+                IntersectionRule = IntersectionRule.Nonzero
             };
             var config = new Configuration();
-            config.SetShapeGraphicsOptions(option);
+            config.SetShapeOptions(option);
 
-            config.SetShapeGraphicsOptions(o =>
+            config.SetShapeOptions(o =>
             {
-                Assert.Equal(0.9f, o.BlendPercentage); // has origional values
-                o.BlendPercentage = 0.4f;
+                Assert.Equal(IntersectionRule.Nonzero, o.IntersectionRule); // has origional values
+                o.IntersectionRule = IntersectionRule.OddEven;
             });
 
-            var returnedOption = config.GetShapeGraphicsOptions();
-            Assert.Equal(0.4f, returnedOption.BlendPercentage);
-            Assert.Equal(0.9f, option.BlendPercentage); // hasn't been mutated
+            var returnedOption = config.GetShapeOptions();
+            Assert.Equal(IntersectionRule.OddEven, returnedOption.IntersectionRule);
+            Assert.Equal(IntersectionRule.Nonzero, option.IntersectionRule); // hasn't been mutated
         }
 
         [Fact]
@@ -83,11 +83,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var config = new Configuration();
 
-            var options = config.GetShapeGraphicsOptions();
+            var options = config.GetShapeOptions();
             Assert.NotNull(options);
-            config.SetShapeGraphicsOptions((ShapeGraphicsOptions)null);
+            config.SetShapeOptions((ShapeOptions)null);
 
-            var options2 = config.GetShapeGraphicsOptions();
+            var options2 = config.GetShapeOptions();
             Assert.NotNull(options2);
 
             // we set it to null should now be a new instance
@@ -99,10 +99,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var config = new Configuration();
 
-            config.Properties[typeof(ShapeGraphicsOptions)] = "wronge type";
-            var options = config.GetShapeGraphicsOptions();
+            config.Properties[typeof(ShapeOptions)] = "wronge type";
+            var options = config.GetShapeOptions();
             Assert.NotNull(options);
-            Assert.IsType<ShapeGraphicsOptions>(options);
+            Assert.IsType<ShapeOptions>(options);
         }
 
         [Fact]
@@ -110,8 +110,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var config = new Configuration();
 
-            Assert.DoesNotContain(typeof(ShapeGraphicsOptions), config.Properties.Keys);
-            var options = config.GetShapeGraphicsOptions();
+            Assert.DoesNotContain(typeof(ShapeOptions), config.Properties.Keys);
+            var options = config.GetShapeOptions();
             Assert.NotNull(options);
         }
 
@@ -120,8 +120,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var config = new Configuration();
 
-            var options = config.GetShapeGraphicsOptions();
-            var options2 = config.GetShapeGraphicsOptions();
+            var options = config.GetShapeOptions();
+            var options2 = config.GetShapeOptions();
             Assert.Equal(options, options2);
         }
 
@@ -131,7 +131,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            var ctxOptions = context.GetShapeGraphicsOptions();
+            var ctxOptions = context.GetShapeOptions();
             Assert.NotNull(ctxOptions);
         }
 
@@ -141,20 +141,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            context.SetShapeGraphicsOptions((ShapeGraphicsOptions)null);
-            var ctxOptions = context.GetShapeGraphicsOptions();
+            context.SetShapeOptions((ShapeOptions)null);
+            var ctxOptions = context.GetShapeOptions();
             Assert.NotNull(ctxOptions);
         }
 
         [Fact]
         public void GetDefaultOptionsFromProcessingContext_FallbackToConfigsInstance()
         {
-            var option = new ShapeGraphicsOptions();
+            var option = new ShapeOptions();
             var config = new Configuration();
-            config.SetShapeGraphicsOptions(option);
+            config.SetShapeOptions(option);
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            var ctxOptions = context.GetShapeGraphicsOptions();
+            var ctxOptions = context.GetShapeOptions();
             Assert.Equal(option, ctxOptions);
         }
 
@@ -163,10 +163,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
-            context.Properties[typeof(ShapeGraphicsOptions)] = "wronge type";
-            var options = context.GetShapeGraphicsOptions();
+            context.Properties[typeof(ShapeOptions)] = "wronge type";
+            var options = context.GetShapeOptions();
             Assert.NotNull(options);
-            Assert.IsType<ShapeGraphicsOptions>(options);
+            Assert.IsType<ShapeOptions>(options);
         }
     }
 }

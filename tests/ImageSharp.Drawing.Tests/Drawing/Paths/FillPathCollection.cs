@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.NotEqual(this.shapeOptions, p.Options);
+                Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.brush, p.Brush);
             });
 
@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.Equal(this.shapeOptions, p.Options);
+                Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.brush, p.Brush);
             });
 
@@ -77,7 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.NotEqual(this.shapeOptions, p.Options);
+                Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
                 var brush = Assert.IsType<SolidBrush>(p.Brush);
                 Assert.Equal(Color.Pink, brush.Color);
             });
@@ -95,7 +95,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.Equal(this.shapeOptions, p.Options);
+                Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
                 var brush = Assert.IsType<SolidBrush>(p.Brush);
                 Assert.Equal(Color.Pink, brush.Color);
             });

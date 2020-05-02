@@ -19,8 +19,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         private readonly FakeImageOperationsProvider.FakeImageOperations<Rgba32> internalOperations;
         protected readonly Rectangle rect;
         protected readonly GraphicsOptions options;
-        protected readonly TextGraphicsOptions textOptions;
-        protected readonly ShapeGraphicsOptions shapeOptions;
+        protected readonly TextOptions textOptions;
+        protected readonly ShapeOptions shapeOptions;
         private readonly Image<Rgba32> source;
 
         public Rectangle SourceBounds() => this.source.Bounds();
@@ -28,13 +28,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         public BaseImageOperationsExtensionTest()
         {
             this.options = new GraphicsOptions { Antialias = false };
-            this.textOptions = new TextGraphicsOptions { Antialias = false };
-            this.shapeOptions = new ShapeGraphicsOptions { Antialias = false };
+            this.textOptions = new TextOptions
+            {
+                TabWidth = 99
+            };
+            this.shapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.Nonzero };
             this.source = new Image<Rgba32>(91 + 324, 123 + 56);
             this.rect = new Rectangle(91, 123, 324, 56); // make this random?
             this.internalOperations = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(this.source.GetConfiguration(), this.source, false);
-            this.internalOperations.SetShapeGraphicsOptions(this.shapeOptions);
-            this.internalOperations.SetTextGraphicsOptions(this.textOptions);
+            this.internalOperations.SetShapeOptions(this.shapeOptions);
+            this.internalOperations.SetTextOptions(this.textOptions);
             this.internalOperations.SetGraphicsOptions(this.options);
             this.operations = this.internalOperations;
         }

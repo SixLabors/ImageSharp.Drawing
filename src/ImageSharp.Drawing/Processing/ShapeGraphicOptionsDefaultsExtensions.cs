@@ -17,11 +17,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="context">The image processing context to store default against.</param>
         /// <param name="optionsBuilder">The action to update instance of the default options used.</param>
         /// <returns>The passed in <paramref name="context"/> to allow chaining.</returns>
-        public static IImageProcessingContext SetShapeGraphicsOptions(this IImageProcessingContext context, Action<ShapeGraphicsOptions> optionsBuilder)
+        public static IImageProcessingContext SetShapeOptions(this IImageProcessingContext context, Action<ShapeOptions> optionsBuilder)
         {
-            var cloned = context.GetShapeGraphicsOptions().DeepClone();
+            var cloned = context.GetShapeOptions().DeepClone();
             optionsBuilder(cloned);
-            context.Properties[typeof(ShapeGraphicsOptions)] = cloned;
+            context.Properties[typeof(ShapeOptions)] = cloned;
             return context;
         }
 
@@ -30,11 +30,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="configuration">The configuration to store default against.</param>
         /// <param name="optionsBuilder">The default options to use.</param>
-        public static void SetShapeGraphicsOptions(this Configuration configuration, Action<ShapeGraphicsOptions> optionsBuilder)
+        public static void SetShapeOptions(this Configuration configuration, Action<ShapeOptions> optionsBuilder)
         {
-            var cloned = configuration.GetShapeGraphicsOptions().DeepClone();
+            var cloned = configuration.GetShapeOptions().DeepClone();
             optionsBuilder(cloned);
-            configuration.Properties[typeof(ShapeGraphicsOptions)] = cloned;
+            configuration.Properties[typeof(ShapeOptions)] = cloned;
         }
 
         /// <summary>
@@ -43,9 +43,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="context">The image processing context to store default against.</param>
         /// <param name="options">The default options to use.</param>
         /// <returns>The passed in <paramref name="context"/> to allow chaining.</returns>
-        public static IImageProcessingContext SetShapeGraphicsOptions(this IImageProcessingContext context, ShapeGraphicsOptions options)
+        public static IImageProcessingContext SetShapeOptions(this IImageProcessingContext context, ShapeOptions options)
         {
-            context.Properties[typeof(ShapeGraphicsOptions)] = options;
+            context.Properties[typeof(ShapeOptions)] = options;
             return context;
         }
 
@@ -54,9 +54,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="configuration">The configuration to store default against.</param>
         /// <param name="options">The default options to use.</param>
-        public static void SetShapeGraphicsOptions(this Configuration configuration, ShapeGraphicsOptions options)
+        public static void SetShapeOptions(this Configuration configuration, ShapeOptions options)
         {
-            configuration.Properties[typeof(ShapeGraphicsOptions)] = options;
+            configuration.Properties[typeof(ShapeOptions)] = options;
         }
 
         /// <summary>
@@ -65,13 +65,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="context">The image processing context to retrieve defaults from.</param>
         /// <returns>The globaly configued default options.</returns>
         public static ShapeGraphicsOptions GetShapeGraphicsOptions(this IImageProcessingContext context)
+            => new ShapeGraphicsOptions(context.GetGraphicsOptions(), context.GetShapeOptions());
+
+        /// <summary>
+        /// Gets the default shape processing options against the image processing context.
+        /// </summary>
+        /// <param name="context">The image processing context to retrieve defaults from.</param>
+        /// <returns>The globaly configued default options.</returns>
+        public static ShapeOptions GetShapeOptions(this IImageProcessingContext context)
         {
-            if (context.Properties.TryGetValue(typeof(ShapeGraphicsOptions), out var options) && options is ShapeGraphicsOptions go)
+            if (context.Properties.TryGetValue(typeof(ShapeOptions), out var options) && options is ShapeOptions go)
             {
                 return go;
             }
 
-            var configOptions = context.Configuration.GetShapeGraphicsOptions();
+            var configOptions = context.Configuration.GetShapeOptions();
 
             // do not cache the fall back to config into the the processing context
             // in case someone want to change the value on the config and expects it re trflow thru
@@ -83,17 +91,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="configuration">The configuration to retrieve defaults from.</param>
         /// <returns>The globaly configued default options.</returns>
-        public static ShapeGraphicsOptions GetShapeGraphicsOptions(this Configuration configuration)
+        public static ShapeOptions GetShapeOptions(this Configuration configuration)
         {
-            if (configuration.Properties.TryGetValue(typeof(ShapeGraphicsOptions), out var options) && options is ShapeGraphicsOptions go)
+            if (configuration.Properties.TryGetValue(typeof(ShapeOptions), out var options) && options is ShapeOptions go)
             {
                 return go;
             }
 
-            var configOptions = new ShapeGraphicsOptions(configuration.GetGraphicsOptions());
+            var configOptions = new ShapeOptions();
 
             // capture the fallback so the same instance will always be returned in case its mutated
-            configuration.Properties[typeof(ShapeGraphicsOptions)] = configOptions;
+            configuration.Properties[typeof(ShapeOptions)] = configOptions;
             return configOptions;
         }
     }

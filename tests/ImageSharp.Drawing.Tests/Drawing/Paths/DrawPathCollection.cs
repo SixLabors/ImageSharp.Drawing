@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.NotEqual(this.shapeOptions, p.Options);
+                Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.pen, p.Pen);
             });
 
@@ -61,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.Equal(this.shapeOptions, p.Options);
+                Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.pen, p.Pen);
             });
 
@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.NotEqual(this.shapeOptions, p.Options);
+                Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.pen.StrokeFill, p.Pen.StrokeFill);
                 Assert.Equal(10, p.Pen.StrokeWidth);
             });
@@ -96,7 +96,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.Equal(this.shapeOptions, p.Options);
+                Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.pen.StrokeFill, p.Pen.StrokeFill);
                 Assert.Equal(10, p.Pen.StrokeWidth);
             });
@@ -114,7 +114,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.NotEqual(this.shapeOptions, p.Options);
+                Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
                 var brush = Assert.IsType<SolidBrush>(p.Pen.StrokeFill);
                 Assert.Equal(Color.Pink, brush.Color);
                 Assert.Equal(10, p.Pen.StrokeWidth);
@@ -133,7 +133,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.All(processors, p =>
             {
-                Assert.Equal(this.shapeOptions, p.Options);
+                Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
                 var brush = Assert.IsType<SolidBrush>(p.Pen.StrokeFill);
                 Assert.Equal(Color.Pink, brush.Color);
                 Assert.Equal(10, p.Pen.StrokeWidth);

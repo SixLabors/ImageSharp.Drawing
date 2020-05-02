@@ -30,13 +30,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         protected override void OnFrameApply(ImageFrame<TPixel> source)
         {
             Configuration configuration = this.Configuration;
-            ShapeGraphicsOptions shapeOptions = this.definition.Options;
-            GraphicsOptions forApplicator = (GraphicsOptions)shapeOptions;
+            ShapeOptions shapeOptions = this.definition.Options.ShapeOptions;
+            GraphicsOptions graphicsOptions = this.definition.Options.GraphicsOptions;
             IBrush brush = this.definition.Brush;
             Region region = this.definition.Region;
             Rectangle rect = region.Bounds;
 
-            bool isSolidBrushWithoutBlending = IsSolidBrushWithoutBlending(forApplicator, this.definition.Brush, out SolidBrush solidBrush);
+            bool isSolidBrushWithoutBlending = IsSolidBrushWithoutBlending(graphicsOptions, this.definition.Brush, out SolidBrush solidBrush);
             TPixel solidBrushColor = isSolidBrushWithoutBlending ? solidBrush.Color.ToPixel<TPixel>() : default;
 
             // Align start/end positions.
@@ -62,17 +62,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             // and this can cause missed fills when not using antialiasing.so we offset the pixel grid by 0.5 in the x & y direction thus causing the#
             // region to align with the pixel grid.
             float offset = 0.5f;
-            if (shapeOptions.Antialias)
+            if (graphicsOptions.Antialias)
             {
                 offset = 0f; // we are antialiasing skip offsetting as real antialiasing should take care of offset.
-                subpixelCount = shapeOptions.AntialiasSubpixelDepth;
+                subpixelCount = graphicsOptions.AntialiasSubpixelDepth;
                 if (subpixelCount < 4)
                 {
                     subpixelCount = 4;
                 }
             }
 
-            using (BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, forApplicator, source, rect))
+            using (BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, graphicsOptions, source, rect))
             {
                 int scanlineWidth = maxX - minX;
                 MemoryAllocator allocator = this.Configuration.MemoryAllocator;
@@ -143,7 +143,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
                         if (scanlineDirty)
                         {
-                            if (!shapeOptions.Antialias)
+                            if (!graphicsOptions.Antialias)
                             {
                                 bool hasOnes = false;
                                 bool hasZeros = false;

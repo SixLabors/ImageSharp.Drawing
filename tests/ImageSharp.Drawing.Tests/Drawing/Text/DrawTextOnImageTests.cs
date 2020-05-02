@@ -48,13 +48,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             var textGraphicOptions = new TextGraphicsOptions
             {
-                Antialias = true,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                FallbackFonts = {
-                        emjoiFontFamily
-                    },
-                RenderColorFonts = enableColorFonts
+                TextOptions = {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FallbackFonts = {
+                            emjoiFontFamily
+                        },
+                    RenderColorFonts = enableColorFonts
+                }
             };
 
             provider.VerifyOperation(
@@ -90,9 +91,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 var center = new PointF(img.Width / 2, img.Height / 2);
                 var textGraphicOptions = new TextGraphicsOptions
                 {
-                    Antialias = true,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center
+                    TextOptions = {
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
                 };
 
                 img.Mutate(i => i.DrawText(textGraphicOptions, text, scaledFont, color, center));
@@ -187,10 +189,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             var textOptions = new TextGraphicsOptions
             {
-                Antialias = true,
-                ApplyKerning = true,
-                VerticalAlignment = VerticalAlignment.Top,
-                HorizontalAlignment = HorizontalAlignment.Left,
+                TextOptions = {
+                    ApplyKerning = true,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                }
             };
 
             var color = Color.Black;
@@ -274,8 +277,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 20);
             var textOptions = new TextGraphicsOptions
             {
-                Antialias = true,
-                WrapTextWidth = 1000
+                TextOptions = {
+                    WrapTextWidth = 1000
+                }
             };
 
             string details = fontName.Replace(" ", "");
