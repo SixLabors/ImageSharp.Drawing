@@ -92,7 +92,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             }
 
             /// <inheritdoc />
-            internal override void Apply(Span<float> scanline, int x, int y)
+            public override void Apply(Span<float> scanline, int x, int y)
             {
                 Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x);
 

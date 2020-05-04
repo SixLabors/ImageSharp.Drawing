@@ -12,80 +12,59 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class FillPath : BaseImageOperationsExtensionTest
     {
-        private static readonly ShapeGraphicsOptionsComparer graphicsOptionsComparer = new ShapeGraphicsOptionsComparer();
-
-        ShapeGraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
-        Color color = Color.HotPink;
-        SolidBrush brush = Brushes.Solid(Color.HotPink);
-        IPath path = new Path(new LinearLineSegment(new PointF[] {
-                    new Vector2(10,10),
-                    new Vector2(20,10),
-                    new Vector2(20,10),
-                    new Vector2(30,10),
-                }));
+        IBrush brush = Brushes.Solid(Color.HotPink);
+        IPath path = new Star(1, 10, 5, 23, 56);
 
         [Fact]
-        public void CorrectlySetsBrushAndPath()
+        public void Brush()
+        {
+            this.operations.Fill(new ShapeGraphicsOptions(), this.brush, this.path);
+
+            FillPathProcessor processor = this.Verify<FillPathProcessor>();
+
+            Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
+            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.brush, processor.Brush);
+        }
+
+        [Fact]
+        public void BrushDefaultOptions()
         {
             this.operations.Fill(this.brush, this.path);
-            var processor = this.Verify<FillRegionProcessor>();
 
-            Assert.Equal(new GraphicsOptions(), processor.Options, graphicsOptionsComparer);
+            FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-            ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-
-            // path is converted to a polygon before filling
-            Polygon polygon = Assert.IsType<Polygon>(region.Shape);
-            Assert.IsType<LinearLineSegment>(polygon.LineSegments[0]);
-
+            Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
+            Assert.Equal(this.path, processor.Shape);
             Assert.Equal(this.brush, processor.Brush);
         }
 
         [Fact]
-        public void CorrectlySetsBrushPathOptions()
+        public void ColorSet()
         {
-            this.operations.Fill(this.nonDefault, this.brush, this.path);
-            var processor = this.Verify<FillRegionProcessor>();
+            this.operations.Fill(new ShapeGraphicsOptions(), Color.Red, this.path);
 
-            Assert.Equal(this.nonDefault, processor.ShapeOptions, graphicsOptionsComparer);
+            FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-            ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-            Polygon polygon = Assert.IsType<Polygon>(region.Shape);
-            Assert.IsType<LinearLineSegment>(polygon.LineSegments[0]);
-
-            Assert.Equal(this.brush, processor.Brush);
+            Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
+            Assert.Equal(this.path, processor.Shape);
+            Assert.NotEqual(this.brush, processor.Brush);
+            var brush = Assert.IsType<SolidBrush>(processor.Brush);
+            Assert.Equal(Color.Red, brush.Color);
         }
 
         [Fact]
-        public void CorrectlySetsColorAndPath()
+        public void ColorAndThicknessDefaultOptions()
         {
-            this.operations.Fill(this.color, this.path);
-            var processor = this.Verify<FillRegionProcessor>();
+            this.operations.Fill(Color.Red, this.path);
 
-            Assert.Equal(new GraphicsOptions(), processor.Options, graphicsOptionsComparer);
+            FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-            ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-            Polygon polygon = Assert.IsType<Polygon>(region.Shape);
-            Assert.IsType<LinearLineSegment>(polygon.LineSegments[0]);
-
-            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
-            Assert.Equal(this.color, brush.Color);
-        }
-
-        [Fact]
-        public void CorrectlySetsColorPathAndOptions()
-        {
-            this.operations.Fill(this.nonDefault, this.color, this.path);
-            var processor = this.Verify<FillRegionProcessor>();
-
-            Assert.Equal(this.nonDefault, processor.ShapeOptions);
-
-            ShapeRegion region = Assert.IsType<ShapeRegion>(processor.Region);
-            Polygon polygon = Assert.IsType<Polygon>(region.Shape);
-            Assert.IsType<LinearLineSegment>(polygon.LineSegments[0]);
-
-            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
-            Assert.Equal(this.color, brush.Color);
+            Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
+            Assert.Equal(this.path, processor.Shape);
+            Assert.NotEqual(this.brush, processor.Brush);
+            var brush = Assert.IsType<SolidBrush>(processor.Brush);
+            Assert.Equal(Color.Red, brush.Color);
         }
     }
 }

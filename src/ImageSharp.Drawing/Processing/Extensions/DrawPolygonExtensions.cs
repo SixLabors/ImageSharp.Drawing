@@ -11,6 +11,34 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public static class DrawPolygonExtensions
     {
         /// <summary>
+        /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
+        /// </summary>
+        /// <param name="source">The image this method extends.</param>
+        /// <param name="pen">The pen.</param>
+        /// <param name="points">The points.</param>
+        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        public static IImageProcessingContext DrawPolygon(
+            this IImageProcessingContext source,
+            IPen pen,
+            params PointF[] points) =>
+            source.Draw(source.GetShapeGraphicsOptions(), pen, new Polygon(new LinearLineSegment(points)));
+
+        /// <summary>
+        /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
+        /// </summary>
+        /// <param name="source">The image this method extends.</param>
+        /// <param name="options">The options.</param>
+        /// <param name="pen">The pen.</param>
+        /// <param name="points">The points.</param>
+        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        public static IImageProcessingContext DrawPolygon(
+            this IImageProcessingContext source,
+            ShapeGraphicsOptions options,
+            IPen pen,
+            params PointF[] points) =>
+            source.Draw(options, pen, new Polygon(new LinearLineSegment(points)));
+
+        /// <summary>
         /// Draws the provided Points as a closed Linear Polygon with the provided brush at the provided thickness.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
@@ -25,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IBrush brush,
             float thickness,
             params PointF[] points) =>
-            source.Draw(options, new Pen(brush, thickness), new Polygon(new LinearLineSegment(points)));
+            source.DrawPolygon(options, new Pen(brush, thickness), points);
 
         /// <summary>
         /// Draws the provided Points as a closed Linear Polygon with the provided brush at the provided thickness.
@@ -40,7 +68,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IBrush brush,
             float thickness,
             params PointF[] points) =>
-            source.Draw(new Pen(brush, thickness), new Polygon(new LinearLineSegment(points)));
+            source.DrawPolygon(new Pen(brush, thickness), points);
 
         /// <summary>
         /// Draws the provided Points as a closed Linear Polygon with the provided brush at the provided thickness.
@@ -73,33 +101,5 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             float thickness,
             params PointF[] points) =>
             source.DrawPolygon(options, new SolidBrush(color), thickness, points);
-
-        /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
-        /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="pen">The pen.</param>
-        /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static IImageProcessingContext DrawPolygon(
-            this IImageProcessingContext source,
-            IPen pen,
-            params PointF[] points) =>
-            source.Draw(new ShapeGraphicsOptions(), pen, new Polygon(new LinearLineSegment(points)));
-
-        /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
-        /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="options">The options.</param>
-        /// <param name="pen">The pen.</param>
-        /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
-        public static IImageProcessingContext DrawPolygon(
-            this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
-            IPen pen,
-            params PointF[] points) =>
-            source.Draw(options, pen, new Polygon(new LinearLineSegment(points)));
     }
 }

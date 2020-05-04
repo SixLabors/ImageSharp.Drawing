@@ -418,7 +418,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     AlphaCompositionMode = PixelAlphaCompositionMode.SrcAtop
                 };
                 var linearGradientBrush = new LinearGradientBrush(new Point(0, 0), new Point(0, size.Height / 2), GradientRepetitionMode.Repeat, new ColorStop(0, Color.White.WithAlpha(0.5f)), new ColorStop(1, Color.White.WithAlpha(0.25f)));
-                ctx.Fill(graphicsOptions, linearGradientBrush, glossPath);
+                ctx.SetGraphicsOptions(graphicsOptions).Fill(linearGradientBrush, glossPath);
             }
 
             IPathCollection BuildGloss(int imageWidth, int imageHeight)

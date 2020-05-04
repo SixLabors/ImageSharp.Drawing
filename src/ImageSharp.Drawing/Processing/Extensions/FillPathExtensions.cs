@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -23,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ShapeGraphicsOptions options,
             IBrush brush,
             IPath path) =>
-            source.Fill(options, brush, new ShapeRegion(path));
+            source.ApplyProcessor(new FillPathProcessor(options, brush, path));
 
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
@@ -33,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="path">The path.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Fill(this IImageProcessingContext source, IBrush brush, IPath path) =>
-            source.Fill(new ShapeGraphicsOptions(), brush, new ShapeRegion(path));
+            source.Fill(source.GetShapeGraphicsOptions(), brush, path);
 
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush..

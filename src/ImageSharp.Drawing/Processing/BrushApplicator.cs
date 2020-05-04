@@ -81,7 +81,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="x">The x-position in the target pixel space that the start of the scanline data corresponds to.</param>
         /// <param name="y">The y-position in  the target pixel space that whole scanline corresponds to.</param>
         /// <remarks>scanlineBuffer will be > scanlineWidth but provide and offset in case we want to share a larger buffer across runs.</remarks>
-        internal virtual void Apply(Span<float> scanline, int x, int y)
+        public virtual void Apply(Span<float> scanline, int x, int y)
         {
             MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
 

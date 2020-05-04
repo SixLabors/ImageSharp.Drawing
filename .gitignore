@@ -220,7 +220,6 @@ artifacts/
 
 # Tests
 **/Images/ActualOutput
-**/Images/ReferenceOutput
 
 # sample output
 /samples/DrawShapesWithImageSharp/Output/**

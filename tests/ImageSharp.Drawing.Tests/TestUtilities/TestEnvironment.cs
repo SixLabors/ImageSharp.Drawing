@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         private const string ActualOutputDirectoryRelativePath = @"tests\Images\ActualOutput";
 
-        private const string ReferenceOutputDirectoryRelativePath = @"tests\Images\External\ReferenceOutput";
+        private const string ReferenceOutputDirectoryRelativePath = @"tests\Images\ReferenceOutput";
 
         private const string ToolsDirectoryRelativePath = @"tests\Images\External\tools";
 
@@ -98,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         internal static string ToolsDirectoryFullPath => GetFullPath(ToolsDirectoryRelativePath);
 
         internal static string GetReferenceOutputFileName(string actualOutputFileName) =>
-            actualOutputFileName.Replace("ActualOutput", @"External\ReferenceOutput").Replace('\\', IOPath.DirectorySeparatorChar);
+            actualOutputFileName.Replace("ActualOutput", @"ReferenceOutput").Replace('\\', IOPath.DirectorySeparatorChar);
 
         internal static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
         

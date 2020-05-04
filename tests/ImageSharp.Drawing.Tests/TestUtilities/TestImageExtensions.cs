@@ -414,9 +414,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Span<TPixel> expectedPixels)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Span<TPixel> actualPixels = image.GetPixelSpan();
+            Assert.True(image.TryGetSinglePixelSpan(out Span<TPixel> actual));
+            Assert.True(expectedPixels.Length == actual.Length, "Buffer sizes are not equal!");
 
-            CompareBuffers(expectedPixels, actualPixels);
+            for (int i = 0; i < expectedPixels.Length; i++)
+            {
+                Assert.True(expectedPixels[i].Equals(actual[i]), $"Pixels are different on position {i}!");
+            }
 
             return image;
         }
@@ -469,7 +473,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public static ImageFrame<TPixel> ComparePixelBufferTo<TPixel>(this ImageFrame<TPixel> imageFrame, TPixel expectedPixel)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Span<TPixel> actualPixels = imageFrame.GetPixelSpan();
+            Assert.True(imageFrame.TryGetSinglePixelSpan(out Span<TPixel> actualPixels));
 
             for (int i = 0; i < actualPixels.Length; i++)
             {
@@ -484,13 +488,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     Span<TPixel> expectedPixels)
                     where TPixel : unmanaged, IPixel<TPixel>
         {
-            Span<TPixel> actual = image.GetPixelSpan();
+            Assert.True(image.TryGetSinglePixelSpan(out Span<TPixel> actualPixels));
 
-            Assert.True(expectedPixels.Length == actual.Length, "Buffer sizes are not equal!");
+            Assert.True(expectedPixels.Length == actualPixels.Length, "Buffer sizes are not equal!");
 
             for (int i = 0; i < expectedPixels.Length; i++)
             {
-                Assert.True(expectedPixels[i].Equals(actual[i]), $"Pixels are different on position {i}!");
+                Assert.True(expectedPixels[i].Equals(actualPixels[i]), $"Pixels are different on position {i}!");
             }
 
             return image;

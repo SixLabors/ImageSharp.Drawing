@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             FormattableString outputDetails = $"{colorName}_A{alpha}{aa}";
 
             provider.RunValidatingProcessorTest(
-                c => c.FillPolygon(options, color, simplePath),
+                c => c.SetGraphicsOptions(options).FillPolygon(color, simplePath),
                 outputDetails,
                 appendSourceFileOrDescription: false);
         }
@@ -174,7 +174,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 img.Mutate(c => c.Fill(
                     new ShapeGraphicsOptions
                     {
-                        IntersectionRule = IntersectionRule.OddEven,
+                        ShapeOptions = { IntersectionRule = IntersectionRule.OddEven },
                     },
                     Color.HotPink,
                     poly));
@@ -208,7 +208,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 img.Mutate(c => c.Fill(
                     new ShapeGraphicsOptions
                     {
-                        IntersectionRule = IntersectionRule.Nonzero,
+                        ShapeOptions = { IntersectionRule = IntersectionRule.Nonzero },
                     },
                     Color.HotPink,
                     poly));

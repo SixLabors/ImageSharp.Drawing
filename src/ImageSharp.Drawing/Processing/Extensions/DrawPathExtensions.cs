@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -23,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ShapeGraphicsOptions options,
             IPen pen,
             IPath path) =>
-            source.Fill(options, pen.StrokeFill, new ShapePath(path, pen));
+            source.ApplyProcessor(new DrawPathProcessor(options, pen, path));
 
         /// <summary>
         /// Draws the outline of the polygon with the provided pen.
@@ -33,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="path">The path.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(this IImageProcessingContext source, IPen pen, IPath path) =>
-            source.Draw(new ShapeGraphicsOptions(), pen, path);
+            source.Draw(source.GetShapeGraphicsOptions(), pen, path);
 
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.

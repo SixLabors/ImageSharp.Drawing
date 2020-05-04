@@ -9,120 +9,76 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 {
-    public class TextGraphicsOptionsTests
+    public class TextOptionsTests
     {
-        private readonly TextGraphicsOptions newTextGraphicsOptions = new TextGraphicsOptions();
-        private readonly TextGraphicsOptions cloneTextGraphicsOptions = new TextGraphicsOptions().DeepClone();
+        private readonly TextOptions newTextOptions = new TextOptions();
+        private readonly TextOptions cloneTextOptions = new TextOptions().DeepClone();
 
         [Fact]
-        public void CloneTextGraphicsOptionsIsNotNull() => Assert.True(this.cloneTextGraphicsOptions != null);
+        public void CloneTextOptionsIsNotNull() => Assert.True(this.cloneTextOptions != null);
 
         [Fact]
-        public void DefaultTextGraphicsOptionsAntialias()
-        {
-            Assert.True(this.newTextGraphicsOptions.Antialias);
-            Assert.True(this.cloneTextGraphicsOptions.Antialias);
-        }
-
-        [Fact]
-        public void DefaultTextGraphicsOptionsAntialiasSuppixelDepth()
-        {
-            const int Expected = 16;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.AntialiasSubpixelDepth);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.AntialiasSubpixelDepth);
-        }
-
-        [Fact]
-        public void DefaultTextGraphicsOptionsBlendPercentage()
-        {
-            const float Expected = 1F;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.BlendPercentage);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.BlendPercentage);
-        }
-
-        [Fact]
-        public void DefaultTextGraphicsOptionsColorBlendingMode()
-        {
-            const PixelColorBlendingMode Expected = PixelColorBlendingMode.Normal;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.ColorBlendingMode);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.ColorBlendingMode);
-        }
-
-        [Fact]
-        public void DefaultTextGraphicsOptionsAlphaCompositionMode()
-        {
-            const PixelAlphaCompositionMode Expected = PixelAlphaCompositionMode.SrcOver;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.AlphaCompositionMode);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.AlphaCompositionMode);
-        }
-
-        [Fact]
-        public void DefaultTextGraphicsOptionsApplyKerning()
+        public void DefaultTextOptionsApplyKerning()
         {
             const bool Expected = true;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.ApplyKerning);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.ApplyKerning);
+            Assert.Equal(Expected, this.newTextOptions.ApplyKerning);
+            Assert.Equal(Expected, this.cloneTextOptions.ApplyKerning);
         }
 
         [Fact]
-        public void DefaultTextGraphicsOptionsHorizontalAlignment()
+        public void DefaultTextOptionsHorizontalAlignment()
         {
             const HorizontalAlignment Expected = HorizontalAlignment.Left;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.HorizontalAlignment);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.HorizontalAlignment);
+            Assert.Equal(Expected, this.newTextOptions.HorizontalAlignment);
+            Assert.Equal(Expected, this.cloneTextOptions.HorizontalAlignment);
         }
 
         [Fact]
-        public void DefaultTextGraphicsOptionsVerticalAlignment()
+        public void DefaultTextOptionsVerticalAlignment()
         {
             const VerticalAlignment Expected = VerticalAlignment.Top;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.VerticalAlignment);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.VerticalAlignment);
+            Assert.Equal(Expected, this.newTextOptions.VerticalAlignment);
+            Assert.Equal(Expected, this.cloneTextOptions.VerticalAlignment);
         }
 
         [Fact]
-        public void DefaultTextGraphicsOptionsDpiX()
+        public void DefaultTextOptionsDpiX()
         {
             const float Expected = 72F;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.DpiX);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.DpiX);
+            Assert.Equal(Expected, this.newTextOptions.DpiX);
+            Assert.Equal(Expected, this.cloneTextOptions.DpiX);
         }
 
         [Fact]
-        public void DefaultTextGraphicsOptionsDpiY()
+        public void DefaultTextOptionsDpiY()
         {
             const float Expected = 72F;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.DpiY);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.DpiY);
+            Assert.Equal(Expected, this.newTextOptions.DpiY);
+            Assert.Equal(Expected, this.cloneTextOptions.DpiY);
         }
 
         [Fact]
-        public void DefaultTextGraphicsOptionsTabWidth()
+        public void DefaultTextOptionsTabWidth()
         {
             const float Expected = 4F;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.TabWidth);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.TabWidth);
+            Assert.Equal(Expected, this.newTextOptions.TabWidth);
+            Assert.Equal(Expected, this.cloneTextOptions.TabWidth);
         }
 
         [Fact]
-        public void DefaultTextGraphicsOptionsWrapTextWidth()
+        public void DefaultTextOptionsWrapTextWidth()
         {
             const float Expected = 0F;
-            Assert.Equal(Expected, this.newTextGraphicsOptions.WrapTextWidth);
-            Assert.Equal(Expected, this.cloneTextGraphicsOptions.WrapTextWidth);
+            Assert.Equal(Expected, this.newTextOptions.WrapTextWidth);
+            Assert.Equal(Expected, this.cloneTextOptions.WrapTextWidth);
         }
 
         [Fact]
         public void NonDefaultClone()
         {
-            var expected = new TextGraphicsOptions
+            var expected = new TextOptions
             {
-                AlphaCompositionMode = PixelAlphaCompositionMode.DestAtop,
-                Antialias = false,
-                AntialiasSubpixelDepth = 23,
                 ApplyKerning = false,
-                BlendPercentage = .25F,
-                ColorBlendingMode = PixelColorBlendingMode.HardLight,
                 DpiX = 46F,
                 DpiY = 52F,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -131,14 +87,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 WrapTextWidth = 42F
             };
 
-            TextGraphicsOptions actual = expected.DeepClone();
+            TextOptions actual = expected.DeepClone();
 
-            Assert.Equal(expected.AlphaCompositionMode, actual.AlphaCompositionMode);
-            Assert.Equal(expected.Antialias, actual.Antialias);
-            Assert.Equal(expected.AntialiasSubpixelDepth, actual.AntialiasSubpixelDepth);
             Assert.Equal(expected.ApplyKerning, actual.ApplyKerning);
-            Assert.Equal(expected.BlendPercentage, actual.BlendPercentage);
-            Assert.Equal(expected.ColorBlendingMode, actual.ColorBlendingMode);
             Assert.Equal(expected.DpiX, actual.DpiX);
             Assert.Equal(expected.DpiY, actual.DpiY);
             Assert.Equal(expected.HorizontalAlignment, actual.HorizontalAlignment);
@@ -150,15 +101,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         [Fact]
         public void CloneIsDeep()
         {
-            var expected = new TextGraphicsOptions();
-            TextGraphicsOptions actual = expected.DeepClone();
+            var expected = new TextOptions();
+            TextOptions actual = expected.DeepClone();
 
-            actual.AlphaCompositionMode = PixelAlphaCompositionMode.DestAtop;
-            actual.Antialias = false;
-            actual.AntialiasSubpixelDepth = 23;
             actual.ApplyKerning = false;
-            actual.BlendPercentage = .25F;
-            actual.ColorBlendingMode = PixelColorBlendingMode.HardLight;
             actual.DpiX = 46F;
             actual.DpiY = 52F;
             actual.HorizontalAlignment = HorizontalAlignment.Center;
@@ -166,46 +112,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             actual.VerticalAlignment = VerticalAlignment.Bottom;
             actual.WrapTextWidth = 42F;
 
-            Assert.NotEqual(expected.AlphaCompositionMode, actual.AlphaCompositionMode);
-            Assert.NotEqual(expected.Antialias, actual.Antialias);
-            Assert.NotEqual(expected.AntialiasSubpixelDepth, actual.AntialiasSubpixelDepth);
             Assert.NotEqual(expected.ApplyKerning, actual.ApplyKerning);
-            Assert.NotEqual(expected.BlendPercentage, actual.BlendPercentage);
-            Assert.NotEqual(expected.ColorBlendingMode, actual.ColorBlendingMode);
             Assert.NotEqual(expected.DpiX, actual.DpiX);
             Assert.NotEqual(expected.DpiY, actual.DpiY);
             Assert.NotEqual(expected.HorizontalAlignment, actual.HorizontalAlignment);
             Assert.NotEqual(expected.TabWidth, actual.TabWidth);
             Assert.NotEqual(expected.VerticalAlignment, actual.VerticalAlignment);
             Assert.NotEqual(expected.WrapTextWidth, actual.WrapTextWidth);
-        }
-
-        [Fact]
-        public void ExplicitCastOfGraphicsOptions()
-        {
-            TextGraphicsOptions textOptions = new GraphicsOptions
-            {
-                Antialias = false,
-                AntialiasSubpixelDepth = 99
-            };
-
-            Assert.False(textOptions.Antialias);
-            Assert.Equal(99, textOptions.AntialiasSubpixelDepth);
-        }
-
-        [Fact]
-        public void ImplicitCastToGraphicsOptions()
-        {
-            var textOptions = new TextGraphicsOptions
-            {
-                Antialias = false,
-                AntialiasSubpixelDepth = 99
-            };
-
-            var opt = (GraphicsOptions)textOptions;
-
-            Assert.False(opt.Antialias);
-            Assert.Equal(99, opt.AntialiasSubpixelDepth);
         }
     }
 }

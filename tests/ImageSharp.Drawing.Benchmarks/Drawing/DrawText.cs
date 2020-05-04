@@ -47,8 +47,10 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             using (var image = new Image<Rgba32>(800, 800))
             {
                 Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
-                image.Mutate(x => x.DrawText(
-                    new TextGraphicsOptions { Antialias = true, WrapTextWidth = 780 },
+                image.Mutate(x => x
+                    .SetGraphicsOptions(o => o.Antialias = true)
+                    .SetTextOptions(o => o.WrapTextWidth = 780)
+                    .DrawText(
                     this.TextToRender,
                     font,
                     Processing.Brushes.Solid(Color.HotPink),
@@ -64,7 +66,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
                 image.Mutate(x => DrawTextOldVersion(
                     x,
-                    new TextGraphicsOptions { Antialias = true, WrapTextWidth = 780 },
+                    new TextGraphicsOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
                     this.TextToRender,
                     font,
                     Processing.Brushes.Solid(Color.HotPink),
@@ -86,16 +88,16 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
                 var style = new Fonts.RendererOptions(font, dpiX, dpiY, location)
                 {
-                    ApplyKerning = options.ApplyKerning,
-                    TabWidth = options.TabWidth,
-                    WrappingWidth = options.WrapTextWidth,
-                    HorizontalAlignment = options.HorizontalAlignment,
-                    VerticalAlignment = options.VerticalAlignment
+                    ApplyKerning = options.TextOptions.ApplyKerning,
+                    TabWidth = options.TextOptions.TabWidth,
+                    WrappingWidth = options.TextOptions.WrapTextWidth,
+                    HorizontalAlignment = options.TextOptions.HorizontalAlignment,
+                    VerticalAlignment = options.TextOptions.VerticalAlignment
                 };
 
                 IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, style);
 
-                var pathOptions = new ShapeGraphicsOptions((GraphicsOptions)options);
+                var pathOptions = new ShapeGraphicsOptions() { GraphicsOptions = options.GraphicsOptions };
                 if (brush != null)
                 {
                     source.Fill(pathOptions, brush, glyphs);

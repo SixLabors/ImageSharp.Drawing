@@ -44,8 +44,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                             Color.DarkBlue,
                             new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY)
                             )
+
                         .Fill(
-                            new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition },
+                            new ShapeGraphicsOptions
+                            {
+                                GraphicsOptions = {
+                                    Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition
+                                }
+                            },
                             Color.HotPink,
                             new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY))
                     );
@@ -72,12 +78,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY)));
                 img.Mutate(
                     x => x.Fill(
-                        new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition },
+                        new ShapeGraphicsOptions
+                        {
+                            GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
+                        },
                         Color.HotPink,
                         new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY)));
                 img.Mutate(
                     x => x.Fill(
-                        new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition },
+                        new ShapeGraphicsOptions
+                        {
+                            GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
+                        },
                         Color.Transparent,
                         new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY))
                     );
@@ -104,7 +116,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new Rectangle(0 * scaleX, 40, 100 * scaleX, 20 * scaleY)));
                 img.Mutate(
                     x => x.Fill(
-                        new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition },
+                        new ShapeGraphicsOptions
+                        {
+                            GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
+                        },
                         Color.HotPink,
                         new Rectangle(20 * scaleX, 0, 30 * scaleX, 100 * scaleY)));
 
@@ -112,7 +127,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
                 img.Mutate(
                     x => x.Fill(
-                        new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition },
+                        new ShapeGraphicsOptions
+                        {
+                            GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
+                        },
                         transparentRed,
                         new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY))
                     );

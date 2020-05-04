@@ -138,7 +138,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             }
 
             /// <inheritdoc />
-            internal override void Apply(Span<float> scanline, int x, int y)
+            public override void Apply(Span<float> scanline, int x, int y)
             {
                 // Create a span for colors
                 MemoryAllocator allocator = this.Configuration.MemoryAllocator;

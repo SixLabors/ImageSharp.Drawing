@@ -89,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
 
             provider.RunValidatingProcessorTest(
-                c => c.DrawLines(options, pen, simplePath),
+                c => c.SetGraphicsOptions(options).DrawLines(pen, simplePath),
                 outputDetails,
                 appendSourceFileOrDescription: false);
         }

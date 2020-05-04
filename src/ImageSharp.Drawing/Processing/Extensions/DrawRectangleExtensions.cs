@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="shape">The shape.</param>
         /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public static IImageProcessingContext Draw(this IImageProcessingContext source, IPen pen, RectangleF shape) =>
-            source.Draw(new ShapeGraphicsOptions(), pen, shape);
+            source.Draw(source.GetShapeGraphicsOptions(), pen, shape);
 
         /// <summary>
         /// Draws the outline of the rectangle with the provided brush at the provided thickness.
