@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors and contributors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
 
@@ -43,6 +44,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
-            => new FillRegionProcessor(this.Options, this.Brush, new ShapeRegion(this.Shape)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
+        {
+            if (this.Shape is RectangularPolygon rectPoly)
+            {
+                var rectF = new RectangleF(rectPoly.Location, rectPoly.Size);
+                var rect = (Rectangle)rectF;
+                if (this.Options.GraphicsOptions.Antialias == false || rectF == rect)
+                {
+                    var interest = Rectangle.Intersect(sourceRectangle, rect);
+
+                    // cast as in and back are the same or we are using anti-aliasing
+                    return new FillProcessor(this.Options.GraphicsOptions, this.Brush).CreatePixelSpecificProcessor(configuration, source, interest);
+                }
+            }
+
+            return new FillRegionProcessor(this.Options, this.Brush, new ShapeRegion(this.Shape)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
+        }
     }
 }
