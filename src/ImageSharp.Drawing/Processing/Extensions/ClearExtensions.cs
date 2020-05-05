@@ -12,9 +12,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public static class ClearExtensions
     {
         /// <summary>
-        /// Clones the graphicoptions and applies changes required to force clearing.
+        /// Clones the graphic options and applies changes required to force clearing.
         /// </summary>
-        /// <param name="options">The optinos to clone</param>
+        /// <param name="options">The options to clone</param>
         /// <returns>A clone of option with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
         internal static GraphicsOptions CloneForClearOperation(this GraphicsOptions options)
         {

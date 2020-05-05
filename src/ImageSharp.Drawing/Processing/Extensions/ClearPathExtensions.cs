@@ -10,11 +10,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// Adds extensions that allow the filling of polygon outlines to the <see cref="Image{TPixel}"/> type.
     /// </summary>
     public static class ClearPathExtensions
-    {/// <summary>
-     /// Clones the graphicoptions and applies changes required to force clearing.
-     /// </summary>
-     /// <param name="shapeOptions">The optinos to clone</param>
-     /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
+    {
+        /// <summary>
+        /// Clones the shape graphic options and applies changes required to force clearing.
+        /// </summary>
+        /// <param name="shapeOptions">The options to clone</param>
+        /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
         internal static ShapeGraphicsOptions CloneForClearOperation(this ShapeGraphicsOptions shapeOptions)
         {
             var options = shapeOptions.GraphicsOptions.DeepClone();
