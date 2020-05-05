@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="options">The graphics options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="path">The shape.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="path">The path.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(this IImageProcessingContext source, IBrush brush, IPath path) =>
             source.Clear(source.GetShapeGraphicsOptions(), brush, path);
 
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="options">The options.</param>
         /// <param name="color">The color.</param>
         /// <param name="path">The path.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
@@ -71,7 +71,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>
         /// <param name="path">The path.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(this IImageProcessingContext source, Color color, IPath path) =>
             source.Clear(new SolidBrush(color), path);
     }

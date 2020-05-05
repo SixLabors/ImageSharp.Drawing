@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="brush">The details how to fill the region of interest.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
             GraphicsOptions options,
@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The details how to fill the region of interest.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(this IImageProcessingContext source, IBrush brush) =>
             source.Fill(source.GetGraphicsOptions(), brush);
 
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="color">The color.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
             GraphicsOptions options,
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(this IImageProcessingContext source, Color color) =>
             source.Fill(new SolidBrush(color));
     }
