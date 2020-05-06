@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image this method extends.</param>
         /// <param name="pen">The pen.</param>
         /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             IPen pen,
@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="options">The options.</param>
         /// <param name="pen">The pen.</param>
         /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
@@ -62,7 +62,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             IBrush brush,
@@ -77,7 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             Color color,
@@ -93,7 +93,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="points">The points.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,

@@ -9,56 +9,56 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Adds extensions that allow the filling of regions with various brushes to the <see cref="Image{TPixel}"/> type.
     /// </summary>
-    public static class FillRegionExtensions
+    public static class ClearRegionExtensions
     {
         /// <summary>
-        /// Flood fills the image with in the region with the specified brush.
+        /// Flood fills the image with in the region with the specified brush without any blending.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="region">The region.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Fill(this IImageProcessingContext source, IBrush brush, Region region) =>
-            source.Fill(source.GetShapeGraphicsOptions(), brush, region);
+        public static IImageProcessingContext Clear(this IImageProcessingContext source, IBrush brush, Region region) =>
+            source.Clear(source.GetShapeGraphicsOptions(), brush, region);
 
         /// <summary>
-        /// Flood fills the image with in the region with the specified brush.
+        /// Flood fills the image with in the region with the specified brush without any blending.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="region">The region.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Fill(
+        public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
             IBrush brush,
             Region region) =>
-            source.ApplyProcessor(new FillRegionProcessor(options, brush, region));
+            source.Fill(options.CloneForClearOperation(), brush, region);
 
         /// <summary>
-        /// Flood fills the image with in the region with the specified color.
+        /// Flood fills the image with in the region with the specified color without any blending.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
         /// <param name="color">The color.</param>
         /// <param name="region">The region.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Fill(
+        public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
             Color color,
             Region region) =>
-            source.Fill(options, new SolidBrush(color), region);
+            source.Clear(options, new SolidBrush(color), region);
 
         /// <summary>
-        /// Flood fills the image with in the region with the specified color.
+        /// Flood fills the image with in the region with the specified color without any blending.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>
         /// <param name="region">The region.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Fill(this IImageProcessingContext source, Color color, Region region) =>
-            source.Fill(new SolidBrush(color), region);
+        public static IImageProcessingContext Clear(this IImageProcessingContext source, Color color, Region region) =>
+            source.Clear(new SolidBrush(color), region);
     }
 }

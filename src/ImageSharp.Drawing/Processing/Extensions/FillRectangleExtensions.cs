@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="options">The options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="shape">The shape.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="shape">The shape.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext
             Fill(this IImageProcessingContext source, IBrush brush, RectangleF shape) =>
             source.Fill(brush, new RectangularPolygon(shape.X, shape.Y, shape.Width, shape.Height));
@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="options">The options.</param>
         /// <param name="color">The color.</param>
         /// <param name="shape">The shape.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
             ShapeGraphicsOptions options,
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>
         /// <param name="shape">The shape.</param>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext
             Fill(this IImageProcessingContext source, Color color, RectangleF shape) =>
             source.Fill(new SolidBrush(color), shape);
