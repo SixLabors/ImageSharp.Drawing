@@ -23,7 +23,7 @@
     <PackageReference Update="StyleCop.Analyzers" PrivateAssets="All" Version="1.1.118" />
 
     <!--Src Dependencies-->
-    <PackageReference Update="SixLabors.Fonts" Version="1.0.0-unstable0056" />
+    <PackageReference Update="SixLabors.Fonts" Version="1.0.0-beta0011" />
     <PackageReference Update="SixLabors.ImageSharp" Version="1.0.0-rc0001" />
   </ItemGroup>
 
