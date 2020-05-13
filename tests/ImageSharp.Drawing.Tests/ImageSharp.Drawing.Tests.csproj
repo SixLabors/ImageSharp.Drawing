@@ -3,7 +3,6 @@
 
   <PropertyGroup>
     <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;net472</TargetFrameworks>
-    <TargetFrameworks Condition="'$(Configuration)' == 'Debug'">netcoreapp3.1</TargetFrameworks>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <DebugSymbols>True</DebugSymbols>
