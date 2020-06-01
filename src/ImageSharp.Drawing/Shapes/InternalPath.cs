@@ -86,6 +86,11 @@ namespace SixLabors.ImageSharp.Drawing
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
                 this.Length = this.points.Sum(x => x.Length);
             }
+            else
+            {
+                this.Bounds = RectangleF.Empty;
+                this.Length = 0;
+            }
         }
 
         /// <summary>
