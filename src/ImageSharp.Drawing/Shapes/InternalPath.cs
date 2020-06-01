@@ -76,13 +76,16 @@ namespace SixLabors.ImageSharp.Drawing
             this.points = points;
             this.closedPath = isClosedPath;
 
-            float minX = this.points.Min(x => x.Point.X);
-            float maxX = this.points.Max(x => x.Point.X);
-            float minY = this.points.Min(x => x.Point.Y);
-            float maxY = this.points.Max(x => x.Point.Y);
+            if (this.points.Length > 0)
+            {
+                float minX = this.points.Min(x => x.Point.X);
+                float maxX = this.points.Max(x => x.Point.X);
+                float minY = this.points.Min(x => x.Point.Y);
+                float maxY = this.points.Max(x => x.Point.Y);
 
-            this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
-            this.Length = this.points.Sum(x => x.Length);
+                this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+                this.Length = this.points.Sum(x => x.Length);
+            }
         }
 
         /// <summary>
@@ -684,10 +687,14 @@ namespace SixLabors.ImageSharp.Drawing
         private static PointData[] Simplify(IEnumerable<PointF> vectors, bool isClosed)
         {
             PointF[] points = vectors.ToArray();
-            var results = new List<PointData>();
 
             int polyCorners = points.Length;
+            if (polyCorners == 0)
+            {
+                return Array.Empty<PointData>();
+            }
 
+            var results = new List<PointData>();
             Vector2 lastPoint = points[0];
 
             if (!isClosed)
