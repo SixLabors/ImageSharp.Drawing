@@ -1,6 +1,6 @@
 ---
-name: Bug report
-about: Create a report to help us improve
+name: Bug Report
+about: Create a report to help us improve the project.
 
 ---
 
@@ -9,7 +9,7 @@ about: Create a report to help us improve
 - [ ] I have written a descriptive issue title
 - [ ] I have verified that I am running the latest version of ImageSharp
 - [ ] I have verified if the problem exist in both `DEBUG` and `RELEASE` mode
-- [ ] I have searched [open](https://github.com/SixLabors/ImageSharp/issues) and [closed](https://github.com/SixLabors/ImageSharp/issues?q=is%3Aissue+is%3Aclosed) issues to ensure it has not already been reported
+- [ ] I have searched [open](https://github.com/SixLabors/ImageSharp.Drawing/issues) and [closed](https://github.com/SixLabors/ImageSharp.Drawing/issues?q=is%3Aissue+is%3Aclosed) issues to ensure it has not already been reported
 
 ### Description
 <!-- A description of the bug or feature -->
@@ -26,4 +26,4 @@ about: Create a report to help us improve
 - .NET Framework version:
 - Additional information:
 
-<!-- Thanks for reporting the issue to ImageSharp! -->
+<!-- Thanks for reporting the issue to ImageSharp.Dawing! -->
