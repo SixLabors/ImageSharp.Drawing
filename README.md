@@ -9,8 +9,7 @@ SixLabors.ImageSharp.Drawing
 <div align="center">
 
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](https://raw.githubusercontent.com/SixLabors/ImageSharp.Drawing/master/LICENSE)
-
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/ImageSharp/General?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
 [![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
 [![OpenCollective](https://opencollective.com/imagesharp/backers/badge.svg)](#backers)
 [![OpenCollective](https://opencollective.com/imagesharp/sponsors/badge.svg)](#sponsors)
@@ -59,11 +58,11 @@ Install stable releases via Nuget; development releases are available via MyGet.
 
 |Build Status|Code Coverage|
 |:----------:|:-----------:|
-|[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/master)](https://github.com/SixLabors/ImageSharp.Drawing/actions)|[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp)|
+|[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/master)](https://github.com/SixLabors/ImageSharp.Drawing/actions)|[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)|
 
 ### Questions?
 
-- Do you have questions? We are happy to help! Please [join our gitter channel](https://gitter.im/ImageSharp/General), or ask them on [stackoverflow](https://stackoverflow.com) using the `ImageSharp` tag. **Do not** open issues for questions!
+- Do you have questions? We are happy to help! Please [join our Discussions Forum](https://github.com/SixLabors/ImageSharp/discussions/category_choices), or ask them on [stackoverflow](https://stackoverflow.com) using the `ImageSharp` tag. **Do not** open issues for questions!
 - Please read our [Contribution Guide](https://github.com/SixLabors/ImageSharp/blob/master/.github/CONTRIBUTING.md) before opening issues or pull requests!
 
 ### Code of Conduct  
@@ -83,7 +82,7 @@ Alternatively, you can work from command line and/or with a lightweight editor o
 - [Visual Studio Code](https://code.visualstudio.com/) with [C# Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.csharp)
 - [.NET Core](https://www.microsoft.com/net/core#linuxubuntu)
 
-To clone ImageSharp locally, click the "Clone in [YOUR_OS]" button above or run the following git commands:
+To clone ImageSharp.Drawing locally, click the "Clone in [YOUR_OS]" button above or run the following git commands:
 
 ```bash
 git clone https://github.com/SixLabors/ImageSharp.Drawing

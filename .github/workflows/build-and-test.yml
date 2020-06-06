@@ -92,7 +92,7 @@ jobs:
               uses: iansu/codecov-action-node@v1.0.0
               if: matrix.options.codecov == true && startsWith(github.repository, 'SixLabors')
               with:
-                  token: 0ef021c7-2679-4012-b42f-4bed33d99450
+                  token: c2b9d8b3-6204-44d7-a49f-bc48c5d0b138
                   flags: unittests
 
     Publish:
