@@ -17,24 +17,11 @@
   <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.targets" />
 
   <!-- Tool versions for tool references across all projects -->
-  <ItemGroup>
+  <ItemGroup Condition="'$(IsTestProject)' == 'true'">
     <!--dotnet tools does not have an x86 runner. You have to use separate SDKs-->
     <!--https://github.com/actions/setup-dotnet/issues/72-->
     <DotNetCliToolReference Update="dotnet-xunit" Version="2.3.1" />
   </ItemGroup>
-
-  <!--Code coverage specific settings-->
-  <!--https://github.com/tonerdo/coverlet-->
-  <PropertyGroup Condition="'$(codecov)' == 'true' AND '$(IsTestProject)' == 'true'">
-    <CollectCoverage>true</CollectCoverage>
-    <UseSourceLink>true</UseSourceLink>
-    <CoverletOutputFormat>opencover</CoverletOutputFormat>
-    <!--Output injects target framework into name despite explicit config. See build yml-->
-    <CoverletOutput>$(MSBuildThisFileDirectory)..\coverage.xml</CoverletOutput>
-    <!--Used by coverlet dues to reference issues with SixLabors.Core-->
-    <!--https://github.com/tonerdo/coverlet/blob/master/Documentation/KnowIssues.md#4-failed-to-resolve-assembly-during-instrumentation-->
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-  </PropertyGroup>
 
   <ItemGroup>
     <!--Test Dependencies-->
