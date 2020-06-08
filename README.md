@@ -8,7 +8,7 @@ SixLabors.ImageSharp.Drawing
 
 <div align="center">
 
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](https://raw.githubusercontent.com/SixLabors/ImageSharp.Drawing/master/LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
 [![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
 [![OpenCollective](https://opencollective.com/imagesharp/backers/badge.svg)](#backers)
@@ -21,19 +21,8 @@ SixLabors.ImageSharp.Drawing
 Designed to democratize image processing, ImageSharp.Drawing brings you an incredibly powerful yet beautifully simple API.
 
 Built against .NET Standard 1.3, ImageSharp.Drawing can be used in device, cloud, and embedded/IoT scenarios. 
-
-### Documentation
-For all SixLabors projects, including ImageSharp.Drawing:
-https://sixlabors.github.io/docs/
-
-### Installation
-
-Install stable releases via Nuget; development releases are available via MyGet.
-
-| Package Name                   | Release (NuGet) | Nightly (MyGet) |
-|--------------------------------|-----------------|-----------------|
-| `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![MyGet](https://img.shields.io/myget/sixlabors/v/SixLabors.ImageSharp.Drawing.svg)](https://www.myget.org/feed/sixlabors/package/nuget/SixLabors.ImageSharp.Drawing) |
-
+  
+Features Include:  
 - Point in Polygon
 - Line Intersections
 - Complex Polygons
@@ -52,7 +41,26 @@ Install stable releases via Nuget; development releases are available via MyGet.
 - Drawing
   - Brushes and various drawing algorithms, including drawing images
   - Various vector drawing methods for drawing paths, polygons etc.
-  - Text drawing
+  - Text drawing  
+
+## License
+  
+- ImageSharp.Drawing is licensed under the [Apache License, Version 2.0](https://opensource.org/licenses/Apache-2.0)  
+- An alternative Commercial License can be purchased for projects and applications requiring support.
+Please visit https://sixlabors.com/pricing for details.
+
+## Documentation
+
+- [Detailed documentation](https://sixlabors.github.io/docs/) for the ImageSharp.Drawing API is available. This includes additional conceptual documentation to help you get started.
+- Our [Samples Repository](https://github.com/SixLabors/Samples/tree/master/ImageSharp) is also available containing buildable code samples demonstrating common activities.
+
+### Installation
+
+Install stable releases via Nuget; development releases are available via MyGet.
+
+| Package Name                   | Release (NuGet) | Nightly (MyGet) |
+|--------------------------------|-----------------|-----------------|
+| `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![MyGet](https://img.shields.io/myget/sixlabors/v/SixLabors.ImageSharp.Drawing.svg)](https://www.myget.org/feed/sixlabors/package/nuget/SixLabors.ImageSharp.Drawing) |
 
 ### Build Status
 
@@ -108,10 +116,7 @@ Please... Spread the word, contribute algorithms, submit performance improvement
 
 ### The ImageSharp Team
 
-Lead
 - [Scott Williams](https://github.com/tocsoft)
-
-Core Team
 - [James Jackson-South](https://github.com/jimbobsquarepants)
 - [Dirk Lemstra](https://github.com/dlemstra)
 - [Anton Firsov](https://github.com/antonfirsov)
