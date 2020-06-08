@@ -8,7 +8,8 @@ SixLabors.ImageSharp.Drawing
 
 <div align="center">
 
-[![License: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue.svg)](https://raw.githubusercontent.com/SixLabors/ImageSharp.Drawing/master/LICENSE)
+[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/master)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
 [![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
 [![OpenCollective](https://opencollective.com/imagesharp/backers/badge.svg)](#backers)
@@ -21,19 +22,8 @@ SixLabors.ImageSharp.Drawing
 Designed to democratize image processing, ImageSharp.Drawing brings you an incredibly powerful yet beautifully simple API.
 
 Built against .NET Standard 1.3, ImageSharp.Drawing can be used in device, cloud, and embedded/IoT scenarios. 
-
-### Documentation
-For all SixLabors projects, including ImageSharp.Drawing:
-https://sixlabors.github.io/docs/
-
-### Installation
-
-Install stable releases via Nuget; development releases are available via MyGet.
-
-| Package Name                   | Release (NuGet) | Nightly (MyGet) |
-|--------------------------------|-----------------|-----------------|
-| `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![MyGet](https://img.shields.io/myget/sixlabors/v/SixLabors.ImageSharp.Drawing.svg)](https://www.myget.org/feed/sixlabors/package/nuget/SixLabors.ImageSharp.Drawing) |
-
+  
+Features Include:  
 - Point in Polygon
 - Line Intersections
 - Complex Polygons
@@ -52,32 +42,48 @@ Install stable releases via Nuget; development releases are available via MyGet.
 - Drawing
   - Brushes and various drawing algorithms, including drawing images
   - Various vector drawing methods for drawing paths, polygons etc.
-  - Text drawing
+  - Text drawing  
 
-### Build Status
+## License
+  
+- ImageSharp.Drawing is licensed under the [Apache License, Version 2.0](https://opensource.org/licenses/Apache-2.0)  
+- An alternative Commercial License can be purchased for projects and applications requiring support.
+Please visit https://sixlabors.com/pricing for details.
 
-|Build Status|Code Coverage|
-|:----------:|:-----------:|
-|[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/master)](https://github.com/SixLabors/ImageSharp.Drawing/actions)|[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)|
+## Documentation
 
-### Questions?
+- [Detailed documentation](https://sixlabors.github.io/docs/) for the ImageSharp.Drawing API is available. This includes additional conceptual documentation to help you get started.
+- Our [Samples Repository](https://github.com/SixLabors/Samples/tree/master/ImageSharp) is also available containing buildable code samples demonstrating common activities.
+
+## Questions?
 
 - Do you have questions? We are happy to help! Please [join our Discussions Forum](https://github.com/SixLabors/ImageSharp/discussions/category_choices), or ask them on [stackoverflow](https://stackoverflow.com) using the `ImageSharp` tag. **Do not** open issues for questions!
-- Please read our [Contribution Guide](https://github.com/SixLabors/ImageSharp/blob/master/.github/CONTRIBUTING.md) before opening issues or pull requests!
+- Please read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/master/.github/CONTRIBUTING.md) before opening issues or pull requests!
 
-### Code of Conduct  
+## Code of Conduct  
 This project has adopted the code of conduct defined by the [Contributor Covenant](https://contributor-covenant.org/) to clarify expected behavior in our community.
 For more information, see the [.NET Foundation Code of Conduct](https://dotnetfoundation.org/code-of-conduct).
 
-### Manual build
+## Installation
+
+Install stable releases via Nuget; development releases are available via MyGet.
+
+| Package Name                   | Release (NuGet) | Nightly (MyGet) |
+|--------------------------------|-----------------|-----------------|
+| `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![MyGet](https://img.shields.io/myget/sixlabors/v/SixLabors.ImageSharp.Drawing.svg)](https://www.myget.org/feed/sixlabors/package/nuget/SixLabors.ImageSharp.Drawing) |
+
+## Manual build
 
 If you prefer, you can compile ImageSharp.Drawing yourself (please do and help!)
 
-- Using [Visual Studio 2017](https://visualstudio.microsoft.com/vs/)
+- Using [Visual Studio 2019](https://visualstudio.microsoft.com/vs/)
   - Make sure you have the latest version installed
-  - Make sure you have [the .NET Core 2.1 SDK](https://www.microsoft.com/net/core#windows) installed
+  - Make sure you have [the .NET Core 3.1 SDK](https://www.microsoft.com/net/core#windows) installed
 
 Alternatively, you can work from command line and/or with a lightweight editor on **both Linux/Unix and Windows**:
+
+- [Visual Studio Code](https://code.visualstudio.com/) with [C# Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.csharp)
+- [.NET Core](https://www.microsoft.com/net/core#linuxubuntu)
 
 - [Visual Studio Code](https://code.visualstudio.com/) with [C# Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.csharp)
 - [.NET Core](https://www.microsoft.com/net/core#linuxubuntu)
@@ -102,16 +108,13 @@ This repository contains [git submodules](https://blog.github.com/2016-02-01-wor
 git submodule update --init --recursive
 ```
 
-### How can you help?
+## How can you help?
 
 Please... Spread the word, contribute algorithms, submit performance improvements, unit tests, no input is too little. Make sure to read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/master/.github/CONTRIBUTING.md) before opening a PR.
 
-### The ImageSharp Team
+## The ImageSharp Team
 
-Lead
 - [Scott Williams](https://github.com/tocsoft)
-
-Core Team
 - [James Jackson-South](https://github.com/jimbobsquarepants)
 - [Dirk Lemstra](https://github.com/dlemstra)
 - [Anton Firsov](https://github.com/antonfirsov)
