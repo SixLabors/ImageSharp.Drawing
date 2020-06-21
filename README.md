@@ -57,7 +57,7 @@ Please visit https://sixlabors.com/pricing for details.
 
 ## Questions?
 
-- Do you have questions? We are happy to help! Please [join our Discussions Forum](https://github.com/SixLabors/ImageSharp/discussions/category_choices), or ask them on [stackoverflow](https://stackoverflow.com) using the `ImageSharp` tag. **Do not** open issues for questions!
+- Do you have questions? We are happy to help! Please [join our Discussions Forum](https://github.com/SixLabors/ImageSharp.Drawing/discussions/category_choices), or ask them on [stackoverflow](https://stackoverflow.com) using the `ImageSharp` tag. **Do not** open issues for questions!
 - Please read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/master/.github/CONTRIBUTING.md) before opening issues or pull requests!
 
 ## Code of Conduct  
