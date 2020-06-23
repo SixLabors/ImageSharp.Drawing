@@ -719,16 +719,18 @@ namespace SixLabors.ImageSharp.Drawing
                     prev--;
                     if (prev == 0)
                     {
-                        // all points are common, shouldn't match anything
+                        // All points are common, shouldn't match anything
+                        int next = points.Length == 1 ? 0 : 1;
                         results.Add(
                             new PointData
                             {
                                 Point = points[0],
                                 Orientation = Orientation.Colinear,
-                                Segment = new Segment(points[0], points[1]),
+                                Segment = new Segment(points[0], points[next]),
                                 Length = 0,
                                 TotalLength = 0
                             });
+
                         return results.ToArray();
                     }
                 }
