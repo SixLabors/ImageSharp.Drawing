@@ -6,7 +6,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
-
+using System.Threading.Tasks;
+using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
@@ -184,7 +185,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 this.testFormat = testFormat;
             }
         }
-        public class TestDecoder : ImageSharp.Formats.IImageDecoder
+        public class TestDecoder : IImageDecoder
         {
             private TestFormat testFormat;
 
@@ -219,9 +220,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             public bool IsSupportedFileFormat(Span<byte> header) => testFormat.IsSupportedFileFormat(header);
 
             public Image Decode(Configuration configuration, Stream stream) => this.Decode<TestPixelForAgnosticDecode>(configuration, stream);
+
+            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream)
+                where TPixel : unmanaged, IPixel<TPixel>
+               => throw new NotImplementedException();
+
+            public Task<Image> DecodeAsync(Configuration configuration, Stream stream)
+               => throw new NotImplementedException();
         }
 
-        public class TestEncoder : ImageSharp.Formats.IImageEncoder
+        public class TestEncoder : IImageEncoder
         {
             private TestFormat testFormat;
 
@@ -238,6 +246,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 // TODO record this happened so we can verify it.
             }
+
+            public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream) where TPixel : unmanaged, IPixel<TPixel>
+               => throw new NotImplementedException();
         }
 
 
