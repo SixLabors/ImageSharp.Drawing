@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         [Fact]
         public void CanRenderLargeFont()
         {
+            if (!TestEnvironment.IsWindows)
+            {
+                return;
+            }
+
             using (var image = new Image<Rgba32>(300, 200))
             {
                 string text = "TEST text foiw|\\";
