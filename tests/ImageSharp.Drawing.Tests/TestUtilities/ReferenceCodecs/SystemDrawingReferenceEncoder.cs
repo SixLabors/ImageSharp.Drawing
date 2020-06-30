@@ -3,7 +3,7 @@
 
 using System.Drawing.Imaging;
 using System.IO;
-
+using System.Threading.Tasks;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -30,5 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
                 sdBitmap.Save(stream, this.imageFormat);
             }
         }
+
+        public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream) where TPixel : unmanaged, IPixel<TPixel> => throw new System.NotImplementedException();
     }
 }
