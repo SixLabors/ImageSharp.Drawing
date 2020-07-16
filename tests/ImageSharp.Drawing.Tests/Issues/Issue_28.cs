@@ -93,18 +93,5 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 Assert.Equal(this.red, image[l.x, l.y]);
             });
         }
-
-        //public void DrawWithSystemDrawing()
-        //{
-        //    GraphicsPath p = new GraphicsPath();
-        //    p.AddString(
-        //        "My Text String",             // text to draw
-        //        FontFamily.GenericSansSerif,  // or any other font family
-        //        (int)FontStyle.Regular,      // font style (bold, italic, etc.)
-        //        g.DpiY * fontSize / 72,       // em size
-        //        new Point(0, 0),              // location where to draw text
-        //        new StringFormat());          // set options here (e.g. center alignment)
-        //    g.DrawPath(Pens.Black, p);
-        //}
     }
 }
