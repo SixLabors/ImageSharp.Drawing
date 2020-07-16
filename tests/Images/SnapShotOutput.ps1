@@ -1,6 +1,6 @@
 . "$PSScriptRoot\Helpers.ps1" # include all the helper methods
 
-Install-ImageSharp -Version "1.0.0-unstable1152" -Source 'MyGet'
+Install-ImageSharp -Version "1.0.0-rc0003" -Source 'NuGet'
 
 $pngEncoder = [SixLabors.ImageSharp.Formats.Png.PngEncoder]::new()
 $pngEncoder.CompressionLevel = 'BestCompression'
@@ -14,7 +14,7 @@ foreach ($sourceFile in $pngs) {
     $path = $sourceFile.FullName
     try {
         $img = Get-ImageSharpImage $path
-        [string]$pathOutput = $path.Replace("\ActualOutput\", "\ReferenceOutput\") 
+        [string]$pathOutput = $path.Replace("\ActualOutput\", "\ReferenceOutput\")
         $newFile = $img | Set-ImageSharpImage -Path $pathOutput -Encoder $pngEncoder
         $oldFile = Get-Item  $path
         if ($newFile.Length -gt $oldFile.Length) {
@@ -28,7 +28,7 @@ foreach ($sourceFile in $pngs) {
     finally {
         $img.Dispose()
     }
-    
+
 }
 
 $all = $copiedCounter + $compressedCounter

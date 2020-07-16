@@ -75,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing
         {
             if (pattern.Length < 2)
             {
-                return path.GenerateOutline(width, jointStyle: jointStyle, endCapStyle: patternSectionCapStyle);
+                return path.GenerateOutline(width, jointStyle: jointStyle);
             }
 
             JoinType style = Convert(jointStyle);
@@ -187,7 +187,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="endCapStyle">The style to render the end caps of open paths (ignored on closed paths).</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Butt)
+        public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Square)
         {
             var offset = new ClipperOffset()
             {
