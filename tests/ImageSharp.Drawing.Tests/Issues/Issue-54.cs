@@ -52,7 +52,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 IPen pen = new Pen(Color.White, 0);
             });
 
-            Assert.Equal("Parameter \"width\" (System.Single) must be greater than 0, was 0 (Parameter 'width')", ex.Message);
+            Assert.StartsWith("Parameter \"width\" (System.Single) must be greater than 0, was 0", ex.Message);
         }
 
 
