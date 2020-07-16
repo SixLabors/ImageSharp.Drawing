@@ -29,10 +29,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <inheritdoc/>
         protected override void OnFrameApply(ImageFrame<TPixel> source)
         {
+            var interest = Rectangle.Intersect(this.SourceRectangle, source.Bounds());
+            if (interest.Width == 0 || interest.Height == 0)
+            {
+                return;
+            }
+
             Configuration configuration = this.Configuration;
             IBrush brush = this.definition.Brush;
             GraphicsOptions options = this.definition.Options;
-            var interest = Rectangle.Intersect(this.SourceRectangle, source.Bounds());
 
             // If there's no reason for blending, then avoid it.
             if (this.IsSolidBrushWithoutBlending(out SolidBrush solidBrush))
