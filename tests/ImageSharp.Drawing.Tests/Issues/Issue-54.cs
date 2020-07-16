@@ -1,6 +1,8 @@
 using System;
+using System.Runtime.InteropServices;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Xunit;
@@ -9,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 {
     public class Issue_54
     {
-        [Fact]
+        [WindowsFact]
         public void CanDrawWithoutMemoryException()
         {
             int width = 768;
@@ -39,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 
                 // Draw the text
                 image.Mutate(x => x.DrawText(options, text, font, brush, pen, new PointF(0, 100)));
-            } 
+            }
         }
 
         [Fact]
@@ -47,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         {
             ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             {
-                IPen pen = new Pen(Color.White, 0); 
+                IPen pen = new Pen(Color.White, 0);
             });
 
             Assert.Equal("Parameter \"width\" (System.Single) must be greater than 0, was 0 (Parameter 'width')", ex.Message);
