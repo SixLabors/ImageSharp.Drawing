@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="shape">The shape.</param>
         /// <param name="pen">The pen to apply to the shape.</param>
         public ShapePath(IPath shape, IPen pen)
-            : base(shape.GenerateOutline(pen.StrokeWidth, pen.StrokePattern))
+            : base(shape.GenerateOutline(pen.StrokeWidth, pen.StrokePattern, false, JointStyle.Square, EndCapStyle.Square))
         {
         }
     }

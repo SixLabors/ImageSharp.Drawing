@@ -61,10 +61,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             // basically if the line is [1,2] => [3,2] then when outlining at 1 we end up with a region of [0.5,1.5],[1.5, 1.5],[3.5,2.5],[2.5,2.5]
             // and this can cause missed fills when not using antialiasing.so we offset the pixel grid by 0.5 in the x & y direction thus causing the#
             // region to align with the pixel grid.
-            float offset = 0.5f;
             if (graphicsOptions.Antialias)
             {
-                offset = 0f; // we are antialiasing skip offsetting as real antialiasing should take care of offset.
                 subpixelCount = graphicsOptions.AntialiasSubpixelDepth;
                 if (subpixelCount < 4)
                 {
@@ -97,7 +95,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                         float yPlusOne = y + 1;
                         for (float subPixel = y; subPixel < yPlusOne; subPixel += subpixelFraction)
                         {
-                            int pointsFound = region.Scan(subPixel + offset, buffer, configuration, shapeOptions.IntersectionRule);
+                            int pointsFound = region.Scan(subPixel, buffer, configuration, shapeOptions.IntersectionRule);
                             if (pointsFound == 0)
                             {
                                 // nothing on this line, skip
@@ -109,8 +107,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                                 // points will be paired up
                                 float scanStart = buffer[point] - minX;
                                 float scanEnd = buffer[point + 1] - minX;
-                                int startX = (int)MathF.Floor(scanStart + offset);
-                                int endX = (int)MathF.Floor(scanEnd + offset);
+                                int startX = (int)MathF.Floor(scanStart);
+                                int endX = (int)MathF.Floor(scanEnd);
 
                                 if (startX >= 0 && startX < scanline.Length)
                                 {

@@ -43,6 +43,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
-            => new FillRegionProcessor(this.Options, this.Pen.StrokeFill, new ShapePath(this.Shape, this.Pen)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
+        {
+            // offset drawlines to align drawing outlines to pixel centers
+            var shape = this.Shape.Translate(0.5f, 0.5f);
+            return new FillRegionProcessor(this.Options, this.Pen.StrokeFill, new ShapePath(shape, this.Pen)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
+        }
     }
 }

@@ -75,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing
         {
             if (pattern.Length < 2)
             {
-                return path.GenerateOutline(width);
+                return path.GenerateOutline(width, jointStyle: jointStyle, endCapStyle: patternSectionCapStyle);
             }
 
             JoinType style = Convert(jointStyle);
