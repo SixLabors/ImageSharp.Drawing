@@ -1,3 +1,4 @@
+using System;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
@@ -17,33 +18,50 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             // Creates a new image with empty pixel data. 
             using (var image = new Image<Rgba32>(width, height))
             {
+                FontFamily family = SystemFonts.Find("verdana");
+                Font font = family.CreateFont(48, FontStyle.Bold);
+
+                // The options are optional
+                TextGraphicsOptions options = new TextGraphicsOptions()
                 {
-                    FontCollection collection = new FontCollection();
-                    FontFamily family = collection.Install(@"C:\Windows\Fonts\verdana.ttf");
-                    Font font = family.CreateFont(48, FontStyle.Bold);
-
-                    // The options are optional
-                    TextGraphicsOptions options = new TextGraphicsOptions()
+                    TextOptions = new TextOptions()
                     {
-                        TextOptions = new TextOptions()
-                        {
-                            ApplyKerning = true,
-                            TabWidth = 8, // a tab renders as 8 spaces wide
-                            WrapTextWidth = width, // greater than zero so we will word wrap at 100 pixels wide
-                            HorizontalAlignment = HorizontalAlignment.Center // right align
-                        }
-                    };
+                        ApplyKerning = true,
+                        TabWidth = 8, // a tab renders as 8 spaces wide
+                        WrapTextWidth = width, // greater than zero so we will word wrap at 100 pixels wide
+                        HorizontalAlignment = HorizontalAlignment.Center // right align
+                    }
+                };
 
-                    IBrush brush = Brushes.Solid(Color.White);
-                    //IPen pen = Pens.DashDot(Color.White, 0);  //0 makes application freeze and eat memory
-                    IPen pen = Pens.Solid(Color.White, 0); //0 makes application crash
-                    string text = "sample text";
+                IBrush brush = Brushes.Solid(Color.White);
+                IPen pen = Pens.Solid(Color.White, 1);
+                string text = "sample text";
 
-                    // Draw the text
-                    image.Mutate(x => x.DrawText(options, text, font, brush, pen, new PointF(0, 100)));
-                }
+                // Draw the text
+                image.Mutate(x => x.DrawText(options, text, font, brush, pen, new PointF(0, 100)));
+            } 
+        }
 
-            } // Dispose - releasing memory into a memory pool ready for the next image you wish to process.
+        [Fact]
+        public void PenMustHaveAWidthGraterThanZero()
+        {
+            ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            {
+                IPen pen = new Pen(Color.White, 0); 
+            });
+
+            Assert.Equal("Parameter \"width\" (System.Single) must be greater than 0, was 0 (Parameter 'width')", ex.Message);
+        }
+
+
+        [Fact]
+        public void ComplexPolygoWithZeroPathsCausesBoundsToBeNonSensicalValue()
+        {
+            var polygon = new ComplexPolygon(Array.Empty<IPath>());
+
+            Assert.NotEqual(float.NegativeInfinity, polygon.Bounds.Width);
+            Assert.NotEqual(float.PositiveInfinity, polygon.Bounds.Width);
+            Assert.NotEqual(float.NaN, polygon.Bounds.Width);
         }
     }
 }
