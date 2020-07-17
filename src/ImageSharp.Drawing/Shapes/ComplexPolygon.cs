@@ -36,42 +36,52 @@ namespace SixLabors.ImageSharp.Drawing
         {
             this.paths = paths ?? throw new ArgumentNullException(nameof(paths));
 
-            float minX = float.MaxValue;
-            float maxX = float.MinValue;
-            float minY = float.MaxValue;
-            float maxY = float.MinValue;
-            float length = 0;
-            int intersections = 0;
-
-            foreach (IPath s in this.paths)
+            if (paths.Length > 0)
             {
-                length += s.Length;
-                if (s.Bounds.Left < minX)
+                float minX = float.MaxValue;
+                float maxX = float.MinValue;
+                float minY = float.MaxValue;
+                float maxY = float.MinValue;
+                float length = 0;
+                int intersections = 0;
+
+                foreach (IPath s in this.paths)
                 {
-                    minX = s.Bounds.Left;
+                    length += s.Length;
+                    if (s.Bounds.Left < minX)
+                    {
+                        minX = s.Bounds.Left;
+                    }
+
+                    if (s.Bounds.Right > maxX)
+                    {
+                        maxX = s.Bounds.Right;
+                    }
+
+                    if (s.Bounds.Top < minY)
+                    {
+                        minY = s.Bounds.Top;
+                    }
+
+                    if (s.Bounds.Bottom > maxY)
+                    {
+                        maxY = s.Bounds.Bottom;
+                    }
+
+                    intersections += s.MaxIntersections;
                 }
 
-                if (s.Bounds.Right > maxX)
-                {
-                    maxX = s.Bounds.Right;
-                }
-
-                if (s.Bounds.Top < minY)
-                {
-                    minY = s.Bounds.Top;
-                }
-
-                if (s.Bounds.Bottom > maxY)
-                {
-                    maxY = s.Bounds.Bottom;
-                }
-
-                intersections += s.MaxIntersections;
+                this.MaxIntersections = intersections;
+                this.Length = length;
+                this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+            }
+            else
+            {
+                this.MaxIntersections = 0;
+                this.Length = 0;
+                this.Bounds = RectangleF.Empty;
             }
 
-            this.MaxIntersections = intersections;
-            this.Length = length;
-            this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             this.PathType = PathTypes.Mixed;
         }
 
