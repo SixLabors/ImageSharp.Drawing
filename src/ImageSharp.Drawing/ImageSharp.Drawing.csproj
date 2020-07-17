@@ -15,6 +15,8 @@
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" />
     <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub"/>
+    <PackageReference Include="MinVer" PrivateAssets="All" />
   </ItemGroup>
 
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
