@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -39,6 +39,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="pattern">The pattern.</param>
         public Pen(IBrush brush, float width, float[] pattern)
         {
+            Guard.MustBeGreaterThan(width, 0, nameof(width));
+
             this.StrokeFill = brush;
             this.StrokeWidth = width;
             this.pattern = pattern;
