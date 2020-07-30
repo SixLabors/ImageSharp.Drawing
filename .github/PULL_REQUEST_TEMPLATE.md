@@ -8,4 +8,4 @@
 ### Description
 <!-- A description of the changes proposed in the pull-request -->
 
-<!-- Thanks for contributing to ImageSharp! -->
+<!-- Thanks for contributing to ImageSharp.Drawing! -->
