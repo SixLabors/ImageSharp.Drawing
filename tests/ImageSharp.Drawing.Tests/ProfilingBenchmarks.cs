@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     public class ProfilingBenchmarks
     {
         [Theory]
-        [WithSolidFilledImages(1300, 1300, 0, 0, 0, PixelTypes.Rgba32, 1, 20, 36)]
+        [WithSolidFilledImages(1300, 1300, 0, 0, 0, PixelTypes.Rgba32, 5, 20, 36)]
         public void RenderLongText<TPixel>(TestImageProvider<TPixel> provider, int times, int rows, int cols)
             where TPixel : unmanaged, IPixel<TPixel>
         {
