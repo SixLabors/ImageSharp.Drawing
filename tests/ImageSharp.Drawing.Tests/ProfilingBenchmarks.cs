@@ -21,10 +21,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             for (int i = 0; i < times; i++)
             {
                 image.Mutate(ctx => ctx.DrawText(text, font, Color.White, default));
-                if (i == 0)
-                {
-                    image.DebugSave(provider);
-                }
+                // if (i == 0)
+                // {
+                //     image.DebugSave(provider);
+                // }
             }
         }
 
