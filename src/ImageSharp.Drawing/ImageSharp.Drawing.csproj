@@ -9,7 +9,8 @@
     <PackageTags>Image Draw Shape Path Font</PackageTags>
     <RootNamespace>SixLabors.ImageSharp.Drawing</RootNamespace>
 
-    <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;netstandard2.1;netstandard2.0;netstandard1.3;net472</TargetFrameworks>
+<!--    <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;netstandard2.1;netstandard2.0;netstandard1.3;net472</TargetFrameworks>-->
+    <TargetFrameworks>netcoreapp3.1</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
