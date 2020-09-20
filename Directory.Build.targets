@@ -26,8 +26,8 @@
     <PackageReference Update="MinVer" PrivateAssets="All" Version="2.3.0" />
 
     <!--Src Dependencies-->
-    <PackageReference Update="SixLabors.Fonts" Version="1.0.0-beta0013" />
-    <PackageReference Update="SixLabors.ImageSharp" Version="1.0.0-rc0003" />
+    <PackageReference Update="SixLabors.Fonts" Version="1.0.0-unstable0058" />
+    <PackageReference Update="SixLabors.ImageSharp" Version="1.0.2-alpha.0.7" />
   </ItemGroup>
 
 </Project>

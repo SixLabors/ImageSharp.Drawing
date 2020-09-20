@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             return new Polygon(new LinearLineSegment(points));
         }
 
-        private void DrawPath(ITestImageProvider provider, IPath path, float scale = 100f)
+        private void DrawRegion(ITestImageProvider provider, IPath path, float scale = 100f)
         {
             path = path.Transform(Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(10, 10));
             using Image image = provider.GetImage(ctx => ctx.Fill(Brush, path));
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         private void DrawPath(ITestImageProvider provider, Polygon polygon, Polygon hole, float scale = 100f) =>
-            DrawPath(provider, new ComplexPolygon(polygon, hole), scale);
+            DrawRegion(provider, new ComplexPolygon(polygon, hole), scale);
         
         private static (PointF Start, PointF End) MakeHLine(float y)
         {
@@ -79,6 +79,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             PointF[] points = path.FindIntersections(line.Start, line.End).ToArray();
             PrintIntersections(points, y);
         }
+        
+        [Theory]
+        [WithBlankImages(1000, 1000, PixelTypes.Rgba32)]
+        public void Case0<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            IPath path = MakePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
+
+
+            PrintIntersections(path, 10);
+
+            DrawRegion(provider, path, 10);
+        }
 
         [Theory]
         [WithBlankImages(1000, 1000, PixelTypes.Rgba32)]
@@ -91,8 +104,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             PrintIntersections(path, 1);
             PrintIntersections(path, 1.5f);
 
-            DrawPath(provider, path);
+            DrawRegion(provider, path);
+            
         }
+        
+        [Theory]
+        [WithBlankImages(1000, 1000, PixelTypes.Rgba32)]
+        public void Case2<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            IPath path = MakePolygon((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
+            
+            PrintIntersections(path, 1);
+
+            DrawRegion(provider, path);
+        }
+        
         
         [Theory]
         [WithBlankImages(1000, 1000, PixelTypes.Rgba32)]
@@ -106,7 +133,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(float.MinValue, 55), new PointF(float.MaxValue, 55));
             Assert.Equal(2, intersections.Count());
             
-            DrawPath(provider, poly, 1f);
+            DrawRegion(provider, poly, 1f);
         }
 
         [Theory]
@@ -126,7 +153,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             IPath poly = simplePath.Clip(hole1);
             
-            DrawPath(provider, poly, 1f);
+            DrawRegion(provider, poly, 1f);
 
             IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(float.MinValue, 137), new PointF(float.MaxValue, 137));
 
@@ -146,6 +173,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             IEnumerable<PointF> intersections = simplePath.FindIntersections(new PointF(float.MinValue, 150), new PointF(float.MaxValue, 150));
 
+            DrawRegion(provider, simplePath, 1f);
             // returns an even number of points
             Assert.Equal(2, intersections.Count());
         }
@@ -157,6 +185,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             IPath simplePath = new RectangularPolygon(10, 10, 100, 100).Clip(new RectangularPolygon(20, 0, 20, 20));
 
+            DrawRegion(provider, simplePath, 1f);
+            
             IEnumerable<PointF> intersections = simplePath.FindIntersections(new PointF(float.MinValue, 20), new PointF(float.MaxValue, 20));
 
             // returns an even number of points
@@ -173,6 +203,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                              new PointF(100, 10),
                              new PointF(50, 300)));
 
+            DrawRegion(provider, simplePath, 1f);
+            
             IEnumerable<PointF> intersections = simplePath.FindIntersections(new PointF(float.MinValue, 10), new PointF(float.MaxValue, 10));
 
             // returns an even number of points
@@ -196,6 +228,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             IPath poly = simplePath.Clip(hole1);
 
+            DrawRegion(provider, poly, 1f);
+            
             IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(float.MinValue, 300), new PointF(float.MaxValue, 300));
 
             // returns an even number of points
@@ -218,6 +252,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                             new PointF(65, 137)));
 
             IPath poly = simplePath.Clip(hole1);
+            
+            DrawRegion(provider, poly, 1f);
 
             IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(float.MinValue, 85), new PointF(float.MaxValue, 85));
 

@@ -4,6 +4,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ImageMagick;
 using SixLabors.ImageSharp.Advanced;
@@ -78,6 +79,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
         }
 
         public Image Decode(Configuration configuration, Stream stream) => this.Decode<Rgba32>(configuration, stream);
+        public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken) where TPixel : unmanaged, IPixel<TPixel>
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
+        {
+            throw new NotImplementedException();
+        }
+
         public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream) where TPixel : unmanaged, IPixel<TPixel> => throw new NotImplementedException();
         public Task<Image> DecodeAsync(Configuration configuration, Stream stream) => throw new NotImplementedException();
     }
