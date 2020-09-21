@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             var line1 = new PointF[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
             var path = new Path(new LinearLineSegment(line1));
-            IReadOnlyList<PointF> pathPoints = path.Flatten().First().Points;
+            IReadOnlyList<PointF> pathPoints = path.Flatten().First().Points.ToArray();
 
             // all points must not be in the outline;
             foreach (PointF v in line1)
@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             var line1 = new PointF[] { new Vector2(117f, 199f), new Vector2(31f, 210f), new Vector2(35f, 191f), new Vector2(117f, 199f), new Vector2(2f, 9f) };
             var path = new InternalPath(new LinearLineSegment(line1), false);
-            IReadOnlyList<PointF> pathPoints = path.Points();
+            IReadOnlyList<PointF> pathPoints = path.Points().ToArray();
 
             // all points must not be in the outline;
             foreach (PointF v in line1)

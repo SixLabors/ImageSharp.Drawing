@@ -20,10 +20,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             var path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
 
-            Assert.Contains(new PointF(0, 0), path.Points());
-            Assert.DoesNotContain(new PointF(2, 2), path.Points());
-            Assert.DoesNotContain(new PointF(4, 4), path.Points());
-            Assert.Contains(new PointF(5, 5), path.Points());
+            Assert.Contains(new PointF(0, 0), path.Points().ToArray());
+            Assert.DoesNotContain(new PointF(2, 2), path.Points().ToArray());
+            Assert.DoesNotContain(new PointF(4, 4), path.Points().ToArray());
+            Assert.Contains(new PointF(5, 5), path.Points().ToArray());
         }
 
         [Fact]

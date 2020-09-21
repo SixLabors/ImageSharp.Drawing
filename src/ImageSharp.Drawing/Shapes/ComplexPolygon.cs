@@ -6,7 +6,6 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using Orientation = SixLabors.ImageSharp.Drawing.InternalPath.Orientation;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -14,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
     /// </summary>
     /// <seealso cref="IPath" />
-    public sealed class ComplexPolygon : IPath
+    public sealed class ComplexPolygon : IPath, IInternalPathOwner
     {
         private readonly IPath[] paths;
         private List<InternalPath> internalPaths = null;
@@ -206,14 +205,14 @@ namespace SixLabors.ImageSharp.Drawing
             this.EnsureInternalPathsInitalized();
 
             int totalAdded = 0;
-            Orientation[] orientations = ArrayPool<Orientation>.Shared.Rent(buffer.Length); // the largest number of intersections of any sub path of the set is the max size with need for this buffer.
-            Span<Orientation> orientationsSpan = orientations;
+            InternalPath.PointOrientation[] orientations = ArrayPool<InternalPath.PointOrientation>.Shared.Rent(buffer.Length); // the largest number of intersections of any sub path of the set is the max size with need for this buffer.
+            Span<InternalPath.PointOrientation> orientationsSpan = orientations;
             try
             {
                 foreach (var ip in this.internalPaths)
                 {
                     Span<PointF> subBuffer = buffer.Slice(totalAdded);
-                    Span<Orientation> subOrientationsSpan = orientationsSpan.Slice(totalAdded);
+                    Span<InternalPath.PointOrientation> subOrientationsSpan = orientationsSpan.Slice(totalAdded);
 
                     var position = ip.FindIntersectionsWithOrientation(start, end, subBuffer, subOrientationsSpan);
                     totalAdded += position;
@@ -236,7 +235,7 @@ namespace SixLabors.ImageSharp.Drawing
             }
             finally
             {
-                ArrayPool<Orientation>.Shared.Return(orientations);
+                ArrayPool<InternalPath.PointOrientation>.Shared.Return(orientations);
             }
 
             return totalAdded;
@@ -375,6 +374,12 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             throw new InvalidOperationException("Should not be possible to reach this line");
+        }
+
+        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
+        {
+            this.EnsureInternalPathsInitalized();
+            return this.internalPaths;
         }
     }
 }

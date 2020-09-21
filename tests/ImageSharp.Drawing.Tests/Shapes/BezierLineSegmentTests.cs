@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void SingleSegmentConstructor()
         {
             var segment = new CubicBezierLineSegment(new Vector2(0, 0), new Vector2(10, 0), new Vector2(10, 0), new Vector2(20, 0));
-            IReadOnlyList<PointF> points = segment.Flatten();
+            IReadOnlyList<PointF> points = segment.Flatten().ToArray();
             Assert.Contains(new Vector2(0, 0), points);
             Assert.Contains(new Vector2(10, 0), points);
             Assert.Contains(new Vector2(20, 0), points);

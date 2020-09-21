@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using ClipperLib;
 
 namespace SixLabors.ImageSharp.Drawing
@@ -94,21 +95,22 @@ namespace SixLabors.ImageSharp.Drawing
                 bool online = !startOff;
                 float targetLength = pattern[0] * width;
                 int patternPos = 0;
+                ReadOnlySpan<PointF> points = p.Points.Span;
 
                 // Create a new list of points representing the new outline
-                int pCount = p.Points.Count;
+                int pCount = points.Length;
                 if (!p.IsClosed)
                 {
                     pCount--;
                 }
 
                 int i = 0;
-                Vector2 currentPoint = p.Points[0];
+                Vector2 currentPoint = points[0];
 
                 while (i < pCount)
                 {
-                    int next = (i + 1) % p.Points.Count;
-                    Vector2 targetPoint = p.Points[next];
+                    int next = (i + 1) % points.Length;
+                    Vector2 targetPoint = points[next];
                     float distToNext = Vector2.Distance(currentPoint, targetPoint);
                     if (distToNext > targetLength)
                     {
@@ -148,11 +150,11 @@ namespace SixLabors.ImageSharp.Drawing
                 {
                     if (p.IsClosed)
                     {
-                        buffer.Add(p.Points.First().ToPoint());
+                        buffer.Add(points[0].ToPoint());
                     }
                     else
                     {
-                        buffer.Add(p.Points.Last().ToPoint());
+                        buffer.Add(points[points.Length - 1].ToPoint());
                     }
 
                     if (online)
@@ -201,8 +203,8 @@ namespace SixLabors.ImageSharp.Drawing
             IEnumerable<ISimplePath> paths = path.Flatten();
             foreach (ISimplePath p in paths)
             {
-                IReadOnlyList<PointF> vectors = p.Points;
-                var points = new List<IntPoint>(vectors.Count);
+                ReadOnlySpan<Vector2> vectors = MemoryMarshal.Cast<PointF, Vector2>(p.Points.Span);
+                var points = new List<IntPoint>(vectors.Length);
                 foreach (Vector2 v in vectors)
                 {
                     points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));

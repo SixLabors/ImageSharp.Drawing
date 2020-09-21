@@ -7,6 +7,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -41,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="segments">The segments.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IEnumerable<ILineSegment> segments, bool isClosedPath)
+        internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath)
             : this(Simplify(segments, isClosedPath), isClosedPath)
         {
         }
@@ -52,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="segment">The segment.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(ILineSegment segment, bool isClosedPath)
-            : this(segment?.Flatten() ?? Enumerable.Empty<PointF>(), isClosedPath)
+            : this(segment?.Flatten() ?? Array.Empty<PointF>(), isClosedPath)
         {
         }
 
@@ -61,7 +63,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="points">The points.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IEnumerable<PointF> points, bool isClosedPath)
+        internal InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
             : this(Simplify(points, isClosedPath), isClosedPath)
         {
         }
@@ -96,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// the orrientateion of an point form a line
         /// </summary>
-        internal enum Orientation
+        internal enum PointOrientation
         {
             /// <summary>
             /// Point is colienear
@@ -198,10 +200,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>number of intersections hit</returns>
         public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
         {
-            Orientation[] orientations = ArrayPool<Orientation>.Shared.Rent(buffer.Length);
+            PointOrientation[] orientations = ArrayPool<PointOrientation>.Shared.Rent(buffer.Length);
             try
             {
-                Span<Orientation> orientationsSpan = orientations.AsSpan(0, buffer.Length);
+                Span<PointOrientation> orientationsSpan = orientations.AsSpan(0, buffer.Length);
                 var position = this.FindIntersectionsWithOrientation(start, end, buffer, orientationsSpan);
 
                 var activeBuffer = buffer.Slice(0, position);
@@ -217,7 +219,7 @@ namespace SixLabors.ImageSharp.Drawing
             }
             finally
             {
-                ArrayPool<Orientation>.Shared.Return(orientations);
+                ArrayPool<PointOrientation>.Shared.Return(orientations);
             }
         }
 
@@ -230,7 +232,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="buffer">The buffer.</param>
         /// <param name="orientationsSpan">The buffer for storeing the orientation of each intersection.</param>
         /// <returns>number of intersections hit</returns>
-        public int FindIntersectionsWithOrientation(PointF start, PointF end, Span<PointF> buffer, Span<Orientation> orientationsSpan)
+        public int FindIntersectionsWithOrientation(PointF start, PointF end, Span<PointF> buffer, Span<PointOrientation> orientationsSpan)
         {
             if (this.points.Length < 2)
             {
@@ -261,9 +263,9 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 // pre calculate relative orientations X places ahead and behind
                 Vector2 startToEnd = end - start;
-                Orientation prevOrientation = CalulateOrientation(startToEnd, this.points[polyCorners - 1].Point - end);
-                Orientation nextOrientation = CalulateOrientation(startToEnd, this.points[0].Point - end);
-                Orientation nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[1].Point - end);
+                PointOrientation prevOrientation = CalulateOrientation(startToEnd, this.points[polyCorners - 1].Point - end);
+                PointOrientation nextOrientation = CalulateOrientation(startToEnd, this.points[0].Point - end);
+                PointOrientation nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[1].Point - end);
 
                 // iterate over all points and precalculate data about each, pre cacluating it relative orientation
                 for (int i = 0; i < polyCorners && count > 0; i++)
@@ -271,20 +273,20 @@ namespace SixLabors.ImageSharp.Drawing
                     ref Segment edge = ref this.points[i].Segment;
 
                     // shift all orientations along but one place and fill in the last one
-                    Orientation pointOrientation = nextOrientation;
+                    PointOrientation pointOrientation = nextOrientation;
                     nextOrientation = nextPlus1Orientation;
                     nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[WrapArrayIndex(i + 2, this.points.Length)].Point - end);
 
                     // should this point cause the last matched point to be excluded
-                    bool removeLastIntersection = nextOrientation == Orientation.Colinear &&
-                                                  pointOrientation == Orientation.Colinear &&
+                    bool removeLastIntersection = nextOrientation == PointOrientation.Colinear &&
+                                                  pointOrientation == PointOrientation.Colinear &&
                                                   nextPlus1Orientation != prevOrientation &&
                                                   (this.closedPath || i > 0) &&
                                                   (IsOnSegment(target, edge.Start) || IsOnSegment(target, edge.End));
 
                     // is there any chance the segments will intersection (do their bounding boxes touch)
                     bool doIntersect = false;
-                    if (pointOrientation == Orientation.Colinear || pointOrientation != nextOrientation)
+                    if (pointOrientation == PointOrientation.Colinear || pointOrientation != nextOrientation)
                     {
                         doIntersect = (edge.Min.X - Epsilon) <= target.Max.X &&
                                       (edge.Max.X + Epsilon) >= target.Min.X &&
@@ -350,8 +352,8 @@ namespace SixLabors.ImageSharp.Drawing
                                     last = i;
                                 }
 
-                                Orientation side = precaclulateSpan[next].RelativeOrientation;
-                                Orientation side2 = precaclulateSpan[last].RelativeOrientation;
+                                PointOrientation side = precaclulateSpan[next].RelativeOrientation;
+                                PointOrientation side2 = precaclulateSpan[last].RelativeOrientation;
 
                                 if (side != side2)
                                 {
@@ -394,7 +396,7 @@ namespace SixLabors.ImageSharp.Drawing
             }
         }
 
-        internal static int ApplyNonZeroIntersectionRules(Span<PointF> buffer, Span<Orientation> orientationsSpan)
+        internal static int ApplyNonZeroIntersectionRules(Span<PointF> buffer, Span<PointOrientation> orientationsSpan)
         {
             int newpositions = 0;
             int tracker = 0;
@@ -404,13 +406,13 @@ namespace SixLabors.ImageSharp.Drawing
                 bool include = tracker == 0;
                 switch (orientationsSpan[i])
                 {
-                    case Orientation.Counterclockwise:
+                    case PointOrientation.Counterclockwise:
                         diff = 1;
                         break;
-                    case Orientation.Clockwise:
+                    case PointOrientation.Clockwise:
                         diff = -1;
                         break;
-                    case Orientation.Colinear:
+                    case PointOrientation.Colinear:
                     default:
                         diff *= -1;
                         break;
@@ -477,7 +479,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// Gets the points.
         /// </summary>
         /// <returns>The <see cref="IReadOnlyCollection{PointF}"/></returns>
-        internal IReadOnlyList<PointF> Points() => this.points.Select(x => (PointF)x.Point).ToArray();
+        internal ReadOnlyMemory<PointF> Points() => this.points.Select(x => x.Point).ToArray();
 
         /// <summary>
         /// Calculates the point a certain distance a path.
@@ -518,6 +520,19 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             throw new InvalidOperationException("should alwys reach a point along the path");
+        }
+
+        internal IMemoryOwner<PointF> ExtractVertices(MemoryAllocator allocator)
+        {
+            IMemoryOwner<PointF> buffer = allocator.Allocate<PointF>(this.points.Length + 1);
+            Span<PointF> span = buffer.Memory.Span;
+
+            for (int i = 0; i < this.points.Length; i++)
+            {
+                span[i] = this.points[i].Point;
+            }
+
+            return buffer;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -579,7 +594,7 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Orientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
+        private static PointOrientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
         {
             // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
             // for details of below formula.
@@ -589,14 +604,14 @@ namespace SixLabors.ImageSharp.Drawing
 
             if (val > -Epsilon && val < Epsilon)
             {
-                return Orientation.Colinear;  // colinear
+                return PointOrientation.Colinear;  // colinear
             }
 
-            return (val > 0) ? Orientation.Clockwise : Orientation.Counterclockwise; // clock or counterclock wise
+            return (val > 0) ? PointOrientation.Clockwise : PointOrientation.Counterclockwise; // clock or counterclock wise
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Orientation CalulateOrientation(Vector2 qp, Vector2 rq)
+        private static PointOrientation CalulateOrientation(Vector2 qp, Vector2 rq)
         {
             // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
             // for details of below formula.
@@ -604,10 +619,10 @@ namespace SixLabors.ImageSharp.Drawing
 
             if (val > -Epsilon && val < Epsilon)
             {
-                return Orientation.Colinear;  // colinear
+                return PointOrientation.Colinear;  // colinear
             }
 
-            return (val > 0) ? Orientation.Clockwise : Orientation.Counterclockwise; // clock or counterclock wise
+            return (val > 0) ? PointOrientation.Clockwise : PointOrientation.Counterclockwise; // clock or counterclock wise
         }
 
         /// <summary>
@@ -678,18 +693,20 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
-        private static PointData[] Simplify(IEnumerable<ILineSegment> segments, bool isClosed)
+        private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed)
         {
             var simplified = new List<PointF>();
+
             foreach (ILineSegment seg in segments)
             {
-                simplified.AddRange(seg.Flatten());
+                ReadOnlyMemory<PointF> points = seg.Flatten();
+                simplified.AddRange(points.ToArray());
             }
 
-            return Simplify(simplified, isClosed);
+            return Simplify(simplified.ToArray(), isClosed);
         }
 
-        private static PointData[] Simplify(IEnumerable<PointF> vectors, bool isClosed)
+        private static PointData[] Simplify(ReadOnlyMemory<PointF> vectors, bool isClosed)
         {
             PointF[] points = vectors.ToArray();
 
@@ -707,7 +724,7 @@ namespace SixLabors.ImageSharp.Drawing
                 results.Add(new PointData
                 {
                     Point = points[0],
-                    Orientation = Orientation.Colinear,
+                    Orientation = PointOrientation.Colinear,
                     Length = 0
                 });
             }
@@ -725,7 +742,7 @@ namespace SixLabors.ImageSharp.Drawing
                             new PointData
                             {
                                 Point = points[0],
-                                Orientation = Orientation.Colinear,
+                                Orientation = PointOrientation.Colinear,
                                 Segment = new Segment(points[0], points[next]),
                                 Length = 0,
                                 TotalLength = 0
@@ -755,8 +772,8 @@ namespace SixLabors.ImageSharp.Drawing
             for (int i = 1; i < polyCorners; i++)
             {
                 int next = WrapArrayIndex(i + 1, polyCorners);
-                Orientation or = CalulateOrientation(lastPoint, points[i], points[next]);
-                if (or == Orientation.Colinear && next != 0)
+                PointOrientation or = CalulateOrientation(lastPoint, points[i], points[next]);
+                if (or == PointOrientation.Colinear && next != 0)
                 {
                     continue;
                 }
@@ -777,7 +794,7 @@ namespace SixLabors.ImageSharp.Drawing
             if (isClosed)
             {
                 // walk back removing collinear points
-                while (results.Count > 2 && results.Last().Orientation == Orientation.Colinear)
+                while (results.Count > 2 && results.Last().Orientation == PointOrientation.Colinear)
                 {
                     results.RemoveAt(results.Count - 1);
                 }
@@ -835,36 +852,6 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 end.Y = this.Bounds.Top - 1;
             }
-        }
-
-        /// <summary>
-        /// Returns the length of the path.
-        /// </summary>
-        /// <returns>
-        /// The <see cref="float"/>.
-        /// </returns>
-        private float CalculateLength()
-        {
-            float length = 0;
-            int polyCorners = this.points.Length;
-
-            if (!this.closedPath)
-            {
-                polyCorners -= 1;
-            }
-
-            for (int i = 0; i < polyCorners; i++)
-            {
-                int next = i + 1;
-                if (this.closedPath && next == polyCorners)
-                {
-                    next = 0;
-                }
-
-                length += this.points[i].Length;
-            }
-
-            return length;
         }
 
         /// <summary>
@@ -933,7 +920,7 @@ namespace SixLabors.ImageSharp.Drawing
         private struct PointData
         {
             public PointF Point;
-            public Orientation Orientation;
+            public PointOrientation Orientation;
 
             public float Length;
             public float TotalLength;
@@ -943,7 +930,7 @@ namespace SixLabors.ImageSharp.Drawing
         private struct PassPointData
         {
             public bool RemoveLastIntersectionAndSkip;
-            public Orientation RelativeOrientation;
+            public PointOrientation RelativeOrientation;
             public bool DoIntersect;
         }
 

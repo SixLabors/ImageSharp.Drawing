@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// A aggregate of <see cref="ILineSegment"/>s making a single logical path
     /// </summary>
     /// <seealso cref="IPath" />
-    public class Path : IPath, ISimplePath
+    public class Path : IPath, ISimplePath, IInternalPathOwner
     {
         private readonly ILineSegment[] lineSegments;
         private InternalPath innerPath;
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        IReadOnlyList<PointF> ISimplePath.Points => this.InnerPath.Points();
+        ReadOnlyMemory<PointF> ISimplePath.Points => this.InnerPath.Points();
 
         /// <inheritdoc />
         public RectangleF Bounds => this.InnerPath.Bounds;
@@ -82,7 +82,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         protected virtual bool IsClosed => false;
 
-        private InternalPath InnerPath => this.innerPath ?? (this.innerPath = new InternalPath(this.lineSegments, this.IsClosed));
+        private InternalPath InnerPath => this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed);
 
         /// <inheritdoc />
         public PointInfo Distance(PointF point)
@@ -199,5 +199,7 @@ namespace SixLabors.ImageSharp.Drawing
         {
             return this.InnerPath.PointAlongPath(distanceAlongPath);
         }
+
+        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };
     }
 }

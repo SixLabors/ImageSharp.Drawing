@@ -138,9 +138,9 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
-            IReadOnlyList<PointF> vectors = path.Points;
+            ReadOnlySpan<PointF> vectors = path.Points.Span;
 
-            var points = new List<IntPoint>(vectors.Count);
+            var points = new List<IntPoint>(vectors.Length);
             foreach (PointF v in vectors)
             {
                 points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));

@@ -66,7 +66,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void SimplePath()
         {
             var path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
-            System.Collections.Generic.IReadOnlyList<PointF> points = path.Flatten().Single().Points;
+            System.Collections.Generic.IReadOnlyList<PointF> points = path.Flatten().Single().Points.ToArray();
 
             Assert.Equal(4, points.Count);
             Assert.Equal(new PointF(0, 0), points[0]);

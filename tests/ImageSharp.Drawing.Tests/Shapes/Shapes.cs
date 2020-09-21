@@ -6,7 +6,7 @@ using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
-    public static class Shapes
+    public static class TestShapes
     {
         public static IPath IrisSegment(int rotationPos)
         {

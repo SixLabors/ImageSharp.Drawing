@@ -159,7 +159,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the points that make this up as a simple linear path.
         /// </summary>
-        IReadOnlyList<PointF> ISimplePath.Points => this.points;
+        ReadOnlyMemory<PointF> ISimplePath.Points => this.points;
 
         /// <summary>
         /// Gets the size.

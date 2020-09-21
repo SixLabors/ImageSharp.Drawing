@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// <summary>
     /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
-    public class EllipsePolygon : IPath, ISimplePath
+    public class EllipsePolygon : IPath, ISimplePath, IInternalPathOwner
     {
         private readonly InternalPath innerPath;
         private readonly CubicBezierLineSegment segment;
@@ -72,7 +72,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the points that make up this simple linear path.
         /// </summary>
-        IReadOnlyList<PointF> ISimplePath.Points => this.innerPath.Points();
+        ReadOnlyMemory<PointF> ISimplePath.Points => this.innerPath.Points();
 
         /// <inheritdoc />
         public RectangleF Bounds => this.innerPath.Bounds;
@@ -229,5 +229,7 @@ namespace SixLabors.ImageSharp.Drawing
 
             return new CubicBezierLineSegment(points);
         }
+
+        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] {this.innerPath};
     }
 }

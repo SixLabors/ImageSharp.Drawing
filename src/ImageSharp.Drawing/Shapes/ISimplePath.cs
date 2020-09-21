@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 
 namespace SixLabors.ImageSharp.Drawing
@@ -18,6 +19,6 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the points that make this up as a simple linear path.
         /// </summary>
-        IReadOnlyList<PointF> Points { get; }
+        ReadOnlyMemory<PointF> Points { get; }
     }
 }

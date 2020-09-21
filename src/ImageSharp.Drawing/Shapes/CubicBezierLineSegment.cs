@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// The line points.
         /// </summary>
-        private readonly List<PointF> linePoints;
+        private readonly PointF[] linePoints;
         private readonly PointF[] controlPoints;
 
         /// <summary>
@@ -79,7 +79,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public IReadOnlyList<PointF> Flatten()
+        public ReadOnlyMemory<PointF> Flatten()
         {
             return this.linePoints;
         }
@@ -114,7 +114,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>A line segment with the matrix applied to it.</returns>
         ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
-        private static List<PointF> GetDrawingPoints(PointF[] controlPoints)
+        private static PointF[] GetDrawingPoints(PointF[] controlPoints)
         {
             var drawingPoints = new List<PointF>();
             int curveCount = (controlPoints.Length - 1) / 3;
@@ -132,7 +132,7 @@ namespace SixLabors.ImageSharp.Drawing
                 drawingPoints.AddRange(bezierCurveDrawingPoints);
             }
 
-            return drawingPoints;
+            return drawingPoints.ToArray();
         }
 
         private static List<PointF> FindDrawingPoints(int curveIndex, PointF[] controlPoints)
