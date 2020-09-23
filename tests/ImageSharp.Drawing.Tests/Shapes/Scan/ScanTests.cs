@@ -17,46 +17,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 {
     public class ScanTests
     {
-        private static readonly IBrush TestBrush = Brushes.Solid(Color.Red);
-
-        private static readonly IPen GridPen = Pens.Solid(Color.Aqua, 0.5f);
-
         private readonly ITestOutputHelper output;
 
+        private static readonly DebugDraw DebugDraw = new DebugDraw(nameof(ScanTests));
         public ScanTests(ITestOutputHelper output)
         {
             this.output = output;
-        }
-
-        private static PointF P(float x, float y) => new PointF(x, y);
-        
-        private static void DrawGrid(IImageProcessingContext ctx, RectangleF rect, float gridSize)
-        {
-            for (float x = rect.Left; x <= rect.Right; x += gridSize)
-            {
-                PointF[] line = {P(x, rect.Top), P(x, rect.Bottom)};
-                ctx.DrawLines(GridPen, line);
-            }
-
-            for (float y = rect.Top; y <= rect.Bottom; y += gridSize)
-            {
-                PointF[] line = {P(rect.Left, y), P(rect.Right, y)};
-                ctx.DrawLines(GridPen, line);
-            }
-        }
-        
-        private void DebugDraw(IPath path, float gridSize = 10f, float scale = 10f, [CallerMemberName]string testMethod = "")
-        {
-            path = path.Transform(Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(gridSize, gridSize));
-            RectangleF bounds = path.Bounds;
-            gridSize *= scale;
-
-            using Image img = new Image<Rgba32>((int)(bounds.Width + 2 * gridSize), (int)(bounds.Height + 2 * gridSize));
-            img.Mutate(ctx => DrawGrid(ctx.Fill(TestBrush, path), bounds, gridSize));
-            
-            string outDir = TestEnvironment.CreateOutputDirectory(nameof(ScanTests));
-            string outFile = IOPath.Combine(outDir, testMethod+".png");
-            img.SaveAsPng(outFile);
         }
 
         private void PrintPoints(ReadOnlySpan<PointF> points)
@@ -86,15 +52,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void Wooo()
         {
-            IPath poly1 = TestData.CreatePolygon((0, 0), (10, 0),(10, 10), (0, 10));
-            IPath poly2 = TestData.CreatePolygon((0, 10), (10, 10), (10, 0), (0, 0));
-            IPath poly3 = TestData.CreatePolygon((0, 0), (10, 0),(10, 10), (0, 10), (0,0));
+            IPath poly1 = PolygonTest.CreatePolygon((0, 0), (10, 0),(10, 10), (0, 10));
+            IPath poly2 = PolygonTest.CreatePolygon((0, 10), (10, 10), (10, 0), (0, 0));
+            IPath poly3 = PolygonTest.CreatePolygon((0, 0), (10, 0),(10, 10), (0, 10), (0,0));
 
             PrintPoints(poly1.Flatten().Single().Points.ToArray());
             PrintPoints(poly2.Flatten().Single().Points.ToArray());
             PrintPoints(poly3.Flatten().Single().Points.ToArray());
-            DebugDraw(poly1);
-            DebugDraw(poly2);
+            DebugDraw.Polygon(poly1);
+            DebugDraw.Polygon(poly2);
         }
         
         [Fact]
@@ -102,8 +68,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         {
             var stuff = new[] {(0, 0), (10, 10), (20, 0), (20, 20), (0f, 20f)};
             
-            IPath poly = TestData.CreatePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
-            DebugDraw(poly);
+            IPath poly = PolygonTest.CreatePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
+            DebugDraw.Polygon(poly);
 
             float[][] expected =
             {
@@ -136,8 +102,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void BasicConcave02()
         {
-            IPath poly = TestData.CreatePolygon((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
-            DebugDraw(poly, 1f, 100f);
+            IPath poly = PolygonTest.CreatePolygon((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
+            DebugDraw.Polygon(poly, 1f, 100f);
 
             float[][] expected =
             {
@@ -155,8 +121,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void BasicConcave03()
         {
-            IPath poly = TestData.CreatePolygon((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
-            DebugDraw(poly, 1f, 100f);
+            IPath poly = PolygonTest.CreatePolygon((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
+            DebugDraw.Polygon(poly, 1f, 100f);
 
             float[][] expected =
             {
@@ -178,8 +144,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void BasicConcave04()
         {
-            IPath poly = TestData.CreatePolygon((10, 0), (20, 0), (20, 30), (10, 30), (10, 20), (0, 20), (0, 10), (10, 10));
-            DebugDraw(poly);
+            IPath poly = PolygonTest.CreatePolygon((10, 0), (20, 0), (20, 30), (10, 30), (10, 20), (0, 20), (0, 10), (10, 10));
+            DebugDraw.Polygon(poly);
 
             float[][] expected =
             {
@@ -199,11 +165,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void CartesianBear()
         {
-            IPath poly = TestData.CreatePolygon((10, 10), (50, 10), (50, 30), (40, 30), (40, 20), (30, 20), (30, 30), (20, 30),
+            IPath poly = PolygonTest.CreatePolygon((10, 10), (50, 10), (50, 30), (40, 30), (40, 20), (30, 20), (30, 30), (20, 30),
                 (20, 20), (10, 20));
-            DebugDraw(poly);
+            DebugDraw.Polygon(poly);
 
-            var l = TestData.CreateHorizontalLine(20);
+            var l = PolygonTest.CreateHorizontalLine(20);
 
             PointF[] isc = poly.FindIntersections(l.Start, l.End).ToArray();
             PrintPointsX(isc);
@@ -223,8 +189,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void SelfIntersecting01()
         {
-            IPath poly = TestData.CreatePolygon((0, 0), (10, 0), (0, 10), (10, 10));
-            DebugDraw(poly, 10f, 10f);
+            IPath poly = PolygonTest.CreatePolygon((0, 0), (10, 0), (0, 10), (10, 10));
+            DebugDraw.Polygon(poly, 10f, 10f);
 
             float[][] expected =
             {
@@ -240,8 +206,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void SelfIntersecting02()
         {
-            IPath poly = TestData.CreatePolygon((0, 0), (10, 10), (10, 0), (0, 10));
-            DebugDraw(poly, 10f, 10f);
+            IPath poly = PolygonTest.CreatePolygon((0, 0), (10, 10), (10, 0), (0, 10));
+            DebugDraw.Polygon(poly, 10f, 10f);
 
             float[][] expected =
             {
@@ -260,9 +226,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         public void SelfIntersecting03(IntersectionRule rule)
         {
             
-            IPath poly = TestData.CreatePolygon((10, 30), (10, 20), (50, 20), (50, 50), (20, 50), (20, 10), (30, 10), (30, 40),
+            IPath poly = PolygonTest.CreatePolygon((10, 30), (10, 20), (50, 20), (50, 50), (20, 50), (20, 10), (30, 10), (30, 40),
                 (40, 40), (40, 30), (10, 30));
-            DebugDraw(poly, 10f, 10f);
+            DebugDraw.Polygon(poly, 10f, 10f);
 
             float[][] expected =
             {
@@ -290,13 +256,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void Case10()
         {
-            IPath poly = TestData.CreatePolygon((82.142F, 63.157F), (37, 85), (65, 137), (103.792F, 79.11F), (200, 150), (50, 300), (10, 10));
+            IPath poly = PolygonTest.CreatePolygon((82.142F, 63.157F), (37, 85), (65, 137), (103.792F, 79.11F), (200, 150), (50, 300), (10, 10));
             
             PointF[] pleas = poly.Flatten().First().Points.ToArray();
             
             PrintPointsX(pleas);
-            
-            DebugDraw(poly, 10f, 5f);
+
+            DebugDraw.Polygon(poly, 10f, 5f);
         }
     }
 }

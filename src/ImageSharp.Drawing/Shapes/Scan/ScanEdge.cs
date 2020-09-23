@@ -28,17 +28,19 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
     /// The edge's segment is defined with the reciprocal slope form:
     /// x = P * y + Q
     /// </summary>
-    internal readonly struct EdgeData
+    internal readonly struct ScanEdge
     {
         public readonly float Y0; // Start
         public readonly float Y1; // End
         public readonly float P;
         public readonly float Q;
 
+        // Store 3 small values in a single Int32, to make EdgeData more compact:
+        // EdgeUp, Emit0, Emit1
         private readonly int flags;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private EdgeData(ref PointF p0, ref PointF p1, int flags)
+        private ScanEdge(ref PointF p0, ref PointF p1, int flags)
         {
             this.Y0 = p0.Y;
             this.Y1 = p1.Y;
@@ -48,13 +50,18 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.Q = ((p0.X * p1.Y) - (p1.X * p0.Y)) / dy;
         }
 
+        // Edge is up in screen coords
         public bool EdgeUp => (this.flags & 1) == 1;
 
-        public int IncludeIsec0Times => (this.flags & 0b00110) >> 1;
+        // How many times to include the intersection result
+        // When the scanline intersects the endpoint at Y0.
+        public int Emit0 => (this.flags & 0b00110) >> 1;
 
-        public int IncludeIsec1Times => (this.flags & 0b11000) >> 3;
+        // How many times to include the intersection result
+        // When the scanline intersects the endpoint at Y1.
+        public int Emit1 => (this.flags & 0b11000) >> 3;
 
-        private static EdgeData CreateSorted(PointF start, PointF end, bool edgeUp, int includeStartTimes, int includeEndTimes)
+        private static ScanEdge CreateSorted(PointF start, PointF end, bool edgeUp, int includeStartTimes, int includeEndTimes)
         {
             if (edgeUp)
             {
@@ -64,13 +71,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
             int up = edgeUp ? 1 : 0;
             int flags = up | (includeStartTimes << 1) | (includeEndTimes << 3);
-            return new EdgeData(ref start, ref end, flags);
-        }
-
-        public IMemoryOwner<EdgeData> CreateEdgesForMultipolygon(TessellatedMultipolygon multipolygon,
-            MemoryAllocator allocator)
-        {
-            throw new NotImplementedException();
+            return new ScanEdge(ref start, ref end, flags);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

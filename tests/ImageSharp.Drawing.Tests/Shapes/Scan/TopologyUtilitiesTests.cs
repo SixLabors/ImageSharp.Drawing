@@ -7,13 +7,13 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 {
-    public class TopologyUtilitiesTests
+    public class TopologyUtilitiesTests0
     {
         private TolerantComparer comparer = new TolerantComparer(0.001f);
         
         private static PointF[] CreateTestPoints()
         {
-            return TestData.CreatePoints((10, 0), (20, 0), (20, 30), (10, 30), (10, 20), (0, 20), (0, 10), (10, 10), (10,0));
+            return PolygonTest.CreatePoints((10, 0), (20, 0), (20, 30), (10, 30), (10, 20), (0, 20), (0, 10), (10, 10), (10,0));
         }
 
         [Theory]

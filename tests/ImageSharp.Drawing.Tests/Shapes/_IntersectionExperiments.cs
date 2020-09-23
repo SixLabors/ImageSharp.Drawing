@@ -24,11 +24,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             this.output = output;
         }
 
-        private static Polygon  MakePolygon(params (float x, float y)[] coords)
-        {
-            PointF[] points = coords.Select(c => new PointF(c.x, c.y)).ToArray();
-            return new Polygon(new LinearLineSegment(points));
-        }
 
         private void DrawRegion(ITestImageProvider provider, IPath path, float scale = 100f)
         {
@@ -85,7 +80,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void Case0<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            IPath path = MakePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
+            IPath path = PolygonTest.CreatePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
 
 
             PrintIntersections(path, 10);
@@ -98,7 +93,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void Case1<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            IPath path = MakePolygon((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
+            IPath path = PolygonTest.CreatePolygon((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
 
             PrintIntersections(path, 0.5f);
             PrintIntersections(path, 1);
@@ -113,7 +108,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void Case2<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            IPath path = MakePolygon((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
+            IPath path = PolygonTest.CreatePolygon((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
             
             PrintIntersections(path, 1);
 
