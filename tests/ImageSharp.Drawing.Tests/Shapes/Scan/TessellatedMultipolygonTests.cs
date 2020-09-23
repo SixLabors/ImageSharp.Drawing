@@ -6,7 +6,7 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 {
-    public class TessellatedComplexPolygonTests
+    public class TessellatedMultipolygonTests
     {
         private static MemoryAllocator MemoryAllocator => Configuration.Default.MemoryAllocator;
         
