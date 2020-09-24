@@ -32,13 +32,13 @@ namespace SixLabors.ImageSharp.Drawing
 
         public bool IsLess(float a, float b) => a < b - this.Eps;
 
-        public bool Equals(float a, float b)
+        public bool AreEqual(float a, float b)
         {
             float d = a - b;
             return d < this.Eps && d > this.negEps;
         }
 
-        public bool Equals(PointF a, PointF b)
+        public bool AreEqual(PointF a, PointF b)
         {
             float dx = a.X - b.X;
             float dy = a.Y - b.Y;
@@ -83,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing
             return a < b - this.Eps2;
         }
 
-        public bool Equals2(float a, float b)
+        public bool AreEqual2(float a, float b)
         {
             var d = a - b;
             return d < this.Eps2 && d > this.negEps2;

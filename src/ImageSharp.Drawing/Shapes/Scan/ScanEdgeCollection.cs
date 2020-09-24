@@ -3,11 +3,13 @@
 
 using System;
 using System.Buffers;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 {
-    internal class ScanEdgeCollection : IDisposable
+    internal partial class ScanEdgeCollection : IDisposable
     {
         private IMemoryOwner<ScanEdge> buffer;
 
@@ -39,9 +41,5 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             return Create(multipolygon, allocator, comparer);
         }
 
-        public static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon,  MemoryAllocator allocator, in TolerantComparer comparer)
-        {
-            throw new NotImplementedException();
-        }
     }
 }

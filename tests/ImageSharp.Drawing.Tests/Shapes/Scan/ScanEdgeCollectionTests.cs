@@ -31,14 +31,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             foreach (ScanEdge e in _edges.Edges)
             {
-                if (comparer.Equals(y0, e.Y0) && comparer.Equals(y1, e.Y1))
+                if (comparer.AreEqual(y0, e.Y0) && comparer.AreEqual(y1, e.Y1))
                 {
                     // x = P*y + Q
-                    bool containsPoint = comparer.Equals(arbitraryPoint.X, e.P * arbitraryPoint.Y + e.Q);
+                    bool containsPoint = comparer.AreEqual(arbitraryPoint.X, e.P * arbitraryPoint.Y + e.Q);
                     if (containsPoint)
                     {
-                        Assert.Equal(emit0, e.Emit0);
-                        Assert.Equal(emit1, e.Emit1);
+                        Assert.Equal(emit0, e.EmitV0);
+                        Assert.Equal(emit1, e.EmitV1);
                         Assert.Equal(edgeUp, e.EdgeUp);
                         
                         // Found the edge
@@ -51,9 +51,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
         
         [Fact]
-        public void Create_SimplePolygon_AllCases()
+        public void SimplePolygon_AllEmitCases()
         {
-            // see: SimplePolygon-AllCases.png
+            // see: SimplePolygon_AllEmitCases.png
             var polygon = PolygonTest.CreatePolygon(
                 (1, 2), (2, 2), (3, 1), (4, 3), (6, 1), (7, 2), (8, 2), (9, 3), 
                 (9, 4), (10, 5), (9, 6), (8, 6), (8, 7), (9,7), (9, 8),
@@ -76,15 +76,46 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             VerifyEdge(5f, 6f, (9.5f, 5.5f), 1, 1, false);
             VerifyEdge(6f, 7f, (8f, 6.5f), 2, 2, false);
             VerifyEdge(7f, 8f, (9f, 7.5f), 1, 1, false);
-            VerifyEdge(7f, 8f, (6.5f, 7.5f), 1, 0, true);
+            VerifyEdge(7f, 8f, (6.5f, 7.5f), 0, 1, true);
             VerifyEdge(7f, 8f, (5.5f, 7.5f), 0, 0, false);
             VerifyEdge(7f, 8f, (4.5f, 7.5f), 0, 0, true);
             VerifyEdge(7f, 8f, (3.5f, 7.5f), 0, 1, false);
-            VerifyEdge(6f, 8f, (2f, 7f), 1, 1, true);
-            VerifyEdge(5f, 6f, (2.5f, 5.5f), 0, 2, true);
+            VerifyEdge(6f, 8f, (2f, 7f), 0, 1, true);
+            VerifyEdge(5f, 6f, (2.5f, 5.5f), 2, 1, true);
             VerifyEdge(4f, 5f, (2f, 4.5f), 0, 1, true);
             VerifyEdge(3f, 4f, (1.5f, 3.5f), 0, 1, true);
             VerifyEdge(2f, 3f, (1f, 1.5f), 1, 1, true);
+        }
+
+        [Fact]
+        public void YDifferenceUnderTreshold_HorizontalEdgeExcluded()
+        {
+            // (0, 2) -> (10, 1.1) counts as horizontal with Epsilon = 1.0
+            var polygon = PolygonTest.CreatePolygon((0, 2), (10, 1.1f), (10, 4));
+            DebugDraw.Polygon(polygon, 1, 50);
+            
+            var comparer = new TolerantComparer(1f);
+            _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, comparer);
+            
+            Assert.Equal(2, _edges.Edges.Length);
+            VerifyEdge(1, 4, (10, 2), 1, 0, false);
+            VerifyEdge(2, 4, (5, 3), 1, 0, true);
+        }
+
+        [Fact]
+        public void YDifferenceOverTreshold_EdgeIncludedAsNonHorizontal()
+        {
+            // (0, 2) -> (10, 0.9) counts as NON-horizontal with Epsilon = 1.0
+            var polygon = PolygonTest.CreatePolygon((0, 2), (10, 0.9f), (10, 4));
+            DebugDraw.Polygon(polygon, 1, 50);
+            
+            var comparer = new TolerantComparer(1f);
+            _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, comparer);
+            
+            Assert.Equal(3, _edges.Edges.Length);
+            VerifyEdge(0.9f, 2, (5, 1.45f), 1, 0, true);
+            VerifyEdge(1, 4, (10, 2), 0, 0, false);
+            VerifyEdge(2, 4, (5, 3), 1, 0, true);
         }
 
         [Fact]

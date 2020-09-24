@@ -30,8 +30,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
     /// </summary>
     internal readonly struct ScanEdge
     {
-        public readonly float Y0; // Start
-        public readonly float Y1; // End
+        public readonly float Y0;
+        public readonly float Y1;
         public readonly float P;
         public readonly float Q;
 
@@ -40,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private readonly int flags;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private ScanEdge(ref PointF p0, ref PointF p1, int flags)
+        internal ScanEdge(ref PointF p0, ref PointF p1, int flags)
         {
             this.Y0 = p0.Y;
             this.Y1 = p1.Y;
@@ -55,31 +55,15 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         // How many times to include the intersection result
         // When the scanline intersects the endpoint at Y0.
-        public int Emit0 => (this.flags & 0b00110) >> 1;
+        public int EmitV0 => (this.flags & 0b00110) >> 1;
 
         // How many times to include the intersection result
         // When the scanline intersects the endpoint at Y1.
-        public int Emit1 => (this.flags & 0b11000) >> 3;
+        public int EmitV1 => (this.flags & 0b11000) >> 3;
 
-        private static ScanEdge CreateSorted(PointF start, PointF end, bool edgeUp, int includeStartTimes, int includeEndTimes)
-        {
-            if (edgeUp)
-            {
-                Swap(ref start, ref end);
-                Swap(ref includeStartTimes, ref includeEndTimes);
-            }
+        private string UpDownString => this.EdgeUp ? "Up" : "Down";
 
-            int up = edgeUp ? 1 : 0;
-            int flags = up | (includeStartTimes << 1) | (includeEndTimes << 3);
-            return new ScanEdge(ref start, ref end, flags);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void Swap<T>(ref T left, ref T right)
-        {
-            T tmp = left;
-            left = right;
-            right = tmp;
-        }
+        public override string ToString()
+            => $"(Y0={this.Y0} Y1={this.Y1} E0={this.EmitV0} E1={this.EmitV1} {this.UpDownString} P={this.P} Q={this.Q})";
     }
 }

@@ -28,22 +28,27 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         internal class Ring : IDisposable
         {
-            private IMemoryOwner<PointF> data;
+            private IMemoryOwner<PointF> buffer;
+            private Memory<PointF> memory;
 
             public RingType RingType { get; }
 
-            public ReadOnlySpan<PointF> Points => this.data.Memory.Span;
+            public ReadOnlySpan<PointF> Vertices => this.memory.Span;
 
-            internal Ring(IMemoryOwner<PointF> data, RingType ringType)
+            public int VertexCount => this.memory.Length - 1; // Last vertex is repeated
+
+            internal Ring(IMemoryOwner<PointF> buffer, RingType ringType)
             {
                 this.RingType = ringType;
-                this.data = data;
+                this.buffer = buffer;
+                this.memory = buffer.Memory;
             }
 
             public void Dispose()
             {
-                this.data?.Dispose();
-                this.data = null;
+                this.buffer?.Dispose();
+                this.buffer = null;
+                this.memory = default;
             }
         }
 
@@ -52,7 +57,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private TessellatedMultipolygon(Ring[] rings)
         {
             this.rings = rings;
+            this.TotalVertexCount = rings.Sum(r => r.VertexCount);
         }
+
+        public int TotalVertexCount { get; }
 
         public static TessellatedMultipolygon Create(IPath path, MemoryAllocator memoryAllocator, in TolerantComparer comparer)
         {

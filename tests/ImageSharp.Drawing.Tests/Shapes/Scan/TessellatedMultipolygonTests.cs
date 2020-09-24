@@ -17,10 +17,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         
         private static void VerifyRing(TessellatedMultipolygon.Ring ring, PointF[] originalPoints, bool originalPositive, bool isHole)
         {
-            ReadOnlySpan<PointF> points = ring.Points;
+            ReadOnlySpan<PointF> points = ring.Vertices;
             
             Assert.Equal(originalPoints.Length + 1, points.Length);
             Assert.Equal(points[0], points[points.Length - 1]);
+            Assert.Equal(originalPoints.Length, ring.VertexCount);
             
             originalPoints = originalPoints.CloneArray();
 
@@ -53,6 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator, Comparer);
             VerifyRing(multipolygon[0], points, reverseOriginal, false);
+            Assert.Equal(6, multipolygon.TotalVertexCount);
         }
         
         [Theory]
@@ -101,6 +103,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             VerifyRing(multipolygon[0], contour, !reverseContour, false);
             VerifyRing(multipolygon[1], hole, !reverseHole, true);
+            Assert.Equal(8, multipolygon.TotalVertexCount);
         }
 
         [Fact]
@@ -112,6 +115,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             
             using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator, Comparer);
             VerifyRing(multipolygon[0], points, true, false);
+            Assert.Equal(4, multipolygon.TotalVertexCount);
         }
         
         [Fact]
