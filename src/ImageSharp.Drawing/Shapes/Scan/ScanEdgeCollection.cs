@@ -37,9 +37,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.memory = default;
         }
 
-        public static ScanEdgeCollection Create(IPath path, MemoryAllocator allocator, in TolerantComparer comparer)
+        public static ScanEdgeCollection Create(IPath polygon, MemoryAllocator allocator, in TolerantComparer comparer)
         {
-            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(path, allocator, comparer);
+            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, comparer);
             return Create(multipolygon, allocator, comparer);
         }
 

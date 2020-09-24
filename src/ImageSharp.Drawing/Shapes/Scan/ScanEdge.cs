@@ -8,21 +8,6 @@ using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 {
-    // [Flags]
-    // internal enum EdgeFlags
-    // {
-    //     None = 0,
-    //
-    //     // Edge is directed "Up" in SCREEN coordinates,
-    //     // which means end.Y < start.Y
-    //     EdgeUp = 1,
-    //
-    //     IncludeStartOnce = 1 << 8,  // 0x00100
-    //     IncludeStartTwice = 1 << 9, // 0x00200
-    //     IncludeEndOnce = 1 << 16,   // 0x10000
-    //     IncludeEndTwice = 1 << 17,  // 0x20000
-    // }
-
     /// <summary>
     /// Holds coordinates, and coefficients for a polygon edge to be vertically scanned.
     /// The edge's segment is defined with the reciprocal slope form:
