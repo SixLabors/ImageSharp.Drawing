@@ -23,6 +23,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         public Span<ScanEdge> Edges => this.memory.Span;
 
+        public int Count => this.Edges.Length;
+
         public void Dispose()
         {
             if (this.buffer == null)

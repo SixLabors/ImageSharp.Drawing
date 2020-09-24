@@ -97,8 +97,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             var comparer = new TolerantComparer(1f);
             _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, comparer);
             
-            Assert.Equal(2, _edges.Edges.Length);
-            VerifyEdge(1, 4, (10, 2), 1, 0, false);
+            Assert.Equal(2, _edges.Count);
+            VerifyEdge(1.1f, 4, (10, 2), 1, 0, false);
             VerifyEdge(2, 4, (5, 3), 1, 0, true);
         }
 
@@ -112,18 +112,36 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             var comparer = new TolerantComparer(1f);
             _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, comparer);
             
-            Assert.Equal(3, _edges.Edges.Length);
-            VerifyEdge(0.9f, 2, (5, 1.45f), 1, 0, true);
-            VerifyEdge(1, 4, (10, 2), 0, 0, false);
-            VerifyEdge(2, 4, (5, 3), 1, 0, true);
+            Assert.Equal(3, _edges.Count);
+            VerifyEdge(0.9f, 2, (5, 1.45f), 0, 1, true);
+            VerifyEdge(0.9f, 4, (10, 2), 0, 0, false);
+            VerifyEdge(2, 4, (5, 3), 0, 0, true);
         }
 
         [Fact]
-        public void Create_ComplexPolygon()
+        public void ComplexPolygon()
         {
+            Polygon contour = PolygonTest.CreatePolygon(
+                (1, 1), (4, 1), (4, 2), (5, 2), (5, 5), (2, 5), (2, 4), (1, 4), (1, 1));
+            Polygon hole = PolygonTest.CreatePolygon(
+                (2, 2), (2, 3), (3, 3), (3, 4), (4, 4), (4, 3), (3, 2));
+
+            IPath polygon = contour.Clip(hole);
+            DebugDraw.Polygon(polygon, 1, 100);
             
+            _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, DefaultComparer);
+            
+            Assert.Equal(8, _edges.Count);
+            
+            VerifyEdge(1, 4, (1, 2), 1, 1, true);
+            VerifyEdge(1, 2, (4, 1.5f), 1, 2, false);
+            VerifyEdge(4, 5, (2, 4.5f), 2, 1, true);
+            VerifyEdge(2, 5, (5, 3f), 1, 1, false);
+            
+            VerifyEdge(2, 3, (2, 2.5f), 2, 2, false);
+            VerifyEdge(2, 3, (3.5f, 2.5f), 2, 1, true);
+            VerifyEdge(3, 4, (3, 3.5f), 1, 2, false);
+            VerifyEdge(3, 4, (4, 3.5f), 0, 2, true);
         }
-        
-        private static PointF P(float x, float y) => new PointF(x, y);
     }
 }

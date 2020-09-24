@@ -24,30 +24,160 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         // since JIT should create a single jump table from a switch-case on this
         private enum VertexCategory
         {
-            Up_Up = 0,
-            Up_Down,
-            Up_Left,
-            Up_Right,
+            UpUp = 0,
+            UpDown,
+            UpLeft,
+            UpRight,
 
-            Down_Up,
-            Down_Down,
-            Down_Left,
-            Down_Right,
+            DownUp,
+            DownDown,
+            DownLeft,
+            DownRight,
 
-            Left_Up,
-            Left_Down,
-            Left_Left,
-            Left_Right,
+            LeftUp,
+            LeftDown,
+            LeftLeft,
+            LeftRight,
 
-            Right_Up,
-            Right_Down,
-            Right_Left,
-            Right_Right,
+            RightUp,
+            RightDown,
+            RightLeft,
+            RightRight,
+        }
+
+        private struct EdgeData
+        {
+            public EdgeCategory EdgeCategory;
+
+            private PointF start;
+            private PointF end;
+            private int emitStart;
+            private int emitEnd;
+
+            public EdgeData(PointF start, PointF end, in TolerantComparer comparer)
+            {
+                this.start = start;
+                this.end = end;
+                if (comparer.AreEqual(this.start.Y, this.end.Y))
+                {
+                    this.EdgeCategory = this.start.X < this.end.X ? EdgeCategory.Right : EdgeCategory.Left;
+                }
+                else
+                {
+                    this.EdgeCategory = this.start.Y < this.end.Y ? EdgeCategory.Down : EdgeCategory.Up;
+                }
+
+                this.emitStart = 0;
+                this.emitEnd = 0;
+            }
+
+            public void EmitScanEdge(Span<ScanEdge> edges, ref int edgeCounter)
+            {
+                if (this.EdgeCategory == EdgeCategory.Left || this.EdgeCategory == EdgeCategory.Right)
+                {
+                    return;
+                }
+
+                edges[edgeCounter++] = this.ToScanEdge();
+            }
+
+            public static void ApplyVertexCategory(
+                VertexCategory vertexCategory,
+                ref EdgeData fromEdge,
+                ref EdgeData toEdge)
+            {
+                switch (vertexCategory)
+                {
+                    case VertexCategory.UpUp:
+                        // 0, 1
+                        toEdge.emitStart = 1;
+                        break;
+                    case VertexCategory.UpDown:
+                        // 0, 0
+                        break;
+                    case VertexCategory.UpLeft:
+                        // 2, 0
+                        fromEdge.emitEnd = 2;
+                        break;
+                    case VertexCategory.UpRight:
+                        // 1, 0
+                        fromEdge.emitEnd = 1;
+                        break;
+                    case VertexCategory.DownUp:
+                        // 0, 0
+                        break;
+                    case VertexCategory.DownDown:
+                        // 0, 1
+                        toEdge.emitStart = 1;
+                        break;
+                    case VertexCategory.DownLeft:
+                        // 1, 0
+                        fromEdge.emitEnd = 1;
+                        break;
+                    case VertexCategory.DownRight:
+                        // 2, 0
+                        fromEdge.emitEnd = 2;
+                        break;
+                    case VertexCategory.LeftUp:
+                        // 0, 1
+                        toEdge.emitStart = 1;
+                        break;
+                    case VertexCategory.LeftDown:
+                        // 0, 2
+                        toEdge.emitStart = 2;
+                        break;
+                    case VertexCategory.LeftLeft:
+                        // INVALID
+                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (<- <-)");
+                        break;
+                    case VertexCategory.LeftRight:
+                        // INVALID
+                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (<- ->)");
+                        break;
+                    case VertexCategory.RightUp:
+                        // 0, 2
+                        toEdge.emitStart = 2;
+                        break;
+                    case VertexCategory.RightDown:
+                        // 0, 1
+                        toEdge.emitStart = 1;
+                        break;
+                    case VertexCategory.RightLeft:
+                        // INVALID
+                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (-> <-)");
+                        break;
+                    case VertexCategory.RightRight:
+                        // INVALID
+                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (-> ->)");
+                        break;
+                }
+            }
+
+            private ScanEdge ToScanEdge()
+            {
+                int up = this.EdgeCategory == EdgeCategory.Up ? 1 : 0;
+                if (up == 1)
+                {
+                    Swap(ref this.start, ref this.end);
+                    Swap(ref this.emitStart, ref this.emitEnd);
+                }
+
+                int flags = up | (this.emitStart << 1) | (this.emitEnd << 3);
+                return new ScanEdge(ref this.start, ref this.end, flags);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static void Swap<T>(ref T left, ref T right)
+            {
+                T tmp = left;
+                left = right;
+                right = tmp;
+            }
         }
 
         private ref struct RingWalker
         {
-            private Span<ScanEdge> output;
+            private readonly Span<ScanEdge> output;
             public int EdgeCounter;
 
             public EdgeData PreviousEdge;
@@ -83,138 +213,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             }
         }
 
-        private struct EdgeData
-        {
-            public PointF Start;
-            public PointF End;
-            public EdgeCategory EdgeCategory;
-            public int EmitStart;
-            public int EmitEnd;
-
-            public EdgeData(PointF start, PointF end, in TolerantComparer comparer)
-            {
-                this.Start = start;
-                this.End = end;
-                if (comparer.AreEqual(this.Start.Y, this.End.Y))
-                {
-                    this.EdgeCategory = this.Start.X < this.End.X ? EdgeCategory.Right : EdgeCategory.Left;
-                }
-                else
-                {
-                    this.EdgeCategory = this.Start.Y < this.End.Y ? EdgeCategory.Down : EdgeCategory.Up;
-                }
-
-                this.EmitStart = 0;
-                this.EmitEnd = 0;
-            }
-
-            public void EmitScanEdge(Span<ScanEdge> edges, ref int edgeCounter)
-            {
-                if (this.EdgeCategory == EdgeCategory.Left || this.EdgeCategory == EdgeCategory.Right)
-                {
-                    return;
-                }
-
-                edges[edgeCounter++] = this.ToScanEdge();
-            }
-
-            public static void ApplyVertexCategory(
-                VertexCategory vertexCategory,
-                ref EdgeData fromEdge,
-                ref EdgeData toEdge)
-            {
-                switch (vertexCategory)
-                {
-                    case VertexCategory.Up_Up:
-                        // 0, 1
-                        toEdge.EmitStart = 1;
-                        break;
-                    case VertexCategory.Up_Down:
-                        // 0, 0
-                        break;
-                    case VertexCategory.Up_Left:
-                        // 2, 0
-                        fromEdge.EmitEnd = 2;
-                        break;
-                    case VertexCategory.Up_Right:
-                        // 1, 0
-                        fromEdge.EmitEnd = 1;
-                        break;
-                    case VertexCategory.Down_Up:
-                        // 0, 0
-                        break;
-                    case VertexCategory.Down_Down:
-                        // 0, 1
-                        toEdge.EmitStart = 1;
-                        break;
-                    case VertexCategory.Down_Left:
-                        // 1, 0
-                        fromEdge.EmitEnd = 1;
-                        break;
-                    case VertexCategory.Down_Right:
-                        // 2, 0
-                        fromEdge.EmitEnd = 2;
-                        break;
-                    case VertexCategory.Left_Up:
-                        // 0, 1
-                        toEdge.EmitStart = 1;
-                        break;
-                    case VertexCategory.Left_Down:
-                        // 0, 2
-                        toEdge.EmitStart = 2;
-                        break;
-                    case VertexCategory.Left_Left:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (<- <-)");
-                        break;
-                    case VertexCategory.Left_Right:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (<- ->)");
-                        break;
-                    case VertexCategory.Right_Up:
-                        // 0, 2
-                        toEdge.EmitStart = 2;
-                        break;
-                    case VertexCategory.Right_Down:
-                        // 0, 1
-                        toEdge.EmitStart = 1;
-                        break;
-                    case VertexCategory.Right_Left:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (-> <-)");
-                        break;
-                    case VertexCategory.Right_Right:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (-> ->)");
-                        break;
-                }
-            }
-
-            private ScanEdge ToScanEdge()
-            {
-                int up = this.EdgeCategory == EdgeCategory.Up ? 1 : 0;
-                if (up == 1)
-                {
-                    Swap(ref this.Start, ref this.End);
-                    Swap(ref this.EmitStart, ref this.EmitEnd);
-                }
-
-                int flags = up | (this.EmitStart << 1) | (this.EmitEnd << 3);
-                return new ScanEdge(ref this.Start, ref this.End, flags);
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private static void Swap<T>(ref T left, ref T right)
-            {
-                T tmp = left;
-                left = right;
-                right = tmp;
-            }
-        }
-
         private static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, in TolerantComparer comparer)
         {
-            // Overallocate, since we don't know how many horizontal edges do we have:
+            // We allocate more than we need, since we don't know how many horizontal edges do we have:
             IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multipolygon.TotalVertexCount);
 
             RingWalker walker = new RingWalker(buffer.Memory.Span);
@@ -242,7 +243,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 walker.NextEdge = new EdgeData(vertices[0], vertices[1], comparer); // First edge
                 walker.Move(true); // Emit edge before last edge
 
-                walker.NextEdge = new EdgeData(vertices[1], vertices[2], comparer);
+                walker.NextEdge = new EdgeData(vertices[1], vertices[2], comparer); // Second edge
                 walker.Move(true); // Emit last edge
             }
 
