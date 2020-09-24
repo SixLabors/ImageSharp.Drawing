@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 sum += (curr.X * next.Y) - (next.X * curr.Y);
             }
 
-            return comparer.Sign(sum);
+            return comparer.Sign2(sum);
         }
 
         /// <summary>
