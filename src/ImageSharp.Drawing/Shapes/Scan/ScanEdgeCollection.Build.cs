@@ -19,9 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             Right, // Horizontal
         }
 
-        // An pair of EdgeCategories defined as (fromEdge.Category, toEdge.Category)
-        // Eliminates the nested switch-case and also good for perf,
-        // since JIT should create a single jump table from a switch-case on this
+        // A pair of EdgeCategories at a given vertex defined as (fromEdge.EdgeCategory, toEdge.EdgeCategory)
         private enum VertexCategory
         {
             UpUp = 0,

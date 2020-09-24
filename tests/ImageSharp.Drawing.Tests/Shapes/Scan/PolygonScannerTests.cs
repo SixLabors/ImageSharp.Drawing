@@ -3,24 +3,20 @@
 
 using System;
 using System.Linq;
-using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Text;
-using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes.Scan;
 using Xunit;
 using Xunit.Abstractions;
 using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 {
-    public class ScanTests
+    public class PolygonScannerTests
     {
         private readonly ITestOutputHelper output;
 
-        private static readonly DebugDraw DebugDraw = new DebugDraw(nameof(ScanTests));
-        public ScanTests(ITestOutputHelper output)
+        private static readonly DebugDraw DebugDraw = new DebugDraw(nameof(PolygonScannerTests));
+        public PolygonScannerTests(ITestOutputHelper output)
         {
             this.output = output;
         }
@@ -43,10 +39,38 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             this.output.WriteLine(s);
         }
 
+        private static void VerifyScanline(ReadOnlySpan<float> expected, ReadOnlySpan<float> actual)
+        {
+            Assert.Equal(expected.Length, actual.Length);
+            ApproximateFloatComparer cmp = new ApproximateFloatComparer(1e-5f);
+
+            for (int i = 0; i < expected.Length; i++)
+            {
+                Assert.Equal(expected[i], actual[i], cmp);
+            }
+        }
 
         private void TestScan(IPath path, float min, float max, float dy, float[][] expected)
         {
-            
+            PolygonScanner scanner = PolygonScanner.Create(path, min, max, dy, Configuration.Default.MemoryAllocator);
+
+            try
+            {
+                int i = 0;
+                while (scanner.MoveToNextScanline())
+                {
+                    ReadOnlySpan<float> intersections = scanner.ScanCurrentLine();
+
+                    VerifyScanline(expected[i], intersections);
+                    i++;
+                }
+                
+                Assert.Equal(expected.Length, i);
+            }
+            finally
+            {
+                scanner.Dispose();
+            }
         }
 
         [Fact]
