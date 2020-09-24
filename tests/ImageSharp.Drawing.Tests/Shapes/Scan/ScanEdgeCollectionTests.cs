@@ -33,8 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             {
                 if (comparer.AreEqual(y0, e.Y0) && comparer.AreEqual(y1, e.Y1))
                 {
-                    // x = P*y + Q
-                    bool containsPoint = comparer.AreEqual(arbitraryPoint.X, e.P * arbitraryPoint.Y + e.Q);
+                    bool containsPoint = comparer.AreEqual(arbitraryPoint.X, e.GetX(arbitraryPoint.Y));
                     if (containsPoint)
                     {
                         Assert.Equal(emit0, e.EmitV0);

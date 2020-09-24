@@ -46,6 +46,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         // When the scanline intersects the endpoint at Y1.
         public int EmitV1 => (this.flags & 0b11000) >> 3;
 
+        public float GetX(float y) => (this.P * y) + this.Q;
+
         private string UpDownString => this.EdgeUp ? "Up" : "Down";
 
         public override string ToString()
