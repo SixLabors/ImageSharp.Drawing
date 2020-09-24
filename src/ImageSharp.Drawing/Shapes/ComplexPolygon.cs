@@ -6,6 +6,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Utilities;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -226,7 +227,7 @@ namespace SixLabors.ImageSharp.Drawing
 
                 var activeBuffer = buffer.Slice(0, totalAdded);
                 var activeOrientationsSpan = orientationsSpan.Slice(0, totalAdded);
-                QuickSort.Sort(distances, activeBuffer, activeOrientationsSpan);
+                SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
 
                 if (intersectionRule == IntersectionRule.Nonzero)
                 {

@@ -4,12 +4,12 @@
 using System;
 using System.Runtime.CompilerServices;
 
-namespace SixLabors.ImageSharp.Drawing
+namespace SixLabors.ImageSharp.Drawing.Utilities
 {
     /// <summary>
     /// Optimized quick sort implementation for Span{float} input
     /// </summary>
-    internal static class QuickSort
+    internal static class SortUtility
     {
         /// <summary>
         /// Sorts the elements of <paramref name="data"/> in ascending order

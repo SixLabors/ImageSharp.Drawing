@@ -8,6 +8,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing
@@ -386,7 +387,7 @@ namespace SixLabors.ImageSharp.Drawing
 
                 var activeBuffer = buffer.Slice(0, position);
                 var activeOrientationsSpan = orientationsSpan.Slice(0, position);
-                QuickSort.Sort(distances, activeBuffer, activeOrientationsSpan);
+                SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
 
                 return position;
             }

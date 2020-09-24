@@ -6,6 +6,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -404,7 +405,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                                 buffer[i] = intersectionSpan[i].X;
                             }
 
-                            QuickSort.Sort(buffer.Slice(0, pointsFound));
+                            SortUtility.Sort(buffer.Slice(0, pointsFound));
 
                             for (int point = 0; point < pointsFound; point += 2)
                             {

@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
     // Adapted from:
     // https://github.com/dotnet/runtime/blob/master/src/libraries/System.Private.CoreLib/src/System/Collections/Generic/ArraySortHelper.cs
     // TODO: In .NET 5, call span based sort instead
-    internal class SortHelper<TValue>
+    internal class SortUtility<TValue>
     {
         public static void Sort(Span<float> keys, Span<TValue> values)
         {
