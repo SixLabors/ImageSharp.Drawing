@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             Right, // Horizontal
         }
 
-        // A pair of EdgeCategories at a given vertex defined as (fromEdge.EdgeCategory, toEdge.EdgeCategory)
+        // A pair of EdgeCategories at a given vertex, defined as (fromEdge.EdgeCategory, toEdge.EdgeCategory)
         private enum VertexCategory
         {
             UpUp = 0,
@@ -84,7 +84,21 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 ref EdgeData fromEdge,
                 ref EdgeData toEdge)
             {
-                // See: VertexCategoriesAndEmitRules.jpg
+                // On PolygonScanner needs to handle intersections at edge connections (vertices) in a special way:
+                // - We need to make sure we do not report ("emit") an intersection point more times than necessary because we detected the intersection at both edges.
+                // - We need to make sure we we emit proper intersection points when scanning through a horizontal line
+                // In practice this means that vertex intersections have to emitted: 0-2 times in total:
+                // - Do not emit if the vertex is a local minimum / local maximum (UpDown or DownUp)
+                //   TODO: Emitting 2 times instead of 0 may result in better quality.
+                // - Emit 2 times if:
+                //    - One of the edges is horizontal
+                //    - The corner is concave
+                //      (The reason for tis rule is that we do not scan horizontal edges)
+                // - Emit once otherwise
+                // Since PolygonScanner does not process vertices, only edges, we need to define arbitrary rules
+                // about WHERE (on which edge) do we emit the vertex intersections.
+                // For visualization of the rules see:
+                //     VertexCategoriesAndEmitRules.jpg
                 switch (vertexCategory)
                 {
                     case VertexCategory.UpUp:
