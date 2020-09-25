@@ -6,10 +6,10 @@ using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Shapes.Helpers;
 using SixLabors.ImageSharp.Memory;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Shapes
 {
     /// <summary>
     /// Compact representation of a multipolygon.

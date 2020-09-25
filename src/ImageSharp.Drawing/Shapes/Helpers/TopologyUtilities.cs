@@ -3,7 +3,7 @@
 
 using System;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Shapes.Helpers
 {
     /// <summary>
     /// Implements some basic algorithms on raw data structures.

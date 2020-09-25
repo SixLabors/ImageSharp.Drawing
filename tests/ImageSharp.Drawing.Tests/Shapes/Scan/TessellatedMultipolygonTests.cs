@@ -3,6 +3,7 @@
 
 using System;
 using System.Linq;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Shapes.Scan;
 using SixLabors.ImageSharp.Memory;
 using Xunit;

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using SixLabors.ImageSharp.Drawing.Shapes.Helpers;
 using SixLabors.ImageSharp.Drawing.Shapes.Scan;
 using Xunit;
 
