@@ -84,6 +84,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 ref EdgeData fromEdge,
                 ref EdgeData toEdge)
             {
+                // See: VertexCategoriesAndEmitRules.jpg
                 switch (vertexCategory)
                 {
                     case VertexCategory.UpUp:
