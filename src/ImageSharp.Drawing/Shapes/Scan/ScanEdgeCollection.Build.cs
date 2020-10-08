@@ -277,7 +277,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             {
                 for (int i = 0; i < vertices.Length; i++)
                 {
-                    destination[i] = MathF.Round(vertices[i].Y * subsamplingRatio) / subsamplingRatio;
+                    // for future SIMD impl:
+                    // https://www.ocf.berkeley.edu/~horie/rounding.html
+                    // Avx.RoundToPositiveInfinity()
+                    destination[i] = MathF.Round(vertices[i].Y * subsamplingRatio, MidpointRounding.AwayFromZero) / subsamplingRatio;
                 }
             }
 
