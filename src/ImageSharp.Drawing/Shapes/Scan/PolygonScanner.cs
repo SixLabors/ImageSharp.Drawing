@@ -72,8 +72,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             IntersectionRule intersectionRule,
             MemoryAllocator allocator)
         {
-            var comparer = new TolerantComparer(1f / subsampling);
-            ScanEdgeCollection edges = ScanEdgeCollection.Create(polygon, allocator, comparer);
+            ScanEdgeCollection edges = ScanEdgeCollection.Create(polygon, allocator, subsampling);
             PolygonScanner scanner = new PolygonScanner(edges, min, max, subsampling, intersectionRule, allocator);
             scanner.Init();
             return scanner;

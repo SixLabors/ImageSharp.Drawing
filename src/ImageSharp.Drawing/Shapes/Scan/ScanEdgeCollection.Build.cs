@@ -4,6 +4,7 @@
 using System;
 using System.Buffers;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
@@ -49,14 +50,18 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
             private PointF start;
             private PointF end;
+            private float startYRounded;
+            private float endYRounded;
             private int emitStart;
             private int emitEnd;
 
-            public EdgeData(PointF start, PointF end, in TolerantComparer comparer)
+            public EdgeData(PointF start, PointF end, float startYRounded, float endYRounded)
             {
                 this.start = start;
                 this.end = end;
-                if (comparer.AreEqual(this.start.Y, this.end.Y))
+                this.startYRounded = startYRounded;
+                this.endYRounded = endYRounded;
+                if (this.startYRounded == this.endYRounded)
                 {
                     this.EdgeCategory = this.start.X < this.end.X ? EdgeCategory.Right : EdgeCategory.Left;
                 }
@@ -174,10 +179,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 {
                     Swap(ref this.start, ref this.end);
                     Swap(ref this.emitStart, ref this.emitEnd);
+                    Swap(ref this.startYRounded, ref this.endYRounded);
                 }
 
                 int flags = up | (this.emitStart << 1) | (this.emitEnd << 3);
-                return new ScanEdge(ref this.start, ref this.end, flags);
+                return new ScanEdge(this.startYRounded, this.endYRounded, ref this.start, ref this.end, flags);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -227,12 +233,17 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             }
         }
 
-        private static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, in TolerantComparer comparer)
+        private static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, int subsampling)
         {
             // We allocate more than we need, since we don't know how many horizontal edges do we have:
             IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multipolygon.TotalVertexCount);
 
             RingWalker walker = new RingWalker(buffer.Memory.Span);
+
+            float subsamplingRatio = subsampling;
+
+            using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multipolygon.Max(r => r.Vertices.Length));
+            Span<float> roundedY = roundedYBuffer.Memory.Span;
 
             foreach (TessellatedMultipolygon.Ring ring in multipolygon)
             {
@@ -242,23 +253,32 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 }
 
                 var vertices = ring.Vertices;
+                RoundY(vertices, roundedY, subsamplingRatio);
 
-                walker.PreviousEdge = new EdgeData(vertices[vertices.Length - 2], vertices[vertices.Length - 1], comparer); // Last edge
-                walker.CurrentEdge = new EdgeData(vertices[0], vertices[1], comparer); // First edge
-                walker.NextEdge = new EdgeData(vertices[1], vertices[2], comparer); // Second edge
+                walker.PreviousEdge = new EdgeData(vertices[vertices.Length - 2], vertices[vertices.Length - 1], roundedY[vertices.Length - 2], roundedY[vertices.Length - 1]); // Last edge
+                walker.CurrentEdge = new EdgeData(vertices[0], vertices[1], roundedY[0], roundedY[1]); // First edge
+                walker.NextEdge = new EdgeData(vertices[1], vertices[2], roundedY[1], roundedY[2]); // Second edge
                 walker.Move(false);
 
                 for (int i = 1; i < vertices.Length - 2; i++)
                 {
-                    walker.NextEdge = new EdgeData(vertices[i + 1], vertices[i + 2], comparer);
+                    walker.NextEdge = new EdgeData(vertices[i + 1], vertices[i + 2], roundedY[i + 1], roundedY[i + 2]);
                     walker.Move(true);
                 }
 
-                walker.NextEdge = new EdgeData(vertices[0], vertices[1], comparer); // First edge
+                walker.NextEdge = new EdgeData(vertices[0], vertices[1], roundedY[0], roundedY[1]); // First edge
                 walker.Move(true); // Emit edge before last edge
 
-                walker.NextEdge = new EdgeData(vertices[1], vertices[2], comparer); // Second edge
+                walker.NextEdge = new EdgeData(vertices[1], vertices[2], roundedY[1], roundedY[2]); // Second edge
                 walker.Move(true); // Emit last edge
+            }
+
+            static void RoundY(ReadOnlySpan<PointF> vertices, Span<float> destination, float subsamplingRatio)
+            {
+                for (int i = 0; i < vertices.Length; i++)
+                {
+                    destination[i] = MathF.Round(vertices[i].Y * subsamplingRatio) / subsamplingRatio;
+                }
             }
 
             return new ScanEdgeCollection(buffer, walker.EdgeCounter);

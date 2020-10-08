@@ -25,10 +25,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private readonly int flags;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ScanEdge(ref PointF p0, ref PointF p1, int flags)
+        internal ScanEdge(float y0Rounded, float y1Rounded, ref PointF p0, ref PointF p1, int flags)
         {
-            this.Y0 = p0.Y;
-            this.Y1 = p1.Y;
+            this.Y0 = y0Rounded;
+            this.Y1 = y1Rounded;
             this.flags = flags;
             float dy = p1.Y - p0.Y;
             this.P = (p1.X - p0.X) / dy;

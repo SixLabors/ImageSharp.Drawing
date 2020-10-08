@@ -61,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             );
             DebugDraw.Polygon(polygon, 1, 100);
             
-            _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, DefaultComparer);
+            _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, 16);
             
             Assert.Equal(19, _edges.Edges.Length);
             
@@ -97,7 +97,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             IPath polygon = contour.Clip(hole);
             DebugDraw.Polygon(polygon, 1, 100);
             
-            _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, DefaultComparer);
+            _edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, 16);
             
             Assert.Equal(8, _edges.Count);
             
@@ -110,6 +110,28 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             VerifyEdge(2, 3, (3.5f, 2.5f), 2, 1, true);
             VerifyEdge(3, 4, (3, 3.5f), 1, 2, false);
             VerifyEdge(3, 4, (4, 3.5f), 0, 2, true);
+        }
+
+        [Fact]
+        public void NumericCornerCase_C()
+        {
+            _edges = ScanEdgeCollection.Create(CornerCasePolygons.C, MemoryAllocator, 4);
+            Assert.Equal(2, _edges.Count);
+            VerifyEdge(3.5f, 4f, (2f, 3.75f), 1, 1, true);
+            VerifyEdge(3.5f, 4f, (8f, 3.75f), 1, 1, false);
+        }
+
+        [Fact]
+        public void NumericCornerCase_D()
+        {
+            _edges = ScanEdgeCollection.Create(CornerCasePolygons.D, MemoryAllocator, 4);
+            Assert.Equal(5, _edges.Count);
+            
+            VerifyEdge(3.25f, 4f, (12f, 3.75f), 1, 1, true);
+            VerifyEdge(3.25f, 3.5f, (15f, 3.45f), 1, 0, false);
+            VerifyEdge(3.5f, 4f, (18f, 3.75f), 1, 1, false);
+            
+            // TODO: verify 2 more edges
         }
     }
 }
