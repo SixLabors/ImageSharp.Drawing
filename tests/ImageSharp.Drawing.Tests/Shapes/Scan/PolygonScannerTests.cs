@@ -334,6 +334,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     (2.25f, new float[]{2, 10}),
                     
                     Empty(2.5f), Empty(1.75f), Empty(3f),
+                }},
+                {"H", new []
+                {
+                    Empty(1f), Empty(1.25f), Empty(1.5f),
+                    
+                    (1.75f, new float[] { 16, 16 }),
+                    (2f, new float[]{14, 14, 14, 16}), // this emits 2 dummy points, but normally it should not corrupt quality too much
+                    (2.25f, new float[]{ 16, 16 }),
+                    
+                    Empty(2.5f), Empty(1.75f), Empty(3f),
                 }}
             };
         
@@ -341,7 +351,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [MemberData(nameof(NumericCornerCasesData))]
         public void NumericCornerCases(string name, (float y, float[] x)[] expectedIntersections)
         {
-            Polygon poly = CornerCasePolygons.GetByName(name);
+            Polygon poly = NumericCornerCasePolygons.GetByName(name);
             DebugDraw.Polygon(poly, 0.25f, 100f, $"{nameof(NumericCornerCases)}_{name}");
 
             int min = (int)expectedIntersections.First().y;

@@ -6,7 +6,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
     /// <summary>
     /// See: NumericCornerCases.jpg
     /// </summary>
-    internal class CornerCasePolygons
+    internal class NumericCornerCasePolygons
     {
         public static readonly Polygon A = PolygonTest.CreatePolygon(
             (2, 2.5f), (11, 2.5f), (11, 3.25f), (8, 3.1f), (5, 3), (2, 3));
@@ -28,9 +28,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
         public static readonly Polygon G = PolygonTest.CreatePolygon((2, 2.25f), (6, 1.87f), (10, 2.25f));
 
+        public static readonly Polygon H = PolygonTest.CreatePolygon(
+            (14, 1.88f), (16, 1.75f), (16, 2.25f), (14, 2.11f));
+
         public static Polygon GetByName(string name)
         {
-            return (Polygon) typeof(CornerCasePolygons).GetField(name).GetValue(null);
+            return (Polygon) typeof(NumericCornerCasePolygons).GetField(name).GetValue(null);
         }
     }
 }

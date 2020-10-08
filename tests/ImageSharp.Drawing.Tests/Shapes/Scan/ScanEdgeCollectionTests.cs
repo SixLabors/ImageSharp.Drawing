@@ -115,7 +115,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void NumericCornerCase_C()
         {
-            _edges = ScanEdgeCollection.Create(CornerCasePolygons.C, MemoryAllocator, 4);
+            _edges = ScanEdgeCollection.Create(NumericCornerCasePolygons.C, MemoryAllocator, 4);
             Assert.Equal(2, _edges.Count);
             VerifyEdge(3.5f, 4f, (2f, 3.75f), 1, 1, true);
             VerifyEdge(3.5f, 4f, (8f, 3.75f), 1, 1, false);
@@ -124,7 +124,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void NumericCornerCase_D()
         {
-            _edges = ScanEdgeCollection.Create(CornerCasePolygons.D, MemoryAllocator, 4);
+            _edges = ScanEdgeCollection.Create(NumericCornerCasePolygons.D, MemoryAllocator, 4);
             Assert.Equal(5, _edges.Count);
             
             VerifyEdge(3.25f, 4f, (12f, 3.75f), 1, 1, true);
@@ -132,6 +132,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             VerifyEdge(3.5f, 4f, (18f, 3.75f), 1, 1, false);
             
             // TODO: verify 2 more edges
+        }
+
+        [Fact]
+        public void NumericCornerCase_H_ShouldCollapseNearZeroEdge()
+        {
+            _edges = ScanEdgeCollection.Create(NumericCornerCasePolygons.H, MemoryAllocator, 4);
+            
+            Assert.Equal(3, _edges.Count);
+            VerifyEdge(1.75f, 2f, (15.230769f, 1.8f), 1, 1, true);
+            VerifyEdge(1.75f, 2.25f, (16f, 2f), 1, 1, false);
+            
+            // this places two dummy points:
+            VerifyEdge( 2f, 2.25f, (15.285714f, 2.2f), 2, 1, true);
         }
     }
 }
