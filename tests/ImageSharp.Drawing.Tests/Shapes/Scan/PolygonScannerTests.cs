@@ -288,5 +288,64 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             DebugDraw.Polygon(poly, 10f, 5f);
         }
+
+        public static readonly TheoryData<string, (float y, float[] x)[] > NumericCornerCasesData =
+            new TheoryData<string, (float y, float[] x)[] >
+            {
+                {"A", new[]
+                {
+                    (2.5f, new float[] {2, 11}),
+                    (2.75f, new float[] {2, 11}),
+                    (3f, new float[]{2, 8, 8, 11}),
+                    (3.25f, new float[]{11,11})
+                }},
+                {"B", new[]
+                {
+                    (2.5f, new float[] {12, 21}),
+                    (2.75f, new float[] {12, 21}),
+                    (3f, new float[]{12, 15, 15, 21}),
+                    (3.25f, new float[]{18, 21}),
+                }},
+                {"C", new[]
+                {
+                    (3.5f, new float[] {2, 8}),
+                    (3.75f, new float[] {2, 8}),
+                    (4f, new float[] {2, 8}),
+                }},
+                {"D", new[]
+                {
+                    (3.25f, new float[] {12,12}),
+                    (3.5f, new float[] {12, 18}),
+                    (3.75f, new float[] {12, 15, 15, 18}),
+                    (4f, new float[] {12, 12, 18, 18}),
+                }},
+                {"E", new[]
+                {
+                    (4.5f, new float[] {3,3,6,6}),
+                    (4.75f, new float[] { 2.4166667f, 4, 4, 6}),
+                    (5f, new float[] {2, 6}),
+                }},
+                {"F", new[]
+                {
+                    (4.25f, new float[] {13,13}),
+                    (4.5f, new float[] {12.714286f, 13.444444f,16,16}),
+                    (4.75f, new float[] {12.357143f, 14, 14, 3.2857143f}),
+                    (5f, new float[] {12, 16}),
+                }},
+                {"G", new[]
+                {
+                    (1.75f, new float[] { 6, 6}),
+                    (2f, new float[] { 4.6315789f, 7.3684211f }),
+                    (2.25f, new float[]{2, 10})
+                }}
+            };
+        
+        [Theory]
+        [MemberData(nameof(NumericCornerCasesData))]
+        public void NumericCornerCases(string name, (float y, float[] x)[] expectedIntersections)
+        {
+            Polygon poly = CornerCasePolygons.GetByName(name);
+            DebugDraw.Polygon(poly, 0.25f, 100f, $"{nameof(NumericCornerCases)}_{name}");
+        }
     }
 }

@@ -82,7 +82,13 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         protected virtual bool IsClosed => false;
 
-        private InternalPath InnerPath => this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed);
+        /// <summary>
+        /// Gets or sets a value indicating whether close or collinear vertices should be removed. TEST ONLY!
+        /// </summary>
+        internal bool RemoveCloseAndCollinearPoints { get; set; } = true;
+
+        private InternalPath InnerPath => 
+            this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
         /// <inheritdoc />
         public PointInfo Distance(PointF point)

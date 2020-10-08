@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             RectangleF bounds = path.Bounds;
             gridSize *= scale;
 
-            using Image img = new Image<Rgba32>((int)(bounds.Width + 2 * gridSize), (int)(bounds.Height + 2 * gridSize));
+            using Image img = new Image<Rgba32>((int)(bounds.Right + 2 * gridSize), (int)(bounds.Bottom + 2 * gridSize));
             img.Mutate(ctx => DrawGrid(ctx.Fill(TestBrush, path), bounds, gridSize));
             
             string outDir = TestEnvironment.CreateOutputDirectory(this.outputDir);

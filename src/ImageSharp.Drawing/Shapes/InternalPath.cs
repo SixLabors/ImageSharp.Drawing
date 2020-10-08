@@ -45,7 +45,17 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="segments">The segments.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath)
-            : this(Simplify(segments, isClosedPath), isClosedPath)
+            : this(Simplify(segments, isClosedPath, true), isClosedPath)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="InternalPath"/> class.
+        /// </summary>
+        /// <param name="segments">The segments.</param>
+        /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
+        internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath, bool removeCloseAndCollinear)
+            : this(Simplify(segments, isClosedPath, removeCloseAndCollinear), isClosedPath)
         {
         }
 
@@ -65,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="points">The points.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
         internal InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
-            : this(Simplify(points, isClosedPath), isClosedPath)
+            : this(Simplify(points, isClosedPath, true), isClosedPath)
         {
         }
 
@@ -691,10 +701,11 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="segments">The segments.</param>
         /// <param name="isClosed">Weather the path is closed or open.</param>
+        /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices</param>
         /// <returns>
         /// The <see cref="T:Vector2[]"/>.
         /// </returns>
-        private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed)
+        private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed, bool removeCloseAndCollinear)
         {
             var simplified = new List<PointF>();
 
@@ -704,12 +715,12 @@ namespace SixLabors.ImageSharp.Drawing
                 simplified.AddRange(points.ToArray());
             }
 
-            return Simplify(simplified.ToArray(), isClosed);
+            return Simplify(simplified.ToArray(), isClosed, removeCloseAndCollinear);
         }
 
-        private static PointData[] Simplify(ReadOnlyMemory<PointF> vectors, bool isClosed)
+        private static PointData[] Simplify(ReadOnlyMemory<PointF> vectors, bool isClosed, bool removeCloseAndCollinear)
         {
-            PointF[] points = vectors.ToArray();
+            ReadOnlySpan<PointF> points = vectors.Span;
 
             int polyCorners = points.Length;
             if (polyCorners == 0)
@@ -752,7 +763,7 @@ namespace SixLabors.ImageSharp.Drawing
                         return results.ToArray();
                     }
                 }
-                while (points[0].Equivelent(points[prev], Epsilon2)); // skip points too close together
+                while (removeCloseAndCollinear && points[0].Equivelent(points[prev], Epsilon2)); // skip points too close together
 
                 polyCorners = prev + 1;
                 lastPoint = points[prev];
@@ -792,7 +803,7 @@ namespace SixLabors.ImageSharp.Drawing
                 lastPoint = points[i];
             }
 
-            if (isClosed)
+            if (isClosed && removeCloseAndCollinear)
             {
                 // walk back removing collinear points
                 while (results.Count > 2 && results.Last().Orientation == PointOrientation.Colinear)

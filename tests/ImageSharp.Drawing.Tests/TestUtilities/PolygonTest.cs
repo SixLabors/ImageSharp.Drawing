@@ -16,9 +16,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         private static readonly IBrush TestBrush = Brushes.Solid(Color.Red);
         
         private static readonly IPen GridPen = Pens.Solid(Color.Aqua, 0.5f);
-        
-        public static Polygon CreatePolygon(params (float x, float y)[] coords) 
-            => new Polygon(new LinearLineSegment(CreatePoints(coords)));
+
+        public static Polygon CreatePolygon(params (float x, float y)[] coords)
+            => new Polygon(new LinearLineSegment(CreatePoints(coords)))
+            {
+                // The default epsilon is too large for test code, we prefer the vertices not to be changed
+                RemoveCloseAndCollinearPoints = false
+            };
 
         public static (PointF Start, PointF End) CreateHorizontalLine(float y) 
             => (new PointF(-Inf, y), new PointF(Inf, y));

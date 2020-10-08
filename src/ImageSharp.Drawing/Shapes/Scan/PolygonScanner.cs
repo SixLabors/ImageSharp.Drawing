@@ -51,8 +51,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.sorted1 = dataBufferInt32Span.Slice(edgeCount, edgeCount);
 
             this.intersections = dataBufferFloatSpan.Slice(edgeCount * 2, edgeCount);
-            this.activeEdges = new ActiveEdgeList(dataBufferInt32Span.Slice(edgeCount * 3, edgeCount));
 
+            // this.activeEdges = new ActiveEdgeList(dataBufferInt32Span.Slice(edgeCount * 3, edgeCount));
+            this.activeEdges = default;
         }
 
         public static PolygonScanner Create(IPath polygon, float min, float max, float step, MemoryAllocator allocator)

@@ -106,7 +106,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
 
             static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, RingType ringType, in TolerantComparer comparer)
             {
-                // Repeat first vertex for perf:
+                // Repeat first vertex for perf:   
                 span[span.Length - 1] = span[0];
 
                 int orientation = ringType == RingType.Contour ? 1 : -1;
