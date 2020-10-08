@@ -51,6 +51,6 @@ def Scan(poly, min, max, step):
         print "new float[] { " + Isec2Str(isc) + " },"
         y+=step
 
-poly1 = Polygon( (1, 3), (1, 2), (5, 2), (5, 5), (2, 5), (2, 1), (3, 1), (3, 4), (4, 4), (4, 3), (1, 3) )
+poly1 = Polygon( (2, 2), (5, 3), (5, 6), (8, 6), (8, 9), (5, 11), (2, 7) )
 
-Scan(poly1,1,5,0.5)
+Scan(poly1,2,11,1)

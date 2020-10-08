@@ -77,10 +77,31 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
 
         [Fact]
+        public void BasicConcave00()
+        {
+            IPath poly = PolygonTest.CreatePolygon((2, 2), (5, 3), (5, 6), (8, 6), (8, 9), (5, 11), (2, 7));
+            DebugDraw.Polygon(poly, 1f, 50f);
+
+            float[][] expected =
+            {
+                new float[] { 2, 2 },
+                new float[] { 2, 5 },
+                new float[] { 2, 5 },
+                new float[] { 2, 5 },
+                new float[] { 2, 5, 5, 8 },
+                new float[] { 2, 8 },
+                new float[] { 2.75f, 8},
+                new float[] { 3.5f, 8 },
+                new float[] { 4.25f, 6.5f},
+                new float[] { 5, 5 },
+            };
+            
+            TestScan(poly, 2, 11, 1, expected);
+        }
+
+        [Fact]
         public void BasicConcave01()
         {
-            var stuff = new[] {(0, 0), (10, 10), (20, 0), (20, 20), (0f, 20f)};
-            
             IPath poly = PolygonTest.CreatePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
             DebugDraw.Polygon(poly);
 

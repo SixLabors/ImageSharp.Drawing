@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
         {
             int[] values = keys.Select(k => (int) (k * 1000)).ToArray();
             
-            SortUtility<int>.Sort(keys, values);
+            SortUtility.Sort(keys, values.AsSpan());
             VerifySorted(keys, values);
         }
 
