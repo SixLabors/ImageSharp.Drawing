@@ -11,9 +11,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 {
     internal ref struct PolygonScanner
     {
-        private readonly float min;
-        private readonly float max;
-        private readonly float step;
+        private readonly int min;
+        private readonly int max;
+        private readonly int subsampling;
+        private readonly IntersectionRule intersectionRule;
         private readonly MemoryAllocator allocator;
         private int counter;
         private readonly int counterMax;
@@ -32,17 +33,24 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private Span<float> intersections;
         private ActiveEdgeList activeEdges;
 
-        private PolygonScanner(ScanEdgeCollection edgeCollection, float min, float max, float step, MemoryAllocator allocator)
+        private PolygonScanner(
+            ScanEdgeCollection edgeCollection,
+            int min,
+            int max,
+            int subsampling,
+            IntersectionRule intersectionRule,
+            MemoryAllocator allocator)
         {
             this.min = min;
             this.max = max;
-            this.step = step;
+            this.subsampling = subsampling;
+            this.intersectionRule = intersectionRule;
             this.allocator = allocator;
             this.edgeCollection = edgeCollection;
             this.edges = edgeCollection.Edges;
             this.counter = -1;
             float range = max - min;
-            this.counterMax = (int)MathF.Ceiling(range / step);
+            this.counterMax = (max - min) * subsampling;
             int edgeCount = this.edges.Length;
             this.dataBuffer = allocator.Allocate<int>(edgeCount * 4);
             Span<int> dataBufferInt32Span = this.dataBuffer.Memory.Span;
@@ -56,11 +64,17 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.activeEdges = default;
         }
 
-        public static PolygonScanner Create(IPath polygon, float min, float max, float step, MemoryAllocator allocator)
+        public static PolygonScanner Create(
+            IPath polygon,
+            int min,
+            int max,
+            int subsampling,
+            IntersectionRule intersectionRule,
+            MemoryAllocator allocator)
         {
-            var comparer = new TolerantComparer(step / 2f);
+            var comparer = new TolerantComparer(1f / subsampling);
             ScanEdgeCollection edges = ScanEdgeCollection.Create(polygon, allocator, comparer);
-            PolygonScanner scanner = new PolygonScanner(edges, min, max, step, allocator);
+            PolygonScanner scanner = new PolygonScanner(edges, min, max, subsampling, intersectionRule, allocator);
             scanner.Init();
             return scanner;
         }

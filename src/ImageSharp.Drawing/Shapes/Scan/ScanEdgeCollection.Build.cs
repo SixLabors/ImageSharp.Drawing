@@ -88,8 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 // - We need to make sure we do not report ("emit") an intersection point more times than necessary because we detected the intersection at both edges.
                 // - We need to make sure we we emit proper intersection points when scanning through a horizontal line
                 // In practice this means that vertex intersections have to emitted: 0-2 times in total:
-                // - Do not emit if the vertex is a local minimum / local maximum (UpDown or DownUp)
-                //   TODO: Emitting 2 times instead of 0 may result in better quality.
+                // - Do not emit on vertex of collinear edges
                 // - Emit 2 times if:
                 //    - One of the edges is horizontal
                 //    - The corner is concave
@@ -99,6 +98,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 // about WHERE (on which edge) do we emit the vertex intersections.
                 // For visualization of the rules see:
                 //     VertexCategoriesAndEmitRules.jpg
+                // For an example, see:
+                //     ImageSharp.Drawing.Tests/Shapes/Scan/SimplePolygon_AllEmitCases.png
                 switch (vertexCategory)
                 {
                     case VertexCategory.UpUp:
@@ -106,7 +107,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                         toEdge.emitStart = 1;
                         break;
                     case VertexCategory.UpDown:
-                        // 0, 0
+                        // 1, 1
+                        toEdge.emitStart = 1;
+                        fromEdge.emitEnd = 1;
                         break;
                     case VertexCategory.UpLeft:
                         // 2, 0
@@ -117,7 +120,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                         fromEdge.emitEnd = 1;
                         break;
                     case VertexCategory.DownUp:
-                        // 0, 0
+                        // 1, 1
+                        toEdge.emitStart = 1;
+                        fromEdge.emitEnd = 1;
                         break;
                     case VertexCategory.DownDown:
                         // 0, 1
@@ -140,12 +145,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                         toEdge.emitStart = 2;
                         break;
                     case VertexCategory.LeftLeft:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (<- <-)");
+                        // 0, 0 - collinear
                         break;
                     case VertexCategory.LeftRight:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (<- ->)");
+                        // 0, 0 - collinear
                         break;
                     case VertexCategory.RightUp:
                         // 0, 2
@@ -156,12 +159,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                         toEdge.emitStart = 1;
                         break;
                     case VertexCategory.RightLeft:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (-> <-)");
+                        // 0, 0 - collinear
                         break;
                     case VertexCategory.RightRight:
-                        // INVALID
-                        ThrowInvalidRing("Invalid ring: repeated horizontal edges (-> ->)");
+                        // 0, 0 - collinear
                         break;
                 }
             }
