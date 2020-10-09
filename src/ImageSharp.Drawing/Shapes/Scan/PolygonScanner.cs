@@ -33,10 +33,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private Span<float> intersections;
         private ActiveEdgeList activeEdges;
 
-        private int counter;
         private int idx0;
         private int idx1;
-        private float y;
+        public int Counter;
+        public float Y;
 
         private PolygonScanner(
             ScanEdgeCollection edgeCollection,
@@ -54,9 +54,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.allocator = allocator;
             this.edgeCollection = edgeCollection;
             this.edges = edgeCollection.Edges;
-            this.counter = -1;
+            this.Counter = -1;
             float range = max - min;
-            this.counterMax = (max - min + 1) * subsampling;
+            this.counterMax = ((max - min) * subsampling) + 1;
             int edgeCount = this.edges.Length;
             this.dataBuffer = allocator.Allocate<int>(edgeCount * 4);
             Span<int> dataBufferInt32Span = this.dataBuffer.Memory.Span;
@@ -68,7 +68,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.activeEdges = new ActiveEdgeList(dataBufferInt32Span.Slice(edgeCount * 3, edgeCount));
             this.idx0 = 0;
             this.idx1 = 0;
-            this.y = default;
+            this.Y = default;
         }
 
         public static PolygonScanner Create(
@@ -107,19 +107,30 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         public bool MoveToNextScanline()
         {
-            this.counter++;
+            this.Counter++;
 
-            this.y = this.min + (this.counter / this.subsampling) + ((this.counter % this.subsampling) * this.step);
+            this.Y = this.min + (this.Counter / this.subsampling) + ((this.Counter % this.subsampling) * this.step);
 
             this.EnterEdges();
             this.LeaveEdges();
 
-            return this.counter < this.counterMax;
+            return this.Counter < this.counterMax;
         }
 
         public ReadOnlySpan<float> ScanCurrentLine()
         {
-            throw new NotImplementedException();
+            int intersectionCounter = 0;
+            if (this.intersectionRule == IntersectionRule.OddEven)
+            {
+                this.activeEdges.ScanOddEven(this.Y, this.edges, this.intersections, ref intersectionCounter);
+                Span<float> result = this.intersections.Slice(0, intersectionCounter);
+                SortUtility.Sort(result);
+                return result;
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
         }
 
         public void Dispose()
@@ -133,7 +144,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             while (this.idx0 < this.sorted0.Length)
             {
                 int edge0 = this.sorted0[this.idx0];
-                if (this.edges[edge0].Y0 > this.y)
+                if (this.edges[edge0].Y0 > this.Y)
                 {
                     break;
                 }
@@ -148,7 +159,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             while (this.idx1 < this.sorted1.Length)
             {
                 int edge1 = this.sorted1[this.idx1];
-                if (this.edges[edge1].Y1 > this.y)
+                if (this.edges[edge1].Y1 > this.Y)
                 {
                     break;
                 }

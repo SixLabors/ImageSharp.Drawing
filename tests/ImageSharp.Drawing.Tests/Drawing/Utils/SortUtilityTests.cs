@@ -57,8 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
 
             Assert.Equal(actual, expected);
         }
-        
-        
+
         [Theory]
         [MemberData(nameof(GenerateTestData))]
         public void KeyValueSort(float[] keys)

@@ -39,14 +39,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             this.output.WriteLine(s);
         }
 
-        private static void VerifyScanline(ReadOnlySpan<float> expected, ReadOnlySpan<float> actual)
+        private static void VerifyScanline(ReadOnlySpan<float> expected, ReadOnlySpan<float> actual, string scanlineId)
         {
             Assert.Equal(expected.Length, actual.Length);
             ApproximateFloatComparer cmp = new ApproximateFloatComparer(1e-5f);
 
             for (int i = 0; i < expected.Length; i++)
             {
-                Assert.Equal(expected[i], actual[i], cmp);
+                Assert.True(cmp.Equals(expected[i], actual[i]), $"Mismatch at scanline {scanlineId}");
             }
         }
 
@@ -59,16 +59,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             try
             {
-                int i = 0;
                 while (scanner.MoveToNextScanline())
                 {
                     ReadOnlySpan<float> intersections = scanner.ScanCurrentLine();
 
-                    VerifyScanline(expected[i], intersections);
-                    i++;
+                    VerifyScanline(expected[scanner.Counter], intersections, $"Y={scanner.Y} Cnt={scanner.Counter}");
                 }
                 
-                Assert.Equal(expected.Length, i);
+                Assert.Equal(expected.Length, scanner.Counter);    
             }
             finally
             {

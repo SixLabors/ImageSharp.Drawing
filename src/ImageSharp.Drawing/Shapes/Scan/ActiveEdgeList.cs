@@ -36,8 +36,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         public void LeaveEdge(int edgeIdx)
         {
-            DebugGuard.MustBeLessThan(edgeIdx, this.count, nameof(edgeIdx));
-
             Span<int> active = this.ActiveEdges;
             for (int i = 0; i < active.Length; i++)
             {
@@ -51,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             throw new ArgumentOutOfRangeException(nameof(edgeIdx));
         }
 
-        public void ScanOddEven(float y, Span<ScanEdge> edges, Span<float> emitSpan, ref int emitCounter)
+        public void ScanOddEven(float y, Span<ScanEdge> edges, Span<float> intersections, ref int intersectionCounter)
         {
             DebugGuard.MustBeLessThanOrEqualTo(edges.Length, MaxEdges, "edges.Length");
 
@@ -67,11 +65,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 float x = edge.GetX(y);
                 if (IsEntering(flaggedIdx))
                 {
-                    Emit(x, edge.EmitV0, emitSpan, ref emitCounter);
+                    Emit(x, edge.EmitV0, intersections, ref intersectionCounter);
                 }
                 else if (IsLeaving(flaggedIdx))
                 {
-                    Emit(x, edge.EmitV1, emitSpan, ref emitCounter);
+                    Emit(x, edge.EmitV1, intersections, ref intersectionCounter);
 
                     offset++;
 
@@ -81,15 +79,14 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 else
                 {
                     // Emit once:
-                    emitSpan[emitCounter++] = x;
+                    intersections[intersectionCounter++] = x;
                 }
 
-                // Do offset if not leaving:
-                if (offset > 0)
-                {
-                    active[i - offset] = active[i];
-                }
+                // Unmask and offset:
+                active[i - offset] = edgeIdx;
             }
+
+            this.count -= offset;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
