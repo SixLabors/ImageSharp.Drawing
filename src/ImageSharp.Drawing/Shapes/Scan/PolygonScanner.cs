@@ -12,7 +12,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
     internal ref struct PolygonScanner
     {
         private readonly int min;
-        private readonly int max;
         private readonly int subsampling;
         private readonly float step;
         private readonly int counterMax;
@@ -24,10 +23,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         // Common contiguous buffer for sorted0, sorted1, intersections, activeEdges
         private IMemoryOwner<int> dataBuffer;
 
-        // | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> |
-        // |---------------|---------------|---------------|---------------|
-        // | sorted0       | sorted1       | intersections | activeEdges   |
-        // |---------------|---------------|---------------|---------------|
+        // | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> | <- maxIntersectionCount -> |
+        // |---------------|---------------|---------------|----------------------------|
+        // | sorted0       | sorted1       | activeEdges   | intersections              |
+        // |---------------|---------------|---------------|----------------------------|
         private Span<int> sorted0;
         private Span<int> sorted1;
         private Span<float> intersections;
@@ -40,6 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         private PolygonScanner(
             ScanEdgeCollection edgeCollection,
+            int maxIntersectionCount,
             int min,
             int max,
             int subsampling,
@@ -47,7 +47,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             MemoryAllocator allocator)
         {
             this.min = min;
-            this.max = max;
             this.subsampling = subsampling;
             this.step = 1f / subsampling;
             this.intersectionRule = intersectionRule;
@@ -58,14 +57,14 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             float range = max - min;
             this.counterMax = ((max - min) * subsampling) + 1;
             int edgeCount = this.edges.Length;
-            this.dataBuffer = allocator.Allocate<int>(edgeCount * 4);
+            this.dataBuffer = allocator.Allocate<int>((edgeCount * 3) + maxIntersectionCount);
             Span<int> dataBufferInt32Span = this.dataBuffer.Memory.Span;
             Span<float> dataBufferFloatSpan = MemoryMarshal.Cast<int, float>(dataBufferInt32Span);
 
             this.sorted0 = dataBufferInt32Span.Slice(0, edgeCount);
             this.sorted1 = dataBufferInt32Span.Slice(edgeCount, edgeCount);
-            this.intersections = dataBufferFloatSpan.Slice(edgeCount * 2, edgeCount);
-            this.activeEdges = new ActiveEdgeList(dataBufferInt32Span.Slice(edgeCount * 3, edgeCount));
+            this.activeEdges = new ActiveEdgeList(dataBufferInt32Span.Slice(edgeCount * 2, edgeCount));
+            this.intersections = dataBufferFloatSpan.Slice(edgeCount * 3, maxIntersectionCount);
             this.idx0 = 0;
             this.idx1 = 0;
             this.Y = default;
@@ -79,8 +78,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             IntersectionRule intersectionRule,
             MemoryAllocator allocator)
         {
-            ScanEdgeCollection edges = ScanEdgeCollection.Create(polygon, allocator, subsampling);
-            PolygonScanner scanner = new PolygonScanner(edges, min, max, subsampling, intersectionRule, allocator);
+            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, new TolerantComparer(1f / subsampling));
+            ScanEdgeCollection edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
+            PolygonScanner scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, min, max, subsampling, intersectionRule, allocator);
             scanner.Init();
             return scanner;
         }
@@ -89,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         {
             // Reuse memory buffers of 'intersections' and 'activeEdges' for key-value sorting,
             // since that region is unused at initialization time.
-            Span<float> keys0 = this.intersections;
+            Span<float> keys0 = this.intersections.Slice(0, this.sorted0.Length);
             Span<float> keys1 = MemoryMarshal.Cast<int, float>(this.activeEdges.Buffer);
 
             for (int i = 0; i < this.edges.Length; i++)

@@ -233,7 +233,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             }
         }
 
-        private static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, int subsampling)
+        internal static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, int subsampling)
         {
             // We allocate more than we need, since we don't know how many horizontal edges do we have:
             IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multipolygon.TotalVertexCount);
