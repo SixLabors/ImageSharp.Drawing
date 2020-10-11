@@ -334,7 +334,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     Empty(4f), Empty(4.25f),
 
                     (4.5f, new FuzzyFloat[] {3,3,6,6}),
-                    (4.75f, new FuzzyFloat[] { 2.4166667f, 4, 4, 6}),
+                    (4.75f, new FuzzyFloat[] { F(2.4166667f, 0.5f), 4, 4, 6}),
                     (5f, new FuzzyFloat[] {2, 6}),
                 }},
                 {"F", new[]
@@ -342,16 +342,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     Empty(4f),
 
                     (4.25f, new FuzzyFloat[] {13,13}),
-                    (4.5f, new FuzzyFloat[] {12.714286f, 13.444444f,16,16}),
-                    (4.75f, new FuzzyFloat[] {12.357143f, 14, 14, 3.2857143f}),
+                    (4.5f, new FuzzyFloat[] {F(12.714286f, 0.5f), F(13.444444f, 0.5f), 16, 16}),
+                    (4.75f, new FuzzyFloat[] {F(12.357143f, 0.5f), 14, 14, 16}),
                     (5f, new FuzzyFloat[] {12, 16}),
                 }},
                 {"G", new[]
                 {
                     Empty(1f), Empty(1.25f), Empty(1.5f),
 
-                    (1.75f, new FuzzyFloat[] { F(6, 0.2f),  F(6, 0.2f)}),
-                    (2f, new FuzzyFloat[] { 4.6315789f, 7.3684211f }),
+                    (1.75f, new FuzzyFloat[] { 6, 6}),
+                    (2f, new FuzzyFloat[] { F(4.6315789f, 1f), F(7.3684211f, 1f) }),
                     (2.25f, new FuzzyFloat[]{2, 10}),
                     
                     Empty(2.5f), Empty(1.75f), Empty(3f),

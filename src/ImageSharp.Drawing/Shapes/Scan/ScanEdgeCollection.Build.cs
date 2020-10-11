@@ -50,18 +50,15 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
             private PointF start;
             private PointF end;
-            private float startYRounded;
-            private float endYRounded;
             private int emitStart;
             private int emitEnd;
 
-            public EdgeData(PointF start, PointF end, float startYRounded, float endYRounded)
+            public EdgeData(float startX, float endX, float startYRounded, float endYRounded)
             {
-                this.start = start;
-                this.end = end;
-                this.startYRounded = startYRounded;
-                this.endYRounded = endYRounded;
-                if (this.startYRounded == this.endYRounded)
+                this.start = new PointF(startX, startYRounded);
+                this.end = new PointF(endX, endYRounded);
+
+                if (this.start.Y == this.end.Y)
                 {
                     this.EdgeCategory = this.start.X < this.end.X ? EdgeCategory.Right : EdgeCategory.Left;
                 }
@@ -179,11 +176,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 {
                     Swap(ref this.start, ref this.end);
                     Swap(ref this.emitStart, ref this.emitEnd);
-                    Swap(ref this.startYRounded, ref this.endYRounded);
                 }
 
                 int flags = up | (this.emitStart << 1) | (this.emitEnd << 3);
-                return new ScanEdge(this.startYRounded, this.endYRounded, ref this.start, ref this.end, flags);
+                return new ScanEdge(this.start, this.end, flags);
             }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -255,21 +251,21 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 var vertices = ring.Vertices;
                 RoundY(vertices, roundedY, subsamplingRatio);
 
-                walker.PreviousEdge = new EdgeData(vertices[vertices.Length - 2], vertices[vertices.Length - 1], roundedY[vertices.Length - 2], roundedY[vertices.Length - 1]); // Last edge
-                walker.CurrentEdge = new EdgeData(vertices[0], vertices[1], roundedY[0], roundedY[1]); // First edge
-                walker.NextEdge = new EdgeData(vertices[1], vertices[2], roundedY[1], roundedY[2]); // Second edge
+                walker.PreviousEdge = new EdgeData(vertices[vertices.Length - 2].X, vertices[vertices.Length - 1].X, roundedY[vertices.Length - 2], roundedY[vertices.Length - 1]); // Last edge
+                walker.CurrentEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
+                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
                 walker.Move(false);
 
                 for (int i = 1; i < vertices.Length - 2; i++)
                 {
-                    walker.NextEdge = new EdgeData(vertices[i + 1], vertices[i + 2], roundedY[i + 1], roundedY[i + 2]);
+                    walker.NextEdge = new EdgeData(vertices[i + 1].X, vertices[i + 2].X, roundedY[i + 1], roundedY[i + 2]);
                     walker.Move(true);
                 }
 
-                walker.NextEdge = new EdgeData(vertices[0], vertices[1], roundedY[0], roundedY[1]); // First edge
+                walker.NextEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
                 walker.Move(true); // Emit edge before last edge
 
-                walker.NextEdge = new EdgeData(vertices[1], vertices[2], roundedY[1], roundedY[2]); // Second edge
+                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
                 walker.Move(true); // Emit last edge
             }
 

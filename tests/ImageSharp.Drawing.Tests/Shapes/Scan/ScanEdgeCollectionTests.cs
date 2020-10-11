@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using SixLabors.ImageSharp.Memory;
 using Xunit;
 
@@ -12,28 +13,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         private ScanEdgeCollection _edges;
 
         private static MemoryAllocator MemoryAllocator => Configuration.Default.MemoryAllocator;
-        
-        private static readonly TolerantComparer DefaultComparer = new TolerantComparer(0.001f);
-        
-        private static readonly DebugDraw DebugDraw = new DebugDraw(nameof(ScanEdgeCollectionTests));
 
-        private void VerifyEdge(float y0, float y1, (float X, float Y) arbitraryPoint, int emit0, int emit1, bool edgeUp)
-            => VerifyEdge(y0, y1, arbitraryPoint, emit0, emit1, edgeUp, DefaultComparer);
+        private static readonly DebugDraw DebugDraw = new DebugDraw(nameof(ScanEdgeCollectionTests));
 
         private void VerifyEdge(float y0,
             float y1,
-            (float X, float Y) arbitraryPoint,
+            (FuzzyFloat X, FuzzyFloat Y) arbitraryPoint,
             int emit0,
             int emit1,
-            bool edgeUp,
-            in TolerantComparer comparer)
+            bool edgeUp)
         {
 
             foreach (ScanEdge e in _edges.Edges)
             {
-                if (comparer.AreEqual(y0, e.Y0) && comparer.AreEqual(y1, e.Y1))
+                if (y0 == e.Y0 && y1 == e.Y1)
                 {
-                    bool containsPoint = comparer.AreEqual(arbitraryPoint.X, e.GetX(arbitraryPoint.Y));
+                    bool containsPoint = arbitraryPoint.X.Equals(e.GetX(arbitraryPoint.Y));
                     if (containsPoint)
                     {
                         Assert.Equal(emit0, e.EmitV0);
@@ -128,7 +123,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             Assert.Equal(5, _edges.Count);
             
             VerifyEdge(3.25f, 4f, (12f, 3.75f), 1, 1, true);
-            VerifyEdge(3.25f, 3.5f, (15f, 3.45f), 1, 0, false);
+            VerifyEdge(3.25f, 3.5f, (15f, 3.375f), 1, 0, false);
             VerifyEdge(3.5f, 4f, (18f, 3.75f), 1, 1, false);
             
             // TODO: verify 2 more edges
@@ -140,11 +135,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             _edges = ScanEdgeCollection.Create(NumericCornerCasePolygons.H, MemoryAllocator, 4);
             
             Assert.Equal(3, _edges.Count);
-            VerifyEdge(1.75f, 2f, (15.230769f, 1.8f), 1, 1, true);
+            VerifyEdge(1.75f, 2f, (15f, 1.875f), 1, 1, true);
             VerifyEdge(1.75f, 2.25f, (16f, 2f), 1, 1, false);
             
             // this places two dummy points:
-            VerifyEdge( 2f, 2.25f, (15.285714f, 2.2f), 2, 1, true);
+            VerifyEdge( 2f, 2.25f, (15f, 2.125f), 2, 1, true);
         }
+        
+        private static FuzzyFloat F(float value, float eps) => new FuzzyFloat(value, eps);
     }
 }
