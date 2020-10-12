@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
         private static void VerifyScanline(ReadOnlySpan<FuzzyFloat> expected, ReadOnlySpan<float> actual, string scanlineId)
         {
-            Assert.Equal(expected.Length, actual.Length);
+            Assert.True(expected.Length == actual.Length, $"Scanline had {actual.Length} intersections instead of {expected.Length}: {scanlineId}");
 
             for (int i = 0; i < expected.Length; i++)
             {
@@ -176,6 +176,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void SelfIntersecting01()
         {
+            // TODO: This case is not handled intuitively with the current rules
             IPath poly = PolygonTest.CreatePolygon((0, 0), (10, 0), (0, 10), (10, 10));
             DebugDraw.Polygon(poly, 10f, 10f);
 
@@ -244,7 +245,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [InlineData(IntersectionRule.Nonzero)]
         public void SelfIntersecting03(IntersectionRule rule)
         {
-            
             IPath poly = PolygonTest.CreatePolygon((1, 3), (1, 2), (5, 2), (5, 5), (2, 5), (2, 1), (3, 1), (3, 4), (4, 4), (4, 3), (1, 3));
             DebugDraw.Polygon(poly, 1f, 100f);
 
