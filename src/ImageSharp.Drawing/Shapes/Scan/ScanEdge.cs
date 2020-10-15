@@ -9,7 +9,7 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 {
     /// <summary>
-    /// Holds coordinates, and coefficients for a polygon edge to be vertically scanned.
+    /// Holds coordinates, and coefficients for a polygon edge to be horizontally scanned.
     /// The edge's segment is defined with the reciprocal slope form:
     /// x = P * y + Q
     /// </summary>
@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.Q = ((p0.X * p1.Y) - (p1.X * p0.Y)) / dy;
         }
 
-        // Edge is up in screen coords
+        // True when non-horizontal edge is oriented upwards in screen coords
         public bool EdgeUp => (this.flags & 1) == 1;
 
         // How many times to include the intersection result
@@ -48,9 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         public float GetX(float y) => (this.P * y) + this.Q;
 
-        private string UpDownString => this.EdgeUp ? "Up" : "Down";
-
         public override string ToString()
-            => $"(Y0={this.Y0} Y1={this.Y1} E0={this.EmitV0} E1={this.EmitV1} {this.UpDownString} P={this.P} Q={this.Q})";
+            => $"(Y0={this.Y0} Y1={this.Y1} E0={this.EmitV0} E1={this.EmitV1} {(this.EdgeUp ? "Up" : "Down")} P={this.P} Q={this.Q})";
     }
 }

@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             IntersectionRule intersectionRule,
             MemoryAllocator allocator)
         {
-            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, new TolerantComparer(1f / subsampling));
+            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
             ScanEdgeCollection edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
             PolygonScanner scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, min, max, subsampling, intersectionRule, allocator);
             scanner.Init();

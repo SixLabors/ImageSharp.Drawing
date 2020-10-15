@@ -10,8 +10,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 {
     public class TopologyUtilitiesTests0
     {
-        private TolerantComparer comparer = new TolerantComparer(0.001f);
-        
         private static PointF[] CreateTestPoints()
         {
             return PolygonTest.CreatePoints((10, 0), (20, 0), (20, 30), (10, 30), (10, 20), (0, 20), (0, 10), (10, 10), (10,0));
@@ -30,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 polygon.AsSpan().Reverse();
             }
             
-            TopologyUtilities.EnsureOrientation(polygon, 1, this.comparer);
+            TopologyUtilities.EnsureOrientation(polygon, 1);
             
             Assert.Equal(expected, polygon);
         }
@@ -51,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 polygon.AsSpan().Reverse();
             }
             
-            TopologyUtilities.EnsureOrientation(polygon, -1, this.comparer);
+            TopologyUtilities.EnsureOrientation(polygon, -1);
             
             Assert.Equal(expected, polygon);
         }

@@ -13,9 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
     public class TessellatedMultipolygonTests
     {
         private static MemoryAllocator MemoryAllocator => Configuration.Default.MemoryAllocator;
-        
-        private static readonly TolerantComparer Comparer = new TolerantComparer(0.001f);
-        
+
         private static void VerifyRing(TessellatedMultipolygon.Ring ring, PointF[] originalPoints, bool originalPositive, bool isHole)
         {
             ReadOnlySpan<PointF> points = ring.Vertices;
@@ -53,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             
             Polygon polygon = new Polygon(new LinearLineSegment(points));
 
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator, Comparer);
+            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
             VerifyRing(multipolygon[0], points, reverseOriginal, false);
             Assert.Equal(6, multipolygon.TotalVertexCount);
         }
@@ -71,7 +69,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             
             Polygon polygon = new Polygon(new LinearLineSegment(points));
 
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator, Comparer);
+            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
 
             VerifyRing(multipolygon[0], points, !reverseOriginal, false);
         }
@@ -100,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 new Path(new LinearLineSegment(contour)),
                 new Path(new LinearLineSegment(hole)));
             
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator, Comparer);
+            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
 
             VerifyRing(multipolygon[0], contour, !reverseContour, false);
             VerifyRing(multipolygon[1], hole, !reverseHole, true);
@@ -114,7 +112,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
             
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator, Comparer);
+            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
             VerifyRing(multipolygon[0], points, true, false);
             Assert.Equal(4, multipolygon.TotalVertexCount);
         }
@@ -125,7 +123,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             Star polygon = new Star(100, 100, 5, 30, 60);
             PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
             
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator, Comparer);
+            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
             VerifyRing(multipolygon[0], points, true, false);
         }
     }

@@ -62,7 +62,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
 
         public int TotalVertexCount { get; }
 
-        public static TessellatedMultipolygon Create(IPath path, MemoryAllocator memoryAllocator, in TolerantComparer comparer)
+        public static TessellatedMultipolygon Create(IPath path, MemoryAllocator memoryAllocator)
         {
             // For now let's go with the assumption that first loop is always an external contour,
             // and the rests are loops.
@@ -71,12 +71,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
                 IReadOnlyList<InternalPath> internalPaths = ipo.GetRingsAsInternalPath();
                 Ring[] rings = new Ring[internalPaths.Count];
                 IMemoryOwner<PointF> pointBuffer = internalPaths[0].ExtractVertices(memoryAllocator);
-                RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, RingType.Contour, comparer);
+                RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, RingType.Contour);
                 rings[0] = new Ring(pointBuffer, RingType.Contour);
                 for (int i = 1; i < internalPaths.Count; i++)
                 {
                     pointBuffer = internalPaths[i].ExtractVertices(memoryAllocator);
-                    RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, RingType.Hole, comparer);
+                    RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, RingType.Hole);
                     rings[i] = new Ring(pointBuffer, RingType.Hole);
                 }
 
@@ -86,31 +86,31 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             {
                 ReadOnlyMemory<PointF>[] points = path.Flatten().Select(sp => sp.Points).ToArray();
                 Ring[] rings = new Ring[points.Length];
-                rings[0] = MakeRing(points[0], RingType.Contour, memoryAllocator, comparer);
+                rings[0] = MakeRing(points[0], RingType.Contour, memoryAllocator);
                 for (int i = 1; i < points.Length; i++)
                 {
-                    rings[i] = MakeRing(points[i], RingType.Hole, memoryAllocator, comparer);
+                    rings[i] = MakeRing(points[i], RingType.Hole, memoryAllocator);
                 }
 
                 return new TessellatedMultipolygon(rings);
             }
 
-            static Ring MakeRing(ReadOnlyMemory<PointF> points, RingType ringType, MemoryAllocator allocator, in TolerantComparer comparer)
+            static Ring MakeRing(ReadOnlyMemory<PointF> points, RingType ringType, MemoryAllocator allocator)
             {
                 IMemoryOwner<PointF> buffer = allocator.Allocate<PointF>(points.Length + 1);
                 Span<PointF> span = buffer.Memory.Span;
                 points.Span.CopyTo(span);
-                RepeateFirstVertexAndEnsureOrientation(span, ringType, comparer);
+                RepeateFirstVertexAndEnsureOrientation(span, ringType);
                 return new Ring(buffer, ringType);
             }
 
-            static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, RingType ringType, in TolerantComparer comparer)
+            static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, RingType ringType)
             {
                 // Repeat first vertex for perf:   
                 span[span.Length - 1] = span[0];
 
                 int orientation = ringType == RingType.Contour ? 1 : -1;
-                TopologyUtilities.EnsureOrientation(span, orientation, comparer);
+                TopologyUtilities.EnsureOrientation(span, orientation);
             }
         }
 

@@ -18,11 +18,23 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Helpers
     internal static class TopologyUtilities
     {
         /// <summary>
+        /// Positive: CCW in world coords (CW on screen)
+        /// Negative: CW in world coords (CCW on screen)
+        /// </summary>
+        public static void EnsureOrientation(Span<PointF> polygon, int expectedOrientation)
+        {
+            if (GetPolygonOrientation(polygon) * expectedOrientation < 0)
+            {
+                polygon.Reverse();
+            }
+        }
+
+        /// <summary>
         /// Zero: area is 0
         /// Positive: CCW in world coords (CW on screen)
         /// Negative: CW in world coords (CCW on screen)
         /// </summary>
-        public static int GetPolygonOrientation(ReadOnlySpan<PointF> polygon, in TolerantComparer comparer)
+        private static int GetPolygonOrientation(ReadOnlySpan<PointF> polygon)
         {
             float sum = 0f;
             for (var i = 0; i < polygon.Length - 1; ++i)
@@ -32,19 +44,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Helpers
                 sum += (curr.X * next.Y) - (next.X * curr.Y);
             }
 
-            return comparer.Sign2(sum);
-        }
-
-        /// <summary>
-        /// Positive: CCW in world coords (CW on screen)
-        /// Negative: CW in woorld coords (CCW on screen)
-        /// </summary>
-        public static void EnsureOrientation(Span<PointF> polygon, int expectedOrientation, in TolerantComparer comparer)
-        {
-            if (GetPolygonOrientation(polygon, in comparer) * expectedOrientation < 0)
-            {
-                polygon.Reverse();
-            }
+            // Normally, this should be a tolerant comparison, we don't have a special path for zero-area
+            // (or for self-intersecting, semi-zero-area) polygons in edge scanning.
+            return MathF.Sign(sum);
         }
     }
 }
