@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [InlineData(true)]
         public void Create_FromPolygon_Case1(bool reverseOriginal)
         {
-            PointF[] points = PolygonTest.CreatePoints((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
+            PointF[] points = PolygonFactory.CreatePointArray((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
             if (reverseOriginal)
             {
                 points.AsSpan().Reverse();
@@ -61,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [InlineData(true)]
         public void Create_FromPolygon_Case2(bool reverseOriginal)
         {
-            PointF[] points = PolygonTest.CreatePoints((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
+            PointF[] points = PolygonFactory.CreatePointArray((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
             if (reverseOriginal)
             {
                 points.AsSpan().Reverse();
@@ -81,8 +81,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [InlineData(true, true)]
         public void Create_FromComplexPolygon(bool reverseContour, bool reverseHole)
         {
-            PointF[] contour = PolygonTest.CreatePoints((0, 0), (30, 0), (30, 30), (0, 30));
-            PointF[] hole = PolygonTest.CreatePoints((10, 10), (20, 10), (20, 20), (10, 20));
+            PointF[] contour = PolygonFactory.CreatePointArray((0, 0), (30, 0), (30, 30), (0, 30));
+            PointF[] hole = PolygonFactory.CreatePointArray((10, 10), (20, 10), (20, 20), (10, 20));
             
             if (reverseContour)
             {

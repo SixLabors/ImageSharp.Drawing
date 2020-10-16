@@ -77,7 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void BasicConcave00()
         {
-            IPath poly = PolygonTest.CreatePolygon((2, 2), (5, 3), (5, 6), (8, 6), (8, 9), (5, 11), (2, 7));
+            IPath poly = PolygonFactory.CreatePolygon((2, 2), (5, 3), (5, 6), (8, 6), (8, 9), (5, 11), (2, 7));
             DebugDraw.Polygon(poly, 1f, 50f);
 
             FuzzyFloat[][] expected =
@@ -100,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void BasicConcave01()
         {
-            IPath poly = PolygonTest.CreatePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
+            IPath poly = PolygonFactory.CreatePolygon((0,0), (10,10), (20,0), (20,20), (0,20) );
             DebugDraw.Polygon(poly);
 
             FuzzyFloat[][] expected =
@@ -134,7 +134,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void BasicConcave02()
         {
-            IPath poly = PolygonTest.CreatePolygon((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
+            IPath poly = PolygonFactory.CreatePolygon((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
             DebugDraw.Polygon(poly, 1f, 100f);
 
             FuzzyFloat[][] expected =
@@ -153,7 +153,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void BasicConcave03()
         {
-            IPath poly = PolygonTest.CreatePolygon((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
+            IPath poly = PolygonFactory.CreatePolygon((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
             DebugDraw.Polygon(poly, 1f, 100f);
 
             FuzzyFloat[][] expected =
@@ -177,7 +177,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         public void SelfIntersecting01()
         {
             // TODO: This case is not handled intuitively with the current rules
-            IPath poly = PolygonTest.CreatePolygon((0, 0), (10, 0), (0, 10), (10, 10));
+            IPath poly = PolygonFactory.CreatePolygon((0, 0), (10, 0), (0, 10), (10, 10));
             DebugDraw.Polygon(poly, 10f, 10f);
 
             FuzzyFloat[][] expected =
@@ -210,7 +210,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void SelfIntersecting02()
         {
-            IPath poly = PolygonTest.CreatePolygon((0, 0), (10, 10), (10, 0), (0, 10));
+            IPath poly = PolygonFactory.CreatePolygon((0, 0), (10, 10), (10, 0), (0, 10));
             DebugDraw.Polygon(poly, 10f, 10f);
 
             FuzzyFloat[][] expected =
@@ -245,7 +245,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [InlineData(IntersectionRule.Nonzero)]
         public void SelfIntersecting03(IntersectionRule rule)
         {
-            IPath poly = PolygonTest.CreatePolygon((1, 3), (1, 2), (5, 2), (5, 5), (2, 5), (2, 1), (3, 1), (3, 4), (4, 4), (4, 3), (1, 3));
+            IPath poly = PolygonFactory.CreatePolygon((1, 3), (1, 2), (5, 2), (5, 5), (2, 5), (2, 1), (3, 1), (3, 4), (4, 4), (4, 3), (1, 3));
             DebugDraw.Polygon(poly, 1f, 100f);
 
             FuzzyFloat[][] expected;

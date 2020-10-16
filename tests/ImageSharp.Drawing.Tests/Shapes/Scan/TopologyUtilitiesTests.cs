@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
     {
         private static PointF[] CreateTestPoints()
         {
-            return PolygonTest.CreatePoints((10, 0), (20, 0), (20, 30), (10, 30), (10, 20), (0, 20), (0, 10), (10, 10), (10,0));
+            return PolygonFactory.CreatePointArray((10, 0), (20, 0), (20, 30), (10, 30), (10, 20), (0, 20), (0, 10), (10, 10), (10,0));
         }
 
         [Theory]

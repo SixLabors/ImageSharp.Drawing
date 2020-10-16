@@ -15,6 +15,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     public class FillPolygonTests
     {
         [Theory]
+        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 0)]
+        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 4)]
+        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 16)]
+        public void FillPolygon_Solid_Basic<TPixel>(TestImageProvider<TPixel> provider, int antialias)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] polygon1 = PolygonFactory.CreatePointArray((2, 2), (6, 2), (6, 4), (2, 4));
+            PointF[] polygon2 = PolygonFactory.CreatePointArray((2, 8), (4, 6), (6, 8), (4, 10));
+            
+            var options = new GraphicsOptions { Antialias = antialias > 0, AntialiasSubpixelDepth = antialias };
+            provider.RunValidatingProcessorTest(
+                c => c.SetGraphicsOptions(options)
+                    .FillPolygon(Color.White, polygon1)
+                    .FillPolygon(Color.White, polygon2),
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false, 
+                testOutputDetails: $"aa{antialias}");
+        }
+        
+        [Theory]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1f, true)]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 0.6f, true)]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1f, false)]

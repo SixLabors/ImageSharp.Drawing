@@ -9,7 +9,7 @@ using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
-    internal static class PolygonTest
+    internal static class PolygonFactory
     {
         private const float Inf = 10000;
         
@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         private static readonly IPen GridPen = Pens.Solid(Color.Aqua, 0.5f);
 
         public static Polygon CreatePolygon(params (float x, float y)[] coords)
-            => new Polygon(new LinearLineSegment(CreatePoints(coords)))
+            => new Polygon(new LinearLineSegment(CreatePointArray(coords)))
             {
                 // The default epsilon is too large for test code, we prefer the vertices not to be changed
                 RemoveCloseAndCollinearPoints = false
@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public static (PointF Start, PointF End) CreateHorizontalLine(float y) 
             => (new PointF(-Inf, y), new PointF(Inf, y));
 
-        public static PointF[] CreatePoints(params (float x, float y)[] coords) =>
+        public static PointF[] CreatePointArray(params (float x, float y)[] coords) =>
             coords.Select(c => new PointF(c.x, c.y)).ToArray();
         public static T[] CloneArray<T>(this T[] points)
         {

@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         public void SimplePolygon_AllEmitCases()
         {
             // see: SimplePolygon_AllEmitCases.png
-            var polygon = PolygonTest.CreatePolygon(
+            var polygon = PolygonFactory.CreatePolygon(
                 (1, 2), (2, 2), (3, 1), (4, 3), (6, 1), (7, 2), (8, 2), (9, 3), 
                 (9, 4), (10, 5), (9, 6), (8, 6), (8, 7), (9,7), (9, 8),
                 (7, 8), (6, 7), (5, 8), (4, 7), (3, 8), (2, 8),
@@ -84,9 +84,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void ComplexPolygon()
         {
-            Polygon contour = PolygonTest.CreatePolygon(
+            Polygon contour = PolygonFactory.CreatePolygon(
                 (1, 1), (4, 1), (4, 2), (5, 2), (5, 5), (2, 5), (2, 4), (1, 4), (1, 1));
-            Polygon hole = PolygonTest.CreatePolygon(
+            Polygon hole = PolygonFactory.CreatePolygon(
                 (2, 2), (2, 3), (3, 3), (3, 4), (4, 4), (4, 3), (3, 2));
 
             IPath polygon = contour.Clip(hole);
