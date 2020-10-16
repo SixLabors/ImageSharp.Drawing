@@ -7,16 +7,15 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 {
     internal ref struct ClassicPolygonScanner
     {
-        public bool ScanlineDirty;
+        public float SubpixelFraction;
 
         private readonly Region region;
         private IMemoryOwner<float> bBuffer;
         private Span<float> buffer;
         private int minY;
         private int maxY;
-        private float subpixelFraction;
-        private float subpixelFractionPoint;
-        private int y;
+
+        public int y;
         private float subPixel;
         private IntersectionRule intersectionRule;
         private Configuration configuration;
@@ -31,9 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.configuration = configuration;
             this.buffer = bBuffer.Memory.Span;
 
-            this.subpixelFraction = 1f / subpixelCount;
-            this.subpixelFractionPoint = this.subpixelFraction / subpixelCount;
-            this.ScanlineDirty = true;
+            this.SubpixelFraction = 1f / subpixelCount;
             this.y = minY - 1;
             this.subPixel = float.MaxValue;
         }
@@ -58,21 +55,18 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.bBuffer.Dispose();
         }
 
-        public bool MoveToNextScanline()
+        public bool MoveToNextScanline(out bool crossingLastSubpixel)
         {
             float yPlusOne = this.y + 1;
             if (this.subPixel < yPlusOne)
             {
-                this.subPixel += this.subpixelFraction;
+                this.subPixel += this.SubpixelFraction;
+                crossingLastSubpixel = !(this.subPixel < yPlusOne);
             }
             else
             {
                 this.y++;
-                if (this.ScanlineDirty)
-                {
-                    this.buffer.Clear();
-                    this.ScanlineDirty = false;
-                }
+                crossingLastSubpixel = false;
 
                 this.subPixel = this.y;
             }

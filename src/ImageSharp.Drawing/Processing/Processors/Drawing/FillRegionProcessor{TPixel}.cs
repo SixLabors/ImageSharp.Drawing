@@ -4,6 +4,7 @@
 using System;
 using System.Buffers;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Drawing.Shapes.Scan;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -55,7 +56,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             }
 
             int maxIntersections = region.MaxIntersections;
-            float subpixelCount = 4;
+            int subpixelCount = 4;
 
             // we need to offset the pixel grid to account for when we outline a path.
             // basically if the line is [1,2] => [3,2] then when outlining at 1 we end up with a region of [0.5,1.5],[1.5, 1.5],[3.5,2.5],[2.5,2.5]
@@ -74,10 +75,103 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             {
                 int scanlineWidth = maxX - minX;
                 MemoryAllocator allocator = this.Configuration.MemoryAllocator;
+                bool scanlineDirty = true;
+#if true
+                ClassicPolygonScanner scanner = ClassicPolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule, configuration);
+
+                float subpixelFraction = scanner.SubpixelFraction;
+                float subpixelFractionPoint = subpixelFraction / subpixelCount;
+                using IMemoryOwner<float> bScanline = allocator.Allocate<float>(scanlineWidth);
+                Span<float> scanline = bScanline.Memory.Span;
+
+                bool crossedPixelBoundary = true;
+
+                while (scanner.MoveToNextScanline(out bool crossingLastSubpixel))
+                {
+                    if (crossedPixelBoundary && scanlineDirty)
+                    {
+                        scanline.Clear();
+                        scanlineDirty = false;
+                    }
+
+                    ReadOnlySpan<float> points = scanner.ScanCurrentLine();
+
+                    for (int point = 0; point < points.Length; point += 2)
+                    {
+                        // points will be paired up
+                        float scanStart = points[point] - minX;
+                        float scanEnd = points[point + 1] - minX;
+                        int startX = (int)MathF.Floor(scanStart);
+                        int endX = (int)MathF.Floor(scanEnd);
+
+                        if (startX >= 0 && startX < scanline.Length)
+                        {
+                            for (float x = scanStart; x < startX + 1; x += subpixelFraction)
+                            {
+                                scanline[startX] += subpixelFractionPoint;
+                                scanlineDirty = true;
+                            }
+                        }
+
+                        if (endX >= 0 && endX < scanline.Length)
+                        {
+                            for (float x = endX; x < scanEnd; x += subpixelFraction)
+                            {
+                                scanline[endX] += subpixelFractionPoint;
+                                scanlineDirty = true;
+                            }
+                        }
+
+                        int nextX = startX + 1;
+                        endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
+                        nextX = Math.Max(nextX, 0);
+                        for (int x = nextX; x < endX; x++)
+                        {
+                            scanline[x] += subpixelFraction;
+                            scanlineDirty = true;
+                        }
+                    }
+
+                    if (crossingLastSubpixel && scanlineDirty)
+                    {
+                        if (!graphicsOptions.Antialias)
+                        {
+                            bool hasOnes = false;
+                            bool hasZeros = false;
+                            for (int x = 0; x < scanlineWidth; x++)
+                            {
+                                if (scanline[x] >= 0.5)
+                                {
+                                    scanline[x] = 1;
+                                    hasOnes = true;
+                                }
+                                else
+                                {
+                                    scanline[x] = 0;
+                                    hasZeros = true;
+                                }
+                            }
+
+                            if (isSolidBrushWithoutBlending && hasOnes != hasZeros)
+                            {
+                                if (hasOnes)
+                                {
+                                    source.GetPixelRowSpan(scanner.y).Slice(minX, scanlineWidth).Fill(solidBrushColor);
+                                }
+
+                                continue;
+                            }
+                        }
+
+                        applicator.Apply(scanline, minX, scanner.y);
+                    }
+
+                    crossedPixelBoundary = crossingLastSubpixel;
+                }
+#else
                 using (IMemoryOwner<float> bBuffer = allocator.Allocate<float>(maxIntersections))
                 using (IMemoryOwner<float> bScanline = allocator.Allocate<float>(scanlineWidth))
                 {
-                    bool scanlineDirty = true;
                     float subpixelFraction = 1f / subpixelCount;
                     float subpixelFractionPoint = subpixelFraction / subpixelCount;
 
@@ -174,6 +268,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                         }
                     }
                 }
+#endif
             }
         }
 
