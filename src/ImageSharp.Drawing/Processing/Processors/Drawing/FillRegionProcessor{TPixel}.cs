@@ -77,7 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 MemoryAllocator allocator = this.Configuration.MemoryAllocator;
                 bool scanlineDirty = true;
 #if true
-                var scanner = ClassicPolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule, configuration);
+                var scanner = PolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule, configuration);
 
                 float subpixelFraction = scanner.SubpixelFraction;
                 float subpixelFractionPoint = subpixelFraction / subpixelCount;

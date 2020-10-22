@@ -4,38 +4,42 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SDPoint = System.Drawing.Point;
+using SDPointF = System.Drawing.PointF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     public class FillPolygon
     {
-        private readonly Polygon shape;
+        private IPath shape;
+        private SDPointF[] shapeVertices;
 
-        public FillPolygon()
+        public const int Size = 4000;
+
+        [GlobalSetup]
+        public void Setup()
         {
-            this.shape = new Polygon(new LinearLineSegment(
-                new Vector2(10, 10),
-                new Vector2(550, 50),
-                new Vector2(200, 400)));
+            this.shape = new EllipsePolygon(Size / 2, Size / 2, Size / 4);
+            this.shapeVertices = this.shape.Flatten().Single().Points.ToArray().Select(p => new SDPointF(p.X, p.Y))
+                .ToArray();
         }
 
-        [Benchmark(Baseline = true, Description = "System.Drawing Fill Polygon")]
-        public void DrawSolidPolygonSystemDrawing()
+        [Benchmark(Baseline = true)]
+        public void SystemDrawing()
         {
-            using (var destination = new Bitmap(800, 800))
+            using (var destination = new Bitmap(Size, Size))
 
             using (var graphics = Graphics.FromImage(destination))
             {
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 graphics.FillPolygon(
                     System.Drawing.Brushes.HotPink,
-                    new[] { new SDPoint(10, 10), new SDPoint(550, 50), new SDPoint(200, 400) });
+                    this.shapeVertices);
 
                 using (var stream = new MemoryStream())
                 {
@@ -44,28 +48,10 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             }
         }
 
-        [Benchmark(Description = "ImageSharp Fill Polygon")]
-        public void DrawSolidPolygonCore()
+        [Benchmark]
+        public void ImageSharp()
         {
-            using (var image = new Image<Rgba32>(800, 800))
-            {
-                image.Mutate(x => x.FillPolygon(
-                    Color.HotPink,
-                    new Vector2(10, 10),
-                    new Vector2(550, 50),
-                    new Vector2(200, 400)));
-
-                using (var stream = new MemoryStream())
-                {
-                    image.SaveAsBmp(stream);
-                }
-            }
-        }
-
-        [Benchmark(Description = "ImageSharp Fill Polygon - Cached shape")]
-        public void DrawSolidPolygonCoreCached()
-        {
-            using (var image = new Image<Rgba32>(800, 800))
+            using (var image = new Image<Rgba32>(Size, Size))
             {
                 image.Mutate(x => x.Fill(
                     Color.HotPink,
