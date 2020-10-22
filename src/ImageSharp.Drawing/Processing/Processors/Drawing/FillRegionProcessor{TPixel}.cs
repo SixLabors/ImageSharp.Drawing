@@ -77,63 +77,70 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 MemoryAllocator allocator = this.Configuration.MemoryAllocator;
                 bool scanlineDirty = true;
 #if true
-                ClassicPolygonScanner scanner = ClassicPolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule, configuration);
+                var scanner = ClassicPolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule, configuration);
 
                 float subpixelFraction = scanner.SubpixelFraction;
                 float subpixelFractionPoint = subpixelFraction / subpixelCount;
                 using IMemoryOwner<float> bScanline = allocator.Allocate<float>(scanlineWidth);
                 Span<float> scanline = bScanline.Memory.Span;
 
-                bool crossedPixelBoundary = true;
-
-                while (scanner.MoveToNextScanline(out bool crossingLastSubpixel))
+                while (scanner.MoveToNextPixelLine())
                 {
-                    if (crossedPixelBoundary && scanlineDirty)
+                    if (scanlineDirty)
                     {
                         scanline.Clear();
                         scanlineDirty = false;
                     }
 
-                    ReadOnlySpan<float> points = scanner.ScanCurrentLine();
-
-                    for (int point = 0; point < points.Length; point += 2)
+                    while (scanner.MoveToNextSubpixelScanLine())
                     {
-                        // points will be paired up
-                        float scanStart = points[point] - minX;
-                        float scanEnd = points[point + 1] - minX;
-                        int startX = (int)MathF.Floor(scanStart);
-                        int endX = (int)MathF.Floor(scanEnd);
-
-                        if (startX >= 0 && startX < scanline.Length)
+                        ReadOnlySpan<float> points = scanner.ScanCurrentLine();
+                        if (points.Length == 0)
                         {
-                            for (float x = scanStart; x < startX + 1; x += subpixelFraction)
-                            {
-                                scanline[startX] += subpixelFractionPoint;
-                                scanlineDirty = true;
-                            }
+                            // nothing on this line, skip
+                            continue;
                         }
 
-                        if (endX >= 0 && endX < scanline.Length)
+                        for (int point = 0; point < points.Length; point += 2)
                         {
-                            for (float x = endX; x < scanEnd; x += subpixelFraction)
+                            // points will be paired up
+                            float scanStart = points[point] - minX;
+                            float scanEnd = points[point + 1] - minX;
+                            int startX = (int)MathF.Floor(scanStart);
+                            int endX = (int)MathF.Floor(scanEnd);
+
+                            if (startX >= 0 && startX < scanline.Length)
                             {
-                                scanline[endX] += subpixelFractionPoint;
+                                for (float x = scanStart; x < startX + 1; x += subpixelFraction)
+                                {
+                                    scanline[startX] += subpixelFractionPoint;
+                                    scanlineDirty = true;
+                                }
+                            }
+
+                            if (endX >= 0 && endX < scanline.Length)
+                            {
+                                for (float x = endX; x < scanEnd; x += subpixelFraction)
+                                {
+                                    scanline[endX] += subpixelFractionPoint;
+                                    scanlineDirty = true;
+                                }
+                            }
+
+                            int nextX = startX + 1;
+                            endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
+                            nextX = Math.Max(nextX, 0);
+                            for (int x = nextX; x < endX; x++)
+                            {
+                                scanline[x] += subpixelFraction;
                                 scanlineDirty = true;
                             }
-                        }
-
-                        int nextX = startX + 1;
-                        endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
-                        nextX = Math.Max(nextX, 0);
-                        for (int x = nextX; x < endX; x++)
-                        {
-                            scanline[x] += subpixelFraction;
-                            scanlineDirty = true;
                         }
                     }
 
-                    if (crossingLastSubpixel && scanlineDirty)
+                    if (scanlineDirty)
                     {
+                        int y = scanner.y;
                         if (!graphicsOptions.Antialias)
                         {
                             bool hasOnes = false;
@@ -156,17 +163,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                             {
                                 if (hasOnes)
                                 {
-                                    source.GetPixelRowSpan(scanner.y).Slice(minX, scanlineWidth).Fill(solidBrushColor);
+                                    source.GetPixelRowSpan(y).Slice(minX, scanlineWidth).Fill(solidBrushColor);
                                 }
 
                                 continue;
                             }
                         }
 
-                        applicator.Apply(scanline, minX, scanner.y);
+                        applicator.Apply(scanline, minX, y);
                     }
-
-                    crossedPixelBoundary = crossingLastSubpixel;
                 }
 #else
                 using (IMemoryOwner<float> bBuffer = allocator.Allocate<float>(maxIntersections))

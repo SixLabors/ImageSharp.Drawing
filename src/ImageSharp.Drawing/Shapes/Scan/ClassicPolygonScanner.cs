@@ -16,11 +16,19 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private int maxY;
 
         public int y;
-        private float subPixel;
+        public float subPixel;
         private IntersectionRule intersectionRule;
         private Configuration configuration;
+        private float yPlusOne;
 
-        public ClassicPolygonScanner(Region region, IMemoryOwner<float> bBuffer, int minY, int maxY, int subpixelCount, IntersectionRule intersectionRule, Configuration configuration)
+        public ClassicPolygonScanner(
+            Region region,
+            IMemoryOwner<float> bBuffer,
+            int minY,
+            int maxY,
+            int subpixelCount,
+            IntersectionRule intersectionRule,
+            Configuration configuration)
         {
             this.region = region;
             this.bBuffer = bBuffer;
@@ -32,7 +40,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
             this.SubpixelFraction = 1f / subpixelCount;
             this.y = minY - 1;
-            this.subPixel = float.MaxValue;
+            this.subPixel = float.NaN;
+            this.yPlusOne = float.NaN;
         }
 
 
@@ -46,8 +55,14 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         {
             int maxIntersections = region.MaxIntersections;
 
-            return new ClassicPolygonScanner(region, configuration.MemoryAllocator.Allocate<float>(maxIntersections), minY, maxY,
-                subsampling, intersectionRule, configuration);
+            return new ClassicPolygonScanner(
+                region,
+                configuration.MemoryAllocator.Allocate<float>(maxIntersections),
+                minY,
+                maxY,
+                subsampling,
+                intersectionRule,
+                configuration);
         }
 
         public void Dispose()
@@ -55,23 +70,18 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.bBuffer.Dispose();
         }
 
-        public bool MoveToNextScanline(out bool crossingLastSubpixel)
+        public bool MoveToNextPixelLine()
         {
-            float yPlusOne = this.y + 1;
-            if (this.subPixel < yPlusOne)
-            {
-                this.subPixel += this.SubpixelFraction;
-                crossingLastSubpixel = !(this.subPixel < yPlusOne);
-            }
-            else
-            {
-                this.y++;
-                crossingLastSubpixel = false;
-
-                this.subPixel = this.y;
-            }
-
+            this.y++;
+            this.yPlusOne = this.y + 1;
+            this.subPixel = this.y - this.SubpixelFraction;
             return this.y < this.maxY;
+        }
+
+        public bool MoveToNextSubpixelScanLine()
+        {
+            this.subPixel += this.SubpixelFraction;
+            return this.subPixel < this.yPlusOne;
         }
 
         public ReadOnlySpan<float> ScanCurrentLine()
