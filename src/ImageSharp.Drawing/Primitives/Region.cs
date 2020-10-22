@@ -23,6 +23,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// </remarks>
         public abstract Rectangle Bounds { get; }
 
+        public abstract IPath Shape { get; }
+
         /// <summary>
         /// Scans the X axis for intersections at the Y axis position.
         /// </summary>

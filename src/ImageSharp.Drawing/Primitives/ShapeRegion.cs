@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the fillable shape
         /// </summary>
-        public IPath Shape { get; }
+        public override IPath Shape { get; }
 
         /// <inheritdoc/>
         public override int MaxIntersections { get; }

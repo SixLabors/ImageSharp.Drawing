@@ -140,7 +140,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
                     if (scanlineDirty)
                     {
-                        int y = scanner.y;
+                        int y = scanner.PixelLineY;
                         if (!graphicsOptions.Antialias)
                         {
                             bool hasOnes = false;
@@ -173,6 +173,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                         applicator.Apply(scanline, minX, y);
                     }
                 }
+
+                scanner.Dispose();
 #else
                 using (IMemoryOwner<float> bBuffer = allocator.Allocate<float>(maxIntersections))
                 using (IMemoryOwner<float> bScanline = allocator.Allocate<float>(scanlineWidth))

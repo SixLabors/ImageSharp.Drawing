@@ -32,8 +32,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             }
             this.output.WriteLine(sb.ToString());
         }
-        
-        
+
+
         private void PrintPointsX(PointF[] isc)
         {
             string s = string.Join(",", isc.Select(p => $"{p.X}"));
@@ -55,18 +55,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
         private void TestScan(IPath path, int min, int max, int subsampling, FuzzyFloat[][] expected, IntersectionRule intersectionRule)
         {
-            PolygonScanner scanner = PolygonScanner.Create(path, min, max, subsampling, intersectionRule, Configuration.Default.MemoryAllocator);
+            var scanner = PolygonScanner.Create(path, min, max, subsampling, intersectionRule, Configuration.Default.MemoryAllocator);
 
             try
             {
-                while (scanner.MoveToNextScanline())
+                int counter = 0;
+                while (scanner.MoveToNextPixelLine())
                 {
-                    ReadOnlySpan<float> intersections = scanner.ScanCurrentLine();
+                    while (scanner.MoveToNextSubpixelScanLine())
+                    {
+                        ReadOnlySpan<float> intersections = scanner.ScanCurrentLine();
+                        VerifyScanline(expected[counter], intersections, $"Y={scanner.SubPixelY} Cnt={counter}");
 
-                    VerifyScanline(expected[scanner.Counter], intersections, $"Y={scanner.Y} Cnt={scanner.Counter}");
+                        counter++;
+                    }
                 }
-                
-                Assert.Equal(expected.Length, scanner.Counter);    
+                Assert.Equal(expected.Length, counter + 1);
             }
             finally
             {
@@ -93,7 +97,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 new FuzzyFloat[] { 4.25f, 6.5f},
                 new FuzzyFloat[] { 5, 5 },
             };
-            
+
             TestScan(poly, 2, 11, 1, expected);
         }
 
@@ -127,10 +131,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 new FuzzyFloat[] { 0f, 20.000000f },
                 new FuzzyFloat[] { 0f, 20.000000f  },
             };
-            
+
             TestScan(poly, 0, 20, 1, expected);
         }
-        
+
         [Fact]
         public void BasicConcave02()
         {
@@ -206,7 +210,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             };
             TestScan(poly, 0, 10, 2, expected);
         }
-        
+
         [Fact]
         public void SelfIntersecting02()
         {
@@ -279,12 +283,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     new FuzzyFloat[] {2.0000000f, 5.0000000f},
                 };
             }
-            
+
             TestScan(poly, 1, 5, 2, expected, rule);
         }
 
         private static (float y, FuzzyFloat[] x) Empty(float y) => (y, new FuzzyFloat[0]);
-        
+
         private static FuzzyFloat F(float x, float eps) => new FuzzyFloat(x, eps);
 
         public static readonly TheoryData<string, (float y, FuzzyFloat[] x)[] > NumericCornerCasesData =
@@ -293,29 +297,29 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 {"A", new[]
                 {
                     Empty(2f), Empty(2.25f),
-                    
+
                     (2.5f, new FuzzyFloat[] {2, 11}),
                     (2.75f, new FuzzyFloat[] {2, 11}),
                     (3f, new FuzzyFloat[]{2, 8, 8, 11}),
                     (3.25f, new FuzzyFloat[]{11,11}),
-                    
+
                     Empty(3.5f), Empty(3.75f), Empty(4f),
                 }},
                 {"B", new[]
                 {
                     Empty(2f), Empty(2.25f),
-                    
+
                     (2.5f, new FuzzyFloat[] {12, 21}),
                     (2.75f, new FuzzyFloat[] {12, 21}),
                     (3f, new FuzzyFloat[]{12, 15, 15, 21}),
                     (3.25f, new FuzzyFloat[]{18, 21}),
-                    
+
                     Empty(3.5f), Empty(3.75f), Empty(4f),
                 }},
                 {"C", new[]
                 {
                     Empty(3f), Empty(3.25f),
-                    
+
                     (3.5f, new FuzzyFloat[] {2, 8}),
                     (3.75f, new FuzzyFloat[] {2, 8}),
                     (4f, new FuzzyFloat[] {2, 8}),
@@ -353,21 +357,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     (1.75f, new FuzzyFloat[] { 6, 6}),
                     (2f, new FuzzyFloat[] { F(4.6315789f, 1f), F(7.3684211f, 1f) }),
                     (2.25f, new FuzzyFloat[]{2, 10}),
-                    
+
                     Empty(2.5f), Empty(1.75f), Empty(3f),
                 }},
                 {"H", new []
                 {
                     Empty(1f), Empty(1.25f), Empty(1.5f),
-                    
+
                     (1.75f, new FuzzyFloat[] { 16, 16 }),
                     (2f, new FuzzyFloat[]{14, 14, 14, 16}), // this emits 2 dummy points, but normally it should not corrupt quality too much
                     (2.25f, new FuzzyFloat[]{ 16, 16 }),
-                    
+
                     Empty(2.5f), Empty(1.75f), Empty(3f),
                 }}
             };
-        
+
         [Theory]
         [MemberData(nameof(NumericCornerCasesData))]
         public void NumericCornerCases(string name, (float y, FuzzyFloat[] x)[] expectedIntersections)
@@ -377,7 +381,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             int min = (int)expectedIntersections.First().y;
             int max = (int)expectedIntersections.Last().y;
-            
+
             TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.x).ToArray());
         }
     }

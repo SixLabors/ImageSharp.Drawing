@@ -15,8 +15,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private int minY;
         private int maxY;
 
-        public int y;
-        public float subPixel;
+        public int PixelLineY;
+        public float SubPixelY;
         private IntersectionRule intersectionRule;
         private Configuration configuration;
         private float yPlusOne;
@@ -39,11 +39,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.buffer = bBuffer.Memory.Span;
 
             this.SubpixelFraction = 1f / subpixelCount;
-            this.y = minY - 1;
-            this.subPixel = float.NaN;
+            this.PixelLineY = minY - 1;
+            this.SubPixelY = float.NaN;
             this.yPlusOne = float.NaN;
         }
-
 
         public static ClassicPolygonScanner Create(
             Region region,
@@ -72,21 +71,21 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         public bool MoveToNextPixelLine()
         {
-            this.y++;
-            this.yPlusOne = this.y + 1;
-            this.subPixel = this.y - this.SubpixelFraction;
-            return this.y < this.maxY;
+            this.PixelLineY++;
+            this.yPlusOne = this.PixelLineY + 1;
+            this.SubPixelY = this.PixelLineY - this.SubpixelFraction;
+            return this.PixelLineY < this.maxY;
         }
 
         public bool MoveToNextSubpixelScanLine()
         {
-            this.subPixel += this.SubpixelFraction;
-            return this.subPixel < this.yPlusOne;
+            this.SubPixelY += this.SubpixelFraction;
+            return this.SubPixelY < this.yPlusOne;
         }
 
         public ReadOnlySpan<float> ScanCurrentLine()
         {
-            int pointsFound = this.region.Scan(this.subPixel, this.buffer, this.configuration, this.intersectionRule);
+            int pointsFound = this.region.Scan(this.SubPixelY, this.buffer, this.configuration, this.intersectionRule);
             return this.buffer.Slice(0, pointsFound);
         }
     }

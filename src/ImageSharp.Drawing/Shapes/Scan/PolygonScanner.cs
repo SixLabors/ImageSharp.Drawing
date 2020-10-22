@@ -11,9 +11,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 {
     internal ref struct PolygonScanner
     {
-        private readonly int min;
+        private readonly int minY;
+        private readonly int maxY;
         private readonly int subsampling;
-        private readonly float step;
         private readonly int counterMax;
         private readonly IntersectionRule intersectionRule;
         private readonly MemoryAllocator allocator;
@@ -34,28 +34,30 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         private int idx0;
         private int idx1;
-        public int Counter;
-        public float Y;
+        private float yPlusOne;
+
+        public readonly float SubpixelFraction;
+        public int PixelLineY;
+        public float SubPixelY;
 
         private PolygonScanner(
             ScanEdgeCollection edgeCollection,
             int maxIntersectionCount,
-            int min,
-            int max,
+            int minY,
+            int maxY,
             int subsampling,
             IntersectionRule intersectionRule,
             MemoryAllocator allocator)
         {
-            this.min = min;
+            this.minY = minY;
+            this.maxY = maxY;
             this.subsampling = subsampling;
-            this.step = 1f / subsampling;
+            this.SubpixelFraction = 1f / subsampling;
             this.intersectionRule = intersectionRule;
             this.allocator = allocator;
             this.edgeCollection = edgeCollection;
             this.edges = edgeCollection.Edges;
-            this.Counter = -1;
-            float range = max - min;
-            this.counterMax = ((max - min) * subsampling) + 1;
+            this.counterMax = ((maxY - minY) * subsampling) + 1;
             int edgeCount = this.edges.Length;
             this.dataBuffer = allocator.Allocate<int>((edgeCount * 3) + maxIntersectionCount);
             Span<int> dataBufferInt32Span = this.dataBuffer.Memory.Span;
@@ -67,23 +69,34 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.intersections = dataBufferFloatSpan.Slice(edgeCount * 3, maxIntersectionCount);
             this.idx0 = 0;
             this.idx1 = 0;
-            this.Y = default;
+            this.PixelLineY = minY - 1;
+            this.SubPixelY = default;
+            this.yPlusOne = default;
         }
 
         public static PolygonScanner Create(
             IPath polygon,
-            int min,
-            int max,
+            int minY,
+            int maxY,
             int subsampling,
             IntersectionRule intersectionRule,
             MemoryAllocator allocator)
         {
             TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
             ScanEdgeCollection edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
-            PolygonScanner scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, min, max, subsampling, intersectionRule, allocator);
+            PolygonScanner scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, minY, maxY, subsampling, intersectionRule, allocator);
             scanner.Init();
             return scanner;
         }
+
+        public static PolygonScanner Create(
+            Region region,
+            int minY,
+            int maxY,
+            int subsampling,
+            IntersectionRule intersectionRule,
+            Configuration configuration)
+            => Create(region.Shape, minY, maxY, subsampling, intersectionRule, configuration.MemoryAllocator);
 
         private void Init()
         {
@@ -105,16 +118,32 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             SortUtility.Sort(keys1, this.sorted1);
         }
 
-        public bool MoveToNextScanline()
+        // private bool MoveToNextScanline()
+        // {
+        //     this.Counter++;
+        //
+        //     this.SubPixelY = this.minY + (this.Counter / this.subsampling) + ((this.Counter % this.subsampling) * this.SubpixelFraction);
+        //
+        //     this.EnterEdges();
+        //     this.LeaveEdges();
+        //
+        //     return this.Counter < this.counterMax;
+        // }
+
+        public bool MoveToNextPixelLine()
         {
-            this.Counter++;
+            this.PixelLineY++;
+            this.yPlusOne = this.PixelLineY + 1;
+            this.SubPixelY = this.PixelLineY - this.SubpixelFraction;
+            return this.PixelLineY < this.maxY;
+        }
 
-            this.Y = this.min + (this.Counter / this.subsampling) + ((this.Counter % this.subsampling) * this.step);
-
+        public bool MoveToNextSubpixelScanLine()
+        {
+            this.SubPixelY += this.SubpixelFraction;
             this.EnterEdges();
             this.LeaveEdges();
-
-            return this.Counter < this.counterMax;
+            return this.SubPixelY < this.yPlusOne;
         }
 
         public ReadOnlySpan<float> ScanCurrentLine()
@@ -122,7 +151,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             int intersectionCounter = 0;
             if (this.intersectionRule == IntersectionRule.OddEven)
             {
-                this.activeEdges.ScanOddEven(this.Y, this.edges, this.intersections, ref intersectionCounter);
+                this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections, ref intersectionCounter);
                 Span<float> result = this.intersections.Slice(0, intersectionCounter);
                 SortUtility.Sort(result);
                 return result;
@@ -144,7 +173,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             while (this.idx0 < this.sorted0.Length)
             {
                 int edge0 = this.sorted0[this.idx0];
-                if (this.edges[edge0].Y0 > this.Y)
+                if (this.edges[edge0].Y0 > this.SubPixelY)
                 {
                     break;
                 }
@@ -159,7 +188,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             while (this.idx1 < this.sorted1.Length)
             {
                 int edge1 = this.sorted1[this.idx1];
-                if (this.edges[edge1].Y1 > this.Y)
+                if (this.edges[edge1].Y1 > this.SubPixelY)
                 {
                     break;
                 }
