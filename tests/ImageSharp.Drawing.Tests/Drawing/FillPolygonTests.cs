@@ -2,7 +2,13 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.IO;
+using System.Linq;
 using System.Numerics;
+using GeoJSON.Net.Converters;
+using GeoJSON.Net.Feature;
+using GeoJSON.Net.Geometry;
+using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -23,17 +29,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             PointF[] polygon1 = PolygonFactory.CreatePointArray((2, 2), (6, 2), (6, 4), (2, 4));
             PointF[] polygon2 = PolygonFactory.CreatePointArray((2, 8), (4, 6), (6, 8), (4, 10));
-            
+
             var options = new GraphicsOptions { Antialias = antialias > 0, AntialiasSubpixelDepth = antialias };
             provider.RunValidatingProcessorTest(
                 c => c.SetGraphicsOptions(options)
                     .FillPolygon(Color.White, polygon1)
                     .FillPolygon(Color.White, polygon2),
                 appendPixelTypeToFileName: false,
-                appendSourceFileOrDescription: false, 
+                appendSourceFileOrDescription: false,
                 testOutputDetails: $"aa{antialias}");
         }
-        
+
         [Theory]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1f, true)]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 0.6f, true)]

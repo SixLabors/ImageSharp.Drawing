@@ -2,10 +2,11 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.IO;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
-
+using SixLabors.ImageSharp.Processing;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
@@ -94,5 +95,25 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendSourceFileOrDescription: false);
         }
 
+        [Theory]
+        [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
+        public void LargeGeoJson(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
+        {
+            string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
+
+            PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(sx, sy));
+
+            using Image<Rgba32> image = provider.GetImage();
+            var options = new ShapeGraphicsOptions()
+            {
+                GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa}
+            };
+            foreach (PointF[] loop in points)
+            {
+                image.Mutate(c => c.DrawLines(options, Color.White, 1.0f, loop));
+            }
+
+            image.DebugSave(provider, $"{System.IO.Path.GetFileName(geoJsonFile)}-aa{aa}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        }
     }
 }

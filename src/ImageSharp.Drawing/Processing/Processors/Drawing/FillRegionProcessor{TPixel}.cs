@@ -101,7 +101,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                             continue;
                         }
 
-                        for (int point = 0; point < points.Length; point += 2)
+                        for (int point = 0; point < points.Length - 1; point += 2)
                         {
                             // points will be paired up
                             float scanStart = points[point] - minX;

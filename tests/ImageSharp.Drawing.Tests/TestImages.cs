@@ -388,5 +388,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             public const string Bit16Pal = "Tga/targa_16bit_pal.tga";
             public const string Bit24Pal = "Tga/targa_24bit_pal.tga";
         }
+
+        public static class GeoJson
+        {
+            public const string States = "GeoJson/States.json";
+        }
     }
 }

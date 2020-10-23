@@ -245,7 +245,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             {
                 if (ring.VertexCount < 3)
                 {
-                    ThrowInvalidRing("ScanEdgeCollection.Create Encountered a ring with VertexCount < 3!");
+                    //ThrowInvalidRing("ScanEdgeCollection.Create Encountered a ring with VertexCount < 3!");
+                    continue;
                 }
 
                 var vertices = ring.Vertices;
