@@ -2,8 +2,12 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
+using GeoJSON.Net.Feature;
+using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -118,6 +122,47 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
 
             string details = $"_{System.IO.Path.GetFileName(geoJsonFile)}_{sx}x{sy}_aa{aa}";
+            if (usePolygonScanner)
+            {
+                details += "_Scanner";
+            }
+
+            image.DebugSave(provider,
+                details,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(5000, 5000, "Black", PixelTypes.Rgba32, 16, 0, false)]
+        [WithSolidFilledImages(5000, 5000, "Black", PixelTypes.Rgba32, 16, 0, true)]
+        [WithSolidFilledImages(5000, 5000, "Black", PixelTypes.Rgba32, 16, 4600, false)]
+        [WithSolidFilledImages(5000, 5000, "Black", PixelTypes.Rgba32, 16, 4600, true)]
+        public void Mississippi(TestImageProvider<Rgba32> provider, int aa, int t, bool usePolygonScanner)
+        {
+            string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+            
+            FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+            var missisipiGeom = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi").Geometry;
+
+            var transform = Matrix3x2.CreateTranslation(-87, -54)
+                            * Matrix3x2.CreateScale(60, 60)
+                            * Matrix3x2.CreateTranslation(t, t);
+            IReadOnlyList<PointF[]> points =PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+            
+            using Image<Rgba32> image = provider.GetImage();
+            var options = new ShapeGraphicsOptions()
+            {
+                GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa},
+                ShapeOptions = new ShapeOptions() { UsePolygonScanner = usePolygonScanner}
+            };
+            foreach (PointF[] loop in points)
+            {
+                image.Mutate(c => c.DrawLines(options, Color.White, 1.0f, loop));
+            }
+
+            string details = $"_aa{aa}_t{t}";
             if (usePolygonScanner)
             {
                 details += "_Scanner";
