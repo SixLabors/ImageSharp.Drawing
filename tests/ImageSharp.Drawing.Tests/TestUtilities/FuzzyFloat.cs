@@ -55,5 +55,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
             this.min = value - eps;
             this.max = value + eps;
         }
+        
+        public static FuzzyFloat operator+(FuzzyFloat a, float b) => new FuzzyFloat(a.value + b, a.eps);
+        public static FuzzyFloat operator-(FuzzyFloat a, float b) => new FuzzyFloat(a.value - b, a.eps);
     }
 }
