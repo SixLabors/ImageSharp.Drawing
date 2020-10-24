@@ -26,6 +26,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.OddEven;
 
+        public bool UsePolygonScanner { get; set; } = false;
+
         /// <inheritdoc/>
         public ShapeOptions DeepClone() => new ShapeOptions(this);
     }
