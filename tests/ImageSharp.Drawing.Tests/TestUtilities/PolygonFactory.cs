@@ -9,8 +9,6 @@ using GeoJSON.Net.Feature;
 using GeoJSON.Net.Geometry;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan;
-using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
