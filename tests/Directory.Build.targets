@@ -34,6 +34,7 @@
     <PackageReference Update="xunit" Version="2.4.1" />
     <PackageReference Update="xunit.runner.visualstudio" Version="2.4.1" />
     <PackageReference Update="GeoJSON.Net" Version="1.2.19" />
+    <PackageReference Update="SkiaSharp" Version="2.80.2" />
   </ItemGroup>
 
 </Project>

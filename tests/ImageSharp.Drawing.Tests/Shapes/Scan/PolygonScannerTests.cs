@@ -415,12 +415,29 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.x).ToArray());
         }
 
-        [Theory]
-        [MemberData(nameof(NumericCornerCasesData))]
-        public void NumericCornerCases_Offset(string name, (float y, FuzzyFloat[] x)[] expectedIntersections)
+        public static TheoryData<float, string, (float y, FuzzyFloat[] x)[]> NumericCornerCases_Offset_Data()
         {
-            float dx = 5000;
-            float dy = 5000;
+            var result = new TheoryData<float, string, (float y, FuzzyFloat[] x)[]>();
+
+            float[] offsets = {1e3f, 1e4f, 1e5f, 1e6f};
+
+            foreach (float offset in offsets)
+            {
+                foreach (var data in NumericCornerCasesData)
+                {
+                    result.Add(offset, (string)data[0], ((float y, FuzzyFloat[] x)[]) data[1]);
+                }
+            }
+            
+            return result;
+        }
+
+        [Theory]
+        [MemberData(nameof(NumericCornerCases_Offset_Data))]
+        public void NumericCornerCases_Offset(float offset, string name, (float y, FuzzyFloat[] x)[] expectedIntersections)
+        {
+            float dx = offset;
+            float dy = offset;
             
             IPath poly = NumericCornerCasePolygons.GetByName(name).Transform(Matrix3x2.CreateTranslation(dx, dy));
             expectedIntersections = TranslateIntersections(expectedIntersections, dx, dy);
@@ -436,5 +453,5 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         {
             return ex.Select(e => (e.y + dy, e.x.Select(xx => xx + dx).ToArray())).ToArray();
         }
-}
+    }
 }
