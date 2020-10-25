@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
     /// <summary>
     /// Holds coordinates, and coefficients for a polygon edge to be horizontally scanned.
     /// The edge's segment is defined with the reciprocal slope form:
-    /// x = P * y + Q
+    /// x = p * y + q
     /// </summary>
     internal readonly struct ScanEdge
     {
@@ -20,26 +20,34 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         public readonly float Y1;
         private readonly float p;
         private readonly float q;
-        private readonly Vector2 c;
 
         // Store 3 small values in a single Int32, to make EdgeData more compact:
         // EdgeUp, Emit0, Emit1
         private readonly int flags;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal ScanEdge(Vector2 p0, Vector2 p1, int flags)
+        internal ScanEdge(PointF p0, PointF p1, int flags)
         {
             this.Y0 = p0.Y;
             this.Y1 = p1.Y;
             this.flags = flags;
             float dy = p1.Y - p0.Y;
 
-            this.c = (p0 + p1) * 0.5f;
-            p0 -= this.c;
-            p1 -= this.c;
+            // To improve accuracy, center the edge around zero before calculating the coefficients:
+            float cx = (p0.X + p1.X) * 0.5f;
+            float cy = (p0.Y + p1.Y) * 0.5f;
+            p0.X -= cx;
+            p0.Y -= cy;
+            p1.X -= cx;
+            p1.Y -= cy;
 
             this.p = (p1.X - p0.X) / dy;
             this.q = ((p0.X * p1.Y) - (p1.X * p0.Y)) / dy;
+
+            // After centering, the equation would be:
+            // x = p * (y-cy) + q + cx
+            // Adjust  the coefficients, so we no longer need (cx,cy):
+            this.q += cx - (this.p * cy);
         }
 
         // True when non-horizontal edge is oriented upwards in screen coords
@@ -53,9 +61,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         // When the scanline intersects the endpoint at Y1.
         public int EmitV1 => (this.flags & 0b11000) >> 3;
 
-        public float GetX(float y) => (this.p * (y - this.c.Y)) + this.q + this.c.X;
+        public float GetX(float y) => (this.p * y) + this.q;
 
         public override string ToString()
-            => $"(Y0={this.Y0} Y1={this.Y1} E0={this.EmitV0} E1={this.EmitV1} {(this.EdgeUp ? "Up" : "Down")} P={this.p} Q={this.q})";
+            => $"(Y0={this.Y0} Y1={this.Y1} E0={this.EmitV0} E1={this.EmitV1} {(this.EdgeUp ? "Up" : "Down")} p={this.p} q={this.q})";
     }
 }

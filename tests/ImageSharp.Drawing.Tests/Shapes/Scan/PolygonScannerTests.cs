@@ -419,7 +419,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         {
             var result = new TheoryData<float, string, (float y, FuzzyFloat[] x)[]>();
 
-            float[] offsets = {1e3f, 1e4f, 1e5f, 1e6f};
+            float[] offsets = {1e3f, 1e4f, 1e5f};
 
             foreach (float offset in offsets)
             {
