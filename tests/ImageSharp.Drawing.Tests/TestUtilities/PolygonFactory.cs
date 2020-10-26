@@ -22,9 +22,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         // based on:
         // https://github.com/SixLabors/ImageSharp.Drawing/issues/15#issuecomment-521061283
-        public static IReadOnlyList<PointF[]> GetGeoJsonPoints(IGeometryObject geometry, Matrix3x2 transform)
+        public static IReadOnlyList<PointF[]> GetGeoJsonPoints(Feature geometryOwner, Matrix3x2 transform)
         {
             var result = new List<PointF[]>();
+            IGeometryObject geometry = geometryOwner.Geometry;
             if (geometry is GeoJSON.Net.Geometry.Polygon p)
             {
                 AddGeoJsonPolygon(p);
@@ -69,7 +70,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public static PointF[][] GetGeoJsonPoints(string geoJsonContent, Matrix3x2 transform)
         {
             FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(geoJsonContent);
-            return features.Features.SelectMany(f => GetGeoJsonPoints(f.Geometry, transform)).ToArray();
+            return features.Features.SelectMany(f => GetGeoJsonPoints(f, transform)).ToArray();
         }
 
         public static PointF[][] GetGeoJsonPoints(string geoJsonContent) =>

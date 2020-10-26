@@ -98,12 +98,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
 
-            var missisipiGeom = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi").Geometry;
+            var missisipiGeom = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi");
 
             var transform = Matrix3x2.CreateTranslation(-87, -54)
                             * Matrix3x2.CreateScale(60, 60)
                             * Matrix3x2.CreateTranslation(offset, offset);
-            IReadOnlyList<PointF[]> points =PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+            var points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
             using Image<Rgba32> image = provider.GetImage();
             var options = new ShapeGraphicsOptions()
@@ -126,6 +126,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 details,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: false);
+
         }
 
         [Theory]
@@ -138,7 +139,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
 
-            var missisipiGeom = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi").Geometry;
+            var missisipiGeom = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi");
 
             var transform = Matrix3x2.CreateTranslation(-87, -54)
                             * Matrix3x2.CreateScale(60, 60)
