@@ -172,7 +172,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         {
             Feature state = features.Features.Single(f => (string) f.Properties["NAME"] == "Utah");
 
-            Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
+            Matrix3x2 transform = Matrix3x2.CreateTranslation(-60, -40)
                                   * Matrix3x2.CreateScale(60, 60);
             return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
         }
