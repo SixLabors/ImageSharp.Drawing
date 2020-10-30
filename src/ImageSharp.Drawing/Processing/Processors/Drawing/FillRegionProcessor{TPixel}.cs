@@ -27,6 +27,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             this.definition = definition;
         }
 
+        private const int DefaultSubpixelCount = 8;
+
         /// <inheritdoc/>
         protected override void OnFrameApply(ImageFrame<TPixel> source)
         {
@@ -56,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             }
 
             int maxIntersections = region.MaxIntersections;
-            int subpixelCount = 4;
+            int subpixelCount = DefaultSubpixelCount;
 
             // we need to offset the pixel grid to account for when we outline a path.
             // basically if the line is [1,2] => [3,2] then when outlining at 1 we end up with a region of [0.5,1.5],[1.5, 1.5],[3.5,2.5],[2.5,2.5]
@@ -64,11 +66,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             // region to align with the pixel grid.
             if (graphicsOptions.Antialias)
             {
-                subpixelCount = graphicsOptions.AntialiasSubpixelDepth;
-                if (subpixelCount < 4)
-                {
-                    subpixelCount = 4;
-                }
+                subpixelCount = Math.Max(subpixelCount, graphicsOptions.AntialiasSubpixelDepth);
             }
 
             using (BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, graphicsOptions, source, rect))
