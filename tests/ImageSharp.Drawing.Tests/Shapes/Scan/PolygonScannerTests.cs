@@ -300,6 +300,50 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             TestScan(poly, 1, 5, 2, expected, rule);
         }
+        
+        [Theory]
+        [InlineData(IntersectionRule.OddEven)]
+        [InlineData(IntersectionRule.Nonzero)]
+        public void SelfIntersecting04(IntersectionRule rule)
+        {
+            IPath poly = PolygonFactory.CreatePolygon((1, 4), (1, 3), (3, 3), (3, 2), (2, 2), (2, 4), (1, 4), (1, 1),
+                (4, 1), (4, 4), (3, 4), (3, 5), (2, 5), (2, 4), (1, 4));
+            DebugDraw.Polygon(poly, 1f, 100f);
+            
+            FuzzyFloat[][] expected;
+            if (rule == IntersectionRule.OddEven)
+            {
+                expected = new[]
+                {
+                    new FuzzyFloat[] {1, 4},
+                    new FuzzyFloat[] {1, 4},
+                    new FuzzyFloat[] {1, 2, 2, 3, 3, 4},
+                    new FuzzyFloat[] {1, 2, 3, 4},
+                    new FuzzyFloat[] {1, 1, 2, 3, 3, 4},
+                    new FuzzyFloat[] {1, 1, 2, 4},
+                    new FuzzyFloat[] {1, 1, 2, 2, 2, 3, 3, 4},
+                    new FuzzyFloat[] {2, 3},
+                    new FuzzyFloat[] {2, 3},
+                };
+            }
+            else
+            {
+                expected = new[]
+                {
+                    new FuzzyFloat[] {1, 4},
+                    new FuzzyFloat[] {1, 4},
+                    new FuzzyFloat[] {1, 2, 2, 3, 3, 4},
+                    new FuzzyFloat[] {1, 2, 3, 4},
+                    new FuzzyFloat[] {1, 3, 3, 4},
+                    new FuzzyFloat[] {1, 4},
+                    new FuzzyFloat[] {1, 2, 2, 3, 3, 4 },
+                    new FuzzyFloat[] {2, 3},
+                    new FuzzyFloat[] {2, 3},
+                };
+            }
+            
+            TestScan(poly, 1, 5, 2, expected, rule);
+        }
 
         private static (float y, FuzzyFloat[] x) Empty(float y) => (y, new FuzzyFloat[0]);
 

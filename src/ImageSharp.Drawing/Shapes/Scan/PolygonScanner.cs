@@ -25,13 +25,13 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         // | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> | <- maxIntersectionCount -> | <- maxIntersectionCount -> |
         // |---------------|---------------|---------------|----------------------------|----------------------------|
-        // | sorted0       | sorted1       | activeEdges   | intersections              | edgeUpAtIntersections      |
+        // | sorted0       | sorted1       | activeEdges   | intersections              | intersectionTypes          |
         // |---------------|---------------|---------------|----------------------------|----------------------------|
         private Span<int> sorted0;
         private Span<int> sorted1;
         private ActiveEdgeList activeEdges;
         private Span<float> intersections;
-        private Span<bool> edgeUpAtIntersections;
+        private Span<NonZeroIntersectionType> intersectionTypes;
 
         private int idx0;
         private int idx1;
@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             // In case of IntersectionRule.Nonzero, we need to allocate space for edgeUpAtIntersections:
             if (intersectionRule == IntersectionRule.Nonzero)
             {
-                dataBufferSize += (maxIntersectionCount + 1) / sizeof(bool);
+                dataBufferSize += maxIntersectionCount;
             }
 
             this.dataBuffer = allocator.Allocate<int>(dataBufferSize);
@@ -79,12 +79,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             if (intersectionRule == IntersectionRule.Nonzero)
             {
                 Span<int> remainder =
-                    dataBufferInt32Span.Slice((edgeCount * 3) + maxIntersectionCount);
-                this.edgeUpAtIntersections = MemoryMarshal.Cast<int, bool>(remainder).Slice(0, maxIntersectionCount);
+                    dataBufferInt32Span.Slice((edgeCount * 3) + maxIntersectionCount, maxIntersectionCount);
+                this.intersectionTypes = MemoryMarshal.Cast<int, NonZeroIntersectionType>(remainder);
             }
             else
             {
-                this.edgeUpAtIntersections = default;
+                this.intersectionTypes = default;
             }
 
             this.idx0 = 0;
@@ -158,7 +158,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         {
             return this.intersectionRule == IntersectionRule.OddEven
                 ? this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections)
-                : this.activeEdges.ScanNonZero(this.SubPixelY, this.edges, this.intersections, this.edgeUpAtIntersections);
+                : this.activeEdges.ScanNonZero(this.SubPixelY, this.edges, this.intersections, this.intersectionTypes);
         }
 
         public void Dispose()
