@@ -20,17 +20,18 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private ScanEdgeCollection edgeCollection;
         private Span<ScanEdge> edges;
 
-        // Common contiguous buffer for sorted0, sorted1, intersections, activeEdges
+        // Common contiguous buffer for sorted0, sorted1, intersections, activeEdges [,edgeUpAtIntersections]
         private IMemoryOwner<int> dataBuffer;
 
-        // | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> | <- maxIntersectionCount -> |
-        // |---------------|---------------|---------------|----------------------------|
-        // | sorted0       | sorted1       | activeEdges   | intersections              |
-        // |---------------|---------------|---------------|----------------------------|
+        // | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> | <- maxIntersectionCount -> | <- maxIntersectionCount -> |
+        // |---------------|---------------|---------------|----------------------------|----------------------------|
+        // | sorted0       | sorted1       | activeEdges   | intersections              | edgeUpAtIntersections      |
+        // |---------------|---------------|---------------|----------------------------|----------------------------|
         private Span<int> sorted0;
         private Span<int> sorted1;
-        private Span<float> intersections;
         private ActiveEdgeList activeEdges;
+        private Span<float> intersections;
+        private Span<bool> edgeUpAtIntersections;
 
         private int idx0;
         private int idx1;
@@ -59,7 +60,15 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.edges = edgeCollection.Edges;
             this.counterMax = ((maxY - minY) * subsampling) + 1;
             int edgeCount = this.edges.Length;
-            this.dataBuffer = allocator.Allocate<int>((edgeCount * 3) + maxIntersectionCount);
+            int dataBufferSize = (edgeCount * 3) + maxIntersectionCount;
+
+            // In case of IntersectionRule.Nonzero, we need to allocate space for edgeUpAtIntersections:
+            if (intersectionRule == IntersectionRule.Nonzero)
+            {
+                dataBufferSize += (maxIntersectionCount + 1) / sizeof(bool);
+            }
+
+            this.dataBuffer = allocator.Allocate<int>(dataBufferSize);
             Span<int> dataBufferInt32Span = this.dataBuffer.Memory.Span;
             Span<float> dataBufferFloatSpan = MemoryMarshal.Cast<int, float>(dataBufferInt32Span);
 
@@ -67,6 +76,17 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.sorted1 = dataBufferInt32Span.Slice(edgeCount, edgeCount);
             this.activeEdges = new ActiveEdgeList(dataBufferInt32Span.Slice(edgeCount * 2, edgeCount));
             this.intersections = dataBufferFloatSpan.Slice(edgeCount * 3, maxIntersectionCount);
+            if (intersectionRule == IntersectionRule.Nonzero)
+            {
+                Span<int> remainder =
+                    dataBufferInt32Span.Slice((edgeCount * 3) + maxIntersectionCount);
+                this.edgeUpAtIntersections = MemoryMarshal.Cast<int, bool>(remainder).Slice(0, maxIntersectionCount);
+            }
+            else
+            {
+                this.edgeUpAtIntersections = default;
+            }
+
             this.idx0 = 0;
             this.idx1 = 0;
             this.PixelLineY = minY - 1;
@@ -118,18 +138,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             SortUtility.Sort(keys1, this.sorted1);
         }
 
-        // private bool MoveToNextScanline()
-        // {
-        //     this.Counter++;
-        //
-        //     this.SubPixelY = this.minY + (this.Counter / this.subsampling) + ((this.Counter % this.subsampling) * this.SubpixelFraction);
-        //
-        //     this.EnterEdges();
-        //     this.LeaveEdges();
-        //
-        //     return this.Counter < this.counterMax;
-        // }
-
         public bool MoveToNextPixelLine()
         {
             this.PixelLineY++;
@@ -148,18 +156,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         public ReadOnlySpan<float> ScanCurrentLine()
         {
-            int intersectionCounter = 0;
-            if (this.intersectionRule == IntersectionRule.OddEven)
-            {
-                this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections, ref intersectionCounter);
-                Span<float> result = this.intersections.Slice(0, intersectionCounter);
-                SortUtility.Sort(result);
-                return result;
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
+            return this.intersectionRule == IntersectionRule.OddEven
+                ? this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections)
+                : this.activeEdges.ScanNonZero(this.SubPixelY, this.edges, this.intersections, this.edgeUpAtIntersections);
         }
 
         public void Dispose()
