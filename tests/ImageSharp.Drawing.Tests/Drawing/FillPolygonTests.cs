@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     {
         [Theory]
         [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 0)]
-        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 4)]
+        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 8)]
         [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 16)]
         public void FillPolygon_Solid_Basic<TPixel>(TestImageProvider<TPixel> provider, int antialias)
             where TPixel : unmanaged, IPixel<TPixel>
