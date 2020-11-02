@@ -16,32 +16,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
     public class FillRegionProcessorTests
     {
-        [Theory]
-        [InlineData(true, 1, 4)]
-        [InlineData(true, 2, 4)]
-        [InlineData(true, 5, 5)]
-        [InlineData(true, 8, 8)]
-        [InlineData(false, 8, 4)]
-        [InlineData(false, 16, 4)] // we always do 4 sub=pixels when antialiasing is off.
-        public void MinimumAntialiasSubpixelDepth(bool antialias, int antialiasSubpixelDepth, int expectedAntialiasSubpixelDepth)
-        {
-            var bounds = new Rectangle(0, 0, 1, 1);
-
-            var brush = new Mock<IBrush>();
-            var region = new MockRegion2(bounds);
-
-            var options = new GraphicsOptions
-            {
-                Antialias = antialias,
-                AntialiasSubpixelDepth = 1
-            };
-            var processor = new FillRegionProcessor(new ShapeGraphicsOptions() { GraphicsOptions = options }, brush.Object, region);
-            var img = new Image<Rgba32>(1, 1);
-            processor.Execute(img.GetConfiguration(), img, bounds);
-
-            Assert.Equal(4, region.ScanInvocationCounter);
-        }
-
         [Fact]
         public void FillOffCanvas()
         {
