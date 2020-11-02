@@ -259,7 +259,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                     if (this.edges.Count == 3)
                     {
-                        if (!this.FindPointOnTriangle(
+                        if (!FindPointOnTriangle(
                                                       this.edges[0].Start,
                                                       this.edges[1].Start,
                                                       this.edges[2].Start,
@@ -321,7 +321,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 return closest;
             }
 
-            private bool FindPointOnTriangle(PointF v1, PointF v2, PointF v3, PointF point, out float u, out float v)
+            private static bool FindPointOnTriangle(PointF v1, PointF v2, PointF v3, PointF point, out float u, out float v)
             {
                 Vector2 e1 = v2 - v1;
                 Vector2 e2 = v3 - v2;
@@ -342,13 +342,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     return false;
                 }
 
-                // From Real-Time Collision Detection 
+                // From Real-Time Collision Detection
                 // https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
                 float d00 = Vector2.Dot(e1, e1);
-                float d01 = Vector2.Dot(e1, -e3);
-                float d11 = Vector2.Dot(-e3, -e3);
+                float d01 = -Vector2.Dot(e1, e3);
+                float d11 = Vector2.Dot(e3, e3);
                 float d20 = Vector2.Dot(pv1, e1);
-                float d21 = Vector2.Dot(pv1, -e3);
+                float d21 = -Vector2.Dot(pv1, e3);
                 float denominator = (d00 * d11) - (d01 * d01);
                 u = ((d11 * d20) - (d01 * d21)) / denominator;
                 v = ((d00 * d21) - (d01 * d20)) / denominator;
