@@ -257,6 +257,25 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                         return this.centerPixel;
                     }
 
+                    if (this.edges.Count == 3)
+                    {
+                        if (!this.FindPointOnTriangle(
+                                                      this.edges[0].Start,
+                                                      this.edges[1].Start,
+                                                      this.edges[2].Start,
+                                                      point,
+                                                      out float u,
+                                                      out float v))
+                        {
+                            return this.transparentPixel;
+                        }
+
+                        Vector4 pointColor = ((1 - u - v) * this.edges[0].StartColor) + (u * this.edges[0].EndColor) +
+                                         (v * this.edges[2].StartColor);
+
+                        return new Color(pointColor).ToPixel<TPixel>();
+                    }
+
                     var direction = Vector2.Normalize(point - this.center);
                     PointF end = point + (PointF)(direction * this.maxDistance);
 
@@ -300,6 +319,40 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 }
 
                 return closest;
+            }
+
+            private bool FindPointOnTriangle(PointF v1, PointF v2, PointF v3, PointF point, out float u, out float v)
+            {
+                Vector2 e1 = v2 - v1;
+                Vector2 e2 = v3 - v2;
+                Vector2 e3 = v1 - v3;
+
+                Vector2 pv1 = point - v1;
+                Vector2 pv2 = point - v2;
+                Vector2 pv3 = point - v3;
+
+                var d1 = Vector3.Cross(new Vector3(e1.X, e1.Y, 0), new Vector3(pv1.X, pv1.Y, 0));
+                var d2 = Vector3.Cross(new Vector3(e2.X, e2.Y, 0), new Vector3(pv2.X, pv2.Y, 0));
+                var d3 = Vector3.Cross(new Vector3(e3.X, e3.Y, 0), new Vector3(pv3.X, pv3.Y, 0));
+
+                if (Math.Sign(Vector3.Dot(d1, d2)) != Math.Sign(Vector3.Dot(d1, d3)) || Math.Sign(Vector3.Dot(d1, d2)) != Math.Sign(Vector3.Dot(d2, d3)))
+                {
+                    u = 0;
+                    v = 0;
+                    return false;
+                }
+
+                // From Real-Time Collision Detection 
+                // https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
+                float d00 = Vector2.Dot(e1, e1);
+                float d01 = Vector2.Dot(e1, -e3);
+                float d11 = Vector2.Dot(-e3, -e3);
+                float d20 = Vector2.Dot(pv1, e1);
+                float d21 = Vector2.Dot(pv1, -e3);
+                float denominator = (d00 * d11) - (d01 * d01);
+                u = ((d11 * d20) - (d01 * d21)) / denominator;
+                v = ((d00 * d21) - (d01 * d20)) / denominator;
+                return true;
             }
         }
     }
