@@ -8,8 +8,16 @@ using SixLabors.ImageSharp.Drawing.Utilities;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 {
+    internal enum NonZeroIntersectionType
+    {
+        Down,
+        Up,
+        Corner,
+        CornerDummy
+    }
+
     /// <summary>
-    /// The list of active edges as index buffer to <see cref="ScanEdge"/>-s.
+    /// The list of active edges as an index buffer into <see cref="ScanEdgeCollection.Edges"/>.
     /// </summary>
     internal ref struct ActiveEdgeList
     {
@@ -18,6 +26,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private const int MaxEdges = EnteringEdgeFlag - 1;
 
         private const int StripMask = ~(EnteringEdgeFlag | LeavingEdgeFlag);
+
+        private const float NonzeroSortingHelperEpsilon = 1e-4f;
 
         private int count;
         internal readonly Span<int> Buffer;
@@ -131,8 +141,16 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 else
                 {
                     // Emit once:
-                    intersectionTypes[intersectionCounter] = edgeUp ? NonZeroIntersectionType.Up : NonZeroIntersectionType.Down;
-                    intersections[intersectionCounter++] = x;
+                    if (edgeUp)
+                    {
+                        intersectionTypes[intersectionCounter] = NonZeroIntersectionType.Up;
+                        intersections[intersectionCounter++] = x + NonzeroSortingHelperEpsilon;
+                    }
+                    else
+                    {
+                        intersectionTypes[intersectionCounter] = NonZeroIntersectionType.Down;
+                        intersections[intersectionCounter++] = x - NonzeroSortingHelperEpsilon;
+                    }
                 }
 
                 // Unmask and offset:
@@ -145,8 +163,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             intersectionTypes = intersectionTypes.Slice(0, intersectionCounter);
             SortUtility.Sort(intersections, intersectionTypes);
 
-            // Apply nonzero intersection rule:
-            offset = 0;
+            return ApplyNonzeroRule(intersections, intersectionTypes);
+        }
+
+        private static Span<float> ApplyNonzeroRule(Span<float> intersections, Span<NonZeroIntersectionType> intersectionTypes)
+        {
+            int offset = 0;
             int tracker = 0;
 
             for (int i = 0; i < intersectionTypes.Length; i++)
@@ -160,24 +182,26 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 else if (type == NonZeroIntersectionType.Corner)
                 {
                     // Assume a Down, Up serie
-                    EmitIfNeeded(intersections, i, -1, ref tracker, ref offset);
-                    EmitIfNeeded(intersections, i, 1, ref tracker, ref offset);
+                    EmitIfNeeded(intersections, i, -1, intersections[i], ref tracker, ref offset);
+                    offset -= 1;
+                    EmitIfNeeded(intersections, i, 1, intersections[i], ref tracker, ref offset);
                 }
                 else
                 {
                     int diff = type == NonZeroIntersectionType.Up ? 1 : -1;
-                    EmitIfNeeded(intersections, i, diff, ref tracker, ref offset);
+                    float emitVal = intersections[i] + (NonzeroSortingHelperEpsilon * diff * -1);
+                    EmitIfNeeded(intersections, i, diff, emitVal, ref tracker, ref offset);
                 }
             }
 
-            static void EmitIfNeeded(Span<float> intersectionsInner, int i, int diff, ref int tracker, ref int offset)
+            static void EmitIfNeeded(Span<float> intersectionsInner, int i, int diff, float emitVal, ref int tracker, ref int offset)
             {
                 bool emit = (tracker == 0 && diff > 0) || (tracker == 1 && diff < 0);
                 tracker += diff;
 
                 if (emit)
                 {
-                    intersectionsInner[i - offset] = intersectionsInner[i];
+                    intersectionsInner[i - offset] = emitVal;
                 }
                 else
                 {
@@ -208,7 +232,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             if (times == 2)
             {
                 intersectionTypes[emitCounter] = NonZeroIntersectionType.CornerDummy;
-                emitSpan[emitCounter++] = x - float.Epsilon; // To make sure the "dummy" point precedes the actual one
+                emitSpan[emitCounter++] = x - NonzeroSortingHelperEpsilon; // To make sure the "dummy" point precedes the actual one
 
                 intersectionTypes[emitCounter] = NonZeroIntersectionType.Corner;
                 emitSpan[emitCounter++] = x;
@@ -218,12 +242,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
                 if (edgeUp)
                 {
                     intersectionTypes[emitCounter] = NonZeroIntersectionType.Up;
-                    emitSpan[emitCounter++] = x + float.Epsilon;
+                    emitSpan[emitCounter++] = x + NonzeroSortingHelperEpsilon;
                 }
                 else
                 {
                     intersectionTypes[emitCounter] = NonZeroIntersectionType.Down;
-                    emitSpan[emitCounter++] = x - float.Epsilon;
+                    emitSpan[emitCounter++] = x - NonzeroSortingHelperEpsilon;
                 }
             }
         }
@@ -236,13 +260,5 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsLeaving(int flaggedIdx) => (flaggedIdx & LeavingEdgeFlag) == LeavingEdgeFlag;
-    }
-
-    internal enum NonZeroIntersectionType
-    {
-        Down,
-        Up,
-        Corner,
-        CornerDummy
     }
 }

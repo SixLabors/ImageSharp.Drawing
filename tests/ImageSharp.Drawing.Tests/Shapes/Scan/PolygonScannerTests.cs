@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             for (int i = 0; i < expected.Length; i++)
             {
-                Assert.True(expected[i].Equals(actual[i]), $"Mismatch at scanline {scanlineId}");
+                Assert.True(expected[i].Equals(actual[i]), $"Mismatch at scanline {scanlineId}: {expected[i]} != {actual[i]}");
             }
         }
 
