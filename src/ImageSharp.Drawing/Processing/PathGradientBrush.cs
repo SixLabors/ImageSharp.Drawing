@@ -230,6 +230,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <param name="source">The source image.</param>
             /// <param name="edges">Edges of the polygon.</param>
             /// <param name="centerColor">Color at the center of the gradient area to which the other colors converge.</param>
+            /// <param name="hasSpecialCenterColor">Whether the center color is different from a smooth gradient between the edges.</param>
             public PathGradientBrushApplicator(
                 Configuration configuration,
                 GraphicsOptions options,
