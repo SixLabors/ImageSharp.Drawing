@@ -281,9 +281,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                         Vector4 pointColor = ((1 - u - v) * this.edges[0].StartColor) + (u * this.edges[0].EndColor) +
                                          (v * this.edges[2].StartColor);
 
-                        TPixel px = default;
-                        px.FromVector4(pointColor);
-                        return px;
+                        return new Color(pointColor).ToPixel<TPixel>();
                     }
 
                     var direction = Vector2.Normalize(point - this.center);
@@ -304,9 +302,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                     var color = Vector4.Lerp(edgeColor, this.centerColor, ratio);
 
-                    TPixel pixel = default;
-                    pixel.FromVector4(color);
-                    return pixel;
+                    return new Color(color).ToPixel<TPixel>();
                 }
             }
 
