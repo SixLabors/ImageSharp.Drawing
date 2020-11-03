@@ -302,6 +302,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                     var color = Vector4.Lerp(edgeColor, this.centerColor, ratio);
 
+                    // Using this conversion because pixel.FromVector4(pointColor)
+                    // doesn't correctly convert some types (see ImageSharp issue 1412).
                     return new Color(color).ToPixel<TPixel>();
                 }
             }
