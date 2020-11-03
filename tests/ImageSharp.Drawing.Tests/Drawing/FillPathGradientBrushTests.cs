@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(10, 10, PixelTypes.Rgba32)]
+        [WithBlankImages(20, 20, PixelTypes.Rgba32)]
         public void FillTriangleWithDifferentColors<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 TolerantComparer,
                 image =>
                 {
-                    PointF[] points = { new PointF(5, 0), new PointF(10, 10), new PointF(0, 10) };
+                    PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
                     Color[] colors = { Color.Red, Color.Green, Color.Blue };
 
                     var brush = new PathGradientBrush(points, colors);
@@ -52,6 +52,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
                 });
         }
+
+        [Theory]
+        [WithBlankImages(20, 20, PixelTypes.Rgba32)]
+        public void FillTriangleWithDifferentColorsCenter<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            provider.VerifyOperation(
+                TolerantComparer,
+                image =>
+                {
+                    PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
+                    Color[] colors = { Color.Red, Color.Green, Color.Blue };
+
+                    var brush = new PathGradientBrush(points, colors, Color.White);
+
+                    image.Mutate(x => x.Fill(brush));
+                    image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+                });
+        }
+
 
         [Theory]
         [WithBlankImages(10, 10, PixelTypes.Rgba32)]
