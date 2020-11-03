@@ -59,7 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             provider.VerifyOperation(
-                TolerantComparer,
+                ImageComparer.TolerantPercentage(0.02f),
                 image =>
                 {
                     PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
