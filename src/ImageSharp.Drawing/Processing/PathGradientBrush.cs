@@ -265,7 +265,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                         return this.centerPixel;
                     }
 
-                    /*if (this.edges.Count == 3 && !this.hasSpecialCenterColor)
+                    if (this.edges.Count == 3 && !this.hasSpecialCenterColor)
                     {
                         if (!FindPointOnTriangle(
                                                       this.edges[0].Start,
@@ -282,7 +282,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                                          (v * this.edges[2].StartColor);
 
                         return new Color(pointColor).ToPixel<TPixel>();
-                    }*/
+                    }
 
                     var direction = Vector2.Normalize(point - this.center);
                     PointF end = point + (PointF)(direction * this.maxDistance);
