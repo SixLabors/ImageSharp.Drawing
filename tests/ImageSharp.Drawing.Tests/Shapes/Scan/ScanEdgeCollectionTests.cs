@@ -141,7 +141,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             // this places two dummy points:
             VerifyEdge( 2f, 2.25f, (15f, 2.125f), 2, 1, true);
         }
-        
+
         private static FuzzyFloat F(float value, float eps) => new FuzzyFloat(value, eps);
     }
 }

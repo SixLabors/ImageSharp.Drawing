@@ -136,6 +136,38 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
             SortUtility.Sort(keys0, this.sorted0);
             SortUtility.Sort(keys1, this.sorted1);
+
+            this.SkipEdgesBeforeMinY();
+        }
+
+        private void SkipEdgesBeforeMinY()
+        {
+            this.SubPixelY = this.edges[this.sorted0[0]].Y0;
+
+            int i0 = 1;
+            int i1 = 0;
+
+            // Do fake scans for the lines belonging to edge start and endpoints before minY
+            while (this.SubPixelY < this.minY)
+            {
+                this.EnterEdges();
+                this.LeaveEdges();
+                this.activeEdges.RemoveLeavingEdges();
+
+                float y0 = this.edges[this.sorted0[i0]].Y0;
+                float y1 = this.edges[this.sorted1[i1]].Y1;
+
+                if (y0 < y1)
+                {
+                    this.SubPixelY = y0;
+                    i0++;
+                }
+                else
+                {
+                    this.SubPixelY = y1;
+                    i1++;
+                }
+            }
         }
 
         public bool MoveToNextPixelLine()

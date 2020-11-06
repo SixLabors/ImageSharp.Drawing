@@ -60,6 +60,30 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             throw new ArgumentOutOfRangeException(nameof(edgeIdx));
         }
 
+        public void RemoveLeavingEdges()
+        {
+            int offset = 0;
+
+            Span<int> active = this.ActiveEdges;
+
+            for (int i = 0; i < active.Length; i++)
+            {
+                int flaggedIdx = active[i];
+                int edgeIdx = Strip(flaggedIdx);
+                if (IsLeaving(flaggedIdx))
+                {
+                    offset++;
+                }
+                else
+                {
+                    // Unmask and offset:
+                    active[i - offset] = edgeIdx;
+                }
+            }
+
+            this.count -= offset;
+        }
+
         public Span<float> ScanOddEven(float y, Span<ScanEdge> edges, Span<float> intersections)
         {
             DebugGuard.MustBeLessThanOrEqualTo(edges.Length, MaxEdges, "edges.Length");
