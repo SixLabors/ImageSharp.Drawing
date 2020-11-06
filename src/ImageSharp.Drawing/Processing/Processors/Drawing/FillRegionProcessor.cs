@@ -42,7 +42,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => new FillRegionProcessor<TPixel>(configuration, this, source, sourceRectangle);
+            where TPixel : unmanaged, IPixel<TPixel> => new FillRegionProcessor<TPixel>(configuration, this, source, sourceRectangle);
+
+        internal const int DefaultSubpixelCount = 8;
     }
 }
