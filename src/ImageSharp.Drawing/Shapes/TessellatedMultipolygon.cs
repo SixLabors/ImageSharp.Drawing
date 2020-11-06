@@ -31,15 +31,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             private IMemoryOwner<PointF> buffer;
             private Memory<PointF> memory;
 
-            public RingType RingType { get; }
-
             public ReadOnlySpan<PointF> Vertices => this.memory.Span;
 
             public int VertexCount => this.memory.Length - 1; // Last vertex is repeated
 
-            internal Ring(IMemoryOwner<PointF> buffer, RingType ringType)
+            internal Ring(IMemoryOwner<PointF> buffer)
             {
-                this.RingType = ringType;
                 this.buffer = buffer;
                 this.memory = buffer.Memory;
             }
@@ -62,22 +59,33 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
 
         public int TotalVertexCount { get; }
 
-        public static TessellatedMultipolygon Create(IPath path, MemoryAllocator memoryAllocator)
+        public static TessellatedMultipolygon Create(IPath path, MemoryAllocator memoryAllocator, bool onlyFirstRingIsContour = true)
         {
+            RingType? firstRingType = onlyFirstRingIsContour ? RingType.Contour : (RingType?)null;
+            RingType? followUpRingType = onlyFirstRingIsContour ? RingType.Hole : (RingType?)null;
+
             // For now let's go with the assumption that first loop is always an external contour,
             // and the rests are loops.
             if (path is IInternalPathOwner ipo)
             {
                 IReadOnlyList<InternalPath> internalPaths = ipo.GetRingsAsInternalPath();
+
+                // If we have only one ring, orient it as a contour
+                if (internalPaths.Count == 1)
+                {
+                    firstRingType = RingType.Contour;
+                }
+
                 Ring[] rings = new Ring[internalPaths.Count];
                 IMemoryOwner<PointF> pointBuffer = internalPaths[0].ExtractVertices(memoryAllocator);
-                RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, RingType.Contour);
-                rings[0] = new Ring(pointBuffer, RingType.Contour);
+                RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, firstRingType);
+                rings[0] = new Ring(pointBuffer);
+
                 for (int i = 1; i < internalPaths.Count; i++)
                 {
                     pointBuffer = internalPaths[i].ExtractVertices(memoryAllocator);
-                    RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, RingType.Hole);
-                    rings[i] = new Ring(pointBuffer, RingType.Hole);
+                    RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, followUpRingType);
+                    rings[i] = new Ring(pointBuffer);
                 }
 
                 return new TessellatedMultipolygon(rings);
@@ -85,32 +93,42 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             else
             {
                 ReadOnlyMemory<PointF>[] points = path.Flatten().Select(sp => sp.Points).ToArray();
+
+                // If we have only one ring, orient it as a contour
+                if (points.Length == 1)
+                {
+                    firstRingType = RingType.Contour;
+                }
+
                 Ring[] rings = new Ring[points.Length];
-                rings[0] = MakeRing(points[0], RingType.Contour, memoryAllocator);
+                rings[0] = MakeRing(points[0], firstRingType, memoryAllocator);
                 for (int i = 1; i < points.Length; i++)
                 {
-                    rings[i] = MakeRing(points[i], RingType.Hole, memoryAllocator);
+                    rings[i] = MakeRing(points[i], followUpRingType, memoryAllocator);
                 }
 
                 return new TessellatedMultipolygon(rings);
             }
 
-            static Ring MakeRing(ReadOnlyMemory<PointF> points, RingType ringType, MemoryAllocator allocator)
+            static Ring MakeRing(ReadOnlyMemory<PointF> points, RingType? ringType, MemoryAllocator allocator)
             {
                 IMemoryOwner<PointF> buffer = allocator.Allocate<PointF>(points.Length + 1);
                 Span<PointF> span = buffer.Memory.Span;
                 points.Span.CopyTo(span);
                 RepeateFirstVertexAndEnsureOrientation(span, ringType);
-                return new Ring(buffer, ringType);
+                return new Ring(buffer);
             }
 
-            static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, RingType ringType)
+            static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, RingType? ringType)
             {
-                // Repeat first vertex for perf:   
+                // Repeat first vertex for perf:
                 span[span.Length - 1] = span[0];
 
-                int orientation = ringType == RingType.Contour ? 1 : -1;
-                TopologyUtilities.EnsureOrientation(span, orientation);
+                if (ringType.HasValue)
+                {
+                    int orientation = ringType.Value == RingType.Contour ? 1 : -1;
+                    TopologyUtilities.EnsureOrientation(span, orientation);
+                }
             }
         }
 

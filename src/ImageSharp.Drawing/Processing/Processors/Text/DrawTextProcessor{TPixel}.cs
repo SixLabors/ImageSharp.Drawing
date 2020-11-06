@@ -386,8 +386,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 if (this.Options.UsePolygonScanner)
                 {
 #if true
-                    var scanner = PolygonScanner.Create(path, 0, size.Height,
-                        subpixelCount, IntersectionRule.Nonzero, this.MemoryAllocator);
+                    var scanner = PolygonScanner.Create(
+                        path,
+                        0,
+                        size.Height,
+                        subpixelCount,
+                        IntersectionRule.Nonzero,
+                        this.MemoryAllocator,
+                        false);
 #else
                     var scanner = ClassicPolygonScanner.Create(new ShapeRegion(path), 0, size.Height,
                         subpixelCount, IntersectionRule.Nonzero, Configuration.Default);

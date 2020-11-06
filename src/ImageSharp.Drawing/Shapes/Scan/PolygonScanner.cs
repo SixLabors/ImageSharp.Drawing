@@ -100,9 +100,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             int maxY,
             int subsampling,
             IntersectionRule intersectionRule,
-            MemoryAllocator allocator)
+            MemoryAllocator allocator,
+            bool onlyFirstRingIsContour = true)
         {
-            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
+            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, onlyFirstRingIsContour);
             ScanEdgeCollection edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
             PolygonScanner scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, minY, maxY, subsampling, intersectionRule, allocator);
             scanner.Init();
