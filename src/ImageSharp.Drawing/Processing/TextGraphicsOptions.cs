@@ -59,6 +59,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             }
         }
 
-        public bool UsePolygonScanner { get; set; } = false;
+        public bool UsePolygonScanner { get; set; } = true;
     }
 }

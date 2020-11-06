@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+using SixLabors.ImageSharp.Drawing.Shapes.Scan;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -370,7 +371,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 Size size = Rectangle.Ceiling(path.Bounds).Size;
                 size = new Size(size.Width + (this.offset * 2), size.Height + (this.offset * 2));
 
-                float subpixelCount = FillRegionProcessor.DefaultSubpixelCount;
+                int subpixelCount = FillRegionProcessor.DefaultSubpixelCount;
                 float xOffset = 0.5f;
                 GraphicsOptions graphicsOptions = this.Options.GraphicsOptions;
                 if (graphicsOptions.Antialias)
@@ -382,88 +383,170 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 // take the path inside the path builder, scan thing and generate a Buffer2d representing the glyph and cache it.
                 Buffer2D<float> fullBuffer = this.MemoryAllocator.Allocate2D<float>(size.Width + 1, size.Height + 1, AllocationOptions.Clean);
 
-                using IMemoryOwner<float> bufferBacking = this.MemoryAllocator.Allocate<float>(path.MaxIntersections);
-                using IMemoryOwner<PointF> rowIntersectionBuffer = this.MemoryAllocator.Allocate<PointF>(size.Width);
-                float subpixelFraction = 1f / subpixelCount;
-                float subpixelFractionPoint = subpixelFraction / subpixelCount;
-                Span<PointF> intersectionSpan = rowIntersectionBuffer.Memory.Span;
-                Span<float> buffer = bufferBacking.Memory.Span;
-
-                for (int y = 0; y <= size.Height; y++)
+                if (this.Options.UsePolygonScanner)
                 {
-                    Span<float> scanline = fullBuffer.GetRowSpan(y);
-                    bool scanlineDirty = false;
-                    float yPlusOne = y + 1;
+                    var scanner = ClassicPolygonScanner.Create(new ShapeRegion(path), 0, size.Height,
+                        subpixelCount, IntersectionRule.Nonzero, Configuration.Default);
 
-                    for (float subPixel = y; subPixel < yPlusOne; subPixel += subpixelFraction)
+                    float subpixelFraction = scanner.SubpixelFraction;
+                    float subpixelFractionPoint = subpixelFraction / subpixelCount;
+
+                    while (scanner.MoveToNextPixelLine())
                     {
-                        var start = new PointF(path.Bounds.Left - 1, subPixel);
-                        var end = new PointF(path.Bounds.Right + 1, subPixel);
-                        int pointsFound = path.FindIntersections(start, end, intersectionSpan, IntersectionRule.Nonzero);
+                        Span<float> scanline = fullBuffer.GetRowSpan(scanner.PixelLineY);
+                        bool scanlineDirty = false;
 
-                        if (pointsFound == 0)
+                        while (scanner.MoveToNextSubpixelScanLine())
                         {
-                            // nothing on this line skip
-                            continue;
-                        }
+                            ReadOnlySpan<float> points = scanner.ScanCurrentLine();
 
-                        for (int i = 0; i < pointsFound && i < intersectionSpan.Length; i++)
-                        {
-                            buffer[i] = intersectionSpan[i].X;
-                        }
-
-                        SortUtility.Sort(buffer.Slice(0, pointsFound));
-
-                        for (int point = 0; point < pointsFound; point += 2)
-                        {
-                            // points will be paired up
-                            float scanStart = buffer[point];
-                            float scanEnd = buffer[point + 1];
-                            int startX = (int)MathF.Floor(scanStart + xOffset);
-                            int endX = (int)MathF.Floor(scanEnd + xOffset);
-
-                            if (startX >= 0 && startX < scanline.Length)
+                            if (points.Length == 0)
                             {
-                                for (float x = scanStart; x < startX + 1; x += subpixelFraction)
+                                // nothing on this line skip
+                                continue;
+                            }
+
+                            for (int point = 0; point < points.Length - 1; point += 2)
+                            {
+                                // points will be paired up
+                                float scanStart = points[point];
+                                float scanEnd = points[point + 1];
+                                int startX = (int)MathF.Floor(scanStart + xOffset);
+                                int endX = (int)MathF.Floor(scanEnd + xOffset);
+
+                                if (startX >= 0 && startX < scanline.Length)
                                 {
-                                    scanline[startX] += subpixelFractionPoint;
+                                    for (float x = scanStart; x < startX + 1; x += subpixelFraction)
+                                    {
+                                        scanline[startX] += subpixelFractionPoint;
+                                        scanlineDirty = true;
+                                    }
+                                }
+
+                                if (endX >= 0 && endX < scanline.Length)
+                                {
+                                    for (float x = endX; x < scanEnd; x += subpixelFraction)
+                                    {
+                                        scanline[endX] += subpixelFractionPoint;
+                                        scanlineDirty = true;
+                                    }
+                                }
+
+                                int nextX = startX + 1;
+                                endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
+                                nextX = Math.Max(nextX, 0);
+                                for (int x = nextX; x < endX; x++)
+                                {
+                                    scanline[x] += subpixelFraction;
                                     scanlineDirty = true;
                                 }
                             }
+                        }
 
-                            if (endX >= 0 && endX < scanline.Length)
+                        if (scanlineDirty)
+                        {
+                            if (!graphicsOptions.Antialias)
                             {
-                                for (float x = endX; x < scanEnd; x += subpixelFraction)
+                                for (int x = 0; x < size.Width; x++)
                                 {
-                                    scanline[endX] += subpixelFractionPoint;
-                                    scanlineDirty = true;
+                                    if (scanline[x] >= 0.5)
+                                    {
+                                        scanline[x] = 1;
+                                    }
+                                    else
+                                    {
+                                        scanline[x] = 0;
+                                    }
                                 }
-                            }
-
-                            int nextX = startX + 1;
-                            endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
-                            nextX = Math.Max(nextX, 0);
-                            for (int x = nextX; x < endX; x++)
-                            {
-                                scanline[x] += subpixelFraction;
-                                scanlineDirty = true;
                             }
                         }
                     }
+                }
+                else
+                {
+                    using IMemoryOwner<float> bufferBacking = this.MemoryAllocator.Allocate<float>(path.MaxIntersections);
+                    using IMemoryOwner<PointF> rowIntersectionBuffer = this.MemoryAllocator.Allocate<PointF>(size.Width);
+                    float subpixelFraction = 1f / subpixelCount;
+                    float subpixelFractionPoint = subpixelFraction / subpixelCount;
+                    Span<PointF> intersectionSpan = rowIntersectionBuffer.Memory.Span;
+                    Span<float> buffer = bufferBacking.Memory.Span;
 
-                    if (scanlineDirty)
+                    for (int y = 0; y <= size.Height; y++)
                     {
-                        if (!graphicsOptions.Antialias)
+                        Span<float> scanline = fullBuffer.GetRowSpan(y);
+                        bool scanlineDirty = false;
+                        float yPlusOne = y + 1;
+
+                        for (float subPixel = y; subPixel < yPlusOne; subPixel += subpixelFraction)
                         {
-                            for (int x = 0; x < size.Width; x++)
+                            var start = new PointF(path.Bounds.Left - 1, subPixel);
+                            var end = new PointF(path.Bounds.Right + 1, subPixel);
+                            int pointsFound = path.FindIntersections(start, end, intersectionSpan, IntersectionRule.Nonzero);
+
+                            if (pointsFound == 0)
                             {
-                                if (scanline[x] >= 0.5)
+                                // nothing on this line skip
+                                continue;
+                            }
+
+                            for (int i = 0; i < pointsFound && i < intersectionSpan.Length; i++)
+                            {
+                                buffer[i] = intersectionSpan[i].X;
+                            }
+
+                            SortUtility.Sort(buffer.Slice(0, pointsFound));
+
+                            for (int point = 0; point < pointsFound; point += 2)
+                            {
+                                // points will be paired up
+                                float scanStart = buffer[point];
+                                float scanEnd = buffer[point + 1];
+                                int startX = (int)MathF.Floor(scanStart + xOffset);
+                                int endX = (int)MathF.Floor(scanEnd + xOffset);
+
+                                if (startX >= 0 && startX < scanline.Length)
                                 {
-                                    scanline[x] = 1;
+                                    for (float x = scanStart; x < startX + 1; x += subpixelFraction)
+                                    {
+                                        scanline[startX] += subpixelFractionPoint;
+                                        scanlineDirty = true;
+                                    }
                                 }
-                                else
+
+                                if (endX >= 0 && endX < scanline.Length)
                                 {
-                                    scanline[x] = 0;
+                                    for (float x = endX; x < scanEnd; x += subpixelFraction)
+                                    {
+                                        scanline[endX] += subpixelFractionPoint;
+                                        scanlineDirty = true;
+                                    }
+                                }
+
+                                int nextX = startX + 1;
+                                endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
+                                nextX = Math.Max(nextX, 0);
+                                for (int x = nextX; x < endX; x++)
+                                {
+                                    scanline[x] += subpixelFraction;
+                                    scanlineDirty = true;
+                                }
+                            }
+                        }
+
+                        if (scanlineDirty)
+                        {
+                            if (!graphicsOptions.Antialias)
+                            {
+                                for (int x = 0; x < size.Width; x++)
+                                {
+                                    if (scanline[x] >= 0.5)
+                                    {
+                                        scanline[x] = 1;
+                                    }
+                                    else
+                                    {
+                                        scanline[x] = 0;
+                                    }
                                 }
                             }
                         }
