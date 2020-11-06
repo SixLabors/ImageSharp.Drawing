@@ -142,6 +142,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
         private void SkipEdgesBeforeMinY()
         {
+            if (this.edges.Length == 0)
+            {
+                return;
+            }
+
             this.SubPixelY = this.edges[this.sorted0[0]].Y0;
 
             int i0 = 1;
