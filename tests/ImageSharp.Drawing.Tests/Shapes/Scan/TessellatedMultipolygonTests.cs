@@ -97,8 +97,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             ComplexPolygon polygon = new ComplexPolygon(
                 new Path(new LinearLineSegment(contour)),
                 new Path(new LinearLineSegment(hole)));
-            
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+
+            using var multipolygon = TessellatedMultipolygon.Create(polygon,
+                MemoryAllocator,
+                OrientationHandling.FirstRingIsContourFollowedByHoles);
 
             VerifyRing(multipolygon[0], contour, !reverseContour, false);
             VerifyRing(multipolygon[1], hole, !reverseHole, true);
