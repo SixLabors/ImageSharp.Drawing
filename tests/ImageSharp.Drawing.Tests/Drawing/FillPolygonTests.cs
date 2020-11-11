@@ -10,6 +10,8 @@ using GeoJSON.Net.Feature;
 using GeoJSON.Net.Geometry;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -65,9 +67,53 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendSourceFileOrDescription: false);
         }
 
+        public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data =
+            new TheoryData<bool, IntersectionRule>()
+            {
+                {false, IntersectionRule.OddEven},
+                {false, IntersectionRule.Nonzero},
+                {true, IntersectionRule.OddEven},
+                {true, IntersectionRule.Nonzero},
+            };
+
         [Theory]
-        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32)]
-        public void FillPolygon_Concave<TPixel>(TestImageProvider<TPixel> provider)
+        [WithBasicTestPatternImages(nameof(FillPolygon_Complex_Data), 100, 100, PixelTypes.Rgba32)]
+        public void FillPolygon_Complex<TPixel>(TestImageProvider<TPixel> provider, bool reverse, IntersectionRule intersectionRule)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] contour = PolygonFactory.CreatePointArray((20, 20), (80, 20), (80, 80), (20, 80));
+            PointF[] hole = PolygonFactory.CreatePointArray((40, 40), (40, 60), (60, 60), (60, 40));
+
+            if (reverse)
+            {
+                Array.Reverse(contour);
+                Array.Reverse(hole);
+            }
+
+            ComplexPolygon polygon = new ComplexPolygon(
+                new Path(new LinearLineSegment(contour)),
+                new Path(new LinearLineSegment(hole)));
+            
+            provider.RunValidatingProcessorTest(
+                c =>
+                {
+                    c.SetShapeOptions(new ShapeOptions()
+                    {
+                        OrientationHandling = OrientationHandling.KeepOriginal,
+                        IntersectionRule = intersectionRule
+                    });
+                    c.Fill(Color.White, polygon);
+                },
+                testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
+                comparer: ImageComparer.TolerantPercentage(0.01f),
+                appendSourceFileOrDescription: false,
+                appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32, false)]
+        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32, true)]
+        public void FillPolygon_Concave<TPixel>(TestImageProvider<TPixel> provider, bool reverse)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             var points = new PointF[]
@@ -79,13 +125,49 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                                  new Vector2(120, 120),
                                  new Vector2(8, 120)
                              };
+            if (reverse)
+            {
+                Array.Reverse(points);
+            }
 
             var color = Color.LightGreen;
 
             provider.RunValidatingProcessorTest(
-                c => c.FillPolygon(color, points),
+                c =>
+                {
+                    c.SetShapeOptions(new ShapeOptions()
+                    {
+                        OrientationHandling = OrientationHandling.KeepOriginal
+                    });
+                    c.FillPolygon(color, points);
+                },
+                testOutputDetails: $"Reverse({reverse})",
+                comparer: ImageComparer.TolerantPercentage(0.01f),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(30, 30, "Black", PixelTypes.Rgba32)]
+        public void FillPolygon_Reverse<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] points = PolygonFactory.CreatePointArray(
+                (2.5644531f, 2.6796875f),
+                (2.9794922f, 10.443359f),
+                (3.6386719f, 23.382812f),
+                (24.634766f, 23.382812f));
+
+            using var image = provider.GetImage();
+            image.Mutate(c =>
+            {
+                c.SetShapeOptions(new ShapeOptions()
+                {
+                    OrientationHandling = OrientationHandling.KeepOriginal
+                });
+                c.FillPolygon(Color.White, points);
+            });
+            image.DebugSave(provider);
         }
 
         [Theory]
@@ -162,16 +244,39 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendPixelTypeToFileName: false);
         }
 
+        public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
+            new TheoryData<bool, IntersectionRule>()
+            {
+                { false, IntersectionRule.OddEven},
+                { false, IntersectionRule.Nonzero},
+                { true, IntersectionRule.OddEven},
+                { true, IntersectionRule.Nonzero},
+            };
+
         [Theory]
-        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32)]
-        public void Fill_EllipsePolygon<TPixel>(TestImageProvider<TPixel> provider)
+        [WithBasicTestPatternImages(nameof(Fill_EllipsePolygon_Data), 200, 200, PixelTypes.Rgba32)]
+        public void Fill_EllipsePolygon<TPixel>(TestImageProvider<TPixel> provider, bool reverse, IntersectionRule intersectionRule)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            var polygon = new EllipsePolygon(100, 100, 80, 120);
+            IPath polygon = new EllipsePolygon(100, 100, 80, 120);
+            if (reverse)
+            {
+                polygon = polygon.Reverse();
+            }
+            
             var color = Color.Azure;
 
             provider.RunValidatingProcessorTest(
-                c =>  c.Fill(color, polygon),
+                c =>
+                {
+                    c.SetShapeOptions(new ShapeOptions()
+                    {
+                        IntersectionRule = intersectionRule,
+                        OrientationHandling = OrientationHandling.KeepOriginal
+                    });
+                    c.Fill(color, polygon);
+                },
+                testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
         }

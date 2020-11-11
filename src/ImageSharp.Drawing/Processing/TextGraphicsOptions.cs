@@ -60,10 +60,5 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.textOptions = value;
             }
         }
-
-        public bool UsePolygonScanner { get; set; } = true;
-
-        internal OrientationHandling OrientationHandling { get; set; } =
-            OrientationHandling.ForcePositiveOrientationOnSimplePolygons;
     }
 }

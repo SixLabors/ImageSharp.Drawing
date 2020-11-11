@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -34,6 +35,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this.VerticalAlignment = source.VerticalAlignment;
             this.FallbackFonts.AddRange(source.FallbackFonts);
             this.RenderColorFonts = source.RenderColorFonts;
+            this.UsePolygonScanner = source.UsePolygonScanner;
+            this.OrientationHandling = source.OrientationHandling;
         }
 
         /// <summary>
@@ -131,5 +134,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         /// <inheritdoc/>
         public TextOptions DeepClone() => new TextOptions(this);
+
+        public bool UsePolygonScanner { get; set; } = true;
+
+        internal OrientationHandling OrientationHandling { get; set; } =
+            OrientationHandling.ForcePositiveOrientationOnSimplePolygons;
     }
 }

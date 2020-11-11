@@ -384,7 +384,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 // take the path inside the path builder, scan thing and generate a Buffer2d representing the glyph and cache it.
                 Buffer2D<float> fullBuffer = this.MemoryAllocator.Allocate2D<float>(size.Width + 1, size.Height + 1, AllocationOptions.Clean);
 
-                if (this.Options.UsePolygonScanner)
+                if (this.Options.TextOptions.UsePolygonScanner)
                 {
 #if true
                     var scanner = PolygonScanner.Create(
@@ -394,7 +394,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         subpixelCount,
                         IntersectionRule.Nonzero,
                         this.MemoryAllocator,
-                        this.Options.OrientationHandling);
+                        this.Options.TextOptions.OrientationHandling);
 #else
                     var scanner = ClassicPolygonScanner.Create(new ShapeRegion(path), 0, size.Height,
                         subpixelCount, IntersectionRule.Nonzero, Configuration.Default);

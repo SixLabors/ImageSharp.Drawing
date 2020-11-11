@@ -363,8 +363,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
         
         
-        [Fact]
-        public void NegativeOrientation01()
+        [Theory]
+        [InlineData(IntersectionRule.OddEven)]
+        [InlineData(IntersectionRule.Nonzero)]
+        public void NegativeOrientation01(IntersectionRule intersectionRule)
         {
             IPath poly = PolygonFactory.CreatePolygon((0, 0), (0, 2), (2, 2), (2, 0));
 
@@ -377,7 +379,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 new FuzzyFloat[] { 0, 0, 2, 2},
             };
             
-            TestScan(poly, 0, 2, 2, expected, IntersectionRule.OddEven, OrientationHandling.KeepOriginal);
+            TestScan(poly, 0, 2, 2, expected, intersectionRule, OrientationHandling.KeepOriginal);
         }
 
         private static (float y, FuzzyFloat[] x) Empty(float y) => (y, new FuzzyFloat[0]);

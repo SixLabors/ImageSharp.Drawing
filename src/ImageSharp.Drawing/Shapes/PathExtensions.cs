@@ -4,6 +4,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing
@@ -176,6 +177,18 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 ArrayPool<PointF>.Shared.Return(buffer);
             }
+        }
+
+        internal static IPath Reverse(this IPath path)
+        {
+            var segments = path.Flatten().Select(p => new LinearLineSegment(p.Points.ToArray().Reverse().ToArray()));
+            bool closed = false;
+            if (path is ISimplePath sp)
+            {
+                closed = sp.IsClosed;
+            }
+
+            return closed ? new Polygon(segments) : new Path(segments);
         }
     }
 }

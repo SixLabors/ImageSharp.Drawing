@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
@@ -154,14 +155,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             Font font = CreateFont(fontName, fontSize);
             var color = Color.Black;
-
-            provider.VerifyOperation(
-                TextDrawingComparer,
-                img =>
+            
+            provider.RunValidatingProcessorTest(
+                c =>
                 {
-                    img.Mutate(c => c.DrawText(text, new Font(font, fontSize), color, new PointF(x, y)));
+                    c.SetTextOptions(new TextOptions()
+                    {
+                        OrientationHandling = OrientationHandling.KeepOriginal
+                    });
+                    c.DrawText(text, new Font(font, fontSize), color, new PointF(x, y));
                 },
                 $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
+                TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
         }
