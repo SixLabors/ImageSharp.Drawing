@@ -220,7 +220,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
 
             static void EmitIfNeeded(Span<float> intersectionsInner, int i, int diff, float emitVal, ref int tracker, ref int offset)
             {
-                bool emit = (tracker == 0 && diff > 0) || (tracker == 1 && diff < 0);
+                bool emit = (tracker == 0 && diff != 0) || tracker * diff == -1;
                 tracker += diff;
 
                 if (emit)
