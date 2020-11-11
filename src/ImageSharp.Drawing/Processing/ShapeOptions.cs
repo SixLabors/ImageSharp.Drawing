@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public bool UsePolygonScanner { get; set; } = true;
 
         internal OrientationHandling OrientationHandling { get; set; } =
-            OrientationHandling.FirstRingIsContourFollowedByHoles;
+            OrientationHandling.ForcePositiveOrientationOnSimplePolygons;
 
         /// <inheritdoc/>
         public ShapeOptions DeepClone() => new ShapeOptions(this);
