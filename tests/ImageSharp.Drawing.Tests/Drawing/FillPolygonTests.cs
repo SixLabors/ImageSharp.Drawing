@@ -171,7 +171,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var color = Color.Azure;
 
             provider.RunValidatingProcessorTest(
-                c => c.Fill(color, polygon),
+                c =>  c.Fill(color, polygon),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
         }

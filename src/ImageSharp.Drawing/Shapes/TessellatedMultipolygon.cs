@@ -11,6 +11,13 @@ using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes
 {
+    internal enum OrientationHandling
+    {
+        KeepOriginal,
+        ForcePositiveOrientationOnSimplePolygons,
+        FirstRingIsContourFollowedByHoles
+    }
+
     /// <summary>
     /// Compact representation of a multipolygon.
     /// Applies some rules which are optimal to implement geometric algorithms:
@@ -59,10 +66,13 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
 
         public int TotalVertexCount { get; }
 
-        public static TessellatedMultipolygon Create(IPath path, MemoryAllocator memoryAllocator, bool onlyFirstRingIsContour = true)
+        public static TessellatedMultipolygon Create(
+            IPath path,
+            MemoryAllocator memoryAllocator,
+            OrientationHandling orientationHandling = OrientationHandling.ForcePositiveOrientationOnSimplePolygons)
         {
-            RingType? firstRingType = onlyFirstRingIsContour ? RingType.Contour : (RingType?)null;
-            RingType? followUpRingType = onlyFirstRingIsContour ? RingType.Hole : (RingType?)null;
+            RingType? firstRingType = orientationHandling == OrientationHandling.FirstRingIsContourFollowedByHoles ? RingType.Contour : (RingType?)null;
+            RingType? followUpRingType = orientationHandling == OrientationHandling.FirstRingIsContourFollowedByHoles ? RingType.Hole : (RingType?)null;
 
             // For now let's go with the assumption that first loop is always an external contour,
             // and the rests are loops.
@@ -70,8 +80,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             {
                 IReadOnlyList<InternalPath> internalPaths = ipo.GetRingsAsInternalPath();
 
-                // If we have only one ring, orient it as a contour
-                if (internalPaths.Count == 1)
+                // If we have only one ring, we may want to orient it as a contour
+                if (internalPaths.Count == 1 && orientationHandling != OrientationHandling.KeepOriginal)
                 {
                     firstRingType = RingType.Contour;
                 }
@@ -94,8 +104,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             {
                 ReadOnlyMemory<PointF>[] points = path.Flatten().Select(sp => sp.Points).ToArray();
 
-                // If we have only one ring, orient it as a contour
-                if (points.Length == 1)
+                // If we have only one ring, we may want to orient it as a contour
+                if (points.Length == 1 && orientationHandling != OrientationHandling.KeepOriginal)
                 {
                     firstRingType = RingType.Contour;
                 }

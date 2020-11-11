@@ -74,7 +74,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
             if (shapeOptions.UsePolygonScanner)
             {
-                var scanner = PolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule, configuration);
+                var scanner = PolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule,
+                    configuration, shapeOptions.OrientationHandling);
 
                 float subpixelFraction = scanner.SubpixelFraction;
                 float subpixelFractionPoint = subpixelFraction / subpixelCount;

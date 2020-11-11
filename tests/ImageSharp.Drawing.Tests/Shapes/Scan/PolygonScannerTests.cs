@@ -5,6 +5,7 @@ using System;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Shapes.Scan;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
@@ -46,6 +47,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         private static void VerifyScanline(ReadOnlySpan<FuzzyFloat> expected, ReadOnlySpan<float> actual,
             string scanlineId)
         {
+            if (expected == null)
+            {
+                return;
+            }
+
             Assert.True(expected.Length == actual.Length,
                 $"Scanline had {actual.Length} intersections instead of {expected.Length}: {scanlineId}");
 
@@ -58,11 +64,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         private void TestScan(IPath path, int min, int max, int subsampling, FuzzyFloat[][] expected) =>
             TestScan(path, min, max, subsampling, expected, IntersectionRule.OddEven);
 
-        private void TestScan(IPath path, int min, int max, int subsampling, FuzzyFloat[][] expected,
-            IntersectionRule intersectionRule)
+        private void TestScan(
+            IPath path,
+            int min,
+            int max,
+            int subsampling,
+            FuzzyFloat[][] expected,
+            IntersectionRule intersectionRule,
+            OrientationHandling orientationHandling = OrientationHandling.FirstRingIsContourFollowedByHoles)
         {
-            var scanner = PolygonScanner.Create(path, min, max, subsampling, intersectionRule,
-                Configuration.Default.MemoryAllocator);
+            var scanner = PolygonScanner.Create(path,
+                min,
+                max,
+                subsampling,
+                intersectionRule,
+                Configuration.Default.MemoryAllocator,
+                orientationHandling);
 
             try
             {
@@ -344,6 +361,24 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             
             TestScan(poly, 1, 5, 2, expected, rule);
         }
+        
+        
+        [Fact]
+        public void NegativeOrientation01()
+        {
+            IPath poly = PolygonFactory.CreatePolygon((0, 0), (0, 2), (2, 2), (2, 0));
+
+            FuzzyFloat[][] expected =
+            {
+                new FuzzyFloat[] { 0, 0, 2, 2},
+                new FuzzyFloat[] { 0, 2 },
+                new FuzzyFloat[] { 0, 2 },
+                new FuzzyFloat[] { 0, 2 },
+                new FuzzyFloat[] { 0, 0, 2, 2},
+            };
+            
+            TestScan(poly, 0, 2, 2, expected, IntersectionRule.OddEven, OrientationHandling.KeepOriginal);
+        }
 
         private static (float y, FuzzyFloat[] x) Empty(float y) => (y, new FuzzyFloat[0]);
 
@@ -492,6 +527,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.x).ToArray());
         }
 
+        
         private static (float y, FuzzyFloat[] x)[] TranslateIntersections(
             (float y, FuzzyFloat[] x)[] ex, float dx, float dy)
         {

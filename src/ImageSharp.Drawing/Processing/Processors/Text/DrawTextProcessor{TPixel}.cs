@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Shapes.Scan;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
@@ -393,7 +394,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         subpixelCount,
                         IntersectionRule.Nonzero,
                         this.MemoryAllocator,
-                        false);
+                        this.Options.OrientationHandling);
 #else
                     var scanner = ClassicPolygonScanner.Create(new ShapeRegion(path), 0, size.Height,
                         subpixelCount, IntersectionRule.Nonzero, Configuration.Default);
