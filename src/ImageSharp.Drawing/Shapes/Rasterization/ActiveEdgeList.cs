@@ -206,34 +206,35 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                 else if (type == NonZeroIntersectionType.Corner)
                 {
                     // Assume a Down, Up serie
-                    EmitIfNeeded(intersections, i, -1, intersections[i], ref tracker, ref offset);
+                    NonzeroEmitIfNeeded(intersections, i, -1, intersections[i], ref tracker, ref offset);
                     offset -= 1;
-                    EmitIfNeeded(intersections, i, 1, intersections[i], ref tracker, ref offset);
+                    NonzeroEmitIfNeeded(intersections, i, 1, intersections[i], ref tracker, ref offset);
                 }
                 else
                 {
                     int diff = type == NonZeroIntersectionType.Up ? 1 : -1;
                     float emitVal = intersections[i] + (NonzeroSortingHelperEpsilon * diff * -1);
-                    EmitIfNeeded(intersections, i, diff, emitVal, ref tracker, ref offset);
-                }
-            }
-
-            static void EmitIfNeeded(Span<float> intersectionsInner, int i, int diff, float emitVal, ref int tracker, ref int offset)
-            {
-                bool emit = (tracker == 0 && diff != 0) || tracker * diff == -1;
-                tracker += diff;
-
-                if (emit)
-                {
-                    intersectionsInner[i - offset] = emitVal;
-                }
-                else
-                {
-                    offset++;
+                    NonzeroEmitIfNeeded(intersections, i, diff, emitVal, ref tracker, ref offset);
                 }
             }
 
             return intersections.Slice(0, intersections.Length - offset);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void NonzeroEmitIfNeeded(Span<float> intersections, int i, int diff, float emitVal, ref int tracker, ref int offset)
+        {
+            bool emit = (tracker == 0 && diff != 0) || tracker * diff == -1;
+            tracker += diff;
+
+            if (emit)
+            {
+                intersections[i - offset] = emitVal;
+            }
+            else
+            {
+                offset++;
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

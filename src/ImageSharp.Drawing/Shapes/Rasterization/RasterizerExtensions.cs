@@ -37,20 +37,16 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 
                 if (startX >= 0 && startX < scanline.Length)
                 {
-                    for (float x = scanStart; x < startX + 1; x += scanner.SubpixelFraction)
-                    {
-                        scanline[startX] += scanner.SubpixelFractionPoint;
-                        scanlineDirty = true;
-                    }
+                    float times = MathF.Ceiling((startX + 1 - scanStart) / scanner.SubpixelFraction);
+                    scanline[startX] += times * scanner.SubpixelFractionPoint;
+                    scanlineDirty = times > 0;
                 }
 
                 if (endX >= 0 && endX < scanline.Length)
                 {
-                    for (float x = endX; x < scanEnd; x += scanner.SubpixelFraction)
-                    {
-                        scanline[endX] += scanner.SubpixelFractionPoint;
-                        scanlineDirty = true;
-                    }
+                    float times = MathF.Ceiling((scanEnd - endX) / scanner.SubpixelFraction);
+                    scanline[endX] += times * scanner.SubpixelFractionPoint;
+                    scanlineDirty = times > 0;
                 }
 
                 int nextX = startX + 1;
