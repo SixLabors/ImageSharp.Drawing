@@ -7,6 +7,17 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 {
     internal static class RasterizerExtensions
     {
+        public static bool ScanCurrentPixelLineInto(this ref PolygonScanner scanner, int minX, float xOffset, Span<float> scanline)
+        {
+            bool scanlineDirty = false;
+            while (scanner.MoveToNextSubpixelScanLine())
+            {
+                scanner.ScanCurrentSubpixelLineInto(minX, xOffset, scanline, ref scanlineDirty);
+            }
+
+            return scanlineDirty;
+        }
+
         public static void ScanCurrentSubpixelLineInto(this ref PolygonScanner scanner, int minX, float xOffset, Span<float> scanline, ref bool scanlineDirty)
         {
             ReadOnlySpan<float> points = scanner.ScanCurrentLine();

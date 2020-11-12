@@ -405,12 +405,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     while (scanner.MoveToNextPixelLine())
                     {
                         Span<float> scanline = fullBuffer.GetRowSpan(scanner.PixelLineY);
-                        bool scanlineDirty = false;
-
-                        while (scanner.MoveToNextSubpixelScanLine())
-                        {
-                            scanner.ScanCurrentSubpixelLineInto(0, xOffset, scanline, ref scanlineDirty);
-                        }
+                        bool scanlineDirty = scanner.ScanCurrentPixelLineInto(0, xOffset, scanline);
 
                         if (scanlineDirty)
                         {

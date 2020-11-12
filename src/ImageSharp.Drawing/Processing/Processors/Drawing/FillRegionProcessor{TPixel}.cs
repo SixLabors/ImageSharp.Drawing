@@ -86,13 +86,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                     if (scanlineDirty)
                     {
                         scanline.Clear();
-                        scanlineDirty = false;
                     }
 
-                    while (scanner.MoveToNextSubpixelScanLine())
-                    {
-                        scanner.ScanCurrentSubpixelLineInto(minX, 0, scanline, ref scanlineDirty);
-                    }
+                    scanlineDirty = scanner.ScanCurrentPixelLineInto(minX, 0, scanline);
 
                     if (scanlineDirty)
                     {
