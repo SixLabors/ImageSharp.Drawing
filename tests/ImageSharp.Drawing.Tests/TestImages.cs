@@ -389,6 +389,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             public const string Bit24Pal = "Tga/targa_24bit_pal.tga";
         }
 
+        // Although this is not an image, the infrastructure utilities built for image files make it very practical to manage it here.
+        // We may want to generalize some of those utils, but for just one test file it doesn't worth it.
         public static class GeoJson
         {
             public const string States = "GeoJson/States.json";
