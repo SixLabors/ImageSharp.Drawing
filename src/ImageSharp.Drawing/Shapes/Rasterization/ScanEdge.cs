@@ -7,7 +7,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 {
     /// <summary>
     /// Holds coordinates, and coefficients for a polygon edge to be horizontally scanned.

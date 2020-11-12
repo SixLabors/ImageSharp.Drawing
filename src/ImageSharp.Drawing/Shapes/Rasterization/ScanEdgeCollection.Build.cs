@@ -8,7 +8,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 {
     internal partial class ScanEdgeCollection
     {

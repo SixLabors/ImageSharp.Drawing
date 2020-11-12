@@ -3,7 +3,7 @@
 
 using System;
 using SixLabors.ImageSharp.Drawing.Shapes.Helpers;
-using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan

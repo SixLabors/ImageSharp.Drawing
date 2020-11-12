@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 {
     internal ref struct PolygonScanner
     {
@@ -38,6 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
         private float yPlusOne;
 
         public readonly float SubpixelFraction;
+        public readonly float SubpixelFractionPoint;
         public int PixelLineY;
         public float SubPixelY;
 
@@ -54,6 +55,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
             this.maxY = maxY;
             this.subsampling = subsampling;
             this.SubpixelFraction = 1f / subsampling;
+            this.SubpixelFractionPoint = this.SubpixelFraction / subsampling;
             this.intersectionRule = intersectionRule;
             this.allocator = allocator;
             this.edgeCollection = edgeCollection;

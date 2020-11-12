@@ -3,7 +3,7 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 {
     internal ref struct ClassicPolygonScanner
     {

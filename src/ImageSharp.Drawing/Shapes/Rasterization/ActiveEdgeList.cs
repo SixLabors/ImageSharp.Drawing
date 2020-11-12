@@ -6,7 +6,7 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Drawing.Utilities;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 {
     internal enum NonZeroIntersectionType
     {

@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using SixLabors.ImageSharp.Memory;
 using Xunit;

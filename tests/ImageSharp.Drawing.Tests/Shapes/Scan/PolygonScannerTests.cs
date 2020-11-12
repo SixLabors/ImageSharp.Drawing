@@ -6,7 +6,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using SixLabors.ImageSharp.Drawing.Shapes;
-using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 using Xunit.Abstractions;

@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 
@@ -346,19 +346,19 @@ namespace SixLabors.ImageSharp.Drawing
                         Vector2 point = FindIntersection(this.points[i].Segment, target);
                         if (point != MaxVector)
                         {
-                            if (lastPoint.Equivelent(point, Epsilon2))
+                            if (lastPoint.Equivalent(point, Epsilon2))
                             {
                                 lastPoint = MaxVector;
 
                                 int last = WrapArrayIndex(i - 1 + polyCorners, polyCorners);
 
                                 // hit the same point a second time do we need to remove the old one if just clipping
-                                if (this.points[next].Point.Equivelent(point, Epsilon))
+                                if (this.points[next].Point.Equivalent(point, Epsilon))
                                 {
                                     next = i;
                                 }
 
-                                if (this.points[last].Point.Equivelent(point, Epsilon))
+                                if (this.points[last].Point.Equivalent(point, Epsilon))
                                 {
                                     last = i;
                                 }
@@ -472,7 +472,7 @@ namespace SixLabors.ImageSharp.Drawing
                 // check if the point is on an intersection is it is then inside
                 for (int i = 0; i < intersection; i++)
                 {
-                    if (buffer[i].Equivelent(point, Epsilon))
+                    if (buffer[i].Equivalent(point, Epsilon))
                     {
                         return true;
                     }
@@ -763,7 +763,7 @@ namespace SixLabors.ImageSharp.Drawing
                         return results.ToArray();
                     }
                 }
-                while (removeCloseAndCollinear && points[0].Equivelent(points[prev], Epsilon2)); // skip points too close together
+                while (removeCloseAndCollinear && points[0].Equivalent(points[prev], Epsilon2)); // skip points too close together
 
                 polyCorners = prev + 1;
                 lastPoint = points[prev];
