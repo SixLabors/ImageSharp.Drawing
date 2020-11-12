@@ -99,28 +99,13 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         }
 
         [Benchmark]
-        public void ImageSharp_Original()
+        public void ImageSharp()
         {
-            ImageSharpImpl(false);
-        }
-
-        [Benchmark]
-        public void ImageSharp_ActiveEdges()
-        {
-            ImageSharpImpl(true);
-        }
-
-        private void ImageSharpImpl(bool useActiveEdges)
-        {
-            var options = new ShapeGraphicsOptions()
-            {
-                ShapeOptions = new ShapeOptions() { UsePolygonScanner = useActiveEdges}
-            };
             this.image.Mutate(c =>
             {
                 foreach (Polygon polygon in this.polygons)
                 {
-                    c.Fill(options, Color.White, polygon);
+                    c.Fill(Color.White, polygon);
                 }
             });
         }
