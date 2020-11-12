@@ -17,6 +17,7 @@ using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
 using SDPoint = System.Drawing.Point;
 using SDPointF = System.Drawing.PointF;
+using SDBitmap = System.Drawing.Bitmap;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
@@ -24,15 +25,12 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
     {
         private PointF[][] points;
         private Polygon[] polygons;
+        private SDPointF[][] sdPoints;
+        private List<SKPath> skPaths;
 
         private Image<Rgba32> image;
-
-        private SDPointF[][] sdPoints;
-
-        private System.Drawing.Bitmap sdBitmap;
+        private SDBitmap sdBitmap;
         private Graphics sdGraphics;
-
-        private List<SKPath> skPaths;
         private SKSurface skSurface;
 
         protected abstract int Width { get; }

@@ -1,115 +1,114 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Linq;
+using System.Numerics;
 using BenchmarkDotNet.Attributes;
+using GeoJSON.Net.Feature;
+using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
+using SDPoint = System.Drawing.Point;
+using SDPointF = System.Drawing.PointF;
+using SDBitmap = System.Drawing.Bitmap;
 using SDRectangleF = System.Drawing.RectangleF;
+using SDFont = System.Drawing.Font;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     [MemoryDiagnoser]
     public class DrawText
     {
-        [Params(10, 100)]
+        public const int Width = 800;
+        public const int Height = 800;
+
+        [Params(1, 20)]
         public int TextIterations { get; set; }
 
-        public string TextPhrase { get; set; } = "Hello World";
+        protected const string TextPhrase= "asdfghjkl123456789{}[]+$%?";
 
-        public string TextToRender => string.Join(" ", Enumerable.Repeat(this.TextPhrase, this.TextIterations));
+        public string TextToRender => string.Join(" ", Enumerable.Repeat(TextPhrase, this.TextIterations));
 
-        [Benchmark(Baseline = true, Description = "System.Drawing Draw Text")]
-        public void DrawTextSystemDrawing()
+        private Image<Rgba32> image;
+        private SDBitmap sdBitmap;
+        private Graphics sdGraphics;
+        private SKSurface skSurface;
+        
+        
+        private SDFont sdFont;
+        private Fonts.Font font;
+        private SKTypeface skTypeface;
+        
+        [GlobalSetup]
+        public void Setup()
         {
-            using (var destination = new Bitmap(800, 800))
-            using (var graphics = Graphics.FromImage(destination))
-            {
-                graphics.InterpolationMode = InterpolationMode.Default;
-                graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var font = new Font("Arial", 12, GraphicsUnit.Point))
-                {
-                    graphics.DrawString(
-                        this.TextToRender,
-                        font,
-                        System.Drawing.Brushes.HotPink,
-                        new SDRectangleF(10, 10, 780, 780));
-                }
-            }
+            this.image = new Image<Rgba32>(Width, Height);
+            this.sdBitmap = new Bitmap(Width, Height);
+            this.sdGraphics = Graphics.FromImage(this.sdBitmap);
+            this.sdGraphics.InterpolationMode = InterpolationMode.Default;
+            this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
+            this.sdGraphics.InterpolationMode = InterpolationMode.Default;
+            this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
+            this.skSurface = SKSurface.Create(new SKImageInfo(Width, Height));
+            
+            this.sdFont = new SDFont("Arial", 12, GraphicsUnit.Point);
+            this.font = Fonts.SystemFonts.CreateFont("Arial", 12);
+            this.skTypeface = SKTypeface.FromFamilyName("Arial");
         }
 
-        [Benchmark(Description = "ImageSharp Draw Text - Cached Glyphs")]
-        public void DrawTextCore()
+        [GlobalCleanup]
+        public void Cleanup()
         {
-            using (var image = new Image<Rgba32>(800, 800))
-            {
-                Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
-                image.Mutate(x => x
-                    .SetGraphicsOptions(o => o.Antialias = true)
-                    .SetTextOptions(o => o.WrapTextWidth = 780)
-                    .DrawText(
+            this.image.Dispose();
+            this.sdGraphics.Dispose();
+            this.sdBitmap.Dispose();
+            this.skSurface.Dispose();
+            this.sdFont.Dispose();
+            this.skTypeface.Dispose();
+        }
+        
+        [Benchmark]
+        public void SystemDrawing()
+        {
+            this.sdGraphics.DrawString(
+                this.TextToRender,
+                this.sdFont,
+                System.Drawing.Brushes.HotPink,
+                new SDRectangleF(10, 10, 780, 780));
+        }
+
+        [Benchmark]
+        public void ImageSharp()
+        {
+            this.image.Mutate(x => x
+                .SetGraphicsOptions(o => o.Antialias = true)
+                .SetTextOptions(o => o.WrapTextWidth = 780)
+                .DrawText(
                     this.TextToRender,
                     font,
                     Processing.Brushes.Solid(Color.HotPink),
                     new PointF(10, 10)));
-            }
         }
 
-        [Benchmark(Description = "ImageSharp Draw Text - Naive")]
-        public void DrawTextCoreOld()
+        [Benchmark(Baseline = true)]
+        public void SkiaSharp()
         {
-            using (var image = new Image<Rgba32>(800, 800))
+            using SKPaint paint = new SKPaint
             {
-                Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
-                image.Mutate(x => DrawTextOldVersion(
-                    x,
-                    new TextGraphicsOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
-                    this.TextToRender,
-                    font,
-                    Processing.Brushes.Solid(Color.HotPink),
-                    null,
-                    new PointF(10, 10)));
-            }
-
-            IImageProcessingContext DrawTextOldVersion(
-                IImageProcessingContext source,
-                TextGraphicsOptions options,
-                string text,
-                Fonts.Font font,
-                IBrush brush,
-                IPen pen,
-                PointF location)
-            {
-                const float dpiX = 72;
-                const float dpiY = 72;
-
-                var style = new Fonts.RendererOptions(font, dpiX, dpiY, location)
-                {
-                    ApplyKerning = options.TextOptions.ApplyKerning,
-                    TabWidth = options.TextOptions.TabWidth,
-                    WrappingWidth = options.TextOptions.WrapTextWidth,
-                    HorizontalAlignment = options.TextOptions.HorizontalAlignment,
-                    VerticalAlignment = options.TextOptions.VerticalAlignment
-                };
-
-                IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, style);
-
-                var pathOptions = new ShapeGraphicsOptions() { GraphicsOptions = options.GraphicsOptions };
-                if (brush != null)
-                {
-                    source.Fill(pathOptions, brush, glyphs);
-                }
-
-                if (pen != null)
-                {
-                    source.Draw(pathOptions, pen, glyphs);
-                }
-
-                return source;
-            }
+                Color = SKColors.HotPink,
+                IsAntialias = true,
+                TextSize = 16, // 12*1.3333
+                Typeface = skTypeface
+            };
+            
+            this.skSurface.Canvas.DrawText(TextToRender, 10, 10, paint);
         }
     }
 }
