@@ -13,6 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
     public class FillRegionProcessor : IImageProcessor
     {
         /// <summary>
+        /// Minimum subpixel count for rasterization, being applied even if antialiasing is off.
+        /// </summary>
+        internal const int MinimumSubpixelCount = 8;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="FillRegionProcessor" /> class.
         /// </summary>
         /// <param name="options">The graphics options.</param>
@@ -43,7 +48,5 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel> => new FillRegionProcessor<TPixel>(configuration, this, source, sourceRectangle);
-
-        internal const int DefaultSubpixelCount = 8;
     }
 }

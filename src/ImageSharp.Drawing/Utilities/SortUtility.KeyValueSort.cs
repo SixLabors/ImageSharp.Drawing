@@ -60,7 +60,6 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
                 {
                     if (partitionSize <= 16)
                     {
-
                         if (partitionSize == 2)
                         {
                             SwapIfGreaterWithValues(keys, values, 0, 1);
@@ -113,8 +112,10 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
 
                 while (left < right)
                 {
+#pragma warning disable SA1503, SA1106
                     while (keys[++left] < pivot);
                     while (pivot < keys[--right]);
+#pragma warning restore SA1503, SA1106
 
                     if (left >= right)
                     {

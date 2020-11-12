@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 return; // no effect inside image;
             }
 
-            int subpixelCount = FillRegionProcessor.DefaultSubpixelCount;
+            int subpixelCount = FillRegionProcessor.MinimumSubpixelCount;
 
             // we need to offset the pixel grid to account for when we outline a path.
             // basically if the line is [1,2] => [3,2] then when outlining at 1 we end up with a region of [0.5,1.5],[1.5, 1.5],[3.5,2.5],[2.5,2.5]

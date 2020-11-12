@@ -88,20 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         private class MockRegion1 : Region
         {
             public override Rectangle Bounds => new Rectangle(-100, -10, 10, 10);
-            public override IPath Shape => throw new NotImplementedException();
-
-            public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
-            {
-                if (y < 5)
-                {
-                    buffer[0] = -10f;
-                    buffer[1] = 100f;
-                    return 2;
-                }
-                return 0;
-            }
-
-            public override int MaxIntersections => 10;
+            internal override IPath Shape => throw new NotImplementedException();
         }
 
         private class MockRegion2 : Region
@@ -111,18 +98,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 this.Bounds = bounds;
             }
 
-            public override int MaxIntersections => 100;
-
             public override Rectangle Bounds { get; }
-            public override IPath Shape => throw new NotImplementedException();
-
-            public int ScanInvocationCounter { get; private set; }
-
-            public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
-            {
-                this.ScanInvocationCounter++;
-                return 0;
-            }
+            internal override IPath Shape => throw new NotImplementedException();
         }
     }
 }

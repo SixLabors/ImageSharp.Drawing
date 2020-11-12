@@ -87,7 +87,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         internal bool RemoveCloseAndCollinearPoints { get; set; } = true;
 
-        private InternalPath InnerPath => 
+        private InternalPath InnerPath =>
             this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
         /// <inheritdoc />
@@ -206,6 +206,7 @@ namespace SixLabors.ImageSharp.Drawing
             return this.InnerPath.PointAlongPath(distanceAlongPath);
         }
 
+        /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };
     }
 }

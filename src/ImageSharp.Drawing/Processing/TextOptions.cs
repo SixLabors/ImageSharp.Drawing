@@ -131,10 +131,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         public bool RenderColorFonts { get; set; } = true;
 
-        /// <inheritdoc/>
-        public TextOptions DeepClone() => new TextOptions(this);
-
         internal OrientationHandling OrientationHandling { get; set; } =
             OrientationHandling.ForcePositiveOrientationOnSimplePolygons;
+
+        /// <inheritdoc/>
+        public TextOptions DeepClone() => new TextOptions(this);
     }
 }

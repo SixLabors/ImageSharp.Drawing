@@ -44,6 +44,84 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             RightRight,
         }
 
+        internal static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, int subsampling)
+        {
+            // We allocate more than we need, since we don't know how many horizontal edges do we have:
+            IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multipolygon.TotalVertexCount);
+
+            RingWalker walker = new RingWalker(buffer.Memory.Span);
+
+            float subsamplingRatio = subsampling;
+
+            using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multipolygon.Max(r => r.Vertices.Length));
+            Span<float> roundedY = roundedYBuffer.Memory.Span;
+
+            foreach (TessellatedMultipolygon.Ring ring in multipolygon)
+            {
+                if (ring.VertexCount < 3)
+                {
+                    continue;
+                }
+
+                var vertices = ring.Vertices;
+                RoundY(vertices, roundedY, subsamplingRatio);
+
+                walker.PreviousEdge = new EdgeData(vertices[vertices.Length - 2].X, vertices[vertices.Length - 1].X, roundedY[vertices.Length - 2], roundedY[vertices.Length - 1]); // Last edge
+                walker.CurrentEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
+                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
+                walker.Move(false);
+
+                for (int i = 1; i < vertices.Length - 2; i++)
+                {
+                    walker.NextEdge = new EdgeData(vertices[i + 1].X, vertices[i + 2].X, roundedY[i + 1], roundedY[i + 2]);
+                    walker.Move(true);
+                }
+
+                walker.NextEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
+                walker.Move(true); // Emit edge before last edge
+
+                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
+                walker.Move(true); // Emit last edge
+            }
+
+            static void RoundY(ReadOnlySpan<PointF> vertices, Span<float> destination, float subsamplingRatio)
+            {
+                for (int i = 0; i < vertices.Length; i++)
+                {
+                    // for future SIMD impl:
+                    // https://www.ocf.berkeley.edu/~horie/rounding.html
+                    // Avx.RoundToPositiveInfinity()
+                    destination[i] = MathF.Round(vertices[i].Y * subsamplingRatio, MidpointRounding.AwayFromZero) / subsamplingRatio;
+                }
+            }
+
+            return new ScanEdgeCollection(buffer, walker.EdgeCounter);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static VertexCategory CreateVertexCategory(EdgeCategory previousCategory, EdgeCategory currentCategory)
+        {
+            var value = (VertexCategory)(((int)previousCategory << 2) | (int)currentCategory);
+            VerifyVertexCategory(value);
+            return value;
+        }
+
+        [Conditional("DEBUG")]
+        private static void VerifyVertexCategory(VertexCategory vertexCategory)
+        {
+            int value = (int)vertexCategory;
+            if (value < 0 || value >= 16)
+            {
+                throw new Exception("EdgeCategoryPair value shall be: 0 <= value < 16");
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowInvalidRing(string message)
+        {
+            throw new InvalidOperationException(message);
+        }
+
         private struct EdgeData
         {
             public EdgeCategory EdgeCategory;
@@ -227,86 +305,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                 this.PreviousEdge = this.CurrentEdge;
                 this.CurrentEdge = this.NextEdge;
             }
-        }
-
-        internal static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, int subsampling)
-        {
-            // We allocate more than we need, since we don't know how many horizontal edges do we have:
-            IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multipolygon.TotalVertexCount);
-
-            RingWalker walker = new RingWalker(buffer.Memory.Span);
-
-            float subsamplingRatio = subsampling;
-
-            using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multipolygon.Max(r => r.Vertices.Length));
-            Span<float> roundedY = roundedYBuffer.Memory.Span;
-
-            foreach (TessellatedMultipolygon.Ring ring in multipolygon)
-            {
-                if (ring.VertexCount < 3)
-                {
-                    //ThrowInvalidRing("ScanEdgeCollection.Create Encountered a ring with VertexCount < 3!");
-                    continue;
-                }
-
-                var vertices = ring.Vertices;
-                RoundY(vertices, roundedY, subsamplingRatio);
-
-                walker.PreviousEdge = new EdgeData(vertices[vertices.Length - 2].X, vertices[vertices.Length - 1].X, roundedY[vertices.Length - 2], roundedY[vertices.Length - 1]); // Last edge
-                walker.CurrentEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
-                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
-                walker.Move(false);
-
-                for (int i = 1; i < vertices.Length - 2; i++)
-                {
-                    walker.NextEdge = new EdgeData(vertices[i + 1].X, vertices[i + 2].X, roundedY[i + 1], roundedY[i + 2]);
-                    walker.Move(true);
-                }
-
-                walker.NextEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
-                walker.Move(true); // Emit edge before last edge
-
-                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
-                walker.Move(true); // Emit last edge
-            }
-
-            static void RoundY(ReadOnlySpan<PointF> vertices, Span<float> destination, float subsamplingRatio)
-            {
-                for (int i = 0; i < vertices.Length; i++)
-                {
-                    // for future SIMD impl:
-                    // https://www.ocf.berkeley.edu/~horie/rounding.html
-                    // Avx.RoundToPositiveInfinity()
-                    destination[i] = MathF.Round(vertices[i].Y * subsamplingRatio, MidpointRounding.AwayFromZero) / subsamplingRatio;
-                }
-            }
-
-            return new ScanEdgeCollection(buffer, walker.EdgeCounter);
-        }
-
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static VertexCategory CreateVertexCategory(EdgeCategory previousCategory, EdgeCategory currentCategory)
-        {
-            var value = (VertexCategory)(((int)previousCategory << 2) | (int)currentCategory);
-            VerifyVertexCategory(value);
-            return value;
-        }
-
-        [Conditional("DEBUG")]
-        private static void VerifyVertexCategory(VertexCategory vertexCategory)
-        {
-            int value = (int) vertexCategory;
-            if (value < 0 || value >= 16)
-            {
-                throw new Exception("EdgeCategoryPair value shall be: 0 <= value < 16");
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void ThrowInvalidRing(string message)
-        {
-            throw new InvalidOperationException(message);
         }
     }
 }

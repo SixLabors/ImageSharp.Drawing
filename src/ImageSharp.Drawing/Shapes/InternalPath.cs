@@ -44,17 +44,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="segments">The segments.</param>
         /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath)
-            : this(Simplify(segments, isClosedPath, true), isClosedPath)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="InternalPath"/> class.
-        /// </summary>
-        /// <param name="segments">The segments.</param>
-        /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
-        internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath, bool removeCloseAndCollinear)
+        /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices</param>
+        internal InternalPath(IReadOnlyList<ILineSegment> segments, bool isClosedPath, bool removeCloseAndCollinear = true)
             : this(Simplify(segments, isClosedPath, removeCloseAndCollinear), isClosedPath)
         {
         }

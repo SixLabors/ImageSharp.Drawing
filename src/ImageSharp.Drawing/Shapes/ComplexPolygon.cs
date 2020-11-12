@@ -377,6 +377,7 @@ namespace SixLabors.ImageSharp.Drawing
             throw new InvalidOperationException("Should not be possible to reach this line");
         }
 
+        /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
         {
             this.EnsureInternalPathsInitalized();

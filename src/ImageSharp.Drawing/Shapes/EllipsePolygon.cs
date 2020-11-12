@@ -230,6 +230,7 @@ namespace SixLabors.ImageSharp.Drawing
             return new CubicBezierLineSegment(points);
         }
 
-        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] {this.innerPath};
+        /// <inheritdoc/>
+        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.innerPath };
     }
 }

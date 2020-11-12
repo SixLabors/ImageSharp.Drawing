@@ -18,7 +18,6 @@ namespace SixLabors.ImageSharp.Drawing
         public ShapeRegion(IPath shape)
         {
             IPath closedPath = shape.AsClosedPath();
-            this.MaxIntersections = closedPath.MaxIntersections;
             this.Shape = closedPath;
             int left = (int)MathF.Floor(shape.Bounds.Left);
             int top = (int)MathF.Floor(shape.Bounds.Top);
@@ -32,9 +31,6 @@ namespace SixLabors.ImageSharp.Drawing
         /// Gets the fillable shape
         /// </summary>
         internal override IPath Shape { get; }
-
-        /// <inheritdoc/>
-        public override int MaxIntersections { get; }
 
         /// <inheritdoc/>
         public override Rectangle Bounds { get; }

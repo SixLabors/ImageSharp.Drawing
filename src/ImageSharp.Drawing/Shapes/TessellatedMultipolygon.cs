@@ -11,13 +11,6 @@ using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes
 {
-    internal enum OrientationHandling
-    {
-        KeepOriginal,
-        ForcePositiveOrientationOnSimplePolygons,
-        FirstRingIsContourFollowedByHoles
-    }
-
     /// <summary>
     /// Compact representation of a multipolygon.
     /// Applies some rules which are optimal to implement geometric algorithms:
@@ -27,35 +20,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
     /// </summary>
     internal class TessellatedMultipolygon : IDisposable, IReadOnlyList<TessellatedMultipolygon.Ring>
     {
-        internal enum RingType
-        {
-            Contour,
-            Hole
-        }
-
-        internal class Ring : IDisposable
-        {
-            private IMemoryOwner<PointF> buffer;
-            private Memory<PointF> memory;
-
-            public ReadOnlySpan<PointF> Vertices => this.memory.Span;
-
-            public int VertexCount => this.memory.Length - 1; // Last vertex is repeated
-
-            internal Ring(IMemoryOwner<PointF> buffer)
-            {
-                this.buffer = buffer;
-                this.memory = buffer.Memory;
-            }
-
-            public void Dispose()
-            {
-                this.buffer?.Dispose();
-                this.buffer = null;
-                this.memory = default;
-            }
-        }
-
         private Ring[] rings;
 
         private TessellatedMultipolygon(Ring[] rings)
@@ -64,7 +28,17 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             this.TotalVertexCount = rings.Sum(r => r.VertexCount);
         }
 
+        private enum RingType
+        {
+            Contour,
+            Hole
+        }
+
         public int TotalVertexCount { get; }
+
+        public int Count => this.rings.Length;
+
+        public Ring this[int index] => this.rings[index];
 
         public static TessellatedMultipolygon Create(
             IPath path,
@@ -161,8 +135,27 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
 
         IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
-        public int Count => this.rings.Length;
+        internal class Ring : IDisposable
+        {
+            private IMemoryOwner<PointF> buffer;
+            private Memory<PointF> memory;
 
-        public Ring this[int index] => this.rings[index];
+            internal Ring(IMemoryOwner<PointF> buffer)
+            {
+                this.buffer = buffer;
+                this.memory = buffer.Memory;
+            }
+
+            public ReadOnlySpan<PointF> Vertices => this.memory.Span;
+
+            public int VertexCount => this.memory.Length - 1; // Last vertex is repeated
+
+            public void Dispose()
+            {
+                this.buffer?.Dispose();
+                this.buffer = null;
+                this.memory = default;
+            }
+        }
     }
 }
