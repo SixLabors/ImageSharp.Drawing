@@ -23,16 +23,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </remarks>
         public abstract Rectangle Bounds { get; }
 
-        public abstract IPath Shape { get; }
-
-        /// <summary>
-        /// Scans the X axis for intersections at the Y axis position.
-        /// </summary>
-        /// <param name="y">The position along the y axis to find intersections.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="configuration">A <see cref="Configuration"/> instance in the context of the caller.</param>
-        /// <param name="intersectionRule">How intersections are handled.</param>
-        /// <returns>The number of intersections found.</returns>
-        public abstract int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule);
+        // We should consider removing Region, so keeping this internal for now.
+        internal abstract IPath Shape { get; }
     }
 }
