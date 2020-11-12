@@ -7,8 +7,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
-using SixLabors.ImageSharp.Drawing.Shapes;
-using SixLabors.ImageSharp.Drawing.Shapes.Scan;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -410,49 +409,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                         while (scanner.MoveToNextSubpixelScanLine())
                         {
-                            ReadOnlySpan<float> points = scanner.ScanCurrentLine();
-
-                            if (points.Length == 0)
-                            {
-                                // nothing on this line skip
-                                continue;
-                            }
-
-                            for (int point = 0; point < points.Length - 1; point += 2)
-                            {
-                                // points will be paired up
-                                float scanStart = points[point];
-                                float scanEnd = points[point + 1];
-                                int startX = (int)MathF.Floor(scanStart + xOffset);
-                                int endX = (int)MathF.Floor(scanEnd + xOffset);
-
-                                if (startX >= 0 && startX < scanline.Length)
-                                {
-                                    for (float x = scanStart; x < startX + 1; x += subpixelFraction)
-                                    {
-                                        scanline[startX] += subpixelFractionPoint;
-                                        scanlineDirty = true;
-                                    }
-                                }
-
-                                if (endX >= 0 && endX < scanline.Length)
-                                {
-                                    for (float x = endX; x < scanEnd; x += subpixelFraction)
-                                    {
-                                        scanline[endX] += subpixelFractionPoint;
-                                        scanlineDirty = true;
-                                    }
-                                }
-
-                                int nextX = startX + 1;
-                                endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
-                                nextX = Math.Max(nextX, 0);
-                                for (int x = nextX; x < endX; x++)
-                                {
-                                    scanline[x] += subpixelFraction;
-                                    scanlineDirty = true;
-                                }
-                            }
+                            scanner.ScanCurrentSubpixelLineInto(0, xOffset, scanline, ref scanlineDirty);
                         }
 
                         if (scanlineDirty)
