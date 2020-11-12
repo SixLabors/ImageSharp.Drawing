@@ -17,11 +17,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     public class DrawingRobustnessTests
     {
         [Theory]
-        // [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30, false)]
-        [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30, true)]
-        // [WithSolidFilledImages(7200, 4800, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 60, 60, false)]
-        // [WithSolidFilledImages(7200, 4800, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 60, 60, true)]
-        public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy, bool usePolygonScanner)
+        [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
+        public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
         {
             string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
 
@@ -31,7 +28,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var options = new ShapeGraphicsOptions()
             {
                 GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa},
-                ShapeOptions = new ShapeOptions() { UsePolygonScanner = usePolygonScanner}
             };
             foreach (PointF[] loop in points)
             {
@@ -39,10 +35,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
 
             string details = $"_{System.IO.Path.GetFileName(geoJsonFile)}_{sx}x{sy}_aa{aa}";
-            if (usePolygonScanner)
-            {
-                details += "_Scanner";
-            }
 
             image.DebugSave(provider,
                 details,
@@ -52,10 +44,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
         [Theory]
         // [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30, false)]
-        [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30, true)]
-        [WithSolidFilledImages(7200, 4800, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 60, 60, false)]
-        [WithSolidFilledImages(7200, 4800, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 60, 60, true)]
-        public void LargeGeoJson_Fill(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy, bool usePolygonScanner)
+        [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
+        [WithSolidFilledImages(7200, 4800, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 60, 60)]
+        public void LargeGeoJson_Fill(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
         {
             string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
 
@@ -65,7 +56,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var options = new ShapeGraphicsOptions()
             {
                 GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa},
-                ShapeOptions = new ShapeOptions() { UsePolygonScanner = usePolygonScanner}
             };
             var rnd = new Random(42);
             foreach (PointF[] loop in points)
@@ -75,10 +65,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
 
             string details = $"_{System.IO.Path.GetFileName(geoJsonFile)}_{sx}x{sy}_aa{aa}";
-            if (usePolygonScanner)
-            {
-                details += "_Scanner";
-            }
 
             image.DebugSave(provider,
                 details,
@@ -87,12 +73,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 0, false)]
+        [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 0)]
         // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 0, true)]
         // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 5000, false)]
         // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 5000, true)]
         // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 9000, true)]
-        public void Mississippi_Lines(TestImageProvider<Rgba32> provider, int aa, int offset, bool usePolygonScanner)
+        public void Mississippi_Lines(TestImageProvider<Rgba32> provider, int aa, int offset)
         {
             string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
 
@@ -109,7 +95,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var options = new ShapeGraphicsOptions()
             {
                 GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa},
-                ShapeOptions = new ShapeOptions() { UsePolygonScanner = usePolygonScanner}
             };
             foreach (PointF[] loop in points)
             {
@@ -117,10 +102,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
 
             string details = $"_aa{aa}_t{offset}";
-            if (usePolygonScanner)
-            {
-                details += "_Scanner";
-            }
 
             image.DebugSave(provider,
                 details,

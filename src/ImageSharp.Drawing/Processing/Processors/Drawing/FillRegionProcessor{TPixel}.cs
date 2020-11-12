@@ -54,7 +54,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 return; // no effect inside image;
             }
 
-            int maxIntersections = region.MaxIntersections;
             int subpixelCount = FillRegionProcessor.DefaultSubpixelCount;
 
             // we need to offset the pixel grid to account for when we outline a path.
@@ -71,13 +70,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             MemoryAllocator allocator = this.Configuration.MemoryAllocator;
             bool scanlineDirty = true;
 
-            if (shapeOptions.UsePolygonScanner)
-            {
-                var scanner = PolygonScanner.Create(region, minY, maxY, subpixelCount, shapeOptions.IntersectionRule,
-                    configuration, shapeOptions.OrientationHandling);
+            var scanner = PolygonScanner.Create(
+                region,
+                minY,
+                maxY,
+                subpixelCount,
+                shapeOptions.IntersectionRule,
+                configuration,
+                shapeOptions.OrientationHandling);
 
-                float subpixelFraction = scanner.SubpixelFraction;
-                float subpixelFractionPoint = subpixelFraction / subpixelCount;
+            try
+            {
                 using IMemoryOwner<float> bScanline = allocator.Allocate<float>(scanlineWidth);
                 Span<float> scanline = bScanline.Memory.Span;
 
@@ -97,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                         {
                             bool hasOnes = false;
                             bool hasZeros = false;
-                            for (int x = 0; x < scanlineWidth; x++)
+                            for (int x = 0; x < scanline.Length; x++)
                             {
                                 if (scanline[x] >= 0.5)
                                 {
@@ -125,108 +128,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                         applicator.Apply(scanline, minX, y);
                     }
                 }
-
-                scanner.Dispose();
             }
-            else
+            finally
             {
-                using IMemoryOwner<float> bBuffer = allocator.Allocate<float>(maxIntersections);
-                using IMemoryOwner<float> bScanline = allocator.Allocate<float>(scanlineWidth);
-                float subpixelFraction = 1f / subpixelCount;
-                float subpixelFractionPoint = subpixelFraction / subpixelCount;
-
-                Span<float> buffer = bBuffer.Memory.Span;
-                Span<float> scanline = bScanline.Memory.Span;
-
-                for (int y = minY; y < maxY; y++)
-                {
-                    if (scanlineDirty)
-                    {
-                        scanline.Clear();
-                        scanlineDirty = false;
-                    }
-
-                    float yPlusOne = y + 1;
-                    for (float subPixel = y; subPixel < yPlusOne; subPixel += subpixelFraction)
-                    {
-                        int pointsFound = region.Scan(subPixel, buffer, configuration, shapeOptions.IntersectionRule);
-                        if (pointsFound == 0)
-                        {
-                            // nothing on this line, skip
-                            continue;
-                        }
-
-                        for (int point = 0; point < pointsFound && point < buffer.Length - 1; point += 2)
-                        {
-                            // points will be paired up
-                            float scanStart = buffer[point] - minX;
-                            float scanEnd = buffer[point + 1] - minX;
-                            int startX = (int)MathF.Floor(scanStart);
-                            int endX = (int)MathF.Floor(scanEnd);
-
-                            if (startX >= 0 && startX < scanline.Length)
-                            {
-                                for (float x = scanStart; x < startX + 1; x += subpixelFraction)
-                                {
-                                    scanline[startX] += subpixelFractionPoint;
-                                    scanlineDirty = true;
-                                }
-                            }
-
-                            if (endX >= 0 && endX < scanline.Length)
-                            {
-                                for (float x = endX; x < scanEnd; x += subpixelFraction)
-                                {
-                                    scanline[endX] += subpixelFractionPoint;
-                                    scanlineDirty = true;
-                                }
-                            }
-
-                            int nextX = startX + 1;
-                            endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
-                            nextX = Math.Max(nextX, 0);
-                            for (int x = nextX; x < endX; x++)
-                            {
-                                scanline[x] += subpixelFraction;
-                                scanlineDirty = true;
-                            }
-                        }
-                    }
-
-                    if (scanlineDirty)
-                    {
-                        if (!graphicsOptions.Antialias)
-                        {
-                            bool hasOnes = false;
-                            bool hasZeros = false;
-                            for (int x = 0; x < scanlineWidth; x++)
-                            {
-                                if (scanline[x] >= 0.5)
-                                {
-                                    scanline[x] = 1;
-                                    hasOnes = true;
-                                }
-                                else
-                                {
-                                    scanline[x] = 0;
-                                    hasZeros = true;
-                                }
-                            }
-
-                            if (isSolidBrushWithoutBlending && hasOnes != hasZeros)
-                            {
-                                if (hasOnes)
-                                {
-                                    source.GetPixelRowSpan(y).Slice(minX, scanlineWidth).Fill(solidBrushColor);
-                                }
-
-                                continue;
-                            }
-                        }
-
-                        applicator.Apply(scanline, minX, y);
-                    }
-                }
+                // ref structs can't implement interfaces so technically PolygonScanner is not IDisposable
+                scanner.Dispose();
             }
         }
 

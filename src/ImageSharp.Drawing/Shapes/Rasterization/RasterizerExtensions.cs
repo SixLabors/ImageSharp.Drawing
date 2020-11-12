@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             return scanlineDirty;
         }
 
-        public static void ScanCurrentSubpixelLineInto(this ref PolygonScanner scanner, int minX, float xOffset, Span<float> scanline, ref bool scanlineDirty)
+        private static void ScanCurrentSubpixelLineInto(this ref PolygonScanner scanner, int minX, float xOffset, Span<float> scanline, ref bool scanlineDirty)
         {
             ReadOnlySpan<float> points = scanner.ScanCurrentLine();
             if (points.Length == 0)
