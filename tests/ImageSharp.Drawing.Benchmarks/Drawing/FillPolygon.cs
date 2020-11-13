@@ -31,7 +31,8 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         private Image<Rgba32> image;
         private SDBitmap sdBitmap;
         private Graphics sdGraphics;
-        private SKSurface skSurface;
+        private SKBitmap skBitmap;
+        private SKCanvas skCanvas;
 
         protected abstract int Width { get; }
         protected abstract int Height { get; }
@@ -69,7 +70,8 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             this.sdGraphics = Graphics.FromImage(this.sdBitmap);
             this.sdGraphics.InterpolationMode = InterpolationMode.Default;
             this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
-            this.skSurface = SKSurface.Create(new SKImageInfo(Width, Height));
+            this.skBitmap = new SKBitmap(Width, Height);
+            this.skCanvas = new SKCanvas(skBitmap);
         }
 
         [GlobalCleanup]
@@ -78,7 +80,8 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             this.image.Dispose();
             this.sdGraphics.Dispose();
             this.sdBitmap.Dispose();
-            this.skSurface.Dispose();
+            this.skCanvas.Dispose();
+            this.skBitmap.Dispose();
             foreach (SKPath skPath in this.skPaths)
             {
                 skPath.Dispose();
@@ -120,7 +123,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                     Color = SKColors.White,
                     IsAntialias = true,
                 };
-                this.skSurface.Canvas.DrawPath(path, paint);
+                this.skCanvas.DrawPath(path, paint);
             }
         }
     }

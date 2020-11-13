@@ -39,9 +39,9 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         private Image<Rgba32> image;
         private SDBitmap sdBitmap;
         private Graphics sdGraphics;
-        private SKSurface skSurface;
-        
-        
+        private SKBitmap skBitmap;
+        private SKCanvas skCanvas;
+
         private SDFont sdFont;
         private Fonts.Font font;
         private SKTypeface skTypeface;
@@ -56,7 +56,8 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
             this.sdGraphics.InterpolationMode = InterpolationMode.Default;
             this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
-            this.skSurface = SKSurface.Create(new SKImageInfo(Width, Height));
+            this.skBitmap = new SKBitmap(Width, Height);
+            this.skCanvas = new SKCanvas(this.skBitmap);
             
             this.sdFont = new SDFont("Arial", 12, GraphicsUnit.Point);
             this.font = Fonts.SystemFonts.CreateFont("Arial", 12);
@@ -69,7 +70,8 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             this.image.Dispose();
             this.sdGraphics.Dispose();
             this.sdBitmap.Dispose();
-            this.skSurface.Dispose();
+            this.skCanvas.Dispose();
+            this.skBitmap.Dispose();
             this.sdFont.Dispose();
             this.skTypeface.Dispose();
         }
@@ -108,7 +110,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 Typeface = skTypeface
             };
             
-            this.skSurface.Canvas.DrawText(TextToRender, 10, 10, paint);
+            this.skCanvas.DrawText(TextToRender, 10, 10, paint);
         }
     }
 }

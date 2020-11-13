@@ -61,7 +61,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                 endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
                 nextX = Math.Max(nextX, 0);
 
-                scanline.Slice(nextX, endX - nextX).AddToAllElements(scanner.SubpixelDistance);
+                if (endX > nextX)
+                {
+                    scanline.Slice(nextX, endX - nextX).AddToAllElements(scanner.SubpixelDistance);
+                    scanlineDirty = true;
+                }
             }
         }
     }
