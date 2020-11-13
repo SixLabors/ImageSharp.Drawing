@@ -20,7 +20,7 @@ SCANLINE 1 >>>> | >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>      | (1)  >>>>>>>>>
                 |                                      |
                 | A                                  C |
                 |                                      |
-                |               (2)                    | (1)
+                |               (2)         X          | (1)
 SCANLINE 2 >>>> | >>>>>>>>>>>>>> + - - - - - - - - - - +      >>>>>>>>>
                 |                |
                 |                |               
@@ -32,22 +32,22 @@ SCANLINE 2 >>>> | >>>>>>>>>>>>>> + - - - - - - - - - - +      >>>>>>>>>
 ```
 
 
-#### Scanning SCANLINE 1
+#### Intersections at SCANLINE 1
 
-- Intersection with edge A is trivial, since it's being intersected on an internal point
+- Intersection with edge A is trivial, since it's being intersected on an internal point of the edge
 - The second intersection is more tricky: the intersection point is at the connection (vertex) between edges B and C, but we do not want to emit the intersection 2 times.
-  - To avoid this, when checking the collision with edge B we emit 0 intersections for edge B, when checking against edge C we emit 1 point
+  - To avoid this, when checking the scanline's collision against edge B we emit 0 intersections for edge B at it's endpoint (Y1), when checking against edge C we emit 1 point at its start point (Y0)
 
-#### Scanning SCANLINE 2
+#### Intersections at SCANLINE 2
 
 - Intersection with edge A is trivial, since it's being intersected on an internal point
-- However the rest is tricky: We want to to emulate the intersection with the collinear edge not being listed in `ScanEdgeCollection`.
-  - The easies we want to do so is to emit a point pair for the line part between A-D and a second point pair for D-C
+- However the rest is tricky: We want to to emulate the intersection with the collinear edge X not being listed in `ScanEdgeCollection`.
+  - The easiest way is to emit a point pair for the line part between A-D and a second point pair for D-C (to emulate the intersection with X)
   - To achieve this, we should emit the start point (Y0) intersection of the D edge 2 times!
 
 ### Edge emit rules
 
-The emit rules are here to provide a consistent way for intersecting stuff as described in the previous "Illustration" part.
+The emit rules are there to provide a consistent way for intersecting scanlines as described in the previous "Illustration" part, handling all corner cases.
 These rules only work well, when:
 - The outline polygons are Clockwise in screen-space (= "has positive orientation" according to the terminlogy used in the repository)
 - Holes have Counter-Clockwise ("negative") orientation.
