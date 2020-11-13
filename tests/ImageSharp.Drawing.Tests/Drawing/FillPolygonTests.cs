@@ -148,6 +148,28 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
+        [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
+        public void FillPolygon_StarCircle(TestImageProvider<Rgba32> provider)
+        {
+            EllipsePolygon circle = new EllipsePolygon(32, 32, 30);
+            Star star = new Star(32, 32, 7, 10, 27);
+            IPath shape = circle.Clip(star);
+            
+            provider.RunValidatingProcessorTest(
+                c =>
+                {
+                    c.SetShapeOptions(new ShapeOptions()
+                    {
+                        OrientationHandling = OrientationHandling.KeepOriginal
+                    });
+                    c.Fill(Color.White, shape);
+                },
+                comparer: ImageComparer.TolerantPercentage(0.01f),
+                appendSourceFileOrDescription: false,
+                appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
         [WithSolidFilledImages(30, 30, "Black", PixelTypes.Rgba32)]
         public void FillPolygon_Reverse<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
