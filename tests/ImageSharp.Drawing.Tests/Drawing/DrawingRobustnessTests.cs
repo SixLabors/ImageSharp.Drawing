@@ -124,7 +124,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa},
             };
             var rnd = new Random(42);
-            int i = 0;
             byte[] rgb = new byte[3];
             foreach (PointF[] loop in points)
             {

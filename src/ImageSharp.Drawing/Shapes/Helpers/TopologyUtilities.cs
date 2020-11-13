@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Helpers
 
             // Normally, this should be a tolerant comparison, we don't have a special path for zero-area
             // (or for self-intersecting, semi-zero-area) polygons in edge scanning.
-            return MathF.Sign(sum);
+            return Math.Sign(sum);
         }
     }
 }

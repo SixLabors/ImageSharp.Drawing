@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
             {
                 if (keys.Length > 1)
                 {
-                    IntroSort(keys, values, 2 * (BitOperations.Log2((uint)keys.Length) + 1));
+                    IntroSort(keys, values, 2 * (NumericExtensions.Log2((uint)keys.Length) + 1));
                 }
             }
 
@@ -89,7 +89,11 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
                     int p = PickPivotAndPartition(keys.Slice(0, partitionSize), values.Slice(0, partitionSize));
 
                     // Note we've already partitioned around the pivot and do not have to move the pivot again.
-                    IntroSort(keys[(p + 1) .. partitionSize], values[(p + 1) .. partitionSize], depthLimit);
+                    int s = p + 1;
+                    int l = partitionSize - s;
+
+                    // IntroSort(keys[(p + 1) .. partitionSize], values[(p + 1) .. partitionSize], depthLimit);
+                    IntroSort(keys.Slice(s, l), values.Slice(s, l), depthLimit);
                     partitionSize = p;
                 }
             }
