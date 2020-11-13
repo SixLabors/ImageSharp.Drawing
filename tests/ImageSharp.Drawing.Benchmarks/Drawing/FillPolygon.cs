@@ -147,6 +147,20 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                                   * Matrix3x2.CreateScale(60, 60);
             return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
         }
+        
+        // ** 11/13/2020 @ Anton's PC ***
+        // BenchmarkDotNet=v0.12.1, OS=Windows 10.0.18363.1198 (1909/November2018Update/19H2)
+        // Intel Core i7-7700HQ CPU 2.80GHz (Kaby Lake), 1 CPU, 8 logical and 4 physical cores
+        //     .NET Core SDK=5.0.100-preview.6.20318.15
+        // [Host]     : .NET Core 3.1.1 (CoreCLR 4.700.19.60701, CoreFX 4.700.19.60801), X64 RyuJIT
+        // DefaultJob : .NET Core 3.1.1 (CoreCLR 4.700.19.60701, CoreFX 4.700.19.60801), X64 RyuJIT
+        //
+        //
+        // |        Method |       Mean |    Error |    StdDev | Ratio | RatioSD |
+        // |-------------- |-----------:|---------:|----------:|------:|--------:|
+        // | SystemDrawing |   457.4 us |  9.07 us |  23.40 us |  2.15 |    0.10 |
+        // |    ImageSharp | 3,079.5 us | 61.45 us | 138.71 us | 14.30 |    0.89 |
+        // |     SkiaSharp |   217.7 us |  4.29 us |   6.55 us |  1.00 |    0.00 |
     }
 
     public class FillPolygonSmall : FillPolygon

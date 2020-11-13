@@ -26,7 +26,7 @@ SCANLINE 2 >>>> | >>>>>>>>>>>>>> + - - - - - - - - - - +      >>>>>>>>>
                 |                |               
                 |              D |
                 |                |
-                |                |
+                | (1)            | (1)
                 +  - - - - - - - +
 
 ```
@@ -36,14 +36,14 @@ SCANLINE 2 >>>> | >>>>>>>>>>>>>> + - - - - - - - - - - +      >>>>>>>>>
 
 - Intersection with edge A is trivial, since it's being intersected on an internal point of the edge
 - The second intersection is more tricky: the intersection point is at the connection (vertex) between edges B and C, but we do not want to emit the intersection 2 times.
-  - To avoid this, when checking the scanline's collision against edge B we emit 0 intersections for edge B at it's endpoint (Y1), when checking against edge C we emit 1 point at its start point (Y0)
+  - To avoid this, when checking the scanline's collision against edge B we emit 0 intersections at it's endpoint (Y1), when checking against edge C we emit 1 point at its start point (Y0)
 
 #### Intersections at SCANLINE 2
 
 - Intersection with edge A is trivial, since it's being intersected on an internal point
 - However the rest is tricky: We want to to emulate the intersection with the collinear edge X not being listed in `ScanEdgeCollection`.
   - The easiest way is to emit a point pair for the line part between A-D and a second point pair for D-C (to emulate the intersection with X)
-  - To achieve this, we should emit the start point (Y0) intersection of the D edge 2 times!
+  - To achieve this, we should emit the start point (Y0) of the D edge 2 times when intersecting it!
 
 ### Edge emit rules
 
