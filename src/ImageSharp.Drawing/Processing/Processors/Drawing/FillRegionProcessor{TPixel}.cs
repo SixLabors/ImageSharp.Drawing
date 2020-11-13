@@ -3,6 +3,7 @@
 
 using System;
 using System.Buffers;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -71,12 +72,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             bool scanlineDirty = true;
 
             var scanner = PolygonScanner.Create(
-                region,
+                region.Shape,
                 minY,
                 maxY,
                 subpixelCount,
                 shapeOptions.IntersectionRule,
-                configuration,
+                configuration.MemoryAllocator,
                 shapeOptions.OrientationHandling);
 
             try

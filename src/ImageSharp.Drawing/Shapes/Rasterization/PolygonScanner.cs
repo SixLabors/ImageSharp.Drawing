@@ -97,7 +97,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             int subsampling,
             IntersectionRule intersectionRule,
             MemoryAllocator allocator,
-            OrientationHandling orientationHandling = OrientationHandling.FirstRingIsContourFollowedByHoles)
+            OrientationHandling orientationHandling)
         {
             TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, orientationHandling);
             ScanEdgeCollection edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
@@ -105,16 +105,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             scanner.Init();
             return scanner;
         }
-
-        public static PolygonScanner Create(
-            Region region,
-            int minY,
-            int maxY,
-            int subsampling,
-            IntersectionRule intersectionRule,
-            Configuration configuration,
-            OrientationHandling orientationHandling = OrientationHandling.FirstRingIsContourFollowedByHoles)
-            => Create(region.Shape, minY, maxY, subsampling, intersectionRule, configuration.MemoryAllocator, orientationHandling);
 
         private void Init()
         {
