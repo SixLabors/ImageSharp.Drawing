@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
             {
                 if (keys.Length > 1)
                 {
-                    IntroSort(keys, values, 2 * (NumericExtensions.Log2((uint)keys.Length) + 1));
+                    IntroSort(keys, values, 2 * (NumericUtilities.Log2((uint)keys.Length) + 1));
                 }
             }
 

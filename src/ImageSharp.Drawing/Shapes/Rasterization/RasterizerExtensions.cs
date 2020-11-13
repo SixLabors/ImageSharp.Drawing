@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using SixLabors.ImageSharp.Drawing.Utilities;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 {
@@ -59,11 +60,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                 int nextX = startX + 1;
                 endX = Math.Min(endX, scanline.Length); // reduce to end to the right edge
                 nextX = Math.Max(nextX, 0);
-                for (int x = nextX; x < endX; x++)
-                {
-                    scanline[x] += scanner.SubpixelDistance;
-                    scanlineDirty = true;
-                }
+
+                scanline.Slice(nextX, endX - nextX).AddToAllElements(scanner.SubpixelDistance);
             }
         }
     }

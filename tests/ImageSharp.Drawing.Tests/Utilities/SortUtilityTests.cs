@@ -3,11 +3,10 @@
 
 using System;
 using System.Linq;
-
-using Xunit;
 using SixLabors.ImageSharp.Drawing.Utilities;
+using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
+namespace SixLabors.ImageSharp.Drawing.Tests.Utilities
 {
     public class SortUtilityTests
     {
