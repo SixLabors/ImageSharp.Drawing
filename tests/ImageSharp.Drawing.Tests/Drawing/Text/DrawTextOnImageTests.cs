@@ -206,9 +206,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             var color = Color.Black;
 
-            // Based on the reported 0.0270% difference with AccuracyMultiple = 8
-            // We should avoid quality regressions leading to higher difference!
-            var comparer = ImageComparer.TolerantPercentage(0.03f);
+            // Strict comparer, because the image is sparse:
+            var comparer = ImageComparer.TolerantPercentage(1e-6f);
 
             provider.VerifyOperation(
                 comparer,

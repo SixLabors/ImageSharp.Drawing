@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     [GroupOutput("Drawing")]
     public class DrawingRobustnessTests
     {
-        [Theory(Skip = "For local experiments")]
+        [Theory(Skip = "For local testing")]
         [WithSolidFilledImages(32, 32, "Black", PixelTypes.Rgba32)]
         public void CompareToSkiaResults_SmallCircle(TestImageProvider<Rgba32> provider)
         {
@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             CompareToSkiaResultsImpl(provider, circle);
         }
         
-        [Theory(Skip = "For local experiments")]
+        [Theory(Skip = "For local testing")]
         [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
         public void CompareToSkiaResults_StarCircle(TestImageProvider<Rgba32> provider)
         {
@@ -77,7 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             throw new Exception(result.DifferencePercentageString);
         }
 
-        [Theory]
+        [Theory(Skip = "For local testing")]
         [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
         public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
         {
@@ -104,42 +104,43 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        // [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30, false)]
-        [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
-        [WithSolidFilledImages(7200, 4800, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 60, 60)]
-        public void LargeGeoJson_Fill(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
+        [WithSolidFilledImages(7200, 3300, "Black", PixelTypes.Rgba32)]
+        public void LargeGeoJson_States_Fill(TestImageProvider<Rgba32> provider)
+        {
+            using Image<Rgba32> image = FillGeoJsonPolygons(provider, TestImages.GeoJson.States, 16, new Vector2(60), new Vector2(0, -1000));
+            image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+            image.CompareToReferenceOutput(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        }
+
+        private Image<Rgba32> FillGeoJsonPolygons(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, Vector2 scale, Vector2 pixelOffset)
         {
             string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
 
-            PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(sx, sy));
+            PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(pixelOffset));
 
-            using Image<Rgba32> image = provider.GetImage();
+            Image<Rgba32> image = provider.GetImage();
             var options = new ShapeGraphicsOptions()
             {
                 GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa},
             };
             var rnd = new Random(42);
+            int i = 0;
+            byte[] rgb = new byte[3];
             foreach (PointF[] loop in points)
             {
-                Color color = Color.WebSafePalette.Span[rnd.Next(Color.WebSafePalette.Length)];
+                rnd.NextBytes(rgb);
+                
+                Color color = Color.FromRgb(rgb[0], rgb[1], rgb[2]);
                 image.Mutate(c => c.FillPolygon(options, color, loop));
             }
 
-            string details = $"_{System.IO.Path.GetFileName(geoJsonFile)}_{sx}x{sy}_aa{aa}";
-
-            image.DebugSave(provider,
-                details,
-                appendPixelTypeToFileName: false,
-                appendSourceFileOrDescription: false);
+            return image;
         }
 
         [Theory]
-        [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 0)]
-        // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 0, true)]
-        // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 5000, false)]
-        // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 5000, true)]
-        // [WithSolidFilledImages(10000, 10000, "Black", PixelTypes.Rgba32, 16, 9000, true)]
-        public void Mississippi_Lines(TestImageProvider<Rgba32> provider, int aa, int offset)
+        [WithSolidFilledImages(400, 400, "Black", PixelTypes.Rgba32, 0)]
+        [WithSolidFilledImages(6000, 6000, "Black", PixelTypes.Rgba32, 5500)]
+        public void LargeGeoJson_Mississippi_Lines(TestImageProvider<Rgba32> provider, int pixelOffset)
         {
             string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
 
@@ -149,29 +150,24 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             var transform = Matrix3x2.CreateTranslation(-87, -54)
                             * Matrix3x2.CreateScale(60, 60)
-                            * Matrix3x2.CreateTranslation(offset, offset);
+                            * Matrix3x2.CreateTranslation(pixelOffset, pixelOffset);
             var points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
             using Image<Rgba32> image = provider.GetImage();
-            var options = new ShapeGraphicsOptions()
-            {
-                GraphicsOptions = new GraphicsOptions() {Antialias = aa > 0, AntialiasSubpixelDepth = aa},
-            };
+
             foreach (PointF[] loop in points)
             {
-                image.Mutate(c => c.DrawLines(options, Color.White, 1.0f, loop));
+                image.Mutate(c => c.DrawLines(Color.White, 1.0f, loop));
             }
 
-            string details = $"_aa{aa}_t{offset}";
-
-            image.DebugSave(provider,
-                details,
-                appendPixelTypeToFileName: false,
-                appendSourceFileOrDescription: false);
-
+            // Very strict tolerance, since the image is sparse:
+            ImageComparer comparer = ImageComparer.TolerantPercentage(1e-7f);
+            string details = $"PixelOffset({pixelOffset})";
+            image.DebugSave(provider, details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+            image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         }
 
-        [Theory]
+        [Theory(Skip = "For local experiments only")]
         [InlineData(0)]
         [InlineData(5000)]
         [InlineData(9000)]
