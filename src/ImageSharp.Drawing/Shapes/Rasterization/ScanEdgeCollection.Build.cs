@@ -177,7 +177,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                 // Since PolygonScanner does not process vertices, only edges, we need to define arbitrary rules
                 // about WHERE (on which edge) do we emit the vertex intersections.
                 // For visualization of the rules see:
-                //     VertexCategoriesAndEmitRules.jpg
+                //     PoygonScanning.MD
                 // For an example, see:
                 //     ImageSharp.Drawing.Tests/Shapes/Scan/SimplePolygon_AllEmitCases.png
                 switch (vertexCategory)
