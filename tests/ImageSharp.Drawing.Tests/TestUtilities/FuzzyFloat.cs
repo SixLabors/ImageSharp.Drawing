@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
     /// </summary>
     public struct FuzzyFloat : IEquatable<float>, IXunitSerializable
     {
-        public const float DefaultEpsilon = 1e-5f;
+        public static readonly float DefaultEpsilon = 1e-5f;
         
         private float value;
         private float min;

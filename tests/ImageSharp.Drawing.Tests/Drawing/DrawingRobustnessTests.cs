@@ -108,8 +108,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void LargeGeoJson_States_Fill(TestImageProvider<Rgba32> provider)
         {
             using Image<Rgba32> image = FillGeoJsonPolygons(provider, TestImages.GeoJson.States, 16, new Vector2(60), new Vector2(0, -1000));
+            ImageComparer comparer = ImageComparer.TolerantPercentage(0.001f);
+
             image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
-            image.CompareToReferenceOutput(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+            image.CompareToReferenceOutput(comparer, provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         }
 
         private Image<Rgba32> FillGeoJsonPolygons(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, Vector2 scale, Vector2 pixelOffset)
@@ -159,12 +161,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 image.Mutate(c => c.DrawLines(Color.White, 1.0f, loop));
             }
 
-            // Very strict tolerance, since the image is sparse:
-            ImageComparer comparer = ImageComparer.TolerantPercentage(1e-7f);
+            // Very strict tolerance, since the image is sparse (relaxed on .NET Framework)
+            ImageComparer comparer = TestEnvironment.IsFramework
+                ? ImageComparer.TolerantPercentage(1e-3f)
+                : ImageComparer.TolerantPercentage(1e-7f);
+
             string details = $"PixelOffset({pixelOffset})";
             image.DebugSave(provider, details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         }
+        
+        
 
         [Theory(Skip = "For local experiments only")]
         [InlineData(0)]

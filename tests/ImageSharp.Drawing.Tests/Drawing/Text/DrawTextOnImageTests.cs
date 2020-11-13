@@ -25,10 +25,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         private const string TestText = "Sphinx of black quartz, judge my vow\n0123456789";
 
-        public static ImageComparer TextDrawingComparer = ImageComparer.TolerantPercentage(1e-5f);
+        public static ImageComparer TextDrawingComparer = TestEnvironment.IsFramework
+            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework 
+            : ImageComparer.TolerantPercentage(1e-5f);
+
         public static ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);
-        // public static ImageComparer TextDrawingComparer = ImageComparer.TolerantPercentage(0.1f);
-        // public static ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(0.2f);
 
         public DrawTextOnImageTests(ITestOutputHelper output)
         {
@@ -155,7 +156,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             Font font = CreateFont(fontName, fontSize);
             var color = Color.Black;
-            
+
             provider.RunValidatingProcessorTest(
                 c =>
                 {

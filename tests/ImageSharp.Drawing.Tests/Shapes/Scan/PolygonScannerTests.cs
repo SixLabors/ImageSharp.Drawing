@@ -451,7 +451,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     {
                         Empty(4f),
 
-                        (4.25f, new FuzzyFloat[] {13, 13}),
+                        // Eps = 0.01 to address inaccuracies on .NET Framework 
+                        (4.25f, new FuzzyFloat[] { F(13, 0.01f), F(13, 0.01f)}),
                         (4.5f, new FuzzyFloat[] {F(12.714286f, 0.5f), F(13.444444f, 0.5f), 16, 16}),
                         (4.75f, new FuzzyFloat[] {F(12.357143f, 0.5f), 14, 14, 16}),
                         (5f, new FuzzyFloat[] {12, 16}),
@@ -529,7 +530,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.x).ToArray());
         }
 
-        
         private static (float y, FuzzyFloat[] x)[] TranslateIntersections(
             (float y, FuzzyFloat[] x)[] ex, float dx, float dy)
         {
