@@ -6,9 +6,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
@@ -19,6 +21,62 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     [GroupOutput("Drawing")]
     public class DrawingRobustnessTests
     {
+        [Theory(Skip = "For local experiments")]
+        [WithSolidFilledImages(32, 32, "Black", PixelTypes.Rgba32)]
+        public void CompareToSkiaResults_SmallCircle(TestImageProvider<Rgba32> provider)
+        {
+            EllipsePolygon circle = new EllipsePolygon(16, 16, 10);
+
+            CompareToSkiaResultsImpl(provider, circle);
+        }
+        
+        [Theory(Skip = "For local experiments")]
+        [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
+        public void CompareToSkiaResults_StarCircle(TestImageProvider<Rgba32> provider)
+        {
+            EllipsePolygon circle = new EllipsePolygon(32, 32, 30);
+            Star star = new Star(32, 32, 7, 10, 27);
+            IPath shape = circle.Clip(star);
+
+            CompareToSkiaResultsImpl(provider, shape);
+        }
+
+        private static void CompareToSkiaResultsImpl(TestImageProvider<Rgba32> provider, IPath shape)
+        {
+            using Image<Rgba32> image = provider.GetImage();
+            image.Mutate(c => c.Fill(Color.White, shape));
+            image.DebugSave(provider, "ImageSharp", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+
+            using SKBitmap bitmap = new SKBitmap(new SKImageInfo(image.Width, image.Height));
+            
+            using SKPath skPath = new SKPath();
+
+            foreach (var loop in shape.Flatten())
+            {
+                ReadOnlySpan<SKPoint> points = MemoryMarshal.Cast<PointF, SKPoint>(loop.Points.Span);
+                skPath.AddPoly(points.ToArray());
+            }
+
+            using SKPaint paint = new SKPaint
+            {
+                Style = SKPaintStyle.Fill,
+                Color = SKColors.White,
+                IsAntialias = true,
+            };
+
+            using SKCanvas canvas = new SKCanvas(bitmap);
+            canvas.Clear(new SKColor(0, 0, 0));
+            canvas.DrawPath(skPath, paint);
+
+            using Image<Rgba32> skResultImage =
+                Image.LoadPixelData<Rgba32>(bitmap.GetPixelSpan(), image.Width, image.Height);
+            skResultImage.DebugSave(provider, "SkiaSharp", appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
+
+            var result = ImageComparer.Exact.CompareImagesOrFrames(image, skResultImage);
+            throw new Exception(result.DifferencePercentageString);
+        }
+
         [Theory]
         [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
         public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)

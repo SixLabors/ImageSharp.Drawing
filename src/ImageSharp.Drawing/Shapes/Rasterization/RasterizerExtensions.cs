@@ -37,16 +37,23 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 
                 if (startX >= 0 && startX < scanline.Length)
                 {
-                    float times = MathF.Ceiling((startX + 1 - scanStart) / scanner.SubpixelFraction);
-                    scanline[startX] += times * scanner.SubpixelFractionPoint;
-                    scanlineDirty = times > 0;
+                    // Originally, this was implemented by a loop.
+                    // It's possible to emulate the old behavior with MathF.Ceiling,
+                    // but omitting the rounding seems to produce more accurate results.
+                    // float subpixelWidth = MathF.Ceiling((startX + 1 - scanStart) / scanner.SubpixelDistance);
+                    float subpixelWidth = (startX + 1 - scanStart) / scanner.SubpixelDistance;
+
+                    scanline[startX] += subpixelWidth * scanner.SubpixelArea;
+                    scanlineDirty = subpixelWidth > 0;
                 }
 
                 if (endX >= 0 && endX < scanline.Length)
                 {
-                    float times = MathF.Ceiling((scanEnd - endX) / scanner.SubpixelFraction);
-                    scanline[endX] += times * scanner.SubpixelFractionPoint;
-                    scanlineDirty = times > 0;
+                    // float subpixelWidth = MathF.Ceiling((scanEnd - endX) / scanner.SubpixelDistance);
+                    float subpixelWidth = (scanEnd - endX) / scanner.SubpixelDistance;
+
+                    scanline[endX] += subpixelWidth * scanner.SubpixelArea;
+                    scanlineDirty = subpixelWidth > 0;
                 }
 
                 int nextX = startX + 1;
@@ -54,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                 nextX = Math.Max(nextX, 0);
                 for (int x = nextX; x < endX; x++)
                 {
-                    scanline[x] += scanner.SubpixelFraction;
+                    scanline[x] += scanner.SubpixelDistance;
                     scanlineDirty = true;
                 }
             }

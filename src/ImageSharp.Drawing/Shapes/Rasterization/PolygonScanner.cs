@@ -13,14 +13,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
     {
         private readonly int minY;
         private readonly int maxY;
-        private readonly int subsampling;
-        private readonly int counterMax;
         private readonly IntersectionRule intersectionRule;
-        private readonly MemoryAllocator allocator;
         private ScanEdgeCollection edgeCollection;
         private Span<ScanEdge> edges;
 
-        // Common contiguous buffer for sorted0, sorted1, intersections, activeEdges [,edgeUpAtIntersections]
+        // Common contiguous buffer for sorted0, sorted1, intersections, activeEdges [,intersectionTypes]
         private IMemoryOwner<int> dataBuffer;
 
         // | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> | <- maxIntersectionCount -> | <- maxIntersectionCount -> |
@@ -37,8 +34,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
         private int idx1;
         private float yPlusOne;
 
-        public readonly float SubpixelFraction;
-        public readonly float SubpixelFractionPoint;
+        public readonly float SubpixelDistance;
+        public readonly float SubpixelArea;
         public int PixelLineY;
         public float SubPixelY;
 
@@ -53,18 +50,15 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
         {
             this.minY = minY;
             this.maxY = maxY;
-            this.subsampling = subsampling;
-            this.SubpixelFraction = 1f / subsampling;
-            this.SubpixelFractionPoint = this.SubpixelFraction / subsampling;
+            this.SubpixelDistance = 1f / subsampling;
+            this.SubpixelArea = this.SubpixelDistance / subsampling;
             this.intersectionRule = intersectionRule;
-            this.allocator = allocator;
             this.edgeCollection = edgeCollection;
             this.edges = edgeCollection.Edges;
-            this.counterMax = ((maxY - minY) * subsampling) + 1;
             int edgeCount = this.edges.Length;
             int dataBufferSize = (edgeCount * 3) + maxIntersectionCount;
 
-            // In case of IntersectionRule.Nonzero, we need to allocate space for edgeUpAtIntersections:
+            // In case of IntersectionRule.Nonzero, we need more space for intersectionTypes:
             if (intersectionRule == IntersectionRule.Nonzero)
             {
                 dataBufferSize += maxIntersectionCount;
@@ -183,13 +177,13 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
         {
             this.PixelLineY++;
             this.yPlusOne = this.PixelLineY + 1;
-            this.SubPixelY = this.PixelLineY - this.SubpixelFraction;
+            this.SubPixelY = this.PixelLineY - this.SubpixelDistance;
             return this.PixelLineY < this.maxY;
         }
 
         public bool MoveToNextSubpixelScanLine()
         {
-            this.SubPixelY += this.SubpixelFraction;
+            this.SubPixelY += this.SubpixelDistance;
             this.EnterEdges();
             this.LeaveEdges();
             return this.SubPixelY < this.yPlusOne;
