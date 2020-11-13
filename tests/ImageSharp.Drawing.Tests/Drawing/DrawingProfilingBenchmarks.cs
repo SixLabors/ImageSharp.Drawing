@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
         }
 
-        [Theory]
+        [Theory(Skip = "For local profiling only")]
         [InlineData(IntersectionRule.OddEven)]
         [InlineData(IntersectionRule.Nonzero)]
         public void FillPolygon(IntersectionRule intersectionRule)
@@ -64,8 +64,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
         }
 
-        [Theory]
-        // [InlineData(1)]
+        [Theory(Skip = "For local profiling only")]
+        [InlineData(1)]
         [InlineData(10)]
         public void DrawText(int textIterations)
         {
