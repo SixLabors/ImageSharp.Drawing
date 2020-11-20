@@ -51,8 +51,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 
             RingWalker walker = new RingWalker(buffer.Memory.Span);
 
-            float subsamplingRatio = subsampling;
-
             using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multipolygon.Max(r => r.Vertices.Length));
             Span<float> roundedY = roundedYBuffer.Memory.Span;
 
@@ -63,24 +61,24 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                     continue;
                 }
 
-                var vertices = ring.Vertices;
-                RoundY(vertices, roundedY, subsamplingRatio);
+                ReadOnlySpan<PointF> vertices = ring.Vertices;
+                RoundY(vertices, roundedY, subsampling);
 
-                walker.PreviousEdge = new EdgeData(vertices[vertices.Length - 2].X, vertices[vertices.Length - 1].X, roundedY[vertices.Length - 2], roundedY[vertices.Length - 1]); // Last edge
-                walker.CurrentEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
-                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
+                walker.PreviousEdge = new EdgeData(vertices, roundedY, vertices.Length - 2); // Last edge
+                walker.CurrentEdge = new EdgeData(vertices, roundedY, 0); // First edge
+                walker.NextEdge = new EdgeData(vertices, roundedY, 1); // Second edge
                 walker.Move(false);
 
                 for (int i = 1; i < vertices.Length - 2; i++)
                 {
-                    walker.NextEdge = new EdgeData(vertices[i + 1].X, vertices[i + 2].X, roundedY[i + 1], roundedY[i + 2]);
+                    walker.NextEdge = new EdgeData(vertices, roundedY, i + 1);
                     walker.Move(true);
                 }
 
-                walker.NextEdge = new EdgeData(vertices[0].X, vertices[1].X, roundedY[0], roundedY[1]); // First edge
+                walker.NextEdge = new EdgeData(vertices, roundedY, 0); // First edge
                 walker.Move(true); // Emit edge before last edge
 
-                walker.NextEdge = new EdgeData(vertices[1].X, vertices[2].X, roundedY[1], roundedY[2]); // Second edge
+                walker.NextEdge = new EdgeData(vertices, roundedY, 1); // Second edge
                 walker.Move(true); // Emit last edge
             }
 
@@ -130,6 +128,16 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             private PointF end;
             private int emitStart;
             private int emitEnd;
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public EdgeData(ReadOnlySpan<PointF> vertices, ReadOnlySpan<float> roundedY, int idx)
+                : this(
+                    vertices[idx].X,
+                    vertices[idx + 1].X,
+                    roundedY[idx],
+                    roundedY[idx + 1])
+            {
+            }
 
             public EdgeData(float startX, float endX, float startYRounded, float endYRounded)
             {
