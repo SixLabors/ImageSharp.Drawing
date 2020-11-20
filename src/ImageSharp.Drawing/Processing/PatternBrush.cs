@@ -4,7 +4,7 @@
 using System;
 using System.Buffers;
 using System.Numerics;
-using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -155,7 +155,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                     for (int i = 0; i < scanline.Length; i++)
                     {
-                        amountSpan[i] = NumberUtilities.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
+                        amountSpan[i] = NumericUtilities.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
 
                         int patternX = (x + i) % this.pattern.Columns;
                         overlaySpan[i] = this.pattern[patternY, patternX];

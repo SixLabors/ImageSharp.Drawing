@@ -13,10 +13,27 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="System.Drawing.Common" />
+    <PackageReference Include="GeoJSON.Net" />
+    <PackageReference Include="SkiaSharp" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestFile.cs">
+      <Link>TestFile.cs</Link>
+    </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestImages.cs">
+      <Link>TestImages.cs</Link>
+    </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestUtilities\PolygonFactory.cs">
+      <Link>PolygonFactory.cs</Link>
+    </Compile>
+    <Compile Include="..\ImageSharp.Drawing.Tests\TestUtilities\TestEnvironment.cs">
+      <Link>TestEnvironment.cs</Link>
+    </Compile>
   </ItemGroup>
 
 </Project>

@@ -66,7 +66,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public IReadOnlyList<PointF> Flatten() => this.points;
+        public ReadOnlyMemory<PointF> Flatten() => this.points;
 
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.

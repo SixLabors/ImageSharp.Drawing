@@ -114,7 +114,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void AsSimpleLinearPath()
         {
             var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(5, 5)));
-            IReadOnlyList<PointF> paths = poly.Flatten().First().Points;
+            IReadOnlyList<PointF> paths = poly.Flatten().First().Points.ToArray();
             Assert.Equal(3, paths.Count);
             Assert.Equal(new PointF(0, 0), paths[0]);
             Assert.Equal(new PointF(0, 10), paths[1]);

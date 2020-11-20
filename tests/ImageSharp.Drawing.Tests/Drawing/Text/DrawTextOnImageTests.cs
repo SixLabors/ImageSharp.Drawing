@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
@@ -24,7 +25,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         private const string TestText = "Sphinx of black quartz, judge my vow\n0123456789";
 
-        public static ImageComparer TextDrawingComparer = ImageComparer.TolerantPercentage(1e-5f);
+        public static ImageComparer TextDrawingComparer = TestEnvironment.IsFramework
+            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework
+            : ImageComparer.TolerantPercentage(1e-5f);
+
         public static ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);
 
         public DrawTextOnImageTests(ITestOutputHelper output)
@@ -136,6 +140,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
+        [WithSolidFilledImages(20, 50, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", "i")]
         [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "SixLaborsSampleAB.woff", AB)]
         [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", TestText)]
         [WithSolidFilledImages(400, 45, "White", PixelTypes.Rgba32, 20, 0, 0, "OpenSans-Regular.ttf", TestText)]
@@ -150,15 +155,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont(fontName, fontSize);
-            var color = Color.Black;
 
-            provider.VerifyOperation(
-                TextDrawingComparer,
-                img =>
-                {
-                    img.Mutate(c => c.DrawText(text, new Font(font, fontSize), color, new PointF(x, y)));
-                },
+            provider.RunValidatingProcessorTest(
+                c => c.DrawText(text, font, Color.Black, new PointF(x, y)),
                 $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
+                TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
         }
@@ -198,9 +199,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             var color = Color.Black;
 
-            // Based on the reported 0.0270% difference with AccuracyMultiple = 8
-            // We should avoid quality regressions leading to higher difference!
-            var comparer = ImageComparer.TolerantPercentage(0.03f);
+            // Strict comparer, because the image is sparse:
+            var comparer = ImageComparer.TolerantPercentage(1e-6f);
 
             provider.VerifyOperation(
                 comparer,

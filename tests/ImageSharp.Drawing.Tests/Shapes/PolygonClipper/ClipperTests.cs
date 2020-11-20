@@ -67,9 +67,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
         {
             IEnumerable<IPath> shapes = this.Clip(this.bigTriangle, this.littleTriangle);
             Assert.Single(shapes);
-            IReadOnlyList<PointF> path = shapes.Single().Flatten().First().Points;
+            IReadOnlyList<PointF> path = shapes.Single().Flatten().First().Points.ToArray();
             Assert.Equal(7, path.Count);
-            foreach (Vector2 p in this.bigTriangle.Flatten().First().Points)
+            foreach (Vector2 p in this.bigTriangle.Flatten().First().Points.ToArray())
             {
                 Assert.Contains(p, path);
             }
@@ -122,7 +122,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
         {
             IEnumerable<ISimplePath> paths = new RectangularPolygon(10, 10, 40, 40).Clip(new RectangularPolygon(20, 0, 20, 20)).Flatten();
             Assert.Single(paths);
-            IReadOnlyList<PointF> points = paths.First().Points;
+            IReadOnlyList<PointF> points = paths.First().Points.ToArray();
 
             Assert.Equal(8, points.Count);
         }

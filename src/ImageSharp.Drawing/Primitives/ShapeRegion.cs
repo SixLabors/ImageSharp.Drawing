@@ -18,7 +18,6 @@ namespace SixLabors.ImageSharp.Drawing
         public ShapeRegion(IPath shape)
         {
             IPath closedPath = shape.AsClosedPath();
-            this.MaxIntersections = closedPath.MaxIntersections;
             this.Shape = closedPath;
             int left = (int)MathF.Floor(shape.Bounds.Left);
             int top = (int)MathF.Floor(shape.Bounds.Top);
@@ -31,32 +30,9 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the fillable shape
         /// </summary>
-        public IPath Shape { get; }
-
-        /// <inheritdoc/>
-        public override int MaxIntersections { get; }
+        internal override IPath Shape { get; }
 
         /// <inheritdoc/>
         public override Rectangle Bounds { get; }
-
-        /// <inheritdoc/>
-        public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
-        {
-            var start = new PointF(this.Bounds.Left - 1, y);
-            var end = new PointF(this.Bounds.Right + 1, y);
-
-            using (IMemoryOwner<PointF> tempBuffer = configuration.MemoryAllocator.Allocate<PointF>(buffer.Length))
-            {
-                Span<PointF> innerBuffer = tempBuffer.Memory.Span;
-                int count = this.Shape.FindIntersections(start, end, innerBuffer, intersectionRule);
-
-                for (int i = 0; i < count; i++)
-                {
-                    buffer[i] = innerBuffer[i].X;
-                }
-
-                return count;
-            }
-        }
     }
 }

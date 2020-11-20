@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -23,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// Converts the <see cref="ILineSegment" /> into a simple linear path..
         /// </summary>
         /// <returns>Returns the current <see cref="ILineSegment" /> as simple linear path.</returns>
-        IReadOnlyList<PointF> Flatten();
+        ReadOnlyMemory<PointF> Flatten();
 
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.

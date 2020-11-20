@@ -20,6 +20,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         string SourceFileOrDescription { get; }
 
         Configuration Configuration { get; set; }
+
+        Image GetImage();
     }
 
     /// <summary>
@@ -96,6 +98,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </summary>
         public abstract Image<TPixel> GetImage();
 
+        Image ITestImageProvider.GetImage() => this.GetImage();
+
         public virtual Image<TPixel> GetImage(IImageDecoder decoder)
         {
             throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");
@@ -167,6 +171,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public override string ToString()
         {
             return $"{this.SourceFileOrDescription}[{this.PixelType}]";
+        }
+    }
+
+    public static class TestImageProviderExtensions
+    {
+        public static Image GetImage(this ITestImageProvider provider, Action<IImageProcessingContext> operationsToApply)
+        {
+            Image img = provider.GetImage();
+            img.Mutate(operationsToApply);
+            return img;
         }
     }
 }

@@ -139,7 +139,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             {
                 this.path = path;
 
-                Vector2[] points = path.LineSegments.SelectMany(s => s.Flatten()).Select(p => (Vector2)p).ToArray();
+                Vector2[] points = path.LineSegments.SelectMany(s => s.Flatten().ToArray()).Select(p => (Vector2)p).ToArray();
 
                 this.Start = points[0];
                 this.StartColor = (Vector4)startColor;

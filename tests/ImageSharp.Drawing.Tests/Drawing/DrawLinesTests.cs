@@ -5,7 +5,6 @@ using System;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
-
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing

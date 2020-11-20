@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             var poly = new RegularPolygon(Vector2.Zero, pointsCount, Radius, 0);
 
-            IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points;
+            IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
             // calcualte baselineDistance
             float baseline = Vector2.Distance(points[0], points[1]);
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             double anAngle = new Random().NextDouble() * TwoPI;
 
             var poly = new RegularPolygon(Vector2.Zero, 3, Radius, (float)anAngle);
-            IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points;
+            IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
             IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI

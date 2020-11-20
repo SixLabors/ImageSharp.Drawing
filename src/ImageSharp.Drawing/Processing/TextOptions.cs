@@ -3,6 +3,7 @@
 
 using System.Collections.Generic;
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing

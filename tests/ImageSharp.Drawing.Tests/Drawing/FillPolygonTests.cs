@@ -2,8 +2,16 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.IO;
+using System.Linq;
 using System.Numerics;
+using GeoJSON.Net.Converters;
+using GeoJSON.Net.Feature;
+using GeoJSON.Net.Geometry;
+using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -14,6 +22,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     [GroupOutput("Drawing")]
     public class FillPolygonTests
     {
+        [Theory]
+        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 0)]
+        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 8)]
+        [WithSolidFilledImages(8, 12, nameof(Color.Black), PixelTypes.Rgba32, 16)]
+        public void FillPolygon_Solid_Basic<TPixel>(TestImageProvider<TPixel> provider, int antialias)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] polygon1 = PolygonFactory.CreatePointArray((2, 2), (6, 2), (6, 4), (2, 4));
+            PointF[] polygon2 = PolygonFactory.CreatePointArray((2, 8), (4, 6), (6, 8), (4, 10));
+
+            var options = new GraphicsOptions { Antialias = antialias > 0, AntialiasSubpixelDepth = antialias };
+            provider.RunValidatingProcessorTest(
+                c => c.SetGraphicsOptions(options)
+                    .FillPolygon(Color.White, polygon1)
+                    .FillPolygon(Color.White, polygon2),
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false,
+                testOutputDetails: $"aa{antialias}");
+        }
+
         [Theory]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1f, true)]
         [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 0.6f, true)]
@@ -39,9 +67,52 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendSourceFileOrDescription: false);
         }
 
+        public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data =
+            new TheoryData<bool, IntersectionRule>()
+            {
+                {false, IntersectionRule.OddEven},
+                {false, IntersectionRule.Nonzero},
+                {true, IntersectionRule.OddEven},
+                {true, IntersectionRule.Nonzero},
+            };
+
         [Theory]
-        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32)]
-        public void FillPolygon_Concave<TPixel>(TestImageProvider<TPixel> provider)
+        [WithBasicTestPatternImages(nameof(FillPolygon_Complex_Data), 100, 100, PixelTypes.Rgba32)]
+        public void FillPolygon_Complex<TPixel>(TestImageProvider<TPixel> provider, bool reverse, IntersectionRule intersectionRule)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] contour = PolygonFactory.CreatePointArray((20, 20), (80, 20), (80, 80), (20, 80));
+            PointF[] hole = PolygonFactory.CreatePointArray((40, 40), (40, 60), (60, 60), (60, 40));
+
+            if (reverse)
+            {
+                Array.Reverse(contour);
+                Array.Reverse(hole);
+            }
+
+            ComplexPolygon polygon = new ComplexPolygon(
+                new Path(new LinearLineSegment(contour)),
+                new Path(new LinearLineSegment(hole)));
+
+            provider.RunValidatingProcessorTest(
+                c =>
+                {
+                    c.SetShapeOptions(new ShapeOptions()
+                    {
+                        IntersectionRule = intersectionRule
+                    });
+                    c.Fill(Color.White, polygon);
+                },
+                testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
+                comparer: ImageComparer.TolerantPercentage(0.01f),
+                appendSourceFileOrDescription: false,
+                appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32, false)]
+        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32, true)]
+        public void FillPolygon_Concave<TPixel>(TestImageProvider<TPixel> provider, bool reverse)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             var points = new PointF[]
@@ -53,11 +124,32 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                                  new Vector2(120, 120),
                                  new Vector2(8, 120)
                              };
+            if (reverse)
+            {
+                Array.Reverse(points);
+            }
 
             var color = Color.LightGreen;
 
             provider.RunValidatingProcessorTest(
                 c => c.FillPolygon(color, points),
+                testOutputDetails: $"Reverse({reverse})",
+                comparer: ImageComparer.TolerantPercentage(0.01f),
+                appendSourceFileOrDescription: false,
+                appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
+        public void FillPolygon_StarCircle(TestImageProvider<Rgba32> provider)
+        {
+            EllipsePolygon circle = new EllipsePolygon(32, 32, 30);
+            Star star = new Star(32, 32, 7, 10, 27);
+            IPath shape = circle.Clip(star);
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White, shape),
+                comparer: ImageComparer.TolerantPercentage(0.01f),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
         }
@@ -136,16 +228,38 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendPixelTypeToFileName: false);
         }
 
+        public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
+            new TheoryData<bool, IntersectionRule>()
+            {
+                { false, IntersectionRule.OddEven},
+                { false, IntersectionRule.Nonzero},
+                { true, IntersectionRule.OddEven},
+                { true, IntersectionRule.Nonzero},
+            };
+
         [Theory]
-        [WithBasicTestPatternImages(200, 200, PixelTypes.Rgba32)]
-        public void Fill_EllipsePolygon<TPixel>(TestImageProvider<TPixel> provider)
+        [WithBasicTestPatternImages(nameof(Fill_EllipsePolygon_Data), 200, 200, PixelTypes.Rgba32)]
+        public void Fill_EllipsePolygon<TPixel>(TestImageProvider<TPixel> provider, bool reverse, IntersectionRule intersectionRule)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            var polygon = new EllipsePolygon(100, 100, 80, 120);
+            IPath polygon = new EllipsePolygon(100, 100, 80, 120);
+            if (reverse)
+            {
+                polygon = polygon.Reverse();
+            }
+
             var color = Color.Azure;
 
             provider.RunValidatingProcessorTest(
-                c => c.Fill(color, polygon),
+                c =>
+                {
+                    c.SetShapeOptions(new ShapeOptions()
+                    {
+                        IntersectionRule = intersectionRule
+                    });
+                    c.Fill(color, polygon);
+                },
+                testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
         }

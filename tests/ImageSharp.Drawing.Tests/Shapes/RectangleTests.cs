@@ -177,7 +177,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void LienearSegements()
         {
             IPath shape = new RectangularPolygon(10, 11, 12, 13);
-            IReadOnlyList<PointF> segemnts = shape.Flatten().ToArray()[0].Points;
+            IReadOnlyList<PointF> segemnts = shape.Flatten().ToArray()[0].Points.ToArray();
             Assert.Equal(new PointF(10, 11), segemnts[0]);
             Assert.Equal(new PointF(22, 11), segemnts[1]);
             Assert.Equal(new PointF(22, 24), segemnts[2]);

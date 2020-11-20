@@ -16,33 +16,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
     public class FillRegionProcessorTests
     {
-
-        [Theory]
-        [InlineData(true, 1, 4)]
-        [InlineData(true, 2, 4)]
-        [InlineData(true, 5, 5)]
-        [InlineData(true, 8, 8)]
-        [InlineData(false, 8, 4)]
-        [InlineData(false, 16, 4)] // we always do 4 sub=pixels when antialiasing is off.
-        public void MinimumAntialiasSubpixelDepth(bool antialias, int antialiasSubpixelDepth, int expectedAntialiasSubpixelDepth)
-        {
-            var bounds = new Rectangle(0, 0, 1, 1);
-
-            var brush = new Mock<IBrush>();
-            var region = new MockRegion2(bounds);
-
-            var options = new GraphicsOptions
-            {
-                Antialias = antialias,
-                AntialiasSubpixelDepth = 1
-            };
-            var processor = new FillRegionProcessor(new ShapeGraphicsOptions() { GraphicsOptions = options }, brush.Object, region);
-            var img = new Image<Rgba32>(1, 1);
-            processor.Execute(img.GetConfiguration(), img, bounds);
-
-            Assert.Equal(4, region.ScanInvocationCounter);
-        }
-
         [Fact]
         public void FillOffCanvas()
         {
@@ -115,19 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         private class MockRegion1 : Region
         {
             public override Rectangle Bounds => new Rectangle(-100, -10, 10, 10);
-
-            public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
-            {
-                if (y < 5)
-                {
-                    buffer[0] = -10f;
-                    buffer[1] = 100f;
-                    return 2;
-                }
-                return 0;
-            }
-
-            public override int MaxIntersections => 10;
+            internal override IPath Shape => throw new NotImplementedException();
         }
 
         private class MockRegion2 : Region
@@ -137,17 +98,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 this.Bounds = bounds;
             }
 
-            public override int MaxIntersections => 100;
-
             public override Rectangle Bounds { get; }
-
-            public int ScanInvocationCounter { get; private set; }
-
-            public override int Scan(float y, Span<float> buffer, Configuration configuration, IntersectionRule intersectionRule)
-            {
-                this.ScanInvocationCounter++;
-                return 0;
-            }
+            internal override IPath Shape => throw new NotImplementedException();
         }
     }
 }

@@ -102,7 +102,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             var poly = new Star(Vector2.Zero, 3, Radius, Radius2, (float)anAngle);
             ISimplePath[] points = poly.Flatten().ToArray();
 
-            IEnumerable<double> allAngles = points[0].Points.Select(b => Math.Atan2(b.Y, b.X))
+            IEnumerable<double> allAngles = points[0].Points.ToArray().Select(b => Math.Atan2(b.Y, b.X))
                 .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
 
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);

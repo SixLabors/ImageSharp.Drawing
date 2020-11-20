@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing
@@ -19,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// the Merged arrays
         /// </returns>
-        public static bool Equivelent(this PointF source1, PointF source2, float threshold)
+        public static bool Equivalent(this PointF source1, PointF source2, float threshold)
         {
             var abs = Vector2.Abs(source1 - source2);
 
@@ -35,7 +36,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// the Merged arrays
         /// </returns>
-        public static bool Equivelent(this Vector2 source1, Vector2 source2, float threshold)
+        public static bool Equivalent(this Vector2 source1, Vector2 source2, float threshold)
         {
             var abs = Vector2.Abs(source1 - source2);
 

@@ -4,12 +4,12 @@
 using System;
 using System.Runtime.CompilerServices;
 
-namespace SixLabors.ImageSharp.Drawing
+namespace SixLabors.ImageSharp.Drawing.Utilities
 {
     /// <summary>
     /// Optimized quick sort implementation for Span{float} input
     /// </summary>
-    internal static class QuickSort
+    internal static partial class SortUtility
     {
         /// <summary>
         /// Sorts the elements of <paramref name="data"/> in ascending order
@@ -82,34 +82,34 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
-        /// Sorts the elements of <paramref name="data"/> in ascending order
+        /// Sorts the elements of <paramref name="values"/> in ascending order
         /// </summary>
-        /// <param name="sortable">The items to sort on</param>
-        /// <param name="data">The items to sort</param>
-        public static void Sort<T>(Span<float> sortable, Span<T> data)
+        /// <param name="keys">The items to sort on</param>
+        /// <param name="values">The items to sort</param>
+        public static void Sort<T>(Span<float> keys, Span<T> values)
         {
-            if (sortable.Length != data.Length)
+            if (keys.Length != values.Length)
             {
                 throw new Exception("both spans must be the same length");
             }
 
-            if (sortable.Length < 2)
+            if (keys.Length < 2)
             {
                 return;
             }
 
-            if (sortable.Length == 2)
+            if (keys.Length == 2)
             {
-                if (sortable[0] > sortable[1])
+                if (keys[0] > keys[1])
                 {
-                    Swap(ref sortable[0], ref sortable[1]);
-                    Swap(ref data[0], ref data[1]);
+                    Swap(ref keys[0], ref keys[1]);
+                    Swap(ref values[0], ref values[1]);
                 }
 
                 return;
             }
 
-            Sort(ref sortable[0], 0, sortable.Length - 1, ref data[0]);
+            KeyValueSort<T>.Sort(keys, values);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -120,81 +120,42 @@ namespace SixLabors.ImageSharp.Drawing
             right = tmp;
         }
 
-        private static void Sort<T>(ref float data0, int lo, int hi, ref T dataToSort)
-        {
-            if (lo < hi)
-            {
-                int p = Partition(ref data0, lo, hi, ref dataToSort);
-                Sort(ref data0, lo, p, ref dataToSort);
-                Sort(ref data0, p + 1, hi, ref dataToSort);
-            }
-        }
-
-        private static int Partition<T>(ref float data0, int lo, int hi, ref T dataToSort)
-        {
-            float pivot = Unsafe.Add(ref data0, lo);
-            int i = lo - 1;
-            int j = hi + 1;
-            while (true)
-            {
-                do
-                {
-                    i = i + 1;
-                }
-                while (Unsafe.Add(ref data0, i) < pivot && i < hi);
-
-                do
-                {
-                    j = j - 1;
-                }
-                while (Unsafe.Add(ref data0, j) > pivot && j > lo);
-
-                if (i >= j)
-                {
-                    return j;
-                }
-
-                Swap(ref Unsafe.Add(ref data0, i), ref Unsafe.Add(ref data0, j));
-                Swap(ref Unsafe.Add(ref dataToSort, i), ref Unsafe.Add(ref dataToSort, j));
-            }
-        }
-
         /// <summary>
-        /// Sorts the elements of <paramref name="sortable"/> in ascending order, and swapping items in <paramref name="data1"/> and <paramref name="data2"/> in sequance with them.
+        /// Sorts the elements of <paramref name="keys"/> in ascending order, and swapping items in <paramref name="values1"/> and <paramref name="values2"/> in sequance with them.
         /// </summary>
-        /// <param name="sortable">The items to sort on</param>
-        /// <param name="data1">The set of items to sort</param>
-        /// <param name="data2">The 2nd set of items to sort</param>
-        public static void Sort<T1, T2>(Span<float> sortable, Span<T1> data1, Span<T2> data2)
+        /// <param name="keys">The items to sort on</param>
+        /// <param name="values1">The set of items to sort</param>
+        /// <param name="values2">The 2nd set of items to sort</param>
+        public static void Sort<T1, T2>(Span<float> keys, Span<T1> values1, Span<T2> values2)
         {
-            if (sortable.Length != data1.Length)
+            if (keys.Length != values1.Length)
             {
                 throw new Exception("both spans must be the same length");
             }
 
-            if (sortable.Length != data2.Length)
+            if (keys.Length != values2.Length)
             {
                 throw new Exception("both spans must be the same length");
             }
 
-            if (sortable.Length < 2)
+            if (keys.Length < 2)
             {
                 return;
             }
 
-            if (sortable.Length == 2)
+            if (keys.Length == 2)
             {
-                if (sortable[0] > sortable[1])
+                if (keys[0] > keys[1])
                 {
-                    Swap(ref sortable[0], ref sortable[1]);
-                    Swap(ref data1[0], ref data1[1]);
-                    Swap(ref data2[0], ref data2[1]);
+                    Swap(ref keys[0], ref keys[1]);
+                    Swap(ref values1[0], ref values1[1]);
+                    Swap(ref values2[0], ref values2[1]);
                 }
 
                 return;
             }
 
-            Sort(ref sortable[0], 0, sortable.Length - 1, ref data1[0], ref data2[0]);
+            Sort(ref keys[0], 0, keys.Length - 1, ref values1[0], ref values2[0]);
         }
 
         private static void Sort<T1, T2>(ref float data0, int lo, int hi, ref T1 dataToSort1, ref T2 dataToSort2)
