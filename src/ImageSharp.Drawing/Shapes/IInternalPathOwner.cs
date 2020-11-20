@@ -14,7 +14,9 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Returns the rings as a list of <see cref="InternalPath"/>-s.
         /// </summary>
-        /// <returns>Seriously this is a thin internal interface, why should I repeat 3 times what does it do?</returns>
+        /// <returns>The list</returns>
         IReadOnlyList<InternalPath> GetRingsAsInternalPath();
+
+        // TODO: We may want to reconfigure StyleCop rules for internals to avoid unnecessary redundant trivial code comments like in this file.
     }
 }
