@@ -28,47 +28,32 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             this.TotalVertexCount = rings.Sum(r => r.VertexCount);
         }
 
-        private enum RingType
-        {
-            Contour,
-            Hole
-        }
-
         public int TotalVertexCount { get; }
 
         public int Count => this.rings.Length;
 
         public Ring this[int index] => this.rings[index];
 
-        public static TessellatedMultipolygon Create(
-            IPath path,
-            MemoryAllocator memoryAllocator,
-            OrientationHandling orientationHandling = OrientationHandling.ForcePositiveOrientationOnSimplePolygons)
+        public static TessellatedMultipolygon Create(IPath path, MemoryAllocator memoryAllocator)
         {
-            RingType? firstRingType = orientationHandling == OrientationHandling.FirstRingIsContourFollowedByHoles ? RingType.Contour : (RingType?)null;
-            RingType? followUpRingType = orientationHandling == OrientationHandling.FirstRingIsContourFollowedByHoles ? RingType.Hole : (RingType?)null;
-
-            // For now let's go with the assumption that first loop is always an external contour,
-            // and the rests are loops.
             if (path is IInternalPathOwner ipo)
             {
                 IReadOnlyList<InternalPath> internalPaths = ipo.GetRingsAsInternalPath();
 
-                // If we have only one ring, we may want to orient it as a contour
-                if (internalPaths.Count == 1 && orientationHandling != OrientationHandling.KeepOriginal)
-                {
-                    firstRingType = RingType.Contour;
-                }
+                // If we have only one ring, we can change it's orientation without negative side-effects.
+                // Since the algorithm works best with positively-oriented polygons,
+                // we enforce the orientation for best output quality.
+                bool enforcePositiveOrientationOnFirstRing = internalPaths.Count == 1;
 
-                Ring[] rings = new Ring[internalPaths.Count];
+                var rings = new Ring[internalPaths.Count];
                 IMemoryOwner<PointF> pointBuffer = internalPaths[0].ExtractVertices(memoryAllocator);
-                RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, firstRingType);
+                RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, enforcePositiveOrientationOnFirstRing);
                 rings[0] = new Ring(pointBuffer);
 
                 for (int i = 1; i < internalPaths.Count; i++)
                 {
                     pointBuffer = internalPaths[i].ExtractVertices(memoryAllocator);
-                    RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, followUpRingType);
+                    RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, false);
                     rings[i] = new Ring(pointBuffer);
                 }
 
@@ -78,40 +63,38 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             {
                 ReadOnlyMemory<PointF>[] points = path.Flatten().Select(sp => sp.Points).ToArray();
 
-                // If we have only one ring, we may want to orient it as a contour
-                if (points.Length == 1 && orientationHandling != OrientationHandling.KeepOriginal)
-                {
-                    firstRingType = RingType.Contour;
-                }
+                // If we have only one ring, we can change it's orientation without negative side-effects.
+                // Since the algorithm works best with positively-oriented polygons,
+                // we enforce the orientation for best output quality.
+                bool enforcePositiveOrientationOnFirstRing = points.Length == 1;
 
-                Ring[] rings = new Ring[points.Length];
-                rings[0] = MakeRing(points[0], firstRingType, memoryAllocator);
+                var rings = new Ring[points.Length];
+                rings[0] = MakeRing(points[0], enforcePositiveOrientationOnFirstRing, memoryAllocator);
                 for (int i = 1; i < points.Length; i++)
                 {
-                    rings[i] = MakeRing(points[i], followUpRingType, memoryAllocator);
+                    rings[i] = MakeRing(points[i], false, memoryAllocator);
                 }
 
                 return new TessellatedMultipolygon(rings);
             }
 
-            static Ring MakeRing(ReadOnlyMemory<PointF> points, RingType? ringType, MemoryAllocator allocator)
+            static Ring MakeRing(ReadOnlyMemory<PointF> points, bool enforcePositiveOrientation, MemoryAllocator allocator)
             {
                 IMemoryOwner<PointF> buffer = allocator.Allocate<PointF>(points.Length + 1);
                 Span<PointF> span = buffer.Memory.Span;
                 points.Span.CopyTo(span);
-                RepeateFirstVertexAndEnsureOrientation(span, ringType);
+                RepeateFirstVertexAndEnsureOrientation(span, enforcePositiveOrientation);
                 return new Ring(buffer);
             }
 
-            static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, RingType? ringType)
+            static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, bool enforcePositiveOrientation)
             {
                 // Repeat first vertex for perf:
                 span[span.Length - 1] = span[0];
 
-                if (ringType.HasValue)
+                if (enforcePositiveOrientation)
                 {
-                    int orientation = ringType.Value == RingType.Contour ? 1 : -1;
-                    TopologyUtilities.EnsureOrientation(span, orientation);
+                    TopologyUtilities.EnsureOrientation(span, 1);
                 }
             }
         }
