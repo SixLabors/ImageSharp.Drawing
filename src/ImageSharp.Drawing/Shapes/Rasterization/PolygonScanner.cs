@@ -96,12 +96,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             int maxY,
             int subsampling,
             IntersectionRule intersectionRule,
-            MemoryAllocator allocator,
-            OrientationHandling orientationHandling)
+            MemoryAllocator allocator)
         {
-            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, orientationHandling);
-            ScanEdgeCollection edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
-            PolygonScanner scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, minY, maxY, subsampling, intersectionRule, allocator);
+            var multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
+            var edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
+            var scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, minY, maxY, subsampling, intersectionRule, allocator);
             scanner.Init();
             return scanner;
         }

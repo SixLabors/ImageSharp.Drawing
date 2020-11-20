@@ -35,7 +35,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this.VerticalAlignment = source.VerticalAlignment;
             this.FallbackFonts.AddRange(source.FallbackFonts);
             this.RenderColorFonts = source.RenderColorFonts;
-            this.OrientationHandling = source.OrientationHandling;
         }
 
         /// <summary>
@@ -130,9 +129,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Defaults to true.
         /// </summary>
         public bool RenderColorFonts { get; set; } = true;
-
-        internal OrientationHandling OrientationHandling { get; set; } =
-            OrientationHandling.ForcePositiveOrientationOnSimplePolygons;
 
         /// <inheritdoc/>
         public TextOptions DeepClone() => new TextOptions(this);

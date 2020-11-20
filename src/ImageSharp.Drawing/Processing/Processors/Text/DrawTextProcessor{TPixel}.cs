@@ -389,8 +389,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     size.Height,
                     subpixelCount,
                     IntersectionRule.Nonzero,
-                    this.MemoryAllocator,
-                    this.Options.TextOptions.OrientationHandling);
+                    this.MemoryAllocator);
 
                 try
                 {

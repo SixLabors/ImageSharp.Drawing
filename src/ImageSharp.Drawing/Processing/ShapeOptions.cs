@@ -20,7 +20,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         private ShapeOptions(ShapeOptions source)
         {
             this.IntersectionRule = source.IntersectionRule;
-            this.OrientationHandling = source.OrientationHandling;
         }
 
         /// <summary>
@@ -28,9 +27,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Defaults to true.
         /// </summary>
         public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.OddEven;
-
-        internal OrientationHandling OrientationHandling { get; set; } =
-            OrientationHandling.ForcePositiveOrientationOnSimplePolygons;
 
         /// <inheritdoc/>
         public ShapeOptions DeepClone() => new ShapeOptions(this);

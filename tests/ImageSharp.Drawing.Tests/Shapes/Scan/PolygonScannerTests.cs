@@ -70,16 +70,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             int max,
             int subsampling,
             FuzzyFloat[][] expected,
-            IntersectionRule intersectionRule,
-            OrientationHandling orientationHandling = OrientationHandling.FirstRingIsContourFollowedByHoles)
+            IntersectionRule intersectionRule)
         {
             var scanner = PolygonScanner.Create(path,
                 min,
                 max,
                 subsampling,
                 intersectionRule,
-                Configuration.Default.MemoryAllocator,
-                orientationHandling);
+                Configuration.Default.MemoryAllocator);
 
             try
             {
@@ -317,7 +315,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             TestScan(poly, 1, 5, 2, expected, rule);
         }
-        
+
         [Theory]
         [InlineData(IntersectionRule.OddEven)]
         [InlineData(IntersectionRule.Nonzero)]
@@ -326,7 +324,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             IPath poly = PolygonFactory.CreatePolygon((1, 4), (1, 3), (3, 3), (3, 2), (2, 2), (2, 4), (1, 4), (1, 1),
                 (4, 1), (4, 4), (3, 4), (3, 5), (2, 5), (2, 4), (1, 4));
             DebugDraw.Polygon(poly, 1f, 100f);
-            
+
             FuzzyFloat[][] expected;
             if (rule == IntersectionRule.OddEven)
             {
@@ -358,17 +356,25 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     new FuzzyFloat[] {2, 3},
                 };
             }
-            
+
             TestScan(poly, 1, 5, 2, expected, rule);
         }
-        
-        
+
+
         [Theory]
         [InlineData(IntersectionRule.OddEven)]
         [InlineData(IntersectionRule.Nonzero)]
         public void NegativeOrientation01(IntersectionRule intersectionRule)
         {
-            IPath poly = PolygonFactory.CreatePolygon((0, 0), (0, 2), (2, 2), (2, 0));
+            // IPath poly = PolygonFactory.CreatePolygon((0, 0), (0, 2), (2, 2), (2, 0));
+            PointF[] interest = PolygonFactory.CreatePointArray((0, 0), (0, 2), (2, 2), (2, 0));
+
+            // Adding a dummy ring outside the area of interest, so the actual loop is not oriented positively
+            PointF[] dummy = PolygonFactory.CreatePointArray((0, 10), (10, 10), (0, 11));
+
+            var poly = new ComplexPolygon(
+                new Polygon(new LinearLineSegment(interest)),
+                new Polygon(new LinearLineSegment(dummy)));
 
             FuzzyFloat[][] expected =
             {
@@ -378,8 +384,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 new FuzzyFloat[] { 0, 2 },
                 new FuzzyFloat[] { 0, 0, 2, 2},
             };
-            
-            TestScan(poly, 0, 2, 2, expected, intersectionRule, OrientationHandling.KeepOriginal);
+
+            TestScan(poly, 0, 2, 2, expected, intersectionRule);
         }
 
         private static (float y, FuzzyFloat[] x) Empty(float y) => (y, new FuzzyFloat[0]);
@@ -451,7 +457,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     {
                         Empty(4f),
 
-                        // Eps = 0.01 to address inaccuracies on .NET Framework 
+                        // Eps = 0.01 to address inaccuracies on .NET Framework
                         (4.25f, new FuzzyFloat[] { F(13, 0.01f), F(13, 0.01f)}),
                         (4.5f, new FuzzyFloat[] {F(12.714286f, 0.5f), F(13.444444f, 0.5f), 16, 16}),
                         (4.75f, new FuzzyFloat[] {F(12.357143f, 0.5f), 14, 14, 16}),
@@ -510,7 +516,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     result.Add(offset, (string)data[0], ((float y, FuzzyFloat[] x)[]) data[1]);
                 }
             }
-            
+
             return result;
         }
 
@@ -520,7 +526,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         {
             float dx = offset;
             float dy = offset;
-            
+
             IPath poly = NumericCornerCasePolygons.GetByName(name).Transform(Matrix3x2.CreateTranslation(dx, dy));
             expectedIntersections = TranslateIntersections(expectedIntersections, dx, dy);
 

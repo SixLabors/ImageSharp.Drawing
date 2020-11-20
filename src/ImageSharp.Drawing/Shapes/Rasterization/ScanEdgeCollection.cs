@@ -40,10 +40,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
         public static ScanEdgeCollection Create(
             IPath polygon,
             MemoryAllocator allocator,
-            int subsampling,
-            OrientationHandling orientationHandling = OrientationHandling.FirstRingIsContourFollowedByHoles)
+            int subsampling)
         {
-            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, orientationHandling);
+            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator, OrientationHandling.ForcePositiveOrientationOnSimplePolygons);
             return Create(multipolygon, allocator, subsampling);
         }
     }

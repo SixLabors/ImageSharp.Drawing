@@ -93,13 +93,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             ComplexPolygon polygon = new ComplexPolygon(
                 new Path(new LinearLineSegment(contour)),
                 new Path(new LinearLineSegment(hole)));
-            
+
             provider.RunValidatingProcessorTest(
                 c =>
                 {
                     c.SetShapeOptions(new ShapeOptions()
                     {
-                        OrientationHandling = OrientationHandling.KeepOriginal,
                         IntersectionRule = intersectionRule
                     });
                     c.Fill(Color.White, polygon);
@@ -133,14 +132,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var color = Color.LightGreen;
 
             provider.RunValidatingProcessorTest(
-                c =>
-                {
-                    c.SetShapeOptions(new ShapeOptions()
-                    {
-                        OrientationHandling = OrientationHandling.KeepOriginal
-                    });
-                    c.FillPolygon(color, points);
-                },
+                c => c.FillPolygon(color, points),
                 testOutputDetails: $"Reverse({reverse})",
                 comparer: ImageComparer.TolerantPercentage(0.01f),
                 appendSourceFileOrDescription: false,
@@ -154,42 +146,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             EllipsePolygon circle = new EllipsePolygon(32, 32, 30);
             Star star = new Star(32, 32, 7, 10, 27);
             IPath shape = circle.Clip(star);
-            
+
             provider.RunValidatingProcessorTest(
-                c =>
-                {
-                    c.SetShapeOptions(new ShapeOptions()
-                    {
-                        OrientationHandling = OrientationHandling.KeepOriginal
-                    });
-                    c.Fill(Color.White, shape);
-                },
+                c => c.Fill(Color.White, shape),
                 comparer: ImageComparer.TolerantPercentage(0.01f),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
-        }
-
-        [Theory]
-        [WithSolidFilledImages(30, 30, "Black", PixelTypes.Rgba32)]
-        public void FillPolygon_Reverse<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-            PointF[] points = PolygonFactory.CreatePointArray(
-                (2.5644531f, 2.6796875f),
-                (2.9794922f, 10.443359f),
-                (3.6386719f, 23.382812f),
-                (24.634766f, 23.382812f));
-
-            using var image = provider.GetImage();
-            image.Mutate(c =>
-            {
-                c.SetShapeOptions(new ShapeOptions()
-                {
-                    OrientationHandling = OrientationHandling.KeepOriginal
-                });
-                c.FillPolygon(Color.White, points);
-            });
-            image.DebugSave(provider);
         }
 
         [Theory]
@@ -285,7 +247,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             {
                 polygon = polygon.Reverse();
             }
-            
+
             var color = Color.Azure;
 
             provider.RunValidatingProcessorTest(
@@ -293,8 +255,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 {
                     c.SetShapeOptions(new ShapeOptions()
                     {
-                        IntersectionRule = intersectionRule,
-                        OrientationHandling = OrientationHandling.KeepOriginal
+                        IntersectionRule = intersectionRule
                     });
                     c.Fill(color, polygon);
                 },

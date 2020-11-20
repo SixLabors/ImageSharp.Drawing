@@ -77,8 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 maxY,
                 subpixelCount,
                 shapeOptions.IntersectionRule,
-                configuration.MemoryAllocator,
-                shapeOptions.OrientationHandling);
+                configuration.MemoryAllocator);
 
             try
             {

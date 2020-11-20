@@ -26,7 +26,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         private const string TestText = "Sphinx of black quartz, judge my vow\n0123456789";
 
         public static ImageComparer TextDrawingComparer = TestEnvironment.IsFramework
-            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework 
+            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework
             : ImageComparer.TolerantPercentage(1e-5f);
 
         public static ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);
@@ -155,17 +155,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont(fontName, fontSize);
-            var color = Color.Black;
 
             provider.RunValidatingProcessorTest(
-                c =>
-                {
-                    c.SetTextOptions(new TextOptions()
-                    {
-                        OrientationHandling = OrientationHandling.KeepOriginal
-                    });
-                    c.DrawText(text, new Font(font, fontSize), color, new PointF(x, y));
-                },
+                c => c.DrawText(text, font, Color.Black, new PointF(x, y)),
                 $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
