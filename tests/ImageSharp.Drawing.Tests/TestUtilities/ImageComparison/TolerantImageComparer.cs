@@ -1,7 +1,9 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -63,7 +65,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             int width = actual.Width;
 
             // TODO: Comparing through Rgba64 may not robust enough because of the existence of super high precision pixel types.
-
             var aBuffer = new Rgba64[width];
             var bBuffer = new Rgba64[width];
 
@@ -109,9 +110,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int GetManhattanDistanceInRgbaSpace(ref Rgba64 a, ref Rgba64 b)
-        {
-            return Diff(a.R, b.R) + Diff(a.G, b.G) + Diff(a.B, b.B) + Diff(a.A, b.A);
-        }
+            => Diff(a.R, b.R) + Diff(a.G, b.G) + Diff(a.B, b.B) + Diff(a.A, b.A);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int Diff(ushort a, ushort b) => Math.Abs(a - b);

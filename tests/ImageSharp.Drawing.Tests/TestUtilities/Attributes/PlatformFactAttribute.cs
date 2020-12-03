@@ -1,3 +1,6 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -19,7 +22,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes
 
     public class WindowsFactAttribute : PlatformFactAttribute
     {
-        public WindowsFactAttribute() : base(OSPlatform.Windows)
+        public WindowsFactAttribute()
+            : base(OSPlatform.Windows)
         {
         }
     }

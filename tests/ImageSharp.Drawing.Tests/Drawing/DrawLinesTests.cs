@@ -70,7 +70,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
         }
 
-
         private static void DrawLinesImpl<TPixel>(
             TestImageProvider<TPixel> provider,
             string colorName,
@@ -84,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             var options = new GraphicsOptions { Antialias = antialias };
 
-            string aa = antialias ? "" : "_NoAntialias";
+            string aa = antialias ? string.Empty : "_NoAntialias";
             FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
 
             provider.RunValidatingProcessorTest(
@@ -92,6 +91,5 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 outputDetails,
                 appendSourceFileOrDescription: false);
         }
-
     }
 }

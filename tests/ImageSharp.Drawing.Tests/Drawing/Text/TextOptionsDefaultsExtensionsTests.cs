@@ -8,7 +8,7 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 {
-    public class TextGraphicOptionsDefaultsExtensionsTests
+    public class TextOptionsDefaultsExtensionsTests
     {
         [Fact]
         public void SetDefaultOptionsOnProcessingContext()
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 o.TabWidth = 9;
             });
 
-            var returnedOption = context.GetTextOptions();
+            TextOptions returnedOption = context.GetTextOptions();
             Assert.Equal(9, returnedOption.TabWidth);
             Assert.Equal(99, option.TabWidth); // hasn't been mutated
         }
@@ -73,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 o.TabWidth = 9;
             });
 
-            var returnedOption = config.GetTextOptions();
+            TextOptions returnedOption = config.GetTextOptions();
             Assert.Equal(9, returnedOption.TabWidth);
             Assert.Equal(99, option.TabWidth); // hasn't been mutated
         }
@@ -83,11 +83,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             var config = new Configuration();
 
-            var options = config.GetTextOptions();
+            TextOptions options = config.GetTextOptions();
             Assert.NotNull(options);
             config.SetTextOptions((TextOptions)null);
 
-            var options2 = config.GetTextOptions();
+            TextOptions options2 = config.GetTextOptions();
             Assert.NotNull(options2);
 
             // we set it to null should now be a new instance
@@ -100,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             var config = new Configuration();
 
             config.Properties[typeof(TextOptions)] = "wronge type";
-            var options = config.GetTextOptions();
+            TextOptions options = config.GetTextOptions();
             Assert.NotNull(options);
             Assert.IsType<TextOptions>(options);
         }
@@ -111,7 +111,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             var config = new Configuration();
 
             Assert.DoesNotContain(typeof(TextOptions), config.Properties.Keys);
-            var options = config.GetTextOptions();
+            TextOptions options = config.GetTextOptions();
             Assert.NotNull(options);
         }
 
@@ -120,8 +120,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             var config = new Configuration();
 
-            var options = config.GetTextOptions();
-            var options2 = config.GetTextOptions();
+            TextOptions options = config.GetTextOptions();
+            TextOptions options2 = config.GetTextOptions();
             Assert.Equal(options, options2);
         }
 
@@ -131,7 +131,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            var ctxOptions = context.GetTextOptions();
+            TextOptions ctxOptions = context.GetTextOptions();
             Assert.NotNull(ctxOptions);
         }
 
@@ -142,7 +142,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
             context.SetTextOptions((TextOptions)null);
-            var ctxOptions = context.GetTextOptions();
+            TextOptions ctxOptions = context.GetTextOptions();
             Assert.NotNull(ctxOptions);
         }
 
@@ -154,7 +154,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             config.SetTextOptions(option);
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            var ctxOptions = context.GetTextOptions();
+            TextOptions ctxOptions = context.GetTextOptions();
             Assert.Equal(option, ctxOptions);
         }
 
@@ -164,7 +164,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
             context.Properties[typeof(TextOptions)] = "wronge type";
-            var options = context.GetTextOptions();
+            TextOptions options = context.GetTextOptions();
             Assert.NotNull(options);
             Assert.IsType<TextOptions>(options);
         }

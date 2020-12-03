@@ -4,26 +4,13 @@
 using System;
 using System.Reflection;
 using Castle.Core.Internal;
-
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-
 using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
-    public interface ITestImageProvider
-    {
-        PixelTypes PixelType { get; }
-        ImagingTestCaseUtility Utility { get; }
-        string SourceFileOrDescription { get; }
-
-        Configuration Configuration { get; set; }
-
-        Image GetImage();
-    }
-
     /// <summary>
     /// Provides <see cref="Image{TPixel}" /> instances for parametric unit tests.
     /// </summary>
@@ -33,23 +20,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     {
         public PixelTypes PixelType { get; private set; } = typeof(TPixel).GetPixelType();
 
-        public virtual string SourceFileOrDescription => "";
+        public virtual string SourceFileOrDescription => string.Empty;
 
         public Configuration Configuration { get; set; } = Configuration.CreateDefaultInstance();
 
         /// <summary>
-        /// Utility instance to provide information about the test image & manage input/output
+        /// Gets the utility instance to provide information about the test image & manage input/output
         /// </summary>
         public ImagingTestCaseUtility Utility { get; private set; }
 
         public string TypeName { get; private set; }
+
         public string MethodName { get; private set; }
+
         public string OutputSubfolderName { get; private set; }
 
-        public static TestImageProvider<TPixel> BasicTestPattern(int width,
-                                                                 int height,
-                                                                 MethodInfo testMethod = null,
-                                                                 PixelTypes pixelTypeOverride = PixelTypes.Undefined)
+        public static TestImageProvider<TPixel> BasicTestPattern(
+            int width,
+            int height,
+            MethodInfo testMethod = null,
+            PixelTypes pixelTypeOverride = PixelTypes.Undefined)
             => new BasicTestPatternProvider(width, height).Init(testMethod, pixelTypeOverride);
 
         public static TestImageProvider<TPixel> TestPattern(
@@ -64,15 +54,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                         int height,
                         MethodInfo testMethod = null,
                         PixelTypes pixelTypeOverride = PixelTypes.Undefined)
-                    => new BlankProvider(width, height).Init(testMethod, pixelTypeOverride);
+            => new BlankProvider(width, height).Init(testMethod, pixelTypeOverride);
 
         public static TestImageProvider<TPixel> File(
             string filePath,
             MethodInfo testMethod = null,
             PixelTypes pixelTypeOverride = PixelTypes.Undefined)
-        {
-            return new FileProvider(filePath).Init(testMethod, pixelTypeOverride);
-        }
+            => new FileProvider(filePath).Init(testMethod, pixelTypeOverride);
 
         public static TestImageProvider<TPixel> Lambda(
                 Func<Image<TPixel>> factoryFunc,
@@ -89,25 +77,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             byte a = 255,
             MethodInfo testMethod = null,
             PixelTypes pixelTypeOverride = PixelTypes.Undefined)
-        {
-            return new SolidProvider(width, height, r, g, b, a).Init(testMethod, pixelTypeOverride);
-        }
+            => new SolidProvider(width, height, r, g, b, a).Init(testMethod, pixelTypeOverride);
 
         /// <summary>
         /// Returns an <see cref="Image{TPixel}"/> instance to the test case with the necessary traits.
         /// </summary>
+        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public abstract Image<TPixel> GetImage();
 
         Image ITestImageProvider.GetImage() => this.GetImage();
 
         public virtual Image<TPixel> GetImage(IImageDecoder decoder)
-        {
-            throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");
-        }
+            => throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");
 
         /// <summary>
         /// Returns an <see cref="Image{TPixel}"/> instance to the test case with the necessary traits.
         /// </summary>
+        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
         public Image<TPixel> GetImage(Action<IImageProcessingContext> operationsToApply)
         {
             Image<TPixel> img = this.GetImage();
@@ -143,6 +129,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 this.PixelType = pixelTypeOverride;
             }
+
             this.TypeName = typeName;
             this.MethodName = methodName;
             this.OutputSubfolderName = outputSubfolderName;
@@ -168,10 +155,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             return this.Init(testMethod?.DeclaringType.Name, testMethod?.Name, subfolder, pixelTypeOverride);
         }
 
-        public override string ToString()
-        {
-            return $"{this.SourceFileOrDescription}[{this.PixelType}]";
-        }
+        public override string ToString() => $"{this.SourceFileOrDescription}[{this.PixelType}]";
     }
 
     public static class TestImageProviderExtensions
@@ -182,5 +166,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             img.Mutate(operationsToApply);
             return img;
         }
+    }
+
+    public interface ITestImageProvider
+    {
+        PixelTypes PixelType { get; }
+
+        ImagingTestCaseUtility Utility { get; }
+
+        string SourceFileOrDescription { get; }
+
+        Configuration Configuration { get; set; }
+
+        Image GetImage();
     }
 }

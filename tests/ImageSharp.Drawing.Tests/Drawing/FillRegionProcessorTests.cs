@@ -30,10 +30,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Fact]
         public void DrawOffCanvas()
         {
-
             using (var img = new Image<Rgba32>(10, 10))
             {
-                img.Mutate(x => x.DrawLines(new Pen(Color.Black, 10),
+                img.Mutate(x => x.DrawLines(
+                    new Pen(Color.Black, 10),
                     new Vector2(-10, 5),
                     new Vector2(20, 5)));
             }
@@ -47,9 +47,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             {
                 img.Mutate(x => x.Fill(Color.Transparent));
 
-                img.Mutate(ctx =>
-                {
-                    ctx.DrawLines(
+                img.Mutate(
+                    ctx => ctx.DrawLines(
                         Color.Red,
                         0.984252f,
                         new PointF(104.762581f, 1074.99365f),
@@ -59,10 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new PointF(104.764488f, 1075.08838f),
                         new PointF(104.772186f, 1075.111f),
                         new PointF(104.782608f, 1075.13245f),
-                        new PointF(104.782608f, 1075.13245f)
-                        );
-                }
-                );
+                        new PointF(104.782608f, 1075.13245f)));
             }
         }
 
@@ -74,13 +70,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 var path = new Polygon(
                     new LinearLineSegment(new PointF(17.11f, 13.99659f), new PointF(14.01433f, 27.06201f)),
                     new LinearLineSegment(new PointF(14.01433f, 27.06201f), new PointF(13.79267f, 14.00023f)),
-                    new LinearLineSegment(new PointF(13.79267f, 14.00023f), new PointF(17.11f, 13.99659f))
-                );
+                    new LinearLineSegment(new PointF(13.79267f, 14.00023f), new PointF(17.11f, 13.99659f)));
 
-                image.Mutate(ctx =>
-                {
-                    ctx.Fill(Color.White, path);
-                });
+                image.Mutate(ctx => ctx.Fill(Color.White, path));
             }
         }
 
@@ -88,17 +80,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         private class MockRegion1 : Region
         {
             public override Rectangle Bounds => new Rectangle(-100, -10, 10, 10);
+
             internal override IPath Shape => throw new NotImplementedException();
         }
 
         private class MockRegion2 : Region
         {
             public MockRegion2(Rectangle bounds)
-            {
-                this.Bounds = bounds;
-            }
+                => this.Bounds = bounds;
 
             public override Rectangle Bounds { get; }
+
             internal override IPath Shape => throw new NotImplementedException();
         }
     }

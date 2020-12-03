@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         public IImageDecoder Decoder { get; }
 
-        private byte[] header = Guid.NewGuid().ToByteArray();
+        private readonly byte[] header = Guid.NewGuid().ToByteArray();
 
         public MemoryStream CreateStream(byte[] marker = null)
         {
@@ -49,6 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 ms.Write(marker, 0, marker.Length);
             }
+
             ms.Position = 0;
             return ms;
         }
@@ -57,7 +58,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             where TPixel : unmanaged, IPixel<TPixel>
         {
             DecodeOperation[] discovered = this.DecodeCalls.Where(x => x.IsMatch(marker, config, typeof(TPixel))).ToArray();
-
 
             Assert.True(discovered.Any(), "No calls to decode on this format with the provided options happened");
 
@@ -70,7 +70,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void VerifyAgnosticDecodeCall(byte[] marker, Configuration config)
         {
             DecodeOperation[] discovered = this.DecodeCalls.Where(x => x.IsMatch(marker, config, typeof(TestPixelForAgnosticDecode))).ToArray();
-
 
             Assert.True(discovered.Any(), "No calls to decode on this format with the provided options happened");
 
@@ -118,6 +117,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 return false;
             }
+
             for (int i = 0; i < this.header.Length; i++)
             {
                 if (header[i] != this.header[i])
@@ -125,6 +125,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     return false;
                 }
             }
+
             return true;
         }
 
@@ -137,156 +138,186 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         public struct DecodeOperation
         {
-            public byte[] marker;
-            internal Configuration config;
+            public byte[] Marker { get; set; }
 
-            public Type pixelType;
+            internal Configuration Config { get; set; }
+
+            public Type PixelType { get; set; }
 
             public bool IsMatch(byte[] testMarker, Configuration config, Type pixelType)
             {
-
-                if (this.config != config || this.pixelType != pixelType)
+                if (this.Config != config || this.PixelType != pixelType)
                 {
                     return false;
                 }
 
-                if (testMarker.Length != this.marker.Length)
+                if (testMarker.Length != this.Marker.Length)
                 {
                     return false;
                 }
 
-                for (int i = 0; i < this.marker.Length; i++)
+                for (int i = 0; i < this.Marker.Length; i++)
                 {
-                    if (testMarker[i] != this.marker[i])
+                    if (testMarker[i] != this.Marker[i])
                     {
                         return false;
                     }
                 }
+
                 return true;
             }
         }
 
         public class TestHeader : IImageFormatDetector
         {
+            private readonly TestFormat testFormat;
 
-            private TestFormat testFormat;
+            public TestHeader(TestFormat testFormat) => this.testFormat = testFormat;
 
             public int HeaderSize => this.testFormat.HeaderSize;
 
             public IImageFormat DetectFormat(ReadOnlySpan<byte> header)
             {
                 if (this.testFormat.IsSupportedFileFormat(header))
+                {
                     return this.testFormat;
+                }
 
                 return null;
             }
-
-            public TestHeader(TestFormat testFormat)
-            {
-                this.testFormat = testFormat;
-            }
         }
+
         public class TestDecoder : IImageDecoder
         {
-            private TestFormat testFormat;
+            private readonly TestFormat testFormat;
 
-            public TestDecoder(TestFormat testFormat)
-            {
-                this.testFormat = testFormat;
-            }
+            public TestDecoder(TestFormat testFormat) => this.testFormat = testFormat;
 
-            public IEnumerable<string> MimeTypes => new[] { testFormat.MimeType };
+            public IEnumerable<string> MimeTypes => new[] { this.testFormat.MimeType };
 
-            public IEnumerable<string> FileExtensions => testFormat.SupportedExtensions;
+            public IEnumerable<string> FileExtensions => this.testFormat.SupportedExtensions;
 
-            public int HeaderSize => testFormat.HeaderSize;
+            public int HeaderSize => this.testFormat.HeaderSize;
 
-            public Image<TPixel> Decode<TPixel>(Configuration config, Stream stream) where TPixel : unmanaged, IPixel<TPixel>
-
+            public Image<TPixel> Decode<TPixel>(Configuration config, Stream stream)
+                where TPixel : unmanaged, IPixel<TPixel>
             {
                 var ms = new MemoryStream();
                 stream.CopyTo(ms);
-                var marker = ms.ToArray().Skip(this.testFormat.header.Length).ToArray();
+                byte[] marker = ms.ToArray().Skip(this.testFormat.header.Length).ToArray();
                 this.testFormat.DecodeCalls.Add(new DecodeOperation
                 {
-                    marker = marker,
-                    config = config,
-                    pixelType = typeof(TPixel)
+                    Marker = marker,
+                    Config = config,
+                    PixelType = typeof(TPixel)
                 });
 
                 // TODO record this happened so we can verify it.
                 return this.testFormat.Sample<TPixel>();
             }
 
-            public bool IsSupportedFileFormat(Span<byte> header) => testFormat.IsSupportedFileFormat(header);
+            public bool IsSupportedFileFormat(Span<byte> header) => this.testFormat.IsSupportedFileFormat(header);
 
             public Image Decode(Configuration configuration, Stream stream) => this.Decode<TestPixelForAgnosticDecode>(configuration, stream);
-            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken) where TPixel : unmanaged, IPixel<TPixel>
-            {
-                throw new NotImplementedException();
-            }
+
+            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
+                where TPixel : unmanaged, IPixel<TPixel>
+                => throw new NotImplementedException();
 
             public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream)
-                where TPixel : unmanaged, IPixel<TPixel>
-               => throw new NotImplementedException();
-
-            public Task<Image> DecodeAsync(Configuration configuration, Stream stream)
-               => throw new NotImplementedException();
+                => throw new NotImplementedException();
         }
 
         public class TestEncoder : IImageEncoder
         {
-            private TestFormat testFormat;
+            private readonly TestFormat testFormat;
 
             public TestEncoder(TestFormat testFormat)
-            {
-                this.testFormat = testFormat;
-            }
+                => this.testFormat = testFormat;
 
-            public IEnumerable<string> MimeTypes => new[] { testFormat.MimeType };
+            public IEnumerable<string> MimeTypes => new[] { this.testFormat.MimeType };
 
-            public IEnumerable<string> FileExtensions => testFormat.SupportedExtensions;
+            public IEnumerable<string> FileExtensions => this.testFormat.SupportedExtensions;
 
-            public void Encode<TPixel>(Image<TPixel> image, Stream stream) where TPixel : unmanaged, IPixel<TPixel>
+            public void Encode<TPixel>(Image<TPixel> image, Stream stream)
+                where TPixel : unmanaged, IPixel<TPixel>
             {
                 // TODO record this happened so we can verify it.
             }
 
-            public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream, CancellationToken cancellationToken) where TPixel : unmanaged, IPixel<TPixel>
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream) where TPixel : unmanaged, IPixel<TPixel>
-               => throw new NotImplementedException();
+            public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream, CancellationToken cancellationToken)
+                where TPixel : unmanaged, IPixel<TPixel>
+                => throw new NotImplementedException();
         }
 
-
-        struct TestPixelForAgnosticDecode : IPixel<TestPixelForAgnosticDecode>
+        private struct TestPixelForAgnosticDecode : IPixel<TestPixelForAgnosticDecode>
         {
             public PixelOperations<TestPixelForAgnosticDecode> CreatePixelOperations() => new PixelOperations<TestPixelForAgnosticDecode>();
-            public void FromScaledVector4(Vector4 vector) { }
+
+            public void FromScaledVector4(Vector4 vector)
+            {
+            }
+
             public Vector4 ToScaledVector4() => default;
-            public void FromVector4(Vector4 vector) { }
+
+            public void FromVector4(Vector4 vector)
+            {
+            }
+
             public Vector4 ToVector4() => default;
-            public void FromArgb32(Argb32 source) { }
-            public void FromBgra5551(Bgra5551 source) { }
-            public void FromBgr24(Bgr24 source) { }
-            public void FromBgra32(Bgra32 source) { }
-            public void FromL8(L8 source) { }
-            public void FromL16(L16 source) { }
-            public void FromLa16(La16 source) { }
-            public void FromLa32(La32 source) { }
-            public void FromRgb24(Rgb24 source) { }
-            public void FromRgba32(Rgba32 source) { }
-            public void ToRgba32(ref Rgba32 dest) { }
-            public void FromRgb48(Rgb48 source) { }
-            public void FromRgba64(Rgba64 source) { }
+
+            public void FromArgb32(Argb32 source)
+            {
+            }
+
+            public void FromBgra5551(Bgra5551 source)
+            {
+            }
+
+            public void FromBgr24(Bgr24 source)
+            {
+            }
+
+            public void FromBgra32(Bgra32 source)
+            {
+            }
+
+            public void FromL8(L8 source)
+            {
+            }
+
+            public void FromL16(L16 source)
+            {
+            }
+
+            public void FromLa16(La16 source)
+            {
+            }
+
+            public void FromLa32(La32 source)
+            {
+            }
+
+            public void FromRgb24(Rgb24 source)
+            {
+            }
+
+            public void FromRgba32(Rgba32 source)
+            {
+            }
+
+            public void ToRgba32(ref Rgba32 dest)
+            {
+            }
+
+            public void FromRgb48(Rgb48 source)
+            {
+            }
+
+            public void FromRgba64(Rgba64 source)
+            {
+            }
+
             public bool Equals(TestPixelForAgnosticDecode other) => false;
         }
     }

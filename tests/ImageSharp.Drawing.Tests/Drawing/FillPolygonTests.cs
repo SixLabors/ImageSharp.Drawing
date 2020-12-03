@@ -58,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             var options = new GraphicsOptions { Antialias = antialias };
 
-            string aa = antialias ? "" : "_NoAntialias";
+            string aa = antialias ? string.Empty : "_NoAntialias";
             FormattableString outputDetails = $"{colorName}_A{alpha}{aa}";
 
             provider.RunValidatingProcessorTest(
@@ -67,13 +67,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendSourceFileOrDescription: false);
         }
 
-        public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data =
+        public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data { get; } =
             new TheoryData<bool, IntersectionRule>()
             {
-                {false, IntersectionRule.OddEven},
-                {false, IntersectionRule.Nonzero},
-                {true, IntersectionRule.OddEven},
-                {true, IntersectionRule.Nonzero},
+                { false, IntersectionRule.OddEven },
+                { false, IntersectionRule.Nonzero },
+                { true, IntersectionRule.OddEven },
+                { true, IntersectionRule.Nonzero },
             };
 
         [Theory]
@@ -90,7 +90,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 Array.Reverse(hole);
             }
 
-            ComplexPolygon polygon = new ComplexPolygon(
+            var polygon = new ComplexPolygon(
                 new Path(new LinearLineSegment(contour)),
                 new Path(new LinearLineSegment(hole)));
 
@@ -129,7 +129,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 Array.Reverse(points);
             }
 
-            var color = Color.LightGreen;
+            Color color = Color.LightGreen;
 
             provider.RunValidatingProcessorTest(
                 c => c.FillPolygon(color, points),
@@ -143,8 +143,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
         public void FillPolygon_StarCircle(TestImageProvider<Rgba32> provider)
         {
-            EllipsePolygon circle = new EllipsePolygon(32, 32, 30);
-            Star star = new Star(32, 32, 7, 10, 27);
+            var circle = new EllipsePolygon(32, 32, 30);
+            var star = new Star(32, 32, 7, 10, 27);
             IPath shape = circle.Clip(star);
 
             provider.RunValidatingProcessorTest(
@@ -163,9 +163,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 {
                     new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
                 };
-            var color = Color.Yellow;
+            Color color = Color.Yellow;
 
-            var brush = Brushes.Horizontal(color);
+            PatternBrush brush = Brushes.Horizontal(color);
 
             provider.RunValidatingProcessorTest(
                 c => c.FillPolygon(brush, simplePath),
@@ -200,7 +200,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             var polygon = new RectangularPolygon(10, 10, 190, 140);
-            var color = Color.White;
+            Color color = Color.White;
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(color, polygon),
@@ -218,7 +218,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             float angle = GeometryUtilities.DegreeToRadian(angleDeg);
             var polygon = new RegularPolygon(100, 100, vertices, radius, angle);
-            var color = Color.Yellow;
+            Color color = Color.Yellow;
 
             FormattableString testOutput = $"V({vertices})_R({radius})_Ang({angleDeg})";
             provider.RunValidatingProcessorTest(
@@ -231,10 +231,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
             new TheoryData<bool, IntersectionRule>()
             {
-                { false, IntersectionRule.OddEven},
-                { false, IntersectionRule.Nonzero},
-                { true, IntersectionRule.OddEven},
-                { true, IntersectionRule.Nonzero},
+                { false, IntersectionRule.OddEven },
+                { false, IntersectionRule.Nonzero },
+                { true, IntersectionRule.OddEven },
+                { true, IntersectionRule.Nonzero },
             };
 
         [Theory]
@@ -248,7 +248,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 polygon = polygon.Reverse();
             }
 
-            var color = Color.Azure;
+            Color color = Color.Azure;
 
             provider.RunValidatingProcessorTest(
                 c =>
@@ -269,9 +269,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void Fill_IntersectionRules_OddEven<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            using (var img = provider.GetImage())
+            using (Image<TPixel> img = provider.GetImage())
             {
-
                 var poly = new Polygon(new LinearLineSegment(
                     new PointF(10, 30),
                     new PointF(10, 20),
@@ -305,7 +304,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Configuration.Default.MaxDegreeOfParallelism = 1;
-            using (var img = provider.GetImage())
+            using (Image<TPixel> img = provider.GetImage())
             {
                 var poly = new Polygon(new LinearLineSegment(
                     new PointF(10, 30),

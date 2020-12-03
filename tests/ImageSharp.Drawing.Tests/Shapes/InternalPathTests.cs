@@ -68,53 +68,53 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             return new InternalPath(new ILineSegment[] { seg1, seg2 }, closed);
         }
 
-        public static TheoryData<TestPoint, TestSize, TestPoint, bool> PointInPolygonTheoryData =
-          new TheoryData<TestPoint, TestSize, TestPoint, bool>
-          {
-               {
+        public static TheoryData<TestPoint, TestSize, TestPoint, bool> PointInPolygonTheoryData { get; }
+            = new TheoryData<TestPoint, TestSize, TestPoint, bool>
+            {
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(10, 10), // test
                     true
-               }, // corner is inside
-               {
+                }, // corner is inside
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(9, 9), // test
                     false
-               },
-          };
+                },
+            };
 
-        public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
-            new TheoryData<TestPoint, float, float>
-                {
-                    { new PointF(0, 0), 0f, 0f },
-                    { new PointF(1,  0), 0f, 1f },
-                    { new PointF(9,  0), 0f, 9f },
-                    { new PointF(10,  0), 0f, 10f },
-                    { new PointF(10, 1), 0f, 11f },
-                    { new PointF(10,  9), 0f, 19f },
-                    { new PointF(10,  10), 0f, 20f },
-                    { new PointF(9,  10), 0f, 21f },
-                    { new PointF(1,  10), 0f, 29f },
-                    { new PointF(0,  10), 0f, 30f },
-                    { new PointF(0,  9), 0f, 31f },
-                    { new PointF(0,  1), 0f, 39f },
-                    { new PointF(4,  3), 3f, 4f },
-                    { new PointF(3, 4), 3f, 36f },
-                    { new PointF(-1,  0), 1f, 0f },
-                    { new PointF(1,  -1), 1f, 1f },
-                    { new PointF(9,  -1), 1f, 9f },
-                    { new PointF(11,  0), 1f, 10f },
-                    { new PointF(11, 1), 1f, 11f },
-                    { new PointF(11,  9), 1f, 19f },
-                    { new PointF(11,  10), 1f, 20f },
-                    { new PointF(9,  11), 1f, 21f },
-                    { new PointF(1,  11), 1f, 29f },
-                    { new PointF(-1,  10), 1f, 30f },
-                    { new PointF(-1,  9), 1f, 31f },
-                    { new PointF(-1,  1), 1f, 39f },
-                };
+        public static TheoryData<TestPoint, float, float> PathDistanceTheoryData { get; }
+            = new TheoryData<TestPoint, float, float>
+            {
+                { new PointF(0, 0), 0f, 0f },
+                { new PointF(1,  0), 0f, 1f },
+                { new PointF(9,  0), 0f, 9f },
+                { new PointF(10,  0), 0f, 10f },
+                { new PointF(10, 1), 0f, 11f },
+                { new PointF(10,  9), 0f, 19f },
+                { new PointF(10,  10), 0f, 20f },
+                { new PointF(9,  10), 0f, 21f },
+                { new PointF(1,  10), 0f, 29f },
+                { new PointF(0,  10), 0f, 30f },
+                { new PointF(0,  9), 0f, 31f },
+                { new PointF(0,  1), 0f, 39f },
+                { new PointF(4,  3), 3f, 4f },
+                { new PointF(3, 4), 3f, 36f },
+                { new PointF(-1,  0), 1f, 0f },
+                { new PointF(1,  -1), 1f, 1f },
+                { new PointF(9,  -1), 1f, 9f },
+                { new PointF(11,  0), 1f, 10f },
+                { new PointF(11, 1), 1f, 11f },
+                { new PointF(11,  9), 1f, 19f },
+                { new PointF(11,  10), 1f, 20f },
+                { new PointF(9,  11), 1f, 21f },
+                { new PointF(1,  11), 1f, 29f },
+                { new PointF(-1,  10), 1f, 30f },
+                { new PointF(-1,  9), 1f, 31f },
+                { new PointF(-1,  1), 1f, 39f },
+            };
 
         [Theory]
         [MemberData(nameof(PointInPolygonTheoryData))]
@@ -229,7 +229,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Assert.Empty(buffer);
         }
 
-
         [Fact]
         public void Intersections_Diagonal_and_straight_NoHit()
         {
@@ -240,21 +239,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Assert.Empty(buffer);
         }
 
-
         [Fact]
         public void Intersections_IntersectionRule_OddEven()
         {
-            var shape = new InternalPath(new LinearLineSegment(
-                new PointF(1, 3),
-                new PointF(1, 2),
-                new PointF(5, 2),
-                new PointF(5, 5),
-                new PointF(2, 5),
-                new PointF(2, 1),
-                new PointF(3, 1),
-                new PointF(3, 4),
-                new PointF(4, 4),
-                new PointF(3, 4)), true);
+            var shape = new InternalPath(
+                new LinearLineSegment(
+                    new PointF(1, 3),
+                    new PointF(1, 2),
+                    new PointF(5, 2),
+                    new PointF(5, 5),
+                    new PointF(2, 5),
+                    new PointF(2, 1),
+                    new PointF(3, 1),
+                    new PointF(3, 4),
+                    new PointF(4, 4),
+                    new PointF(3, 4)), true);
 
             PointF[] buffer = shape.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.OddEven).ToArray();
 
@@ -264,17 +263,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void Intersections_IntersectionRule_Nonezero()
         {
-            var shape = new InternalPath(new LinearLineSegment(
-                new PointF(1, 3),
-                new PointF(1, 2),
-                new PointF(5, 2),
-                new PointF(5, 5),
-                new PointF(2, 5),
-                new PointF(2, 1),
-                new PointF(3, 1),
-                new PointF(3, 4),
-                new PointF(4, 4),
-                new PointF(3, 4)), true);
+            var shape = new InternalPath(
+                new LinearLineSegment(
+                    new PointF(1, 3),
+                    new PointF(1, 2),
+                    new PointF(5, 2),
+                    new PointF(5, 5),
+                    new PointF(2, 5),
+                    new PointF(2, 1),
+                    new PointF(3, 1),
+                    new PointF(3, 4),
+                    new PointF(4, 4),
+                    new PointF(3, 4)),
+                true);
 
             PointF[] buffer = shape.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.Nonzero).ToArray();
 

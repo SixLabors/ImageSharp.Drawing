@@ -9,24 +9,23 @@ using SixLabors.ImageSharp.Processing;
 using Xunit;
 
 // ReSharper disable InconsistentNaming
-
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
     [GroupOutput("Drawing")]
     public class ClearSolidBrushTests
     {
         [Theory]
-        [WithBlankImages(1, 1, PixelTypes.Rgba32)]
-        [WithBlankImages(7, 4, PixelTypes.Rgba32)]
-        [WithBlankImages(16, 7, PixelTypes.Rgba32)]
-        [WithBlankImages(33, 32, PixelTypes.Rgba32)]
-        [WithBlankImages(400, 500, PixelTypes.Rgba32)]
+        [WithBlankImage(1, 1, PixelTypes.Rgba32)]
+        [WithBlankImage(7, 4, PixelTypes.Rgba32)]
+        [WithBlankImage(16, 7, PixelTypes.Rgba32)]
+        [WithBlankImage(33, 32, PixelTypes.Rgba32)]
+        [WithBlankImage(400, 500, PixelTypes.Rgba32)]
         public void DoesNotDependOnSize<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
-                var color = Color.HotPink;
+                Color color = Color.HotPink;
                 image.Mutate(c => c.Clear(color));
 
                 image.DebugSave(provider, appendPixelTypeToFileName: false);
@@ -35,13 +34,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(16, 16, PixelTypes.Rgba32 | PixelTypes.Argb32 | PixelTypes.RgbaVector)]
+        [WithBlankImage(16, 16, PixelTypes.Rgba32 | PixelTypes.Argb32 | PixelTypes.RgbaVector)]
         public void DoesNotDependOnSinglePixelType<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
-                var color = Color.HotPink;
+                Color color = Color.HotPink;
                 image.Mutate(c => c.Clear(color));
 
                 image.DebugSave(provider, appendSourceFileOrDescription: false);

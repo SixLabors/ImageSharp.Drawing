@@ -5,26 +5,22 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Text;
-
+using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-
 using Xunit;
-// ReSharper disable InconsistentNaming
 
+// ReSharper disable InconsistentNaming
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
-    using SixLabors.ImageSharp.Advanced;
-    using SixLabors.ImageSharp.Drawing.Processing;
-    using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-
     [GroupOutput("Drawing/GradientBrushes")]
     public class FillLinearGradientBrushTests
     {
-        public static ImageComparer TolerantComparer = ImageComparer.TolerantPercentage(0.01f);
+        public static ImageComparer TolerantComparer { get; } = ImageComparer.TolerantPercentage(0.01f);
 
         [Theory]
-        [WithBlankImages(10, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(10, 10, PixelTypes.Rgba32)]
         public void WithEqualColorsReturnsUnicolorImage<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -49,13 +45,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(20, 10, PixelTypes.Rgba32)]
-        [WithBlankImages(20, 10, PixelTypes.Argb32)]
-        [WithBlankImages(20, 10, PixelTypes.Rgb24)]
+        [WithBlankImage(20, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(20, 10, PixelTypes.Argb32)]
+        [WithBlankImage(20, 10, PixelTypes.Rgb24)]
         public void DoesNotDependOnSinglePixelType<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                     {
@@ -69,14 +64,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         image.Mutate(x => x.Fill(unicolorLinearGradientBrush));
                     },
                 appendSourceFileOrDescription: false);
-        }
 
         [Theory]
-        [WithBlankImages(500, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(500, 10, PixelTypes.Rgba32)]
         public void HorizontalReturnsUnicolorColumns<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                     {
@@ -94,19 +87,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     },
                 false,
                 false);
-        }
 
         [Theory]
-        [WithBlankImages(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.DontFill)]
-        [WithBlankImages(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.None)]
-        [WithBlankImages(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.Repeat)]
-        [WithBlankImages(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.Reflect)]
+        [WithBlankImage(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.DontFill)]
+        [WithBlankImage(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.None)]
+        [WithBlankImage(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.Repeat)]
+        [WithBlankImage(500, 10, PixelTypes.Rgba32, GradientRepetitionMode.Reflect)]
         public void HorizontalGradientWithRepMode<TPixel>(
             TestImageProvider<TPixel> provider,
             GradientRepetitionMode repetitionMode)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                     {
@@ -125,12 +116,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 $"{repetitionMode}",
                 false,
                 false);
-        }
 
         [Theory]
-        [WithBlankImages(200, 100, PixelTypes.Rgba32, new[] { 0.5f })]
-        [WithBlankImages(200, 100, PixelTypes.Rgba32, new[] { 0.2f, 0.4f, 0.6f, 0.8f })]
-        [WithBlankImages(200, 100, PixelTypes.Rgba32, new[] { 0.1f, 0.3f, 0.6f })]
+        [WithBlankImage(200, 100, PixelTypes.Rgba32, new[] { 0.5f })]
+        [WithBlankImage(200, 100, PixelTypes.Rgba32, new[] { 0.2f, 0.4f, 0.6f, 0.8f })]
+        [WithBlankImage(200, 100, PixelTypes.Rgba32, new[] { 0.1f, 0.3f, 0.6f })]
         public void WithDoubledStopsProduceDashedPatterns<TPixel>(
             TestImageProvider<TPixel> provider,
             float[] pattern)
@@ -148,12 +138,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             ColorStop[] colorStops =
                 Enumerable.Repeat(new ColorStop(0, black), 1)
                 .Concat(
-                        pattern
-                            .SelectMany((f, index) => new[]
-                                                      {
-                                                          new ColorStop(f, index % 2 == 0 ? black : white),
-                                                          new ColorStop(f, index % 2 == 0 ? white : black)
-                                                      }))
+                    pattern.SelectMany(
+                        (f, index) =>
+                        new[]
+                        {
+                            new ColorStop(f, index % 2 == 0 ? black : white),
+                            new ColorStop(f, index % 2 == 0 ? white : black)
+                        }))
                 .Concat(Enumerable.Repeat(new ColorStop(1, pattern.Length % 2 == 0 ? black : white), 1))
                 .ToArray();
 
@@ -190,7 +181,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(10, 500, PixelTypes.Rgba32)]
+        [WithBlankImage(10, 500, PixelTypes.Rgba32)]
         public void VerticalBrushReturnsUnicolorRows<TPixel>(
             TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
@@ -215,7 +206,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 false,
                 false);
 
-            void VerifyAllRowsAreUnicolor(Image<TPixel> image)
+            static void VerifyAllRowsAreUnicolor(Image<TPixel> image)
             {
                 for (int y = 0; y < image.Height; y++)
                 {
@@ -238,10 +229,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, ImageCorner.TopLeft)]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, ImageCorner.TopRight)]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, ImageCorner.BottomLeft)]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, ImageCorner.BottomRight)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, ImageCorner.TopLeft)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, ImageCorner.TopRight)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, ImageCorner.BottomLeft)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, ImageCorner.BottomRight)]
         public void DiagonalReturnsCorrectImages<TPixel>(
             TestImageProvider<TPixel> provider,
             ImageCorner startCorner)
@@ -300,14 +291,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(500, 500, PixelTypes.Rgba32, 0, 0, 499, 499, new[] { 0f, .2f, .5f, .9f }, new[] { 0, 0, 1, 1 })]
-        [WithBlankImages(500, 500, PixelTypes.Rgba32, 0, 499, 499, 0, new[] { 0f, 0.2f, 0.5f, 0.9f }, new[] { 0, 1, 2, 3 })]
-        [WithBlankImages(500, 500, PixelTypes.Rgba32, 499, 499, 0, 0, new[] { 0f, 0.7f, 0.8f, 0.9f }, new[] { 0, 1, 2, 0 })]
-        [WithBlankImages(500, 500, PixelTypes.Rgba32, 0, 0, 499, 499, new[] { 0f, .5f, 1f }, new[] { 0, 1, 3 })]
+        [WithBlankImage(500, 500, PixelTypes.Rgba32, 0, 0, 499, 499, new[] { 0f, .2f, .5f, .9f }, new[] { 0, 0, 1, 1 })]
+        [WithBlankImage(500, 500, PixelTypes.Rgba32, 0, 499, 499, 0, new[] { 0f, 0.2f, 0.5f, 0.9f }, new[] { 0, 1, 2, 3 })]
+        [WithBlankImage(500, 500, PixelTypes.Rgba32, 499, 499, 0, 0, new[] { 0f, 0.7f, 0.8f, 0.9f }, new[] { 0, 1, 2, 0 })]
+        [WithBlankImage(500, 500, PixelTypes.Rgba32, 0, 0, 499, 499, new[] { 0f, .5f, 1f }, new[] { 0, 1, 3 })]
         public void ArbitraryGradients<TPixel>(
             TestImageProvider<TPixel> provider,
-            int startX, int startY,
-            int endX, int endY,
+            int startX,
+            int startY,
+            int endX,
+            int endY,
             float[] stopPositions,
             int[] stopColorCodes)
             where TPixel : unmanaged, IPixel<TPixel>
@@ -349,11 +342,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, 0, 0, 199, 199, new[] { 0f, .25f, .5f, .75f, 1f }, new[] { 0, 1, 2, 3, 4 })]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, 0, 0, 199, 199, new[] { 0f, .25f, .5f, .75f, 1f }, new[] { 0, 1, 2, 3, 4 })]
         public void MultiplePointGradients<TPixel>(
             TestImageProvider<TPixel> provider,
-            int startX, int startY,
-            int endX, int endY,
+            int startX,
+            int startY,
+            int endX,
+            int endY,
             float[] stopPositions,
             int[] stopColorCodes)
             where TPixel : unmanaged, IPixel<TPixel>
@@ -395,7 +390,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32)]
         public void GradientsWithTransparencyOnExistingBackground<TPixel>(TestImageProvider<TPixel> provider)
                     where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -404,7 +399,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 {
                     image.Mutate(i => i.Fill(Color.Red));
                     image.Mutate(ApplyGloss);
-
                 });
 
             void ApplyGloss(IImageProcessingContext ctx)
@@ -433,11 +427,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(200, 200, PixelTypes.Rgb24)]
+        [WithBlankImage(200, 200, PixelTypes.Rgb24)]
         public void BrushApplicatorIsThreadSafeIssue1044<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 img =>
                 {
@@ -446,7 +439,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new[] { Color.Red, Color.Yellow, Color.Green, Color.DarkCyan, Color.Red });
 
                     img.Mutate(m => m.Fill(brush));
-                }, false, false);
-        }
+                },
+                false,
+                false);
     }
 }

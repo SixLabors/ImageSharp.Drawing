@@ -1,10 +1,10 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
-
 using Moq;
-
-using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
-
+using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
@@ -83,24 +83,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 ImagingTestCaseUtility.ModifyPixel(image, 3, 1, 1);
 
-                Assert.ThrowsAny<ImageDifferenceIsOverThresholdException>(() =>
-                {
-                    image.CompareToOriginal(provider, ImageComparer.Exact);
-                });
+                Assert.ThrowsAny<ImageDifferenceIsOverThresholdException>(() => image.CompareToOriginal(provider, ImageComparer.Exact));
             }
         }
 
         [Theory]
-        [WithBlankImages(10, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(10, 10, PixelTypes.Rgba32)]
         public void CompareToOriginal_WhenInputIsNotFromFile_Throws<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             using (Image<TPixel> image = provider.GetImage())
             {
-                Assert.ThrowsAny<Exception>(() =>
-                {
-                    image.CompareToOriginal(provider, Mock.Of<ImageComparer>());
-                });
+                Assert.ThrowsAny<Exception>(() => image.CompareToOriginal(provider, Mock.Of<ImageComparer>()));
             }
         }
     }

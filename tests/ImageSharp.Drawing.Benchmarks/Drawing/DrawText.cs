@@ -1,25 +1,17 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.IO;
 using System.Linq;
-using System.Numerics;
 using BenchmarkDotNet.Attributes;
-using GeoJSON.Net.Feature;
-using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
-using SDPoint = System.Drawing.Point;
-using SDPointF = System.Drawing.PointF;
 using SDBitmap = System.Drawing.Bitmap;
-using SDRectangleF = System.Drawing.RectangleF;
 using SDFont = System.Drawing.Font;
+using SDRectangleF = System.Drawing.RectangleF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
@@ -32,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         [Params(1, 20)]
         public int TextIterations { get; set; }
 
-        protected const string TextPhrase= "asdfghjkl123456789{}[]+$%?";
+        protected const string TextPhrase = "asdfghjkl123456789{}[]+$%?";
 
         public string TextToRender => string.Join(" ", Enumerable.Repeat(TextPhrase, this.TextIterations));
 
@@ -45,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         private SDFont sdFont;
         private Fonts.Font font;
         private SKTypeface skTypeface;
-        
+
         [GlobalSetup]
         public void Setup()
         {
@@ -58,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
             this.skBitmap = new SKBitmap(Width, Height);
             this.skCanvas = new SKCanvas(this.skBitmap);
-            
+
             this.sdFont = new SDFont("Arial", 12, GraphicsUnit.Point);
             this.font = Fonts.SystemFonts.CreateFont("Arial", 12);
             this.skTypeface = SKTypeface.FromFamilyName("Arial");
@@ -75,42 +67,39 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             this.sdFont.Dispose();
             this.skTypeface.Dispose();
         }
-        
+
         [Benchmark]
         public void SystemDrawing()
-        {
-            this.sdGraphics.DrawString(
+            => this.sdGraphics.DrawString(
                 this.TextToRender,
                 this.sdFont,
                 System.Drawing.Brushes.HotPink,
                 new SDRectangleF(10, 10, 780, 780));
-        }
 
         [Benchmark]
         public void ImageSharp()
-        {
-            this.image.Mutate(x => x
+            => this.image.Mutate(
+                x => x
                 .SetGraphicsOptions(o => o.Antialias = true)
                 .SetTextOptions(o => o.WrapTextWidth = 780)
                 .DrawText(
                     this.TextToRender,
-                    font,
+                    this.font,
                     Processing.Brushes.Solid(Color.HotPink),
                     new PointF(10, 10)));
-        }
 
         [Benchmark(Baseline = true)]
         public void SkiaSharp()
         {
-            using SKPaint paint = new SKPaint
+            using var paint = new SKPaint
             {
                 Color = SKColors.HotPink,
                 IsAntialias = true,
                 TextSize = 16, // 12*1.3333
-                Typeface = skTypeface
+                Typeface = this.skTypeface
             };
-            
-            this.skCanvas.DrawText(TextToRender, 10, 10, paint);
+
+            this.skCanvas.DrawText(this.TextToRender, 10, 10, paint);
         }
     }
 }

@@ -9,6 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
     public class GraphicsOptionsComparer : IEqualityComparer<GraphicsOptions>
     {
         public bool SkipClearOptions { get; set; } = false;
+
         public bool Equals(GraphicsOptions x, GraphicsOptions y)
         {
             if (this.SkipClearOptions)
@@ -26,5 +27,4 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
 
         public int GetHashCode(GraphicsOptions obj) => obj.GetHashCode();
     }
-
 }

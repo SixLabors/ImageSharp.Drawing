@@ -17,8 +17,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
     public class DrawingProfilingBenchmarks : IDisposable
     {
-        private Image<Rgba32> image;
-        private Polygon[] polygons;
+        private readonly Image<Rgba32> image;
+        private readonly Polygon[] polygons;
 
         public DrawingProfilingBenchmarks()
         {
@@ -28,12 +28,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             PointF[][] points = GetPoints(featureCollection);
             this.polygons = points.Select(pts => new Polygon(new LinearLineSegment(pts))).ToArray();
-            
+
             this.image = new Image<Rgba32>(1000, 1000);
-            
+
             static PointF[][] GetPoints(FeatureCollection features)
             {
-                Feature state = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi");
+                Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
                 Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
                                       * Matrix3x2.CreateScale(60, 60);
@@ -70,9 +70,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void DrawText(int textIterations)
         {
             const int Times = 20;
-            const string TextPhrase= "asdfghjkl123456789{}[]+$%?";
+            const string TextPhrase = "asdfghjkl123456789{}[]+$%?";
             string textToRender = string.Join("/n", Enumerable.Repeat(TextPhrase, textIterations));
-            
+
             Font font = SystemFonts.CreateFont("Arial", 12);
 
             for (int i = 0; i < Times; i++)
@@ -88,9 +88,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
         }
 
-        public void Dispose()
-        {
-            this.image.Dispose();
-        }
+        public void Dispose() => this.image.Dispose();
     }
 }

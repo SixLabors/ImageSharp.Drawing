@@ -1,4 +1,7 @@
-﻿using SixLabors.ImageSharp.PixelFormats;
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
 {
@@ -19,19 +22,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
         }
 
         public PixelDifference(Point position, Rgba64 expected, Rgba64 actual)
-            : this(position,
-                actual.R - expected.R,
-                actual.G - expected.G,
-                actual.B - expected.B,
-                actual.A - expected.A)
+            : this(
+                  position,
+                  actual.R - expected.R,
+                  actual.G - expected.G,
+                  actual.B - expected.B,
+                  actual.A - expected.A)
         {
         }
 
         public Point Position { get; }
 
         public int RedDifference { get; }
+
         public int GreenDifference { get; }
+
         public int BlueDifference { get; }
+
         public int AlphaDifference { get; }
 
         public override string ToString() =>

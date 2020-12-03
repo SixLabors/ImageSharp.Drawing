@@ -13,15 +13,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class Clear : BaseImageOperationsExtensionTest
     {
-        GraphicsOptionsComparer clearComparer = new GraphicsOptionsComparer() { SkipClearOptions = true };
-        GraphicsOptions nonDefaultOptions = new GraphicsOptions()
+        private readonly GraphicsOptionsComparer clearComparer = new GraphicsOptionsComparer() { SkipClearOptions = true };
+        private readonly GraphicsOptions nonDefaultOptions = new GraphicsOptions()
         {
             AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Clear,
             BlendPercentage = 0.5f,
             ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Darken,
             AntialiasSubpixelDepth = 99
         };
-        IBrush brush = new SolidBrush(Color.HotPink);
+
+        private readonly IBrush brush = new SolidBrush(Color.HotPink);
 
         [Fact]
         public void Brush()
@@ -57,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Equal(this.nonDefaultOptions, processor.Options, this.clearComparer);
 
-            var solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, solidBrush.Color);
         }
 
@@ -70,7 +71,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Equal(this.options, processor.Options, this.clearComparer);
 
-            var solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, solidBrush.Color);
         }
     }

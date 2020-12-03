@@ -1,20 +1,19 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class ClearRectangle : BaseImageOperationsExtensionTest
     {
-        IBrush brush = Brushes.Solid(Color.HotPink);
-        RectangleF rectangle = new RectangleF(10, 10, 20, 20);
-        RectangularPolygon rectanglePolygon => new RectangularPolygon(rectangle);
+        private readonly IBrush brush = Brushes.Solid(Color.HotPink);
+        private RectangleF rectangle = new RectangleF(10, 10, 20, 20);
+
+        private RectangularPolygon RectanglePolygon => new RectangularPolygon(this.rectangle);
 
         [Fact]
         public void Brush()
@@ -24,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -36,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -48,9 +47,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.NotEqual(this.brush, processor.Brush);
-            var brush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
         }
 
@@ -62,9 +61,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.NotEqual(this.brush, processor.Brush);
-            var brush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
         }
     }

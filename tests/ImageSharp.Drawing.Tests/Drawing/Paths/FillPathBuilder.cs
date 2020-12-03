@@ -2,22 +2,18 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Linq;
-using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class FillPathBuilder : BaseImageOperationsExtensionTest
     {
-        IBrush brush = Brushes.Solid(Color.HotPink);
-
-        IPath path = null;
-        Action<PathBuilder> builder = pb =>
+        private readonly IBrush brush = Brushes.Solid(Color.HotPink);
+        private readonly IPath path = null;
+        private readonly Action<PathBuilder> builder = pb =>
         {
             pb.StartFigure();
             pb.AddLine(10, 10, 20, 20);
@@ -29,16 +25,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         public FillPathBuilder()
         {
             var pb = new PathBuilder();
-            builder(pb);
-            path = pb.Build();
+            this.builder(pb);
+            this.path = pb.Build();
         }
 
         private void VerifyPoints(IPath expectedPath, IPath path)
         {
-            var simplePathExpected = Assert.Single(expectedPath.Flatten());
-            var expectedPoints = simplePathExpected.Points.ToArray();
+            ISimplePath simplePathExpected = Assert.Single(expectedPath.Flatten());
+            PointF[] expectedPoints = simplePathExpected.Points.ToArray();
 
-            var simplePath = Assert.Single(path.Flatten());
+            ISimplePath simplePath = Assert.Single(path.Flatten());
             Assert.True(simplePath.IsClosed);
             Assert.Equal(expectedPoints, simplePath.Points.ToArray());
         }
@@ -77,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
             this.VerifyPoints(this.path, processor.Shape);
             Assert.NotEqual(this.brush, processor.Brush);
-            var brush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
         }
 
@@ -91,7 +87,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
             this.VerifyPoints(this.path, processor.Shape);
             Assert.NotEqual(this.brush, processor.Brush);
-            var brush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
         }
     }

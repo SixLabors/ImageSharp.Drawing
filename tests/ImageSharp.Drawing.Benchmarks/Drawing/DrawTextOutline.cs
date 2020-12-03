@@ -81,16 +81,16 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                         new PointF(10, 10)));
             }
 
-            IImageProcessingContext DrawTextOldVersion(
+            static IImageProcessingContext DrawTextOldVersion(
                 IImageProcessingContext source,
                 TextGraphicsOptions options,
                 string text,
-                SixLabors.Fonts.Font font,
+                Fonts.Font font,
                 IBrush brush,
                 IPen pen,
                 PointF location)
             {
-                var style = new SixLabors.Fonts.RendererOptions(font, options.TextOptions.DpiX, options.TextOptions.DpiY, location)
+                var style = new Fonts.RendererOptions(font, options.TextOptions.DpiX, options.TextOptions.DpiY, location)
                 {
                     ApplyKerning = options.TextOptions.ApplyKerning,
                     TabWidth = options.TextOptions.TabWidth,
@@ -115,7 +115,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 return source;
             }
         }
-        
+
         // 11/12/2020
         // BenchmarkDotNet=v0.12.1, OS=Windows 10.0.18363.1198 (1909/November2018Update/19H2)
         // Intel Core i7-7700HQ CPU 2.80GHz (Kaby Lake), 1 CPU, 8 logical and 4 physical cores

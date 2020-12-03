@@ -12,22 +12,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Utilities
     {
         public static TheoryData<float[]> GenerateTestData()
         {
-            TheoryData<float[]> result = new TheoryData<float[]>();
+            var result = new TheoryData<float[]>();
 
-            Random rnd = new Random(42);
+            var rnd = new Random(42);
 
-            int[] sizes = {1, 2, 3, 5, 10, 16, 42, 500, 1000};
+            int[] sizes = { 1, 2, 3, 5, 10, 16, 42, 500, 1000 };
 
             foreach (int size in sizes)
             {
                 float[] keys = new float[size];
                 for (int i = 0; i < keys.Length; i++)
                 {
-                    keys[i] = (float) (rnd.NextDouble() * 10);
+                    keys[i] = (float)(rnd.NextDouble() * 10);
                 }
+
                 result.Add(keys);
             }
-            
+
             return result;
         }
 
@@ -61,8 +62,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Utilities
         [MemberData(nameof(GenerateTestData))]
         public void KeyValueSort(float[] keys)
         {
-            int[] values = keys.Select(k => (int) (k * 1000)).ToArray();
-            
+            int[] values = keys.Select(k => (int)(k * 1000)).ToArray();
+
             SortUtility.Sort(keys, values.AsSpan());
             VerifySorted(keys, values);
         }
@@ -74,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Utilities
                 float current = keys[i];
                 float next = i < keys.Length - 1 ? keys[i + 1] : float.MaxValue;
                 Assert.True(current <= next);
-                Assert.Equal((int)(current*1000), values[i]);
+                Assert.Equal((int)(current * 1000), values[i]);
             }
         }
     }

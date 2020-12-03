@@ -8,7 +8,6 @@ using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
-
     /// <summary>
     /// Provides <see cref="Image{TPixel}" /> instances for parametric unit tests.
     /// </summary>

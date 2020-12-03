@@ -18,11 +18,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         private readonly string outputDir;
 
         public DebugDraw(string outputDir)
-        {
-            this.outputDir = outputDir;
-        }
+            => this.outputDir = outputDir;
 
-        public void Polygon(IPath path, float gridSize = 10f, float scale = 10f, [CallerMemberName]string testMethod = "")
+        public void Polygon(IPath path, float gridSize = 10f, float scale = 10f, [CallerMemberName] string testMethod = "")
         {
             if (TestEnvironment.RunsOnCI)
             {
@@ -33,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             RectangleF bounds = path.Bounds;
             gridSize *= scale;
 
-            using Image img = new Image<Rgba32>((int)(bounds.Right + 2 * gridSize), (int)(bounds.Bottom + 2 * gridSize));
+            using Image img = new Image<Rgba32>((int)(bounds.Right + (2 * gridSize)), (int)(bounds.Bottom + (2 * gridSize)));
             img.Mutate(ctx => DrawGrid(ctx.Fill(TestBrush, path), bounds, gridSize));
 
             string outDir = TestEnvironment.CreateOutputDirectory(this.outputDir);
@@ -47,13 +45,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             for (float x = rect.Left; x <= rect.Right; x += gridSize)
             {
-                PointF[] line = {P(x, rect.Top), P(x, rect.Bottom)};
+                PointF[] line = { P(x, rect.Top), P(x, rect.Bottom) };
                 ctx.DrawLines(GridPen, line);
             }
 
             for (float y = rect.Top; y <= rect.Bottom; y += gridSize)
             {
-                PointF[] line = {P(rect.Left, y), P(rect.Right, y)};
+                PointF[] line = { P(rect.Left, y), P(rect.Right, y) };
                 ctx.DrawLines(GridPen, line);
             }
         }

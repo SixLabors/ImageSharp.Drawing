@@ -28,10 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <returns>
         /// The <see cref="string"/>.
         /// </returns>
-        public static string GetPath(string file)
-        {
-            return IOPath.Combine(FormatsDirectory, file);
-        }
+        public static string GetPath(string file) => IOPath.Combine(FormatsDirectory, file);
 
         /// <summary>
         /// Gets the correct path to the formats directory.
@@ -41,7 +38,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </returns>
         private static string GetFontsDirectory()
         {
-            var directories = new List<string> {
+            var directories = new List<string>
+            {
                  "TestFonts/", // Here for code coverage tests.
                  "tests/ImageSharp.Drawing.Tests/TestFonts/", // from travis/build script
                  "../../../../../ImageSharp.Drawing.Tests/TestFonts/", // from Sandbox46

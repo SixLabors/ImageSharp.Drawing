@@ -88,9 +88,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         public static PointF[] CreatePointArray(params (float x, float y)[] coords) =>
             coords.Select(c => new PointF(c.x, c.y)).ToArray();
+
         public static T[] CloneArray<T>(this T[] points)
         {
-            T[] result = new T[points.Length];
+            var result = new T[points.Length];
             Array.Copy(points, result, points.Length);
             return result;
         }

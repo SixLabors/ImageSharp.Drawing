@@ -18,17 +18,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </summary>
         private class TestPatternProvider : BlankProvider
         {
-            static readonly Dictionary<string, Image<TPixel>> TestImages = new Dictionary<string, Image<TPixel>>();
+            private static readonly Dictionary<string, Image<TPixel>> TestImages = new Dictionary<string, Image<TPixel>>();
 
-            private static TPixel[] BlackWhitePixels = new[] {
-                                                                     Color.Black.ToPixel<TPixel>(),
-                                                                     Color.White.ToPixel<TPixel>()
-                                                                 };
+            private static readonly TPixel[] BlackWhitePixels = new[]
+            {
+                Color.Black.ToPixel<TPixel>(),
+                Color.White.ToPixel<TPixel>()
+            };
 
-            private static TPixel[] PinkBluePixels = new[] {
-                                                                   Color.HotPink.ToPixel<TPixel>(),
-                                                                   Color.Blue.ToPixel<TPixel>()
-                                                               };
+            private static readonly TPixel[] PinkBluePixels = new[]
+            {
+                Color.HotPink.ToPixel<TPixel>(),
+                Color.Blue.ToPixel<TPixel>()
+            };
 
             public TestPatternProvider(int width, int height)
                 : base(width, height)
@@ -42,7 +44,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
             }
 
-            public override string SourceFileOrDescription => TestUtils.AsInvariantString($"TestPattern{this.Width}x{this.Height}");
+            public override string SourceFileOrDescription
+                => TestUtils.AsInvariantString($"TestPattern{this.Width}x{this.Height}");
 
             public override Image<TPixel> GetImage()
             {
@@ -50,10 +53,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 {
                     if (!TestImages.ContainsKey(this.SourceFileOrDescription))
                     {
-                        Image<TPixel> image = new Image<TPixel>(this.Width, this.Height);
+                        var image = new Image<TPixel>(this.Width, this.Height);
                         DrawTestPattern(image);
                         TestImages.Add(this.SourceFileOrDescription, image);
                     }
+
                     return TestImages[this.SourceFileOrDescription].Clone(this.Configuration);
                 }
             }
@@ -61,7 +65,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             /// <summary>
             /// Draws the test pattern on an image by drawing 4 other patterns in the for quadrants of the image.
             /// </summary>
-            /// <param name="image"></param>
             private static void DrawTestPattern(Image<TPixel> image)
             {
                 // first lets split the image into 4 quadrants
@@ -75,7 +78,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             /// <summary>
             /// Fills the top right quadrant with alternating solid vertical bars.
             /// </summary>
-            /// <param name="pixels"></param>
             private static void VerticalBars(Buffer2D<TPixel> pixels)
             {
                 // topLeft
@@ -97,8 +99,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                         if (x % stride == 0)
                         {
                             p++;
-                            p = p % PinkBluePixels.Length;
+                            p %= PinkBluePixels.Length;
                         }
+
                         pixels[x, y] = PinkBluePixels[p];
                     }
                 }
@@ -107,7 +110,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             /// <summary>
             /// fills the top left quadrant with a black and white checker board.
             /// </summary>
-            /// <param name="pixels"></param>
             private static void BlackWhiteChecker(Buffer2D<TPixel> pixels)
             {
                 // topLeft
@@ -123,18 +125,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     if (y % stride == 0)
                     {
                         p++;
-                        p = p % BlackWhitePixels.Length;
+                        p %= BlackWhitePixels.Length;
                     }
+
                     int pstart = p;
                     for (int x = left; x < right; x++)
                     {
                         if (x % stride == 0)
                         {
                             p++;
-                            p = p % BlackWhitePixels.Length;
+                            p %= BlackWhitePixels.Length;
                         }
+
                         pixels[x, y] = BlackWhitePixels[p];
                     }
+
                     p = pstart;
                 }
             }
@@ -142,7 +147,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             /// <summary>
             /// Fills the bottom left quadrant with 3 horizontal bars in Red, Green and Blue with a alpha gradient from left (transparent) to right (solid).
             /// </summary>
-            /// <param name="pixels"></param>
             private static void TransparentGradients(Buffer2D<TPixel> pixels)
             {
                 // topLeft
@@ -152,11 +156,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 int bottom = pixels.Height;
                 int height = (int)Math.Ceiling(pixels.Height / 6f);
 
-                Vector4 red = Color.Red.ToVector4(); // use real color so we can see har it translates in the test pattern
-                Vector4 green = Color.Green.ToVector4(); // use real color so we can see har it translates in the test pattern
-                Vector4 blue = Color.Blue.ToVector4(); // use real color so we can see har it translates in the test pattern
+                var red = Color.Red.ToVector4(); // use real color so we can see har it translates in the test pattern
+                var green = Color.Green.ToVector4(); // use real color so we can see har it translates in the test pattern
+                var blue = Color.Blue.ToVector4(); // use real color so we can see har it translates in the test pattern
 
-                TPixel c = default(TPixel);
+                var c = default(TPixel);
 
                 for (int x = left; x < right; x++)
                 {
@@ -168,13 +172,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     {
                         pixels[x, y] = c;
                     }
-                    topBand = topBand + height;
+
+                    topBand += height;
                     c.FromVector4(green);
                     for (int y = topBand; y < topBand + height; y++)
                     {
                         pixels[x, y] = c;
                     }
-                    topBand = topBand + height;
+
+                    topBand += height;
                     c.FromVector4(blue);
                     for (int y = topBand; y < bottom; y++)
                     {
@@ -187,7 +193,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             /// Fills the bottom right quadrant with all the colors producible by converting iterating over a uint and unpacking it.
             /// A better algorithm could be used but it works
             /// </summary>
-            /// <param name="pixels"></param>
             private static void Rainbow(Buffer2D<TPixel> pixels)
             {
                 int left = pixels.Width / 2;
@@ -205,8 +210,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     for (int y = top; y < bottom; y++)
                     {
                         t.PackedValue += stepsPerPixel;
-                        Vector4 v = t.ToVector4();
-                        //v.W = (x - left) / (float)left;
+                        var v = t.ToVector4();
+
+                        // v.W = (x - left) / (float)left;
                         c.FromVector4(v);
                         pixels[x, y] = c;
                     }

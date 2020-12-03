@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void PathExtendingOffEdgeOfImageShouldNotBeCropped<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            var color = Color.White;
+            Color color = Color.White;
             Pen pen = Pens.Solid(color, 5f);
 
             provider.RunValidatingProcessorTest(

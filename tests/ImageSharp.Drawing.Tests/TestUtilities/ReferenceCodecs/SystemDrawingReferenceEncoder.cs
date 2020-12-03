@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
+using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
@@ -12,12 +14,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
 {
     public class SystemDrawingReferenceEncoder : IImageEncoder
     {
-        private readonly System.Drawing.Imaging.ImageFormat imageFormat;
+        private readonly ImageFormat imageFormat;
 
         public SystemDrawingReferenceEncoder(ImageFormat imageFormat)
-        {
-            this.imageFormat = imageFormat;
-        }
+            => this.imageFormat = imageFormat;
 
         public static SystemDrawingReferenceEncoder Png { get; } = new SystemDrawingReferenceEncoder(ImageFormat.Png);
 
@@ -26,17 +26,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
         public void Encode<TPixel>(Image<TPixel> image, Stream stream)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            using (System.Drawing.Bitmap sdBitmap = SystemDrawingBridge.To32bppArgbSystemDrawingBitmap(image))
-            {
-                sdBitmap.Save(stream, this.imageFormat);
-            }
+            using Bitmap sdBitmap = SystemDrawingBridge.To32bppArgbSystemDrawingBitmap(image);
+            sdBitmap.Save(stream, this.imageFormat);
         }
 
-        public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream, CancellationToken cancellationToken) where TPixel : unmanaged, IPixel<TPixel>
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream) where TPixel : unmanaged, IPixel<TPixel> => throw new System.NotImplementedException();
+        public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream, CancellationToken cancellationToken)
+            where TPixel : unmanaged, IPixel<TPixel>
+            => throw new NotImplementedException();
     }
 }

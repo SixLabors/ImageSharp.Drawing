@@ -8,7 +8,6 @@ using SixLabors.ImageSharp.Processing;
 using Xunit;
 
 // ReSharper disable InconsistentNaming
-
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 {
     [GroupOutput("Drawing")]
@@ -29,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithTestPatternImages(200, 200, PixelTypes.Rgba32 | PixelTypes.Bgra32)]
+        [WithTestPatternImage(200, 200, PixelTypes.Rgba32 | PixelTypes.Bgra32)]
         public void UseBrushOfDifferentPixelType<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {

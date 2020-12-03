@@ -11,31 +11,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 {
     internal class FakeImageOperationsProvider : IImageProcessingContextFactory
     {
-        private List<object> ImageOperators = new List<object>();
+        private readonly List<object> imageOperators = new List<object>();
 
         public bool HasCreated<TPixel>(Image<TPixel> source)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            return this.Created(source).Any();
-        }
-        public IEnumerable<FakeImageOperations<TPixel>> Created<TPixel>(Image<TPixel> source) where TPixel : unmanaged, IPixel<TPixel>
-        {
-            return this.ImageOperators.OfType<FakeImageOperations<TPixel>>()
-                .Where(x => x.Source == source);
-        }
+            => this.Created(source).Any();
+
+        public IEnumerable<FakeImageOperations<TPixel>> Created<TPixel>(Image<TPixel> source)
+            where TPixel : unmanaged, IPixel<TPixel>
+            => this.imageOperators.OfType<FakeImageOperations<TPixel>>()
+            .Where(x => x.Source == source);
 
         public IEnumerable<FakeImageOperations<TPixel>.AppliedOperation> AppliedOperations<TPixel>(Image<TPixel> source)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            return this.Created(source)
-                .SelectMany(x => x.Applied);
-        }
+            => this.Created(source).SelectMany(x => x.Applied);
 
         public IInternalImageProcessingContext<TPixel> CreateImageProcessingContext<TPixel>(Configuration configuration, Image<TPixel> source, bool mutate)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             var op = new FakeImageOperations<TPixel>(configuration, source, mutate);
-            this.ImageOperators.Add(op);
+            this.imageOperators.Add(op);
             return op;
         }
 
@@ -56,15 +51,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 
             public IDictionary<object, object> Properties { get; } = new Dictionary<object, object>();
 
-            public Image<TPixel> GetResultImage()
-            {
-                return this.Source;
-            }
+            public Image<TPixel> GetResultImage() => this.Source;
 
-            public Size GetCurrentSize()
-            {
-                return this.Source.Size();
-            }
+            public Size GetCurrentSize() => this.Source.Size();
 
             public IImageProcessingContext ApplyProcessor(IImageProcessor processor, Rectangle rectangle)
             {
@@ -88,6 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             public struct AppliedOperation
             {
                 public Rectangle? Rectangle { get; set; }
+
                 public IImageProcessor<TPixel> GenericProcessor { get; set; }
 
                 public IImageProcessor NonGenericProcessor { get; set; }

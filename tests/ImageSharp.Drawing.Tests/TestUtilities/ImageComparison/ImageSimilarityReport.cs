@@ -1,3 +1,6 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -50,10 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
 
         public bool IsEmpty => this.Differences.Length == 0;
 
-        public override string ToString()
-        {
-            return this.IsEmpty ? "[SimilarImages]" : this.PrintDifference();
-        }
+        public override string ToString() => this.IsEmpty ? "[SimilarImages]" : this.PrintDifference();
 
         private string PrintDifference()
         {
@@ -63,6 +63,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
                 sb.AppendLine();
                 sb.AppendLine($"Total difference: {this.DifferencePercentageString}");
             }
+
             int max = Math.Min(5, this.Differences.Length);
 
             for (int i = 0; i < max; i++)
@@ -73,10 +74,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
                     sb.AppendFormat(";{0}", Environment.NewLine);
                 }
             }
+
             if (this.Differences.Length >= 5)
             {
                 sb.Append("...");
             }
+
             return sb.ToString();
         }
     }

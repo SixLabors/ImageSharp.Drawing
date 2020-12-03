@@ -1,3 +1,6 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -9,10 +12,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     public class FillOutsideBoundsTests
     {
         [Theory]
-        [InlineData(-100)] //Crash
-        [InlineData(-99)]  //Fine
-        [InlineData(99)]   //Fine
-        [InlineData(100)]  //Crash
+        [InlineData(-100)] // Crash
+        [InlineData(-99)] // Fine
+        [InlineData(99)] // Fine
+        [InlineData(100)] // Crash
         public void DrawRectactangleOutsideBoundsDrawingArea(int xpos)
         {
             int width = 100;
@@ -26,14 +29,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             }
         }
 
-        public static TheoryData<int, int> CircleCoordinates = new TheoryData<int, int>()
+        public static TheoryData<int, int> CircleCoordinates { get; } = new TheoryData<int, int>()
         {
-            {-110, -60}, { 0, -60 }, {110, -60},
-            {-110, -50}, { 0, -50 }, {110, -50},
-            {-110, -49}, { 0, -49 }, {110, -49},
-            {-110, -20}, { 0, -20 }, {110, -20},
-            {-110, -50}, { 0, -60 }, {110, -60},
-            {-110, 0}, { -99, 0}, { 0, 0 }, {99, 0}, { 110, 0},
+            { -110, -60 }, { 0, -60 }, { 110, -60 },
+            { -110, -50 }, { 0, -50 }, { 110, -50 },
+            { -110, -49 }, { 0, -49 }, { 110, -49 },
+            { -110, -20 }, { 0, -20 }, { 110, -20 },
+            { -110, -50 }, { 0, -60 }, { 110, -60 },
+            { -110, 0 }, { -99, 0 }, { 0, 0 }, { 99, 0 }, { 110, 0 },
         };
 
         [Theory]
@@ -43,10 +46,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             int width = 100;
             int height = 100;
 
-            using var image = provider.GetImage();
+            using Image<Rgba32> image = provider.GetImage();
             var circle = new EllipsePolygon(xpos, ypos, width, height);
 
-            provider.RunValidatingProcessorTest(x => x.Fill(Color.Black, circle),
+            provider.RunValidatingProcessorTest(
+                x => x.Fill(Color.Black, circle),
                 $"({xpos}_{ypos})",
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: false);

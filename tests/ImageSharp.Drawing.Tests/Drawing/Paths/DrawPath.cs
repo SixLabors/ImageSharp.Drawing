@@ -1,21 +1,17 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Linq;
-using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class DrawPath : BaseImageOperationsExtensionTest
     {
-        IPen pen = Pens.Solid(Color.HotPink, 2);
-
-        IPath path = new EllipsePolygon(10, 10, 100);
+        private readonly IPen pen = Pens.Solid(Color.HotPink, 2);
+        private readonly IPath path = new EllipsePolygon(10, 10, 100);
 
         [Fact]
         public void Pen()
@@ -76,7 +72,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
             Assert.Equal(this.path, processor.Shape);
-            var brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }
@@ -90,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
             Assert.Equal(this.path, processor.Shape);
-            var brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }

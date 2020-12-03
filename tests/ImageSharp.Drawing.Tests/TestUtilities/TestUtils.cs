@@ -6,12 +6,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
-using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
@@ -102,11 +101,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         public static Type GetClrType(this PixelTypes pixelType) => PixelTypes2ClrTypes[pixelType];
 
-        /// <summary>
-        /// Returns the <see cref="PixelTypes"/> enumerations for the given type.
-        /// </summary>
-        /// <param name="colorStructClrType"></param>
-        /// <returns></returns>
         public static PixelTypes GetPixelType(this Type colorStructClrType) => ClrTypes2PixelTypes[colorStructClrType];
 
         public static IEnumerable<KeyValuePair<PixelTypes, Type>> ExpandAllTypes(this PixelTypes pixelTypes)
@@ -129,6 +123,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     result[pt] = pt.GetClrType();
                 }
             }
+
             return result;
         }
 
@@ -161,8 +156,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <param name="process">The image processing method to test. (As a delegate)</param>
         /// <param name="testOutputDetails">The value to append to the test output.</param>
         /// <param name="comparer">The custom image comparer to use</param>
-        /// <param name="appendPixelTypeToFileName"></param>
-        /// <param name="appendSourceFileOrDescription"></param>
+        /// <param name="appendPixelTypeToFileName">Whether to append the picel type to the file name.</param>
+        /// <param name="appendSourceFileOrDescription">Whether to append the source file or description.</param>
         internal static void RunValidatingProcessorTest<TPixel>(
             this TestImageProvider<TPixel> provider,
             Action<IImageProcessingContext> process,
@@ -216,9 +211,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             using (Image<TPixel> image = provider.GetImage())
             {
                 FormattableString testOutputDetails = $"";
-                image.Mutate(
-                    ctx => { testOutputDetails = processAndGetTestOutputDetails(ctx); }
-                    );
+                image.Mutate(ctx => testOutputDetails = processAndGetTestOutputDetails(ctx));
 
                 image.DebugSave(
                     provider,
@@ -346,11 +339,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         public static string[] GetAllResamplerNames(bool includeNearestNeighbour = true)
-        {
-            return typeof(KnownResamplers).GetProperties(BindingFlags.Public | BindingFlags.Static)
-                .Select(p => p.Name)
-                .Where(name => includeNearestNeighbour || name != nameof(KnownResamplers.NearestNeighbor))
-                .ToArray();
-        }
+            => typeof(KnownResamplers).GetProperties(BindingFlags.Public | BindingFlags.Static)
+            .Select(p => p.Name)
+            .Where(name => includeNearestNeighbour || name != nameof(KnownResamplers.NearestNeighbor))
+            .ToArray();
     }
 }

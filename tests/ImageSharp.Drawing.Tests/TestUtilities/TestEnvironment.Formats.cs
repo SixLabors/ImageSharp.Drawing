@@ -2,13 +2,13 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Formats.Tga;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs;
 using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
@@ -55,8 +55,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             var cfg = new Configuration(
                 new JpegConfigurationModule(),
                 new GifConfigurationModule(),
-                new TgaConfigurationModule()
-            );
+                new TgaConfigurationModule());
 
             // Magick codecs should work on all platforms
             IImageEncoder pngEncoder = IsWindows ? (IImageEncoder)SystemDrawingReferenceEncoder.Png : new PngEncoder();

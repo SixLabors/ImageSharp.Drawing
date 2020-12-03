@@ -22,9 +22,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             // are shared between PixelTypes.Color & PixelTypes.Rgba32
             private class Key : IEquatable<Key>
             {
-                private Tuple<PixelTypes, string, Type> commonValues;
+                private readonly Tuple<PixelTypes, string, Type> commonValues;
 
-                private Dictionary<string, object> decoderParameters;
+                private readonly Dictionary<string, object> decoderParameters;
 
                 public Key(PixelTypes pixelType, string filePath, IImageDecoder customDecoder)
                 {
@@ -48,8 +48,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                             object value = p.GetValue(customDecoder);
                             data[key] = value;
                         }
+
                         type = type.GetTypeInfo().BaseType;
                     }
+
                     return data;
                 }
 
@@ -81,11 +83,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                         {
                             return false;
                         }
+
                         if (!object.Equals(kv.Value, otherVal))
                         {
                             return false;
                         }
                     }
+
                     return true;
                 }
 
@@ -116,7 +120,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 public static bool operator !=(Key left, Key right) => !Equals(left, right);
             }
 
-            private static readonly ConcurrentDictionary<Key, Image<TPixel>> cache = new ConcurrentDictionary<Key, Image<TPixel>>();
+            private static readonly ConcurrentDictionary<Key, Image<TPixel>> Cache = new ConcurrentDictionary<Key, Image<TPixel>>();
 
             // Needed for deserialization!
             // ReSharper disable once UnusedMember.Local
@@ -148,7 +152,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
                 var key = new Key(this.PixelType, this.FilePath, decoder);
 
-                Image<TPixel> cachedImage = cache.GetOrAdd(key, _ => this.LoadImage(decoder));
+                Image<TPixel> cachedImage = Cache.GetOrAdd(key, _ => this.LoadImage(decoder));
 
                 return cachedImage.Clone(this.Configuration);
             }

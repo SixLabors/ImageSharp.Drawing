@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             var complex = new ComplexPolygon(simplePath1, simplePath2);
 
             var buffer = new PointF[10];
-            var points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.Nonzero);
+            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.Nonzero);
 
             Assert.Equal(2, points);
             Assert.Equal(1, buffer[0].X);
@@ -85,7 +85,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             var complex = new ComplexPolygon(simplePath1, simplePath2);
 
             var buffer = new PointF[10];
-            var points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.OddEven);
+            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.OddEven);
 
             Assert.Equal(4, points);
             Assert.Equal(1, buffer[0].X);

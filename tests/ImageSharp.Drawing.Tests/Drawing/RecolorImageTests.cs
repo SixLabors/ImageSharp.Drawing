@@ -15,8 +15,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Rgba32, "Yellow", "Pink", 0.2f)]
         [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Bgra32, "Yellow", "Pink", 0.5f)]
-        [WithTestPatternImages(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.2f)]
-        [WithTestPatternImages(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.6f)]
+        [WithTestPatternImage(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.2f)]
+        [WithTestPatternImage(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.6f)]
         public void Recolor<TPixel>(TestImageProvider<TPixel> provider, string sourceColorName, string targetColorName, float threshold)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
         [Theory]
         [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Bgra32, "Yellow", "Pink", 0.5f)]
-        [WithTestPatternImages(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.2f)]
+        [WithTestPatternImage(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.2f)]
         public void Recolor_InBox<TPixel>(TestImageProvider<TPixel> provider, string sourceColorName, string targetColorName, float threshold)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -39,10 +39,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var brush = new RecolorBrush(sourceColor, targetColor, threshold);
 
             FormattableString testInfo = $"{sourceColorName}-{targetColorName}-{threshold}";
-            provider.RunValidatingProcessorTest(x =>
+            provider.RunValidatingProcessorTest(
+                x =>
                 {
                     Size size = x.GetCurrentSize();
-                    var rectangle = new Rectangle(0, size.Height / 2 - size.Height / 4, size.Width, size.Height / 2);
+                    var rectangle = new Rectangle(0, (size.Height / 2) - (size.Height / 4), size.Width, size.Height / 2);
                     x.Fill(brush, rectangle);
                 }, testInfo);
         }

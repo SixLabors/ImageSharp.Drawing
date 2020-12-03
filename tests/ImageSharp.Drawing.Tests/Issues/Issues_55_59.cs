@@ -35,8 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 new LinearLineSegment(new PointF(592.0153f, 1156.238f), new PointF(592.4992f, 1157.138f)),
                 new LinearLineSegment(new PointF(592.4992f, 1157.138f), new PointF(593.3998f, 1156.654f)),
                 new LinearLineSegment(new PointF(593.3998f, 1156.654f), new PointF(592.916f, 1155.754f)),
-                new LinearLineSegment(new PointF(592.916f, 1155.754f), new PointF(592.0153f, 1156.238f))
-            );
+                new LinearLineSegment(new PointF(592.916f, 1155.754f), new PointF(592.0153f, 1156.238f)));
 
             using var image = new Image<Rgba32>(2000, 2000);
             image.Mutate(imageContext => imageContext.Draw(new Rgba32(255, 0, 0), 1, path));

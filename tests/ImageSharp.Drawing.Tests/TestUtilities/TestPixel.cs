@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-
 using SixLabors.ImageSharp.PixelFormats;
-
 using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
@@ -25,26 +23,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
         }
 
         public float Red { get; set; }
+
         public float Green { get; set; }
+
         public float Blue { get; set; }
+
         public float Alpha { get; set; }
 
-        public static implicit operator TPixel(TestPixel<TPixel> d)
-        {
-            return d?.AsPixel() ?? default(TPixel);
-        }
+        public static implicit operator TPixel(TestPixel<TPixel> d) => d?.AsPixel() ?? default;
 
         public TPixel AsPixel()
         {
-            TPixel pix = default(TPixel);
+            TPixel pix = default;
             pix.FromVector4(new System.Numerics.Vector4(this.Red, this.Green, this.Blue, this.Alpha));
             return pix;
         }
 
-        internal Span<TPixel> AsSpan()
-        {
-            return new Span<TPixel>(new[] { AsPixel() });
-        }
+        internal Span<TPixel> AsSpan() => new Span<TPixel>(new[] { this.AsPixel() });
 
         public void Deserialize(IXunitSerializationInfo info)
         {
@@ -62,9 +57,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
             info.AddValue("alpha", this.Alpha);
         }
 
-        public override string ToString()
-        {
-            return $"{typeof(TPixel).Name}{this.AsPixel().ToString()}";
-        }
+        public override string ToString() => $"{typeof(TPixel).Name}{this.AsPixel()}";
     }
 }

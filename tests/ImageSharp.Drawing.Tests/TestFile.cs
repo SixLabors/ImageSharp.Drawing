@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
-
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
@@ -26,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// The "Formats" directory, as lazy value
         /// </summary>
         // ReSharper disable once InconsistentNaming
-        private static readonly Lazy<string> inputImagesDirectory = new Lazy<string>(() => TestEnvironment.InputImagesDirectoryFullPath);
+        private static readonly Lazy<string> LazyInputImagesDirectory = new Lazy<string>(() => TestEnvironment.InputImagesDirectoryFullPath);
 
         /// <summary>
         /// The image (lazy initialized value)
@@ -43,53 +42,47 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </summary>
         /// <param name="file">The file.</param>
         private TestFile(string file)
-        {
-            this.FullPath = file;
-        }
+            => this.FullPath = file;
 
         /// <summary>
         /// Gets the image bytes.
         /// </summary>
-        public byte[] Bytes => this.bytes ?? (this.bytes = File.ReadAllBytes(this.FullPath));
+        public byte[] Bytes => this.bytes ??= File.ReadAllBytes(this.FullPath);
 
         /// <summary>
-        /// The full path to file.
+        /// Gets the full path to file.
         /// </summary>
         public string FullPath { get; }
 
         /// <summary>
-        /// The file name.
+        /// Gets the file name.
         /// </summary>
         public string FileName => IOPath.GetFileName(this.FullPath);
 
         /// <summary>
-        /// The file name without extension.
+        /// Gets the file name without extension.
         /// </summary>
         public string FileNameWithoutExtension => IOPath.GetFileNameWithoutExtension(this.FullPath);
 
         /// <summary>
         /// Gets the image with lazy initialization.
         /// </summary>
-        private Image<Rgba32> Image => this.image ?? (this.image = ImageSharp.Image.Load<Rgba32>(this.Bytes));
+        private Image<Rgba32> Image => this.image ??= ImageSharp.Image.Load<Rgba32>(this.Bytes);
 
         /// <summary>
         /// Gets the input image directory.
         /// </summary>
-        private static string InputImagesDirectory => inputImagesDirectory.Value;
+        private static string InputImagesDirectory => LazyInputImagesDirectory.Value;
 
         /// <summary>
         /// Gets the full qualified path to the input test file.
         /// </summary>
-        /// <param name="file">
-        /// The file path.
-        /// </param>
+        /// <param name="file">The file path.</param>
         /// <returns>
         /// The <see cref="string"/>.
         /// </returns>
         public static string GetInputFileFullPath(string file)
-        {
-            return IOPath.Combine(InputImagesDirectory, file).Replace('\\', IOPath.DirectorySeparatorChar);
-        }
+            => IOPath.Combine(InputImagesDirectory, file).Replace('\\', IOPath.DirectorySeparatorChar);
 
         /// <summary>
         /// Creates a new test file or returns one from the cache.
@@ -99,9 +92,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// The <see cref="TestFile"/>.
         /// </returns>
         public static TestFile Create(string file)
-        {
-            return Cache.GetOrAdd(file, (string fileName) => new TestFile(GetInputFileFullPath(file)));
-        }
+            => Cache.GetOrAdd(file, (string fileName) => new TestFile(GetInputFileFullPath(file)));
 
         /// <summary>
         /// Gets the file name.
@@ -111,9 +102,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// The <see cref="string"/>.
         /// </returns>
         public string GetFileName(object value)
-        {
-            return $"{this.FileNameWithoutExtension}-{value}{IOPath.GetExtension(this.FullPath)}";
-        }
+            => $"{this.FileNameWithoutExtension}-{value}{IOPath.GetExtension(this.FullPath)}";
 
         /// <summary>
         /// Gets the file name without extension.
@@ -123,9 +112,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// The <see cref="string"/>.
         /// </returns>
         public string GetFileNameWithoutExtension(object value)
-        {
-            return this.FileNameWithoutExtension + "-" + value;
-        }
+            => this.FileNameWithoutExtension + "-" + value;
 
         /// <summary>
         /// Creates a new image.
@@ -133,10 +120,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <returns>
         /// The <see cref="ImageSharp.Image"/>.
         /// </returns>
-        public Image<Rgba32> CreateRgba32Image()
-        {
-            return this.Image.Clone();
-        }
+        public Image<Rgba32> CreateRgba32Image() => this.Image.Clone();
 
         /// <summary>
         /// Creates a new image.
@@ -145,8 +129,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// The <see cref="ImageSharp.Image"/>.
         /// </returns>
         public Image<Rgba32> CreateRgba32Image(IImageDecoder decoder)
-        {
-            return ImageSharp.Image.Load<Rgba32>(this.Image.GetConfiguration(), this.Bytes, decoder);
-        }
+            => ImageSharp.Image.Load<Rgba32>(this.Image.GetConfiguration(), this.Bytes, decoder);
     }
 }

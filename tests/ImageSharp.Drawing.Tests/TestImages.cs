@@ -2,14 +2,14 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System.Linq;
-// ReSharper disable InconsistentNaming
 
+// ReSharper disable InconsistentNaming
 // ReSharper disable MemberHidesStaticFromOuterClass
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
     /// <summary>
     /// Class that contains all the relative test image paths in the TestImages/Formats directory.
-    /// Use with <see cref="WithFileAttribute"/>, <see cref="WithFileCollectionAttribute"/> or <see cref="FileTestBase"/>.
+    /// Use with <see cref="WithFileAttribute"/>, <see cref="WithFileCollectionAttribute"/>.
     /// </summary>
     public static class TestImages
     {
@@ -310,42 +310,42 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             public const string Rgba321010102 = "Bmp/rgba32-1010102.bmp";
             public const string RgbaAlphaBitfields = "Bmp/rgba32abf.bmp";
 
-            public static readonly string[] BitFields
-            = {
-                  Rgb32bfdef,
-                  Rgb32bf,
-                  Rgb16565,
-                  Rgb16bfdef,
-                  Rgb16565pal,
-                  Issue735,
+            public static readonly string[] BitFields =
+            {
+                Rgb32bfdef,
+                Rgb32bf,
+                Rgb16565,
+                Rgb16bfdef,
+                Rgb16565pal,
+                Issue735,
             };
 
-            public static readonly string[] Miscellaneous
-            = {
+            public static readonly string[] Miscellaneous =
+            {
                 Car,
                 F,
                 NegHeight
             };
 
-            public static readonly string[] Benchmark
-                = {
-                          Car,
-                          F,
-                          NegHeight,
-                          CoreHeader,
-                          V5Header,
-                          RLE4,
-                          RLE8,
-                          RLE8Inverted,
-                          Bit1,
-                          Bit1Pal1,
-                          Bit4,
-                          Bit8,
-                          Bit8Inverted,
-                          Bit16,
-                          Bit16Inverted,
-                          Bit32Rgb
-                      };
+            public static readonly string[] Benchmark =
+            {
+                Car,
+                F,
+                NegHeight,
+                CoreHeader,
+                V5Header,
+                RLE4,
+                RLE8,
+                RLE8Inverted,
+                Bit1,
+                Bit1Pal1,
+                Bit4,
+                Bit8,
+                Bit8Inverted,
+                Bit16,
+                Bit16Inverted,
+                Bit32Rgb
+            };
         }
 
         public static class Gif

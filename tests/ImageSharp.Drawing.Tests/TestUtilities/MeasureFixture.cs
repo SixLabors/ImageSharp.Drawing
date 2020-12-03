@@ -14,9 +14,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     public class MeasureFixture
     {
         /// <summary>
-        /// Value indicating whether printing is enabled.
+        /// Gets or sets a value indicating whether printing is enabled.
         /// </summary>
-        protected bool EnablePrinting = true;
+        protected bool EnablePrinting { get; set; } = true;
 
         /// <summary>
         /// Measures and prints the execution time of an <see cref="Action{T}"/>, executed multiple times.
@@ -49,10 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// Initializes a new instance of <see cref="MeasureFixture"/>
         /// </summary>
         /// <param name="output">A <see cref="ITestOutputHelper"/> instance to print the results </param>
-        public MeasureFixture(ITestOutputHelper output)
-        {
-            this.Output = output;
-        }
+        public MeasureFixture(ITestOutputHelper output) => this.Output = output;
 
         protected ITestOutputHelper Output { get; }
     }

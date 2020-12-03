@@ -1,3 +1,6 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -14,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public static ImageComparer TolerantComparer = ImageComparer.TolerantPercentage(0.01f);
 
         [Theory]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32)]
         public void WithEqualColorsReturnsUnicolorImage<TPixel>(
             TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
@@ -41,11 +44,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, 100, 100)]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, 0, 0)]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, 100, 0)]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, 0, 100)]
-        [WithBlankImages(200, 200, PixelTypes.Rgba32, -40, 100)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, 100, 100)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, 0, 0)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, 100, 0)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, 0, 100)]
+        [WithBlankImage(200, 200, PixelTypes.Rgba32, -40, 100)]
         public void WithDifferentCentersReturnsImage<TPixel>(
             TestImageProvider<TPixel> provider,
             int centerX,
