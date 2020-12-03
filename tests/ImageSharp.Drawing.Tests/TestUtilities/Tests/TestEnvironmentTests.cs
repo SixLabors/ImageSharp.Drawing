@@ -58,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData("lol/Baz.gif", typeof(GifEncoder))]
         public void GetReferenceEncoder_ReturnsCorrectEncoders_Windows(string fileName, Type expectedEncoderType)
         {
-            if (TestEnvironment.IsLinux)
+            if (!TestEnvironment.IsWindows)
             {
                 return;
             }
@@ -74,7 +74,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData("lol/Baz.gif", typeof(GifDecoder))]
         public void GetReferenceDecoder_ReturnsCorrectDecoders_Windows(string fileName, Type expectedDecoderType)
         {
-            if (TestEnvironment.IsLinux)
+            if (!TestEnvironment.IsWindows)
             {
                 return;
             }
