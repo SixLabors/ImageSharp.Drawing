@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     /// Triggers passing <see cref="TestImageProvider{TPixel}"/> instances which produce an image of size width * height filled with the requested color.
     /// One <see cref="TestImageProvider{TPixel}"/> instance will be passed for each the pixel format defined by the pixelTypes parameter
     /// </summary>
-    public class WithSolidFilledImagesAttribute : WithBlankImagesAttribute
+    public class WithSolidFilledImagesAttribute : WithBlankImageAttribute
     {
         /// <summary>
         /// Triggers passing <see cref="TestImageProvider{TPixel}"/> instances which produce an image of size width * height filled with the requested color.

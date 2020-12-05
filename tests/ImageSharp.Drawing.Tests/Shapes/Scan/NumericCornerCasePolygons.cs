@@ -11,8 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         public static readonly Polygon A = PolygonFactory.CreatePolygon(
             (2, 2.5f), (11, 2.5f), (11, 3.25f), (8, 3.1f), (5, 3), (2, 3));
 
-        public static readonly Polygon B  = PolygonFactory.CreatePolygon(
-            (12, 2.5f), (21, 2.5f), (21, 3.2f), (18, 3.125f), (15,3), (12,3));
+        public static readonly Polygon B = PolygonFactory.CreatePolygon(
+            (12, 2.5f), (21, 2.5f), (21, 3.2f), (18, 3.125f), (15, 3), (12, 3));
 
         public static readonly Polygon C = PolygonFactory.CreatePolygon(
             (2, 3.4f), (8, 3.6f), (8, 4), (5, 3.875f), (2, 4));
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
         public static Polygon GetByName(string name)
         {
-            return (Polygon) typeof(NumericCornerCasePolygons).GetField(name).GetValue(null);
+            return (Polygon)typeof(NumericCornerCasePolygons).GetField(name).GetValue(null);
         }
     }
 }

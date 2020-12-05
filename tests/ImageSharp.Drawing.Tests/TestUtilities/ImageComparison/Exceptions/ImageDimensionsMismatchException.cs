@@ -13,6 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
         }
 
         public Size ExpectedSize { get; }
+
         public Size ActualSize { get; }
     }
 }

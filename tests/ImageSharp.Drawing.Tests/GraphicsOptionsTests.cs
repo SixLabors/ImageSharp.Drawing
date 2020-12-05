@@ -1,15 +1,15 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
+using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
     public class GraphicsOptionsTests
     {
-        private static readonly GraphicsOptionsComparer graphicsOptionsComparer = new GraphicsOptionsComparer();
+        private static readonly GraphicsOptionsComparer GraphicsOptionsComparer = new GraphicsOptionsComparer();
         private readonly GraphicsOptions newGraphicsOptions = new GraphicsOptions();
         private readonly GraphicsOptions cloneGraphicsOptions = new GraphicsOptions().DeepClone();
 
@@ -69,7 +69,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             GraphicsOptions actual = expected.DeepClone();
 
-            Assert.Equal(expected, actual, graphicsOptionsComparer);
+            Assert.Equal(expected, actual, GraphicsOptionsComparer);
         }
 
         [Fact]
@@ -84,7 +84,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             actual.BlendPercentage = .25F;
             actual.ColorBlendingMode = PixelColorBlendingMode.HardLight;
 
-            Assert.NotEqual(expected, actual, graphicsOptionsComparer);
+            Assert.NotEqual(expected, actual, GraphicsOptionsComparer);
         }
 
         [Fact]

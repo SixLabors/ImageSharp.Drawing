@@ -10,12 +10,10 @@ using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-
 using Xunit;
 using Xunit.Abstractions;
 
 // ReSharper disable InconsistentNaming
-
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
     public class TestImageProviderTests
@@ -32,17 +30,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             TestImageProvider<HalfVector4>.File(TestImages.Bmp.F)
         };
 
-        public static string[] AllBmpFiles = { TestImages.Bmp.F, TestImages.Bmp.Bit8 };
-
         public TestImageProviderTests(ITestOutputHelper output) => this.Output = output;
+
+        public static string[] AllBmpFiles { get; } = { TestImages.Bmp.F, TestImages.Bmp.Bit8 };
 
         private ITestOutputHelper Output { get; }
 
-        /// <summary>
-        /// Need to use <see cref="GenericFactory{TPixel}"/> to create instance of <see cref="Image"/> when pixelType is StandardImageClass
-        /// </summary>
-        /// <typeparam name="TPixel"></typeparam>
-        /// <returns></returns>
         public static Image<TPixel> CreateTestImage<TPixel>()
             where TPixel : unmanaged, IPixel<TPixel> =>
             new Image<TPixel>(3, 3);
@@ -163,15 +156,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Theory]
-        [WithBlankImages(1, 1, PixelTypes.Rgba32)]
+        [WithBlankImage(1, 1, PixelTypes.Rgba32)]
         public void NoOutputSubfolderIsPresentByDefault<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel> =>
             Assert.Empty(provider.Utility.OutputSubfolderName);
 
         [Theory]
-        [WithBlankImages(1, 1, PixelTypes.Rgba32, PixelTypes.Rgba32)]
-        [WithBlankImages(1, 1, PixelTypes.A8, PixelTypes.A8)]
-        [WithBlankImages(1, 1, PixelTypes.Argb32, PixelTypes.Argb32)]
+        [WithBlankImage(1, 1, PixelTypes.Rgba32, PixelTypes.Rgba32)]
+        [WithBlankImage(1, 1, PixelTypes.A8, PixelTypes.A8)]
+        [WithBlankImage(1, 1, PixelTypes.Argb32, PixelTypes.Argb32)]
         public void PixelType_PropertyValueIsCorrect<TPixel>(TestImageProvider<TPixel> provider, PixelTypes expected)
             where TPixel : unmanaged, IPixel<TPixel> =>
             Assert.Equal(expected, provider.PixelType);
@@ -208,7 +201,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Theory]
-        [WithBlankImages(42, 666, PixelTypes.All, "hello")]
+        [WithBlankImage(42, 666, PixelTypes.All, "hello")]
         public void Use_WithBlankImagesAttribute_WithAllPixelTypes<TPixel>(
             TestImageProvider<TPixel> provider,
             string message)
@@ -222,7 +215,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Theory]
-        [WithBlankImages(42, 666, PixelTypes.Rgba32 | PixelTypes.Argb32 | PixelTypes.HalfSingle, "hello")]
+        [WithBlankImage(42, 666, PixelTypes.Rgba32 | PixelTypes.Argb32 | PixelTypes.HalfSingle, "hello")]
         public void Use_WithEmptyImageAttribute<TPixel>(TestImageProvider<TPixel> provider, string message)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -254,10 +247,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Theory]
         [WithFile(TestImages.Jpeg.Baseline.Testorig420, PixelTypes.Rgba32)]
         public void Use_WithFileAttribute_CustomConfig<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-            EnsureCustomConfigurationIsApplied(provider);
-        }
+            where TPixel : unmanaged, IPixel<TPixel> => EnsureCustomConfigurationIsApplied(provider);
 
         [Theory]
         [WithFileCollection(nameof(AllBmpFiles), PixelTypes.Rgba32 | PixelTypes.Argb32)]
@@ -310,7 +300,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Theory]
-        [WithTestPatternImages(49, 20, PixelTypes.Rgba32)]
+        [WithTestPatternImage(49, 20, PixelTypes.Rgba32)]
         public void Use_WithTestPatternImages<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -321,12 +311,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Theory]
-        [WithTestPatternImages(20, 20, PixelTypes.Rgba32)]
+        [WithTestPatternImage(20, 20, PixelTypes.Rgba32)]
         public void Use_WithTestPatternImages_CustomConfiguration<TPixel>(TestImageProvider<TPixel> provider)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-            EnsureCustomConfigurationIsApplied(provider);
-        }
+            where TPixel : unmanaged, IPixel<TPixel> => EnsureCustomConfigurationIsApplied(provider);
 
         private static void EnsureCustomConfigurationIsApplied<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
@@ -348,8 +335,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         private class TestDecoder : IImageDecoder
         {
             // Couldn't make xUnit happy without this hackery:
-
-            private static readonly ConcurrentDictionary<string, int> invocationCounts =
+            private static readonly ConcurrentDictionary<string, int> InvocationCounts =
                 new ConcurrentDictionary<string, int>();
 
             private static readonly object Monitor = new object();
@@ -367,36 +353,31 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream)
                 where TPixel : unmanaged, IPixel<TPixel>
             {
-                invocationCounts[this.callerName]++;
+                InvocationCounts[this.callerName]++;
                 return new Image<TPixel>(42, 42);
             }
 
-            internal static int GetInvocationCount(string callerName) => invocationCounts[callerName];
+            internal static int GetInvocationCount(string callerName) => InvocationCounts[callerName];
 
             internal void InitCaller(string name)
             {
                 this.callerName = name;
-                invocationCounts[name] = 0;
+                InvocationCounts[name] = 0;
             }
 
             public Image Decode(Configuration configuration, Stream stream) => this.Decode<Rgba32>(configuration, stream);
-            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken) where TPixel : unmanaged, IPixel<TPixel>
-            {
-                throw new NotImplementedException();
-            }
+
+            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
+                where TPixel : unmanaged, IPixel<TPixel>
+                => throw new NotImplementedException();
 
             public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream) where TPixel : unmanaged, IPixel<TPixel> => throw new NotImplementedException();
-            public Task<Image> DecodeAsync(Configuration configuration, Stream stream) => throw new NotImplementedException();
+                => throw new NotImplementedException();
         }
 
         private class TestDecoderWithParameters : IImageDecoder
         {
-            private static readonly ConcurrentDictionary<string, int> invocationCounts =
+            private static readonly ConcurrentDictionary<string, int> InvocationCounts =
                 new ConcurrentDictionary<string, int>();
 
             private static readonly object Monitor = new object();
@@ -418,31 +399,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream)
                 where TPixel : unmanaged, IPixel<TPixel>
             {
-                invocationCounts[this.callerName]++;
+                InvocationCounts[this.callerName]++;
                 return new Image<TPixel>(42, 42);
             }
 
-            internal static int GetInvocationCount(string callerName) => invocationCounts[callerName];
+            internal static int GetInvocationCount(string callerName) => InvocationCounts[callerName];
 
             internal void InitCaller(string name)
             {
                 this.callerName = name;
-                invocationCounts[name] = 0;
+                InvocationCounts[name] = 0;
             }
 
             public Image Decode(Configuration configuration, Stream stream) => this.Decode<Rgba32>(configuration, stream);
-            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken) where TPixel : unmanaged, IPixel<TPixel>
-            {
-                throw new NotImplementedException();
-            }
+
+            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
+                where TPixel : unmanaged, IPixel<TPixel>
+                => throw new NotImplementedException();
 
             public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            {
-                throw new NotImplementedException();
-            }
-
-            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream) where TPixel : unmanaged, IPixel<TPixel> => throw new NotImplementedException();
-            public Task<Image> DecodeAsync(Configuration configuration, Stream stream) => throw new NotImplementedException();
+                => throw new NotImplementedException();
         }
     }
 }

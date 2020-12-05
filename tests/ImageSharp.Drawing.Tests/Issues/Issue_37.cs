@@ -24,9 +24,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 
                 Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 40, Fonts.FontStyle.Regular);
                 var graphicsOptions = new GraphicsOptions { Antialias = false };
-                image.Mutate(x =>
-                {
-                    x.BackgroundColor(Color.White)
+                image.Mutate(
+                    x => x.BackgroundColor(Color.White)
                     .DrawLines(
                         new ShapeGraphicsOptions { GraphicsOptions = graphicsOptions },
                         Color.Black,
@@ -38,8 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         text,
                         font,
                         Color.Black,
-                        new PointF(50, 50));
-                });
+                        new PointF(50, 50)));
             }
         }
     }

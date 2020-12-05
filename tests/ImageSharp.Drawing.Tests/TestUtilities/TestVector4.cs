@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System.Numerics;
@@ -16,24 +16,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
         {
             this.X = x;
             this.Y = y;
-            this.Z = x;
+            this.Z = z;
             this.W = w;
         }
 
         public float X { get; set; }
+
         public float Y { get; set; }
+
         public float Z { get; set; }
+
         public float W { get; set; }
 
-        public static implicit operator Vector4(TestVector4 d)
-        {
-            return d?.AsVector() ?? default(Vector4);
-        }
+        public static implicit operator Vector4(TestVector4 d) => d?.AsVector() ?? default;
 
-        public Vector4 AsVector()
-        {
-            return new Vector4(this.X, this.Y, this.Z, this.W);
-        }
+        public Vector4 AsVector() => new Vector4(this.X, this.Y, this.Z, this.W);
 
         public void Deserialize(IXunitSerializationInfo info)
         {
@@ -51,9 +48,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
             info.AddValue("w", this.W);
         }
 
-        public override string ToString()
-        {
-            return $"{this.AsVector().ToString()}";
-        }
+        public override string ToString() => $"{this.AsVector()}";
     }
 }

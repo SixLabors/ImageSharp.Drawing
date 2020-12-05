@@ -25,8 +25,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
             const float val = 13.4321f;
             float[] expected = values.Select(x => x + val).ToArray();
             values.AsSpan().AddToAllElements(val);
-            
+
             Assert.Equal(expected, values);
-        } 
+        }
     }
 }

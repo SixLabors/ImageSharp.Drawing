@@ -4,19 +4,24 @@
   <PropertyGroup>
     <AssemblyName>SixLabors.ImageSharp.Drawing</AssemblyName>
     <AssemblyTitle>SixLabors.ImageSharp.Drawing</AssemblyTitle>
-    <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
-    <PackageId>SixLabors.ImageSharp.Drawing</PackageId>
-    <PackageTags>Image Draw Shape Path Font</PackageTags>
     <RootNamespace>SixLabors.ImageSharp.Drawing</RootNamespace>
-
+    <PackageId>SixLabors.ImageSharp.Drawing</PackageId>
+    <PackageIcon>sixlabors.imagesharp.drawing.128.png</PackageIcon>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>
+    <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+    <PackageTags>Image Draw Shape Path Font</PackageTags>
+    <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
     <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;netstandard2.1;netstandard2.0;netstandard1.3;net472</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" />
-    <PackageReference Include="SixLabors.ImageSharp" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" />
-    <PackageReference Include="MinVer" PrivateAssets="All" />
+    <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta0013"/>
+    <PackageReference Include="SixLabors.ImageSharp" Version="1.0.2" />
   </ItemGroup>
 
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />

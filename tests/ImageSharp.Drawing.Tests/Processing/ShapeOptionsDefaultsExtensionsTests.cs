@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
 
@@ -41,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
                 o.IntersectionRule = IntersectionRule.OddEven;
             });
 
-            var returnedOption = context.GetShapeOptions();
+            ShapeOptions returnedOption = context.GetShapeOptions();
             Assert.Equal(IntersectionRule.OddEven, returnedOption.IntersectionRule);
             Assert.Equal(IntersectionRule.Nonzero, option.IntersectionRule); // hasn't been mutated
         }
@@ -73,7 +72,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
                 o.IntersectionRule = IntersectionRule.OddEven;
             });
 
-            var returnedOption = config.GetShapeOptions();
+            ShapeOptions returnedOption = config.GetShapeOptions();
             Assert.Equal(IntersectionRule.OddEven, returnedOption.IntersectionRule);
             Assert.Equal(IntersectionRule.Nonzero, option.IntersectionRule); // hasn't been mutated
         }
@@ -83,11 +82,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var config = new Configuration();
 
-            var options = config.GetShapeOptions();
+            ShapeOptions options = config.GetShapeOptions();
             Assert.NotNull(options);
             config.SetShapeOptions((ShapeOptions)null);
 
-            var options2 = config.GetShapeOptions();
+            ShapeOptions options2 = config.GetShapeOptions();
             Assert.NotNull(options2);
 
             // we set it to null should now be a new instance
@@ -100,7 +99,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var config = new Configuration();
 
             config.Properties[typeof(ShapeOptions)] = "wronge type";
-            var options = config.GetShapeOptions();
+            ShapeOptions options = config.GetShapeOptions();
             Assert.NotNull(options);
             Assert.IsType<ShapeOptions>(options);
         }
@@ -111,7 +110,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var config = new Configuration();
 
             Assert.DoesNotContain(typeof(ShapeOptions), config.Properties.Keys);
-            var options = config.GetShapeOptions();
+            ShapeOptions options = config.GetShapeOptions();
             Assert.NotNull(options);
         }
 
@@ -120,8 +119,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var config = new Configuration();
 
-            var options = config.GetShapeOptions();
-            var options2 = config.GetShapeOptions();
+            ShapeOptions options = config.GetShapeOptions();
+            ShapeOptions options2 = config.GetShapeOptions();
             Assert.Equal(options, options2);
         }
 
@@ -131,7 +130,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            var ctxOptions = context.GetShapeOptions();
+            ShapeOptions ctxOptions = context.GetShapeOptions();
             Assert.NotNull(ctxOptions);
         }
 
@@ -142,7 +141,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
             context.SetShapeOptions((ShapeOptions)null);
-            var ctxOptions = context.GetShapeOptions();
+            ShapeOptions ctxOptions = context.GetShapeOptions();
             Assert.NotNull(ctxOptions);
         }
 
@@ -154,7 +153,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             config.SetShapeOptions(option);
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
 
-            var ctxOptions = context.GetShapeOptions();
+            ShapeOptions ctxOptions = context.GetShapeOptions();
             Assert.Equal(option, ctxOptions);
         }
 
@@ -164,7 +163,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var config = new Configuration();
             var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
             context.Properties[typeof(ShapeOptions)] = "wronge type";
-            var options = context.GetShapeOptions();
+            ShapeOptions options = context.GetShapeOptions();
             Assert.NotNull(options);
             Assert.IsType<ShapeOptions>(options);
         }

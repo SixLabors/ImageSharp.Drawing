@@ -1,6 +1,7 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
 
 using SixLabors.ImageSharp.PixelFormats;
-
 using Xunit;
 using IOPath = System.IO.Path;
 
@@ -10,15 +11,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     public class GroupOutputTests
     {
         [Theory]
-        [WithBlankImages(1, 1, PixelTypes.Rgba32)]
+        [WithBlankImage(1, 1, PixelTypes.Rgba32)]
         public void OutputSubfolderName_ValueIsTakeFromGroupOutputAttribute<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            Assert.Equal("Foo", provider.Utility.OutputSubfolderName);
-        }
+            => Assert.Equal("Foo", provider.Utility.OutputSubfolderName);
 
         [Theory]
-        [WithBlankImages(1, 1, PixelTypes.Rgba32)]
+        [WithBlankImage(1, 1, PixelTypes.Rgba32)]
         public void GetTestOutputDir_ShouldDefineSubfolder<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {

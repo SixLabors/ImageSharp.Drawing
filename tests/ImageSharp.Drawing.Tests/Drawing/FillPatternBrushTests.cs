@@ -23,6 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 image.Save($"{path}/{name}.png");
 
                 Buffer2D<Rgba32> sourcePixels = image.GetRootFramePixelBuffer();
+
                 // lets pick random spots to start checking
                 var r = new Random();
                 var expectedPatternFast = new DenseMatrix<Rgba32>(expectedPattern);
@@ -53,225 +54,253 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Fact]
         public void ImageShouldBeFloodFilledWithPercent10()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
+            };
+
             this.Test(
                 "Percent10",
                 Color.Blue,
                 Brushes.Percent10(Color.HotPink, Color.LimeGreen),
-                new Rgba32[,]
-                    {
-                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithPercent10Transparent()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
+            };
+
             this.Test(
                 "Percent10_Transparent",
                 Color.Blue,
                 Brushes.Percent10(Color.HotPink),
-                new Rgba32[,]
-                    {
-                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithPercent20()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen }
+            };
+
             this.Test(
                 "Percent20",
                 Color.Blue,
                 Brushes.Percent20(Color.HotPink, Color.LimeGreen),
-                new Rgba32[,]
-                    {
-                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
-                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithPercent20_transparent()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.HotPink, Color.Blue }
+            };
+
             this.Test(
                 "Percent20_Transparent",
                 Color.Blue,
                 Brushes.Percent20(Color.HotPink),
-                new Rgba32[,]
-                    {
-                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
-                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithHorizontal()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
+            };
+
             this.Test(
                 "Horizontal",
                 Color.Blue,
                 Brushes.Horizontal(Color.HotPink, Color.LimeGreen),
-                new Rgba32[,]
-                    {
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithHorizontal_transparent()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
+            };
+
             this.Test(
                 "Horizontal_Transparent",
                 Color.Blue,
                 Brushes.Horizontal(Color.HotPink),
-                new Rgba32[,]
-                    {
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithMin()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink }
+            };
+
             this.Test(
                 "Min",
                 Color.Blue,
                 Brushes.Min(Color.HotPink, Color.LimeGreen),
-                new Rgba32[,]
-                    {
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithMin_transparent()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
+                { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
+            };
+
             this.Test(
                 "Min_Transparent",
                 Color.Blue,
                 Brushes.Min(Color.HotPink),
-                new Rgba32[,]
-                    {
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithVertical()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen }
+            };
+
             this.Test(
                 "Vertical",
                 Color.Blue,
                 Brushes.Vertical(Color.HotPink, Color.LimeGreen),
-                new Rgba32[,]
-                    {
-                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithVertical_transparent()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                { Color.Blue, Color.HotPink, Color.Blue, Color.Blue }
+            };
+
             this.Test(
                 "Vertical_Transparent",
                 Color.Blue,
                 Brushes.Vertical(Color.HotPink),
-                new Rgba32[,]
-                    {
-                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithForwardDiagonal()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink },
+                { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
+            };
+
             this.Test(
                 "ForwardDiagonal",
                 Color.Blue,
                 Brushes.ForwardDiagonal(Color.HotPink, Color.LimeGreen),
-                new Rgba32[,]
-                    {
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink },
-                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
-                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
-                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithForwardDiagonal_transparent()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.Blue, Color.Blue, Color.Blue, Color.HotPink },
+                { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                { Color.HotPink, Color.Blue, Color.Blue, Color.Blue }
+            };
+
             this.Test(
                 "ForwardDiagonal_Transparent",
                 Color.Blue,
                 Brushes.ForwardDiagonal(Color.HotPink),
-                new Rgba32[,]
-                    {
-                        { Color.Blue, Color.Blue, Color.Blue, Color.HotPink },
-                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
-                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
-                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue }
-                    });
+                expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithBackwardDiagonal()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
+                { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink }
+            };
+
             this.Test(
-                "BackwardDiagonal",
-                Color.Blue,
-                Brushes.BackwardDiagonal(Color.HotPink, Color.LimeGreen),
-                new Rgba32[,]
-                    {
-                        { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
-                        { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink }
-                    });
+                 "BackwardDiagonal",
+                 Color.Blue,
+                 Brushes.BackwardDiagonal(Color.HotPink, Color.LimeGreen),
+                 expectedPattern);
         }
 
         [Fact]
         public void ImageShouldBeFloodFilledWithBackwardDiagonal_transparent()
         {
+            var expectedPattern = new Rgba32[,]
+            {
+                { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
+                { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
+                { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
+                { Color.Blue, Color.Blue, Color.Blue, Color.HotPink }
+            };
+
             this.Test(
                 "BackwardDiagonal_Transparent",
                 Color.Blue,
                 Brushes.BackwardDiagonal(Color.HotPink),
-                new Rgba32[,]
-                    {
-                        { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
-                        { Color.Blue, Color.Blue, Color.Blue, Color.HotPink }
-                    });
+                expectedPattern);
         }
     }
 }

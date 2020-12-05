@@ -16,23 +16,24 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
         /// Returns an instance of <see cref="TolerantImageComparer"/>.
         /// Individual manhattan pixel difference is only added to total image difference when the individual difference is over 'perPixelManhattanThreshold'.
         /// </summary>
+        /// <returns>The <see cref="ImageComparer"/>.</returns>
         public static ImageComparer Tolerant(
             float imageThreshold = TolerantImageComparer.DefaultImageThreshold,
             int perPixelManhattanThreshold = 0)
-        {
-            return new TolerantImageComparer(imageThreshold, perPixelManhattanThreshold);
-        }
+            => new TolerantImageComparer(imageThreshold, perPixelManhattanThreshold);
 
         /// <summary>
         /// Returns Tolerant(imageThresholdInPercents/100)
         /// </summary>
+        /// <returns>The <see cref="ImageComparer"/>.</returns>
         public static ImageComparer TolerantPercentage(float imageThresholdInPercents, int perPixelManhattanThreshold = 0)
             => Tolerant(imageThresholdInPercents / 100F, perPixelManhattanThreshold);
 
         public abstract ImageSimilarityReport<TPixelA, TPixelB> CompareImagesOrFrames<TPixelA, TPixelB>(
             ImageFrame<TPixelA> expected,
             ImageFrame<TPixelB> actual)
-            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>;
+            where TPixelA : unmanaged, IPixel<TPixelA>
+            where TPixelB : unmanaged, IPixel<TPixelB>;
     }
 
     public static class ImageComparerExtensions
@@ -41,16 +42,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             this ImageComparer comparer,
             Image<TPixelA> expected,
             Image<TPixelB> actual)
-            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>
-        {
-            return comparer.CompareImagesOrFrames(expected.Frames.RootFrame, actual.Frames.RootFrame);
-        }
+            where TPixelA : unmanaged, IPixel<TPixelA>
+            where TPixelB : unmanaged, IPixel<TPixelB>
+            => comparer.CompareImagesOrFrames(expected.Frames.RootFrame, actual.Frames.RootFrame);
 
         public static IEnumerable<ImageSimilarityReport<TPixelA, TPixelB>> CompareImages<TPixelA, TPixelB>(
             this ImageComparer comparer,
             Image<TPixelA> expected,
             Image<TPixelB> actual)
-            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>
+            where TPixelA : unmanaged, IPixel<TPixelA>
+            where TPixelB : unmanaged, IPixel<TPixelB>
         {
             var result = new List<ImageSimilarityReport<TPixelA, TPixelB>>();
 
@@ -58,6 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             {
                 throw new Exception("Frame count does not match!");
             }
+
             for (int i = 0; i < expected.Frames.Count; i++)
             {
                 ImageSimilarityReport<TPixelA, TPixelB> report = comparer.CompareImagesOrFrames(expected.Frames[i], actual.Frames[i]);
@@ -74,7 +76,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
             this ImageComparer comparer,
             Image<TPixelA> expected,
             Image<TPixelB> actual)
-            where TPixelA : unmanaged, IPixel<TPixelA> where TPixelB : unmanaged, IPixel<TPixelB>
+            where TPixelA : unmanaged, IPixel<TPixelA>
+            where TPixelB : unmanaged, IPixel<TPixelB>
         {
             if (expected.Size() != actual.Size())
             {

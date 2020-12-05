@@ -35,7 +35,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             public override Image<TPixel> GetImage() => new Image<TPixel>(this.Configuration, this.Width, this.Height);
 
-
             public override void Deserialize(IXunitSerializationInfo info)
             {
                 this.Width = info.GetValue<int>("width");

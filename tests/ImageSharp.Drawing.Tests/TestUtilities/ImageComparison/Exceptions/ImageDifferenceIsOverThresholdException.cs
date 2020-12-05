@@ -1,3 +1,6 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,9 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
 
         public ImageDifferenceIsOverThresholdException(IEnumerable<ImageSimilarityReport> reports)
             : base("Image difference is over threshold!" + StringifyReports(reports))
-        {
-            this.Reports = reports.ToArray();
-        }
+            => this.Reports = reports.ToArray();
 
         private static string StringifyReports(IEnumerable<ImageSimilarityReport> reports)
         {
@@ -29,6 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
                 sb.Append(Environment.NewLine);
                 i++;
             }
+
             return sb.ToString();
         }
     }

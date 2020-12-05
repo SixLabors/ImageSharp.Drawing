@@ -54,23 +54,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
         }
 
         public Task<IImageInfo> IdentifyAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-        {
-            throw new System.NotImplementedException();
-        }
+            => throw new System.NotImplementedException();
 
-        public Image Decode(Configuration configuration, Stream stream) => this.Decode<Rgba32>(configuration, stream);
-        public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken) where TPixel : unmanaged, IPixel<TPixel>
-        {
-            throw new System.NotImplementedException();
-        }
+        public Image Decode(Configuration configuration, Stream stream)
+            => this.Decode<Rgba32>(configuration, stream);
+
+        public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
+            where TPixel : unmanaged, IPixel<TPixel>
+            => throw new System.NotImplementedException();
 
         public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream) where TPixel : unmanaged, IPixel<TPixel> => throw new System.NotImplementedException();
-        public Task<Image> DecodeAsync(Configuration configuration, Stream stream) => throw new System.NotImplementedException();
-        public Task<IImageInfo> IdentifyAsync(Configuration configuration, Stream stream) => throw new System.NotImplementedException();
+            => throw new System.NotImplementedException();
     }
 }

@@ -1,19 +1,17 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class FillRegion : BaseImageOperationsExtensionTest
     {
-        IBrush brush = new SolidBrush(Color.HotPink);
-        Region region = new ShapeRegion(new RectangularPolygon(10, 10, 10, 10));
+        private readonly IBrush brush = new SolidBrush(Color.HotPink);
+        private readonly Region region = new ShapeRegion(new RectangularPolygon(10, 10, 10, 10));
 
         [Fact]
         public void Brush()
@@ -38,6 +36,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(this.region, processor.Region);
             Assert.Equal(this.brush, processor.Brush);
         }
+
         [Fact]
         public void ColorSet()
         {
@@ -47,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
             Assert.Equal(this.region, processor.Region);
-            var solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, solidBrush.Color);
         }
 
@@ -60,7 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
             Assert.Equal(this.region, processor.Region);
-            var solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
+            SolidBrush solidBrush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, solidBrush.Color);
         }
     }

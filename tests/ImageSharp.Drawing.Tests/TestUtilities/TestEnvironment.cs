@@ -25,15 +25,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         private static readonly Lazy<string> SolutionDirectoryFullPathLazy = new Lazy<string>(GetSolutionDirectoryFullPathImpl);
 
         private static readonly Lazy<bool> RunsOnCiLazy = new Lazy<bool>(
-            () =>
-                {
-                    bool isCi;
-                    return bool.TryParse(Environment.GetEnvironmentVariable("CI"), out isCi) && isCi;
-                });
+            () => bool.TryParse(Environment.GetEnvironmentVariable("CI"), out bool isCi) && isCi);
 
         internal static bool IsFramework => RuntimeInformation.FrameworkDescription.StartsWith(".NET Framework");
 
-        // ReSharper disable once InconsistentNaming
         /// <summary>
         /// Gets a value indicating whether test execution runs on CI.
         /// </summary>
@@ -79,7 +74,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// Gets the correct full path to the Input Images directory.
         /// </summary>
         internal static string InputImagesDirectoryFullPath => GetFullPath(InputImagesRelativePath);
-        
+
         /// <summary>
         /// Gets the correct full path to the Actual Output directory. (To be written to by the test cases.)
         /// </summary>
@@ -96,7 +91,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             actualOutputFileName.Replace("ActualOutput", @"ReferenceOutput").Replace('\\', IOPath.DirectorySeparatorChar);
 
         internal static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-        
+
         internal static bool IsMono => Type.GetType("Mono.Runtime") != null; // https://stackoverflow.com/a/721194
 
         internal static bool IsWindows => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);

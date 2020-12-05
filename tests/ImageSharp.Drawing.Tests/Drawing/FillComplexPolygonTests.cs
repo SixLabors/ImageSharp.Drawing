@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             Color color = colorRgba;
 
-            string testDetails = "";
+            string testDetails = string.Empty;
             if (overlap)
             {
                 testDetails += "_Overlap";

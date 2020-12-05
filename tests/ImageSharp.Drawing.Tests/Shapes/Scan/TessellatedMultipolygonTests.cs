@@ -4,7 +4,6 @@
 using System;
 using System.Linq;
 using SixLabors.ImageSharp.Drawing.Shapes;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using Xunit;
 
@@ -24,8 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
             originalPoints = originalPoints.CloneArray();
 
-
-            if (originalPositive && isHole || !originalPositive && !isHole)
+            if ((originalPositive && isHole) || (!originalPositive && !isHole))
             {
                 originalPoints.AsSpan().Reverse();
                 points = points.Slice(1);
@@ -49,7 +47,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 points.AsSpan().Reverse();
             }
 
-            Polygon polygon = new Polygon(new LinearLineSegment(points));
+            var polygon = new Polygon(new LinearLineSegment(points));
 
             using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
             VerifyRing(multipolygon[0], points, reverseOriginal, false);
@@ -67,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 points.AsSpan().Reverse();
             }
 
-            Polygon polygon = new Polygon(new LinearLineSegment(points));
+            var polygon = new Polygon(new LinearLineSegment(points));
 
             using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
 
@@ -77,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void Create_FromRecangle()
         {
-            RectangularPolygon polygon = new RectangularPolygon( 10, 20, 100, 50);
+            var polygon = new RectangularPolygon(10, 20, 100, 50);
 
             PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
 
@@ -89,7 +87,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void Create_FromStar()
         {
-            Star polygon = new Star(100, 100, 5, 30, 60);
+            var polygon = new Star(100, 100, 5, 30, 60);
             PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
 
             using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);

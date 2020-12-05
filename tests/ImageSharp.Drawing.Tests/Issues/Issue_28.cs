@@ -1,8 +1,8 @@
-using System;
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using SixLabors.ImageSharp.ColorSpaces;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -24,14 +24,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         this.red,
                         1f,
                         new PointF(0, 0),
-                        new PointF(100, 0)
-                    ));
+                        new PointF(100, 0)));
 
-            var locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0));
-            Assert.All(locations, l =>
-            {
-                Assert.Equal(this.red, image[l.x, l.y]);
-            });
+            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
 
         [Fact]
@@ -44,14 +40,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         this.red,
                         1f,
                         new PointF(0, 99),
-                        new PointF(100, 99)
-                    ));
+                        new PointF(100, 99)));
 
-            var locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 99));
-            Assert.All(locations, l =>
-            {
-                Assert.Equal(this.red, image[l.x, l.y]);
-            });
+            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 99));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
 
         [Fact]
@@ -64,14 +56,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         this.red,
                         1f,
                         new PointF(0, 0),
-                        new PointF(0, 99)
-                    ));
+                        new PointF(0, 99)));
 
-            var locations = Enumerable.Range(0, 100).Select(i => (x: 0, y: i));
-            Assert.All(locations, l =>
-            {
-                Assert.Equal(this.red, image[l.x, l.y]);
-            });
+            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: 0, y: i));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
 
         [Fact]
@@ -84,14 +72,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         this.red,
                         1f,
                         new PointF(99, 0),
-                        new PointF(99, 99)
-                    ));
+                        new PointF(99, 99)));
 
-            var locations = Enumerable.Range(0, 100).Select(i => (x: 99, y: i));
-            Assert.All(locations, l =>
-            {
-                Assert.Equal(this.red, image[l.x, l.y]);
-            });
+            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: 99, y: i));
+
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
     }
 }

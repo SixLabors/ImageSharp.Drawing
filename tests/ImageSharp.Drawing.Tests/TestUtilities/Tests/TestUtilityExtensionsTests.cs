@@ -5,11 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-
 using Xunit;
 using Xunit.Abstractions;
 
@@ -18,9 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     public class TestUtilityExtensionsTests
     {
         public TestUtilityExtensionsTests(ITestOutputHelper output)
-        {
-            this.Output = output;
-        }
+            => this.Output = output;
 
         private ITestOutputHelper Output { get; }
 
@@ -76,25 +72,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData(PixelTypes.Argb32, typeof(Argb32))]
         [InlineData(PixelTypes.HalfVector4, typeof(HalfVector4))]
         public void ToType(PixelTypes pt, Type expectedType)
-        {
-            Assert.Equal(pt.GetClrType(), expectedType);
-        }
+            => Assert.Equal(pt.GetClrType(), expectedType);
 
         [Theory]
         [InlineData(typeof(Rgba32), PixelTypes.Rgba32)]
         [InlineData(typeof(Argb32), PixelTypes.Argb32)]
         public void GetPixelType(Type clrType, PixelTypes expectedPixelType)
-        {
-            Assert.Equal(expectedPixelType, clrType.GetPixelType());
-        }
+            => Assert.Equal(expectedPixelType, clrType.GetPixelType());
 
         private static void AssertContainsPixelType<T>(
             PixelTypes pt,
             IEnumerable<KeyValuePair<PixelTypes, Type>> pixelTypesExp)
-        {
-            Assert.Contains(new KeyValuePair<PixelTypes, Type>(pt, typeof(T)), pixelTypesExp);
-
-        }
+            => Assert.Contains(new KeyValuePair<PixelTypes, Type>(pt, typeof(T)), pixelTypesExp);
 
         [Fact]
         public void ExpandAllTypes_1()

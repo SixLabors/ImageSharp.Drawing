@@ -1,21 +1,18 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Linq;
-using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class DrawPolygon : BaseImageOperationsExtensionTest
     {
-        IPen pen = Pens.Solid(Color.HotPink, 2);
-
-        PointF[] points = new[] {
+        private readonly IPen pen = Pens.Solid(Color.HotPink, 2);
+        private readonly PointF[] points = new[]
+        {
             new PointF(10, 10),
             new PointF(10, 20),
             new PointF(20, 20),
@@ -25,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
         private void VerifyPoints(PointF[] expectedPoints, IPath path)
         {
-            var simplePath = Assert.Single(path.Flatten());
+            ISimplePath simplePath = Assert.Single(path.Flatten());
             Assert.True(simplePath.IsClosed);
             Assert.Equal(expectedPoints, simplePath.Points.ToArray());
         }
@@ -89,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
             this.VerifyPoints(this.points, processor.Shape);
-            var brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }
@@ -103,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
             this.VerifyPoints(this.points, processor.Shape);
-            var brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }

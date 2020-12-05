@@ -1,20 +1,19 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class DrawRectangle : BaseImageOperationsExtensionTest
     {
-        IPen pen = Pens.Solid(Color.HotPink, 2);
-        RectangleF rectangle = new RectangleF(10, 10, 20, 20);
-        RectangularPolygon rectanglePolygon => new RectangularPolygon(rectangle);
+        private readonly IPen pen = Pens.Solid(Color.HotPink, 2);
+        private RectangleF rectangle = new RectangleF(10, 10, 20, 20);
+
+        private RectangularPolygon RectanglePolygon => new RectangularPolygon(this.rectangle);
 
         [Fact]
         public void CorrectlySetsPenAndPath()
@@ -24,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.Equal(this.pen, processor.Pen);
         }
 
@@ -36,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.Equal(this.pen, processor.Pen);
         }
 
@@ -48,7 +47,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.NotEqual(this.pen, processor.Pen);
             Assert.Equal(this.pen.StrokeFill, processor.Pen.StrokeFill);
             Assert.Equal(10, processor.Pen.StrokeWidth);
@@ -62,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.NotEqual(this.pen, processor.Pen);
             Assert.Equal(this.pen.StrokeFill, processor.Pen.StrokeFill);
             Assert.Equal(10, processor.Pen.StrokeWidth);
@@ -76,9 +75,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.NotEqual(this.pen, processor.Pen);
-            var brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }
@@ -91,9 +90,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(this.rectanglePolygon, processor.Shape);
+            Assert.Equal(this.RectanglePolygon, processor.Shape);
             Assert.NotEqual(this.pen, processor.Pen);
-            var brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
+            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }

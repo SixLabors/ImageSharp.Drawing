@@ -13,14 +13,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     [GroupOutput("Drawing/GradientBrushes")]
     public class FillPathGradientBrushTests
     {
-        public static ImageComparer TolerantComparer = ImageComparer.TolerantPercentage(0.01f);
+        private static readonly ImageComparer TolerantComparer = ImageComparer.TolerantPercentage(0.01f);
 
         [Theory]
-        [WithBlankImages(10, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(10, 10, PixelTypes.Rgba32)]
         public void FillRectangleWithDifferentColors<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                 {
@@ -32,14 +31,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     image.Mutate(x => x.Fill(brush));
                     image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
                 });
-        }
 
         [Theory]
-        [WithBlankImages(20, 20, PixelTypes.Rgba32)]
+        [WithBlankImage(20, 20, PixelTypes.Rgba32)]
         public void FillTriangleWithDifferentColors<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                 {
@@ -51,42 +48,37 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     image.Mutate(x => x.Fill(brush));
                     image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
                 });
-        }
 
         [Theory]
-        [WithBlankImages(20, 20, PixelTypes.HalfSingle)]
+        [WithBlankImage(20, 20, PixelTypes.HalfSingle)]
         public void FillTriangleWithGreyscale<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 ImageComparer.TolerantPercentage(0.02f),
                 image =>
                 {
                     PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
 
-                    var c1 = new Rgba32();
-                    var c2 = new Rgba32();
-                    var c3 = new Rgba32();
+                    var c1 = default(Rgba32);
+                    var c2 = default(Rgba32);
+                    var c3 = default(Rgba32);
                     new HalfSingle(-1).ToRgba32(ref c1);
                     new HalfSingle(0).ToRgba32(ref c2);
                     new HalfSingle(1).ToRgba32(ref c3);
 
-                    Color[] colors = { new Color(c1), new Color(c2), new Color(c3)  };
-                    
+                    Color[] colors = { new Color(c1), new Color(c2), new Color(c3) };
+
                     var brush = new PathGradientBrush(points, colors);
 
                     image.Mutate(x => x.Fill(brush));
                     image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
                 });
-        }
-
 
         [Theory]
-        [WithBlankImages(20, 20, PixelTypes.Rgba32)]
+        [WithBlankImage(20, 20, PixelTypes.Rgba32)]
         public void FillTriangleWithDifferentColorsCenter<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                 {
@@ -98,11 +90,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     image.Mutate(x => x.Fill(brush));
                     image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
                 });
-        }
-
 
         [Theory]
-        [WithBlankImages(10, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(10, 10, PixelTypes.Rgba32)]
         public void FillRectangleWithSingleColor<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -120,11 +110,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBlankImages(10, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(10, 10, PixelTypes.Rgba32)]
         public void ShouldRotateTheColorsWhenThereAreMorePoints<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                 {
@@ -136,14 +125,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     image.Mutate(x => x.Fill(brush));
                     image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
                 });
-        }
 
         [Theory]
-        [WithBlankImages(10, 10, PixelTypes.Rgba32)]
+        [WithBlankImage(10, 10, PixelTypes.Rgba32)]
         public void FillWithCustomCenterColor<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            provider.VerifyOperation(
+            => provider.VerifyOperation(
                 TolerantComparer,
                 image =>
                 {
@@ -155,7 +142,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     image.Mutate(x => x.Fill(brush));
                     image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
                 });
-        }
 
         [Fact]
         public void ShouldThrowArgumentNullExceptionWhenLinesAreNull()

@@ -1,3 +1,6 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
 using System.Runtime.InteropServices;
 using SixLabors.Fonts;
@@ -17,14 +20,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             int width = 768;
             int height = 438;
 
-            // Creates a new image with empty pixel data. 
+            // Creates a new image with empty pixel data.
             using (var image = new Image<Rgba32>(width, height))
             {
                 FontFamily family = SystemFonts.Find("verdana");
                 Font font = family.CreateFont(48, FontStyle.Bold);
 
                 // The options are optional
-                TextGraphicsOptions options = new TextGraphicsOptions()
+                var options = new TextGraphicsOptions()
                 {
                     TextOptions = new TextOptions()
                     {
@@ -54,7 +57,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 
             Assert.StartsWith("Parameter \"width\" (System.Single) must be greater than 0, was 0", ex.Message);
         }
-
 
         [Fact]
         public void ComplexPolygoWithZeroPathsCausesBoundsToBeNonSensicalValue()

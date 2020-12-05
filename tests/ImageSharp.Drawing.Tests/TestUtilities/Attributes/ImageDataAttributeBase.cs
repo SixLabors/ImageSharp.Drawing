@@ -14,16 +14,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     /// </summary>
     public abstract class ImageDataAttributeBase : DataAttribute
     {
-        protected readonly object[] AdditionalParameters;
-
-        protected readonly PixelTypes PixelTypes;
-
         /// <summary>
         /// Initializes a new instance of the <see cref="ImageDataAttributeBase"/> class.
         /// </summary>
-        /// <param name="memberName"></param>
-        /// <param name="pixelTypes"></param>
-        /// <param name="additionalParameters"></param>
         protected ImageDataAttributeBase(string memberName, PixelTypes pixelTypes, object[] additionalParameters)
         {
             this.PixelTypes = pixelTypes;
@@ -37,9 +30,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public string MemberName { get; }
 
         /// <summary>
-        /// Gets the member type
+        /// Gets or sets the member type
         /// </summary>
         public Type MemberType { get; set; }
+
+        protected object[] AdditionalParameters { get; }
+
+        protected PixelTypes PixelTypes { get; }
 
         /// <summary>Returns the data to be used to test theory.</summary>
         /// <param name="testMethod">The method that is being tested</param>
@@ -84,8 +81,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <summary>
         /// Returns a value indicating whether the first parameter of the method is a test provider.
         /// </summary>
-        /// <param name="testMethod"></param>
-        /// <returns></returns>
         private bool FirstIsProvider(MethodInfo testMethod)
         {
             TypeInfo dataType = testMethod.GetParameters().First().ParameterType.GetTypeInfo();
@@ -102,7 +97,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 {
                     foreach (object[] row in memberData)
                     {
-                        var actualFactoryMethodArgs = new object[originalFactoryMethodArgs.Length + 2];
+                        object[] actualFactoryMethodArgs = new object[originalFactoryMethodArgs.Length + 2];
                         Array.Copy(originalFactoryMethodArgs, actualFactoryMethodArgs, originalFactoryMethodArgs.Length);
                         actualFactoryMethodArgs[actualFactoryMethodArgs.Length - 2] = testMethod;
                         actualFactoryMethodArgs[actualFactoryMethodArgs.Length - 1] = kv.Key;
@@ -110,7 +105,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                         object factory = factoryType.GetMethod(this.GetFactoryMethodName(testMethod))
                             .Invoke(null, actualFactoryMethodArgs);
 
-                        var result = new object[this.AdditionalParameters.Length + 1 + row.Length];
+                        object[] result = new object[this.AdditionalParameters.Length + 1 + row.Length];
                         result[0] = factory;
                         Array.Copy(row, 0, result, 1, row.Length);
                         Array.Copy(this.AdditionalParameters, 0, result, 1 + row.Length, this.AdditionalParameters.Length);
@@ -139,9 +134,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <param name="factoryType">The test image provider factory type</param>
         /// <returns>The <see cref="T:object[]"/></returns>
         protected virtual object[] GetFactoryMethodArgs(MethodInfo testMethod, Type factoryType)
-        {
-            throw new InvalidOperationException("Semi-abstract method");
-        }
+            => throw new InvalidOperationException("Semi-abstract method");
 
         /// <summary>
         /// Generates the method name from the given test method.
@@ -153,6 +146,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <summary>
         /// Gets the field accessor for the given type.
         /// </summary>
+        /// <returns>The <see cref="Func{out TResult}"/>.</returns>
         protected Func<object> GetFieldAccessor(Type type, string memberName)
         {
             FieldInfo fieldInfo = null;
@@ -160,11 +154,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 fieldInfo = reflectionType.GetRuntimeField(memberName);
                 if (fieldInfo != null)
+                {
                     break;
+                }
             }
 
             if (fieldInfo == null || !fieldInfo.IsStatic)
+            {
                 return null;
+            }
 
             return () => fieldInfo.GetValue(null);
         }
@@ -172,6 +170,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <summary>
         /// Gets the property accessor for the given type.
         /// </summary>
+        /// <returns>The <see cref="Func{out TResult}"/>.</returns>
         protected Func<object> GetPropertyAccessor(Type type, string memberName)
         {
             PropertyInfo propInfo = null;

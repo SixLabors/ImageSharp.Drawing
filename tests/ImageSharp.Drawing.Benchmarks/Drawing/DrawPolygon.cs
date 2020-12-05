@@ -33,11 +33,13 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         private SKSurface skSurface;
 
         protected abstract int Width { get; }
+
         protected abstract int Height { get; }
+
         protected abstract float Thickness { get; }
 
         protected virtual PointF[][] GetPoints(FeatureCollection features) =>
-            features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f,  Matrix3x2.CreateScale(60, 60))).ToArray();
+            features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60))).ToArray();
 
         [GlobalSetup]
         public void Setup()
@@ -46,28 +48,27 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
             FeatureCollection featureCollection = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
 
-
-
             this.points = this.GetPoints(featureCollection);
             this.sdPoints = this.points.Select(pts => pts.Select(p => new SDPointF(p.X, p.Y)).ToArray()).ToArray();
 
             this.skPath = new SKPath();
             foreach (PointF[] ptArr in this.points.Where(pts => pts.Length > 2))
             {
-                skPath.MoveTo(ptArr[0].X, ptArr[1].Y);
+                this.skPath.MoveTo(ptArr[0].X, ptArr[1].Y);
                 for (int i = 1; i < ptArr.Length; i++)
                 {
-                    skPath.LineTo(ptArr[i].X, ptArr[i].Y);
+                    this.skPath.LineTo(ptArr[i].X, ptArr[i].Y);
                 }
-                skPath.LineTo(ptArr[0].X, ptArr[1].Y);
+
+                this.skPath.LineTo(ptArr[0].X, ptArr[1].Y);
             }
 
-            this.image = new Image<Rgba32>(Width, Height);
-            this.sdBitmap = new Bitmap(Width, Height);
+            this.image = new Image<Rgba32>(this.Width, this.Height);
+            this.sdBitmap = new Bitmap(this.Width, this.Height);
             this.sdGraphics = Graphics.FromImage(this.sdBitmap);
             this.sdGraphics.InterpolationMode = InterpolationMode.Default;
             this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
-            this.skSurface = SKSurface.Create(new SKImageInfo(Width, Height));
+            this.skSurface = SKSurface.Create(new SKImageInfo(this.Width, this.Height));
         }
 
         [GlobalCleanup]
@@ -93,20 +94,19 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
         [Benchmark]
         public void ImageSharp()
-        {
-            this.image.Mutate(c =>
-            {
-                foreach (PointF[] loop in this.points)
+            => this.image.Mutate(
+                c =>
                 {
-                    c.DrawPolygon(Color.White, this.Thickness, loop);
-                }
-            });
-        }
+                    foreach (PointF[] loop in this.points)
+                    {
+                        c.DrawPolygon(Color.White, this.Thickness, loop);
+                    }
+                });
 
         [Benchmark(Baseline = true)]
         public void SkiaSharp()
         {
-            using SKPaint paint = new SKPaint
+            using var paint = new SKPaint
             {
                 Style = SKPaintStyle.Stroke,
                 Color = SKColors.White,
@@ -121,19 +121,23 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
     public class DrawPolygonAll : DrawPolygon
     {
         protected override int Width => 7200;
+
         protected override int Height => 4800;
+
         protected override float Thickness => 2f;
     }
 
     public class DrawPolygonMediumThin : DrawPolygon
     {
         protected override int Width => 1000;
+
         protected override int Height => 1000;
+
         protected override float Thickness => 1f;
 
         protected override PointF[][] GetPoints(FeatureCollection features)
         {
-            Feature state = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi");
+            Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
             Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
                                   * Matrix3x2.CreateScale(60, 60);

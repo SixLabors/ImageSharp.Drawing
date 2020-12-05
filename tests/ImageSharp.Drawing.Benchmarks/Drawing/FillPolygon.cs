@@ -15,9 +15,8 @@ using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
-using SDPoint = System.Drawing.Point;
-using SDPointF = System.Drawing.PointF;
 using SDBitmap = System.Drawing.Bitmap;
+using SDPointF = System.Drawing.PointF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
@@ -35,10 +34,13 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
         private SKCanvas skCanvas;
 
         protected abstract int Width { get; }
+
         protected abstract int Height { get; }
 
-        protected virtual PointF[][] GetPoints(FeatureCollection features) =>
-            features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f,  Matrix3x2.CreateScale(60, 60))).ToArray();
+        protected virtual PointF[][] GetPoints(FeatureCollection features)
+            => features.Features
+            .SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60)))
+            .ToArray();
 
         [GlobalSetup]
         public void Setup()
@@ -55,23 +57,24 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             this.skPaths = new List<SKPath>();
             foreach (PointF[] ptArr in this.points.Where(pts => pts.Length > 2))
             {
-                SKPath skPath = new SKPath();
+                var skPath = new SKPath();
                 skPath.MoveTo(ptArr[0].X, ptArr[1].Y);
                 for (int i = 1; i < ptArr.Length; i++)
                 {
                     skPath.LineTo(ptArr[i].X, ptArr[i].Y);
                 }
+
                 skPath.LineTo(ptArr[0].X, ptArr[1].Y);
                 this.skPaths.Add(skPath);
             }
 
-            this.image = new Image<Rgba32>(Width, Height);
-            this.sdBitmap = new Bitmap(Width, Height);
+            this.image = new Image<Rgba32>(this.Width, this.Height);
+            this.sdBitmap = new SDBitmap(this.Width, this.Height);
             this.sdGraphics = Graphics.FromImage(this.sdBitmap);
             this.sdGraphics.InterpolationMode = InterpolationMode.Default;
             this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
-            this.skBitmap = new SKBitmap(Width, Height);
-            this.skCanvas = new SKCanvas(skBitmap);
+            this.skBitmap = new SKBitmap(this.Width, this.Height);
+            this.skCanvas = new SKCanvas(this.skBitmap);
         }
 
         [GlobalCleanup]
@@ -101,15 +104,13 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
         [Benchmark]
         public void ImageSharp()
-        {
-            this.image.Mutate(c =>
+            => this.image.Mutate(c =>
             {
                 foreach (Polygon polygon in this.polygons)
                 {
                     c.Fill(Color.White, polygon);
                 }
             });
-        }
 
         [Benchmark(Baseline = true)]
         public void SkiaSharp()
@@ -117,7 +118,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
             foreach (SKPath path in this.skPaths)
             {
                 // Emulate using different color for each polygon:
-                using SKPaint paint = new SKPaint
+                using var paint = new SKPaint
                 {
                     Style = SKPaintStyle.Fill,
                     Color = SKColors.White,
@@ -131,23 +132,25 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
     public class FillPolygonAll : FillPolygon
     {
         protected override int Width => 7200;
+
         protected override int Height => 4800;
     }
 
     public class FillPolygonMedium : FillPolygon
     {
         protected override int Width => 1000;
+
         protected override int Height => 1000;
 
         protected override PointF[][] GetPoints(FeatureCollection features)
         {
-            Feature state = features.Features.Single(f => (string) f.Properties["NAME"] == "Mississippi");
+            Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
             Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
                                   * Matrix3x2.CreateScale(60, 60);
             return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
         }
-        
+
         // ** 11/13/2020 @ Anton's PC ***
         // BenchmarkDotNet=v0.12.1, OS=Windows 10.0.18363.1198 (1909/November2018Update/19H2)
         // Intel Core i7-7700HQ CPU 2.80GHz (Kaby Lake), 1 CPU, 8 logical and 4 physical cores
@@ -166,11 +169,12 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
     public class FillPolygonSmall : FillPolygon
     {
         protected override int Width => 1000;
+
         protected override int Height => 1000;
 
         protected override PointF[][] GetPoints(FeatureCollection features)
         {
-            Feature state = features.Features.Single(f => (string) f.Properties["NAME"] == "Utah");
+            Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Utah");
 
             Matrix3x2 transform = Matrix3x2.CreateTranslation(-60, -40)
                                   * Matrix3x2.CreateScale(60, 60);

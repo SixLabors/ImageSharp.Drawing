@@ -32,12 +32,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var processorMock = new Mock<IImageProcessor>();
             this.processorDefinition = processorMock.Object;
 
-            this.image = new Image<Rgba32>(new Configuration
-            {
-                ImageOperationsProvider = this.provider
-            }, 1, 1);
+            this.image = new Image<Rgba32>(
+                new Configuration
+                {
+                    ImageOperationsProvider = this.provider
+                },
+                1,
+                1);
         }
-
 
         [Fact]
         public void MutateCallsImageOperationsProvider_Func_OriginalImage()
@@ -169,7 +171,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 
         private static void CheckThrowsCorrectObjectDisposedException(Action action)
         {
-            var ex = Assert.Throws<ObjectDisposedException>(action);
+            ObjectDisposedException ex = Assert.Throws<ObjectDisposedException>(action);
             Assert.Equal(ExpectedExceptionMessage, ex.Message);
         }
     }
