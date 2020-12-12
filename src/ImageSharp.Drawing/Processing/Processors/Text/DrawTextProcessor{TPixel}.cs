@@ -2,13 +2,11 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
-using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -56,6 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 WrappingWidth = this.Options.TextOptions.WrapTextWidth,
                 HorizontalAlignment = this.Options.TextOptions.HorizontalAlignment,
                 VerticalAlignment = this.Options.TextOptions.VerticalAlignment,
+                LineSpacing = this.Options.TextOptions.LineSpacing,
                 FallbackFontFamilies = this.Options.TextOptions.FallbackFonts,
                 ColorFontSupport = this.definition.Options.TextOptions.RenderColorFonts ? ColorFontSupport.MicrosoftColrFormat : ColorFontSupport.None,
             };

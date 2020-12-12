@@ -3,8 +3,6 @@
 
 using System.Collections.Generic;
 using SixLabors.Fonts;
-using SixLabors.ImageSharp.Drawing.Shapes;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
@@ -16,6 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         private float tabWidth = 4F;
         private float dpiX = 72F;
         private float dpiY = 72F;
+        private float lineSpacing = 1F;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TextOptions"/> class.
@@ -29,6 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this.ApplyKerning = source.ApplyKerning;
             this.DpiX = source.DpiX;
             this.DpiY = source.DpiY;
+            this.LineSpacing = source.LineSpacing;
             this.HorizontalAlignment = source.HorizontalAlignment;
             this.TabWidth = source.TabWidth;
             this.WrapTextWidth = source.WrapTextWidth;
@@ -49,10 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         public float TabWidth
         {
-            get
-            {
-                return this.tabWidth;
-            }
+            get => this.tabWidth;
 
             set
             {
@@ -73,10 +70,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         public float DpiX
         {
-            get
-            {
-                return this.dpiX;
-            }
+            get => this.dpiX;
 
             set
             {
@@ -91,15 +85,27 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         public float DpiY
         {
-            get
-            {
-                return this.dpiY;
-            }
+            get => this.dpiY;
 
             set
             {
                 Guard.MustBeGreaterThanOrEqualTo(value, 0, nameof(this.DpiY));
                 this.dpiY = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the line spacing. Applied as a multiple of the line height.
+        /// Defaults to 1.
+        /// </summary>
+        public float LineSpacing
+        {
+            get => this.lineSpacing;
+
+            set
+            {
+                Guard.IsTrue(value != 0, nameof(this.LineSpacing), "Value must not be equal to 0.");
+                this.lineSpacing = value;
             }
         }
 
