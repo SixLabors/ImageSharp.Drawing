@@ -205,13 +205,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(400, 600, "White", PixelTypes.Rgba32, 1, 5)]
-        [WithSolidFilledImages(400, 600, "White", PixelTypes.Rgba32, 1.5, 3)]
-        [WithSolidFilledImages(400, 600, "White", PixelTypes.Rgba32, 2, 2)]
+        [WithSolidFilledImages(400, 550, "White", PixelTypes.Rgba32, 1, 5, true)]
+        [WithSolidFilledImages(400, 550, "White", PixelTypes.Rgba32, 1.5, 3, true)]
+        [WithSolidFilledImages(400, 550, "White", PixelTypes.Rgba32, 2, 2, true)]
+        [WithSolidFilledImages(400, 100, "White", PixelTypes.Rgba32, 1, 5, false)]
+        [WithSolidFilledImages(400, 100, "White", PixelTypes.Rgba32, 1.5, 3, false)]
+        [WithSolidFilledImages(400, 100, "White", PixelTypes.Rgba32, 2, 2, false)]
         public void FontShapesAreRenderedCorrectly_WithLineSpacing<TPixel>(
             TestImageProvider<TPixel> provider,
             float lineSpacing,
-            int lineCount)
+            int lineCount,
+            bool wrap)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont("OpenSans-Regular.ttf", 16);
@@ -224,16 +228,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            var textOptions = new TextGraphicsOptions
+            var textOptions = new TextOptions
             {
-                TextOptions =
-                {
-                    ApplyKerning = true,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    LineSpacing = lineSpacing,
-                    WrapTextWidth = 300
-                }
+                ApplyKerning = true,
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                LineSpacing = lineSpacing
+            };
+
+            if (wrap)
+            {
+                textOptions.WrapTextWidth = 300;
+            }
+
+            var textGraphicsOptions = new TextGraphicsOptions
+            {
+                TextOptions = textOptions
             };
 
             Color color = Color.Black;
@@ -243,8 +253,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             provider.VerifyOperation(
                 comparer,
-                img => img.Mutate(c => c.DrawText(textOptions, sb.ToString(), font, color, new PointF(10, 1))),
-                $"linespacing_{lineSpacing}_linecount_{lineCount}",
+                img => img.Mutate(c => c.DrawText(textGraphicsOptions, sb.ToString(), font, color, new PointF(10, 1))),
+                $"linespacing_{lineSpacing}_linecount_{lineCount}_wrap_{wrap}",
                 false,
                 false);
         }
