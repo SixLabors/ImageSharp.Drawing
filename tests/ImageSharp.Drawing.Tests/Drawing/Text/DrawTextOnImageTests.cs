@@ -205,6 +205,61 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
+        [WithSolidFilledImages(400, 550, "White", PixelTypes.Rgba32, 1, 5, true)]
+        [WithSolidFilledImages(400, 550, "White", PixelTypes.Rgba32, 1.5, 3, true)]
+        [WithSolidFilledImages(400, 550, "White", PixelTypes.Rgba32, 2, 2, true)]
+        [WithSolidFilledImages(400, 100, "White", PixelTypes.Rgba32, 1, 5, false)]
+        [WithSolidFilledImages(400, 100, "White", PixelTypes.Rgba32, 1.5, 3, false)]
+        [WithSolidFilledImages(400, 100, "White", PixelTypes.Rgba32, 2, 2, false)]
+        public void FontShapesAreRenderedCorrectly_WithLineSpacing<TPixel>(
+            TestImageProvider<TPixel> provider,
+            float lineSpacing,
+            int lineCount,
+            bool wrap)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont("OpenSans-Regular.ttf", 16);
+
+            var sb = new StringBuilder();
+            string str = "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Maecenas porttitor congue massa. Fusce posuere, magna sed pulvinar ultricies, purus lectus malesuada libero, sit amet commodo magna eros quis urna.";
+
+            for (int i = 0; i < lineCount; i++)
+            {
+                sb.AppendLine(str);
+            }
+
+            var textOptions = new TextOptions
+            {
+                ApplyKerning = true,
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                LineSpacing = lineSpacing
+            };
+
+            if (wrap)
+            {
+                textOptions.WrapTextWidth = 300;
+            }
+
+            var textGraphicsOptions = new TextGraphicsOptions
+            {
+                TextOptions = textOptions
+            };
+
+            Color color = Color.Black;
+
+            // NET472 is 0.0002 different.
+            var comparer = ImageComparer.TolerantPercentage(0.0003f);
+
+            provider.VerifyOperation(
+                comparer,
+                img => img.Mutate(c => c.DrawText(textGraphicsOptions, sb.ToString(), font, color, new PointF(10, 1))),
+                $"linespacing_{lineSpacing}_linecount_{lineCount}_wrap_{wrap}",
+                false,
+                false);
+        }
+
+        [Theory]
         [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "SixLaborsSampleAB.woff", AB)]
         [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", TestText)]
         [WithSolidFilledImages(1100, 200, "White", PixelTypes.Rgba32, 50, 150, 50, "OpenSans-Regular.ttf", TestText)]

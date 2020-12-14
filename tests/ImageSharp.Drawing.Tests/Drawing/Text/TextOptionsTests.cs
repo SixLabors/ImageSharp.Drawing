@@ -72,6 +72,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Fact]
+        public void DefaultTextOptionsLineSpacing()
+        {
+            const float Expected = 1F;
+            Assert.Equal(Expected, this.newTextOptions.LineSpacing);
+            Assert.Equal(Expected, this.cloneTextOptions.LineSpacing);
+        }
+
+        [Fact]
         public void NonDefaultClone()
         {
             var expected = new TextOptions
@@ -81,6 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 DpiY = 52F,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 TabWidth = 3F,
+                LineSpacing = -1F,
                 VerticalAlignment = VerticalAlignment.Bottom,
                 WrapTextWidth = 42F
             };
@@ -90,6 +99,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.Equal(expected.ApplyKerning, actual.ApplyKerning);
             Assert.Equal(expected.DpiX, actual.DpiX);
             Assert.Equal(expected.DpiY, actual.DpiY);
+            Assert.Equal(expected.LineSpacing, actual.LineSpacing);
             Assert.Equal(expected.HorizontalAlignment, actual.HorizontalAlignment);
             Assert.Equal(expected.TabWidth, actual.TabWidth);
             Assert.Equal(expected.VerticalAlignment, actual.VerticalAlignment);
@@ -107,12 +117,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             actual.DpiY = 52F;
             actual.HorizontalAlignment = HorizontalAlignment.Center;
             actual.TabWidth = 3F;
+            actual.LineSpacing = 2F;
             actual.VerticalAlignment = VerticalAlignment.Bottom;
             actual.WrapTextWidth = 42F;
 
             Assert.NotEqual(expected.ApplyKerning, actual.ApplyKerning);
             Assert.NotEqual(expected.DpiX, actual.DpiX);
             Assert.NotEqual(expected.DpiY, actual.DpiY);
+            Assert.NotEqual(expected.LineSpacing, actual.LineSpacing);
             Assert.NotEqual(expected.HorizontalAlignment, actual.HorizontalAlignment);
             Assert.NotEqual(expected.TabWidth, actual.TabWidth);
             Assert.NotEqual(expected.VerticalAlignment, actual.VerticalAlignment);
