@@ -201,7 +201,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 comparer,
                 img => img.Mutate(c => c.DrawText(textOptions, sb.ToString(), font, color, new PointF(10, 1))),
                 false,
-                true);
+                false);
         }
 
         [Theory]
