@@ -1,10 +1,10 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
+
+using System;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
-    using System;
-
     /// <summary>
     /// The output produced by this test class should be grouped into the specified subfolder.
     /// </summary>
