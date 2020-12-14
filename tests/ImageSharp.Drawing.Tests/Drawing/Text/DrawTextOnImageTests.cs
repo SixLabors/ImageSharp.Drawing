@@ -238,8 +238,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             Color color = Color.Black;
 
-            // Strict comparer, because the image is sparse:
-            var comparer = ImageComparer.TolerantPercentage(1e-6f);
+            // NET472 is 0.0002 different.
+            var comparer = ImageComparer.TolerantPercentage(0.0003f);
 
             provider.VerifyOperation(
                 comparer,
