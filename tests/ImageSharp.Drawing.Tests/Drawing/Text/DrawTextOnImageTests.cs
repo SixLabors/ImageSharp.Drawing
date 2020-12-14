@@ -201,6 +201,51 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 comparer,
                 img => img.Mutate(c => c.DrawText(textOptions, sb.ToString(), font, color, new PointF(10, 1))),
                 false,
+                true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(400, 600, "White", PixelTypes.Rgba32, 1, 5)]
+        [WithSolidFilledImages(400, 600, "White", PixelTypes.Rgba32, 1.5, 3)]
+        [WithSolidFilledImages(400, 600, "White", PixelTypes.Rgba32, 2, 2)]
+        public void FontShapesAreRenderedCorrectly_WithLineSpacing<TPixel>(
+            TestImageProvider<TPixel> provider,
+            float lineSpacing,
+            int lineCount)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont("OpenSans-Regular.ttf", 16);
+
+            var sb = new StringBuilder();
+            string str = "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Maecenas porttitor congue massa. Fusce posuere, magna sed pulvinar ultricies, purus lectus malesuada libero, sit amet commodo magna eros quis urna.";
+
+            for (int i = 0; i < lineCount; i++)
+            {
+                sb.AppendLine(str);
+            }
+
+            var textOptions = new TextGraphicsOptions
+            {
+                TextOptions =
+                {
+                    ApplyKerning = true,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    LineSpacing = lineSpacing,
+                    WrapTextWidth = 300
+                }
+            };
+
+            Color color = Color.Black;
+
+            // Strict comparer, because the image is sparse:
+            var comparer = ImageComparer.TolerantPercentage(1e-6f);
+
+            provider.VerifyOperation(
+                comparer,
+                img => img.Mutate(c => c.DrawText(textOptions, sb.ToString(), font, color, new PointF(10, 1))),
+                $"linespacing_{lineSpacing}_linecount_{lineCount}",
+                false,
                 false);
         }
 
