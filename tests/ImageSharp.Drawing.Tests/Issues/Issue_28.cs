@@ -78,5 +78,54 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 
             Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
+
+        [Fact]
+        public void DrawingLineAtTopWith1point5pxStrokeShouldDisplay()
+        {
+            using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
+            image.Mutate(x => x
+                    .SetGraphicsOptions(g => g.Antialias = false)
+                    .DrawLines(
+                        this.red,
+                        1.5f,
+                        new PointF(0, 0),
+                        new PointF(100, 0)));
+
+            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
+        }
+
+        [Fact]
+        public void DrawingLineAtTopWith2pxStrokeShouldDisplay()
+        {
+            using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
+            image.Mutate(x => x
+                    .SetGraphicsOptions(g => g.Antialias = false)
+                    .DrawLines(
+                        this.red,
+                        2f,
+                        new PointF(0, 0),
+                        new PointF(100, 0)));
+
+            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
+        }
+
+        [Fact]
+        public void DrawingLineAtTopWith3pxStrokeShouldDisplay()
+        {
+            using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
+            image.Mutate(x => x
+                    .SetGraphicsOptions(g => g.Antialias = false)
+                    .DrawLines(
+                        this.red,
+                        3f,
+                        new PointF(0, 0),
+                        new PointF(100, 0)));
+
+            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0))
+                .Concat(Enumerable.Range(0, 100).Select(i => (x: i, y: 1)));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
+        }
     }
 }
