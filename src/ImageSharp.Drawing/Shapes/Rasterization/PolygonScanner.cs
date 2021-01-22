@@ -140,7 +140,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             int i1 = 0;
 
             // Do fake scans for the lines belonging to edge start and endpoints before minY
-            while (this.SubPixelY < this.minY && i0 < this.edges.Length)
+            while (this.SubPixelY < this.minY)
             {
                 this.EnterEdges();
                 this.LeaveEdges();
@@ -151,12 +151,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 
                 if (y0 < y1)
                 {
-                    this.SubPixelY = y0;
+                    this.SubPixelY = y1;
                     i0++;
                 }
                 else
                 {
-                    this.SubPixelY = y1;
+                    this.SubPixelY = y0;
                     i1++;
                 }
             }
