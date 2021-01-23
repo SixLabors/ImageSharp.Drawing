@@ -426,6 +426,25 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             this.TestScan(poly, 0, 2, 2, expected, intersectionRule);
         }
 
+        [Fact]
+        public void OutOfBounds()
+        {
+            IPath poly = PolygonFactory.CreatePolygon((1, -5), (5, -5), (5, -3), (10, -1), (10, 2), (12, 4), (1, 4));
+
+            FuzzyFloat[][] exected =
+            {
+                new FuzzyFloat[] { 1, 10 },
+                new FuzzyFloat[] { 1, 10 },
+                new FuzzyFloat[] { 1, 10 },
+                new FuzzyFloat[] { 1, 10 },
+                new FuzzyFloat[] { 1, 10 },
+                new FuzzyFloat[] { 1, 10.5 },
+                new FuzzyFloat[] { 1, 11 },
+            };
+
+            this.TestScan(poly, 0, 3, 2, exected);
+        }
+
         private static (float y, FuzzyFloat[] x) Empty(float y) => (y, new FuzzyFloat[0]);
 
         private static FuzzyFloat F(float x, float eps) => new FuzzyFloat(x, eps);

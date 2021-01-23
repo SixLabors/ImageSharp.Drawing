@@ -151,12 +151,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 
                 if (y0 < y1)
                 {
-                    this.SubPixelY = y0;
+                    this.SubPixelY = y1;
                     i0++;
                 }
                 else
                 {
-                    this.SubPixelY = y1;
+                    this.SubPixelY = y0;
                     i1++;
                 }
             }

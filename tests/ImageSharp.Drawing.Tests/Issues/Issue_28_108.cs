@@ -10,19 +10,23 @@ using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 {
-    public class Issue_28
+    public class Issue_28_108
     {
         private Rgba32 red = Color.Red.ToRgba32();
 
-        [Fact]
-        public void DrawingLineAtTopShouldDisplay()
+        [Theory]
+        [InlineData(1F)]
+        [InlineData(1.5F)]
+        [InlineData(2F)]
+        [InlineData(3F)]
+        public void DrawingLineAtTopShouldDisplay(float stroke)
         {
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
                     .DrawLines(
                         this.red,
-                        1f,
+                        stroke,
                         new PointF(0, 0),
                         new PointF(100, 0)));
 
@@ -30,15 +34,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
 
-        [Fact]
-        public void DrawingLineAtBottomShouldDisplay()
+        [Theory]
+        [InlineData(1F)]
+        [InlineData(1.5F)]
+        [InlineData(2F)]
+        [InlineData(3F)]
+        public void DrawingLineAtBottomShouldDisplay(float stroke)
         {
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
                     .DrawLines(
                         this.red,
-                        1f,
+                        stroke,
                         new PointF(0, 99),
                         new PointF(100, 99)));
 
@@ -46,15 +54,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
 
-        [Fact]
-        public void DrawingLineAtLeftShouldDisplay()
+        [Theory]
+        [InlineData(1F)]
+        [InlineData(1.5F)]
+        [InlineData(2F)]
+        [InlineData(3F)]
+        public void DrawingLineAtLeftShouldDisplay(float stroke)
         {
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
                     .DrawLines(
                         this.red,
-                        1f,
+                        stroke,
                         new PointF(0, 0),
                         new PointF(0, 99)));
 
@@ -62,20 +74,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
 
-        [Fact]
-        public void DrawingLineAtRightShouldDisplay()
+        [Theory]
+        [InlineData(1F)]
+        [InlineData(1.5F)]
+        [InlineData(2F)]
+        [InlineData(3F)]
+        public void DrawingLineAtRightShouldDisplay(float stroke)
         {
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
                     .DrawLines(
                         this.red,
-                        1f,
+                        stroke,
                         new PointF(99, 0),
                         new PointF(99, 99)));
 
             IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: 99, y: i));
-
             Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
         }
     }
