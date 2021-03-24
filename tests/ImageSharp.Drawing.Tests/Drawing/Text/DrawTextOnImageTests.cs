@@ -3,6 +3,7 @@
 
 using System;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -152,6 +153,81 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             provider.RunValidatingProcessorTest(
                 c => c.DrawText(text, font, Color.Black, new PointF(x, y)),
+                $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, "OpenSans-Regular.ttf", "i", 45, 25, 25)]
+        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, "SixLaborsSampleAB.woff", AB, 45, 100, 100)]
+        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, "OpenSans-Regular.ttf", TestText, 45, 550, 550)]
+        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, "OpenSans-Regular.ttf", TestText, 45, 200, 200)]
+        public void FontShapesAreRenderedCorrectly_WithRotationApplied<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize,
+            int x,
+            int y,
+            string fontName,
+            string text,
+            float angle,
+            float rotationOriginX,
+            float rotationOriginY)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(fontName, fontSize);
+
+            var radians = (float)Math.PI * angle / 180f;
+
+            provider.RunValidatingProcessorTest(
+                c => c
+                    .SetTextOptions(o =>
+                    {
+                        o.HorizontalAlignment = HorizontalAlignment.Center;
+                        o.VerticalAlignment = VerticalAlignment.Center;
+                        o.Transform = Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY));
+                    })
+                    .DrawText(text, font, Color.Black, new PointF(x, y)),
+                $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+
+        [Theory]
+        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, "OpenSans-Regular.ttf", "i", -12, 0, 25, 25)]
+        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, "SixLaborsSampleAB.woff", AB, 10, 0, 100, 100)]
+        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, "OpenSans-Regular.ttf", TestText, 0, 10, 550, 550)]
+        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, "OpenSans-Regular.ttf", TestText, 0, -10, 200, 200)]
+        public void FontShapesAreRenderedCorrectly_WithSkewApplied<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize,
+            int x,
+            int y,
+            string fontName,
+            string text,
+            float angleX,
+            float angleY,
+            float rotationOriginX,
+            float rotationOriginY)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(fontName, fontSize);
+
+            var radianX = (float)Math.PI * angleX / 180f;
+            var radianY = (float)Math.PI * angleY / 180f;
+
+            provider.RunValidatingProcessorTest(
+                c => c
+                    .SetTextOptions(o =>
+                    {
+                        o.HorizontalAlignment = HorizontalAlignment.Center;
+                        o.VerticalAlignment = VerticalAlignment.Center;
+                        o.Transform = Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY));
+                    })
+                    .DrawText(text, font, Color.Black, new PointF(x, y)),
                 $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
