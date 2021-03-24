@@ -1,6 +1,7 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Shapes;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -27,6 +28,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Defaults to true.
         /// </summary>
         public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.OddEven;
+
+        /// <summary>
+        /// Gets or sets the transform to apply to the shape during rendering.
+        /// </summary>
+        public Matrix3x2 Transform { get; set; } = Matrix3x2.Identity;
 
         /// <inheritdoc/>
         public ShapeOptions DeepClone() => new ShapeOptions(this);

@@ -67,6 +67,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendSourceFileOrDescription: false);
         }
 
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32)]
+        public void FillPolygon_Solid_Transformed<TPixel>(TestImageProvider<TPixel> provider)
+           where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] simplePath =
+                {
+                    new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
+                };
+
+            provider.RunValidatingProcessorTest(
+                c => c.SetShapeOptions(x => x.Transform = Matrix3x2.CreateSkew(GeometryUtilities.DegreeToRadian(-15), 0, new Vector2(200, 200)))
+                .FillPolygon(Color.White, simplePath));
+        }
+
         public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data { get; } =
             new TheoryData<bool, IntersectionRule>()
             {

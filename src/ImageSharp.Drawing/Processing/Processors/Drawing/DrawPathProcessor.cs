@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             // offset drawlines to align drawing outlines to pixel centers
-            var shape = this.Shape.Translate(0.5f, 0.5f);
+            var shape = this.Shape.Translate(0.5f, 0.5f).Transform(this.Options.ShapeOptions.Transform);
             return new FillRegionProcessor(this.Options, this.Pen.StrokeFill, new ShapePath(shape, this.Pen)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
         }
     }

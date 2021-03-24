@@ -45,7 +45,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            if (this.Shape is RectangularPolygon rectPoly)
+            var shape = this.Shape.Transform(this.Options.ShapeOptions.Transform);
+
+            if (shape is RectangularPolygon rectPoly)
             {
                 var rectF = new RectangleF(rectPoly.Location, rectPoly.Size);
                 var rect = (Rectangle)rectF;
@@ -58,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 }
             }
 
-            return new FillRegionProcessor(this.Options, this.Brush, new ShapeRegion(this.Shape)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
+            return new FillRegionProcessor(this.Options, this.Brush, new ShapeRegion(shape)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
         }
     }
 }
