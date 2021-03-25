@@ -189,7 +189,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         o.Transform = Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY));
                     })
                     .DrawText(text, font, Color.Black, new PointF(x, y)),
-                $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
+                $"F({fontName})-S({fontSize})-A({angle})-{ToTestOutputDisplayText(text)}-({x},{y})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
