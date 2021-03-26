@@ -12,10 +12,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public static class DrawingTransformDefaultsExtensions
     {
         /// <summary>
-        /// Sets the default shape processing options against the image processing context.
+        /// Sets the 2D transformation matrix to be used during rasterization when drawing shapes or text.
         /// </summary>
         /// <param name="context">The image processing context to store default against.</param>
-        /// <param name="matrix">The default matrix to use.</param>
+        /// <param name="matrix">The matrix to use.</param>
         /// <returns>The passed in <paramref name="context"/> to allow chaining.</returns>
         public static IImageProcessingContext SetDrawingTransform(this IImageProcessingContext context, Matrix3x2 matrix)
         {
@@ -24,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Sets the default shape processing options against the configuration.
+        /// Sets the default 2D transformation matrix to be used during rasterization when drawing shapes or text.
         /// </summary>
         /// <param name="configuration">The configuration to store default against.</param>
         /// <param name="matrix">The default matrix to use.</param>
@@ -34,10 +34,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Gets the default matrix to apply during raterization against the image processing context.
+        /// Gets the default 2D transformation matrix to be used during rasterization when drawing shapes or text.
         /// </summary>
         /// <param name="context">The image processing context to retrieve defaults from.</param>
-        /// <returns>The globaly configured default options.</returns>
+        /// <returns>The matrix.</returns>
         public static Matrix3x2 GetDrawingTransform(this IImageProcessingContext context)
         {
             if (context.Properties.TryGetValue(typeof(DrawingTransformDefaultsExtensions), out var options) && options is Matrix3x2 go)
@@ -53,10 +53,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Gets the default shape processing options against the image processing context.
+        /// Gets the default 2D transformation matrix to be used during rasterization when drawing shapes or text.
         /// </summary>
         /// <param name="configuration">The configuration to retrieve defaults from.</param>
-        /// <returns>The globaly configured default options.</returns>
+        /// <returns>The globaly configured default matrix.</returns>
         public static Matrix3x2 GetDrawingTransform(this Configuration configuration)
         {
             if (configuration.Properties.TryGetValue(typeof(DrawingTransformDefaultsExtensions), out var options) && options is Matrix3x2 go)
