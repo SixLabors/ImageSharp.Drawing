@@ -29,11 +29,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.OddEven;
 
-        /// <summary>
-        /// Gets or sets the transform to apply to the shape during rendering.
-        /// </summary>
-        public Matrix3x2 Transform { get; set; } = Matrix3x2.Identity;
-
         /// <inheritdoc/>
         public ShapeOptions DeepClone() => new ShapeOptions(this);
     }

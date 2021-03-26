@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void CorrectlySetsPenAndPath()
         {
-            this.operations.Draw(new ShapeGraphicsOptions(), this.pen, this.rectangle);
+            this.operations.Draw(new DrawingOptions(), this.pen, this.rectangle);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void BrushAndThickness()
         {
-            this.operations.Draw(new ShapeGraphicsOptions(), this.pen.StrokeFill, 10, this.rectangle);
+            this.operations.Draw(new DrawingOptions(), this.pen.StrokeFill, 10, this.rectangle);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -70,7 +70,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorAndThickness()
         {
-            this.operations.Draw(new ShapeGraphicsOptions(), Color.Red, 10, this.rectangle);
+            this.operations.Draw(new DrawingOptions(), Color.Red, 10, this.rectangle);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 

@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <param name="options">The graphics options.</param>
         /// <param name="brush">The details how to fill the region of interest.</param>
         /// <param name="region">The region of interest to be filled.</param>
-        public FillRegionProcessor(ShapeGraphicsOptions options, IBrush brush, Region region)
+        public FillRegionProcessor(DrawingOptions options, IBrush brush, Region region)
         {
             this.Region = region;
             this.Brush = brush;
@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <summary>
         /// Gets the <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.
         /// </summary>
-        public ShapeGraphicsOptions Options { get; }
+        public DrawingOptions Options { get; }
 
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)

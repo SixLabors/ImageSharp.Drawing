@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Color color = Color.Black;
             string text = "A short piece of text 😀 with an emoji";
 
-            var textGraphicOptions = new TextGraphicsOptions
+            var textGraphicOptions = new DrawingOptions
             {
                 TextOptions =
                 {
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 var scaledFont = new Font(font, scalingFactor * font.Size);
 
                 var center = new PointF(img.Width / 2, img.Height / 2);
-                var textGraphicOptions = new TextGraphicsOptions
+                var textGraphicOptions = new DrawingOptions
                 {
                     TextOptions =
                     {
@@ -186,15 +186,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                     {
                         o.HorizontalAlignment = HorizontalAlignment.Center;
                         o.VerticalAlignment = VerticalAlignment.Center;
-                        o.Transform = Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY));
                     })
+                    .SetDrawingTransform(Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY)))
                     .DrawText(text, font, Color.Black, new PointF(x, y)),
                 $"F({fontName})-S({fontSize})-A({angle})-{ToTestOutputDisplayText(text)}-({x},{y})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
         }
-
 
         [Theory]
         [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, "OpenSans-Regular.ttf", "i", -12, 0, 25, 25)]
@@ -225,10 +224,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                     {
                         o.HorizontalAlignment = HorizontalAlignment.Center;
                         o.VerticalAlignment = VerticalAlignment.Center;
-                        o.Transform = Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY));
                     })
+                    .SetDrawingTransform(Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY)))
                     .DrawText(text, font, Color.Black, new PointF(x, y)),
-                $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
+                $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})-A({angleX},{angleY})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
@@ -258,7 +257,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            var textOptions = new TextGraphicsOptions
+            var textOptions = new DrawingOptions
             {
                 TextOptions =
                 {
@@ -317,7 +316,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 textOptions.WrapTextWidth = 300;
             }
 
-            var textGraphicsOptions = new TextGraphicsOptions
+            var textGraphicsOptions = new DrawingOptions
             {
                 TextOptions = textOptions
             };
@@ -393,7 +392,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             string text = Repeat(
                 "Beware the Jabberwock, my son!  The jaws that bite, the claws that catch!  Beware the Jubjub bird, and shun The frumious Bandersnatch!\n",
                 20);
-            var textOptions = new TextGraphicsOptions
+            var textOptions = new DrawingOptions
             {
                 TextOptions =
                 {

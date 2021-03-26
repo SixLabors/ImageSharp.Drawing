@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -10,31 +11,37 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Options for influencing the drawing functions.
     /// </summary>
-    public class ShapeGraphicsOptions
+    public class DrawingOptions
     {
         private GraphicsOptions graphicsOptions;
         private ShapeOptions shapeOptions;
+        private TextOptions textOptions;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ShapeGraphicsOptions"/> class.
+        /// Initializes a new instance of the <see cref="DrawingOptions"/> class.
         /// </summary>
-        public ShapeGraphicsOptions()
+        public DrawingOptions()
         {
             this.graphicsOptions = new GraphicsOptions();
             this.shapeOptions = new ShapeOptions();
+            this.textOptions = new TextOptions();
+            this.Transform = Matrix3x2.Identity;
         }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ShapeGraphicsOptions"/> class.
-        /// </summary>
-        /// <param name="graphicsOptions">The graphic options to use</param>
-        /// <param name="shapeOptions">The text options to use</param>
-        public ShapeGraphicsOptions(GraphicsOptions graphicsOptions, ShapeOptions shapeOptions)
+        internal DrawingOptions(
+            GraphicsOptions graphicsOptions,
+            ShapeOptions shapeOptions,
+            TextOptions textOptions,
+            Matrix3x2 transform)
         {
-            Guard.NotNull(graphicsOptions, nameof(graphicsOptions));
-            Guard.NotNull(shapeOptions, nameof(shapeOptions));
+            DebugGuard.NotNull(graphicsOptions, nameof(graphicsOptions));
+            DebugGuard.NotNull(shapeOptions, nameof(shapeOptions));
+            DebugGuard.NotNull(textOptions, nameof(textOptions));
+
             this.graphicsOptions = graphicsOptions;
             this.shapeOptions = shapeOptions;
+            this.textOptions = textOptions;
+            this.Transform = transform;
         }
 
         /// <summary>
@@ -51,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Gets or sets the Text Options.
+        /// Gets or sets the Shape Options.
         /// </summary>
         public ShapeOptions ShapeOptions
         {
@@ -62,5 +69,23 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.shapeOptions = value;
             }
         }
+
+        /// <summary>
+        /// Gets or sets the Text Options.
+        /// </summary>
+        public TextOptions TextOptions
+        {
+            get => this.textOptions;
+            set
+            {
+                Guard.NotNull(value, nameof(this.TextOptions));
+                this.textOptions = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the Transform to apply during rasterization.
+        /// </summary>
+        public Matrix3x2 Transform { get; set; }
     }
 }

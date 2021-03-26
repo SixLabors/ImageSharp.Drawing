@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Numerics;
 using SixLabors.ImageSharp.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -58,14 +59,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
             configuration.Properties[typeof(TextOptions)] = options;
         }
-
-        /// <summary>
-        /// Gets the default shape processing options against the image processing context.
-        /// </summary>
-        /// <param name="context">The image processing context to retrieve defaults from.</param>
-        /// <returns>The globaly configued default options.</returns>
-        public static TextGraphicsOptions GetTextGraphicsOptions(this IImageProcessingContext context)
-            => new TextGraphicsOptions(context.GetGraphicsOptions(), context.GetTextOptions());
 
         /// <summary>
         /// Gets the default shape processing options against the image processing context.

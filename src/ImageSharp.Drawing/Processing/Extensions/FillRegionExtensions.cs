@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="region">The region.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(this IImageProcessingContext source, IBrush brush, Region region) =>
-            source.Fill(source.GetShapeGraphicsOptions(), brush, region);
+            source.Fill(source.GetDrawingOptions(), brush, region);
 
         /// <summary>
         /// Flood fills the image with in the region with the specified brush.
@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IBrush brush,
             Region region) =>
             source.ApplyProcessor(new FillRegionProcessor(options, brush, region));
@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             Color color,
             Region region) =>
             source.Fill(options, new SolidBrush(color), region);

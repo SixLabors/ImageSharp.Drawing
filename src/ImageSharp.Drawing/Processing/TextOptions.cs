@@ -137,11 +137,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         public bool RenderColorFonts { get; set; } = true;
 
-        /// <summary>
-        /// Gets or sets the transform to apply to the text during rendering.
-        /// </summary>
-        public Matrix3x2 Transform { get; set; } = Matrix3x2.Identity;
-
         /// <inheritdoc/>
         public TextOptions DeepClone() => new TextOptions(this);
     }

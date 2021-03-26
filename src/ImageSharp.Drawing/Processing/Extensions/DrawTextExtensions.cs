@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Font font,
             Color color,
             PointF location) =>
-            source.DrawText(source.GetTextGraphicsOptions(), text, font, color, location);
+            source.DrawText(source.GetDrawingOptions(), text, font, color, location);
 
         /// <summary>
         /// Draws the text onto the image filled via the brush.
@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextGraphicsOptions options,
+            DrawingOptions options,
             string text,
             Font font,
             Color color,
@@ -69,7 +69,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Font font,
             IBrush brush,
             PointF location) =>
-            source.DrawText(source.GetTextGraphicsOptions(), text, font, brush, location);
+            source.DrawText(source.GetDrawingOptions(), text, font, brush, location);
 
         /// <summary>
         /// Draws the text onto the image filled via the brush.
@@ -85,7 +85,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextGraphicsOptions options,
+            DrawingOptions options,
             string text,
             Font font,
             IBrush brush,
@@ -109,7 +109,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Font font,
             IPen pen,
             PointF location) =>
-            source.DrawText(source.GetTextGraphicsOptions(), text, font, pen, location);
+            source.DrawText(source.GetDrawingOptions(), text, font, pen, location);
 
         /// <summary>
         /// Draws the text onto the image outlined via the pen.
@@ -125,7 +125,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextGraphicsOptions options,
+            DrawingOptions options,
             string text,
             Font font,
             IPen pen,
@@ -151,7 +151,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IBrush brush,
             IPen pen,
             PointF location) =>
-            source.DrawText(source.GetTextGraphicsOptions(), text, font, brush, pen, location);
+            source.DrawText(source.GetDrawingOptions(), text, font, brush, pen, location);
 
         /// <summary>
         /// Draws the text using the default resolution of <value>72dpi</value> onto the image filled via the brush then outlined via the pen.
@@ -168,7 +168,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextGraphicsOptions options,
+            DrawingOptions options,
             string text,
             Font font,
             IBrush brush,

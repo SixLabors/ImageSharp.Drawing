@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 {
     /// <summary>
     /// Defines a processor to fill <see cref="Image"/> pixels withing a given <see cref="IPath"/>
-    /// with the given <see cref="IBrush"/> and blending defined by the given <see cref="ShapeGraphicsOptions"/>.
+    /// with the given <see cref="IBrush"/> and blending defined by the given <see cref="DrawingOptions"/>.
     /// </summary>
     public class FillPathProcessor : IImageProcessor
     {
@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <param name="options">The graphics options.</param>
         /// <param name="brush">The details how to fill the region of interest.</param>
         /// <param name="shape">The shape to be filled.</param>
-        public FillPathProcessor(ShapeGraphicsOptions options, IBrush brush, IPath shape)
+        public FillPathProcessor(DrawingOptions options, IBrush brush, IPath shape)
         {
             this.Shape = shape;
             this.Brush = brush;
@@ -39,13 +39,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <summary>
         /// Gets the <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.
         /// </summary>
-        public ShapeGraphicsOptions Options { get; }
+        public DrawingOptions Options { get; }
 
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            var shape = this.Shape.Transform(this.Options.ShapeOptions.Transform);
+            var shape = this.Shape.Transform(this.Options.Transform);
 
             if (shape is RectangularPolygon rectPoly)
             {

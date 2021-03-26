@@ -16,14 +16,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="shapeOptions">The options to clone</param>
         /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
-        internal static ShapeGraphicsOptions CloneForClearOperation(this ShapeGraphicsOptions shapeOptions)
+        internal static DrawingOptions CloneForClearOperation(this DrawingOptions shapeOptions)
         {
             var options = shapeOptions.GraphicsOptions.DeepClone();
             options.ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Normal;
             options.AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Src;
             options.BlendPercentage = 1;
 
-            return new ShapeGraphicsOptions(options, shapeOptions.ShapeOptions);
+            return new DrawingOptions(options, shapeOptions.ShapeOptions, shapeOptions.TextOptions, shapeOptions.Transform);
         }
 
         /// <summary>
@@ -36,7 +36,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IBrush brush,
             IPath path) =>
             source.Fill(options.CloneForClearOperation(), brush, path);
@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="path">The path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(this IImageProcessingContext source, IBrush brush, IPath path) =>
-            source.Clear(source.GetShapeGraphicsOptions(), brush, path);
+            source.Clear(source.GetDrawingOptions(), brush, path);
 
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush without any blending.
@@ -61,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             Color color,
             IPath path) =>
             source.Clear(options, new SolidBrush(color), path);

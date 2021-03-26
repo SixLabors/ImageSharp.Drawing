@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class ClearRegion : BaseImageOperationsExtensionTest
     {
-        private readonly ShapeGraphicsOptions nonDefaultOptions = new ShapeGraphicsOptions()
+        private readonly DrawingOptions nonDefaultOptions = new DrawingOptions()
         {
             GraphicsOptions =
             {
@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             FillRegionProcessor processor = this.Verify<FillRegionProcessor>();
 
-            ShapeGraphicsOptions expectedOptions = this.nonDefaultOptions;
+            DrawingOptions expectedOptions = this.nonDefaultOptions;
             Assert.Equal(expectedOptions.ShapeOptions, processor.Options.ShapeOptions);
             Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
@@ -64,7 +64,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             FillRegionProcessor processor = this.Verify<FillRegionProcessor>();
 
-            ShapeGraphicsOptions expectedOptions = this.nonDefaultOptions;
+            DrawingOptions expectedOptions = this.nonDefaultOptions;
             Assert.Equal(expectedOptions.ShapeOptions, processor.Options.ShapeOptions);
 
             Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);

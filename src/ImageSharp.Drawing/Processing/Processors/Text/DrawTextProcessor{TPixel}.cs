@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             this.definition = definition;
         }
 
-        private TextGraphicsOptions Options => this.definition.Options;
+        private DrawingOptions Options => this.definition.Options;
 
         private Font Font => this.definition.Font;
 
@@ -64,7 +64,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.Text.Length,
                 this.Pen,
                 this.Brush != null,
-                this.Options.TextOptions.Transform)
+                this.Options.Transform)
             {
                 Options = this.Options
             };
@@ -233,7 +233,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public IPen Pen { get; internal set; }
 
-            public TextGraphicsOptions Options { get; internal set; }
+            public DrawingOptions Options { get; internal set; }
 
             protected void SetLayerColor(Color color)
             {

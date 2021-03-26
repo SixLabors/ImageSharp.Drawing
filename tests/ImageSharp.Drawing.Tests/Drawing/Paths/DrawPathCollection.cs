@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void Pen()
         {
-            this.operations.Draw(new ShapeGraphicsOptions(), this.pen, this.pathCollection);
+            this.operations.Draw(new DrawingOptions(), this.pen, this.pathCollection);
             IEnumerable<DrawPathProcessor> processors = this.VerifyAll<DrawPathProcessor>();
 
             Assert.All(processors, p =>
@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void BrushAndThickness()
         {
-            this.operations.Draw(new ShapeGraphicsOptions(), this.pen.StrokeFill, 10, this.pathCollection);
+            this.operations.Draw(new DrawingOptions(), this.pen.StrokeFill, 10, this.pathCollection);
             IEnumerable<DrawPathProcessor> processors = this.VerifyAll<DrawPathProcessor>();
 
             Assert.All(processors, p =>
@@ -116,7 +116,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorAndThickness()
         {
-            this.operations.Draw(new ShapeGraphicsOptions(), Color.Pink, 10, this.pathCollection);
+            this.operations.Draw(new DrawingOptions(), Color.Pink, 10, this.pathCollection);
             IEnumerable<DrawPathProcessor> processors = this.VerifyAll<DrawPathProcessor>();
 
             Assert.All(processors, p =>

@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 };
 
             provider.RunValidatingProcessorTest(
-                c => c.SetShapeOptions(x => x.Transform = Matrix3x2.CreateSkew(GeometryUtilities.DegreeToRadian(-15), 0, new Vector2(200, 200)))
+                c => c.SetDrawingTransform(Matrix3x2.CreateSkew(GeometryUtilities.DegreeToRadian(-15), 0, new Vector2(200, 200)))
                 .DrawPolygon(Color.White, 2.5f, simplePath));
         }
     }

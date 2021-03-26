@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 };
 
             provider.RunValidatingProcessorTest(
-                c => c.SetShapeOptions(x => x.Transform = Matrix3x2.CreateSkew(GeometryUtilities.DegreeToRadian(-15), 0, new Vector2(200, 200)))
+                c => c.SetDrawingTransform(Matrix3x2.CreateSkew(GeometryUtilities.DegreeToRadian(-15), 0, new Vector2(200, 200)))
                 .FillPolygon(Color.White, simplePath));
         }
 
@@ -300,7 +300,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     new PointF(10, 30)));
 
                 img.Mutate(c => c.Fill(
-                    new ShapeGraphicsOptions
+                    new DrawingOptions
                     {
                         ShapeOptions = { IntersectionRule = IntersectionRule.OddEven },
                     },
@@ -334,7 +334,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     new PointF(40, 30),
                     new PointF(10, 30)));
                 img.Mutate(c => c.Fill(
-                    new ShapeGraphicsOptions
+                    new DrawingOptions
                     {
                         ShapeOptions = { IntersectionRule = IntersectionRule.Nonzero },
                     },

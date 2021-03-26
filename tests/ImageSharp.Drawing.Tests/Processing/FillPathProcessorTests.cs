@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var imageSize = new Rectangle(0, 0, 500, 500);
             var path = new EllipsePolygon(1, 1, 23);
             var processor = new FillPathProcessor(
-                new ShapeGraphicsOptions()
+                new DrawingOptions()
                 {
                     GraphicsOptions = { Antialias = true }
                 },
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var expectedRect = new Rectangle(10, 10, 400, 400);
             var path = new RectangularPolygon(floatRect);
             var processor = new FillPathProcessor(
-                new ShapeGraphicsOptions()
+                new DrawingOptions()
                 {
                     GraphicsOptions = { Antialias = true }
                 },
@@ -61,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var expectedRect = new Rectangle(10, 10, 400, 400);
             var path = new RectangularPolygon(expectedRect);
             var processor = new FillPathProcessor(
-                new ShapeGraphicsOptions()
+                new DrawingOptions()
                 {
                     GraphicsOptions = { Antialias = true }
                 },
@@ -82,7 +82,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             var expectedRect = new Rectangle(10, 10, 400, 400);
             var path = new RectangularPolygon(floatRect);
             var processor = new FillPathProcessor(
-                new ShapeGraphicsOptions()
+                new DrawingOptions()
                 {
                     GraphicsOptions = { Antialias = false }
                 },
