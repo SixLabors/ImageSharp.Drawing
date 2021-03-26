@@ -227,7 +227,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                     })
                     .SetDrawingTransform(Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY)))
                     .DrawText(text, font, Color.Black, new PointF(x, y)),
-                $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})-A({angleX},{angleY})",
+                $"F({fontName})-S({fontSize})-A({angleX},{angleY})-{ToTestOutputDisplayText(text)}-({x},{y})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);

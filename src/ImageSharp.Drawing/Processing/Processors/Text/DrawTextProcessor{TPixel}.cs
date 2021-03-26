@@ -377,7 +377,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             private Buffer2D<float> Render(IPath path)
             {
-                Size size = Rectangle.Ceiling(path.Bounds).Size * 2;
+                var size = Rectangle.Ceiling(new RectangularPolygon(path.Bounds)
+                            .Transform(this.Options.Transform)
+                            .Bounds)
+                            .Size;
+
                 size = new Size(size.Width + (this.offset * 2), size.Height + (this.offset * 2));
 
                 int subpixelCount = FillRegionProcessor.MinimumSubpixelCount;
