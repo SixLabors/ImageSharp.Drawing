@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             IPen pen,
             params PointF[] points) =>
-            source.Draw(source.GetShapeGraphicsOptions(), pen, new Polygon(new LinearLineSegment(points)));
+            source.Draw(source.GetDrawingOptions(), pen, new Polygon(new LinearLineSegment(points)));
 
         /// <summary>
         /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IPen pen,
             params PointF[] points) =>
             source.Draw(options, pen, new Polygon(new LinearLineSegment(points)));
@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IBrush brush,
             float thickness,
             params PointF[] points) =>
@@ -96,7 +96,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             Color color,
             float thickness,
             params PointF[] points) =>

@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             this.definition = definition;
         }
 
-        private TextGraphicsOptions Options => this.definition.Options;
+        private DrawingOptions Options => this.definition.Options;
 
         private Font Font => this.definition.Font;
 
@@ -63,7 +63,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.Configuration.MemoryAllocator,
                 this.Text.Length,
                 this.Pen,
-                this.Brush != null)
+                this.Brush != null,
+                this.Options.Transform)
             {
                 Options = this.Options
             };
@@ -185,7 +186,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             // - Provide a good accuracy (smaller than 0.2% image difference compared to the non-caching variant)
             // - Cache hit ratio above 60%
             private const float AccuracyMultiple = 8;
-
+            private readonly Matrix3x2 transform;
             private readonly PathBuilder builder;
 
             private Point currentRenderPosition;
@@ -201,7 +202,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private readonly bool renderFill;
             private bool rasterizationRequired;
 
-            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, IPen pen, bool renderFill)
+            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, IPen pen, bool renderFill, Matrix3x2 transform)
             {
                 this.MemoryAllocator = memoryAllocator;
                 this.currentRenderPosition = default;
@@ -220,6 +221,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     this.OutlineOperations = new List<DrawingOperation>(size);
                 }
 
+                this.transform = transform;
                 this.builder = new PathBuilder();
             }
 
@@ -231,7 +233,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public IPen Pen { get; internal set; }
 
-            public TextGraphicsOptions Options { get; internal set; }
+            public DrawingOptions Options { get; internal set; }
 
             protected void SetLayerColor(Color color)
             {
@@ -251,8 +253,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             public bool BeginGlyph(FontRectangle bounds, GlyphRendererParameters parameters)
             {
                 this.currentColor = null;
-                this.currentRenderPosition = Point.Truncate(bounds.Location);
-                PointF subPixelOffset = bounds.Location - this.currentRenderPosition;
+                var currentBounds = new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height)
+                    .Transform(this.transform)
+                    .Bounds;
+
+                this.currentRenderPosition = Point.Truncate(currentBounds.Location);
+                PointF subPixelOffset = currentBounds.Location - this.currentRenderPosition;
 
                 subPixelOffset.X = MathF.Round(subPixelOffset.X * AccuracyMultiple) / AccuracyMultiple;
                 subPixelOffset.Y = MathF.Round(subPixelOffset.Y * AccuracyMultiple) / AccuracyMultiple;
@@ -272,7 +278,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.builder.Clear();
 
                 // ensure all glyphs render around [zero, zero]  so offset negative root positions so when we draw the glyph we can offset it back
-                this.builder.SetOrigin(new PointF(-(int)bounds.X + this.offset, -(int)bounds.Y + this.offset));
+                var origionTransform = new Vector2(-(int)currentBounds.X + this.offset, -(int)currentBounds.Y + this.offset);
+
+                var transform = this.transform;
+                transform.Translation = transform.Translation + origionTransform;
+                this.builder.SetTransform(transform);
 
                 this.rasterizationRequired = true;
                 return true;
@@ -367,7 +377,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             private Buffer2D<float> Render(IPath path)
             {
-                Size size = Rectangle.Ceiling(path.Bounds).Size;
+                Size size = Rectangle.Ceiling(new RectangularPolygon(path.Bounds)
+                            .Transform(this.Options.Transform)
+                            .Bounds)
+                            .Size;
+
                 size = new Size(size.Width + (this.offset * 2), size.Height + (this.offset * 2));
 
                 int subpixelCount = FillRegionProcessor.MinimumSubpixelCount;

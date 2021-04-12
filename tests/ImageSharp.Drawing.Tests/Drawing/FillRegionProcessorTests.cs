@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             var bounds = new Rectangle(-100, -10, 10, 10);
             var brush = new Mock<IBrush>();
             var options = new GraphicsOptions { Antialias = true };
-            var processor = new FillRegionProcessor(new ShapeGraphicsOptions() { GraphicsOptions = options }, brush.Object, new MockRegion1());
+            var processor = new FillRegionProcessor(new DrawingOptions() { GraphicsOptions = options }, brush.Object, new MockRegion1());
             var img = new Image<Rgba32>(10, 10);
             processor.Execute(img.GetConfiguration(), img, bounds);
         }

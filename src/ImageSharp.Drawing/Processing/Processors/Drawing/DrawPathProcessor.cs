@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
 
@@ -8,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 {
     /// <summary>
     /// Defines a processor to fill <see cref="Image"/> pixels withing a given <see cref="IPath"/>
-    /// with the given <see cref="IBrush"/> and blending defined by the given <see cref="ShapeGraphicsOptions"/>.
+    /// with the given <see cref="IBrush"/> and blending defined by the given <see cref="DrawingOptions"/>.
     /// </summary>
     public class DrawPathProcessor : IImageProcessor
     {
@@ -18,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <param name="options">The graphics options.</param>
         /// <param name="pen">The details how to outline the region of interest.</param>
         /// <param name="shape">The shape to be filled.</param>
-        public DrawPathProcessor(ShapeGraphicsOptions options, IPen pen, IPath shape)
+        public DrawPathProcessor(DrawingOptions options, IPen pen, IPath shape)
         {
             this.Shape = shape;
             this.Pen = pen;
@@ -36,16 +37,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IPath Shape { get; }
 
         /// <summary>
-        /// Gets the <see cref="ShapeGraphicsOptions"/> defining how to blend the brush pixels over the image pixels.
+        /// Gets the <see cref="DrawingOptions"/> defining how to blend the brush pixels over the image pixels.
         /// </summary>
-        public ShapeGraphicsOptions Options { get; }
+        public DrawingOptions Options { get; }
 
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            // offset drawlines to align drawing outlines to pixel centers
-            var shape = this.Shape.Translate(0.5f, 0.5f);
+            // offset drawlines to align drawing outlines to pixel centers, and apply global transform
+            Matrix3x2 transform = Matrix3x2.CreateTranslation(0.5f, 0.5f) * this.Options.Transform;
+            IPath shape = this.Shape.Transform(transform);
             return new FillRegionProcessor(this.Options, this.Pen.StrokeFill, new ShapePath(shape, this.Pen)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
         }
     }

@@ -89,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(sx, sy));
 
             using Image<Rgba32> image = provider.GetImage();
-            var options = new ShapeGraphicsOptions()
+            var options = new DrawingOptions()
             {
                 GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
             };
@@ -125,7 +125,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(pixelOffset));
 
             Image<Rgba32> image = provider.GetImage();
-            var options = new ShapeGraphicsOptions()
+            var options = new DrawingOptions()
             {
                 GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
             };

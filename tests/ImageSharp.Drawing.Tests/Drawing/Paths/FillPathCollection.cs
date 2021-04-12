@@ -40,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void Brush()
         {
-            this.operations.Fill(new ShapeGraphicsOptions(), this.brush, this.pathCollection);
+            this.operations.Fill(new DrawingOptions(), this.brush, this.pathCollection);
             IEnumerable<FillPathProcessor> processors = this.VerifyAll<FillPathProcessor>();
 
             Assert.All(processors, p =>
@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorSet()
         {
-            this.operations.Fill(new ShapeGraphicsOptions(), Color.Pink, this.pathCollection);
+            this.operations.Fill(new DrawingOptions(), Color.Pink, this.pathCollection);
             IEnumerable<FillPathProcessor> processors = this.VerifyAll<FillPathProcessor>();
 
             Assert.All(processors, p =>

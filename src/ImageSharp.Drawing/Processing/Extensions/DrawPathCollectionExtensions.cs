@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IPen pen,
             IPathCollection paths)
         {
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext
             Draw(this IImageProcessingContext source, IPen pen, IPathCollection paths) =>
-            source.Draw(source.GetShapeGraphicsOptions(), pen, paths);
+            source.Draw(source.GetDrawingOptions(), pen, paths);
 
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IBrush brush,
             float thickness,
             IPathCollection paths) =>
@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             Color color,
             float thickness,
             IPathCollection paths) =>

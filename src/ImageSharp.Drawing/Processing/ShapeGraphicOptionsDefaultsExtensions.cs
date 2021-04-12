@@ -64,14 +64,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="context">The image processing context to retrieve defaults from.</param>
         /// <returns>The globaly configued default options.</returns>
-        public static ShapeGraphicsOptions GetShapeGraphicsOptions(this IImageProcessingContext context)
-            => new ShapeGraphicsOptions(context.GetGraphicsOptions(), context.GetShapeOptions());
-
-        /// <summary>
-        /// Gets the default shape processing options against the image processing context.
-        /// </summary>
-        /// <param name="context">The image processing context to retrieve defaults from.</param>
-        /// <returns>The globaly configued default options.</returns>
         public static ShapeOptions GetShapeOptions(this IImageProcessingContext context)
         {
             if (context.Properties.TryGetValue(typeof(ShapeOptions), out var options) && options is ShapeOptions go)

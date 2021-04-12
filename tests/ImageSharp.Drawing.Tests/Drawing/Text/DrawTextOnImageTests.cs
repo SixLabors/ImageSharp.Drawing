@@ -3,6 +3,7 @@
 
 using System;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -45,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Color color = Color.Black;
             string text = "A short piece of text 😀 with an emoji";
 
-            var textGraphicOptions = new TextGraphicsOptions
+            var textGraphicOptions = new DrawingOptions
             {
                 TextOptions =
                 {
@@ -87,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 var scaledFont = new Font(font, scalingFactor * font.Size);
 
                 var center = new PointF(img.Width / 2, img.Height / 2);
-                var textGraphicOptions = new TextGraphicsOptions
+                var textGraphicOptions = new DrawingOptions
                 {
                     TextOptions =
                     {
@@ -158,6 +159,80 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 appendSourceFileOrDescription: true);
         }
 
+        [Theory]
+        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, "OpenSans-Regular.ttf", "i", 45, 25, 25)]
+        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, "SixLaborsSampleAB.woff", AB, 45, 100, 100)]
+        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, "OpenSans-Regular.ttf", TestText, 45, 550, 550)]
+        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, "OpenSans-Regular.ttf", TestText, 45, 200, 200)]
+        public void FontShapesAreRenderedCorrectly_WithRotationApplied<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize,
+            int x,
+            int y,
+            string fontName,
+            string text,
+            float angle,
+            float rotationOriginX,
+            float rotationOriginY)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(fontName, fontSize);
+
+            var radians = (float)Math.PI * angle / 180f;
+
+            provider.RunValidatingProcessorTest(
+                c => c
+                    .SetTextOptions(o =>
+                    {
+                        o.HorizontalAlignment = HorizontalAlignment.Center;
+                        o.VerticalAlignment = VerticalAlignment.Center;
+                    })
+                    .SetDrawingTransform(Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY)))
+                    .DrawText(text, font, Color.Black, new PointF(x, y)),
+                $"F({fontName})-S({fontSize})-A({angle})-{ToTestOutputDisplayText(text)}-({x},{y})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, "OpenSans-Regular.ttf", "i", -12, 0, 25, 25)]
+        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, "SixLaborsSampleAB.woff", AB, 10, 0, 100, 100)]
+        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, "OpenSans-Regular.ttf", TestText, 0, 10, 550, 550)]
+        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, "OpenSans-Regular.ttf", TestText, 0, -10, 200, 200)]
+        public void FontShapesAreRenderedCorrectly_WithSkewApplied<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize,
+            int x,
+            int y,
+            string fontName,
+            string text,
+            float angleX,
+            float angleY,
+            float rotationOriginX,
+            float rotationOriginY)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(fontName, fontSize);
+
+            var radianX = (float)Math.PI * angleX / 180f;
+            var radianY = (float)Math.PI * angleY / 180f;
+
+            provider.RunValidatingProcessorTest(
+                c => c
+                    .SetTextOptions(o =>
+                    {
+                        o.HorizontalAlignment = HorizontalAlignment.Center;
+                        o.VerticalAlignment = VerticalAlignment.Center;
+                    })
+                    .SetDrawingTransform(Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY)))
+                    .DrawText(text, font, Color.Black, new PointF(x, y)),
+                $"F({fontName})-S({fontSize})-A({angleX},{angleY})-{ToTestOutputDisplayText(text)}-({x},{y})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
         /// <summary>
         /// Based on:
         /// https://github.com/SixLabors/ImageSharp/issues/572
@@ -182,7 +257,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            var textOptions = new TextGraphicsOptions
+            var textOptions = new DrawingOptions
             {
                 TextOptions =
                 {
@@ -241,7 +316,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 textOptions.WrapTextWidth = 300;
             }
 
-            var textGraphicsOptions = new TextGraphicsOptions
+            var textGraphicsOptions = new DrawingOptions
             {
                 TextOptions = textOptions
             };
@@ -317,7 +392,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             string text = Repeat(
                 "Beware the Jabberwock, my son!  The jaws that bite, the claws that catch!  Beware the Jubjub bird, and shun The frumious Bandersnatch!\n",
                 20);
-            var textOptions = new TextGraphicsOptions
+            var textOptions = new DrawingOptions
             {
                 TextOptions =
                 {

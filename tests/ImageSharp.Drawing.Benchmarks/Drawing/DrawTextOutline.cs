@@ -56,7 +56,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
 
                 image.Mutate(x => x.DrawText(
-                    new TextGraphicsOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
+                    new DrawingOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
                     this.TextToRender,
                     font,
                     Processing.Pens.Solid(Color.HotPink, 10),
@@ -73,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
                 image.Mutate(
                     x => DrawTextOldVersion(
                         x,
-                        new TextGraphicsOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
+                        new DrawingOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
                         this.TextToRender,
                         font,
                         null,
@@ -83,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
             static IImageProcessingContext DrawTextOldVersion(
                 IImageProcessingContext source,
-                TextGraphicsOptions options,
+                DrawingOptions options,
                 string text,
                 Fonts.Font font,
                 IBrush brush,
@@ -101,7 +101,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks
 
                 IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, style);
 
-                var pathOptions = new ShapeGraphicsOptions() { GraphicsOptions = options.GraphicsOptions };
+                var pathOptions = new DrawingOptions() { GraphicsOptions = options.GraphicsOptions };
                 if (brush != null)
                 {
                     source.Fill(pathOptions, brush, glyphs);

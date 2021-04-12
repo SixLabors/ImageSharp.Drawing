@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 Font font = family.CreateFont(48, FontStyle.Bold);
 
                 // The options are optional
-                var options = new TextGraphicsOptions()
+                var options = new DrawingOptions()
                 {
                     TextOptions = new TextOptions()
                     {

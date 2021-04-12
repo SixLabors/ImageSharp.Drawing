@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                             new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY))
 
                         .Fill(
-                            new ShapeGraphicsOptions
+                            new DrawingOptions
                             {
                                 GraphicsOptions =
                                 {
@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY)));
                 img.Mutate(
                     x => x.Fill(
-                        new ShapeGraphicsOptions
+                        new DrawingOptions
                         {
                             GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
                         },
@@ -94,7 +94,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY)));
                 img.Mutate(
                     x => x.Fill(
-                        new ShapeGraphicsOptions
+                        new DrawingOptions
                         {
                             GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
                         },
@@ -127,7 +127,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         new Rectangle(0 * scaleX, 40, 100 * scaleX, 20 * scaleY)));
                 img.Mutate(
                     x => x.Fill(
-                        new ShapeGraphicsOptions
+                        new DrawingOptions
                         {
                             GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
                         },
@@ -138,7 +138,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
                 img.Mutate(
                     x => x.Fill(
-                        new ShapeGraphicsOptions
+                        new DrawingOptions
                         {
                             GraphicsOptions = new GraphicsOptions { Antialias = true, ColorBlendingMode = blending, AlphaCompositionMode = composition }
                         },

@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IPen pen,
             RectangleF shape) =>
             source.Draw(options, pen, new RectangularPolygon(shape.X, shape.Y, shape.Width, shape.Height));
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="shape">The shape.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(this IImageProcessingContext source, IPen pen, RectangleF shape) =>
-            source.Draw(source.GetShapeGraphicsOptions(), pen, shape);
+            source.Draw(source.GetDrawingOptions(), pen, shape);
 
         /// <summary>
         /// Draws the outline of the rectangle with the provided brush at the provided thickness.
@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IBrush brush,
             float thickness,
             RectangleF shape) =>
@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             Color color,
             float thickness,
             RectangleF shape) =>

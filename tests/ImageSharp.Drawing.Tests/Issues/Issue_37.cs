@@ -27,13 +27,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 image.Mutate(
                     x => x.BackgroundColor(Color.White)
                     .DrawLines(
-                        new ShapeGraphicsOptions { GraphicsOptions = graphicsOptions },
+                        new DrawingOptions { GraphicsOptions = graphicsOptions },
                         Color.Black,
                         1,
                         new PointF(0, 50),
                         new PointF(150, 50))
                     .DrawText(
-                        new TextGraphicsOptions { GraphicsOptions = graphicsOptions },
+                        new DrawingOptions { GraphicsOptions = graphicsOptions },
                         text,
                         font,
                         Color.Black,

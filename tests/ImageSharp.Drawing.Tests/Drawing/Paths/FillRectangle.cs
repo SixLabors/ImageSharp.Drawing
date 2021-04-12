@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void Brush()
         {
-            this.operations.Fill(new ShapeGraphicsOptions(), this.brush, this.rectangle);
+            this.operations.Fill(new DrawingOptions(), this.brush, this.rectangle);
 
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorSet()
         {
-            this.operations.Fill(new ShapeGraphicsOptions(), Color.Red, this.rectangle);
+            this.operations.Fill(new DrawingOptions(), Color.Red, this.rectangle);
 
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 

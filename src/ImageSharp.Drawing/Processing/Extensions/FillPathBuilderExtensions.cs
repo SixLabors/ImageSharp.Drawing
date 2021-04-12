@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             IBrush brush,
             Action<PathBuilder> path)
         {
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             IBrush brush,
             Action<PathBuilder> path) =>
-            source.Fill(source.GetShapeGraphicsOptions(), brush, path);
+            source.Fill(source.GetDrawingOptions(), brush, path);
 
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            ShapeGraphicsOptions options,
+            DrawingOptions options,
             Color color,
             Action<PathBuilder> path) =>
             source.Fill(options, new SolidBrush(color), path);
