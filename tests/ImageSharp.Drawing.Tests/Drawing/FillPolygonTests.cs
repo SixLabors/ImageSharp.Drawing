@@ -82,6 +82,28 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 .FillPolygon(Color.White, simplePath));
         }
 
+        [Theory]
+        [WithBasicTestPatternImages(100, 100, PixelTypes.Rgba32)]
+        public void Fill_RectangularPolygon_Solid_Transformed<TPixel>(TestImageProvider<TPixel> provider)
+   where TPixel : unmanaged, IPixel<TPixel>
+        {
+            var polygon = new RectangularPolygon(25, 25, 50, 50);
+
+            provider.RunValidatingProcessorTest(
+                c => c.SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))
+                .Fill(Color.White, polygon));
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(100, 100, PixelTypes.Rgba32)]
+        public void Fill_RectangularPolygon_Solid_TransformedUsingConfiguration<TPixel>(TestImageProvider<TPixel> provider)
+  where TPixel : unmanaged, IPixel<TPixel>
+        {
+            var polygon = new RectangularPolygon(25, 25, 50, 50);
+            provider.Configuration.SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)));
+            provider.RunValidatingProcessorTest(c => c.Fill(Color.White, polygon));
+        }
+
         public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data { get; } =
             new TheoryData<bool, IntersectionRule>()
             {
