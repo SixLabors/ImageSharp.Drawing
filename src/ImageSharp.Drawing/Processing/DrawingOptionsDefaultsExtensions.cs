@@ -55,7 +55,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 return go;
             }
 
-            var matrix = context.Configuration.GetDrawingTransform();
+            Matrix3x2 matrix = context.Configuration.GetDrawingTransform();
 
             // do not cache the fall back to config into the processing context
             // in case someone want to change the value on the config and expects it re-flow thru.

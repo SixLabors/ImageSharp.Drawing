@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            var shape = this.Shape.Transform(this.Options.Transform);
+            IPath shape = this.Shape.Transform(this.Options.Transform);
 
             if (shape is RectangularPolygon rectPoly)
             {

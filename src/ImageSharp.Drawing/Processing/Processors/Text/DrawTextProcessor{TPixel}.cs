@@ -377,7 +377,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             private Buffer2D<float> Render(IPath path)
             {
-                var size = Rectangle.Ceiling(new RectangularPolygon(path.Bounds)
+                Size size = Rectangle.Ceiling(new RectangularPolygon(path.Bounds)
                             .Transform(this.Options.Transform)
                             .Bounds)
                             .Size;

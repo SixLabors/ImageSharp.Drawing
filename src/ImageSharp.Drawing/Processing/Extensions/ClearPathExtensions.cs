@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
         internal static DrawingOptions CloneForClearOperation(this DrawingOptions shapeOptions)
         {
-            var options = shapeOptions.GraphicsOptions.DeepClone();
+            GraphicsOptions options = shapeOptions.GraphicsOptions.DeepClone();
             options.ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Normal;
             options.AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Src;
             options.BlendPercentage = 1;
