@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
 
@@ -44,8 +45,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            // offset drawlines to align drawing outlines to pixel centers
-            var shape = this.Shape.Translate(0.5f, 0.5f).Transform(this.Options.Transform);
+            // offset drawlines to align drawing outlines to pixel centers, and apply global transform
+            Matrix3x2 transform = Matrix3x2.CreateTranslation(0.5f, 0.5f) * this.Options.Transform;
+            IPath shape = this.Shape.Transform(transform);
             return new FillRegionProcessor(this.Options, this.Pen.StrokeFill, new ShapePath(shape, this.Pen)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
         }
     }
