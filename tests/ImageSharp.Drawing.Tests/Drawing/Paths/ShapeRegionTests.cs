@@ -33,28 +33,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             public abstract float Length { get; }
 
-            public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-            {
-                return this.FindIntersections(start, end, buffer, 0);
-            }
+            public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+                => this.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
-            public int FindIntersections(PointF s, PointF e, Span<PointF> buffer, IntersectionRule intersectionRule)
+            public int FindIntersections(
+                PointF start,
+                PointF end,
+                Span<PointF>
+                intersections,
+                Span<PointOrientation> orientations,
+                IntersectionRule intersectionRule)
             {
-                Assert.Equal(this.TestYToScan, s.Y);
-                Assert.Equal(this.TestYToScan, e.Y);
-                Assert.True(s.X < this.Bounds.Left);
-                Assert.True(e.X > this.Bounds.Right);
+                Assert.Equal(this.TestYToScan, start.Y);
+                Assert.Equal(this.TestYToScan, end.Y);
+                Assert.True(start.X < this.Bounds.Left);
+                Assert.True(end.X > this.Bounds.Right);
 
                 this.TestFindIntersectionsInvocationCounter++;
 
                 return this.TestFindIntersectionsResult;
             }
-
-            public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-                => this.FindIntersections(start, end, buffer, offset, IntersectionRule.OddEven);
-
-            public int FindIntersections(PointF s, PointF e, Span<PointF> buffer)
-                => this.FindIntersections(s, e, buffer, IntersectionRule.OddEven);
 
             public int TestFindIntersectionsInvocationCounter { get; private set; }
 

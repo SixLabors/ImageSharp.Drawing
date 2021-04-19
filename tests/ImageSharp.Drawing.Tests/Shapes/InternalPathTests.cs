@@ -178,12 +178,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void Intersections_buffer()
         {
             InternalPath shape = Create(new PointF(0, 0), new Size(10, 10));
-            var buffer = new PointF[shape.PointCount];
-            int hits = shape.FindIntersections(new PointF(5, -10), new PointF(5, 20), buffer);
+            var intersections = new PointF[shape.PointCount];
+            var orientations = new PointOrientation[shape.PointCount];
+            int hits = shape.FindIntersections(new PointF(5, -10), new PointF(5, 20), intersections, orientations);
 
             Assert.Equal(2, hits);
-            Assert.Equal(new PointF(5, 0), buffer[0]);
-            Assert.Equal(new PointF(5, 10), buffer[1]);
+            Assert.Equal(new PointF(5, 0), intersections[0]);
+            Assert.Equal(new PointF(5, 10), intersections[1]);
         }
 
         [Fact]

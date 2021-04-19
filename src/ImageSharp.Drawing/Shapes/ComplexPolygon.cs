@@ -120,7 +120,7 @@ namespace SixLabors.ImageSharp.Drawing
         public int MaxIntersections { get; }
 
         /// <summary>
-        /// the distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
+        /// The distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>
@@ -162,81 +162,43 @@ namespace SixLabors.ImageSharp.Drawing
             return pointInfo;
         }
 
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on all the polygons, that make up this complex shape,
-        /// that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The offset within the buffer</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-            => this.FindIntersections(start, end, buffer, offset, IntersectionRule.OddEven);
+        /// <inheritdoc />
+        public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => this.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-            => this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on all the polygons, that make up this complex shape,
-        /// that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The offset within the buffer</param>
-        /// <param name="intersectionRule">The intersection rule to use</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.FindIntersections(start, end, subBuffer, intersectionRule);
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
+        public int FindIntersections(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations,
+            IntersectionRule intersectionRule)
         {
             this.EnsureInternalPathsInitalized();
 
             int totalAdded = 0;
-            InternalPath.PointOrientation[] orientations = ArrayPool<InternalPath.PointOrientation>.Shared.Rent(buffer.Length); // the largest number of intersections of any sub path of the set is the max size with need for this buffer.
-            Span<InternalPath.PointOrientation> orientationsSpan = orientations;
-            try
+            foreach (InternalPath ip in this.internalPaths)
             {
-                foreach (var ip in this.internalPaths)
-                {
-                    Span<PointF> subBuffer = buffer.Slice(totalAdded);
-                    Span<InternalPath.PointOrientation> subOrientationsSpan = orientationsSpan.Slice(totalAdded);
+                Span<PointF> subBuffer = intersections.Slice(totalAdded);
+                Span<PointOrientation> subOrientationsSpan = orientations.Slice(totalAdded);
 
-                    var position = ip.FindIntersectionsWithOrientation(start, end, subBuffer, subOrientationsSpan);
-                    totalAdded += position;
-                }
-
-                Span<float> distances = stackalloc float[totalAdded];
-                for (int i = 0; i < totalAdded; i++)
-                {
-                    distances[i] = Vector2.DistanceSquared(start, buffer[i]);
-                }
-
-                var activeBuffer = buffer.Slice(0, totalAdded);
-                var activeOrientationsSpan = orientationsSpan.Slice(0, totalAdded);
-                SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
-
-                if (intersectionRule == IntersectionRule.Nonzero)
-                {
-                    totalAdded = InternalPath.ApplyNonZeroIntersectionRules(activeBuffer, activeOrientationsSpan);
-                }
+                int position = ip.FindIntersectionsWithOrientation(start, end, subBuffer, subOrientationsSpan);
+                totalAdded += position;
             }
-            finally
+
+            Span<float> distances = stackalloc float[totalAdded];
+            for (int i = 0; i < totalAdded; i++)
             {
-                ArrayPool<InternalPath.PointOrientation>.Shared.Return(orientations);
+                distances[i] = Vector2.DistanceSquared(start, intersections[i]);
+            }
+
+            Span<PointF> activeIntersections = intersections.Slice(0, totalAdded);
+            Span<PointOrientation> activeOrientations = orientations.Slice(0, totalAdded);
+            SortUtility.Sort(distances, activeIntersections, activeOrientations);
+
+            if (intersectionRule == IntersectionRule.Nonzero)
+            {
+                totalAdded = InternalPath.ApplyNonZeroIntersectionRules(activeIntersections, activeOrientations);
             }
 
             return totalAdded;
@@ -252,9 +214,9 @@ namespace SixLabors.ImageSharp.Drawing
                     {
                         this.internalPaths = new List<InternalPath>(this.paths.Length);
 
-                        foreach (var p in this.paths)
+                        foreach (IPath p in this.paths)
                         {
-                            foreach (var s in p.Flatten())
+                            foreach (ISimplePath s in p.Flatten())
                             {
                                 var ip = new InternalPath(s.Points, s.IsClosed);
                                 this.internalPaths.Add(ip);
@@ -361,7 +323,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </returns>
         public SegmentInfo PointAlongPath(float distanceAlongPath)
         {
-            distanceAlongPath = distanceAlongPath % this.Length;
+            distanceAlongPath %= this.Length;
 
             foreach (IPath p in this.Paths)
             {

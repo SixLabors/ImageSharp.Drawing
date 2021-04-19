@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -161,21 +161,24 @@ namespace SixLabors.ImageSharp.Drawing
         /// </returns>
         public static IEnumerable<PointF> FindIntersections(this IPath path, PointF start, PointF end)
         {
-            PointF[] buffer = ArrayPool<PointF>.Shared.Rent(path.MaxIntersections);
+            int max = path.MaxIntersections;
+            PointF[] intersections = ArrayPool<PointF>.Shared.Rent(max);
+            PointOrientation[] orientations = ArrayPool<PointOrientation>.Shared.Rent(max);
             try
             {
-                int hits = path.FindIntersections(start, end, buffer, 0);
+                int hits = path.FindIntersections(start, end, intersections.AsSpan(0, max), orientations.AsSpan(0, max));
                 PointF[] results = new PointF[hits];
                 for (int i = 0; i < hits; i++)
                 {
-                    results[i] = buffer[i];
+                    results[i] = intersections[i];
                 }
 
                 return results;
             }
             finally
             {
-                ArrayPool<PointF>.Shared.Return(buffer);
+                ArrayPool<PointF>.Shared.Return(intersections);
+                ArrayPool<PointOrientation>.Shared.Return(orientations);
             }
         }
 

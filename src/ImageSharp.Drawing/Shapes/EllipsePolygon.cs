@@ -8,7 +8,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
+    /// An elliptical shape made up of a single path made up of one of more <see cref="ILineSegment"/>s.
     /// </summary>
     public class EllipsePolygon : IPath, ISimplePath, IInternalPathOwner
     {
@@ -110,12 +110,9 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// A new path with the matrix applied to it.
         /// </returns>
-        public EllipsePolygon Transform(Matrix3x2 matrix)
-        {
-            return matrix.IsIdentity
+        public EllipsePolygon Transform(Matrix3x2 matrix) => matrix.IsIdentity
                 ? this
                 : new EllipsePolygon(this.segment.Transform(matrix));
-        }
 
         /// <summary>
         /// Transforms the path using the specified matrix.
@@ -133,7 +130,7 @@ namespace SixLabors.ImageSharp.Drawing
         IPath IPath.AsClosedPath() => this;
 
         /// <summary>
-        /// Converts the <see cref="IPath" /> into a simple linear path..
+        /// Converts the <see cref="IPath" /> into a simple linear path.
         /// </summary>
         /// <returns>
         /// Returns the current <see cref="IPath" /> as simple linear path.
@@ -144,30 +141,17 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.innerPath.FindIntersections(start, end, subBuffer, intersectionRule);
-        }
+        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => this.innerPath.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
         /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
-        {
-            return this.innerPath.FindIntersections(start, end, buffer, intersectionRule);
-        }
-
-        /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.innerPath.FindIntersections(start, end, subBuffer, IntersectionRule.OddEven);
-        }
-
-        /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-        {
-            return this.innerPath.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
-        }
+        int IPath.FindIntersections(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations,
+            IntersectionRule intersectionRule)
+            => this.innerPath.FindIntersections(start, end, intersections, orientations, intersectionRule);
 
         /// <summary>
         /// Determines whether the <see cref="IPath" /> contains the specified point
@@ -176,17 +160,13 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(PointF point)
-        {
-            return this.innerPath.PointInPolygon(point);
-        }
+        public bool Contains(PointF point) => this.innerPath.PointInPolygon(point);
 
         /// <inheritdoc />
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
-        {
-            // TODO switch this out to a calculated algorithum
-            return this.innerPath.PointAlongPath(distanceAlongPath);
-        }
+        public SegmentInfo PointAlongPath(float distanceAlongPath) =>
+
+            // TODO switch this out to a calculated algorithm
+            this.innerPath.PointAlongPath(distanceAlongPath);
 
         private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
         {

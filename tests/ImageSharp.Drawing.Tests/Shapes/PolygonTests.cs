@@ -125,12 +125,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void FindIntersectionsBuffer()
         {
             var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0)));
-            var buffer = new PointF[2];
+            var intersections = new PointF[2];
+            var orientations = new PointOrientation[intersections.Length];
 
-            int hits = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15), buffer, 0);
+            int hits = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15), intersections, orientations);
             Assert.Equal(2, hits);
-            Assert.Contains(new PointF(5, 10), buffer);
-            Assert.Contains(new PointF(5, 0), buffer);
+            Assert.Contains(new PointF(5, 10), intersections);
+            Assert.Contains(new PointF(5, 0), intersections);
         }
 
         [Fact]

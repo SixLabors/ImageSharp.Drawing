@@ -129,6 +129,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
                 using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
                 using IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length);
+
                 Span<float> amountSpan = amountBuffer.Memory.Span;
                 Span<TPixel> overlaySpan = overlay.Memory.Span;
                 float blendPercentage = this.Options.BlendPercentage;

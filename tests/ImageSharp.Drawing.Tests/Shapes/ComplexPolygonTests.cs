@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Numerics;
-using SixLabors.ImageSharp;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -59,12 +58,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             var complex = new ComplexPolygon(simplePath1, simplePath2);
 
-            var buffer = new PointF[10];
-            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.Nonzero);
+            var intersections = new PointF[10];
+            var orientations = new PointOrientation[intersections.Length];
+            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), intersections, orientations, IntersectionRule.Nonzero);
 
             Assert.Equal(2, points);
-            Assert.Equal(1, buffer[0].X);
-            Assert.Equal(4, buffer[1].X);
+            Assert.Equal(1, intersections[0].X);
+            Assert.Equal(4, intersections[1].X);
         }
 
         [Fact]
@@ -84,14 +84,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             var complex = new ComplexPolygon(simplePath1, simplePath2);
 
-            var buffer = new PointF[10];
-            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), buffer, 0, IntersectionRule.OddEven);
+            var intersections = new PointF[10];
+            var orientations = new PointOrientation[intersections.Length];
+            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), intersections, orientations, IntersectionRule.OddEven);
 
             Assert.Equal(4, points);
-            Assert.Equal(1, buffer[0].X);
-            Assert.Equal(2, buffer[1].X);
-            Assert.Equal(3, buffer[2].X);
-            Assert.Equal(4, buffer[3].X);
+            Assert.Equal(1, intersections[0].X);
+            Assert.Equal(2, intersections[1].X);
+            Assert.Equal(3, intersections[2].X);
+            Assert.Equal(4, intersections[3].X);
         }
 
         [Fact]
@@ -122,21 +123,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             var start = new PointF(shape.Bounds.Left - 1, y);
             var end = new PointF(shape.Bounds.Right + 1, y);
-            PointF[] innerbuffer = ArrayPool<PointF>.Shared.Rent(length);
+            PointF[] intersections = ArrayPool<PointF>.Shared.Rent(length);
+            PointOrientation[] orientations = ArrayPool<PointOrientation>.Shared.Rent(length);
             try
             {
-                int count = shape.FindIntersections(start, end, innerbuffer, 0);
+                int count = shape.FindIntersections(
+                    start,
+                    end,
+                    intersections.AsSpan(0, length),
+                    orientations.AsSpan(0, length));
 
                 for (int i = 0; i < count; i++)
                 {
-                    buffer[i + offset] = innerbuffer[i].X;
+                    buffer[i + offset] = intersections[i].X;
                 }
 
                 return count;
             }
             finally
             {
-                ArrayPool<PointF>.Shared.Return(innerbuffer);
+                ArrayPool<PointF>.Shared.Return(intersections);
             }
         }
 
@@ -224,7 +230,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             int yMin = cy - r + thickness + 1;
             int yMax = cy + r - thickness;
 
-            var buffer = new PointF[16];
+            var intersections = new PointF[16];
+            var orientations = new PointOrientation[intersections.Length];
 
             var badPositions = new List<int>();
 
@@ -233,7 +240,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 var start = new PointF(-1, y);
                 var end = new PointF(w + 1, y);
 
-                int intersectionCount = path.FindIntersections(start, end, buffer);
+                int intersectionCount = path.FindIntersections(start, end, intersections, orientations);
                 if (intersectionCount != 4)
                 {
                     badPositions.Add(y);
@@ -266,7 +273,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             var path = new Path(new LinearLineSegment(a, b));
 
-            int count = path.FindIntersections(c, d, new PointF[1]);
+            int count = path.FindIntersections(c, d, new PointF[1], new PointOrientation[1]);
             Assert.Equal(1, count);
         }
 

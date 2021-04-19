@@ -160,9 +160,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             public Vector4 EndColor { get; }
 
-            public Intersection? FindIntersection(PointF start, PointF end, Span<PointF> intersections)
+            public Intersection? FindIntersection(
+                PointF start,
+                PointF end,
+                Span<PointF> intersections,
+                Span<PointOrientation> orientations)
             {
-                int pathIntersections = this.Path.FindIntersections(start, end, intersections.Slice(0, this.Path.MaxIntersections));
+                int pathIntersections = this.Path.FindIntersections(
+                    start,
+                    end,
+                    intersections.Slice(0, this.Path.MaxIntersections),
+                    orientations.Slice(0, this.Path.MaxIntersections));
 
                 if (pathIntersections == 0)
                 {
@@ -211,13 +219,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             private readonly float maxDistance;
 
+            private readonly int maxIntersections;
+
             private readonly IList<Edge> edges;
 
             private readonly TPixel centerPixel;
 
             private readonly TPixel transparentPixel;
-
-            private readonly int maxIntersections;
 
             /// <summary>
             /// Initializes a new instance of the <see cref="PathGradientBrushApplicator{TPixel}"/> class.
@@ -249,7 +257,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
             }
 
-            internal TPixel this[int x, int y, Span<PointF> intersections]
+            internal TPixel this[int x, int y, Span<PointF> intersections, Span<PointOrientation> orientations]
             {
                 get
                 {
@@ -285,7 +293,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     var direction = Vector2.Normalize(point - this.center);
                     PointF end = point + (PointF)(direction * this.maxDistance);
 
-                    (Edge edge, Intersection? info) = this.FindIntersection(point, end, intersections);
+                    (Edge edge, Intersection? info) = this.FindIntersection(point, end, intersections, orientations);
 
                     if (!info.HasValue)
                     {
@@ -311,12 +319,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             {
                 MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
                 using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
-                using IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length);
+                using IMemoryOwner<TPixel> overlayBuffer = memoryAllocator.Allocate<TPixel>(scanline.Length);
                 using IMemoryOwner<PointF> intersectionsBuffer = memoryAllocator.Allocate<PointF>(this.maxIntersections);
+                using IMemoryOwner<PointOrientation> orientationsBuffer = memoryAllocator.Allocate<PointOrientation>(this.maxIntersections);
 
                 Span<float> amountSpan = amountBuffer.Memory.Span;
-                Span<TPixel> overlaySpan = overlay.Memory.Span;
+                Span<TPixel> overlaySpan = overlayBuffer.Memory.Span;
                 Span<PointF> intersectionsSpan = intersectionsBuffer.Memory.Span;
+                Span<PointOrientation> orientationsSpan = orientationsBuffer.Memory.Span;
                 float blendPercentage = this.Options.BlendPercentage;
 
                 // TODO: Remove bounds checks.
@@ -325,7 +335,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     for (int i = 0; i < scanline.Length; i++)
                     {
                         amountSpan[i] = scanline[i] * blendPercentage;
-                        overlaySpan[i] = this[x + i, y, intersectionsSpan];
+                        overlaySpan[i] = this[x + i, y, intersectionsSpan, orientationsSpan];
                     }
                 }
                 else
@@ -333,7 +343,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     for (int i = 0; i < scanline.Length; i++)
                     {
                         amountSpan[i] = scanline[i];
-                        overlaySpan[i] = this[x + i, y, intersectionsSpan];
+                        overlaySpan[i] = this[x + i, y, intersectionsSpan, orientationsSpan];
                     }
                 }
 
@@ -341,13 +351,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlaySpan, amountSpan);
             }
 
-            private (Edge edge, Intersection? info) FindIntersection(PointF start, PointF end, Span<PointF> intersections)
+            private (Edge edge, Intersection? info) FindIntersection(
+                PointF start,
+                PointF end,
+                Span<PointF> intersections,
+                Span<PointOrientation> orientations)
             {
                 (Edge edge, Intersection? info) closest = default;
 
                 foreach (Edge edge in this.edges)
                 {
-                    Intersection? intersection = edge.FindIntersection(start, end, intersections);
+                    Intersection? intersection = edge.FindIntersection(start, end, intersections, orientations);
 
                     if (!intersection.HasValue)
                     {

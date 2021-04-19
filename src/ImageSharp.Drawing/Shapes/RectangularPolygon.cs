@@ -186,7 +186,8 @@ namespace SixLabors.ImageSharp.Drawing
         public float Height => this.Size.Height;
 
         /// <summary>
-        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
+        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture
+        /// of open and closed figures.
         /// </summary>
         PathTypes IPath.PathType => PathTypes.Closed;
 
@@ -203,9 +204,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="polygon">The polygon to convert.</param>
         public static explicit operator RectangularPolygon(Polygon polygon)
-        {
-            return new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
-        }
+            => new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
         /// <summary>
         /// Determines if the specified point is contained within the rectangular region defined by
@@ -216,60 +215,48 @@ namespace SixLabors.ImageSharp.Drawing
         /// The <see cref="bool" />
         /// </returns>
         public bool Contains(PointF point)
-        {
-            return Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
-        }
+            => Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-        {
-            return this.FindIntersections(start, end, buffer.AsSpan(offset), intersectionRule);
-        }
+        public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => this.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.FindIntersections(start, end, subBuffer);
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
+        public int FindIntersections(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations,
+            IntersectionRule intersectionRule)
         {
             int offset = 0;
             int discovered = 0;
-            Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
-            Vector2 endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
+            var startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
+            var endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
 
-            // start doesn't change when its inside the shape thus not crossing
+            // Start doesn't change when its inside the shape thus not crossing
             if (startPoint != (Vector2)start)
             {
                 if (startPoint == Vector2.Clamp(startPoint, start, end))
                 {
                     // if start closest is within line then its a valid point
                     discovered++;
-                    buffer[offset++] = startPoint;
+                    intersections[offset++] = startPoint;
                 }
             }
 
-            // end didn't change it must not intercept with an edge
+            // End didn't change it must not intercept with an edge
             if (endPoint != (Vector2)end)
             {
                 if (endPoint == Vector2.Clamp(endPoint, start, end))
                 {
-                    // if start closest is within line then its a valid point
+                    // If start closest is within line then its a valid point
                     discovered++;
-                    buffer[offset] = endPoint;
+                    intersections[offset] = endPoint;
                 }
             }
 
             return discovered;
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-        {
-            return this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
         }
 
         /// <summary>
@@ -293,7 +280,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <inheritdoc />
         public SegmentInfo PointAlongPath(float distanceAlongPath)
         {
-            distanceAlongPath = distanceAlongPath % this.length;
+            distanceAlongPath %= this.length;
 
             if (distanceAlongPath < this.Width)
             {
@@ -467,36 +454,20 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="other">The other recentalge.</param>
         /// <returns>Returns a value indicating if the rectangles are equal.</returns>
         public bool Equals(RectangularPolygon other)
-        {
-            return other != null &&
+            => other != null &&
                 this.X == other.X &&
                 this.Y == other.Y &&
                 this.Height == other.Height &&
                 this.Width == other.Width;
-        }
 
-        /// <summary>
-        /// Equality comparer for two RectangularPolygons
-        /// </summary>
-        /// <param name="obj">The polygon to compare to.</param>
-        /// <returns>Returns a value indicating if the rectangles are equal.</returns>
+        /// <inheritdoc/>
         public override bool Equals(object obj)
-        {
-            return obj is RectangularPolygon other && this.Equals(other);
-        }
 
-        /// <summary>
-        ///     Serves as the default hash function.
-        /// </summary>
-        /// <returns>A hash code for the current object.</returns>
+            // TODO: It's very odd to do value type equality with a class like this.
+            => obj is RectangularPolygon other && this.Equals(other);
+
+        /// <inheritdoc/>
         public override int GetHashCode()
-        {
-            int hashCode = -1073544145;
-            hashCode = (hashCode * -1521134295) + this.X.GetHashCode();
-            hashCode = (hashCode * -1521134295) + this.Y.GetHashCode();
-            hashCode = (hashCode * -1521134295) + this.Width.GetHashCode();
-            hashCode = (hashCode * -1521134295) + this.Height.GetHashCode();
-            return hashCode;
-        }
+            => HashCode.Combine(this.X, this.Y, this.Width, this.Height);
     }
 }

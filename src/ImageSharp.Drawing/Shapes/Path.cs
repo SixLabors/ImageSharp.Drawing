@@ -40,9 +40,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="segments">The segments.</param>
         public Path(params ILineSegment[] segments)
-        {
-            this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
-        }
+            => this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
 
         /// <summary>
         /// Gets the length of the path.
@@ -159,28 +157,17 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-        {
-            return this.InnerPath.FindIntersections(start, end, buffer.AsSpan(offset));
-        }
+        public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => this.InnerPath.FindIntersections(start, end, intersections, orientations);
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-        {
-            return this.InnerPath.FindIntersections(start, end, buffer);
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-        {
-            return this.InnerPath.FindIntersections(start, end, buffer.AsSpan(offset), intersectionRule);
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
-        {
-            return this.InnerPath.FindIntersections(start, end, buffer, intersectionRule);
-        }
+        public int FindIntersections(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations,
+            IntersectionRule intersectionRule)
+            => this.InnerPath.FindIntersections(start, end, intersections, orientations, intersectionRule);
 
         /// <summary>
         /// Determines whether the <see cref="IPath" /> contains the specified point
@@ -189,10 +176,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
         /// </returns>
-        public bool Contains(PointF point)
-        {
-            return this.InnerPath.PointInPolygon(point);
-        }
+        public bool Contains(PointF point) => this.InnerPath.PointInPolygon(point);
 
         /// <summary>
         /// Calculates the point a certain distance a path.
@@ -201,10 +185,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// Returns details about a point along a path.
         /// </returns>
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
-        {
-            return this.InnerPath.PointAlongPath(distanceAlongPath);
-        }
+        public SegmentInfo PointAlongPath(float distanceAlongPath) => this.InnerPath.PointAlongPath(distanceAlongPath);
 
         /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };
