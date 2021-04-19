@@ -48,14 +48,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         protected GraphicsOptions Options { get; }
 
-        /// <summary>
-        /// Gets the overlay pixel at the specified position.
-        /// </summary>
-        /// <param name="x">The x-coordinate.</param>
-        /// <param name="y">The y-coordinate.</param>
-        /// <returns>The <see typeparam="TPixel"/> at the specified position.</returns>
-        internal abstract TPixel this[int x, int y] { get; }
-
         /// <inheritdoc/>
         public void Dispose()
         {

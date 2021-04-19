@@ -4,7 +4,6 @@
 using System;
 using System.Buffers;
 using System.Numerics;
-using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -107,8 +106,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
             }
 
-            /// <inheritdoc />
-            internal override TPixel this[int x, int y]
+            internal TPixel this[int x, int y]
             {
                 get
                 {

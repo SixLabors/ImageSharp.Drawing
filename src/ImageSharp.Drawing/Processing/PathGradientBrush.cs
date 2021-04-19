@@ -165,38 +165,31 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             public Vector4 EndColor { get; }
 
-            public Intersection? FindIntersection(PointF start, PointF end, MemoryAllocator allocator)
+            public Intersection? FindIntersection(PointF start, PointF end, Span<PointF> intersections)
             {
-                // TODO: The number of max intersections is upper bound to the number of nodes of the path.
-                // Normally these numbers would be small and could potentially be stackalloc rather than pooled.
-                // Investigate performance beifit of checking length and choosing approach.
-                using (IMemoryOwner<PointF> memory = allocator.Allocate<PointF>(this.Path.MaxIntersections))
+                int pathIntersections = this.Path.FindIntersections(start, end, intersections.Slice(0, this.Path.MaxIntersections));
+
+                if (pathIntersections == 0)
                 {
-                    Span<PointF> buffer = memory.Memory.Span;
-                    int intersections = this.Path.FindIntersections(start, end, buffer);
-
-                    if (intersections == 0)
-                    {
-                        return null;
-                    }
-
-                    buffer = buffer.Slice(0, intersections);
-
-                    PointF minPoint = buffer[0];
-                    var min = new Intersection(minPoint, ((Vector2)(minPoint - start)).LengthSquared());
-                    for (int i = 1; i < buffer.Length; i++)
-                    {
-                        PointF point = buffer[i];
-                        var current = new Intersection(point, ((Vector2)(point - start)).LengthSquared());
-
-                        if (min.Distance > current.Distance)
-                        {
-                            min = current;
-                        }
-                    }
-
-                    return min;
+                    return null;
                 }
+
+                intersections = intersections.Slice(0, pathIntersections);
+
+                PointF minPoint = intersections[0];
+                var min = new Intersection(minPoint, ((Vector2)(minPoint - start)).LengthSquared());
+                for (int i = 1; i < intersections.Length; i++)
+                {
+                    PointF point = intersections[i];
+                    var current = new Intersection(point, ((Vector2)(point - start)).LengthSquared());
+
+                    if (min.Distance > current.Distance)
+                    {
+                        min = current;
+                    }
+                }
+
+                return min;
             }
 
             public Vector4 ColorAt(float distance)
@@ -261,8 +254,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
             }
 
-            /// <inheritdoc />
-            internal override TPixel this[int x, int y]
+            internal TPixel this[int x, int y, Span<PointF> intersections]
             {
                 get
                 {
@@ -298,7 +290,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     var direction = Vector2.Normalize(point - this.center);
                     PointF end = point + (PointF)(direction * this.maxDistance);
 
-                    (Edge edge, Intersection? info) = this.FindIntersection(point, end);
+                    (Edge edge, Intersection? info) = this.FindIntersection(point, end, intersections);
 
                     if (!info.HasValue)
                     {
@@ -325,9 +317,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
                 using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
                 using IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length);
+                using IMemoryOwner<PointF> intersectionsBuffer = memoryAllocator.Allocate<PointF>(this.maxIntersections);
 
                 Span<float> amountSpan = amountBuffer.Memory.Span;
                 Span<TPixel> overlaySpan = overlay.Memory.Span;
+                Span<PointF> intersectionsSpan = intersectionsBuffer.Memory.Span;
                 float blendPercentage = this.Options.BlendPercentage;
 
                 // TODO: Remove bounds checks.
@@ -336,7 +330,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     for (int i = 0; i < scanline.Length; i++)
                     {
                         amountSpan[i] = scanline[i] * blendPercentage;
-                        overlaySpan[i] = this[x + i, y];
+                        overlaySpan[i] = this[x + i, y, intersectionsSpan];
                     }
                 }
                 else
@@ -344,7 +338,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     for (int i = 0; i < scanline.Length; i++)
                     {
                         amountSpan[i] = scanline[i];
-                        overlaySpan[i] = this[x + i, y];
+                        overlaySpan[i] = this[x + i, y, intersectionsSpan];
                     }
                 }
 
@@ -352,14 +346,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlaySpan, amountSpan);
             }
 
-            private (Edge edge, Intersection? info) FindIntersection(PointF start, PointF end)
+            private (Edge edge, Intersection? info) FindIntersection(PointF start, PointF end, Span<PointF> intersections)
             {
                 (Edge edge, Intersection? info) closest = default;
 
-                MemoryAllocator allocator = this.Configuration.MemoryAllocator;
                 foreach (Edge edge in this.edges)
                 {
-                    Intersection? intersection = edge.FindIntersection(start, end, allocator);
+                    Intersection? intersection = edge.FindIntersection(start, end, intersections);
 
                     if (!intersection.HasValue)
                     {

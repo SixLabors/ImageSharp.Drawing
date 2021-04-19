@@ -3,8 +3,6 @@
 
 using System;
 using System.Buffers;
-
-using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -19,10 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Initializes a new instance of the <see cref="SolidBrush"/> class.
         /// </summary>
         /// <param name="color">The color.</param>
-        public SolidBrush(Color color)
-        {
-            this.Color = color;
-        }
+        public SolidBrush(Color color) => this.Color = color;
 
         /// <summary>
         /// Gets the color.
@@ -36,9 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            return new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
-        }
+            => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
 
         /// <summary>
         /// The solid brush applicator.
@@ -71,9 +64,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// </summary>
             protected IMemoryOwner<TPixel> Colors { get; private set; }
 
-            /// <inheritdoc/>
-            internal override TPixel this[int x, int y] => this.Colors.Memory.Span[x];
-
             /// <inheritdoc />
             protected override void Dispose(bool disposing)
             {
@@ -96,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             {
                 Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x);
 
-                // constrain the spans to each other
+                // Constrain the spans to each other
                 if (destinationRow.Length > scanline.Length)
                 {
                     destinationRow = destinationRow.Slice(0, scanline.Length);
@@ -115,22 +105,20 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 }
                 else
                 {
-                    using (IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length))
+                    using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
+                    Span<float> amountSpan = amountBuffer.Memory.Span;
+
+                    for (int i = 0; i < scanline.Length; i++)
                     {
-                        Span<float> amountSpan = amountBuffer.Memory.Span;
-
-                        for (int i = 0; i < scanline.Length; i++)
-                        {
-                            amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
-                        }
-
-                        this.Blender.Blend(
-                            configuration,
-                            destinationRow,
-                            destinationRow,
-                            this.Colors.Memory.Span,
-                            amountSpan);
+                        amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
                     }
+
+                    this.Blender.Blend(
+                        configuration,
+                        destinationRow,
+                        destinationRow,
+                        this.Colors.Memory.Span,
+                        amountSpan);
                 }
             }
         }

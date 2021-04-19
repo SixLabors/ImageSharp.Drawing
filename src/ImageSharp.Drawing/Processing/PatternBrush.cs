@@ -123,13 +123,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 GraphicsOptions options,
                 ImageFrame<TPixel> source,
                 in DenseMatrix<TPixel> pattern)
-                : base(configuration, options, source)
-            {
-                this.pattern = pattern;
-            }
+                : base(configuration, options, source) => this.pattern = pattern;
 
-            /// <inheritdoc/>
-            internal override TPixel this[int x, int y]
+            internal TPixel this[int x, int y]
             {
                 get
                 {

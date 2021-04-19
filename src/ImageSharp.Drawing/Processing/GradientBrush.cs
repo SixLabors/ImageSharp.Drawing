@@ -75,8 +75,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.repetitionMode = repetitionMode;
             }
 
-            /// <inheritdoc/>
-            internal override TPixel this[int x, int y]
+            internal TPixel this[int x, int y]
             {
                 get
                 {
