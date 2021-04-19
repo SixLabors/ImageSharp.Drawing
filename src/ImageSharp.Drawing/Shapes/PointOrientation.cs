@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing
     public enum PointOrientation
     {
         /// <summary>
-        /// The point is collienear.
+        /// The point is collinear.
         /// </summary>
         Collinear = 0,
 
