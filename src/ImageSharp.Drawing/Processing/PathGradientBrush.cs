@@ -66,6 +66,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             Color ColorAt(int index) => colors[index % colors.Length];
 
+            IEnumerable<Path> paths = lines.Select(s => new Path(s));
+            int maxIntersections = paths.Max(x => x.MaxIntersections);
+
             this.edges = lines.Select(s => new Path(s))
                 .Select((path, i) => new Edge(path, ColorAt(i), ColorAt(i + 1))).ToList();
         }
@@ -90,9 +93,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            return new PathGradientBrushApplicator<TPixel>(configuration, options, source, this.edges, this.centerColor, this.hasSpecialCenterColor);
-        }
+            => new PathGradientBrushApplicator<TPixel>(
+                configuration,
+                options,
+                source,
+                this.edges,
+                this.centerColor,
+                this.hasSpecialCenterColor);
 
         private static Color CalculateCenterColor(Color[] colors)
         {
@@ -131,13 +138,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         private class Edge
         {
-            private readonly Path path;
-
             private readonly float length;
 
             public Edge(Path path, Color startColor, Color endColor)
             {
-                this.path = path;
+                this.Path = path;
 
                 Vector2[] points = path.LineSegments.SelectMany(s => s.Flatten().ToArray()).Select(p => (Vector2)p).ToArray();
 
@@ -149,6 +154,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                 this.length = DistanceBetween(this.End, this.Start);
             }
+
+            public Path Path { get; }
 
             public PointF Start { get; }
 
@@ -163,10 +170,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 // TODO: The number of max intersections is upper bound to the number of nodes of the path.
                 // Normally these numbers would be small and could potentially be stackalloc rather than pooled.
                 // Investigate performance beifit of checking length and choosing approach.
-                using (IMemoryOwner<PointF> memory = allocator.Allocate<PointF>(this.path.MaxIntersections))
+                using (IMemoryOwner<PointF> memory = allocator.Allocate<PointF>(this.Path.MaxIntersections))
                 {
                     Span<PointF> buffer = memory.Memory.Span;
-                    int intersections = this.path.FindIntersections(start, end, buffer);
+                    int intersections = this.Path.FindIntersections(start, end, buffer);
 
                     if (intersections == 0)
                     {
@@ -222,6 +229,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             private readonly TPixel transparentPixel;
 
+            private readonly int maxIntersections;
+
             /// <summary>
             /// Initializes a new instance of the <see cref="PathGradientBrushApplicator{TPixel}"/> class.
             /// </summary>
@@ -247,9 +256,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.centerColor = (Vector4)centerColor;
                 this.hasSpecialCenterColor = hasSpecialCenterColor;
                 this.centerPixel = centerColor.ToPixel<TPixel>();
-
                 this.maxDistance = points.Select(p => (Vector2)(p - this.center)).Max(d => d.Length());
-
+                this.maxIntersections = this.edges.Max(e => e.Path.MaxIntersections);
                 this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
             }
 
@@ -268,18 +276,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     if (this.edges.Count == 3 && !this.hasSpecialCenterColor)
                     {
                         if (!FindPointOnTriangle(
-                                                      this.edges[0].Start,
-                                                      this.edges[1].Start,
-                                                      this.edges[2].Start,
-                                                      point,
-                                                      out float u,
-                                                      out float v))
+                            this.edges[0].Start,
+                            this.edges[1].Start,
+                            this.edges[2].Start,
+                            point,
+                            out float u,
+                            out float v))
                         {
                             return this.transparentPixel;
                         }
 
-                        Vector4 pointColor = ((1 - u - v) * this.edges[0].StartColor) + (u * this.edges[0].EndColor) +
-                                         (v * this.edges[2].StartColor);
+                        Vector4 pointColor = ((1 - u - v) * this.edges[0].StartColor)
+                            + (u * this.edges[0].EndColor)
+                            + (v * this.edges[2].StartColor);
 
                         TPixel px = default;
                         px.FromScaledVector4(pointColor);
@@ -308,6 +317,39 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     pixel.FromScaledVector4(color);
                     return pixel;
                 }
+            }
+
+            /// <inheritdoc />
+            public override void Apply(Span<float> scanline, int x, int y)
+            {
+                MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
+                using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
+                using IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length);
+
+                Span<float> amountSpan = amountBuffer.Memory.Span;
+                Span<TPixel> overlaySpan = overlay.Memory.Span;
+                float blendPercentage = this.Options.BlendPercentage;
+
+                // TODO: Remove bounds checks.
+                if (blendPercentage < 1)
+                {
+                    for (int i = 0; i < scanline.Length; i++)
+                    {
+                        amountSpan[i] = scanline[i] * blendPercentage;
+                        overlaySpan[i] = this[x + i, y];
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < scanline.Length; i++)
+                    {
+                        amountSpan[i] = scanline[i];
+                        overlaySpan[i] = this[x + i, y];
+                    }
+                }
+
+                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
+                this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlaySpan, amountSpan);
             }
 
             private (Edge edge, Intersection? info) FindIntersection(PointF start, PointF end)

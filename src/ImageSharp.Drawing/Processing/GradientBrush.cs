@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Buffers;
 using System.Numerics;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -15,9 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <inheritdoc cref="IBrush"/>
         /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1]</param>
         /// <param name="colorStops">The gradient colors.</param>
-        protected GradientBrush(
-            GradientRepetitionMode repetitionMode,
-            params ColorStop[] colorStops)
+        protected GradientBrush(GradientRepetitionMode repetitionMode, params ColorStop[] colorStops)
         {
             this.RepetitionMode = repetitionMode;
             this.ColorStops = colorStops;
@@ -69,7 +69,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 GradientRepetitionMode repetitionMode)
                 : base(configuration, options, target)
             {
-                this.colorStops = colorStops; // TODO: requires colorStops to be sorted by position - should that be checked?
+                // TODO: requires colorStops to be sorted by position.
+                // Use Array.Sort with a custom comparer.
+                this.colorStops = colorStops;
                 this.repetitionMode = repetitionMode;
             }
 
@@ -122,6 +124,38 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 }
             }
 
+            /// <inheritdoc />
+            public override void Apply(Span<float> scanline, int x, int y)
+            {
+                MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
+                using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
+                using IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length);
+                Span<float> amountSpan = amountBuffer.Memory.Span;
+                Span<TPixel> overlaySpan = overlay.Memory.Span;
+                float blendPercentage = this.Options.BlendPercentage;
+
+                // TODO: Remove bounds checks.
+                if (blendPercentage < 1)
+                {
+                    for (int i = 0; i < scanline.Length; i++)
+                    {
+                        amountSpan[i] = scanline[i] * blendPercentage;
+                        overlaySpan[i] = this[x + i, y];
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < scanline.Length; i++)
+                    {
+                        amountSpan[i] = scanline[i];
+                        overlaySpan[i] = this[x + i, y];
+                    }
+                }
+
+                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
+                this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlaySpan, amountSpan);
+            }
+
             /// <summary>
             /// calculates the position on the gradient for a given point.
             /// This method is abstract as it's content depends on the shape of the gradient.
@@ -136,8 +170,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// </returns>
             protected abstract float PositionOnGradient(float x, float y);
 
-            private (ColorStop from, ColorStop to) GetGradientSegment(
-                float positionOnCompleteGradient)
+            private (ColorStop from, ColorStop to) GetGradientSegment(float positionOnCompleteGradient)
             {
                 ColorStop localGradientFrom = this.colorStops[0];
                 ColorStop localGradientTo = default;

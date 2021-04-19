@@ -2,15 +2,12 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Buffers;
-using SixLabors.ImageSharp.Advanced;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// A primitive that converts a point into a color for discovering the fill color based on an implementation.
+    /// Performs the application of an <see cref="IBrush"/> implementation against individual scanlines.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <seealso cref="IDisposable" />
@@ -22,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target.</param>
+        /// <param name="target">The target image frame.</param>
         internal BrushApplicator(Configuration configuration, GraphicsOptions options, ImageFrame<TPixel> target)
         {
             this.Configuration = configuration;
@@ -42,12 +39,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         internal PixelBlender<TPixel> Blender { get; }
 
         /// <summary>
-        /// Gets the target image.
+        /// Gets the target image frame.
         /// </summary>
         protected ImageFrame<TPixel> Target { get; }
 
         /// <summary>
-        /// Gets thegraphics options
+        /// Gets the graphics options
         /// </summary>
         protected GraphicsOptions Options { get; }
 
@@ -75,43 +72,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Applies the opacity weighting for each pixel in a scanline to the target based on the pattern contained in the brush.
+        /// Applies the opacity weighting for each pixel in a scanline to the target based on the
+        /// pattern contained in the brush.
         /// </summary>
-        /// <param name="scanline">A collection of opacity values between 0 and 1 to be merged with the brushed color value before being applied to the target.</param>
+        /// <param name="scanline">
+        /// A collection of opacity values between 0 and 1 to be merged with the brushed color value
+        /// before being applied to the
+        /// target.
+        /// </param>
         /// <param name="x">The x-position in the target pixel space that the start of the scanline data corresponds to.</param>
         /// <param name="y">The y-position in  the target pixel space that whole scanline corresponds to.</param>
-        /// <remarks>scanlineBuffer will be > scanlineWidth but provide and offset in case we want to share a larger buffer across runs.</remarks>
-        public virtual void Apply(Span<float> scanline, int x, int y)
-        {
-            MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
-
-            using (IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length))
-            using (IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length))
-            {
-                Span<float> amountSpan = amountBuffer.Memory.Span;
-                Span<TPixel> overlaySpan = overlay.Memory.Span;
-                float blendPercentage = this.Options.BlendPercentage;
-
-                if (blendPercentage < 1)
-                {
-                    for (int i = 0; i < scanline.Length; i++)
-                    {
-                        amountSpan[i] = scanline[i] * blendPercentage;
-                        overlaySpan[i] = this[x + i, y];
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i < scanline.Length; i++)
-                    {
-                        amountSpan[i] = scanline[i];
-                        overlaySpan[i] = this[x + i, y];
-                    }
-                }
-
-                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
-                this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlaySpan, amountSpan);
-            }
-        }
+        public abstract void Apply(Span<float> scanline, int x, int y);
     }
 }
