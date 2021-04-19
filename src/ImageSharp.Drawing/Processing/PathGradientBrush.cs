@@ -13,12 +13,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
     /// Provides an implementation of a brush for painting gradients between multiple color positions in 2D coordinates.
-    /// It works similarly with the class in System.Drawing.Drawing2D of the same name.
     /// </summary>
     public sealed class PathGradientBrush : IBrush
     {
         private readonly IList<Edge> edges;
-
         private readonly Color centerColor;
         private readonly bool hasSpecialCenterColor;
 
@@ -65,9 +63,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this.centerColor = CalculateCenterColor(colors);
 
             Color ColorAt(int index) => colors[index % colors.Length];
-
-            IEnumerable<Path> paths = lines.Select(s => new Path(s));
-            int maxIntersections = paths.Max(x => x.MaxIntersections);
 
             this.edges = lines.Select(s => new Path(s))
                 .Select((path, i) => new Edge(path, ColorAt(i), ColorAt(i + 1))).ToList();
