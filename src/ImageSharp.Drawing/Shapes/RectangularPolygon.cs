@@ -447,27 +447,5 @@ namespace SixLabors.ImageSharp.Drawing
         /// Returns the path as a closed path.
         /// </returns>
         IPath IPath.AsClosedPath() => this;
-
-        /// <summary>
-        /// Returns whether the rectangles are equal.
-        /// </summary>
-        /// <param name="other">The other recentalge.</param>
-        /// <returns>Returns a value indicating if the rectangles are equal.</returns>
-        public bool Equals(RectangularPolygon other)
-            => other != null &&
-                this.X == other.X &&
-                this.Y == other.Y &&
-                this.Height == other.Height &&
-                this.Width == other.Width;
-
-        /// <inheritdoc/>
-        public override bool Equals(object obj)
-
-            // TODO: It's very odd to do value type equality with a class like this.
-            => obj is RectangularPolygon other && this.Equals(other);
-
-        /// <inheritdoc/>
-        public override int GetHashCode()
-            => HashCode.Combine(this.X, this.Y, this.Width, this.Height);
     }
 }
