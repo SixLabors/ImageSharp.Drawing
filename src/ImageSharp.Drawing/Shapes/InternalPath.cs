@@ -245,9 +245,25 @@ namespace SixLabors.ImageSharp.Drawing
             int position = 0;
             Vector2 lastPoint = MaxVector;
 
-            // TODO: This request can happen in huge numbers.
-            PassPointData[] precaclulate = ArrayPool<PassPointData>.Shared.Rent(this.points.Length);
-            Span<PassPointData> precaclulateSpan = precaclulate.AsSpan(0, this.points.Length);
+            int max = this.points.Length;
+            Span<PassPointData> precaclulateSpan;
+            PassPointData[] precaclulate = null;
+
+            // Avoid pool overhead for short numbers.
+            // This method can be called in high volume.
+            unsafe
+            {
+                if (max < (1024 / sizeof(PassPointData)))
+                {
+                    PassPointData* points = stackalloc PassPointData[max];
+                    precaclulateSpan = new Span<PassPointData>(points, max);
+                }
+                else
+                {
+                    precaclulate = ArrayPool<PassPointData>.Shared.Rent(max);
+                    precaclulateSpan = precaclulate.AsSpan(0, this.points.Length);
+                }
+            }
 
             try
             {
@@ -382,7 +398,10 @@ namespace SixLabors.ImageSharp.Drawing
             }
             finally
             {
-                ArrayPool<PassPointData>.Shared.Return(precaclulate);
+                if (precaclulate != null)
+                {
+                    ArrayPool<PassPointData>.Shared.Return(precaclulate);
+                }
             }
         }
 
