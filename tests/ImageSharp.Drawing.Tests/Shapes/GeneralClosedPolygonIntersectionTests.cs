@@ -106,7 +106,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             IPath polygon = ShapesData[name];
 
-            int intersections = polygon.FindIntersections(new Vector2(polygon.Bounds.Left - 1, yScanLine), new Vector2(polygon.Bounds.Right + 1, yScanLine)).Count();
+            int intersections = polygon.FindIntersections(
+                new Vector2(polygon.Bounds.Left - 1, yScanLine),
+                new Vector2(polygon.Bounds.Right + 1, yScanLine)).Count();
 
             Assert.True(intersections % 2 == 0, $"crosssection of '{name}' at '{yScanLine}' produced {intersections} intersections");
         }

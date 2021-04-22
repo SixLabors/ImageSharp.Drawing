@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// A aggregate of <see cref="ILineSegment"/>s making a single logical path
     /// </summary>
     /// <seealso cref="IPath" />
-    public class Path : IPath, ISimplePath, IInternalPathOwner
+    public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     {
         private readonly ILineSegment[] lineSegments;
         private InternalPath innerPath;
@@ -157,11 +157,11 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
             => this.InnerPath.FindIntersections(start, end, intersections, orientations);
 
         /// <inheritdoc />
-        public int FindIntersections(
+        int IPathInternals.FindIntersections(
             PointF start,
             PointF end,
             Span<PointF> intersections,

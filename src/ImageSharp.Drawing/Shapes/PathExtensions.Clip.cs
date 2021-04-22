@@ -6,18 +6,18 @@ using SixLabors.ImageSharp.Drawing.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing
 {
-    /// <summary>
+    /// <content>
     /// Clipping extensions for shapes
-    /// </summary>
-    public static class ClipperExtensions
+    /// </content>
+    public static partial class PathExtensions
     {
         /// <summary>
         /// Clips the specified holes.
         /// </summary>
         /// <param name="shape">The shape.</param>
         /// <param name="holes">The holes.</param>
-        /// <returns>Returns a new shape with the holes cliped out out the shape.</returns>
-        public static IPath Clip(this IPath shape, IEnumerable<IPath> holes)
+        /// <returns>Returns a new shape with the holes clipped out of the shape.</returns>
+        public static ComplexPolygon Clip(this IPath shape, IEnumerable<IPath> holes)
         {
             var clipper = new Clipper();
 
@@ -34,7 +34,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="shape">The shape.</param>
         /// <param name="holes">The holes.</param>
-        /// <returns>Returns a new shape with the holes cliped out out the shape.</returns>
-        public static IPath Clip(this IPath shape, params IPath[] holes) => shape.Clip((IEnumerable<IPath>)holes);
+        /// <returns>Returns a new shape with the holes clipped out of the shape.</returns>
+        public static ComplexPolygon Clip(this IPath shape, params IPath[] holes)
+            => shape.Clip((IEnumerable<IPath>)holes);
     }
 }

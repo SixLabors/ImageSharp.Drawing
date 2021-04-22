@@ -11,13 +11,15 @@ using SixLabors.ImageSharp.Drawing.Utilities;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
+    /// Represents a complex polygon made up of one or more shapes overlayed on each other,
+    /// where overlaps causes holes.
     /// </summary>
     /// <seealso cref="IPath" />
-    public sealed class ComplexPolygon : IPath, IInternalPathOwner
+    public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     {
         private readonly IPath[] paths;
-        private List<InternalPath> internalPaths = null;
+        private readonly List<InternalPath> internalPaths;
+        private readonly int maxIntersections;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
@@ -34,7 +36,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="paths">The paths.</param>
         public ComplexPolygon(params IPath[] paths)
         {
-            this.paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            Guard.NotNull(paths, nameof(paths));
+
+            this.paths = paths;
+            this.internalPaths = new List<InternalPath>(this.paths.Length);
 
             if (paths.Length > 0)
             {
@@ -45,39 +50,45 @@ namespace SixLabors.ImageSharp.Drawing
                 float length = 0;
                 int intersections = 0;
 
-                foreach (IPath s in this.paths)
+                foreach (IPath p in this.paths)
                 {
-                    length += s.Length;
-                    if (s.Bounds.Left < minX)
+                    length += p.Length;
+                    if (p.Bounds.Left < minX)
                     {
-                        minX = s.Bounds.Left;
+                        minX = p.Bounds.Left;
                     }
 
-                    if (s.Bounds.Right > maxX)
+                    if (p.Bounds.Right > maxX)
                     {
-                        maxX = s.Bounds.Right;
+                        maxX = p.Bounds.Right;
                     }
 
-                    if (s.Bounds.Top < minY)
+                    if (p.Bounds.Top < minY)
                     {
-                        minY = s.Bounds.Top;
+                        minY = p.Bounds.Top;
                     }
 
-                    if (s.Bounds.Bottom > maxY)
+                    if (p.Bounds.Bottom > maxY)
                     {
-                        maxY = s.Bounds.Bottom;
+                        maxY = p.Bounds.Bottom;
                     }
 
-                    intersections += s.MaxIntersections;
+                    foreach (ISimplePath s in p.Flatten())
+                    {
+                        var ip = new InternalPath(s.Points, s.IsClosed);
+                        intersections += ip.PointCount;
+
+                        this.internalPaths.Add(ip);
+                    }
                 }
 
-                this.MaxIntersections = intersections;
+                this.maxIntersections = intersections;
                 this.Length = length;
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
             else
             {
-                this.MaxIntersections = 0;
+                this.maxIntersections = 0;
                 this.Length = 0;
                 this.Bounds = RectangleF.Empty;
             }
@@ -111,13 +122,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// </value>
         public RectangleF Bounds { get; }
 
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        /// <value>
-        /// The maximum intersections.
-        /// </value>
-        public int MaxIntersections { get; }
+        /// <inheritdoc/>
+        int IPathInternals.MaxIntersections => this.maxIntersections;
 
         /// <summary>
         /// The distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
@@ -163,19 +169,17 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-            => this.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
+        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
         /// <inheritdoc />
-        public int FindIntersections(
+        int IPathInternals.FindIntersections(
             PointF start,
             PointF end,
             Span<PointF> intersections,
             Span<PointOrientation> orientations,
             IntersectionRule intersectionRule)
         {
-            this.EnsureInternalPathsInitalized();
-
             int totalAdded = 0;
             foreach (InternalPath ip in this.internalPaths)
             {
@@ -202,29 +206,6 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             return totalAdded;
-        }
-
-        private void EnsureInternalPathsInitalized()
-        {
-            if (this.internalPaths == null)
-            {
-                lock (this.paths)
-                {
-                    if (this.internalPaths == null)
-                    {
-                        this.internalPaths = new List<InternalPath>(this.paths.Length);
-
-                        foreach (IPath p in this.paths)
-                        {
-                            foreach (ISimplePath s in p.Flatten())
-                            {
-                                var ip = new InternalPath(s.Points, s.IsClosed);
-                                this.internalPaths.Add(ip);
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         /// <summary>
@@ -267,7 +248,7 @@ namespace SixLabors.ImageSharp.Drawing
             int i = 0;
             foreach (IPath s in this.Paths)
             {
-                shapes[i++] = s.Transform(matrix);
+                shapes[i++] = (IPath)s.Transform(matrix);
             }
 
             return new ComplexPolygon(shapes);
@@ -307,7 +288,7 @@ namespace SixLabors.ImageSharp.Drawing
                 var paths = new IPath[this.paths.Length];
                 for (int i = 0; i < this.paths.Length; i++)
                 {
-                    paths[i] = this.paths[i].AsClosedPath();
+                    paths[i] = (IPath)this.paths[i].AsClosedPath();
                 }
 
                 return new ComplexPolygon(paths);
@@ -336,14 +317,12 @@ namespace SixLabors.ImageSharp.Drawing
                 distanceAlongPath -= p.Length;
             }
 
+            // TODO: Perf. Throwhelper
             throw new InvalidOperationException("Should not be possible to reach this line");
         }
 
         /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
-        {
-            this.EnsureInternalPathsInitalized();
-            return this.internalPaths;
-        }
+            => this.internalPaths;
     }
 }

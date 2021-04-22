@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Linq;
 using System.Numerics;
 using Xunit;
 
@@ -54,18 +53,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void ClippingCornerShouldReturn2Points()
         {
             var poly = new EllipsePolygon(50, 50, 30, 50);
-            PointF[] points = poly.FindIntersections(new Vector2(0, 75), new Vector2(100, 75)).ToArray();
+            int points = poly.CountIntersections(new Vector2(0, 75), new Vector2(100, 75));
 
-            Assert.Equal(2, points.Length);
+            Assert.Equal(2, points);
         }
 
         [Fact]
         public void AcrossEllipsShouldReturn2()
         {
             var poly = new EllipsePolygon(50, 50, 30, 50);
-            PointF[] points = poly.FindIntersections(new Vector2(0, 49), new Vector2(100, 49)).ToArray();
+            int points = poly.CountIntersections(new Vector2(0, 49), new Vector2(100, 49));
 
-            Assert.Equal(2, points.Length);
+            Assert.Equal(2, points);
         }
 
         [Fact]
@@ -75,9 +74,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             poly = poly.Translate(-poly.Bounds.Location) // touch top left
                .Translate(new Vector2(10)); // move in from top left
 
-            PointF[] points = poly.FindIntersections(new Vector2(0, 10), new Vector2(100, 10)).ToArray();
+            int points = poly.CountIntersections(new Vector2(0, 10), new Vector2(100, 10));
 
-            Assert.Equal(2, points.Length);
+            Assert.Equal(2, points);
         }
     }
 }

@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class ShapeRegionTests
     {
-        public abstract class MockPath : IPath
+        public abstract class MockPath : IPath, IPathInternals
         {
             public abstract RectangleF Bounds { get; }
 

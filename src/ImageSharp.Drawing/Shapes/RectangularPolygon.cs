@@ -8,10 +8,10 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// A way of optimizing drawing rectangles.
+    /// A polygon tha allows the optimized drawing of rectangles.
     /// </summary>
     /// <seealso cref="IPath" />
-    public class RectangularPolygon : IPath, ISimplePath
+    public class RectangularPolygon : IPath, ISimplePath, IPathInternals
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
@@ -23,10 +23,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
         /// </summary>
-        /// <param name="x">The x.</param>
-        /// <param name="y">The y.</param>
-        /// <param name="width">The width.</param>
-        /// <param name="height">The height.</param>
+        /// <param name="x">The horizontal position of the rectangle.</param>
+        /// <param name="y">The vertical position of the rectangle.</param>
+        /// <param name="width">The width of the rectangle.</param>
+        /// <param name="height">The height of the rectangle.</param>
         public RectangularPolygon(float x, float y, float width, float height)
             : this(new PointF(x, y), new SizeF(width, height))
         {
@@ -35,8 +35,12 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
         /// </summary>
-        /// <param name="topLeft">The top left.</param>
-        /// <param name="bottomRight">The bottom right.</param>
+        /// <param name="topLeft">
+        /// The <see cref="PointF"/> which specifies the rectangles top/left point in a two-dimensional plane.
+        /// </param>
+        /// <param name="bottomRight">
+        /// The <see cref="PointF"/> which specifies the rectangles bottom/right point in a two-dimensional plane.
+        /// </param>
         public RectangularPolygon(PointF topLeft, PointF bottomRight)
         {
             this.Location = topLeft;
@@ -60,10 +64,14 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="RectangularPolygon"/> class.
         /// </summary>
-        /// <param name="location">The location.</param>
-        /// <param name="size">The size.</param>
-        public RectangularPolygon(PointF location, SizeF size)
-            : this(location, location + size)
+        /// <param name="point">
+        /// The <see cref="PointF"/> which specifies the rectangles point in a two-dimensional plane.
+        /// </param>
+        /// <param name="size">
+        /// The <see cref="SizeF"/> which specifies the rectangles height and width.
+        /// </param>
+        public RectangularPolygon(PointF point, SizeF size)
+            : this(point, point + size)
         {
         }
 
@@ -79,77 +87,48 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the location.
         /// </summary>
-        /// <value>
-        /// The location.
-        /// </value>
         public PointF Location { get; }
 
         /// <summary>
-        /// Gets the left.
+        /// Gets the x-coordinate of the left edge.
         /// </summary>
-        /// <value>
-        /// The left.
-        /// </value>
-        public float Left => this.topLeft.X;
+        public float Left => this.X;
 
         /// <summary>
-        /// Gets the X.
+        /// Gets the x-coordinate.
         /// </summary>
-        /// <value>
-        /// The X.
-        /// </value>
         public float X => this.topLeft.X;
 
         /// <summary>
-        /// Gets the right.
+        /// Gets the x-coordinate of the right edge.
         /// </summary>
-        /// <value>
-        /// The right.
-        /// </value>
         public float Right => this.bottomRight.X;
 
         /// <summary>
-        /// Gets the top.
+        /// Gets the y-coordinate of the top edge.
         /// </summary>
-        /// <value>
-        /// The top.
-        /// </value>
-        public float Top => this.topLeft.Y;
+        public float Top => this.Y;
 
         /// <summary>
-        /// Gets the Y.
+        /// Gets the y-coordinate.
         /// </summary>
-        /// <value>
-        /// The Y.
-        /// </value>
         public float Y => this.topLeft.Y;
 
         /// <summary>
-        /// Gets the bottom.
+        /// Gets the y-coordinate of the bottom edge.
         /// </summary>
-        /// <value>
-        /// The bottom.
-        /// </value>
         public float Bottom => this.bottomRight.Y;
 
         /// <summary>
         /// Gets the bounding box of this shape.
         /// </summary>
-        /// <value>
-        /// The bounds.
-        /// </value>
         RectangleF IPath.Bounds => this.bounds;
 
         /// <inheritdoc />
         float IPath.Length => this.length;
 
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        /// <value>
-        /// The maximum intersections.
-        /// </value>
-        int IPath.MaxIntersections => 4;
+        /// <inheritdoc/>
+        int IPathInternals.MaxIntersections => 4;
 
         /// <summary>
         /// Gets a value indicating whether this instance is a closed path.
@@ -218,11 +197,11 @@ namespace SixLabors.ImageSharp.Drawing
             => Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
 
         /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-            => this.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
+        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
         /// <inheritdoc />
-        public int FindIntersections(
+        int IPathInternals.FindIntersections(
             PointF start,
             PointF end,
             Span<PointF> intersections,
@@ -239,7 +218,7 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 if (startPoint == Vector2.Clamp(startPoint, start, end))
                 {
-                    // if start closest is within line then its a valid point
+                    // If start closest is within line then its a valid point
                     discovered++;
                     intersections[offset++] = startPoint;
                 }

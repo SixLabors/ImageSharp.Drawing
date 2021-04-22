@@ -2,15 +2,8 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.IO;
-using System.Linq;
 using System.Numerics;
-using GeoJSON.Net.Converters;
-using GeoJSON.Net.Feature;
-using GeoJSON.Net.Geometry;
-using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -182,7 +175,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             var circle = new EllipsePolygon(32, 32, 30);
             var star = new Star(32, 32, 7, 10, 27);
-            IPath shape = circle.Clip(star);
+            ComplexPolygon shape = circle.Clip(star);
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White, shape),

@@ -57,12 +57,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                             new PointF(4, 2)));
 
             var complex = new ComplexPolygon(simplePath1, simplePath2);
+            ReadOnlySpan<PointF> intersections = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.Nonzero);
 
-            var intersections = new PointF[10];
-            var orientations = new PointOrientation[intersections.Length];
-            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), intersections, orientations, IntersectionRule.Nonzero);
-
-            Assert.Equal(2, points);
+            Assert.Equal(2, intersections.Length);
             Assert.Equal(1, intersections[0].X);
             Assert.Equal(4, intersections[1].X);
         }
@@ -83,12 +80,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                             new PointF(4, 2)));
 
             var complex = new ComplexPolygon(simplePath1, simplePath2);
+            ReadOnlySpan<PointF> intersections = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.OddEven);
 
-            var intersections = new PointF[10];
-            var orientations = new PointOrientation[intersections.Length];
-            int points = complex.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), intersections, orientations, IntersectionRule.OddEven);
-
-            Assert.Equal(4, points);
+            Assert.Equal(4, intersections.Length);
             Assert.Equal(1, intersections[0].X);
             Assert.Equal(2, intersections[1].X);
             Assert.Equal(3, intersections[2].X);
@@ -111,7 +105,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             int intersections1 = this.ScanY(hole1, 137, data, 6, 0);
             Assert.Equal(2, intersections1);
-            IPath poly = simplePath.Clip(hole1);
+            ComplexPolygon poly = simplePath.Clip(hole1);
 
             int intersections = this.ScanY(poly, 137, data, 6, 0);
 
@@ -119,7 +113,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Assert.Equal(4, intersections);
         }
 
-        public int ScanY(IPath shape, float y, float[] buffer, int length, int offset)
+        private int ScanY(IPathInternals shape, float y, float[] buffer, int length, int offset)
         {
             var start = new PointF(shape.Bounds.Left - 1, y);
             var end = new PointF(shape.Bounds.Right + 1, y);
@@ -204,7 +198,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 return new Polygon(new LinearLineSegment(points));
             }).ToArray();
 
-            var complex = new ComplexPolygon(polys);
+            IPathInternals complex = new ComplexPolygon(polys);
 
             float[] data = new float[complex.MaxIntersections];
             int intersections = this.ScanY(complex, scanStartY + offset.Y, data, complex.MaxIntersections, 0);
@@ -225,7 +219,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             int cy = h - (2 * 3);
 
             var ellipse = new EllipsePolygon(cx, cy, r);
-            IPath path = ellipse.GenerateOutline(thickness);
+            IPathInternals path = ellipse.GenerateOutline(thickness);
 
             int yMin = cy - r + thickness + 1;
             int yMax = cy + r - thickness;
@@ -273,7 +267,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             var path = new Path(new LinearLineSegment(a, b));
 
-            int count = path.FindIntersections(c, d, new PointF[1], new PointOrientation[1]);
+            int count = path.CountIntersections(c, d);
             Assert.Equal(1, count);
         }
 

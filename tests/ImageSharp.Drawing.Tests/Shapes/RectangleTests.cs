@@ -198,7 +198,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void Intersections_1()
         {
-            IPath shape = new RectangularPolygon(1, 1, 10, 10);
+            var shape = new RectangularPolygon(1, 1, 10, 10);
             IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(5, 5));
 
             Assert.Single(intersections);
@@ -208,7 +208,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void Intersections_0()
         {
-            IPath shape = new RectangularPolygon(1, 1, 10, 10);
+            var shape = new RectangularPolygon(1, 1, 10, 10);
             IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(-5, 5));
 
             Assert.Empty(intersections);
@@ -227,7 +227,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void MaxIntersections_Shape()
         {
-            IPath shape = new RectangularPolygon(10, 11, 12, 13);
+            IPathInternals shape = new RectangularPolygon(10, 11, 12, 13);
             Assert.Equal(4, shape.MaxIntersections);
         }
 

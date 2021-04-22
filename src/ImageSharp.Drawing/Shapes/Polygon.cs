@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System.Collections.Generic;
@@ -66,7 +66,7 @@ namespace SixLabors.ImageSharp.Drawing
                 return this;
             }
 
-            ILineSegment[] segments = new ILineSegment[this.LineSegments.Count];
+            var segments = new ILineSegment[this.LineSegments.Count];
             int i = 0;
             foreach (ILineSegment s in this.LineSegments)
             {

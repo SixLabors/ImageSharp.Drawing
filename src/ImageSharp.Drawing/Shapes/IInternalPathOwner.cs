@@ -12,11 +12,9 @@ namespace SixLabors.ImageSharp.Drawing
     internal interface IInternalPathOwner
     {
         /// <summary>
-        /// Returns the rings as a list of <see cref="InternalPath"/>-s.
+        /// Returns the rings as a readonly collection of <see cref="InternalPath"/> elements.
         /// </summary>
-        /// <returns>The list</returns>
+        /// <returns>The <see cref="IReadOnlyList{T}"/>.</returns>
         IReadOnlyList<InternalPath> GetRingsAsInternalPath();
-
-        // TODO: We may want to reconfigure StyleCop rules for internals to avoid unnecessary redundant trivial code comments like in this file.
     }
 }

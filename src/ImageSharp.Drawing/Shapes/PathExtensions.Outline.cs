@@ -10,10 +10,10 @@ using ClipperLib;
 
 namespace SixLabors.ImageSharp.Drawing
 {
-    /// <summary>
+    /// <content>
     /// Path extensions to generate outlines of paths.
-    /// </summary>
-    public static class Outliner
+    /// </content>
+    public static partial class PathExtensions
     {
         private const double MiterOffsetDelta = 20;
         private const float ScalingFactor = 1000.0f;
@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="width">The final width outline</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width, float[] pattern)
+        public static ComplexPolygon GenerateOutline(this IPath path, float width, float[] pattern)
             => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern));
 
         /// <summary>
@@ -35,10 +35,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="width">The final width outline</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern)
-        {
-            return path.GenerateOutline(width, pattern, false);
-        }
+        public static ComplexPolygon GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern)
+            => path.GenerateOutline(width, pattern, false);
 
         /// <summary>
         /// Generates a outline of the path with alternating on and off segments based on the pattern.
@@ -48,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width, float[] pattern, bool startOff)
+        public static ComplexPolygon GenerateOutline(this IPath path, float width, float[] pattern, bool startOff)
             => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern), startOff);
 
         /// <summary>
@@ -59,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
+        public static ComplexPolygon GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
             => GenerateOutline(path, width, pattern, startOff, JointStyle.Square, EndCapStyle.Butt);
 
         /// <summary>
@@ -72,7 +70,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="patternSectionCapStyle">The style to render between sections of the specified pattern.</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle = JointStyle.Square, EndCapStyle patternSectionCapStyle = EndCapStyle.Butt)
+        public static ComplexPolygon GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle = JointStyle.Square, EndCapStyle patternSectionCapStyle = EndCapStyle.Butt)
         {
             if (pattern.Length < 2)
             {
@@ -179,7 +177,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="path">the path to outline</param>
         /// <param name="width">The final width outline</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, JointStyle.Square, EndCapStyle.Butt);
+        public static ComplexPolygon GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, JointStyle.Square, EndCapStyle.Butt);
 
         /// <summary>
         /// Generates a solid outline of the path.
@@ -189,7 +187,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="endCapStyle">The style to render the end caps of open paths (ignored on closed paths).</param>
         /// <returns>A new path representing the outline.</returns>
-        public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Square)
+        public static ComplexPolygon GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Square)
         {
             var offset = new ClipperOffset()
             {
@@ -218,7 +216,7 @@ namespace SixLabors.ImageSharp.Drawing
             return ExecuteOutliner(width, offset);
         }
 
-        private static IPath ExecuteOutliner(float width, ClipperOffset offset)
+        private static ComplexPolygon ExecuteOutliner(float width, ClipperOffset offset)
         {
             var tree = new List<List<IntPoint>>();
             offset.Execute(ref tree, width * ScalingFactor / 2);
@@ -233,41 +231,25 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         private static IntPoint ToPoint(this PointF vector)
-        {
-            return new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
-        }
+            => new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
 
         private static IntPoint ToPoint(this Vector2 vector)
-        {
-            return new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
-        }
+            => new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
 
         private static JoinType Convert(JointStyle style)
-        {
-            switch (style)
+            => style switch
             {
-                case JointStyle.Round:
-                    return JoinType.jtRound;
-                case JointStyle.Miter:
-                    return JoinType.jtMiter;
-                case JointStyle.Square:
-                default:
-                    return JoinType.jtSquare;
-            }
-        }
+                JointStyle.Round => JoinType.jtRound,
+                JointStyle.Miter => JoinType.jtMiter,
+                _ => JoinType.jtSquare,
+            };
 
         private static EndType Convert(EndCapStyle style)
-        {
-            switch (style)
+            => style switch
             {
-                case EndCapStyle.Round:
-                    return EndType.etOpenRound;
-                case EndCapStyle.Square:
-                    return EndType.etOpenSquare;
-                case EndCapStyle.Butt:
-                default:
-                    return EndType.etOpenButt;
-            }
-        }
+                EndCapStyle.Round => EndType.etOpenRound,
+                EndCapStyle.Square => EndType.etOpenSquare,
+                _ => EndType.etOpenButt,
+            };
     }
 }

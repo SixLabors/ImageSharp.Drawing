@@ -1,16 +1,12 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Text;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 {
     // https://github.com/SixLabors/ImageSharp.Drawing/issues/48
-    // index out of rang error if zero length ChildPath of a ComplexPolygon
+    // index out of range error if zero length ChildPath of a ComplexPolygon
     public class Issues_48
     {
         [Fact]

@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -18,14 +17,9 @@ namespace SixLabors.ImageSharp.Drawing
         PathTypes PathType { get; }
 
         /// <summary>
-        /// Gets the bounds enclosing the path
+        /// Gets the bounds enclosing the path.
         /// </summary>
         RectangleF Bounds { get; }
-
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        int MaxIntersections { get; }
 
         /// <summary>
         /// Gets the length of the path.
@@ -55,44 +49,6 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
         IEnumerable<ISimplePath> Flatten();
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start position.</param>
-        /// <param name="end">The end position.</param>
-        /// <param name="intersections">The buffer for storing each intersection.</param>
-        /// <param name="orientations">
-        /// The buffer for storing the orientation of each intersection.
-        /// Must be the same length as <paramref name="intersections"/>.
-        /// </param>
-        /// <returns>
-        /// The number of intersections found.
-        /// </returns>
-        int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start position.</param>
-        /// <param name="end">The end position.</param>
-        /// <param name="intersections">The buffer for storing each intersection.</param>
-        /// <param name="orientations">
-        /// The buffer for storing the orientation of each intersection.
-        /// Must be the same length as <paramref name="intersections"/>.
-        /// </param>
-        /// <param name="intersectionRule">How intersections should be handled.</param>
-        /// <returns>
-        /// The number of intersections found.
-        /// </returns>
-        int FindIntersections(
-            PointF start,
-            PointF end,
-            Span<PointF> intersections,
-            Span<PointOrientation> orientations,
-            IntersectionRule intersectionRule);
 
         /// <summary>
         /// Determines whether the <see cref="IPath"/> contains the specified point

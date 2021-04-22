@@ -125,11 +125,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public void FindIntersectionsBuffer()
         {
             var poly = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0)));
-            var intersections = new PointF[2];
-            var orientations = new PointOrientation[intersections.Length];
 
-            int hits = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15), intersections, orientations);
-            Assert.Equal(2, hits);
+            IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(5, -5), new PointF(5, 15));
+
+            Assert.Equal(2, intersections.Count());
             Assert.Contains(new PointF(5, 10), intersections);
             Assert.Contains(new PointF(5, 0), intersections);
         }
@@ -207,12 +206,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                             new PointF(130, 40),
                             new PointF(65, 137)));
 
-            IPath poly = simplePath.Clip(hole1);
+            ComplexPolygon poly = simplePath.Clip(hole1);
 
-            IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(float.MinValue, 137), new PointF(float.MaxValue, 137));
+            int count = poly.CountIntersections(new PointF(float.MinValue, 137), new PointF(float.MaxValue, 137));
 
             // returns an even number of points
-            Assert.Equal(4, intersections.Count());
+            Assert.Equal(4, count);
         }
 
         [Fact]
@@ -223,21 +222,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                              new PointF(200, 150),
                              new PointF(50, 300)));
 
-            IEnumerable<PointF> intersections = simplePath.FindIntersections(new PointF(float.MinValue, 150), new PointF(float.MaxValue, 150));
+            int count = simplePath.CountIntersections(new PointF(float.MinValue, 150), new PointF(float.MaxValue, 150));
 
             // returns an even number of points
-            Assert.Equal(2, intersections.Count());
+            Assert.Equal(2, count);
         }
 
         [Fact]
         public void ClippingEdgefromInside()
         {
-            IPath simplePath = new RectangularPolygon(10, 10, 100, 100).Clip(new RectangularPolygon(20, 0, 20, 20));
+            ComplexPolygon simplePath = new RectangularPolygon(10, 10, 100, 100)
+                .Clip(new RectangularPolygon(20, 0, 20, 20));
 
-            IEnumerable<PointF> intersections = simplePath.FindIntersections(new PointF(float.MinValue, 20), new PointF(float.MaxValue, 20));
+            int count = simplePath.CountIntersections(new PointF(float.MinValue, 20), new PointF(float.MaxValue, 20));
 
             // returns an even number of points
-            Assert.Equal(4, intersections.Count());
+            Assert.Equal(4, count);
         }
 
         [Fact]
@@ -248,10 +248,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                              new PointF(100, 10),
                              new PointF(50, 300)));
 
-            IEnumerable<PointF> intersections = simplePath.FindIntersections(new PointF(float.MinValue, 10), new PointF(float.MaxValue, 10));
+            int count = simplePath.CountIntersections(new PointF(float.MinValue, 10), new PointF(float.MaxValue, 10));
 
             // returns an even number of points
-            Assert.Equal(0, intersections.Count() % 2);
+            Assert.Equal(0, count % 2);
         }
 
         [Fact]
@@ -267,12 +267,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                             new PointF(130, 40),
                             new PointF(65, 137)));
 
-            IPath poly = simplePath.Clip(hole1);
+            ComplexPolygon poly = simplePath.Clip(hole1);
 
-            IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(float.MinValue, 300), new PointF(float.MaxValue, 300));
+            int count = poly.CountIntersections(new PointF(float.MinValue, 300), new PointF(float.MaxValue, 300));
 
             // returns an even number of points
-            Assert.Equal(2, intersections.Count());
+            Assert.Equal(2, count);
         }
 
         [Fact]
@@ -288,12 +288,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                             new PointF(130, 40),
                             new PointF(65, 137)));
 
-            IPath poly = simplePath.Clip(hole1);
+            ComplexPolygon poly = simplePath.Clip(hole1);
 
-            IEnumerable<PointF> intersections = poly.FindIntersections(new PointF(float.MinValue, 85), new PointF(float.MaxValue, 85));
+            int count = poly.CountIntersections(new PointF(float.MinValue, 85), new PointF(float.MaxValue, 85));
 
             // returns an even number of points
-            Assert.Equal(4, intersections.Count());
+            Assert.Equal(4, count);
         }
 
         [Theory]
@@ -313,9 +313,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             var poly = new Polygon(new CubicBezierLineSegment(simplePath));
 
-            var points = poly.FindIntersections(new PointF(float.MinValue, y), new PointF(float.MaxValue, y)).ToList();
+            int count = poly.CountIntersections(new PointF(float.MinValue, y), new PointF(float.MaxValue, y));
 
-            Assert.Equal(2, points.Count);
+            Assert.Equal(2, count);
         }
     }
 }

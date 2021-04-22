@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// <summary>
     /// An elliptical shape made up of a single path made up of one of more <see cref="ILineSegment"/>s.
     /// </summary>
-    public class EllipsePolygon : IPath, ISimplePath, IInternalPathOwner
+    public class EllipsePolygon : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     {
         private readonly InternalPath innerPath;
         private readonly CubicBezierLineSegment segment;
@@ -85,7 +85,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
         /// </summary>
-        int IPath.MaxIntersections => this.innerPath.PointCount;
+        int IPathInternals.MaxIntersections => this.innerPath.PointCount;
 
         /// <inheritdoc />
         public float Length => this.innerPath.Length;
@@ -141,11 +141,11 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
             => this.innerPath.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
         /// <inheritdoc/>
-        int IPath.FindIntersections(
+        int IPathInternals.FindIntersections(
             PointF start,
             PointF end,
             Span<PointF> intersections,
@@ -211,6 +211,7 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc/>
-        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.innerPath };
+        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
+            => new[] { this.innerPath };
     }
 }

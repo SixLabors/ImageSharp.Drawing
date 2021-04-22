@@ -567,12 +567,10 @@ namespace SixLabors.ImageSharp.Drawing
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsOnSegment(in Segment seg, Vector2 q)
-        {
-            return (q.X - Epsilon2) <= seg.Max.X &&
-                    (q.X + Epsilon2) >= seg.Min.X &&
-                    (q.Y - Epsilon2) <= seg.Max.Y &&
-                    (q.Y + Epsilon2) >= seg.Min.Y;
-        }
+            => (q.X - Epsilon2) <= seg.Max.X
+            && (q.X + Epsilon2) >= seg.Min.X
+            && (q.Y - Epsilon2) <= seg.Max.Y
+            && (q.Y + Epsilon2) >= seg.Min.Y;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsOnSegments(in Segment seg1, in Segment seg2, Vector2 q)
@@ -606,10 +604,7 @@ namespace SixLabors.ImageSharp.Drawing
 
         // Modulo is a very slow operation.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int WrapArrayIndex(int i, int arrayLength)
-        {
-            return i < arrayLength ? i : i - arrayLength;
-        }
+        private static int WrapArrayIndex(int i, int arrayLength) => i < arrayLength ? i : i - arrayLength;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static PointOrientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)

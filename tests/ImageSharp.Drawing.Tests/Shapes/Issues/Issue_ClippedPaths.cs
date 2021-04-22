@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -21,8 +22,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                             new PointF(93, 85),
                             new PointF(65, 137)));
 
-            IPath clippedPath = simplePath.Clip(hole1);
-            IPath outline = clippedPath.GenerateOutline(5, new[] { 1f });
+            ComplexPolygon clippedPath = simplePath.Clip(hole1);
+            ComplexPolygon outline = clippedPath.GenerateOutline(5, new[] { 1f });
 
             Assert.False(outline.Contains(new PointF(74, 97)));
         }
@@ -40,16 +41,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                             new PointF(93, 85),
                             new PointF(65, 137)));
 
-            IPath clippedPath = simplePath.Clip(hole1);
-            IPath outline = clippedPath.GenerateOutline(5, new[] { 1f });
-            var intersections = new PointF[20];
-            var orientations = new PointOrientation[intersections.Length];
+            ComplexPolygon clippedPath = simplePath.Clip(hole1);
+            ComplexPolygon outline = clippedPath.GenerateOutline(5, new[] { 1f });
 
             var start = new PointF(outline.Bounds.Left - 1, 102);
             var end = new PointF(outline.Bounds.Right + 1, 102);
 
-            int matches = outline.FindIntersections(start, end, intersections, orientations);
-            int maxIndex = intersections.Select((x, i) => new { x, i }).Where(x => x.x.X > 0).Select(x => x.i).Last();
+            IEnumerable<PointF> intersections = outline.FindIntersections(start, end);
+            int matches = intersections.Count();
+            int maxIndex = intersections.Select((x, i) => new { x, i })
+                .Where(x => x.x.X > 0)
+                .Select(x => x.i)
+                .Last();
+
             Assert.Equal(matches - 1, maxIndex);
         }
     }
