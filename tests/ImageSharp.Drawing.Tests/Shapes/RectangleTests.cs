@@ -279,8 +279,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData(620, 150, 50, Pi)] // wrap about end of path
         public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
         {
-            IPath shape = new RectangularPolygon(50, 50, 200, 60);
-            SegmentInfo point = shape.PointAlongPath(distance);
+            var shape = new RectangularPolygon(50, 50, 200, 60);
+            SegmentInfo point = ((IPathInternals)shape).PointAlongPath(distance);
             Assert.Equal(expectedX, point.Point.X);
             Assert.Equal(expectedY, point.Point.Y);
             Assert.Equal(expectedAngle, point.Angle);

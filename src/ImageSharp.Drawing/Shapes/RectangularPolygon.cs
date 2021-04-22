@@ -257,49 +257,49 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc />
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        SegmentInfo IPathInternals.PointAlongPath(float distance)
         {
-            distanceAlongPath %= this.length;
+            distance %= this.length;
 
-            if (distanceAlongPath < this.Width)
+            if (distance < this.Width)
             {
                 // we are on the top stretch
                 return new SegmentInfo
                 {
-                    Point = new Vector2(this.Left + distanceAlongPath, this.Top),
+                    Point = new Vector2(this.Left + distance, this.Top),
                     Angle = MathF.PI
                 };
             }
             else
             {
-                distanceAlongPath -= this.Width;
-                if (distanceAlongPath < this.Height)
+                distance -= this.Width;
+                if (distance < this.Height)
                 {
                     // down on right
                     return new SegmentInfo
                     {
-                        Point = new Vector2(this.Right, this.Top + distanceAlongPath),
+                        Point = new Vector2(this.Right, this.Top + distance),
                         Angle = -MathF.PI / 2
                     };
                 }
                 else
                 {
-                    distanceAlongPath -= this.Height;
-                    if (distanceAlongPath < this.Width)
+                    distance -= this.Height;
+                    if (distance < this.Width)
                     {
                         // botom right to left
                         return new SegmentInfo
                         {
-                            Point = new Vector2(this.Right - distanceAlongPath, this.Bottom),
+                            Point = new Vector2(this.Right - distance, this.Bottom),
                             Angle = 0
                         };
                     }
                     else
                     {
-                        distanceAlongPath -= this.Width;
+                        distance -= this.Width;
                         return new SegmentInfo
                         {
-                            Point = new Vector2(this.Left, this.Bottom - distanceAlongPath),
+                            Point = new Vector2(this.Left, this.Bottom - distance),
                             Angle = (float)(Math.PI / 2)
                         };
                     }

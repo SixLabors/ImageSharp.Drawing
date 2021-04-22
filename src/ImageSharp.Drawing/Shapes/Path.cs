@@ -178,14 +178,9 @@ namespace SixLabors.ImageSharp.Drawing
         /// </returns>
         public bool Contains(PointF point) => this.InnerPath.PointInPolygon(point);
 
-        /// <summary>
-        /// Calculates the point a certain distance a path.
-        /// </summary>
-        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
-        /// <returns>
-        /// Returns details about a point along a path.
-        /// </returns>
-        public SegmentInfo PointAlongPath(float distanceAlongPath) => this.InnerPath.PointAlongPath(distanceAlongPath);
+        /// <inheritdoc/>
+        SegmentInfo IPathInternals.PointAlongPath(float distanceAlongPath)
+           => this.InnerPath.PointAlongPath(distanceAlongPath);
 
         /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };

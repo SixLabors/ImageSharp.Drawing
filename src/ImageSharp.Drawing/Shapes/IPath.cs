@@ -27,15 +27,6 @@ namespace SixLabors.ImageSharp.Drawing
         float Length { get; }
 
         /// <summary>
-        /// Calculates the point a certain distance along a path.
-        /// </summary>
-        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
-        /// <returns>
-        /// Returns details about a point along a path.
-        /// </returns>
-        SegmentInfo PointAlongPath(float distanceAlongPath);
-
-        /// <summary>
         /// Calculates the distance along and away from the path for a specified point.
         /// </summary>
         /// <param name="point">The point along the path.</param>

@@ -190,7 +190,17 @@ namespace SixLabors.ImageSharp.Drawing
                 totalAdded += position;
             }
 
-            Span<float> distances = stackalloc float[totalAdded];
+            // Avoid pool overhead for short runs.
+            // This method can be called in high volume.
+            const int MaxStackSize = 1024 / sizeof(float);
+            float[] rentedFromPool = null;
+            Span<float> buffer =
+                totalAdded > MaxStackSize
+                ? (rentedFromPool = ArrayPool<float>.Shared.Rent(totalAdded))
+                : stackalloc float[MaxStackSize];
+
+            Span<float> distances = buffer.Slice(0, totalAdded);
+
             for (int i = 0; i < totalAdded; i++)
             {
                 distances[i] = Vector2.DistanceSquared(start, intersections[i]);
@@ -203,6 +213,11 @@ namespace SixLabors.ImageSharp.Drawing
             if (intersectionRule == IntersectionRule.Nonzero)
             {
                 totalAdded = InternalPath.ApplyNonZeroIntersectionRules(activeIntersections, activeOrientations);
+            }
+
+            if (rentedFromPool != null)
+            {
+                ArrayPool<float>.Shared.Return(rentedFromPool);
             }
 
             return totalAdded;
@@ -248,7 +263,7 @@ namespace SixLabors.ImageSharp.Drawing
             int i = 0;
             foreach (IPath s in this.Paths)
             {
-                shapes[i++] = (IPath)s.Transform(matrix);
+                shapes[i++] = s.Transform(matrix);
             }
 
             return new ComplexPolygon(shapes);
@@ -288,7 +303,7 @@ namespace SixLabors.ImageSharp.Drawing
                 var paths = new IPath[this.paths.Length];
                 for (int i = 0; i < this.paths.Length; i++)
                 {
-                    paths[i] = (IPath)this.paths[i].AsClosedPath();
+                    paths[i] = this.paths[i].AsClosedPath();
                 }
 
                 return new ComplexPolygon(paths);
@@ -298,23 +313,22 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Calculates the point a certain distance a path.
         /// </summary>
-        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
+        /// <param name="distance">The distance along the path to find details of.</param>
         /// <returns>
         /// Returns details about a point along a path.
         /// </returns>
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        SegmentInfo IPathInternals.PointAlongPath(float distance)
         {
-            distanceAlongPath %= this.Length;
-
-            foreach (IPath p in this.Paths)
+            distance %= this.Length;
+            foreach (InternalPath p in this.internalPaths)
             {
-                if (p.Length >= distanceAlongPath)
+                if (p.Length >= distance)
                 {
-                    return p.PointAlongPath(distanceAlongPath);
+                    return p.PointAlongPath(distance);
                 }
 
-                // reduce it before trying the next path
-                distanceAlongPath -= p.Length;
+                // Reduce it before trying the next path
+                distance -= p.Length;
             }
 
             // TODO: Perf. Throwhelper

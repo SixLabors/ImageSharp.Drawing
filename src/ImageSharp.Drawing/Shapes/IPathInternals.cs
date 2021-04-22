@@ -52,5 +52,14 @@ namespace SixLabors.ImageSharp.Drawing
             Span<PointF> intersections,
             Span<PointOrientation> orientations,
             IntersectionRule intersectionRule);
+
+        /// <summary>
+        /// Returns information about a point at a given distance along a path.
+        /// </summary>
+        /// <param name="distance">The distance along the path to return details for.</param>
+        /// <returns>
+        /// The segment information.
+        /// </returns>
+        SegmentInfo PointAlongPath(float distance);
     }
 }

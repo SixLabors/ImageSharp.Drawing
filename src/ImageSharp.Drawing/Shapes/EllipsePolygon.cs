@@ -163,10 +163,9 @@ namespace SixLabors.ImageSharp.Drawing
         public bool Contains(PointF point) => this.innerPath.PointInPolygon(point);
 
         /// <inheritdoc />
-        public SegmentInfo PointAlongPath(float distanceAlongPath) =>
-
-            // TODO switch this out to a calculated algorithm
-            this.innerPath.PointAlongPath(distanceAlongPath);
+        // TODO switch this out to a calculated algorithm
+        SegmentInfo IPathInternals.PointAlongPath(float distance)
+            => this.innerPath.PointAlongPath(distance);
 
         private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
         {

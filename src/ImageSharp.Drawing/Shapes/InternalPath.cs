@@ -245,164 +245,151 @@ namespace SixLabors.ImageSharp.Drawing
             int position = 0;
             Vector2 lastPoint = MaxVector;
 
-            int max = this.points.Length;
-            Span<PassPointData> precaclulateSpan;
-            PassPointData[] precaclulate = null;
-
-            // Avoid pool overhead for short numbers.
+            // Avoid pool overhead for short runs.
             // This method can be called in high volume.
-            unsafe
+            int pointsLength = this.points.Length;
+            int maxStackSize = 1024 / Unsafe.SizeOf<PassPointData>();
+            PassPointData[] rentedFromPool = null;
+            Span<PassPointData> buffer =
+                pointsLength > maxStackSize
+                ? (rentedFromPool = ArrayPool<PassPointData>.Shared.Rent(pointsLength))
+                : stackalloc PassPointData[maxStackSize];
+
+            Span<PassPointData> precalculate = buffer.Slice(0, pointsLength);
+
+            // Pre calculate relative orientations X places ahead and behind
+            Vector2 startToEnd = end - start;
+            PointOrientation prevOrientation = CalulateOrientation(startToEnd, this.points[polyCorners - 1].Point - end);
+            PointOrientation nextOrientation = CalulateOrientation(startToEnd, this.points[0].Point - end);
+            PointOrientation nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[1].Point - end);
+
+            // iterate over all points and precalculate data about each, pre cacluating it relative orientation
+            for (int i = 0; i < polyCorners && count > 0; i++)
             {
-                if (max < (1024 / sizeof(PassPointData)))
+                ref Segment edge = ref this.points[i].Segment;
+
+                // shift all orientations along but one place and fill in the last one
+                PointOrientation pointOrientation = nextOrientation;
+                nextOrientation = nextPlus1Orientation;
+                nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[WrapArrayIndex(i + 2, this.points.Length)].Point - end);
+
+                // should this point cause the last matched point to be excluded
+                bool removeLastIntersection = nextOrientation == PointOrientation.Collinear &&
+                                              pointOrientation == PointOrientation.Collinear &&
+                                              nextPlus1Orientation != prevOrientation &&
+                                              (this.closedPath || i > 0) &&
+                                              (IsOnSegment(target, edge.Start) || IsOnSegment(target, edge.End));
+
+                // is there any chance the segments will intersection (do their bounding boxes touch)
+                bool doIntersect = false;
+                if (pointOrientation == PointOrientation.Collinear || pointOrientation != nextOrientation)
                 {
-                    PassPointData* points = stackalloc PassPointData[max];
-                    precaclulateSpan = new Span<PassPointData>(points, max);
+                    doIntersect = (edge.Min.X - Epsilon) <= target.Max.X &&
+                                  (edge.Max.X + Epsilon) >= target.Min.X &&
+                                  (edge.Min.Y - Epsilon) <= target.Max.Y &&
+                                  (edge.Max.Y + Epsilon) >= target.Min.Y;
+                }
+
+                precalculate[i] = new PassPointData
+                {
+                    RemoveLastIntersectionAndSkip = removeLastIntersection,
+                    RelativeOrientation = pointOrientation,
+                    DoIntersect = doIntersect
+                };
+
+                prevOrientation = pointOrientation;
+            }
+
+            // seed the last point for deduping at begining of closed line
+            if (this.closedPath)
+            {
+                int prev = polyCorners - 1;
+
+                if (precalculate[prev].DoIntersect)
+                {
+                    lastPoint = FindIntersection(this.points[prev].Segment, target);
+                }
+            }
+
+            for (int i = 0; i < polyCorners && count > 0; i++)
+            {
+                int next = WrapArrayIndex(i + 1, this.points.Length);
+
+                if (precalculate[i].RemoveLastIntersectionAndSkip)
+                {
+                    if (position > 0)
+                    {
+                        position--;
+                        count++;
+                    }
+
+                    continue;
+                }
+
+                if (precalculate[i].DoIntersect)
+                {
+                    Vector2 point = FindIntersection(this.points[i].Segment, target);
+                    if (point != MaxVector)
+                    {
+                        if (lastPoint.Equivalent(point, Epsilon2))
+                        {
+                            lastPoint = MaxVector;
+
+                            int last = WrapArrayIndex(i - 1 + polyCorners, polyCorners);
+
+                            // hit the same point a second time do we need to remove the old one if just clipping
+                            if (this.points[next].Point.Equivalent(point, Epsilon))
+                            {
+                                next = i;
+                            }
+
+                            if (this.points[last].Point.Equivalent(point, Epsilon))
+                            {
+                                last = i;
+                            }
+
+                            PointOrientation side = precalculate[next].RelativeOrientation;
+                            PointOrientation side2 = precalculate[last].RelativeOrientation;
+
+                            if (side != side2)
+                            {
+                                // differnet side we skip adding as we are passing through it
+                                continue;
+                            }
+                        }
+
+                        // only need to track this during odd non zero rulings
+                        orientations[position] = precalculate[i].RelativeOrientation;
+                        intersections[position] = point;
+                        position++;
+                        count--;
+                    }
+
+                    lastPoint = point;
                 }
                 else
                 {
-                    precaclulate = ArrayPool<PassPointData>.Shared.Rent(max);
-                    precaclulateSpan = precaclulate.AsSpan(0, this.points.Length);
+                    lastPoint = MaxVector;
                 }
             }
 
-            try
+            Vector2 startVector = start;
+            Span<float> distances = stackalloc float[position];
+            for (int i = 0; i < distances.Length; i++)
             {
-                // Pre calculate relative orientations X places ahead and behind
-                Vector2 startToEnd = end - start;
-                PointOrientation prevOrientation = CalulateOrientation(startToEnd, this.points[polyCorners - 1].Point - end);
-                PointOrientation nextOrientation = CalulateOrientation(startToEnd, this.points[0].Point - end);
-                PointOrientation nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[1].Point - end);
-
-                // iterate over all points and precalculate data about each, pre cacluating it relative orientation
-                for (int i = 0; i < polyCorners && count > 0; i++)
-                {
-                    ref Segment edge = ref this.points[i].Segment;
-
-                    // shift all orientations along but one place and fill in the last one
-                    PointOrientation pointOrientation = nextOrientation;
-                    nextOrientation = nextPlus1Orientation;
-                    nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[WrapArrayIndex(i + 2, this.points.Length)].Point - end);
-
-                    // should this point cause the last matched point to be excluded
-                    bool removeLastIntersection = nextOrientation == PointOrientation.Collinear &&
-                                                  pointOrientation == PointOrientation.Collinear &&
-                                                  nextPlus1Orientation != prevOrientation &&
-                                                  (this.closedPath || i > 0) &&
-                                                  (IsOnSegment(target, edge.Start) || IsOnSegment(target, edge.End));
-
-                    // is there any chance the segments will intersection (do their bounding boxes touch)
-                    bool doIntersect = false;
-                    if (pointOrientation == PointOrientation.Collinear || pointOrientation != nextOrientation)
-                    {
-                        doIntersect = (edge.Min.X - Epsilon) <= target.Max.X &&
-                                      (edge.Max.X + Epsilon) >= target.Min.X &&
-                                      (edge.Min.Y - Epsilon) <= target.Max.Y &&
-                                      (edge.Max.Y + Epsilon) >= target.Min.Y;
-                    }
-
-                    precaclulateSpan[i] = new PassPointData
-                    {
-                        RemoveLastIntersectionAndSkip = removeLastIntersection,
-                        RelativeOrientation = pointOrientation,
-                        DoIntersect = doIntersect
-                    };
-
-                    prevOrientation = pointOrientation;
-                }
-
-                // seed the last point for deduping at begining of closed line
-                if (this.closedPath)
-                {
-                    int prev = polyCorners - 1;
-
-                    if (precaclulateSpan[prev].DoIntersect)
-                    {
-                        lastPoint = FindIntersection(this.points[prev].Segment, target);
-                    }
-                }
-
-                for (int i = 0; i < polyCorners && count > 0; i++)
-                {
-                    int next = WrapArrayIndex(i + 1, this.points.Length);
-
-                    if (precaclulateSpan[i].RemoveLastIntersectionAndSkip)
-                    {
-                        if (position > 0)
-                        {
-                            position--;
-                            count++;
-                        }
-
-                        continue;
-                    }
-
-                    if (precaclulateSpan[i].DoIntersect)
-                    {
-                        Vector2 point = FindIntersection(this.points[i].Segment, target);
-                        if (point != MaxVector)
-                        {
-                            if (lastPoint.Equivalent(point, Epsilon2))
-                            {
-                                lastPoint = MaxVector;
-
-                                int last = WrapArrayIndex(i - 1 + polyCorners, polyCorners);
-
-                                // hit the same point a second time do we need to remove the old one if just clipping
-                                if (this.points[next].Point.Equivalent(point, Epsilon))
-                                {
-                                    next = i;
-                                }
-
-                                if (this.points[last].Point.Equivalent(point, Epsilon))
-                                {
-                                    last = i;
-                                }
-
-                                PointOrientation side = precaclulateSpan[next].RelativeOrientation;
-                                PointOrientation side2 = precaclulateSpan[last].RelativeOrientation;
-
-                                if (side != side2)
-                                {
-                                    // differnet side we skip adding as we are passing through it
-                                    continue;
-                                }
-                            }
-
-                            // only need to track this during odd non zero rulings
-                            orientations[position] = precaclulateSpan[i].RelativeOrientation;
-                            intersections[position] = point;
-                            position++;
-                            count--;
-                        }
-
-                        lastPoint = point;
-                    }
-                    else
-                    {
-                        lastPoint = MaxVector;
-                    }
-                }
-
-                Vector2 startVector = start;
-                Span<float> distances = stackalloc float[position];
-                for (int i = 0; i < position; i++)
-                {
-                    distances[i] = Vector2.DistanceSquared(startVector, intersections[i]);
-                }
-
-                Span<PointF> activeBuffer = intersections.Slice(0, position);
-                Span<PointOrientation> activeOrientationsSpan = orientations.Slice(0, position);
-                SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
-
-                return position;
+                distances[i] = Vector2.DistanceSquared(startVector, intersections[i]);
             }
-            finally
+
+            Span<PointF> activeBuffer = intersections.Slice(0, position);
+            Span<PointOrientation> activeOrientationsSpan = orientations.Slice(0, position);
+            SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
+
+            if (rentedFromPool != null)
             {
-                if (precaclulate != null)
-                {
-                    ArrayPool<PassPointData>.Shared.Return(precaclulate);
-                }
+                ArrayPool<PassPointData>.Shared.Return(rentedFromPool);
             }
+
+            return position;
         }
 
         internal static int ApplyNonZeroIntersectionRules(Span<PointF> intersections, Span<PointOrientation> orientations)
