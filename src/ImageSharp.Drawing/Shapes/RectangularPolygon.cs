@@ -307,14 +307,8 @@ namespace SixLabors.ImageSharp.Drawing
             }
         }
 
-        /// <summary>
-        /// Calculates the distance along and away from the path for a specified point.
-        /// </summary>
-        /// <param name="point">The point along the path.</param>
-        /// <returns>
-        /// Returns details about the point and its distance away from the path.
-        /// </returns>
-        public PointInfo Distance(PointF point)
+        /// <inheritdoc/>
+        PointInfo IPathInternals.Distance(PointF point)
         {
             Vector2 vectorPoint = point;
 

@@ -69,7 +69,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [MemberData(nameof(DistanceTheoryData))]
         public void Distance(TestPoint[] controlPoints, TestPoint point, float expected)
         {
-            var shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
+            IPathInternals shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
             Assert.Equal(expected, shape.Distance(point).DistanceFromPath);
         }
 
@@ -104,7 +104,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
         {
-            IPath path = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
+            IPathInternals path = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
             PointInfo info = path.Distance(point);
             Assert.Equal(expectedDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);

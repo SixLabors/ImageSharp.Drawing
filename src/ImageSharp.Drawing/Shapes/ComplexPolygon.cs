@@ -125,26 +125,29 @@ namespace SixLabors.ImageSharp.Drawing
         /// <inheritdoc/>
         int IPathInternals.MaxIntersections => this.maxIntersections;
 
-        /// <summary>
-        /// The distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        /// Returns the distance from thr shape to the point
-        /// </returns>
+        /// <inheritdoc/>
         /// <remarks>
-        /// Due to the clipping we did during construction we know that out shapes do not overlap at there edges
+        /// Due to the clipping we did during construction we know that out shapes do not overlap at their edges
         /// therefore for a point to be in more that one we must be in a hole of another, theoretically this could
         /// then flip again to be in a outline inside a hole inside an outline :)
         /// </remarks>
-        public PointInfo Distance(PointF point)
+        PointInfo IPathInternals.Distance(PointF point)
         {
             float dist = float.MaxValue;
             PointInfo pointInfo = default;
             bool inside = false;
             foreach (IPath shape in this.Paths)
             {
-                PointInfo d = shape.Distance(point);
+                PointInfo d;
+                if (shape is IPathInternals internals)
+                {
+                    d = internals.Distance(point);
+                }
+                else
+                {
+                    // TODO: How can I solve this?
+                    throw new NotImplementedException();
+                }
 
                 if (d.DistanceFromPath <= 0)
                 {

@@ -91,7 +91,7 @@ namespace SixLabors.ImageSharp.Drawing
         public float Length => this.innerPath.Length;
 
         /// <inheritdoc />
-        public PointInfo Distance(PointF point)
+        PointInfo IPathInternals.Distance(PointF point)
         {
             PointInfo dist = this.innerPath.DistanceFromPath(point);
             bool isInside = this.innerPath.PointInPolygon(point);

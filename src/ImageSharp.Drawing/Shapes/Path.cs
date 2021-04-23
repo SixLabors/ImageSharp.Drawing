@@ -89,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing
             this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
         /// <inheritdoc />
-        public PointInfo Distance(PointF point)
+        PointInfo IPathInternals.Distance(PointF point)
         {
             PointInfo dist = this.InnerPath.DistanceFromPath(point);
 

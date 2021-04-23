@@ -112,7 +112,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [MemberData(nameof(DistanceTheoryData))]
         public void Distance(TestPoint location, TestSize size, TestPoint point, float expectecDistance)
         {
-            IPath shape = new RectangularPolygon(location, size);
+            IPathInternals shape = new RectangularPolygon(location, size);
 
             Assert.Equal(expectecDistance, shape.Distance(point).DistanceFromPath);
         }
@@ -121,7 +121,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [MemberData(nameof(PathDistanceTheoryData))]
         public void DistanceFromPath_Path(TestPoint point, float expectecDistance, float alongPath)
         {
-            IPath shape = new RectangularPolygon(0, 0, 10, 10);
+            IPathInternals shape = new RectangularPolygon(0, 0, 10, 10);
             PointInfo info = shape.Distance(point);
             Assert.Equal(expectecDistance, info.DistanceFromPath);
             Assert.Equal(alongPath, info.DistanceAlongPath);
