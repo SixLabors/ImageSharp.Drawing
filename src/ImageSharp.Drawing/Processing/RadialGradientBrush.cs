@@ -83,8 +83,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// As this is a circular gradient, the position on the gradient is based on
             /// the distance of the point to the center.
             /// </summary>
-            /// <param name="x">The X coordinate of the target pixel.</param>
-            /// <param name="y">The Y coordinate of the target pixel.</param>
+            /// <param name="x">The x-coordinate of the target pixel.</param>
+            /// <param name="y">The y-coordinate of the target pixel.</param>
             /// <returns>the position on the color gradient.</returns>
             protected override float PositionOnGradient(float x, float y)
             {

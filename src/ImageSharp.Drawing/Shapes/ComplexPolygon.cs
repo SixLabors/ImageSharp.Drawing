@@ -96,92 +96,21 @@ namespace SixLabors.ImageSharp.Drawing
             this.PathType = PathTypes.Mixed;
         }
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
-        /// </summary>
+        /// <inheritdoc/>
         public PathTypes PathType { get; }
 
         /// <summary>
-        /// Gets the paths that make up this shape
+        /// Gets the collection of paths that make up this shape.
         /// </summary>
-        /// <value>
-        /// The paths.
-        /// </value>
         public IEnumerable<IPath> Paths => this.paths;
 
-        /// <summary>
-        /// Gets the bounding box of this shape.
-        /// </summary>
-        /// <value>
-        /// The bounds.
-        /// </value>
+        /// <inheritdoc/>
         public RectangleF Bounds { get; }
 
         /// <inheritdoc/>
         int IPathInternals.MaxIntersections => this.maxIntersections;
 
-        /// <inheritdoc />
-        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-            => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
-
-        /// <inheritdoc />
-        int IPathInternals.FindIntersections(
-            PointF start,
-            PointF end,
-            Span<PointF> intersections,
-            Span<PointOrientation> orientations,
-            IntersectionRule intersectionRule)
-        {
-            int totalAdded = 0;
-            foreach (InternalPath ip in this.internalPaths)
-            {
-                Span<PointF> subBuffer = intersections.Slice(totalAdded);
-                Span<PointOrientation> subOrientationsSpan = orientations.Slice(totalAdded);
-
-                int position = ip.FindIntersectionsWithOrientation(start, end, subBuffer, subOrientationsSpan);
-                totalAdded += position;
-            }
-
-            // Avoid pool overhead for short runs.
-            // This method can be called in high volume.
-            const int MaxStackSize = 1024 / sizeof(float);
-            float[] rentedFromPool = null;
-            Span<float> buffer =
-                totalAdded > MaxStackSize
-                ? (rentedFromPool = ArrayPool<float>.Shared.Rent(totalAdded))
-                : stackalloc float[MaxStackSize];
-
-            Span<float> distances = buffer.Slice(0, totalAdded);
-
-            for (int i = 0; i < totalAdded; i++)
-            {
-                distances[i] = Vector2.DistanceSquared(start, intersections[i]);
-            }
-
-            Span<PointF> activeIntersections = intersections.Slice(0, totalAdded);
-            Span<PointOrientation> activeOrientations = orientations.Slice(0, totalAdded);
-            SortUtility.Sort(distances, activeIntersections, activeOrientations);
-
-            if (intersectionRule == IntersectionRule.Nonzero)
-            {
-                totalAdded = InternalPath.ApplyNonZeroIntersectionRules(activeIntersections, activeOrientations);
-            }
-
-            if (rentedFromPool != null)
-            {
-                ArrayPool<float>.Shared.Return(rentedFromPool);
-            }
-
-            return totalAdded;
-        }
-
-        /// <summary>
-        /// Determines whether the <see cref="IPath" /> contains the specified point
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
-        /// </returns>
+        /// <inheritdoc/>
         public bool Contains(PointF point)
         {
             bool inside = false;
@@ -196,18 +125,12 @@ namespace SixLabors.ImageSharp.Drawing
             return inside;
         }
 
-        /// <summary>
-        /// Transforms the shape using the specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new shape with the matrix applied to it.
-        /// </returns>
+        /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
-                // no transform to apply skip it
+                // No transform to apply skip it
                 return this;
             }
 
@@ -233,37 +156,79 @@ namespace SixLabors.ImageSharp.Drawing
             return paths.ToArray();
         }
 
-        /// <summary>
-        /// Converts a path to a closed path.
-        /// </summary>
-        /// <returns>
-        /// Returns the path as a closed path.
-        /// </returns>
+        /// <inheritdoc/>
         public IPath AsClosedPath()
         {
             if (this.PathType == PathTypes.Closed)
             {
                 return this;
             }
-            else
-            {
-                var paths = new IPath[this.paths.Length];
-                for (int i = 0; i < this.paths.Length; i++)
-                {
-                    paths[i] = this.paths[i].AsClosedPath();
-                }
 
-                return new ComplexPolygon(paths);
+            var paths = new IPath[this.paths.Length];
+            for (int i = 0; i < this.paths.Length; i++)
+            {
+                paths[i] = this.paths[i].AsClosedPath();
             }
+
+            return new ComplexPolygon(paths);
         }
 
-        /// <summary>
-        /// Calculates the point a certain distance a path.
-        /// </summary>
-        /// <param name="distance">The distance along the path to find details of.</param>
-        /// <returns>
-        /// Returns details about a point along a path.
-        /// </returns>
+        /// <inheritdoc />
+        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
+
+        /// <inheritdoc />
+        int IPathInternals.FindIntersections(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations,
+            IntersectionRule intersectionRule)
+        {
+            int totalAdded = 0;
+            foreach (InternalPath ip in this.internalPaths)
+            {
+                Span<PointF> subBuffer = intersections.Slice(totalAdded);
+                Span<PointOrientation> subOrientationsSpan = orientations.Slice(totalAdded);
+
+                int position = ip.FindIntersectionsWithOrientation(start, end, subBuffer, subOrientationsSpan);
+                totalAdded += position;
+            }
+
+            // Avoid pool overhead for short runs.
+            // This method can be called in high volume.
+            const int maxStackSize = 1024 / sizeof(float);
+            float[] rentedFromPool = null;
+            Span<float> buffer =
+                totalAdded > maxStackSize
+                ? (rentedFromPool = ArrayPool<float>.Shared.Rent(totalAdded))
+                : stackalloc float[maxStackSize];
+
+            Span<float> distances = buffer.Slice(0, totalAdded);
+
+            for (int i = 0; i < totalAdded; i++)
+            {
+                distances[i] = Vector2.DistanceSquared(start, intersections[i]);
+            }
+
+            Span<PointF> activeIntersections = intersections.Slice(0, totalAdded);
+            Span<PointOrientation> activeOrientations = orientations.Slice(0, totalAdded);
+            SortUtility.Sort(distances, activeIntersections, activeOrientations);
+
+            if (intersectionRule == IntersectionRule.Nonzero)
+            {
+                totalAdded = InternalPath.ApplyNonZeroIntersectionRules(activeIntersections, activeOrientations);
+            }
+
+            if (rentedFromPool != null)
+            {
+                ArrayPool<float>.Shared.Return(rentedFromPool);
+            }
+
+            return totalAdded;
+        }
+
+        /// <inheritdoc/>
         SegmentInfo IPathInternals.PointAlongPath(float distance)
         {
             distance %= this.length;

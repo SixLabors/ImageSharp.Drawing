@@ -7,7 +7,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Represents a logic path that can be drawn
+    /// Represents a logic path that can be drawn.
     /// </summary>
     public interface IPath
     {

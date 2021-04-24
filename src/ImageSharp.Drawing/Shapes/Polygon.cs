@@ -7,7 +7,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
+    /// A shape made up of a single closed path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
     public class Polygon : Path
     {
@@ -47,18 +47,10 @@ namespace SixLabors.ImageSharp.Drawing
         {
         }
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is a closed path.
-        /// </summary>
-        protected override bool IsClosed => true;
+        /// <inheritdoc />
+        public override bool IsClosed => true;
 
-        /// <summary>
-        /// Transforms the rectangle using specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new shape with the matrix applied to it.
-        /// </returns>
+        /// <inheritdoc />
         public override IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)

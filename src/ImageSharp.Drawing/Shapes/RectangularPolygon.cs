@@ -11,14 +11,13 @@ namespace SixLabors.ImageSharp.Drawing
     /// A polygon tha allows the optimized drawing of rectangles.
     /// </summary>
     /// <seealso cref="IPath" />
-    public class RectangularPolygon : IPath, ISimplePath, IPathInternals
+    public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
         private readonly PointF[] points;
         private readonly float halfLength;
         private readonly float length;
-        private readonly RectangleF bounds;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
@@ -58,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
 
             this.halfLength = this.Size.Width + this.Size.Height;
             this.length = this.halfLength * 2;
-            this.bounds = new RectangleF(this.Location, this.Size);
+            this.Bounds = new RectangleF(this.Location, this.Size);
         }
 
         /// <summary>
@@ -119,60 +118,39 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         public float Bottom => this.bottomRight.Y;
 
-        /// <summary>
-        /// Gets the bounding box of this shape.
-        /// </summary>
-        RectangleF IPath.Bounds => this.bounds;
+        /// <inheritdoc/>
+        public RectangleF Bounds { get; private set; }
 
         /// <inheritdoc/>
         int IPathInternals.MaxIntersections => 4;
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is a closed path.
-        /// </summary>
-        bool ISimplePath.IsClosed => true;
+        /// <inheritdoc/>
+        public bool IsClosed => true;
 
-        /// <summary>
-        /// Gets the points that make this up as a simple linear path.
-        /// </summary>
-        ReadOnlyMemory<PointF> ISimplePath.Points => this.points;
+        /// <inheritdoc/>
+        public ReadOnlyMemory<PointF> Points => this.points;
 
         /// <summary>
         /// Gets the size.
         /// </summary>
-        /// <value>
-        /// The size.
-        /// </value>
         public SizeF Size { get; }
 
         /// <summary>
-        /// Gets the size.
+        /// Gets the width.
         /// </summary>
-        /// <value>
-        /// The size.
-        /// </value>
         public float Width => this.Size.Width;
 
         /// <summary>
         /// Gets the height.
         /// </summary>
-        /// <value>
-        /// The height.
-        /// </value>
         public float Height => this.Size.Height;
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture
-        /// of open and closed figures.
-        /// </summary>
-        PathTypes IPath.PathType => PathTypes.Closed;
+        /// <inheritdoc/>
+        public PathTypes PathType => PathTypes.Closed;
 
         /// <summary>
-        /// Gets the center.
+        /// Gets the center point.
         /// </summary>
-        /// <value>
-        /// The center.
-        /// </value>
         public PointF Center => (this.topLeft + this.bottomRight) / 2;
 
         /// <summary>
@@ -182,14 +160,7 @@ namespace SixLabors.ImageSharp.Drawing
         public static explicit operator RectangularPolygon(Polygon polygon)
             => new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
-        /// <summary>
-        /// Determines if the specified point is contained within the rectangular region defined by
-        /// this <see cref="RectangularPolygon" />.
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        /// The <see cref="bool" />
-        /// </returns>
+        /// <inheritdoc/>
         public bool Contains(PointF point)
             => Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
 
@@ -211,37 +182,25 @@ namespace SixLabors.ImageSharp.Drawing
             var endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
 
             // Start doesn't change when its inside the shape thus not crossing
-            if (startPoint != (Vector2)start)
+            if (startPoint != (Vector2)start && startPoint == Vector2.Clamp(startPoint, start, end))
             {
-                if (startPoint == Vector2.Clamp(startPoint, start, end))
-                {
-                    // If start closest is within line then its a valid point
-                    discovered++;
-                    intersections[offset++] = startPoint;
-                }
+                // If start closest is within line then its a valid point
+                discovered++;
+                intersections[offset++] = startPoint;
             }
 
             // End didn't change it must not intercept with an edge
-            if (endPoint != (Vector2)end)
+            if (endPoint != (Vector2)end && endPoint == Vector2.Clamp(endPoint, start, end))
             {
-                if (endPoint == Vector2.Clamp(endPoint, start, end))
-                {
-                    // If start closest is within line then its a valid point
-                    discovered++;
-                    intersections[offset] = endPoint;
-                }
+                // If start closest is within line then its a valid point
+                discovered++;
+                intersections[offset] = endPoint;
             }
 
             return discovered;
         }
 
-        /// <summary>
-        /// Transforms the rectangle using specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new shape with the matrix applied to it.
-        /// </returns>
+        /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
@@ -249,7 +208,7 @@ namespace SixLabors.ImageSharp.Drawing
                 return this;
             }
 
-            // rectangles may be rotated and skewed which means they will then nedd representing by a polygon
+            // Rectangles may be rotated and skewed which means they will then nedd representing by a polygon
             return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
         }
 
@@ -267,41 +226,35 @@ namespace SixLabors.ImageSharp.Drawing
                     Angle = MathF.PI
                 };
             }
-            else
+
+            distance -= this.Width;
+            if (distance < this.Height)
             {
-                distance -= this.Width;
-                if (distance < this.Height)
+                // down on right
+                return new SegmentInfo
                 {
-                    // down on right
-                    return new SegmentInfo
-                    {
-                        Point = new Vector2(this.Right, this.Top + distance),
-                        Angle = -MathF.PI / 2
-                    };
-                }
-                else
-                {
-                    distance -= this.Height;
-                    if (distance < this.Width)
-                    {
-                        // botom right to left
-                        return new SegmentInfo
-                        {
-                            Point = new Vector2(this.Right - distance, this.Bottom),
-                            Angle = 0
-                        };
-                    }
-                    else
-                    {
-                        distance -= this.Width;
-                        return new SegmentInfo
-                        {
-                            Point = new Vector2(this.Left, this.Bottom - distance),
-                            Angle = (float)(Math.PI / 2)
-                        };
-                    }
-                }
+                    Point = new Vector2(this.Right, this.Top + distance),
+                    Angle = -MathF.PI / 2
+                };
             }
+
+            distance -= this.Height;
+            if (distance < this.Width)
+            {
+                // botom right to left
+                return new SegmentInfo
+                {
+                    Point = new Vector2(this.Right - distance, this.Bottom),
+                    Angle = 0
+                };
+            }
+
+            distance -= this.Width;
+            return new SegmentInfo
+            {
+                Point = new Vector2(this.Left, this.Bottom - distance),
+                Angle = (float)(Math.PI / 2)
+            };
         }
 
         /// <inheritdoc/>
@@ -310,12 +263,7 @@ namespace SixLabors.ImageSharp.Drawing
             yield return this;
         }
 
-        /// <summary>
-        /// Converts a path to a closed path.
-        /// </summary>
-        /// <returns>
-        /// Returns the path as a closed path.
-        /// </returns>
-        IPath IPath.AsClosedPath() => this;
+        /// <inheritdoc/>
+        public IPath AsClosedPath() => this;
     }
 }

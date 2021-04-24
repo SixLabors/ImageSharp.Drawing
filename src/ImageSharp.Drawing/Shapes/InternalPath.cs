@@ -368,7 +368,6 @@ namespace SixLabors.ImageSharp.Drawing
                         diff = -1;
                         break;
                     case PointOrientation.Collinear:
-                    default:
                         diff *= -1;
                         break;
                 }

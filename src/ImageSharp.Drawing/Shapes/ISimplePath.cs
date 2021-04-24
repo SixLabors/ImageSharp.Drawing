@@ -6,7 +6,7 @@ using System;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Represents a logic path that can be drawn
+    /// Represents a simplified logic path that can be drawn.
     /// </summary>
     public interface ISimplePath
     {

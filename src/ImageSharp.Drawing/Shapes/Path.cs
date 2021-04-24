@@ -9,7 +9,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// A aggregate of <see cref="ILineSegment"/>s making a single logical path
+    /// A aggregate of <see cref="ILineSegment"/>s making a single logical path.
     /// </summary>
     /// <seealso cref="IPath" />
     public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
@@ -42,38 +42,28 @@ namespace SixLabors.ImageSharp.Drawing
         public Path(params ILineSegment[] segments)
             => this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is a closed path.
-        /// </summary>
+        /// <inheritdoc/>
         bool ISimplePath.IsClosed => this.IsClosed;
 
-        /// <summary>
-        /// Gets the points that make up this simple linear path.
-        /// </summary>
-        ReadOnlyMemory<PointF> ISimplePath.Points => this.InnerPath.Points();
+        /// <inheritdoc cref="ISimplePath.IsClosed"/>
+        public virtual bool IsClosed => false;
+
+        /// <inheritdoc/>
+        public ReadOnlyMemory<PointF> Points => this.InnerPath.Points();
 
         /// <inheritdoc />
         public RectangleF Bounds => this.InnerPath.Bounds;
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
-        /// </summary>
+        /// <inheritdoc />
         public PathTypes PathType => this.IsClosed ? PathTypes.Open : PathTypes.Closed;
 
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
+        /// <inheritdoc />
         public int MaxIntersections => this.InnerPath.PointCount;
 
         /// <summary>
-        /// Gets the line segments
+        /// Gets readonly collection of line segments.
         /// </summary>
         public IReadOnlyList<ILineSegment> LineSegments => this.lineSegments;
-
-        /// <summary>
-        /// Gets a value indicating whether this instance is a closed path.
-        /// </summary>
-        protected virtual bool IsClosed => false;
 
         /// <summary>
         /// Gets or sets a value indicating whether close or collinear vertices should be removed. TEST ONLY!
@@ -83,13 +73,7 @@ namespace SixLabors.ImageSharp.Drawing
         private InternalPath InnerPath =>
             this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
-        /// <summary>
-        /// Transforms the rectangle using specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new path with the matrix applied to it.
-        /// </returns>
+        /// <inheritdoc />
         public virtual IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
@@ -107,20 +91,15 @@ namespace SixLabors.ImageSharp.Drawing
             return new Path(segments);
         }
 
-        /// <summary>
-        /// Returns this polygon as a path
-        /// </summary>
-        /// <returns>This polygon as a path</returns>
+        /// <inheritdoc />
         public IPath AsClosedPath()
         {
             if (this.IsClosed)
             {
                 return this;
             }
-            else
-            {
-                return new Polygon(this.LineSegments);
-            }
+
+            return new Polygon(this.LineSegments);
         }
 
         /// <inheritdoc />
@@ -128,6 +107,9 @@ namespace SixLabors.ImageSharp.Drawing
         {
             yield return this;
         }
+
+        /// <inheritdoc />
+        public bool Contains(PointF point) => this.InnerPath.PointInPolygon(point);
 
         /// <inheritdoc />
         int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
@@ -142,18 +124,9 @@ namespace SixLabors.ImageSharp.Drawing
             IntersectionRule intersectionRule)
             => this.InnerPath.FindIntersections(start, end, intersections, orientations, intersectionRule);
 
-        /// <summary>
-        /// Determines whether the <see cref="IPath" /> contains the specified point
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
-        /// </returns>
-        public bool Contains(PointF point) => this.InnerPath.PointInPolygon(point);
-
         /// <inheritdoc/>
-        SegmentInfo IPathInternals.PointAlongPath(float distanceAlongPath)
-           => this.InnerPath.PointAlongPath(distanceAlongPath);
+        SegmentInfo IPathInternals.PointAlongPath(float distance)
+           => this.InnerPath.PointAlongPath(distance);
 
         /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };

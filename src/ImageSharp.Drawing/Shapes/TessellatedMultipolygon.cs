@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
     /// - Holes are oriented "Negative" (CW in world, CCW on screen)
     /// - First vertex is always repeated at the end of the span in each ring
     /// </summary>
-    internal class TessellatedMultipolygon : IDisposable, IReadOnlyList<TessellatedMultipolygon.Ring>
+    internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<TessellatedMultipolygon.Ring>
     {
         private Ring[] rings;
 
