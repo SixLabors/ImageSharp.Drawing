@@ -43,11 +43,6 @@ namespace SixLabors.ImageSharp.Drawing
             => this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
 
         /// <summary>
-        /// Gets the length of the path.
-        /// </summary>
-        public float Length => this.InnerPath.Length;
-
-        /// <summary>
         /// Gets a value indicating whether this instance is a closed path.
         /// </summary>
         bool ISimplePath.IsClosed => this.IsClosed;

@@ -20,6 +20,7 @@ namespace SixLabors.ImageSharp.Drawing
         private readonly IPath[] paths;
         private readonly List<InternalPath> internalPaths;
         private readonly int maxIntersections;
+        private readonly float length;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
@@ -52,7 +53,6 @@ namespace SixLabors.ImageSharp.Drawing
 
                 foreach (IPath p in this.paths)
                 {
-                    length += p.Length;
                     if (p.Bounds.Left < minX)
                     {
                         minX = p.Bounds.Left;
@@ -77,29 +77,24 @@ namespace SixLabors.ImageSharp.Drawing
                     {
                         var ip = new InternalPath(s.Points, s.IsClosed);
                         intersections += ip.PointCount;
-
+                        length += ip.Length;
                         this.internalPaths.Add(ip);
                     }
                 }
 
                 this.maxIntersections = intersections;
-                this.Length = length;
+                this.length = length;
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
             else
             {
                 this.maxIntersections = 0;
-                this.Length = 0;
+                this.length = 0;
                 this.Bounds = RectangleF.Empty;
             }
 
             this.PathType = PathTypes.Mixed;
         }
-
-        /// <summary>
-        /// Gets the length of the path.
-        /// </summary>
-        public float Length { get; }
 
         /// <summary>
         /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
@@ -271,7 +266,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </returns>
         SegmentInfo IPathInternals.PointAlongPath(float distance)
         {
-            distance %= this.Length;
+            distance %= this.length;
             foreach (InternalPath p in this.internalPaths)
             {
                 if (p.Length >= distance)

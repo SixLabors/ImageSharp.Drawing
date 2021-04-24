@@ -124,9 +124,6 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         RectangleF IPath.Bounds => this.bounds;
 
-        /// <inheritdoc />
-        float IPath.Length => this.length;
-
         /// <inheritdoc/>
         int IPathInternals.MaxIntersections => 4;
 

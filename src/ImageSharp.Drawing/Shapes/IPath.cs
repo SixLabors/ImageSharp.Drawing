@@ -22,22 +22,17 @@ namespace SixLabors.ImageSharp.Drawing
         RectangleF Bounds { get; }
 
         /// <summary>
-        /// Gets the length of the path.
-        /// </summary>
-        float Length { get; }
-
-        /// <summary>
         /// Converts the <see cref="IPath" /> into a simple linear path.
         /// </summary>
         /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
         IEnumerable<ISimplePath> Flatten();
 
         /// <summary>
-        /// Determines whether the <see cref="IPath"/> contains the specified point
+        /// Determines whether the <see cref="IPath"/> contains the specified point.
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>
-        ///   <c>true</c> if the <see cref="IPath"/> contains the specified point; otherwise, <c>false</c>.
+        /// <see langword="true"/> if the <see cref="IPath"/> contains the specified point; otherwise, <see langword="false"/>.
         /// </returns>
         bool Contains(PointF point);
 

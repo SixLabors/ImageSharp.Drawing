@@ -82,13 +82,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         PathTypes IPath.PathType => PathTypes.Closed;
 
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        int IPathInternals.MaxIntersections => this.innerPath.PointCount;
-
         /// <inheritdoc />
-        public float Length => this.innerPath.Length;
+        int IPathInternals.MaxIntersections => this.innerPath.PointCount;
 
         /// <summary>
         /// Transforms the rectangle using specified matrix.
