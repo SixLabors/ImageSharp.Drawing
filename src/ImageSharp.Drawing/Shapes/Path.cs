@@ -88,23 +88,6 @@ namespace SixLabors.ImageSharp.Drawing
         private InternalPath InnerPath =>
             this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
-        /// <inheritdoc />
-        PointInfo IPathInternals.Distance(PointF point)
-        {
-            PointInfo dist = this.InnerPath.DistanceFromPath(point);
-
-            if (this.IsClosed)
-            {
-                bool isInside = this.InnerPath.PointInPolygon(point);
-                if (isInside)
-                {
-                    dist.DistanceFromPath *= -1;
-                }
-            }
-
-            return dist;
-        }
-
         /// <summary>
         /// Transforms the rectangle using specified matrix.
         /// </summary>
@@ -145,12 +128,7 @@ namespace SixLabors.ImageSharp.Drawing
             }
         }
 
-        /// <summary>
-        /// Converts the <see cref="IPath" /> into a simple linear path..
-        /// </summary>
-        /// <returns>
-        /// Returns the current <see cref="IPath" /> as simple linear path.
-        /// </returns>
+        /// <inheritdoc />
         public IEnumerable<ISimplePath> Flatten()
         {
             yield return this;

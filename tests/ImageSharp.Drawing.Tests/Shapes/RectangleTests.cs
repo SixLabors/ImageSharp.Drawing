@@ -69,62 +69,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                },
             };
 
-        public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
-            new TheoryData<TestPoint, float, float>
-            {
-               { new PointF(0, 0), 0f, 0f },
-               { new PointF(1, 0), 0f, 1f },
-               { new PointF(9, 0), 0f, 9f },
-               { new PointF(10, 0), 0f, 10f },
-               { new PointF(10, 1), 0f, 11f },
-               { new PointF(10, 9), 0f, 19f },
-               { new PointF(10, 10), 0f, 20f },
-               { new PointF(9, 10), 0f, 21f },
-               { new PointF(1, 10), 0f, 29f },
-               { new PointF(0, 10), 0f, 30f },
-               { new PointF(0, 9), 0f, 31f },
-               { new PointF(0, 1), 0f, 39f },
-               { new PointF(4, 3), -3f, 4f },
-               { new PointF(3, 4), -3f, 36f },
-               { new PointF(-1, 0), 1f, 0f },
-               { new PointF(1, -1), 1f, 1f },
-               { new PointF(9, -1), 1f, 9f },
-               { new PointF(11, 0), 1f, 10f },
-               { new PointF(11, 1), 1f, 11f },
-               { new PointF(11, 9), 1f, 19f },
-               { new PointF(11, 10), 1f, 20f },
-               { new PointF(9, 11), 1f, 21f },
-               { new PointF(1, 11), 1f, 29f },
-               { new PointF(-1, 10), 1f, 30f },
-               { new PointF(-1, 9), 1f, 31f },
-               { new PointF(-1, 1), 1f, 39f },
-            };
-
         [Theory]
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
         {
             var shape = new RectangularPolygon(location, size);
             Assert.Equal(isInside, shape.Contains(point));
-        }
-
-        [Theory]
-        [MemberData(nameof(DistanceTheoryData))]
-        public void Distance(TestPoint location, TestSize size, TestPoint point, float expectecDistance)
-        {
-            IPathInternals shape = new RectangularPolygon(location, size);
-
-            Assert.Equal(expectecDistance, shape.Distance(point).DistanceFromPath);
-        }
-
-        [Theory]
-        [MemberData(nameof(PathDistanceTheoryData))]
-        public void DistanceFromPath_Path(TestPoint point, float expectecDistance, float alongPath)
-        {
-            IPathInternals shape = new RectangularPolygon(0, 0, 10, 10);
-            PointInfo info = shape.Distance(point);
-            Assert.Equal(expectecDistance, info.DistanceFromPath);
-            Assert.Equal(alongPath, info.DistanceAlongPath);
         }
 
         [Fact]

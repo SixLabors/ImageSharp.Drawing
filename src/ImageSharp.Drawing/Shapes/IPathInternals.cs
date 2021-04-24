@@ -54,15 +54,6 @@ namespace SixLabors.ImageSharp.Drawing
             IntersectionRule intersectionRule);
 
         /// <summary>
-        /// Calculates the distance along and away from the path for a specified point.
-        /// </summary>
-        /// <param name="point">The point along the path.</param>
-        /// <returns>
-        /// Returns details about the point and its distance away from the path.
-        /// </returns>
-        PointInfo Distance(PointF point);
-
-        /// <summary>
         /// Returns information about a point at a given distance along a path.
         /// </summary>
         /// <param name="distance">The distance along the path to return details for.</param>

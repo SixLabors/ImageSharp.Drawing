@@ -65,51 +65,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 },
            };
 
-        [Theory]
-        [MemberData(nameof(DistanceTheoryData))]
-        public void Distance(TestPoint[] controlPoints, TestPoint point, float expected)
-        {
-            IPathInternals shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
-            Assert.Equal(expected, shape.Distance(point).DistanceFromPath);
-        }
-
-        public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
-            new TheoryData<TestPoint, float, float>
-                {
-                    { new PointF(0, 0), 0f, 0f },
-                    { new PointF(1,  0), 0f, 1f },
-                    { new PointF(9,  0), 0f, 9f },
-                    { new PointF(10,  0), 0f, 10f },
-                    { new PointF(10, 1), 0f, 11f },
-                    { new PointF(10,  9), 0f, 19f },
-                    { new PointF(10,  10), 0f, 20f },
-                    { new PointF(9,  10), 0f, 21f },
-                    { new PointF(1,  10), 0f, 29f },
-                    { new PointF(0,  10), 0f, 30f },
-                    { new PointF(0,  1), 0f, 39f },
-                    { new PointF(4,  3), -3f, 4f },
-                    { new PointF(3, 4), -3f, 36f },
-                    { new PointF(-1,  0), 1f, 0f },
-                    { new PointF(1,  -1), 1f, 1f },
-                    { new PointF(9,  -1), 1f, 9f },
-                    { new PointF(11,  0), 1f, 10f },
-                    { new PointF(11, 1), 1f, 11f },
-                    { new PointF(11,  9), 1f, 19f },
-                    { new PointF(11,  10), 1f, 20f },
-                    { new PointF(9,  11), 1f, 21f },
-                    { new PointF(1,  11), 1f, 29f }
-                };
-
-        [Theory]
-        [MemberData(nameof(PathDistanceTheoryData))]
-        public void DistanceFromPath_Path(TestPoint point, float expectedDistance, float alongPath)
-        {
-            IPathInternals path = new Polygon(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
-            PointInfo info = path.Distance(point);
-            Assert.Equal(expectedDistance, info.DistanceFromPath);
-            Assert.Equal(alongPath, info.DistanceAlongPath);
-        }
-
         [Fact]
         public void AsSimpleLinearPath()
         {
