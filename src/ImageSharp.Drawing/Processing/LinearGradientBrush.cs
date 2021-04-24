@@ -54,6 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// The linear gradient brush applicator.
         /// </summary>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
         private sealed class LinearGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {

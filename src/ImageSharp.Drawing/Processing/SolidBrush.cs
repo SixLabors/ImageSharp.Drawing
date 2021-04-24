@@ -36,6 +36,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// The solid brush applicator.
         /// </summary>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
         private class SolidBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -97,14 +98,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 }
 
                 Configuration configuration = this.Configuration;
-                MemoryAllocator memoryAllocator = configuration.MemoryAllocator;
-
                 if (this.Options.BlendPercentage == 1f)
                 {
                     this.Blender.Blend(configuration, destinationRow, destinationRow, this.Colors.Memory.Span, scanline);
                 }
                 else
                 {
+                    MemoryAllocator memoryAllocator = configuration.MemoryAllocator;
                     using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
                     Span<float> amountSpan = amountBuffer.Memory.Span;
 

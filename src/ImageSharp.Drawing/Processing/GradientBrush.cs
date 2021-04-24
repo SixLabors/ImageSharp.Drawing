@@ -44,6 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Base class for gradient brush applicators
         /// </summary>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
         internal abstract class GradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -115,11 +116,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     {
                         return from.Color.ToPixel<TPixel>();
                     }
-                    else
-                    {
-                        float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
-                        return new Color(Vector4.Lerp((Vector4)from.Color, (Vector4)to.Color, onLocalGradient)).ToPixel<TPixel>();
-                    }
+
+                    float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
+
+                    return new Color(Vector4.Lerp((Vector4)from.Color, (Vector4)to.Color, onLocalGradient)).ToPixel<TPixel>();
                 }
             }
 
