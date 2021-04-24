@@ -19,8 +19,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             public abstract SegmentInfo PointAlongPath(float distanceAlongPath);
 
-            public abstract PointInfo Distance(PointF point);
-
             public abstract IEnumerable<ISimplePath> Flatten();
 
             public abstract bool Contains(PointF point);

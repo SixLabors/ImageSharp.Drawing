@@ -118,47 +118,6 @@ namespace SixLabors.ImageSharp.Drawing
         public int PointCount => this.points.Length;
 
         /// <summary>
-        /// Calculates the distance from the path.
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>Returns the distance from the path</returns>
-        public PointInfo DistanceFromPath(PointF point)
-        {
-            PointInfoInternal internalInfo = default;
-            internalInfo.DistanceSquared = float.MaxValue; // Set it to max so that CalculateShorterDistance can reduce it back down
-
-            int polyCorners = this.points.Length;
-
-            if (!this.closedPath)
-            {
-                polyCorners--;
-            }
-
-            int closestPoint = 0;
-            for (int i = 0; i < polyCorners; i++)
-            {
-                int next = i + 1;
-                if (this.closedPath && next == polyCorners)
-                {
-                    next = 0;
-                }
-
-                if (this.CalculateShorterDistance(this.points[i].Point, this.points[next].Point, point, ref internalInfo))
-                {
-                    closestPoint = i;
-                }
-            }
-
-            return new PointInfo
-            {
-                DistanceAlongPath = this.points[closestPoint].TotalLength + Vector2.Distance(this.points[closestPoint].Point, internalInfo.PointOnLine),
-                DistanceFromPath = MathF.Sqrt(internalInfo.DistanceSquared),
-                SearchPoint = point,
-                ClosestPointOnPath = internalInfo.PointOnLine
-            };
-        }
-
-        /// <summary>
         /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
         /// populates a buffer for all points on the path that the line intersects.
         /// </summary>
