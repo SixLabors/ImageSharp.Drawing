@@ -210,7 +210,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// The path gradient brush applicator.
         /// </summary>
         /// <typeparam name="TPixel">The pixel format.</typeparam>
-        private class PathGradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
+        private sealed class PathGradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
             private readonly PointF center;
@@ -333,11 +333,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <inheritdoc />
             public override void Apply(Span<float> scanline, int x, int y)
             {
-                ThreadContextData values = this.threadContextData.Value;
-                Span<float> amounts = values.AmountSpan.Slice(0, scanline.Length);
-                Span<TPixel> overlays = values.OverlaySpan.Slice(0, scanline.Length);
-                Span<PointF> intersections = values.IntersectionsSpan;
-                Span<PointOrientation> orientations = values.OrientationsSpan;
+                ThreadContextData contextData = this.threadContextData.Value;
+                Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
+                Span<TPixel> overlays = contextData.OverlaySpan.Slice(0, scanline.Length);
+                Span<PointF> intersections = contextData.IntersectionsSpan;
+                Span<PointOrientation> orientations = contextData.OrientationsSpan;
                 float blendPercentage = this.Options.BlendPercentage;
 
                 // TODO: Remove bounds checks.
@@ -362,6 +362,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
             }
 
+            /// <inheritdoc />
             protected override void Dispose(bool disposing)
             {
                 if (this.isDisposed)
@@ -452,12 +453,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 private readonly IMemoryOwner<PointF> intersectionsBuffer;
                 private readonly IMemoryOwner<PointOrientation> orientationsBuffer;
 
-                public ThreadContextData(MemoryAllocator memoryAllocator, int scanlineLength, int maxIntersections)
+                public ThreadContextData(MemoryAllocator allocator, int scanlineLength, int maxIntersections)
                 {
-                    this.amountBuffer = memoryAllocator.Allocate<float>(scanlineLength);
-                    this.overlayBuffer = memoryAllocator.Allocate<TPixel>(scanlineLength);
-                    this.intersectionsBuffer = memoryAllocator.Allocate<PointF>(maxIntersections);
-                    this.orientationsBuffer = memoryAllocator.Allocate<PointOrientation>(maxIntersections);
+                    this.amountBuffer = allocator.Allocate<float>(scanlineLength);
+                    this.overlayBuffer = allocator.Allocate<TPixel>(scanlineLength);
+                    this.intersectionsBuffer = allocator.Allocate<PointF>(maxIntersections);
+                    this.orientationsBuffer = allocator.Allocate<PointOrientation>(maxIntersections);
                 }
 
                 public Span<float> AmountSpan => this.amountBuffer.Memory.Span;

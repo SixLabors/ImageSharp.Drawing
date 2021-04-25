@@ -4,6 +4,7 @@
 using System;
 using System.Buffers;
 using System.Numerics;
+using System.Threading;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -54,6 +55,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             private readonly GradientRepetitionMode repetitionMode;
 
+            private readonly MemoryAllocator allocator;
+
+            private readonly int scalineWidth;
+
+            private readonly ThreadLocal<ThreadContextData> threadContextData;
+
+            private bool isDisposed;
+
             /// <summary>
             /// Initializes a new instance of the <see cref="GradientBrushApplicator{TPixel}"/> class.
             /// </summary>
@@ -74,6 +83,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 // Use Array.Sort with a custom comparer.
                 this.colorStops = colorStops;
                 this.repetitionMode = repetitionMode;
+                this.scalineWidth = target.Width;
+                this.allocator = configuration.MemoryAllocator;
+                this.threadContextData = new ThreadLocal<ThreadContextData>(
+                    () => new ThreadContextData(this.allocator, this.scalineWidth),
+                    true);
             }
 
             internal TPixel this[int x, int y]
@@ -126,12 +140,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <inheritdoc />
             public override void Apply(Span<float> scanline, int x, int y)
             {
-                MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
-                using IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length);
-                using IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length);
-
-                Span<float> amountSpan = amountBuffer.Memory.Span;
-                Span<TPixel> overlaySpan = overlay.Memory.Span;
+                ThreadContextData contextData = this.threadContextData.Value;
+                Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
+                Span<TPixel> overlays = contextData.OverlaySpan.Slice(0, scanline.Length);
                 float blendPercentage = this.Options.BlendPercentage;
 
                 // TODO: Remove bounds checks.
@@ -139,25 +150,25 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 {
                     for (int i = 0; i < scanline.Length; i++)
                     {
-                        amountSpan[i] = scanline[i] * blendPercentage;
-                        overlaySpan[i] = this[x + i, y];
+                        amounts[i] = scanline[i] * blendPercentage;
+                        overlays[i] = this[x + i, y];
                     }
                 }
                 else
                 {
                     for (int i = 0; i < scanline.Length; i++)
                     {
-                        amountSpan[i] = scanline[i];
-                        overlaySpan[i] = this[x + i, y];
+                        amounts[i] = scanline[i];
+                        overlays[i] = this[x + i, y];
                     }
                 }
 
                 Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
-                this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlaySpan, amountSpan);
+                this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
             }
 
             /// <summary>
-            /// calculates the position on the gradient for a given point.
+            /// Calculates the position on the gradient for a given point.
             /// This method is abstract as it's content depends on the shape of the gradient.
             /// </summary>
             /// <param name="x">The x-coordinate of the point.</param>
@@ -169,6 +180,29 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// e.g. for the <see cref="GradientRepetitionMode" /> enum.
             /// </returns>
             protected abstract float PositionOnGradient(float x, float y);
+
+            /// <inheritdoc/>
+            protected override void Dispose(bool disposing)
+            {
+                if (this.isDisposed)
+                {
+                    return;
+                }
+
+                base.Dispose(disposing);
+
+                if (disposing)
+                {
+                    foreach (ThreadContextData data in this.threadContextData.Values)
+                    {
+                        data.Dispose();
+                    }
+
+                    this.threadContextData.Dispose();
+                }
+
+                this.isDisposed = true;
+            }
 
             private (ColorStop from, ColorStop to) GetGradientSegment(float positionOnCompleteGradient)
             {
@@ -190,6 +224,33 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 }
 
                 return (localGradientFrom, localGradientTo);
+            }
+
+            private sealed class ThreadContextData : IDisposable
+            {
+                private bool isDisposed;
+                private readonly IMemoryOwner<float> amountBuffer;
+                private readonly IMemoryOwner<TPixel> overlayBuffer;
+
+                public ThreadContextData(MemoryAllocator allocator, int scanlineLength)
+                {
+                    this.amountBuffer = allocator.Allocate<float>(scanlineLength);
+                    this.overlayBuffer = allocator.Allocate<TPixel>(scanlineLength);
+                }
+
+                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
+
+                public Span<TPixel> OverlaySpan => this.overlayBuffer.Memory.Span;
+
+                public void Dispose()
+                {
+                    if (!this.isDisposed)
+                    {
+                        this.isDisposed = true;
+                        this.amountBuffer.Dispose();
+                        this.overlayBuffer.Dispose();
+                    }
+                }
             }
         }
     }

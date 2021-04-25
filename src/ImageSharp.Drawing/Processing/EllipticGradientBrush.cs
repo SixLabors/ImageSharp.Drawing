@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-
+using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -126,16 +126,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             }
 
             /// <inheritdoc />
-            protected override float PositionOnGradient(float xt, float yt)
+            protected override float PositionOnGradient(float x, float y)
             {
-                float x0 = xt - this.center.X;
-                float y0 = yt - this.center.Y;
+                float x0 = x - this.center.X;
+                float y0 = y - this.center.Y;
 
-                float x = (x0 * this.cosRotation) - (y0 * this.sinRotation);
-                float y = (x0 * this.sinRotation) + (y0 * this.cosRotation);
+                float xR = (x0 * this.cosRotation) - (y0 * this.sinRotation);
+                float yR = (x0 * this.sinRotation) + (y0 * this.cosRotation);
 
-                float xSquared = x * x;
-                float ySquared = y * y;
+                float xSquared = xR * xR;
+                float ySquared = yR * yR;
 
                 return (xSquared / this.referenceRadiusSquared) + (ySquared / this.secondRadiusSquared);
             }
@@ -147,18 +147,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 return MathF.Atan2(vB.Y, vB.X) - MathF.Atan2(vA.Y, vA.X);
             }
 
-            private float DistanceBetween(
-                PointF p1,
-                PointF p2)
-            {
-                // TODO: Can we not just use Vector2 distance here?
-                float dX = p1.X - p2.X;
-                float dXsquared = dX * dX;
-
-                float dY = p1.Y - p2.Y;
-                float dYsquared = dY * dY;
-                return MathF.Sqrt(dXsquared + dYsquared);
-            }
+            private float DistanceBetween(PointF p1, PointF p2) => Vector2.Distance(p1, p2);
         }
     }
 }
