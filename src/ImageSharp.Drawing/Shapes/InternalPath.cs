@@ -175,6 +175,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="intersections">The buffer for storing each intersection.</param>
         /// <param name="orientations">The buffer for storing the orientation of each intersection.</param>
         /// <returns>number of intersections hit</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int FindIntersectionsWithOrientation(
             PointF start,
             PointF end,
@@ -188,6 +189,24 @@ namespace SixLabors.ImageSharp.Drawing
                 return 0;
             }
 
+            return this.FindIntersectionsWithOrientationInternal(start, end, intersections, orientations);
+        }
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populates a buffer for all points on the path that the line intersects.
+        /// </summary>
+        /// <param name="start">The start position.</param>
+        /// <param name="end">The end position.</param>
+        /// <param name="intersections">The buffer for storing each intersection.</param>
+        /// <param name="orientations">The buffer for storing the orientation of each intersection.</param>
+        /// <returns>number of intersections hit</returns>
+        public int FindIntersectionsWithOrientationInternal(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations)
+        {
             int count = intersections.Length;
 
             this.ClampPoints(ref start, ref end);
@@ -811,69 +830,6 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 end.Y = this.Bounds.Top - 1;
             }
-        }
-
-        /// <summary>
-        /// Calculate any shorter distances along the path.
-        /// </summary>
-        /// <param name="start">The start position.</param>
-        /// <param name="end">The end position.</param>
-        /// <param name="point">The current point.</param>
-        /// <param name="info">The info.</param>
-        /// <returns>
-        /// The <see cref="bool"/>.
-        /// </returns>
-        private bool CalculateShorterDistance(Vector2 start, Vector2 end, Vector2 point, ref PointInfoInternal info)
-        {
-            Vector2 diffEnds = end - start;
-
-            float lengthSquared = diffEnds.LengthSquared();
-            Vector2 diff = point - start;
-
-            Vector2 multiplied = diff * diffEnds;
-            float u = (multiplied.X + multiplied.Y) / lengthSquared;
-
-            if (u > 1)
-            {
-                u = 1;
-            }
-            else if (u < 0)
-            {
-                u = 0;
-            }
-
-            Vector2 multipliedByU = diffEnds * u;
-
-            Vector2 pointOnLine = start + multipliedByU;
-
-            Vector2 d = pointOnLine - point;
-
-            float dist = d.LengthSquared();
-
-            if (info.DistanceSquared > dist)
-            {
-                info.DistanceSquared = dist;
-                info.PointOnLine = pointOnLine;
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Contains information about the current point.
-        /// </summary>
-        private struct PointInfoInternal
-        {
-            /// <summary>
-            /// The distance squared.
-            /// </summary>
-            public float DistanceSquared;
-
-            /// <summary>
-            /// The point on the current line.
-            /// </summary>
-            public PointF PointOnLine;
         }
 
         private struct PointData
