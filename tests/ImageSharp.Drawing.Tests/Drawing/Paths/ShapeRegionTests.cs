@@ -29,10 +29,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             public abstract int MaxIntersections { get; }
 
-            public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-                => this.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
+            int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+                => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
 
-            public int FindIntersections(
+            int IPathInternals.FindIntersections(
                 PointF start,
                 PointF end,
                 Span<PointF>
