@@ -6,7 +6,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// <summary>
     /// Represents the orientation of a point from a line.
     /// </summary>
-    public enum PointOrientation
+    internal enum PointOrientation
     {
         /// <summary>
         /// The point is collinear.
