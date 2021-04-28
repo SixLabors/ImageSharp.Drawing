@@ -122,9 +122,6 @@ namespace SixLabors.ImageSharp.Drawing
         public RectangleF Bounds { get; private set; }
 
         /// <inheritdoc/>
-        int IPathInternals.MaxIntersections => 4;
-
-        /// <inheritdoc/>
         public bool IsClosed => true;
 
         /// <inheritdoc/>

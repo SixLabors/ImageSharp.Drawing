@@ -9,11 +9,6 @@ namespace SixLabors.ImageSharp.Drawing
     internal interface IPathInternals : IPath
     {
         /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        int MaxIntersections { get; }
-
-        /// <summary>
         /// Returns information about a point at a given distance along a path.
         /// </summary>
         /// <param name="distance">The distance along the path to return details for.</param>

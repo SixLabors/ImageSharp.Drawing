@@ -57,8 +57,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// <inheritdoc />
         public PathTypes PathType => this.IsClosed ? PathTypes.Open : PathTypes.Closed;
 
-        /// <inheritdoc />
-        public int MaxIntersections => this.InnerPath.PointCount;
+        /// <summary>
+        /// Gets the maximum number intersections that a shape can have when testing a line.
+        /// </summary>
+        internal int MaxIntersections => this.InnerPath.PointCount;
 
         /// <summary>
         /// Gets readonly collection of line segments.

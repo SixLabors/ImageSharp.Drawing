@@ -27,8 +27,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             public abstract PathTypes PathType { get; }
 
-            public abstract int MaxIntersections { get; }
-
             public int TestFindIntersectionsInvocationCounter { get; private set; }
 
             public virtual int TestYToScan => 10;

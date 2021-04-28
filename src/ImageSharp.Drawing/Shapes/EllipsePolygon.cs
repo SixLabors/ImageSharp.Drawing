@@ -76,9 +76,6 @@ namespace SixLabors.ImageSharp.Drawing
         /// <inheritdoc/>
         public PathTypes PathType => PathTypes.Closed;
 
-        /// <inheritdoc />
-        int IPathInternals.MaxIntersections => this.innerPath.PointCount;
-
         /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix) => matrix.IsIdentity
                   ? this

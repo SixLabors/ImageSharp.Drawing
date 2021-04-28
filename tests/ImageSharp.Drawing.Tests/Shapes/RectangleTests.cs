@@ -145,13 +145,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Fact]
-        public void MaxIntersections_Shape()
-        {
-            IPathInternals shape = new RectangularPolygon(10, 11, 12, 13);
-            Assert.Equal(4, shape.MaxIntersections);
-        }
-
-        [Fact]
         public void ShapePaths()
         {
             IPath shape = new RectangularPolygon(10, 11, 12, 13);

@@ -18,7 +18,6 @@ namespace SixLabors.ImageSharp.Drawing
     {
         private readonly IPath[] paths;
         private readonly List<InternalPath> internalPaths;
-        private readonly int maxIntersections;
         private readonly float length;
 
         /// <summary>
@@ -48,7 +47,6 @@ namespace SixLabors.ImageSharp.Drawing
                 float minY = float.MaxValue;
                 float maxY = float.MinValue;
                 float length = 0;
-                int intersections = 0;
 
                 foreach (IPath p in this.paths)
                 {
@@ -75,19 +73,16 @@ namespace SixLabors.ImageSharp.Drawing
                     foreach (ISimplePath s in p.Flatten())
                     {
                         var ip = new InternalPath(s.Points, s.IsClosed);
-                        intersections += ip.PointCount;
                         length += ip.Length;
                         this.internalPaths.Add(ip);
                     }
                 }
 
-                this.maxIntersections = intersections;
                 this.length = length;
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
             else
             {
-                this.maxIntersections = 0;
                 this.length = 0;
                 this.Bounds = RectangleF.Empty;
             }
@@ -105,9 +100,6 @@ namespace SixLabors.ImageSharp.Drawing
 
         /// <inheritdoc/>
         public RectangleF Bounds { get; }
-
-        /// <inheritdoc/>
-        int IPathInternals.MaxIntersections => this.maxIntersections;
 
         /// <inheritdoc/>
         public bool Contains(PointF point)
