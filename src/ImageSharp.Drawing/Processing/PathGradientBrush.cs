@@ -167,7 +167,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 Span<PointF> intersections,
                 Span<PointOrientation> orientations)
             {
-                int pathIntersections = ((IPathInternals)this.Path).FindIntersections(
+                int pathIntersections = this.Path.FindIntersections(
                     start,
                     end,
                     intersections.Slice(0, this.Path.MaxIntersections),

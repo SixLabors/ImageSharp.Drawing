@@ -94,19 +94,6 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <inheritdoc/>
-        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-            => this.innerPath.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
-
-        /// <inheritdoc/>
-        int IPathInternals.FindIntersections(
-            PointF start,
-            PointF end,
-            Span<PointF> intersections,
-            Span<PointOrientation> orientations,
-            IntersectionRule intersectionRule)
-            => this.innerPath.FindIntersections(start, end, intersections, orientations, intersectionRule);
-
-        /// <inheritdoc/>
         public bool Contains(PointF point) => this.innerPath.PointInPolygon(point);
 
         /// <inheritdoc />

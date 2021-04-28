@@ -6,7 +6,6 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -171,61 +170,6 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             return new ComplexPolygon(paths);
-        }
-
-        /// <inheritdoc />
-        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-            => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
-
-        /// <inheritdoc />
-        int IPathInternals.FindIntersections(
-            PointF start,
-            PointF end,
-            Span<PointF> intersections,
-            Span<PointOrientation> orientations,
-            IntersectionRule intersectionRule)
-        {
-            int totalAdded = 0;
-            foreach (InternalPath ip in this.internalPaths)
-            {
-                Span<PointF> subBuffer = intersections.Slice(totalAdded);
-                Span<PointOrientation> subOrientationsSpan = orientations.Slice(totalAdded);
-
-                int position = ip.FindIntersectionsWithOrientation(start, end, subBuffer, subOrientationsSpan);
-                totalAdded += position;
-            }
-
-            // Avoid pool overhead for short runs.
-            // This method can be called in high volume.
-            const int maxStackSize = 1024 / sizeof(float);
-            float[] rentedFromPool = null;
-            Span<float> buffer =
-                totalAdded > maxStackSize
-                ? (rentedFromPool = ArrayPool<float>.Shared.Rent(totalAdded))
-                : stackalloc float[maxStackSize];
-
-            Span<float> distances = buffer.Slice(0, totalAdded);
-
-            for (int i = 0; i < totalAdded; i++)
-            {
-                distances[i] = Vector2.DistanceSquared(start, intersections[i]);
-            }
-
-            Span<PointF> activeIntersections = intersections.Slice(0, totalAdded);
-            Span<PointOrientation> activeOrientations = orientations.Slice(0, totalAdded);
-            SortUtility.Sort(distances, activeIntersections, activeOrientations);
-
-            if (intersectionRule == IntersectionRule.Nonzero)
-            {
-                totalAdded = InternalPath.ApplyNonZeroIntersectionRules(activeIntersections, activeOrientations);
-            }
-
-            if (rentedFromPool != null)
-            {
-                ArrayPool<float>.Shared.Return(rentedFromPool);
-            }
-
-            return totalAdded;
         }
 
         /// <inheritdoc/>

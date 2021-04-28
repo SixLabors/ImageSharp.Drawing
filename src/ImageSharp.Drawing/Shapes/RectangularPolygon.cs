@@ -164,42 +164,6 @@ namespace SixLabors.ImageSharp.Drawing
         public bool Contains(PointF point)
             => Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
 
-        /// <inheritdoc />
-        int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-            => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
-
-        /// <inheritdoc />
-        int IPathInternals.FindIntersections(
-            PointF start,
-            PointF end,
-            Span<PointF> intersections,
-            Span<PointOrientation> orientations,
-            IntersectionRule intersectionRule)
-        {
-            int offset = 0;
-            int discovered = 0;
-            var startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
-            var endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
-
-            // Start doesn't change when its inside the shape thus not crossing
-            if (startPoint != (Vector2)start && startPoint == Vector2.Clamp(startPoint, start, end))
-            {
-                // If start closest is within line then its a valid point
-                discovered++;
-                intersections[offset++] = startPoint;
-            }
-
-            // End didn't change it must not intercept with an edge
-            if (endPoint != (Vector2)end && endPoint == Vector2.Clamp(endPoint, start, end))
-            {
-                // If start closest is within line then its a valid point
-                discovered++;
-                intersections[offset] = endPoint;
-            }
-
-            return discovered;
-        }
-
         /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
         {

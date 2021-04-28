@@ -469,6 +469,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// Returns details about a point along a path.
         /// </returns>
+        /// <exception cref="InvalidOperationException">Thrown if no points found.</exception>
         internal SegmentInfo PointAlongPath(float distanceAlongPath)
         {
             distanceAlongPath %= this.Length;
@@ -494,10 +495,8 @@ namespace SixLabors.ImageSharp.Drawing
                         Angle = (float)(Math.Atan2(diff.Y, diff.X) % (Math.PI * 2))
                     };
                 }
-                else
-                {
-                    distanceAlongPath -= this.points[next].Length;
-                }
+
+                distanceAlongPath -= this.points[next].Length;
             }
 
             // TODO: Perf - Throwhelper.

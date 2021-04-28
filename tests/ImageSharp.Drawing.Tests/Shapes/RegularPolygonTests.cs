@@ -95,23 +95,5 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
         }
-
-        [Fact]
-        public void TriangleMissingIntersectionsDownCenter()
-        {
-            var poly = new RegularPolygon(50, 50, 3, 30);
-            PointF[] points = poly.FindIntersections(new PointF(0, 50), new PointF(100, 50)).ToArray();
-
-            Assert.Equal(2, points.Length);
-        }
-
-        [Fact]
-        public void ClippingCornerShouldReturn2Points()
-        {
-            var poly = new RegularPolygon(50, 50, 7, 30, -(float)Math.PI);
-            PointF[] points = poly.FindIntersections(new PointF(0, 20), new PointF(100, 20)).ToArray();
-
-            Assert.Equal(2, points.Length);
-        }
     }
 }

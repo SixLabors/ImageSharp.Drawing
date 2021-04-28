@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             public IPath AsClosedPath() => this;
 
-            public abstract SegmentInfo PointAlongPath(float distanceAlongPath);
+            public abstract SegmentInfo PointAlongPath(float distance);
 
             public abstract IEnumerable<ISimplePath> Flatten();
 
@@ -28,27 +28,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             public abstract PathTypes PathType { get; }
 
             public abstract int MaxIntersections { get; }
-
-            int IPathInternals.FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-                => ((IPathInternals)this).FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
-
-            int IPathInternals.FindIntersections(
-                PointF start,
-                PointF end,
-                Span<PointF>
-                intersections,
-                Span<PointOrientation> orientations,
-                IntersectionRule intersectionRule)
-            {
-                Assert.Equal(this.TestYToScan, start.Y);
-                Assert.Equal(this.TestYToScan, end.Y);
-                Assert.True(start.X < this.Bounds.Left);
-                Assert.True(end.X > this.Bounds.Right);
-
-                this.TestFindIntersectionsInvocationCounter++;
-
-                return this.TestFindIntersectionsResult;
-            }
 
             public int TestFindIntersectionsInvocationCounter { get; private set; }
 
