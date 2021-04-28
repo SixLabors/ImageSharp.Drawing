@@ -6,10 +6,10 @@ using SixLabors.ImageSharp.Drawing.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing
 {
-    /// <content>
-    /// Clipping extensions for shapes
-    /// </content>
-    public static partial class PathExtensions
+    /// <summary>
+    /// Path extensions to clip paths.
+    /// </summary>
+    public static class ClipPathExtensions
     {
         /// <summary>
         /// Clips the specified holes.

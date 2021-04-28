@@ -10,10 +10,10 @@ using ClipperLib;
 
 namespace SixLabors.ImageSharp.Drawing
 {
-    /// <content>
+    /// <summary>
     /// Path extensions to generate outlines of paths.
-    /// </content>
-    public static partial class PathExtensions
+    /// </summary>
+    public static class OutlinePathExtensions
     {
         private const double MiterOffsetDelta = 20;
         private const float ScalingFactor = 1000.0f;
