@@ -90,6 +90,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 Configuration configuration = this.Configuration;
                 if (this.Options.BlendPercentage == 1F)
                 {
+                    // TODO: refactor the BlendPercentage == 1 logic to a separate, simpler BrushApplicator class.
                     this.Blender.Blend(configuration, destinationRow, destinationRow, this.colors.Memory.Span, scanline);
                 }
                 else
