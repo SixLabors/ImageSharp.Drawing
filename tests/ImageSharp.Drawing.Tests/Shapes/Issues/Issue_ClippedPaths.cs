@@ -20,8 +20,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                             new PointF(93, 85),
                             new PointF(65, 137)));
 
-            ComplexPolygon clippedPath = simplePath.Clip(hole1);
-            ComplexPolygon outline = clippedPath.GenerateOutline(5, new[] { 1f });
+            IPath clippedPath = simplePath.Clip(hole1);
+            IPath outline = clippedPath.GenerateOutline(5, new[] { 1f });
 
             Assert.False(outline.Contains(new PointF(74, 97)));
         }

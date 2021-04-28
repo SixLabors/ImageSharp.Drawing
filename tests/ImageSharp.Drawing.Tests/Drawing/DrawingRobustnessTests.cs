@@ -36,7 +36,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             var circle = new EllipsePolygon(32, 32, 30);
             var star = new Star(32, 32, 7, 10, 27);
-            ComplexPolygon shape = circle.Clip(star);
+            IPath shape = circle.Clip(star);
 
             CompareToSkiaResultsImpl(provider, shape);
         }

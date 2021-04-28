@@ -111,7 +111,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             Polygon hole = PolygonFactory.CreatePolygon(
                 (2, 2), (2, 3), (3, 3), (3, 4), (4, 4), (4, 3), (3, 2));
 
-            ComplexPolygon polygon = contour.Clip(hole);
+            IPath polygon = contour.Clip(hole);
             DebugDraw.Polygon(polygon, 1, 100);
 
             this.edges = ScanEdgeCollection.Create(polygon, MemoryAllocator, 16);

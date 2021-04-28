@@ -135,8 +135,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 },
                 testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
                 comparer: ImageComparer.TolerantPercentage(0.01f),
-                appendSourceFileOrDescription: false,
-                appendPixelTypeToFileName: false);
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
         }
 
         [Theory]
@@ -165,8 +165,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 c => c.FillPolygon(color, points),
                 testOutputDetails: $"Reverse({reverse})",
                 comparer: ImageComparer.TolerantPercentage(0.01f),
-                appendSourceFileOrDescription: false,
-                appendPixelTypeToFileName: false);
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
         }
 
         [Theory]
@@ -175,7 +175,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             var circle = new EllipsePolygon(32, 32, 30);
             var star = new Star(32, 32, 7, 10, 27);
-            ComplexPolygon shape = circle.Clip(star);
+            IPath shape = circle.Clip(star);
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White, shape),
