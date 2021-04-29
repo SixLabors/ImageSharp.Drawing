@@ -185,5 +185,25 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             Assert.Throws<ArgumentOutOfRangeException>(Create);
         }
+
+        [Theory]
+        [WithBlankImage(100, 100, PixelTypes.Rgba32)]
+        public void FillComplex<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+            => provider.VerifyOperation(
+                TolerantComparer,
+                image =>
+                {
+                    var star = new Star(50, 50, 5, 20, 45);
+                    PointF[] points = star.Points.ToArray();
+                    Color[] colors = { Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple,
+                        Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple };
+
+                    var brush = new PathGradientBrush(points, colors, Color.White);
+
+                    image.Mutate(x => x.Fill(brush));
+                },
+                appendSourceFileOrDescription: false,
+                appendPixelTypeToFileName: false);
     }
 }
