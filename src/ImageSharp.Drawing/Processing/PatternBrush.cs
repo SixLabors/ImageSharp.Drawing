@@ -4,6 +4,7 @@
 using System;
 using System.Buffers;
 using System.Numerics;
+using System.Threading;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -31,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     ///  0
     /// </para>
     /// </remarks>
-    public class PatternBrush : IBrush
+    public sealed class PatternBrush : IBrush
     {
         /// <summary>
         /// The pattern.
@@ -103,13 +104,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// The pattern brush applicator.
         /// </summary>
-        private class PatternBrushApplicator<TPixel> : BrushApplicator<TPixel>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
+        private sealed class PatternBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            /// <summary>
-            /// The pattern.
-            /// </summary>
             private readonly DenseMatrix<TPixel> pattern;
+            private readonly MemoryAllocator allocator;
+            private readonly int scalineWidth;
+            private readonly ThreadLocal<ThreadContextData> threadContextData;
+            private bool isDisposed;
 
             /// <summary>
             /// Initializes a new instance of the <see cref="PatternBrushApplicator{TPixel}" /> class.
@@ -126,10 +129,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 : base(configuration, options, source)
             {
                 this.pattern = pattern;
+                this.scalineWidth = source.Width;
+                this.allocator = configuration.MemoryAllocator;
+                this.threadContextData = new ThreadLocal<ThreadContextData>(
+                    () => new ThreadContextData(this.allocator, this.scalineWidth),
+                    true);
             }
 
-            /// <inheritdoc/>
-            internal override TPixel this[int x, int y]
+            internal TPixel this[int x, int y]
             {
                 get
                 {
@@ -145,29 +152,74 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             public override void Apply(Span<float> scanline, int x, int y)
             {
                 int patternY = y % this.pattern.Rows;
-                MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
+                ThreadContextData contextData = this.threadContextData.Value;
+                Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
+                Span<TPixel> overlays = contextData.OverlaySpan.Slice(0, scanline.Length);
 
-                using (IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length))
-                using (IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length))
+                for (int i = 0; i < scanline.Length; i++)
                 {
-                    Span<float> amountSpan = amountBuffer.Memory.Span;
-                    Span<TPixel> overlaySpan = overlay.Memory.Span;
+                    amounts[i] = NumericUtilities.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
 
-                    for (int i = 0; i < scanline.Length; i++)
+                    int patternX = (x + i) % this.pattern.Columns;
+                    overlays[i] = this.pattern[patternY, patternX];
+                }
+
+                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
+                this.Blender.Blend(
+                    this.Configuration,
+                    destinationRow,
+                    destinationRow,
+                    overlays,
+                    amounts);
+            }
+
+            /// <inheritdoc/>
+            protected override void Dispose(bool disposing)
+            {
+                if (this.isDisposed)
+                {
+                    return;
+                }
+
+                base.Dispose(disposing);
+
+                if (disposing)
+                {
+                    foreach (ThreadContextData data in this.threadContextData.Values)
                     {
-                        amountSpan[i] = NumericUtilities.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
-
-                        int patternX = (x + i) % this.pattern.Columns;
-                        overlaySpan[i] = this.pattern[patternY, patternX];
+                        data.Dispose();
                     }
 
-                    Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
-                    this.Blender.Blend(
-                        this.Configuration,
-                        destinationRow,
-                        destinationRow,
-                        overlaySpan,
-                        amountSpan);
+                    this.threadContextData.Dispose();
+                }
+
+                this.isDisposed = true;
+            }
+
+            private sealed class ThreadContextData : IDisposable
+            {
+                private bool isDisposed;
+                private readonly IMemoryOwner<float> amountBuffer;
+                private readonly IMemoryOwner<TPixel> overlayBuffer;
+
+                public ThreadContextData(MemoryAllocator allocator, int scanlineLength)
+                {
+                    this.amountBuffer = allocator.Allocate<float>(scanlineLength);
+                    this.overlayBuffer = allocator.Allocate<TPixel>(scanlineLength);
+                }
+
+                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
+
+                public Span<TPixel> OverlaySpan => this.overlayBuffer.Memory.Span;
+
+                public void Dispose()
+                {
+                    if (!this.isDisposed)
+                    {
+                        this.isDisposed = true;
+                        this.amountBuffer.Dispose();
+                        this.overlayBuffer.Dispose();
+                    }
                 }
             }
         }

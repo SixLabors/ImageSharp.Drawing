@@ -83,8 +83,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// As this is a circular gradient, the position on the gradient is based on
             /// the distance of the point to the center.
             /// </summary>
-            /// <param name="x">The X coordinate of the target pixel.</param>
-            /// <param name="y">The Y coordinate of the target pixel.</param>
+            /// <param name="x">The x-coordinate of the target pixel.</param>
+            /// <param name="y">The y-coordinate of the target pixel.</param>
             /// <returns>the position on the color gradient.</returns>
             protected override float PositionOnGradient(float x, float y)
             {
@@ -93,6 +93,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 return distance / this.radius;
             }
 
+            /// <inheritdoc/>
             public override void Apply(Span<float> scanline, int x, int y)
             {
                 // TODO: each row is symmetric across center, so we can calculate half of it and mirror it to improve performance.

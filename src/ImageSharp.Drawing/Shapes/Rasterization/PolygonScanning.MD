@@ -2,7 +2,7 @@
 
 Scanning is done with a variant of the ["Active Edge Table" algorithm](https://en.wikipedia.org/wiki/Scanline_rendering#Algorithm), that doesn't build a table beforehand, just maintains the list of currently active edges.
 
-After rasterizing polygons a collection of non-horizontal edges (ScanEdge) is extracted into ScanEdgeCollection. These are then sorted by minimum and maximum Y coordinate, which enables the maintanance of the Active Edge List as we traverse the collection from `minY` to `maxY`.
+After rasterizing polygons a collection of non-horizontal edges (ScanEdge) is extracted into ScanEdgeCollection. These are then sorted by minimum and maximum y-coordinate, which enables the maintanance of the Active Edge List as we traverse the collection from `minY` to `maxY`.
 
 When intersecting a ScanEdge start (Y0) and end (Y1) intersections have special handling. Since these belong to vertices (connection points) sometimes we need to emit the intersection point 2 times. In other cases we do not want to emit it at all.
 

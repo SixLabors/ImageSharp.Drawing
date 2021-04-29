@@ -3,8 +3,7 @@
 
 using System;
 using System.Buffers;
-
-using SixLabors.ImageSharp.Advanced;
+using System.Threading;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -13,16 +12,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Provides an implementation of a solid brush for painting solid color areas.
     /// </summary>
-    public class SolidBrush : IBrush
+    public sealed class SolidBrush : IBrush
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="SolidBrush"/> class.
         /// </summary>
         /// <param name="color">The color.</param>
-        public SolidBrush(Color color)
-        {
-            this.Color = color;
-        }
+        public SolidBrush(Color color) => this.Color = color;
 
         /// <summary>
         /// Gets the color.
@@ -36,16 +32,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            return new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
-        }
+            => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
 
         /// <summary>
         /// The solid brush applicator.
         /// </summary>
-        private class SolidBrushApplicator<TPixel> : BrushApplicator<TPixel>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
+        private sealed class SolidBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
+            private readonly IMemoryOwner<TPixel> colors;
+            private readonly MemoryAllocator allocator;
+            private readonly int scalineWidth;
+            private readonly ThreadLocal<ThreadContextData> threadContextData;
             private bool isDisposed;
 
             /// <summary>
@@ -62,17 +61,56 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 TPixel color)
                 : base(configuration, options, source)
             {
-                this.Colors = configuration.MemoryAllocator.Allocate<TPixel>(source.Width);
-                this.Colors.Memory.Span.Fill(color);
+                this.colors = configuration.MemoryAllocator.Allocate<TPixel>(source.Width);
+                this.colors.Memory.Span.Fill(color);
+                this.scalineWidth = source.Width;
+                this.allocator = configuration.MemoryAllocator;
+
+                // The threadlocal value is lazily invoked so there is no need to optionally create the type.
+                this.threadContextData = new ThreadLocal<ThreadContextData>(
+                    () => new ThreadContextData(this.allocator, this.scalineWidth),
+                    true);
             }
 
-            /// <summary>
-            /// Gets the colors.
-            /// </summary>
-            protected IMemoryOwner<TPixel> Colors { get; private set; }
+            /// <inheritdoc />
+            public override void Apply(Span<float> scanline, int x, int y)
+            {
+                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x);
 
-            /// <inheritdoc/>
-            internal override TPixel this[int x, int y] => this.Colors.Memory.Span[x];
+                // Constrain the spans to each other
+                if (destinationRow.Length > scanline.Length)
+                {
+                    destinationRow = destinationRow.Slice(0, scanline.Length);
+                }
+                else
+                {
+                    scanline = scanline.Slice(0, destinationRow.Length);
+                }
+
+                Configuration configuration = this.Configuration;
+                if (this.Options.BlendPercentage == 1F)
+                {
+                    // TODO: refactor the BlendPercentage == 1 logic to a separate, simpler BrushApplicator class.
+                    this.Blender.Blend(configuration, destinationRow, destinationRow, this.colors.Memory.Span, scanline);
+                }
+                else
+                {
+                    ThreadContextData contextData = this.threadContextData.Value;
+                    Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
+
+                    for (int i = 0; i < scanline.Length; i++)
+                    {
+                        amounts[i] = scanline[i] * this.Options.BlendPercentage;
+                    }
+
+                    this.Blender.Blend(
+                        configuration,
+                        destinationRow,
+                        destinationRow,
+                        this.colors.Memory.Span,
+                        amounts);
+                }
+            }
 
             /// <inheritdoc />
             protected override void Dispose(bool disposing)
@@ -84,52 +122,34 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                 if (disposing)
                 {
-                    this.Colors.Dispose();
+                    this.colors.Dispose();
+                    foreach (ThreadContextData data in this.threadContextData.Values)
+                    {
+                        data.Dispose();
+                    }
+
+                    this.threadContextData.Dispose();
                 }
 
-                this.Colors = null;
                 this.isDisposed = true;
             }
 
-            /// <inheritdoc />
-            public override void Apply(Span<float> scanline, int x, int y)
+            private sealed class ThreadContextData : IDisposable
             {
-                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x);
+                private bool isDisposed;
+                private readonly IMemoryOwner<float> amountBuffer;
 
-                // constrain the spans to each other
-                if (destinationRow.Length > scanline.Length)
-                {
-                    destinationRow = destinationRow.Slice(0, scanline.Length);
-                }
-                else
-                {
-                    scanline = scanline.Slice(0, destinationRow.Length);
-                }
+                public ThreadContextData(MemoryAllocator allocator, int scanlineLength)
+                    => this.amountBuffer = allocator.Allocate<float>(scanlineLength);
 
-                Configuration configuration = this.Configuration;
-                MemoryAllocator memoryAllocator = configuration.MemoryAllocator;
+                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
 
-                if (this.Options.BlendPercentage == 1f)
+                public void Dispose()
                 {
-                    this.Blender.Blend(configuration, destinationRow, destinationRow, this.Colors.Memory.Span, scanline);
-                }
-                else
-                {
-                    using (IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length))
+                    if (!this.isDisposed)
                     {
-                        Span<float> amountSpan = amountBuffer.Memory.Span;
-
-                        for (int i = 0; i < scanline.Length; i++)
-                        {
-                            amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
-                        }
-
-                        this.Blender.Blend(
-                            configuration,
-                            destinationRow,
-                            destinationRow,
-                            this.Colors.Memory.Span,
-                            amountSpan);
+                        this.isDisposed = true;
+                        this.amountBuffer.Dispose();
                     }
                 }
             }

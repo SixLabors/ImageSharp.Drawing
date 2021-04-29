@@ -7,7 +7,7 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
+    /// A shape made up of a single closed path made up of one of more <see cref="ILineSegment"/>s
     /// </summary>
     public sealed class Star : Polygon
     {
@@ -39,8 +39,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="Star" /> class.
         /// </summary>
-        /// <param name="x">The X coordinate of the center of the polygon.</param>
-        /// <param name="y">The Y coordinate of the center of the polygon.</param>
+        /// <param name="x">The x-coordinate of the center of the polygon.</param>
+        /// <param name="y">The y-coordinate of the center of the polygon.</param>
         /// <param name="prongs">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
@@ -53,8 +53,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="Star" /> class.
         /// </summary>
-        /// <param name="x">The X coordinate of the center of the polygon.</param>
-        /// <param name="y">The Y coordinate of the center of the polygon.</param>
+        /// <param name="x">The x-coordinate of the center of the polygon.</param>
+        /// <param name="y">The y-coordinate of the center of the polygon.</param>
         /// <param name="prongs">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
@@ -73,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing
             var distanceVectorOuter = new Vector2(0, outerRadii);
 
             int verticies = prongs * 2;
-            float anglePerSegemnts = (float)((2 * Math.PI) / verticies);
+            float anglePerSegemnts = (float)(2 * Math.PI / verticies);
             float current = angle;
             var points = new PointF[verticies];
             Vector2 distance = distanceVectorInner;

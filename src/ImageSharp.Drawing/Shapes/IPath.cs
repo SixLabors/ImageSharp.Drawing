@@ -1,14 +1,13 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System;
 using System.Collections.Generic;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Represents a logic path that can be drawn
+    /// Represents a logic path that can be drawn.
     /// </summary>
     public interface IPath
     {
@@ -18,37 +17,9 @@ namespace SixLabors.ImageSharp.Drawing
         PathTypes PathType { get; }
 
         /// <summary>
-        /// Gets the bounds enclosing the path
+        /// Gets the bounds enclosing the path.
         /// </summary>
         RectangleF Bounds { get; }
-
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        int MaxIntersections { get; }
-
-        /// <summary>
-        /// Gets the length of the path.
-        /// </summary>
-        float Length { get; }
-
-        /// <summary>
-        /// Calculates the point a certain distance along a path.
-        /// </summary>
-        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
-        /// <returns>
-        /// Returns details about a point along a path.
-        /// </returns>
-        SegmentInfo PointAlongPath(float distanceAlongPath);
-
-        /// <summary>
-        /// Calculates the distance along and away from the path for a specified point.
-        /// </summary>
-        /// <param name="point">The point along the path.</param>
-        /// <returns>
-        /// Returns details about the point and its distance away from the path.
-        /// </returns>
-        PointInfo Distance(PointF point);
 
         /// <summary>
         /// Converts the <see cref="IPath" /> into a simple linear path.
@@ -57,63 +28,11 @@ namespace SixLabors.ImageSharp.Drawing
         IEnumerable<ISimplePath> Flatten();
 
         /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The offset within the buffer to start.</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        int FindIntersections(PointF start, PointF end, Span<PointF> buffer);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The offset within the buffer to start.</param>
-        /// <param name="intersectionRule">How intersections are handled</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="intersectionRule">How intersections are handled</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule);
-
-        /// <summary>
-        /// Determines whether the <see cref="IPath"/> contains the specified point
+        /// Determines whether the <see cref="IPath"/> contains the specified point.
         /// </summary>
         /// <param name="point">The point.</param>
         /// <returns>
-        ///   <c>true</c> if the <see cref="IPath"/> contains the specified point; otherwise, <c>false</c>.
+        /// <see langword="true"/> if the <see cref="IPath"/> contains the specified point; otherwise, <see langword="false"/>.
         /// </returns>
         bool Contains(PointF point);
 

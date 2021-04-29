@@ -69,62 +69,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                },
             };
 
-        public static TheoryData<TestPoint, float, float> PathDistanceTheoryData =
-            new TheoryData<TestPoint, float, float>
-            {
-               { new PointF(0, 0), 0f, 0f },
-               { new PointF(1, 0), 0f, 1f },
-               { new PointF(9, 0), 0f, 9f },
-               { new PointF(10, 0), 0f, 10f },
-               { new PointF(10, 1), 0f, 11f },
-               { new PointF(10, 9), 0f, 19f },
-               { new PointF(10, 10), 0f, 20f },
-               { new PointF(9, 10), 0f, 21f },
-               { new PointF(1, 10), 0f, 29f },
-               { new PointF(0, 10), 0f, 30f },
-               { new PointF(0, 9), 0f, 31f },
-               { new PointF(0, 1), 0f, 39f },
-               { new PointF(4, 3), -3f, 4f },
-               { new PointF(3, 4), -3f, 36f },
-               { new PointF(-1, 0), 1f, 0f },
-               { new PointF(1, -1), 1f, 1f },
-               { new PointF(9, -1), 1f, 9f },
-               { new PointF(11, 0), 1f, 10f },
-               { new PointF(11, 1), 1f, 11f },
-               { new PointF(11, 9), 1f, 19f },
-               { new PointF(11, 10), 1f, 20f },
-               { new PointF(9, 11), 1f, 21f },
-               { new PointF(1, 11), 1f, 29f },
-               { new PointF(-1, 10), 1f, 30f },
-               { new PointF(-1, 9), 1f, 31f },
-               { new PointF(-1, 1), 1f, 39f },
-            };
-
         [Theory]
         [MemberData(nameof(PointInPolygonTheoryData))]
         public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
         {
             var shape = new RectangularPolygon(location, size);
             Assert.Equal(isInside, shape.Contains(point));
-        }
-
-        [Theory]
-        [MemberData(nameof(DistanceTheoryData))]
-        public void Distance(TestPoint location, TestSize size, TestPoint point, float expectecDistance)
-        {
-            IPath shape = new RectangularPolygon(location, size);
-
-            Assert.Equal(expectecDistance, shape.Distance(point).DistanceFromPath);
-        }
-
-        [Theory]
-        [MemberData(nameof(PathDistanceTheoryData))]
-        public void DistanceFromPath_Path(TestPoint point, float expectecDistance, float alongPath)
-        {
-            IPath shape = new RectangularPolygon(0, 0, 10, 10);
-            PointInfo info = shape.Distance(point);
-            Assert.Equal(expectecDistance, info.DistanceFromPath);
-            Assert.Equal(alongPath, info.DistanceAlongPath);
         }
 
         [Fact]
@@ -185,36 +135,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Fact]
-        public void Intersections_2()
-        {
-            IPath shape = new RectangularPolygon(1, 1, 10, 10);
-            IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(20, 5));
-
-            Assert.Equal(2, intersections.Count());
-            Assert.Equal(new PointF(1, 5), intersections.First());
-            Assert.Equal(new PointF(11, 5), intersections.Last());
-        }
-
-        [Fact]
-        public void Intersections_1()
-        {
-            IPath shape = new RectangularPolygon(1, 1, 10, 10);
-            IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(5, 5));
-
-            Assert.Single(intersections);
-            Assert.Equal(new PointF(1, 5), intersections.First());
-        }
-
-        [Fact]
-        public void Intersections_0()
-        {
-            IPath shape = new RectangularPolygon(1, 1, 10, 10);
-            IEnumerable<PointF> intersections = shape.FindIntersections(new PointF(0, 5), new PointF(-5, 5));
-
-            Assert.Empty(intersections);
-        }
-
-        [Fact]
         public void Bounds_Path()
         {
             IPath shape = new RectangularPolygon(10, 11, 12, 13);
@@ -222,13 +142,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Assert.Equal(22, shape.Bounds.Right);
             Assert.Equal(11, shape.Bounds.Top);
             Assert.Equal(24, shape.Bounds.Bottom);
-        }
-
-        [Fact]
-        public void MaxIntersections_Shape()
-        {
-            IPath shape = new RectangularPolygon(10, 11, 12, 13);
-            Assert.Equal(4, shape.MaxIntersections);
         }
 
         [Fact]
@@ -279,8 +192,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData(620, 150, 50, Pi)] // wrap about end of path
         public void PointOnPath(float distance, float expectedX, float expectedY, float expectedAngle)
         {
-            IPath shape = new RectangularPolygon(50, 50, 200, 60);
-            SegmentInfo point = shape.PointAlongPath(distance);
+            var shape = new RectangularPolygon(50, 50, 200, 60);
+            SegmentInfo point = ((IPathInternals)shape).PointAlongPath(distance);
             Assert.Equal(expectedX, point.Point.X);
             Assert.Equal(expectedY, point.Point.Y);
             Assert.Equal(expectedAngle, point.Angle);

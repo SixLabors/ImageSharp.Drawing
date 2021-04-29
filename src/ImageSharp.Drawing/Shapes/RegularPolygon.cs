@@ -27,8 +27,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// Initializes a new instance of the <see cref="RegularPolygon" /> class.
         /// </summary>
         /// <param name="location">The location the center of the polygon will be placed.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
+        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         public RegularPolygon(PointF location, int verticies, float radius)
             : this(location, verticies, radius, 0)
         {
@@ -37,8 +37,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="RegularPolygon" /> class.
         /// </summary>
-        /// <param name="x">The X coordinate of the center of the polygon.</param>
-        /// <param name="y">The Y coordinate of the center of the polygon.</param>
+        /// <param name="x">The x-coordinate of the center of the polygon.</param>
+        /// <param name="y">The y-coordinate of the center of the polygon.</param>
         /// <param name="verticies">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
         /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
@@ -50,10 +50,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="RegularPolygon" /> class.
         /// </summary>
-        /// <param name="x">The X coordinate of the center of the polygon.</param>
-        /// <param name="y">The Y coordinate of the center of the polygon.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
+        /// <param name="x">The x-coordinate of the center of the polygon.</param>
+        /// <param name="y">The y-coordinate of the center of the polygon.</param>
         /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
+        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
         public RegularPolygon(float x, float y, int verticies, float radius)
             : this(new PointF(x, y), verticies, radius)
         {
@@ -66,7 +66,7 @@ namespace SixLabors.ImageSharp.Drawing
 
             var distanceVector = new PointF(0, radius);
 
-            float anglePerSegments = (float)((2 * Math.PI) / verticies);
+            float anglePerSegments = (float)(2 * Math.PI / verticies);
             float current = angle;
             var points = new PointF[verticies];
             for (int i = 0; i < verticies; i++)

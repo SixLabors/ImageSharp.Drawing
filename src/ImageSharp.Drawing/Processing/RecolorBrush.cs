@@ -4,7 +4,7 @@
 using System;
 using System.Buffers;
 using System.Numerics;
-using SixLabors.ImageSharp.Advanced;
+using System.Threading;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Provides an implementation of a brush that can recolor an image
     /// </summary>
-    public class RecolorBrush : IBrush
+    public sealed class RecolorBrush : IBrush
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="RecolorBrush" /> class.
@@ -50,33 +50,28 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            return new RecolorBrushApplicator<TPixel>(
+            => new RecolorBrushApplicator<TPixel>(
                 configuration,
                 options,
                 source,
                 this.SourceColor.ToPixel<TPixel>(),
                 this.TargetColor.ToPixel<TPixel>(),
                 this.Threshold);
-        }
 
         /// <summary>
         /// The recolor brush applicator.
         /// </summary>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
         private class RecolorBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            /// <summary>
-            /// The source color.
-            /// </summary>
             private readonly Vector4 sourceColor;
-
-            /// <summary>
-            /// The threshold.
-            /// </summary>
             private readonly float threshold;
-
             private readonly TPixel targetColorPixel;
+            private readonly MemoryAllocator allocator;
+            private readonly int scalineWidth;
+            private readonly ThreadLocal<ThreadContextData> threadContextData;
+            private bool isDisposed;
 
             /// <summary>
             /// Initializes a new instance of the <see cref="RecolorBrushApplicator{TPixel}" /> class.
@@ -105,10 +100,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 var minColor = default(TPixel);
                 minColor.FromVector4(new Vector4(float.MinValue));
                 this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
+
+                this.scalineWidth = source.Width;
+                this.allocator = configuration.MemoryAllocator;
+                this.threadContextData = new ThreadLocal<ThreadContextData>(
+                    () => new ThreadContextData(this.allocator, this.scalineWidth),
+                    true);
             }
 
-            /// <inheritdoc />
-            internal override TPixel this[int x, int y]
+            internal TPixel this[int x, int y]
             {
                 get
                 {
@@ -132,32 +132,77 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <inheritdoc />
             public override void Apply(Span<float> scanline, int x, int y)
             {
-                MemoryAllocator memoryAllocator = this.Configuration.MemoryAllocator;
+                ThreadContextData contextData = this.threadContextData.Value;
+                Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
+                Span<TPixel> overlays = contextData.OverlaySpan.Slice(0, scanline.Length);
 
-                using (IMemoryOwner<float> amountBuffer = memoryAllocator.Allocate<float>(scanline.Length))
-                using (IMemoryOwner<TPixel> overlay = memoryAllocator.Allocate<TPixel>(scanline.Length))
+                for (int i = 0; i < scanline.Length; i++)
                 {
-                    Span<float> amountSpan = amountBuffer.Memory.Span;
-                    Span<TPixel> overlaySpan = overlay.Memory.Span;
+                    amounts[i] = scanline[i] * this.Options.BlendPercentage;
 
-                    for (int i = 0; i < scanline.Length; i++)
+                    int offsetX = x + i;
+
+                    // No doubt this one can be optimized further but I can't imagine its
+                    // actually being used and can probably be removed/internalized for now
+                    overlays[i] = this[offsetX, y];
+                }
+
+                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
+                this.Blender.Blend(
+                    this.Configuration,
+                    destinationRow,
+                    destinationRow,
+                    overlays,
+                    amounts);
+            }
+
+            /// <inheritdoc/>
+            protected override void Dispose(bool disposing)
+            {
+                if (this.isDisposed)
+                {
+                    return;
+                }
+
+                base.Dispose(disposing);
+
+                if (disposing)
+                {
+                    foreach (ThreadContextData data in this.threadContextData.Values)
                     {
-                        amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
-
-                        int offsetX = x + i;
-
-                        // No doubt this one can be optimized further but I can't imagine its
-                        // actually being used and can probably be removed/internalized for now
-                        overlaySpan[i] = this[offsetX, y];
+                        data.Dispose();
                     }
 
-                    Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
-                    this.Blender.Blend(
-                        this.Configuration,
-                        destinationRow,
-                        destinationRow,
-                        overlaySpan,
-                        amountSpan);
+                    this.threadContextData.Dispose();
+                }
+
+                this.isDisposed = true;
+            }
+
+            private sealed class ThreadContextData : IDisposable
+            {
+                private bool isDisposed;
+                private readonly IMemoryOwner<float> amountBuffer;
+                private readonly IMemoryOwner<TPixel> overlayBuffer;
+
+                public ThreadContextData(MemoryAllocator allocator, int scanlineLength)
+                {
+                    this.amountBuffer = allocator.Allocate<float>(scanlineLength);
+                    this.overlayBuffer = allocator.Allocate<TPixel>(scanlineLength);
+                }
+
+                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
+
+                public Span<TPixel> OverlaySpan => this.overlayBuffer.Memory.Span;
+
+                public void Dispose()
+                {
+                    if (!this.isDisposed)
+                    {
+                        this.isDisposed = true;
+                        this.amountBuffer.Dispose();
+                        this.overlayBuffer.Dispose();
+                    }
                 }
             }
         }

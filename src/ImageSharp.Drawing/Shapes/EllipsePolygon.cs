@@ -8,9 +8,9 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// A shape made up of a single path made up of one of more <see cref="ILineSegment"/>s
+    /// An elliptical shape made up of a single path made up of one of more <see cref="ILineSegment"/>s.
     /// </summary>
-    public class EllipsePolygon : IPath, ISimplePath, IInternalPathOwner
+    public sealed class EllipsePolygon : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     {
         private readonly InternalPath innerPath;
         private readonly CubicBezierLineSegment segment;
@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
         /// </summary>
         /// <param name="location">The location the center of the ellipse will be placed.</param>
-        /// <param name="size">The width/hight of the final ellipse.</param>
+        /// <param name="size">The width/height of the final ellipse.</param>
         public EllipsePolygon(PointF location, SizeF size)
             : this(CreateSegment(location, size))
         {
@@ -38,8 +38,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
         /// </summary>
-        /// <param name="x">The X coordinate of the center of the ellipse.</param>
-        /// <param name="y">The Y coordinate of the center of the ellipse.</param>
+        /// <param name="x">The x-coordinate of the center of the ellipse.</param>
+        /// <param name="y">The y-coordinate of the center of the ellipse.</param>
         /// <param name="width">The width the ellipse should have.</param>
         /// <param name="height">The height the ellipse should have.</param>
         public EllipsePolygon(float x, float y, float width, float height)
@@ -50,8 +50,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
         /// </summary>
-        /// <param name="x">The X coordinate of the center of the circle.</param>
-        /// <param name="y">The Y coordinate of the center of the circle.</param>
+        /// <param name="x">The x-coordinate of the center of the circle.</param>
+        /// <param name="y">The y-coordinate of the center of the circle.</param>
         /// <param name="radius">The radius final circle.</param>
         public EllipsePolygon(float x, float y, float radius)
             : this(new PointF(x, y), new SizeF(radius * 2, radius * 2))
@@ -64,129 +64,43 @@ namespace SixLabors.ImageSharp.Drawing
             this.innerPath = new InternalPath(segment, true);
         }
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is a closed path.
-        /// </summary>
-        bool ISimplePath.IsClosed => true;
+        /// <inheritdoc/>
+        public bool IsClosed => true;
 
-        /// <summary>
-        /// Gets the points that make up this simple linear path.
-        /// </summary>
-        ReadOnlyMemory<PointF> ISimplePath.Points => this.innerPath.Points();
+        /// <inheritdoc/>
+        public ReadOnlyMemory<PointF> Points => this.innerPath.Points();
 
         /// <inheritdoc />
         public RectangleF Bounds => this.innerPath.Bounds;
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
-        /// </summary>
-        PathTypes IPath.PathType => PathTypes.Closed;
+        /// <inheritdoc/>
+        public PathTypes PathType => PathTypes.Closed;
 
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        int IPath.MaxIntersections => this.innerPath.PointCount;
+        /// <inheritdoc/>
+        public IPath Transform(Matrix3x2 matrix) => matrix.IsIdentity
+                  ? this
+                  : new EllipsePolygon(this.segment.Transform(matrix));
 
-        /// <inheritdoc />
-        public float Length => this.innerPath.Length;
+        /// <inheritdoc/>
+        public IPath AsClosedPath() => this;
 
         /// <inheritdoc />
-        public PointInfo Distance(PointF point)
-        {
-            PointInfo dist = this.innerPath.DistanceFromPath(point);
-            bool isInside = this.innerPath.PointInPolygon(point);
-            if (isInside)
-            {
-                dist.DistanceFromPath *= -1;
-            }
-
-            return dist;
-        }
-
-        /// <summary>
-        /// Transforms the rectangle using specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new path with the matrix applied to it.
-        /// </returns>
-        public EllipsePolygon Transform(Matrix3x2 matrix)
-        {
-            return matrix.IsIdentity
-                ? this
-                : new EllipsePolygon(this.segment.Transform(matrix));
-        }
-
-        /// <summary>
-        /// Transforms the path using the specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new path with the matrix applied to it.
-        /// </returns>
-        IPath IPath.Transform(Matrix3x2 matrix) => this.Transform(matrix);
-
-        /// <summary>
-        /// Returns this polygon as a path
-        /// </summary>
-        /// <returns>This polygon as a path</returns>
-        IPath IPath.AsClosedPath() => this;
-
-        /// <summary>
-        /// Converts the <see cref="IPath" /> into a simple linear path..
-        /// </summary>
-        /// <returns>
-        /// Returns the current <see cref="IPath" /> as simple linear path.
-        /// </returns>
         public IEnumerable<ISimplePath> Flatten()
         {
             yield return this;
         }
 
         /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.innerPath.FindIntersections(start, end, subBuffer, intersectionRule);
-        }
-
-        /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
-        {
-            return this.innerPath.FindIntersections(start, end, buffer, intersectionRule);
-        }
-
-        /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.innerPath.FindIntersections(start, end, subBuffer, IntersectionRule.OddEven);
-        }
-
-        /// <inheritdoc/>
-        int IPath.FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-        {
-            return this.innerPath.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
-        }
-
-        /// <summary>
-        /// Determines whether the <see cref="IPath" /> contains the specified point
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
-        /// </returns>
-        public bool Contains(PointF point)
-        {
-            return this.innerPath.PointInPolygon(point);
-        }
+        public bool Contains(PointF point) => this.innerPath.PointInPolygon(point);
 
         /// <inheritdoc />
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
-        {
-            // TODO switch this out to a calculated algorithum
-            return this.innerPath.PointAlongPath(distanceAlongPath);
-        }
+        // TODO switch this out to a calculated algorithm
+        SegmentInfo IPathInternals.PointAlongPath(float distance)
+            => this.innerPath.PointAlongPath(distance);
+
+        /// <inheritdoc/>
+        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
+            => new[] { this.innerPath };
 
         private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
         {
@@ -229,8 +143,5 @@ namespace SixLabors.ImageSharp.Drawing
 
             return new CubicBezierLineSegment(points);
         }
-
-        /// <inheritdoc/>
-        IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.innerPath };
     }
 }

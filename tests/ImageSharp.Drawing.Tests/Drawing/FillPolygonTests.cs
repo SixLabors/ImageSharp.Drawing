@@ -2,15 +2,8 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.IO;
-using System.Linq;
 using System.Numerics;
-using GeoJSON.Net.Converters;
-using GeoJSON.Net.Feature;
-using GeoJSON.Net.Geometry;
-using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -142,8 +135,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 },
                 testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
                 comparer: ImageComparer.TolerantPercentage(0.01f),
-                appendSourceFileOrDescription: false,
-                appendPixelTypeToFileName: false);
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
         }
 
         [Theory]
@@ -172,8 +165,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 c => c.FillPolygon(color, points),
                 testOutputDetails: $"Reverse({reverse})",
                 comparer: ImageComparer.TolerantPercentage(0.01f),
-                appendSourceFileOrDescription: false,
-                appendPixelTypeToFileName: false);
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
         }
 
         [Theory]

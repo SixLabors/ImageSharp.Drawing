@@ -11,15 +11,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class ShapeRegionTests
     {
-        public abstract class MockPath : IPath
+        public abstract class MockPath : IPath, IPathInternals
         {
             public abstract RectangleF Bounds { get; }
 
             public IPath AsClosedPath() => this;
 
-            public abstract SegmentInfo PointAlongPath(float distanceAlongPath);
-
-            public abstract PointInfo Distance(PointF point);
+            public abstract SegmentInfo PointAlongPath(float distance);
 
             public abstract IEnumerable<ISimplePath> Flatten();
 
@@ -28,33 +26,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             public abstract IPath Transform(Matrix3x2 matrix);
 
             public abstract PathTypes PathType { get; }
-
-            public abstract int MaxIntersections { get; }
-
-            public abstract float Length { get; }
-
-            public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-            {
-                return this.FindIntersections(start, end, buffer, 0);
-            }
-
-            public int FindIntersections(PointF s, PointF e, Span<PointF> buffer, IntersectionRule intersectionRule)
-            {
-                Assert.Equal(this.TestYToScan, s.Y);
-                Assert.Equal(this.TestYToScan, e.Y);
-                Assert.True(s.X < this.Bounds.Left);
-                Assert.True(e.X > this.Bounds.Right);
-
-                this.TestFindIntersectionsInvocationCounter++;
-
-                return this.TestFindIntersectionsResult;
-            }
-
-            public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-                => this.FindIntersections(start, end, buffer, offset, IntersectionRule.OddEven);
-
-            public int FindIntersections(PointF s, PointF e, Span<PointF> buffer)
-                => this.FindIntersections(s, e, buffer, IntersectionRule.OddEven);
 
             public int TestFindIntersectionsInvocationCounter { get; private set; }
 

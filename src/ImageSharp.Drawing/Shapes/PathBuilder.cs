@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -289,19 +289,14 @@ namespace SixLabors.ImageSharp.Drawing
 
             public bool IsClosed { get; set; } = false;
 
-            public bool IsEmpty => !this.segments.Any();
+            public bool IsEmpty => this.segments.Count == 0;
 
-            public void AddSegment(ILineSegment segment)
-            {
-                this.segments.Add(segment);
-            }
+            public void AddSegment(ILineSegment segment) => this.segments.Add(segment);
 
             public IPath Build()
-            {
-                return this.IsClosed
-                    ? new Polygon(this.segments.ToArray())
-                    : new Path(this.segments.ToArray());
-            }
+                => this.IsClosed
+                ? new Polygon(this.segments.ToArray())
+                : new Path(this.segments.ToArray());
         }
     }
 }

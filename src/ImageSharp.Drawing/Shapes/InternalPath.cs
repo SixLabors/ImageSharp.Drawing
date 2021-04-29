@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 
@@ -98,27 +97,6 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
-        /// the orrientateion of an point form a line
-        /// </summary>
-        internal enum PointOrientation
-        {
-            /// <summary>
-            /// Point is colienear
-            /// </summary>
-            Colinear = 0,
-
-            /// <summary>
-            /// Its clockwise
-            /// </summary>
-            Clockwise = 1,
-
-            /// <summary>
-            /// Its counter clockwise
-            /// </summary>
-            Counterclockwise = 2
-        }
-
-        /// <summary>
         /// Gets the bounds.
         /// </summary>
         /// <value>
@@ -140,108 +118,96 @@ namespace SixLabors.ImageSharp.Drawing
         public int PointCount => this.points.Length;
 
         /// <summary>
-        /// Calculates the distance from the path.
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populates a buffer for all points on the path that the line intersects.
         /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>Returns the distance from the path</returns>
-        public PointInfo DistanceFromPath(PointF point)
+        /// <param name="start">The start position.</param>
+        /// <param name="end">The end position.</param>
+        /// <param name="intersections">The buffer for storing each intersection.</param>
+        /// <param name="orientations">
+        /// The buffer for storing the orientation of each intersection.
+        /// Must be the same length as <paramref name="intersections"/>.
+        /// </param>
+        /// <returns>The number of intersections found.</returns>
+        public int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
+            => this.FindIntersections(start, end, intersections, orientations, IntersectionRule.OddEven);
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populates a buffer for all points on the path that the line intersects.
+        /// </summary>
+        /// <param name="start">The start position.</param>
+        /// <param name="end">The end position.</param>
+        /// <param name="intersections">The buffer for storing each intersection.</param>
+        /// <param name="orientations">
+        /// The buffer for storing the orientation of each intersection.
+        /// Must be the same length as <paramref name="intersections"/>.
+        /// </param>
+        /// <param name="intersectionRule">How intersections should be handled.</param>
+        /// <returns>The number of intersections found.</returns>
+        public int FindIntersections(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations,
+            IntersectionRule intersectionRule)
         {
-            PointInfoInternal internalInfo = default;
-            internalInfo.DistanceSquared = float.MaxValue; // Set it to max so that CalculateShorterDistance can reduce it back down
+            int position = this.FindIntersectionsWithOrientation(start, end, intersections, orientations);
 
-            int polyCorners = this.points.Length;
+            Span<PointF> activeBuffer = intersections.Slice(0, position);
+            Span<PointOrientation> activeOrientationsSpan = orientations.Slice(0, position);
 
-            if (!this.closedPath)
+            // Intersection rules only really apply to closed paths
+            if (intersectionRule == IntersectionRule.Nonzero && this.closedPath)
             {
-                polyCorners -= 1;
+                position = ApplyNonZeroIntersectionRules(activeBuffer, activeOrientationsSpan);
             }
 
-            int closestPoint = 0;
-            for (int i = 0; i < polyCorners; i++)
-            {
-                int next = i + 1;
-                if (this.closedPath && next == polyCorners)
-                {
-                    next = 0;
-                }
-
-                if (this.CalculateShorterDistance(this.points[i].Point, this.points[next].Point, point, ref internalInfo))
-                {
-                    closestPoint = i;
-                }
-            }
-
-            return new PointInfo
-            {
-                DistanceAlongPath = this.points[closestPoint].TotalLength + Vector2.Distance(this.points[closestPoint].Point, internalInfo.PointOnLine),
-                DistanceFromPath = MathF.Sqrt(internalInfo.DistanceSquared),
-                SearchPoint = point,
-                ClosestPointOnPath = internalInfo.PointOnLine
-            };
+            return position;
         }
 
         /// <summary>
         /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
         /// populates a buffer for all points on the path that the line intersects.
         /// </summary>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <param name="buffer">The buffer.</param>
+        /// <param name="start">The start position.</param>
+        /// <param name="end">The end position.</param>
+        /// <param name="intersections">The buffer for storing each intersection.</param>
+        /// <param name="orientations">The buffer for storing the orientation of each intersection.</param>
         /// <returns>number of intersections hit</returns>
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-            => this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
-        /// populates a buffer for all points on the path that the line intersects.
-        /// </summary>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="intersectionRule">Intersection rule types</param>
-        /// <returns>number of intersections hit</returns>
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int FindIntersectionsWithOrientation(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations)
         {
-            PointOrientation[] orientations = ArrayPool<PointOrientation>.Shared.Rent(buffer.Length);
-            try
-            {
-                Span<PointOrientation> orientationsSpan = orientations.AsSpan(0, buffer.Length);
-                var position = this.FindIntersectionsWithOrientation(start, end, buffer, orientationsSpan);
+            DebugGuard.IsTrue(intersections.Length == orientations.Length, nameof(orientations), "Intersection and orientation lengths must match.");
 
-                var activeBuffer = buffer.Slice(0, position);
-                var activeOrientationsSpan = orientationsSpan.Slice(0, position);
-
-                // intersection rules only really apply to closed paths
-                if (intersectionRule == IntersectionRule.Nonzero && this.closedPath)
-                {
-                    position = ApplyNonZeroIntersectionRules(activeBuffer, activeOrientationsSpan);
-                }
-
-                return position;
-            }
-            finally
-            {
-                ArrayPool<PointOrientation>.Shared.Return(orientations);
-            }
-        }
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
-        /// populates a buffer for all points on the path that the line intersects.
-        /// </summary>
-        /// <param name="start">The start.</param>
-        /// <param name="end">The end.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="orientationsSpan">The buffer for storeing the orientation of each intersection.</param>
-        /// <returns>number of intersections hit</returns>
-        public int FindIntersectionsWithOrientation(PointF start, PointF end, Span<PointF> buffer, Span<PointOrientation> orientationsSpan)
-        {
             if (this.points.Length < 2)
             {
                 return 0;
             }
 
-            int count = buffer.Length;
+            return this.FindIntersectionsWithOrientationInternal(start, end, intersections, orientations);
+        }
+
+        /// <summary>
+        /// Based on a line described by <paramref name="start" /> and <paramref name="end" />
+        /// populates a buffer for all points on the path that the line intersects.
+        /// </summary>
+        /// <param name="start">The start position.</param>
+        /// <param name="end">The end position.</param>
+        /// <param name="intersections">The buffer for storing each intersection.</param>
+        /// <param name="orientations">The buffer for storing the orientation of each intersection.</param>
+        /// <returns>number of intersections hit</returns>
+        public int FindIntersectionsWithOrientationInternal(
+            PointF start,
+            PointF end,
+            Span<PointF> intersections,
+            Span<PointOrientation> orientations)
+        {
+            int count = intersections.Length;
 
             this.ClampPoints(ref start, ref end);
 
@@ -251,162 +217,168 @@ namespace SixLabors.ImageSharp.Drawing
 
             if (!this.closedPath)
             {
-                polyCorners -= 1;
+                polyCorners--;
             }
 
             int position = 0;
             Vector2 lastPoint = MaxVector;
 
-            PassPointData[] precaclulate = ArrayPool<PassPointData>.Shared.Rent(this.points.Length);
+            // Avoid pool overhead for short runs.
+            // This method can be called in high volume.
+            int pointsLength = this.points.Length;
+            int maxStackSize = 1024 / Unsafe.SizeOf<PassPointData>();
+            PassPointData[] rentedFromPool = null;
+            Span<PassPointData> buffer =
+                pointsLength > maxStackSize
+                ? (rentedFromPool = ArrayPool<PassPointData>.Shared.Rent(pointsLength))
+                : stackalloc PassPointData[maxStackSize];
 
-            Span<PassPointData> precaclulateSpan = precaclulate.AsSpan(0, this.points.Length);
+            Span<PassPointData> precalculate = buffer.Slice(0, pointsLength);
 
-            try
+            // Pre calculate relative orientations X places ahead and behind
+            Vector2 startToEnd = end - start;
+            PointOrientation prevOrientation = CalulateOrientation(startToEnd, this.points[polyCorners - 1].Point - end);
+            PointOrientation nextOrientation = CalulateOrientation(startToEnd, this.points[0].Point - end);
+            PointOrientation nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[1].Point - end);
+
+            // iterate over all points and precalculate data about each, pre cacluating it relative orientation
+            for (int i = 0; i < polyCorners && count > 0; i++)
             {
-                // pre calculate relative orientations X places ahead and behind
-                Vector2 startToEnd = end - start;
-                PointOrientation prevOrientation = CalulateOrientation(startToEnd, this.points[polyCorners - 1].Point - end);
-                PointOrientation nextOrientation = CalulateOrientation(startToEnd, this.points[0].Point - end);
-                PointOrientation nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[1].Point - end);
+                ref Segment edge = ref this.points[i].Segment;
 
-                // iterate over all points and precalculate data about each, pre cacluating it relative orientation
-                for (int i = 0; i < polyCorners && count > 0; i++)
+                // shift all orientations along but one place and fill in the last one
+                PointOrientation pointOrientation = nextOrientation;
+                nextOrientation = nextPlus1Orientation;
+                nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[WrapArrayIndex(i + 2, this.points.Length)].Point - end);
+
+                // should this point cause the last matched point to be excluded
+                bool removeLastIntersection = nextOrientation == PointOrientation.Collinear &&
+                                              pointOrientation == PointOrientation.Collinear &&
+                                              nextPlus1Orientation != prevOrientation &&
+                                              (this.closedPath || i > 0) &&
+                                              (IsOnSegment(target, edge.Start) || IsOnSegment(target, edge.End));
+
+                // is there any chance the segments will intersection (do their bounding boxes touch)
+                bool doIntersect = false;
+                if (pointOrientation == PointOrientation.Collinear || pointOrientation != nextOrientation)
                 {
-                    ref Segment edge = ref this.points[i].Segment;
-
-                    // shift all orientations along but one place and fill in the last one
-                    PointOrientation pointOrientation = nextOrientation;
-                    nextOrientation = nextPlus1Orientation;
-                    nextPlus1Orientation = CalulateOrientation(startToEnd, this.points[WrapArrayIndex(i + 2, this.points.Length)].Point - end);
-
-                    // should this point cause the last matched point to be excluded
-                    bool removeLastIntersection = nextOrientation == PointOrientation.Colinear &&
-                                                  pointOrientation == PointOrientation.Colinear &&
-                                                  nextPlus1Orientation != prevOrientation &&
-                                                  (this.closedPath || i > 0) &&
-                                                  (IsOnSegment(target, edge.Start) || IsOnSegment(target, edge.End));
-
-                    // is there any chance the segments will intersection (do their bounding boxes touch)
-                    bool doIntersect = false;
-                    if (pointOrientation == PointOrientation.Colinear || pointOrientation != nextOrientation)
-                    {
-                        doIntersect = (edge.Min.X - Epsilon) <= target.Max.X &&
-                                      (edge.Max.X + Epsilon) >= target.Min.X &&
-                                      (edge.Min.Y - Epsilon) <= target.Max.Y &&
-                                      (edge.Max.Y + Epsilon) >= target.Min.Y;
-                    }
-
-                    precaclulateSpan[i] = new PassPointData
-                    {
-                        RemoveLastIntersectionAndSkip = removeLastIntersection,
-                        RelativeOrientation = pointOrientation,
-                        DoIntersect = doIntersect
-                    };
-
-                    prevOrientation = pointOrientation;
+                    doIntersect = (edge.Min.X - Epsilon) <= target.Max.X &&
+                                  (edge.Max.X + Epsilon) >= target.Min.X &&
+                                  (edge.Min.Y - Epsilon) <= target.Max.Y &&
+                                  (edge.Max.Y + Epsilon) >= target.Min.Y;
                 }
 
-                // seed the last point for deduping at begining of closed line
-                if (this.closedPath)
+                precalculate[i] = new PassPointData
                 {
-                    int prev = polyCorners - 1;
+                    RemoveLastIntersectionAndSkip = removeLastIntersection,
+                    RelativeOrientation = pointOrientation,
+                    DoIntersect = doIntersect
+                };
 
-                    if (precaclulateSpan[prev].DoIntersect)
+                prevOrientation = pointOrientation;
+            }
+
+            // seed the last point for deduping at begining of closed line
+            if (this.closedPath)
+            {
+                int prev = polyCorners - 1;
+
+                if (precalculate[prev].DoIntersect)
+                {
+                    lastPoint = FindIntersection(this.points[prev].Segment, target);
+                }
+            }
+
+            for (int i = 0; i < polyCorners && count > 0; i++)
+            {
+                int next = WrapArrayIndex(i + 1, this.points.Length);
+
+                if (precalculate[i].RemoveLastIntersectionAndSkip)
+                {
+                    if (position > 0)
                     {
-                        lastPoint = FindIntersection(this.points[prev].Segment, target);
+                        position--;
+                        count++;
                     }
+
+                    continue;
                 }
 
-                for (int i = 0; i < polyCorners && count > 0; i++)
+                if (precalculate[i].DoIntersect)
                 {
-                    int next = WrapArrayIndex(i + 1, this.points.Length);
-
-                    if (precaclulateSpan[i].RemoveLastIntersectionAndSkip)
+                    Vector2 point = FindIntersection(this.points[i].Segment, target);
+                    if (point != MaxVector)
                     {
-                        if (position > 0)
+                        if (lastPoint.Equivalent(point, Epsilon2))
                         {
-                            position--;
-                            count++;
-                        }
+                            lastPoint = MaxVector;
 
-                        continue;
-                    }
+                            int last = WrapArrayIndex(i - 1 + polyCorners, polyCorners);
 
-                    if (precaclulateSpan[i].DoIntersect)
-                    {
-                        Vector2 point = FindIntersection(this.points[i].Segment, target);
-                        if (point != MaxVector)
-                        {
-                            if (lastPoint.Equivalent(point, Epsilon2))
+                            // hit the same point a second time do we need to remove the old one if just clipping
+                            if (this.points[next].Point.Equivalent(point, Epsilon))
                             {
-                                lastPoint = MaxVector;
-
-                                int last = WrapArrayIndex(i - 1 + polyCorners, polyCorners);
-
-                                // hit the same point a second time do we need to remove the old one if just clipping
-                                if (this.points[next].Point.Equivalent(point, Epsilon))
-                                {
-                                    next = i;
-                                }
-
-                                if (this.points[last].Point.Equivalent(point, Epsilon))
-                                {
-                                    last = i;
-                                }
-
-                                PointOrientation side = precaclulateSpan[next].RelativeOrientation;
-                                PointOrientation side2 = precaclulateSpan[last].RelativeOrientation;
-
-                                if (side != side2)
-                                {
-                                    // differnet side we skip adding as we are passing through it
-                                    continue;
-                                }
+                                next = i;
                             }
 
-                            // only need to track this during odd non zero rulings
-                            orientationsSpan[position] = precaclulateSpan[i].RelativeOrientation;
-                            buffer[position] = point;
-                            position++;
-                            count--;
+                            if (this.points[last].Point.Equivalent(point, Epsilon))
+                            {
+                                last = i;
+                            }
+
+                            PointOrientation side = precalculate[next].RelativeOrientation;
+                            PointOrientation side2 = precalculate[last].RelativeOrientation;
+
+                            if (side != side2)
+                            {
+                                // differnet side we skip adding as we are passing through it
+                                continue;
+                            }
                         }
 
-                        lastPoint = point;
+                        // only need to track this during odd non zero rulings
+                        orientations[position] = precalculate[i].RelativeOrientation;
+                        intersections[position] = point;
+                        position++;
+                        count--;
                     }
-                    else
-                    {
-                        lastPoint = MaxVector;
-                    }
-                }
 
-                Vector2 startVector = start;
-                Span<float> distances = stackalloc float[position];
-                for (int i = 0; i < position; i++)
+                    lastPoint = point;
+                }
+                else
                 {
-                    distances[i] = Vector2.DistanceSquared(startVector, buffer[i]);
+                    lastPoint = MaxVector;
                 }
-
-                var activeBuffer = buffer.Slice(0, position);
-                var activeOrientationsSpan = orientationsSpan.Slice(0, position);
-                SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
-
-                return position;
             }
-            finally
+
+            Vector2 startVector = start;
+            Span<float> distances = stackalloc float[position];
+            for (int i = 0; i < distances.Length; i++)
             {
-                ArrayPool<PassPointData>.Shared.Return(precaclulate);
+                distances[i] = Vector2.DistanceSquared(startVector, intersections[i]);
             }
+
+            Span<PointF> activeBuffer = intersections.Slice(0, position);
+            Span<PointOrientation> activeOrientationsSpan = orientations.Slice(0, position);
+            SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
+
+            if (rentedFromPool != null)
+            {
+                ArrayPool<PassPointData>.Shared.Return(rentedFromPool);
+            }
+
+            return position;
         }
 
-        internal static int ApplyNonZeroIntersectionRules(Span<PointF> buffer, Span<PointOrientation> orientationsSpan)
+        internal static int ApplyNonZeroIntersectionRules(Span<PointF> intersections, Span<PointOrientation> orientations)
         {
             int newpositions = 0;
             int tracker = 0;
             int diff = 0;
-            for (int i = 0; i < buffer.Length; i++)
+            for (int i = 0; i < intersections.Length; i++)
             {
                 bool include = tracker == 0;
-                switch (orientationsSpan[i])
+                switch (orientations[i])
                 {
                     case PointOrientation.Counterclockwise:
                         diff = 1;
@@ -414,8 +386,7 @@ namespace SixLabors.ImageSharp.Drawing
                     case PointOrientation.Clockwise:
                         diff = -1;
                         break;
-                    case PointOrientation.Colinear:
-                    default:
+                    case PointOrientation.Collinear:
                         diff *= -1;
                         break;
                 }
@@ -424,7 +395,7 @@ namespace SixLabors.ImageSharp.Drawing
 
                 if (include || tracker == 0)
                 {
-                    buffer[newpositions] = buffer[i];
+                    intersections[newpositions] = intersections[i];
                     newpositions++;
                 }
             }
@@ -450,20 +421,27 @@ namespace SixLabors.ImageSharp.Drawing
                 return false;
             }
 
-            // if it hit any points then class it as inside
-            PointF[] buffer = ArrayPool<PointF>.Shared.Rent(this.points.Length);
+            // If it hit any points then class it as inside
+            int max = this.points.Length;
+            PointF[] intersections = ArrayPool<PointF>.Shared.Rent(max);
+            PointOrientation[] orientations = ArrayPool<PointOrientation>.Shared.Rent(max);
             try
             {
-                int intersection = this.FindIntersections(point, new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1), buffer);
+                int intersection = this.FindIntersections(
+                    point,
+                    new Vector2(this.Bounds.Left - 1, this.Bounds.Top - 1),
+                    intersections.AsSpan(0, max),
+                    orientations.AsSpan(0, max));
+
                 if ((intersection & 1) == 1)
                 {
                     return true;
                 }
 
-                // check if the point is on an intersection is it is then inside
+                // Check if the point is on an intersection is it is then inside
                 for (int i = 0; i < intersection; i++)
                 {
-                    if (buffer[i].Equivalent(point, Epsilon))
+                    if (intersections[i].Equivalent(point, Epsilon))
                     {
                         return true;
                     }
@@ -471,7 +449,8 @@ namespace SixLabors.ImageSharp.Drawing
             }
             finally
             {
-                ArrayPool<PointF>.Shared.Return(buffer);
+                ArrayPool<PointF>.Shared.Return(intersections);
+                ArrayPool<PointOrientation>.Shared.Return(orientations);
             }
 
             return false;
@@ -490,9 +469,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// Returns details about a point along a path.
         /// </returns>
+        /// <exception cref="InvalidOperationException">Thrown if no points found.</exception>
         internal SegmentInfo PointAlongPath(float distanceAlongPath)
         {
-            distanceAlongPath = distanceAlongPath % this.Length;
+            distanceAlongPath %= this.Length;
             int pointCount = this.PointCount;
             if (this.closedPath)
             {
@@ -515,13 +495,12 @@ namespace SixLabors.ImageSharp.Drawing
                         Angle = (float)(Math.Atan2(diff.Y, diff.X) % (Math.PI * 2))
                     };
                 }
-                else
-                {
-                    distanceAlongPath -= this.points[next].Length;
-                }
+
+                distanceAlongPath -= this.points[next].Length;
             }
 
-            throw new InvalidOperationException("should alwys reach a point along the path");
+            // TODO: Perf - Throwhelper.
+            throw new InvalidOperationException("Should always reach a point along the path.");
         }
 
         internal IMemoryOwner<PointF> ExtractVertices(MemoryAllocator allocator)
@@ -551,12 +530,10 @@ namespace SixLabors.ImageSharp.Drawing
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsOnSegment(in Segment seg, Vector2 q)
-        {
-            return (q.X - Epsilon2) <= seg.Max.X &&
-                    (q.X + Epsilon2) >= seg.Min.X &&
-                    (q.Y - Epsilon2) <= seg.Max.Y &&
-                    (q.Y + Epsilon2) >= seg.Min.Y;
-        }
+            => (q.X - Epsilon2) <= seg.Max.X
+            && (q.X + Epsilon2) >= seg.Min.X
+            && (q.Y - Epsilon2) <= seg.Max.Y
+            && (q.Y + Epsilon2) >= seg.Min.Y;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsOnSegments(in Segment seg1, in Segment seg2, Vector2 q)
@@ -590,10 +567,7 @@ namespace SixLabors.ImageSharp.Drawing
 
         // Modulo is a very slow operation.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int WrapArrayIndex(int i, int arrayLength)
-        {
-            return i < arrayLength ? i : i - arrayLength;
-        }
+        private static int WrapArrayIndex(int i, int arrayLength) => i < arrayLength ? i : i - arrayLength;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static PointOrientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
@@ -606,7 +580,7 @@ namespace SixLabors.ImageSharp.Drawing
 
             if (val > -Epsilon && val < Epsilon)
             {
-                return PointOrientation.Colinear;  // colinear
+                return PointOrientation.Collinear;  // colinear
             }
 
             return (val > 0) ? PointOrientation.Clockwise : PointOrientation.Counterclockwise; // clock or counterclock wise
@@ -621,7 +595,7 @@ namespace SixLabors.ImageSharp.Drawing
 
             if (val > -Epsilon && val < Epsilon)
             {
-                return PointOrientation.Colinear;  // colinear
+                return PointOrientation.Collinear;  // colinear
             }
 
             return (val > 0) ? PointOrientation.Clockwise : PointOrientation.Counterclockwise; // clock or counterclock wise
@@ -727,7 +701,7 @@ namespace SixLabors.ImageSharp.Drawing
                 results.Add(new PointData
                 {
                     Point = points[0],
-                    Orientation = PointOrientation.Colinear,
+                    Orientation = PointOrientation.Collinear,
                     Length = 0
                 });
             }
@@ -745,7 +719,7 @@ namespace SixLabors.ImageSharp.Drawing
                             new PointData
                             {
                                 Point = points[0],
-                                Orientation = PointOrientation.Colinear,
+                                Orientation = PointOrientation.Collinear,
                                 Segment = new Segment(points[0], points[next]),
                                 Length = 0,
                                 TotalLength = 0
@@ -776,7 +750,7 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 int next = WrapArrayIndex(i + 1, polyCorners);
                 PointOrientation or = CalulateOrientation(lastPoint, points[i], points[next]);
-                if (or == PointOrientation.Colinear && next != 0)
+                if (or == PointOrientation.Collinear && next != 0)
                 {
                     continue;
                 }
@@ -797,7 +771,7 @@ namespace SixLabors.ImageSharp.Drawing
             if (isClosed && removeCloseAndCollinear)
             {
                 // walk back removing collinear points
-                while (results.Count > 2 && results.Last().Orientation == PointOrientation.Colinear)
+                while (results.Count > 2 && results.Last().Orientation == PointOrientation.Collinear)
                 {
                     results.RemoveAt(results.Count - 1);
                 }
@@ -855,69 +829,6 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 end.Y = this.Bounds.Top - 1;
             }
-        }
-
-        /// <summary>
-        /// Calculate any shorter distances along the path.
-        /// </summary>
-        /// <param name="start">The start position.</param>
-        /// <param name="end">The end position.</param>
-        /// <param name="point">The current point.</param>
-        /// <param name="info">The info.</param>
-        /// <returns>
-        /// The <see cref="bool"/>.
-        /// </returns>
-        private bool CalculateShorterDistance(Vector2 start, Vector2 end, Vector2 point, ref PointInfoInternal info)
-        {
-            Vector2 diffEnds = end - start;
-
-            float lengthSquared = diffEnds.LengthSquared();
-            Vector2 diff = point - start;
-
-            Vector2 multiplied = diff * diffEnds;
-            float u = (multiplied.X + multiplied.Y) / lengthSquared;
-
-            if (u > 1)
-            {
-                u = 1;
-            }
-            else if (u < 0)
-            {
-                u = 0;
-            }
-
-            Vector2 multipliedByU = diffEnds * u;
-
-            Vector2 pointOnLine = start + multipliedByU;
-
-            Vector2 d = pointOnLine - point;
-
-            float dist = d.LengthSquared();
-
-            if (info.DistanceSquared > dist)
-            {
-                info.DistanceSquared = dist;
-                info.PointOnLine = pointOnLine;
-                return true;
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Contains information about the current point.
-        /// </summary>
-        private struct PointInfoInternal
-        {
-            /// <summary>
-            /// The distance squared.
-            /// </summary>
-            public float DistanceSquared;
-
-            /// <summary>
-            /// The point on the current line.
-            /// </summary>
-            public PointF PointOnLine;
         }
 
         private struct PointData

@@ -28,6 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 new Vector2(37, 85),
                 overlap ? new Vector2(130, 40) : new Vector2(93, 85),
                 new Vector2(65, 137)));
+
             IPath clipped = simplePath.Clip(hole1);
 
             Rgba32 colorRgba = Color.HotPink;

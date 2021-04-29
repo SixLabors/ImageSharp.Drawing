@@ -6,18 +6,19 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
 
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Represents a complex polygon made up of one or more shapes overlayed on each other, where overlaps causes holes.
+    /// Represents a complex polygon made up of one or more shapes overlayed on each other,
+    /// where overlaps causes holes.
     /// </summary>
     /// <seealso cref="IPath" />
-    public sealed class ComplexPolygon : IPath, IInternalPathOwner
+    public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     {
         private readonly IPath[] paths;
-        private List<InternalPath> internalPaths = null;
+        private readonly List<InternalPath> internalPaths;
+        private readonly float length;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
@@ -34,7 +35,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="paths">The paths.</param>
         public ComplexPolygon(params IPath[] paths)
         {
-            this.paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            Guard.NotNull(paths, nameof(paths));
+
+            this.paths = paths;
+            this.internalPaths = new List<InternalPath>(this.paths.Length);
 
             if (paths.Length > 0)
             {
@@ -43,235 +47,61 @@ namespace SixLabors.ImageSharp.Drawing
                 float minY = float.MaxValue;
                 float maxY = float.MinValue;
                 float length = 0;
-                int intersections = 0;
 
-                foreach (IPath s in this.paths)
+                foreach (IPath p in this.paths)
                 {
-                    length += s.Length;
-                    if (s.Bounds.Left < minX)
+                    if (p.Bounds.Left < minX)
                     {
-                        minX = s.Bounds.Left;
+                        minX = p.Bounds.Left;
                     }
 
-                    if (s.Bounds.Right > maxX)
+                    if (p.Bounds.Right > maxX)
                     {
-                        maxX = s.Bounds.Right;
+                        maxX = p.Bounds.Right;
                     }
 
-                    if (s.Bounds.Top < minY)
+                    if (p.Bounds.Top < minY)
                     {
-                        minY = s.Bounds.Top;
+                        minY = p.Bounds.Top;
                     }
 
-                    if (s.Bounds.Bottom > maxY)
+                    if (p.Bounds.Bottom > maxY)
                     {
-                        maxY = s.Bounds.Bottom;
+                        maxY = p.Bounds.Bottom;
                     }
 
-                    intersections += s.MaxIntersections;
+                    foreach (ISimplePath s in p.Flatten())
+                    {
+                        var ip = new InternalPath(s.Points, s.IsClosed);
+                        length += ip.Length;
+                        this.internalPaths.Add(ip);
+                    }
                 }
 
-                this.MaxIntersections = intersections;
-                this.Length = length;
+                this.length = length;
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
             else
             {
-                this.MaxIntersections = 0;
-                this.Length = 0;
+                this.length = 0;
                 this.Bounds = RectangleF.Empty;
             }
 
             this.PathType = PathTypes.Mixed;
         }
 
-        /// <summary>
-        /// Gets the length of the path.
-        /// </summary>
-        public float Length { get; }
-
-        /// <summary>
-        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
-        /// </summary>
+        /// <inheritdoc/>
         public PathTypes PathType { get; }
 
         /// <summary>
-        /// Gets the paths that make up this shape
+        /// Gets the collection of paths that make up this shape.
         /// </summary>
-        /// <value>
-        /// The paths.
-        /// </value>
         public IEnumerable<IPath> Paths => this.paths;
 
-        /// <summary>
-        /// Gets the bounding box of this shape.
-        /// </summary>
-        /// <value>
-        /// The bounds.
-        /// </value>
+        /// <inheritdoc/>
         public RectangleF Bounds { get; }
 
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        /// <value>
-        /// The maximum intersections.
-        /// </value>
-        public int MaxIntersections { get; }
-
-        /// <summary>
-        /// the distance of the point from the outline of the shape, if the value is negative it is inside the polygon bounds
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        /// Returns the distance from thr shape to the point
-        /// </returns>
-        /// <remarks>
-        /// Due to the clipping we did during construction we know that out shapes do not overlap at there edges
-        /// therefore for a point to be in more that one we must be in a hole of another, theoretically this could
-        /// then flip again to be in a outline inside a hole inside an outline :)
-        /// </remarks>
-        public PointInfo Distance(PointF point)
-        {
-            float dist = float.MaxValue;
-            PointInfo pointInfo = default;
-            bool inside = false;
-            foreach (IPath shape in this.Paths)
-            {
-                PointInfo d = shape.Distance(point);
-
-                if (d.DistanceFromPath <= 0)
-                {
-                    // we are inside a poly
-                    d.DistanceFromPath = -d.DistanceFromPath;  // flip the sign
-                    inside ^= true; // flip the inside flag
-                }
-
-                if (d.DistanceFromPath < dist)
-                {
-                    dist = d.DistanceFromPath;
-                    pointInfo = d;
-                }
-            }
-
-            if (inside)
-            {
-                pointInfo.DistanceFromPath = -pointInfo.DistanceFromPath;
-            }
-
-            return pointInfo;
-        }
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on all the polygons, that make up this complex shape,
-        /// that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The offset within the buffer</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-            => this.FindIntersections(start, end, buffer, offset, IntersectionRule.OddEven);
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-            => this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on all the polygons, that make up this complex shape,
-        /// that the line intersects.
-        /// </summary>
-        /// <param name="start">The start point of the line.</param>
-        /// <param name="end">The end point of the line.</param>
-        /// <param name="buffer">The buffer that will be populated with intersections.</param>
-        /// <param name="offset">The offset within the buffer</param>
-        /// <param name="intersectionRule">The intersection rule to use</param>
-        /// <returns>
-        /// The number of intersections populated into the buffer.
-        /// </returns>
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.FindIntersections(start, end, subBuffer, intersectionRule);
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
-        {
-            this.EnsureInternalPathsInitalized();
-
-            int totalAdded = 0;
-            InternalPath.PointOrientation[] orientations = ArrayPool<InternalPath.PointOrientation>.Shared.Rent(buffer.Length); // the largest number of intersections of any sub path of the set is the max size with need for this buffer.
-            Span<InternalPath.PointOrientation> orientationsSpan = orientations;
-            try
-            {
-                foreach (var ip in this.internalPaths)
-                {
-                    Span<PointF> subBuffer = buffer.Slice(totalAdded);
-                    Span<InternalPath.PointOrientation> subOrientationsSpan = orientationsSpan.Slice(totalAdded);
-
-                    var position = ip.FindIntersectionsWithOrientation(start, end, subBuffer, subOrientationsSpan);
-                    totalAdded += position;
-                }
-
-                Span<float> distances = stackalloc float[totalAdded];
-                for (int i = 0; i < totalAdded; i++)
-                {
-                    distances[i] = Vector2.DistanceSquared(start, buffer[i]);
-                }
-
-                var activeBuffer = buffer.Slice(0, totalAdded);
-                var activeOrientationsSpan = orientationsSpan.Slice(0, totalAdded);
-                SortUtility.Sort(distances, activeBuffer, activeOrientationsSpan);
-
-                if (intersectionRule == IntersectionRule.Nonzero)
-                {
-                    totalAdded = InternalPath.ApplyNonZeroIntersectionRules(activeBuffer, activeOrientationsSpan);
-                }
-            }
-            finally
-            {
-                ArrayPool<InternalPath.PointOrientation>.Shared.Return(orientations);
-            }
-
-            return totalAdded;
-        }
-
-        private void EnsureInternalPathsInitalized()
-        {
-            if (this.internalPaths == null)
-            {
-                lock (this.paths)
-                {
-                    if (this.internalPaths == null)
-                    {
-                        this.internalPaths = new List<InternalPath>(this.paths.Length);
-
-                        foreach (var p in this.paths)
-                        {
-                            foreach (var s in p.Flatten())
-                            {
-                                var ip = new InternalPath(s.Points, s.IsClosed);
-                                this.internalPaths.Add(ip);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Determines whether the <see cref="IPath" /> contains the specified point
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        ///   <c>true</c> if the <see cref="IPath" /> contains the specified point; otherwise, <c>false</c>.
-        /// </returns>
+        /// <inheritdoc/>
         public bool Contains(PointF point)
         {
             bool inside = false;
@@ -286,18 +116,12 @@ namespace SixLabors.ImageSharp.Drawing
             return inside;
         }
 
-        /// <summary>
-        /// Transforms the shape using the specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new shape with the matrix applied to it.
-        /// </returns>
+        /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
             {
-                // no transform to apply skip it
+                // No transform to apply skip it
                 return this;
             }
 
@@ -311,12 +135,7 @@ namespace SixLabors.ImageSharp.Drawing
             return new ComplexPolygon(shapes);
         }
 
-        /// <summary>
-        /// Converts the <see cref="IPath" /> into a simple linear path..
-        /// </summary>
-        /// <returns>
-        /// Returns the current <see cref="IPath" /> as simple linear path.
-        /// </returns>
+        /// <inheritdoc />
         public IEnumerable<ISimplePath> Flatten()
         {
             var paths = new List<ISimplePath>();
@@ -328,60 +147,44 @@ namespace SixLabors.ImageSharp.Drawing
             return paths.ToArray();
         }
 
-        /// <summary>
-        /// Converts a path to a closed path.
-        /// </summary>
-        /// <returns>
-        /// Returns the path as a closed path.
-        /// </returns>
+        /// <inheritdoc/>
         public IPath AsClosedPath()
         {
             if (this.PathType == PathTypes.Closed)
             {
                 return this;
             }
-            else
-            {
-                var paths = new IPath[this.paths.Length];
-                for (int i = 0; i < this.paths.Length; i++)
-                {
-                    paths[i] = this.paths[i].AsClosedPath();
-                }
 
-                return new ComplexPolygon(paths);
+            var paths = new IPath[this.paths.Length];
+            for (int i = 0; i < this.paths.Length; i++)
+            {
+                paths[i] = this.paths[i].AsClosedPath();
             }
+
+            return new ComplexPolygon(paths);
         }
 
-        /// <summary>
-        /// Calculates the point a certain distance a path.
-        /// </summary>
-        /// <param name="distanceAlongPath">The distance along the path to find details of.</param>
-        /// <returns>
-        /// Returns details about a point along a path.
-        /// </returns>
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        /// <inheritdoc/>
+        SegmentInfo IPathInternals.PointAlongPath(float distance)
         {
-            distanceAlongPath = distanceAlongPath % this.Length;
-
-            foreach (IPath p in this.Paths)
+            distance %= this.length;
+            foreach (InternalPath p in this.internalPaths)
             {
-                if (p.Length >= distanceAlongPath)
+                if (p.Length >= distance)
                 {
-                    return p.PointAlongPath(distanceAlongPath);
+                    return p.PointAlongPath(distance);
                 }
 
-                // reduce it before trying the next path
-                distanceAlongPath -= p.Length;
+                // Reduce it before trying the next path
+                distance -= p.Length;
             }
 
+            // TODO: Perf. Throwhelper
             throw new InvalidOperationException("Should not be possible to reach this line");
         }
 
         /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
-        {
-            this.EnsureInternalPathsInitalized();
-            return this.internalPaths;
-        }
+            => this.internalPaths;
     }
 }

@@ -8,25 +8,24 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// A way of optimizing drawing rectangles.
+    /// A polygon tha allows the optimized drawing of rectangles.
     /// </summary>
     /// <seealso cref="IPath" />
-    public class RectangularPolygon : IPath, ISimplePath
+    public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     {
         private readonly Vector2 topLeft;
         private readonly Vector2 bottomRight;
         private readonly PointF[] points;
         private readonly float halfLength;
         private readonly float length;
-        private readonly RectangleF bounds;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
         /// </summary>
-        /// <param name="x">The x.</param>
-        /// <param name="y">The y.</param>
-        /// <param name="width">The width.</param>
-        /// <param name="height">The height.</param>
+        /// <param name="x">The horizontal position of the rectangle.</param>
+        /// <param name="y">The vertical position of the rectangle.</param>
+        /// <param name="width">The width of the rectangle.</param>
+        /// <param name="height">The height of the rectangle.</param>
         public RectangularPolygon(float x, float y, float width, float height)
             : this(new PointF(x, y), new SizeF(width, height))
         {
@@ -35,8 +34,12 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
         /// </summary>
-        /// <param name="topLeft">The top left.</param>
-        /// <param name="bottomRight">The bottom right.</param>
+        /// <param name="topLeft">
+        /// The <see cref="PointF"/> which specifies the rectangles top/left point in a two-dimensional plane.
+        /// </param>
+        /// <param name="bottomRight">
+        /// The <see cref="PointF"/> which specifies the rectangles bottom/right point in a two-dimensional plane.
+        /// </param>
         public RectangularPolygon(PointF topLeft, PointF bottomRight)
         {
             this.Location = topLeft;
@@ -54,16 +57,20 @@ namespace SixLabors.ImageSharp.Drawing
 
             this.halfLength = this.Size.Width + this.Size.Height;
             this.length = this.halfLength * 2;
-            this.bounds = new RectangleF(this.Location, this.Size);
+            this.Bounds = new RectangleF(this.Location, this.Size);
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RectangularPolygon"/> class.
         /// </summary>
-        /// <param name="location">The location.</param>
-        /// <param name="size">The size.</param>
-        public RectangularPolygon(PointF location, SizeF size)
-            : this(location, location + size)
+        /// <param name="point">
+        /// The <see cref="PointF"/> which specifies the rectangles point in a two-dimensional plane.
+        /// </param>
+        /// <param name="size">
+        /// The <see cref="SizeF"/> which specifies the rectangles height and width.
+        /// </param>
+        public RectangularPolygon(PointF point, SizeF size)
+            : this(point, point + size)
         {
         }
 
@@ -79,123 +86,68 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the location.
         /// </summary>
-        /// <value>
-        /// The location.
-        /// </value>
         public PointF Location { get; }
 
         /// <summary>
-        /// Gets the left.
+        /// Gets the x-coordinate of the left edge.
         /// </summary>
-        /// <value>
-        /// The left.
-        /// </value>
-        public float Left => this.topLeft.X;
+        public float Left => this.X;
 
         /// <summary>
-        /// Gets the X.
+        /// Gets the x-coordinate.
         /// </summary>
-        /// <value>
-        /// The X.
-        /// </value>
         public float X => this.topLeft.X;
 
         /// <summary>
-        /// Gets the right.
+        /// Gets the x-coordinate of the right edge.
         /// </summary>
-        /// <value>
-        /// The right.
-        /// </value>
         public float Right => this.bottomRight.X;
 
         /// <summary>
-        /// Gets the top.
+        /// Gets the y-coordinate of the top edge.
         /// </summary>
-        /// <value>
-        /// The top.
-        /// </value>
-        public float Top => this.topLeft.Y;
+        public float Top => this.Y;
 
         /// <summary>
-        /// Gets the Y.
+        /// Gets the y-coordinate.
         /// </summary>
-        /// <value>
-        /// The Y.
-        /// </value>
         public float Y => this.topLeft.Y;
 
         /// <summary>
-        /// Gets the bottom.
+        /// Gets the y-coordinate of the bottom edge.
         /// </summary>
-        /// <value>
-        /// The bottom.
-        /// </value>
         public float Bottom => this.bottomRight.Y;
 
-        /// <summary>
-        /// Gets the bounding box of this shape.
-        /// </summary>
-        /// <value>
-        /// The bounds.
-        /// </value>
-        RectangleF IPath.Bounds => this.bounds;
+        /// <inheritdoc/>
+        public RectangleF Bounds { get; private set; }
 
-        /// <inheritdoc />
-        float IPath.Length => this.length;
+        /// <inheritdoc/>
+        public bool IsClosed => true;
 
-        /// <summary>
-        /// Gets the maximum number intersections that a shape can have when testing a line.
-        /// </summary>
-        /// <value>
-        /// The maximum intersections.
-        /// </value>
-        int IPath.MaxIntersections => 4;
-
-        /// <summary>
-        /// Gets a value indicating whether this instance is a closed path.
-        /// </summary>
-        bool ISimplePath.IsClosed => true;
-
-        /// <summary>
-        /// Gets the points that make this up as a simple linear path.
-        /// </summary>
-        ReadOnlyMemory<PointF> ISimplePath.Points => this.points;
+        /// <inheritdoc/>
+        public ReadOnlyMemory<PointF> Points => this.points;
 
         /// <summary>
         /// Gets the size.
         /// </summary>
-        /// <value>
-        /// The size.
-        /// </value>
         public SizeF Size { get; }
 
         /// <summary>
-        /// Gets the size.
+        /// Gets the width.
         /// </summary>
-        /// <value>
-        /// The size.
-        /// </value>
         public float Width => this.Size.Width;
 
         /// <summary>
         /// Gets the height.
         /// </summary>
-        /// <value>
-        /// The height.
-        /// </value>
         public float Height => this.Size.Height;
 
-        /// <summary>
-        /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
-        /// </summary>
-        PathTypes IPath.PathType => PathTypes.Closed;
+        /// <inheritdoc/>
+        public PathTypes PathType => PathTypes.Closed;
 
         /// <summary>
-        /// Gets the center.
+        /// Gets the center point.
         /// </summary>
-        /// <value>
-        /// The center.
-        /// </value>
         public PointF Center => (this.topLeft + this.bottomRight) / 2;
 
         /// <summary>
@@ -203,82 +155,13 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="polygon">The polygon to convert.</param>
         public static explicit operator RectangularPolygon(Polygon polygon)
-        {
-            return new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
-        }
+            => new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
-        /// <summary>
-        /// Determines if the specified point is contained within the rectangular region defined by
-        /// this <see cref="RectangularPolygon" />.
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        /// The <see cref="bool" />
-        /// </returns>
+        /// <inheritdoc/>
         public bool Contains(PointF point)
-        {
-            return Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
-        }
+            => Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
 
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset, IntersectionRule intersectionRule)
-        {
-            return this.FindIntersections(start, end, buffer.AsSpan(offset), intersectionRule);
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, PointF[] buffer, int offset)
-        {
-            Span<PointF> subBuffer = buffer.AsSpan(offset);
-            return this.FindIntersections(start, end, subBuffer);
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer, IntersectionRule intersectionRule)
-        {
-            int offset = 0;
-            int discovered = 0;
-            Vector2 startPoint = Vector2.Clamp(start, this.topLeft, this.bottomRight);
-            Vector2 endPoint = Vector2.Clamp(end, this.topLeft, this.bottomRight);
-
-            // start doesn't change when its inside the shape thus not crossing
-            if (startPoint != (Vector2)start)
-            {
-                if (startPoint == Vector2.Clamp(startPoint, start, end))
-                {
-                    // if start closest is within line then its a valid point
-                    discovered++;
-                    buffer[offset++] = startPoint;
-                }
-            }
-
-            // end didn't change it must not intercept with an edge
-            if (endPoint != (Vector2)end)
-            {
-                if (endPoint == Vector2.Clamp(endPoint, start, end))
-                {
-                    // if start closest is within line then its a valid point
-                    discovered++;
-                    buffer[offset] = endPoint;
-                }
-            }
-
-            return discovered;
-        }
-
-        /// <inheritdoc />
-        public int FindIntersections(PointF start, PointF end, Span<PointF> buffer)
-        {
-            return this.FindIntersections(start, end, buffer, IntersectionRule.OddEven);
-        }
-
-        /// <summary>
-        /// Transforms the rectangle using specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>
-        /// A new shape with the matrix applied to it.
-        /// </returns>
+        /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)
@@ -286,217 +169,62 @@ namespace SixLabors.ImageSharp.Drawing
                 return this;
             }
 
-            // rectangles may be rotated and skewed which means they will then nedd representing by a polygon
+            // Rectangles may be rotated and skewed which means they will then nedd representing by a polygon
             return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
         }
 
         /// <inheritdoc />
-        public SegmentInfo PointAlongPath(float distanceAlongPath)
+        SegmentInfo IPathInternals.PointAlongPath(float distance)
         {
-            distanceAlongPath = distanceAlongPath % this.length;
+            distance %= this.length;
 
-            if (distanceAlongPath < this.Width)
+            if (distance < this.Width)
             {
                 // we are on the top stretch
                 return new SegmentInfo
                 {
-                    Point = new Vector2(this.Left + distanceAlongPath, this.Top),
+                    Point = new Vector2(this.Left + distance, this.Top),
                     Angle = MathF.PI
                 };
             }
-            else
+
+            distance -= this.Width;
+            if (distance < this.Height)
             {
-                distanceAlongPath -= this.Width;
-                if (distanceAlongPath < this.Height)
+                // down on right
+                return new SegmentInfo
                 {
-                    // down on right
-                    return new SegmentInfo
-                    {
-                        Point = new Vector2(this.Right, this.Top + distanceAlongPath),
-                        Angle = -MathF.PI / 2
-                    };
-                }
-                else
-                {
-                    distanceAlongPath -= this.Height;
-                    if (distanceAlongPath < this.Width)
-                    {
-                        // botom right to left
-                        return new SegmentInfo
-                        {
-                            Point = new Vector2(this.Right - distanceAlongPath, this.Bottom),
-                            Angle = 0
-                        };
-                    }
-                    else
-                    {
-                        distanceAlongPath -= this.Width;
-                        return new SegmentInfo
-                        {
-                            Point = new Vector2(this.Left, this.Bottom - distanceAlongPath),
-                            Angle = (float)(Math.PI / 2)
-                        };
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Calculates the distance along and away from the path for a specified point.
-        /// </summary>
-        /// <param name="point">The point along the path.</param>
-        /// <returns>
-        /// Returns details about the point and its distance away from the path.
-        /// </returns>
-        public PointInfo Distance(PointF point)
-        {
-            Vector2 vectorPoint = point;
-
-            // Point in rectangle if after its clamped by the extremes its still the same then it must be inside :)
-            Vector2 clamped = Vector2.Clamp(point, this.topLeft, this.bottomRight);
-            bool isInside = clamped == vectorPoint;
-
-            float distanceFromEdge = float.MaxValue;
-            float distanceAlongEdge = 0f;
-
-            if (isInside)
-            {
-                // get the absolute distances from the extreams
-                Vector2 topLeftDist = Vector2.Abs(vectorPoint - this.topLeft);
-                Vector2 bottomRightDist = Vector2.Abs(vectorPoint - this.bottomRight);
-
-                // get the min components
-                Vector2 minDists = Vector2.Min(topLeftDist, bottomRightDist);
-
-                // and then the single smallest (dont have to worry about direction)
-                distanceFromEdge = Math.Min(minDists.X, minDists.Y);
-
-                // we need to make clamped the closest point
-                if (this.topLeft.X + distanceFromEdge == point.X)
-                {
-                    // closer to lhf
-                    clamped.X = this.topLeft.X; // y is already the same
-
-                    // distance along edge is length minus the amout down we are from the top of the rect
-                    distanceAlongEdge = this.length - (clamped.Y - this.topLeft.Y);
-                }
-                else if (this.topLeft.Y + distanceFromEdge == point.Y)
-                {
-                    // closer to top
-                    clamped.Y = this.topLeft.Y; // x is already the same
-
-                    distanceAlongEdge = clamped.X - this.topLeft.X;
-                }
-                else if (this.bottomRight.Y - distanceFromEdge == point.Y)
-                {
-                    // closer to bottom
-                    clamped.Y = this.bottomRight.Y; // x is already the same
-
-                    distanceAlongEdge = (this.bottomRight.X - clamped.X) + this.halfLength;
-                }
-                else if (this.bottomRight.X - distanceFromEdge == point.X)
-                {
-                    // closer to rhs
-                    clamped.X = this.bottomRight.X; // x is already the same
-                    distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
-                }
-            }
-            else
-            {
-                // clamped is the point on the path thats closest no matter what
-                distanceFromEdge = (clamped - vectorPoint).Length();
-
-                // we need to figure out whats the cloests edge now and thus what distance/poitn is closest
-                if (this.topLeft.X == clamped.X)
-                {
-                    // distance along edge is length minus the amout down we are from the top of the rect
-                    distanceAlongEdge = this.length - (clamped.Y - this.topLeft.Y);
-                }
-                else if (this.topLeft.Y == clamped.Y)
-                {
-                    distanceAlongEdge = clamped.X - this.topLeft.X;
-                }
-                else if (this.bottomRight.Y == clamped.Y)
-                {
-                    distanceAlongEdge = (this.bottomRight.X - clamped.X) + this.halfLength;
-                }
-                else if (this.bottomRight.X == clamped.X)
-                {
-                    distanceAlongEdge = (clamped.Y - this.topLeft.Y) + this.Size.Width;
-                }
+                    Point = new Vector2(this.Right, this.Top + distance),
+                    Angle = -MathF.PI / 2
+                };
             }
 
-            if (distanceAlongEdge == this.length)
+            distance -= this.Height;
+            if (distance < this.Width)
             {
-                distanceAlongEdge = 0;
+                // botom right to left
+                return new SegmentInfo
+                {
+                    Point = new Vector2(this.Right - distance, this.Bottom),
+                    Angle = 0
+                };
             }
 
-            distanceFromEdge = isInside ? -distanceFromEdge : distanceFromEdge;
-
-            return new PointInfo
+            distance -= this.Width;
+            return new SegmentInfo
             {
-                SearchPoint = point,
-                DistanceFromPath = distanceFromEdge,
-                ClosestPointOnPath = clamped,
-                DistanceAlongPath = distanceAlongEdge
+                Point = new Vector2(this.Left, this.Bottom - distance),
+                Angle = (float)(Math.PI / 2)
             };
         }
 
-        /// <summary>
-        /// Converts the <see cref="IPath" /> into a simple linear path..
-        /// </summary>
-        /// <returns>
-        /// Returns the current <see cref="IPath" /> as simple linear path.
-        /// </returns>
+        /// <inheritdoc/>
         public IEnumerable<ISimplePath> Flatten()
         {
             yield return this;
         }
 
-        /// <summary>
-        /// Converts a path to a closed path.
-        /// </summary>
-        /// <returns>
-        /// Returns the path as a closed path.
-        /// </returns>
-        IPath IPath.AsClosedPath() => this;
-
-        /// <summary>
-        /// Returns whether the rectangles are equal.
-        /// </summary>
-        /// <param name="other">The other recentalge.</param>
-        /// <returns>Returns a value indicating if the rectangles are equal.</returns>
-        public bool Equals(RectangularPolygon other)
-        {
-            return other != null &&
-                this.X == other.X &&
-                this.Y == other.Y &&
-                this.Height == other.Height &&
-                this.Width == other.Width;
-        }
-
-        /// <summary>
-        /// Equality comparer for two RectangularPolygons
-        /// </summary>
-        /// <param name="obj">The polygon to compare to.</param>
-        /// <returns>Returns a value indicating if the rectangles are equal.</returns>
-        public override bool Equals(object obj)
-        {
-            return obj is RectangularPolygon other && this.Equals(other);
-        }
-
-        /// <summary>
-        ///     Serves as the default hash function.
-        /// </summary>
-        /// <returns>A hash code for the current object.</returns>
-        public override int GetHashCode()
-        {
-            int hashCode = -1073544145;
-            hashCode = (hashCode * -1521134295) + this.X.GetHashCode();
-            hashCode = (hashCode * -1521134295) + this.Y.GetHashCode();
-            hashCode = (hashCode * -1521134295) + this.Width.GetHashCode();
-            hashCode = (hashCode * -1521134295) + this.Height.GetHashCode();
-            return hashCode;
-        }
+        /// <inheritdoc/>
+        public IPath AsClosedPath() => this;
     }
 }

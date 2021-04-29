@@ -3,8 +3,6 @@
 
 using System;
 using System.Buffers;
-
-using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -108,8 +106,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.offsetX = (int)MathF.Max(MathF.Floor(region.Left), 0);
             }
 
-            /// <inheritdoc/>
-            internal override TPixel this[int x, int y]
+            internal TPixel this[int x, int y]
             {
                 get
                 {
