@@ -90,9 +90,6 @@ namespace SixLabors.ImageSharp.Drawing
             yield return this;
         }
 
-        /// <inheritdoc/>
-        public bool Contains(PointF point) => this.innerPath.PointInPolygon(point);
-
         /// <inheritdoc />
         // TODO switch this out to a calculated algorithm
         SegmentInfo IPathInternals.PointAlongPath(float distance)

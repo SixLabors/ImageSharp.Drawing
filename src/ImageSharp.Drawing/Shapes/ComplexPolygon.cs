@@ -102,21 +102,6 @@ namespace SixLabors.ImageSharp.Drawing
         public RectangleF Bounds { get; }
 
         /// <inheritdoc/>
-        public bool Contains(PointF point)
-        {
-            bool inside = false;
-            foreach (IPath shape in this.Paths)
-            {
-                if (shape.Contains(point))
-                {
-                    inside ^= true; // flip the inside flag
-                }
-            }
-
-            return inside;
-        }
-
-        /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)

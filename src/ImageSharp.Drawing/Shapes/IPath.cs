@@ -28,15 +28,6 @@ namespace SixLabors.ImageSharp.Drawing
         IEnumerable<ISimplePath> Flatten();
 
         /// <summary>
-        /// Determines whether the <see cref="IPath"/> contains the specified point.
-        /// </summary>
-        /// <param name="point">The point.</param>
-        /// <returns>
-        /// <see langword="true"/> if the <see cref="IPath"/> contains the specified point; otherwise, <see langword="false"/>.
-        /// </returns>
-        bool Contains(PointF point);
-
-        /// <summary>
         /// Transforms the path using the specified matrix.
         /// </summary>
         /// <param name="matrix">The matrix.</param>
