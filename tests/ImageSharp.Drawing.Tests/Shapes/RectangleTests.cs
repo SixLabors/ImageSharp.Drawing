@@ -69,14 +69,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                },
             };
 
-        [Theory]
-        [MemberData(nameof(PointInPolygonTheoryData))]
-        public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
-        {
-            var shape = new RectangularPolygon(location, size);
-            Assert.Equal(isInside, shape.Contains(point));
-        }
-
         [Fact]
         public void Left()
         {

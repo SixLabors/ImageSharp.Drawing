@@ -111,7 +111,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             private readonly DenseMatrix<TPixel> pattern;
             private readonly MemoryAllocator allocator;
             private readonly int scalineWidth;
-            private readonly ThreadLocal<ThreadContextData> threadContextData;
+            private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
             private bool isDisposed;
 
             /// <summary>
@@ -131,9 +131,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.pattern = pattern;
                 this.scalineWidth = source.Width;
                 this.allocator = configuration.MemoryAllocator;
-                this.threadContextData = new ThreadLocal<ThreadContextData>(
-                    () => new ThreadContextData(this.allocator, this.scalineWidth),
-                    true);
+                this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
             }
 
             internal TPixel this[int x, int y]
@@ -152,9 +150,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             public override void Apply(Span<float> scanline, int x, int y)
             {
                 int patternY = y % this.pattern.Rows;
-                ThreadContextData contextData = this.threadContextData.Value;
-                Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
-                Span<TPixel> overlays = contextData.OverlaySpan.Slice(0, scanline.Length);
+                Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
+                Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
 
                 for (int i = 0; i < scanline.Length; i++)
                 {
@@ -185,42 +182,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                 if (disposing)
                 {
-                    foreach (ThreadContextData data in this.threadContextData.Values)
-                    {
-                        data.Dispose();
-                    }
-
-                    this.threadContextData.Dispose();
+                    this.blenderBuffers.Dispose();
                 }
 
                 this.isDisposed = true;
-            }
-
-            private sealed class ThreadContextData : IDisposable
-            {
-                private bool isDisposed;
-                private readonly IMemoryOwner<float> amountBuffer;
-                private readonly IMemoryOwner<TPixel> overlayBuffer;
-
-                public ThreadContextData(MemoryAllocator allocator, int scanlineLength)
-                {
-                    this.amountBuffer = allocator.Allocate<float>(scanlineLength);
-                    this.overlayBuffer = allocator.Allocate<TPixel>(scanlineLength);
-                }
-
-                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
-
-                public Span<TPixel> OverlaySpan => this.overlayBuffer.Memory.Span;
-
-                public void Dispose()
-                {
-                    if (!this.isDisposed)
-                    {
-                        this.isDisposed = true;
-                        this.amountBuffer.Dispose();
-                        this.overlayBuffer.Dispose();
-                    }
-                }
             }
         }
     }

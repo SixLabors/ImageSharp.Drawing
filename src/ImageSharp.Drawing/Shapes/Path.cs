@@ -110,26 +110,6 @@ namespace SixLabors.ImageSharp.Drawing
             yield return this;
         }
 
-        /// <inheritdoc />
-        public bool Contains(PointF point) => this.InnerPath.PointInPolygon(point);
-
-        /// <summary>
-        /// Based on a line described by <paramref name="start"/> and <paramref name="end"/>
-        /// populate a buffer for all points on the polygon that the line intersects.
-        /// </summary>
-        /// <param name="start">The start position.</param>
-        /// <param name="end">The end position.</param>
-        /// <param name="intersections">The buffer for storing each intersection.</param>
-        /// <param name="orientations">
-        /// The buffer for storing the orientation of each intersection.
-        /// Must be the same length as <paramref name="intersections"/>.
-        /// </param>
-        /// <returns>
-        /// The number of intersections found.
-        /// </returns>
-        internal int FindIntersections(PointF start, PointF end, Span<PointF> intersections, Span<PointOrientation> orientations)
-            => this.InnerPath.FindIntersections(start, end, intersections, orientations);
-
         /// <inheritdoc/>
         SegmentInfo IPathInternals.PointAlongPath(float distance)
            => this.InnerPath.PointAlongPath(distance);

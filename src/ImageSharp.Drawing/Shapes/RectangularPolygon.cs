@@ -158,10 +158,6 @@ namespace SixLabors.ImageSharp.Drawing
             => new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
         /// <inheritdoc/>
-        public bool Contains(PointF point)
-            => Vector2.Clamp(point, this.topLeft, this.bottomRight) == (Vector2)point;
-
-        /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
         {
             if (matrix.IsIdentity)

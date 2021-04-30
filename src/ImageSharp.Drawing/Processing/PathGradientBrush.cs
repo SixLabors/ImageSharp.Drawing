@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Threading;
+using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -17,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// </summary>
     public sealed class PathGradientBrush : IBrush
     {
-        private readonly IList<Edge> edges;
+        private readonly Edge[] edges;
         private readonly Color centerColor;
         private readonly bool hasSpecialCenterColor;
 
@@ -54,19 +55,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             int size = points.Length;
 
-            var lines = new ILineSegment[size];
+            this.edges = new Edge[points.Length];
 
-            for (int i = 0; i < size; i++)
+            for (int i = 0; i < points.Length; i++)
             {
-                lines[i] = new LinearLineSegment(points[i % size], points[(i + 1) % size]);
+                this.edges[i] = new Edge(points[i % size], points[(i + 1) % size], ColorAt(i), ColorAt(i + 1));
             }
 
             this.centerColor = CalculateCenterColor(colors);
 
             Color ColorAt(int index) => colors[index % colors.Length];
-
-            this.edges = lines.Select(s => new Path(s))
-                .Select((path, i) => new Edge(path, ColorAt(i), ColorAt(i + 1))).ToList();
         }
 
         /// <summary>
@@ -136,65 +134,29 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
             private readonly float length;
 
-            public Edge(Path path, Color startColor, Color endColor)
+            public Edge(Vector2 start, Vector2 end, Color startColor, Color endColor)
             {
-                this.Path = path;
-
-                Vector2[] points = path.LineSegments.SelectMany(s => s.Flatten().ToArray()).Select(p => (Vector2)p).ToArray();
-
-                this.Start = points[0];
+                this.Start = start;
+                this.End = end;
                 this.StartColor = (Vector4)startColor;
-
-                this.End = points.Last();
                 this.EndColor = (Vector4)endColor;
 
                 this.length = DistanceBetween(this.End, this.Start);
             }
 
-            public Path Path { get; }
+            public Vector2 Start { get; }
 
-            public PointF Start { get; }
+            public Vector2 End { get; }
 
             public Vector4 StartColor { get; }
 
-            public PointF End { get; }
-
             public Vector4 EndColor { get; }
 
-            public Intersection? FindIntersection(
-                PointF start,
-                PointF end,
-                Span<PointF> intersections,
-                Span<PointOrientation> orientations)
-            {
-                int pathIntersections = this.Path.FindIntersections(
-                    start,
-                    end,
-                    intersections.Slice(0, this.Path.MaxIntersections),
-                    orientations.Slice(0, this.Path.MaxIntersections));
-
-                if (pathIntersections == 0)
-                {
-                    return null;
-                }
-
-                intersections = intersections.Slice(0, pathIntersections);
-
-                PointF minPoint = intersections[0];
-                var min = new Intersection(minPoint, ((Vector2)(minPoint - start)).LengthSquared());
-                for (int i = 1; i < intersections.Length; i++)
-                {
-                    PointF point = intersections[i];
-                    var current = new Intersection(point, ((Vector2)(point - start)).LengthSquared());
-
-                    if (min.Distance > current.Distance)
-                    {
-                        min = current;
-                    }
-                }
-
-                return min;
-            }
+            public bool Intersect(
+                Vector2 start,
+                Vector2 end,
+                ref Vector2 ip) =>
+                Utilities.Intersect.LineSegmentToLineSegmentIgnoreCollinear(start, end, this.Start, this.End, ref ip);
 
             public Vector4 ColorAt(float distance)
             {
@@ -213,7 +175,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         private sealed class PathGradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            private readonly PointF center;
+            private readonly Vector2 center;
 
             private readonly Vector4 centerColor;
 
@@ -227,13 +189,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             private readonly TPixel transparentPixel;
 
-            private readonly MemoryAllocator allocator;
-
-            private readonly int maxIntersections;
-
-            private readonly int scalineWidth;
-
-            private readonly ThreadLocal<ThreadContextData> threadContextData;
+            private ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
 
             private bool isDisposed;
 
@@ -256,7 +212,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 : base(configuration, options, source)
             {
                 this.edges = edges;
-                PointF[] points = edges.Select(s => s.Start).ToArray();
+                Vector2[] points = edges.Select(s => s.Start).ToArray();
 
                 this.center = points.Aggregate((p1, p2) => p1 + p2) / edges.Count;
                 this.centerColor = (Vector4)centerColor;
@@ -264,20 +220,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.centerPixel = centerColor.ToPixel<TPixel>();
                 this.maxDistance = points.Select(p => (Vector2)(p - this.center)).Max(d => d.Length());
                 this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
-
-                this.scalineWidth = source.Width;
-                this.maxIntersections = this.edges.Max(e => e.Path.MaxIntersections);
-                this.allocator = configuration.MemoryAllocator;
-                this.threadContextData = new ThreadLocal<ThreadContextData>(
-                    () => new ThreadContextData(this.allocator, this.scalineWidth, this.maxIntersections),
-                    true);
+                this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
             }
 
-            internal TPixel this[int x, int y, Span<PointF> intersections, Span<PointOrientation> orientations]
+            internal TPixel this[int x, int y]
             {
                 get
                 {
-                    var point = new PointF(x, y);
+                    var point = new Vector2(x, y);
 
                     if (point == this.center)
                     {
@@ -307,17 +257,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     }
 
                     var direction = Vector2.Normalize(point - this.center);
-                    PointF end = point + (PointF)(direction * this.maxDistance);
+                    Vector2 end = point + (direction * this.maxDistance);
 
-                    (Edge edge, Intersection? info) = this.FindIntersection(point, end, intersections, orientations);
+                    (Edge edge, Vector2 point)? isc = this.FindIntersection(point, end);
 
-                    if (!info.HasValue)
+                    if (!isc.HasValue)
                     {
                         return this.transparentPixel;
                     }
 
-                    PointF intersection = info.Value.Point;
-                    Vector4 edgeColor = edge.ColorAt(intersection);
+                    Vector2 intersection = isc.Value.point;
+                    Vector4 edgeColor = isc.Value.edge.ColorAt(intersection);
 
                     float length = DistanceBetween(intersection, this.center);
                     float ratio = length > 0 ? DistanceBetween(intersection, point) / length : 0;
@@ -333,11 +283,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <inheritdoc />
             public override void Apply(Span<float> scanline, int x, int y)
             {
-                ThreadContextData contextData = this.threadContextData.Value;
-                Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
-                Span<TPixel> overlays = contextData.OverlaySpan.Slice(0, scanline.Length);
-                Span<PointF> intersections = contextData.IntersectionsSpan;
-                Span<PointOrientation> orientations = contextData.OrientationsSpan;
+                Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
+                Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
                 float blendPercentage = this.Options.BlendPercentage;
 
                 // TODO: Remove bounds checks.
@@ -346,7 +293,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     for (int i = 0; i < scanline.Length; i++)
                     {
                         amounts[i] = scanline[i] * blendPercentage;
-                        overlays[i] = this[x + i, y, intersections, orientations];
+                        overlays[i] = this[x + i, y];
                     }
                 }
                 else
@@ -354,7 +301,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     for (int i = 0; i < scanline.Length; i++)
                     {
                         amounts[i] = scanline[i];
-                        overlays[i] = this[x + i, y, intersections, orientations];
+                        overlays[i] = this[x + i, y];
                     }
                 }
 
@@ -374,44 +321,39 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                 if (disposing)
                 {
-                    foreach (ThreadContextData data in this.threadContextData.Values)
-                    {
-                        data.Dispose();
-                    }
-
-                    this.threadContextData.Dispose();
+                    this.blenderBuffers.Dispose();
                 }
 
                 this.isDisposed = true;
             }
 
-            private (Edge edge, Intersection? info) FindIntersection(
+            private (Edge edge, Vector2 point)? FindIntersection(
                 PointF start,
-                PointF end,
-                Span<PointF> intersections,
-                Span<PointOrientation> orientations)
+                PointF end)
             {
-                (Edge edge, Intersection? info) closest = default;
-
+                Vector2 ip = default;
+                Vector2 closestIntersection = default;
+                Edge closestEdge = null;
+                float minDistance = float.MaxValue;
                 foreach (Edge edge in this.edges)
                 {
-                    Intersection? intersection = edge.FindIntersection(start, end, intersections, orientations);
-
-                    if (!intersection.HasValue)
+                    if (!edge.Intersect(start, end, ref ip))
                     {
                         continue;
                     }
 
-                    if (closest.info == null || closest.info.Value.Distance > intersection.Value.Distance)
+                    float d = Vector2.DistanceSquared(start, end);
+                    if (d < minDistance)
                     {
-                        closest = (edge, intersection);
+                        closestEdge = edge;
+                        closestIntersection = ip;
                     }
                 }
 
-                return closest;
+                return closestEdge != null ? (closestEdge, closestIntersection) : ((Edge edge, Vector2 point)?)null;
             }
 
-            private static bool FindPointOnTriangle(PointF v1, PointF v2, PointF v3, PointF point, out float u, out float v)
+            private static bool FindPointOnTriangle(Vector2 v1, Vector2 v2, Vector2 v3, Vector2 point, out float u, out float v)
             {
                 Vector2 e1 = v2 - v1;
                 Vector2 e2 = v3 - v2;
@@ -443,43 +385,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 u = ((d11 * d20) - (d01 * d21)) / denominator;
                 v = ((d00 * d21) - (d01 * d20)) / denominator;
                 return true;
-            }
-
-            private sealed class ThreadContextData : IDisposable
-            {
-                private bool isDisposed;
-                private readonly IMemoryOwner<float> amountBuffer;
-                private readonly IMemoryOwner<TPixel> overlayBuffer;
-                private readonly IMemoryOwner<PointF> intersectionsBuffer;
-                private readonly IMemoryOwner<PointOrientation> orientationsBuffer;
-
-                public ThreadContextData(MemoryAllocator allocator, int scanlineLength, int maxIntersections)
-                {
-                    this.amountBuffer = allocator.Allocate<float>(scanlineLength);
-                    this.overlayBuffer = allocator.Allocate<TPixel>(scanlineLength);
-                    this.intersectionsBuffer = allocator.Allocate<PointF>(maxIntersections);
-                    this.orientationsBuffer = allocator.Allocate<PointOrientation>(maxIntersections);
-                }
-
-                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
-
-                public Span<TPixel> OverlaySpan => this.overlayBuffer.Memory.Span;
-
-                public Span<PointF> IntersectionsSpan => this.intersectionsBuffer.Memory.Span;
-
-                public Span<PointOrientation> OrientationsSpan => this.orientationsBuffer.Memory.Span;
-
-                public void Dispose()
-                {
-                    if (!this.isDisposed)
-                    {
-                        this.isDisposed = true;
-                        this.amountBuffer.Dispose();
-                        this.overlayBuffer.Dispose();
-                        this.intersectionsBuffer.Dispose();
-                        this.orientationsBuffer.Dispose();
-                    }
-                }
             }
         }
     }

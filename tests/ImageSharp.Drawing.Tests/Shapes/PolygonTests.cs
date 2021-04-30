@@ -35,16 +35,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 }, // corner is inside
             };
 
-        [Theory]
-        [MemberData(nameof(PointInPolygonTheoryData))]
-        public void PointInPolygon(TestPoint[] controlPoints, TestPoint point, bool isInside)
-        {
-            var shape = new Polygon(new LinearLineSegment(controlPoints.Select(x => (PointF)x).ToArray()));
-            Assert.Equal(isInside, shape.Contains(point));
-        }
-
         public static TheoryData<TestPoint[], TestPoint, float> DistanceTheoryData =
-           new TheoryData<TestPoint[], TestPoint, float>
+           new ()
            {
                 {
                     new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },

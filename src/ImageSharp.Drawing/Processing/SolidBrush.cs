@@ -4,6 +4,7 @@
 using System;
 using System.Buffers;
 using System.Threading;
+using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -44,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             private readonly IMemoryOwner<TPixel> colors;
             private readonly MemoryAllocator allocator;
             private readonly int scalineWidth;
-            private readonly ThreadLocal<ThreadContextData> threadContextData;
+            private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
             private bool isDisposed;
 
             /// <summary>
@@ -67,9 +68,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.allocator = configuration.MemoryAllocator;
 
                 // The threadlocal value is lazily invoked so there is no need to optionally create the type.
-                this.threadContextData = new ThreadLocal<ThreadContextData>(
-                    () => new ThreadContextData(this.allocator, this.scalineWidth),
-                    true);
+                this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width, true);
             }
 
             /// <inheritdoc />
@@ -95,8 +94,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 }
                 else
                 {
-                    ThreadContextData contextData = this.threadContextData.Value;
-                    Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
+                    Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
 
                     for (int i = 0; i < scanline.Length; i++)
                     {
@@ -123,35 +121,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 if (disposing)
                 {
                     this.colors.Dispose();
-                    foreach (ThreadContextData data in this.threadContextData.Values)
-                    {
-                        data.Dispose();
-                    }
-
-                    this.threadContextData.Dispose();
+                    this.blenderBuffers.Dispose();
                 }
 
                 this.isDisposed = true;
-            }
-
-            private sealed class ThreadContextData : IDisposable
-            {
-                private bool isDisposed;
-                private readonly IMemoryOwner<float> amountBuffer;
-
-                public ThreadContextData(MemoryAllocator allocator, int scanlineLength)
-                    => this.amountBuffer = allocator.Allocate<float>(scanlineLength);
-
-                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
-
-                public void Dispose()
-                {
-                    if (!this.isDisposed)
-                    {
-                        this.isDisposed = true;
-                        this.amountBuffer.Dispose();
-                    }
-                }
             }
         }
     }
