@@ -12,6 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     internal readonly struct ApproximateFloatComparer :
         IEqualityComparer<float>,
         IEqualityComparer<Vector2>,
+        IEqualityComparer<PointF>,
         IEqualityComparer<Vector4>,
         IEqualityComparer<ColorMatrix>
     {
@@ -35,13 +36,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public int GetHashCode(float obj) => obj.GetHashCode();
 
         /// <inheritdoc/>
-        public bool Equals(Vector2 x, Vector2 y) => this.Equals(x.X, y.X) && this.Equals(x.Y, y.Y);
+        public bool Equals(Vector2 a, Vector2 b) => this.Equals(a.X, b.X) && this.Equals(a.Y, b.Y);
+
+        /// <inheritdoc/>
+        public bool Equals(PointF a, PointF b) => this.Equals(a.X, b.X) && this.Equals(a.Y, b.Y);
 
         /// <inheritdoc/>
         public int GetHashCode(Vector2 obj) => obj.GetHashCode();
 
         /// <inheritdoc/>
-        public bool Equals(Vector4 x, Vector4 y) => this.Equals(x.X, y.X) && this.Equals(x.Y, y.Y) && this.Equals(x.Z, y.Z) && this.Equals(x.W, y.W);
+        public int GetHashCode(PointF obj) => obj.GetHashCode();
+
+        /// <inheritdoc/>
+        public bool Equals(Vector4 a, Vector4 b) => this.Equals(a.X, b.X) && this.Equals(a.Y, b.Y) && this.Equals(a.Z, b.Z) && this.Equals(a.W, b.W);
 
         /// <inheritdoc/>
         public int GetHashCode(Vector4 obj) => obj.GetHashCode();

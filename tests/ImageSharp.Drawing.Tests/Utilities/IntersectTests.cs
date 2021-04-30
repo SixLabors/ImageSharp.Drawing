@@ -8,25 +8,39 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
 {
     public class IntersectTests
     {
-        public static TheoryData<PointF, PointF, PointF, PointF, PointF?> LineSegmentToLineSegment_Data =
-            new TheoryData<PointF, PointF, PointF, PointF, PointF?>()
+        public static TheoryData<(float x, float y), (float x, float y), (float x, float y), (float x, float y), (float x, float y)?> LineSegmentToLineSegment_Data =
+            new ()
             {
-                { new PointF(0, 0), new PointF(2, 3), new PointF(1, 3), new PointF(1, 0), new PointF(1, 1.5f) },
-                { new PointF(0, 0), new PointF(2, 3), new PointF(1, 3), new PointF(1, 2), null },
+                { (0, 0), (2, 3), (1, 3), (1, 0), (1, 1.5f) },
+                { (3, 1), (3, 3), (3, 2), (4, 2), (3, 2)},
+                { (1, -3), (3, -1), (3, -4), (2, -2), (2, -2)},
+                { (0, 0), (2, 1), (2, 1.0001f), (5, 2), (2, 1)}, // Robust to inaccuracies
+                { (0, 0), (2, 3), (1, 3), (1, 2), null },
+                { (-3, 3), (-1, 3), (-3, 2), (-1, 2), null},
+                { (-4, 3), (-4, 1), (-5, 3), (-5, 1), null},
+                { (0, 0), (4, 1), (4, 1), (8, 2), null}, // Collinear intersections are ignored
+                { (0, 0), (4, 1), (4, 1.0001f), (8, 2), null}, // Collinear intersections are ignored
             };
 
         [Theory]
         [MemberData(nameof(LineSegmentToLineSegment_Data))]
-        public void LineSegmentToLineSegment(PointF a0, PointF a1, PointF b0, PointF b1, PointF? expected)
+        public void LineSegmentToLineSegmentNoCollinear(
+            (float x, float y) a0,
+            (float x, float y) a1,
+            (float x, float y) b0,
+            (float x, float y) b1,
+            (float x, float y)? expected)
         {
             PointF ip = default;
 
-            bool result = Intersect.LineSegmentToLineSegment(a0, a1, b0, b1, ref ip);
+            bool result = Intersect.LineSegmentToLineSegmentIgnoreCollinear(P(a0), P(a1), P(b0), P(b1), ref ip);
             Assert.Equal(result, expected.HasValue);
             if (expected.HasValue)
             {
-                Assert.Equal(expected.Value, ip);
+                Assert.Equal(P(expected.Value), ip, new ApproximateFloatComparer(1e-3f));
             }
+
+            static PointF P((float x, float y) p) => new PointF(p.x, p.y);
         }
     }
 }
