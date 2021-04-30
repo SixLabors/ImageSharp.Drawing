@@ -191,7 +191,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void FillComplex<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
             => provider.VerifyOperation(
-                TolerantComparer,
+                new TolerantImageComparer(0.2f),
                 image =>
                 {
                     var star = new Star(50, 50, 5, 20, 45);

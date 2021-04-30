@@ -1,6 +1,8 @@
 ﻿// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Numerics;
+
 namespace SixLabors.ImageSharp.Drawing.Utilities
 {
     internal static class Intersect
@@ -9,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
         private const float MinusEps = -Eps;
         private const float OnePlusEps = 1 + Eps;
 
-        public static bool LineSegmentToLineSegmentIgnoreCollinear(PointF a0, PointF a1, PointF b0, PointF b1, ref PointF intersectionPoint)
+        public static bool LineSegmentToLineSegmentIgnoreCollinear(Vector2 a0, Vector2 a1, Vector2 b0, Vector2 b1, ref Vector2 intersectionPoint)
         {
             float dax = a1.X - a0.X;
             float day = a1.Y - a0.Y;

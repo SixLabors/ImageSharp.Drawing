@@ -1,6 +1,7 @@
 ﻿// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using Xunit;
 
@@ -31,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
             (float x, float y) b1,
             (float x, float y)? expected)
         {
-            PointF ip = default;
+            Vector2 ip = default;
 
             bool result = Intersect.LineSegmentToLineSegmentIgnoreCollinear(P(a0), P(a1), P(b0), P(b1), ref ip);
             Assert.Equal(result, expected.HasValue);
@@ -40,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
                 Assert.Equal(P(expected.Value), ip, new ApproximateFloatComparer(1e-3f));
             }
 
-            static PointF P((float x, float y) p) => new PointF(p.x, p.y);
+            static Vector2 P((float x, float y) p) => new Vector2(p.x, p.y);
         }
     }
 }
