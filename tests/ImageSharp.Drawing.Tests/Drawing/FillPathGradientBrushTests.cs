@@ -196,8 +196,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 {
                     var star = new Star(50, 50, 5, 20, 45);
                     PointF[] points = star.Points.ToArray();
-                    Color[] colors = { Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple,
-                        Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple };
+                    Color[] colors =
+                    {
+                        Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple,
+                        Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple
+                    };
 
                     var brush = new PathGradientBrush(points, colors, Color.White);
 

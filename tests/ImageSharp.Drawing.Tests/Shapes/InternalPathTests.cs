@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Linq;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
@@ -85,26 +84,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 },
             };
 
-        [Theory]
-        [MemberData(nameof(PointInPolygonTheoryData))]
-        public void PointInPolygon(TestPoint location, TestSize size, TestPoint point, bool isInside)
-        {
-            InternalPath shape = Create(location, size);
-            Assert.Equal(isInside, shape.PointInPolygon(point));
-        }
-
-        [Fact]
-        public void PointInPolygon_OpenPath()
-        {
-            var seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(0, 10), new PointF(10, 10), new PointF(10, 0));
-
-            var p = new InternalPath(seg1, false);
-            Assert.False(p.PointInPolygon(new PointF(5, 5)));
-
-            var p2 = new InternalPath(seg1, true);
-            Assert.True(p2.PointInPolygon(new PointF(5, 5f)));
-        }
-
         private const float HalfPi = (float)(Math.PI / 2);
         private const float Pi = (float)Math.PI;
 
@@ -122,115 +101,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Assert.Equal(expectedX, point.Point.X, 4);
             Assert.Equal(expectedY, point.Point.Y, 4);
             Assert.Equal(expectedAngle, point.Angle, 4);
-        }
-
-        [Fact]
-        public void Intersections_buffer()
-        {
-            InternalPath shape = Create(new PointF(0, 0), new Size(10, 10));
-            var intersections = new PointF[shape.PointCount];
-            var orientations = new PointOrientation[shape.PointCount];
-            int hits = shape.FindIntersections(new PointF(5, -10), new PointF(5, 20), intersections, orientations);
-
-            Assert.Equal(2, hits);
-            Assert.Equal(new PointF(5, 0), intersections[0]);
-            Assert.Equal(new PointF(5, 10), intersections[1]);
-        }
-
-        [Fact]
-        public void Intersections_enumerabe()
-        {
-            InternalPath shape = Create(new PointF(0, 0), new Size(10, 10));
-            PointF[] buffer = shape.FindIntersections(new PointF(5, -10), new PointF(5, 20)).ToArray();
-
-            Assert.Equal(2, buffer.Length);
-            Assert.Equal(new PointF(5, 0), buffer[0]);
-            Assert.Equal(new PointF(5, 10), buffer[1]);
-        }
-
-        [Fact]
-        public void Intersections_enumerabe_openpath()
-        {
-            InternalPath shape = Create(new PointF(0, 0), new Size(10, 10), false);
-            PointF[] buffer = shape.FindIntersections(new PointF(5, -10), new PointF(5, 20)).ToArray();
-
-            Assert.Equal(2, buffer.Length);
-            Assert.Equal(new PointF(5, 0), buffer[0]);
-            Assert.Equal(new PointF(5, 10), buffer[1]);
-        }
-
-        [Fact]
-        public void Intersections_Diagonal()
-        {
-            var shape = new InternalPath(new LinearLineSegment(new PointF(0, 0), new PointF(10, 10)), false);
-
-            PointF[] buffer = shape.FindIntersections(new PointF(0, 10), new PointF(10, 0)).ToArray();
-
-            Assert.Single(buffer);
-            Assert.Equal(new PointF(5, 5), buffer[0]);
-        }
-
-        [Fact]
-        public void Intersections_Diagonal_NoHit()
-        {
-            var shape = new InternalPath(new LinearLineSegment(new PointF(0, 0), new PointF(4, 4)), false);
-
-            PointF[] buffer = shape.FindIntersections(new PointF(0, 10), new PointF(10, 0)).ToArray();
-
-            Assert.Empty(buffer);
-        }
-
-        [Fact]
-        public void Intersections_Diagonal_and_straight_NoHit()
-        {
-            var shape = new InternalPath(new LinearLineSegment(new PointF(0, 0), new PointF(4, 4)), false);
-
-            PointF[] buffer = shape.FindIntersections(new PointF(3, 10), new PointF(3, 3.5f)).ToArray();
-
-            Assert.Empty(buffer);
-        }
-
-        [Fact]
-        public void Intersections_IntersectionRule_OddEven()
-        {
-            var shape = new InternalPath(
-                new LinearLineSegment(
-                    new PointF(1, 3),
-                    new PointF(1, 2),
-                    new PointF(5, 2),
-                    new PointF(5, 5),
-                    new PointF(2, 5),
-                    new PointF(2, 1),
-                    new PointF(3, 1),
-                    new PointF(3, 4),
-                    new PointF(4, 4),
-                    new PointF(3, 4)), true);
-
-            PointF[] buffer = shape.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.OddEven).ToArray();
-
-            Assert.Equal(4, buffer.Length);
-        }
-
-        [Fact]
-        public void Intersections_IntersectionRule_Nonezero()
-        {
-            var shape = new InternalPath(
-                new LinearLineSegment(
-                    new PointF(1, 3),
-                    new PointF(1, 2),
-                    new PointF(5, 2),
-                    new PointF(5, 5),
-                    new PointF(2, 5),
-                    new PointF(2, 1),
-                    new PointF(3, 1),
-                    new PointF(3, 4),
-                    new PointF(4, 4),
-                    new PointF(3, 4)),
-                true);
-
-            PointF[] buffer = shape.FindIntersections(new PointF(0, 2.5f), new PointF(6, 2.5f), IntersectionRule.Nonzero).ToArray();
-
-            Assert.Equal(2, buffer.Length);
         }
     }
 }

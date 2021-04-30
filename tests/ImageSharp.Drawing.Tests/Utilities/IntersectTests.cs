@@ -13,14 +13,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
             new ()
             {
                 { (0, 0), (2, 3), (1, 3), (1, 0), (1, 1.5f) },
-                { (3, 1), (3, 3), (3, 2), (4, 2), (3, 2)},
-                { (1, -3), (3, -1), (3, -4), (2, -2), (2, -2)},
-                { (0, 0), (2, 1), (2, 1.0001f), (5, 2), (2, 1)}, // Robust to inaccuracies
+                { (3, 1), (3, 3), (3, 2), (4, 2), (3, 2) },
+                { (1, -3), (3, -1), (3, -4), (2, -2), (2, -2) },
+                { (0, 0), (2, 1), (2, 1.0001f), (5, 2), (2, 1) }, // Robust to inaccuracies
                 { (0, 0), (2, 3), (1, 3), (1, 2), null },
-                { (-3, 3), (-1, 3), (-3, 2), (-1, 2), null},
-                { (-4, 3), (-4, 1), (-5, 3), (-5, 1), null},
-                { (0, 0), (4, 1), (4, 1), (8, 2), null}, // Collinear intersections are ignored
-                { (0, 0), (4, 1), (4, 1.0001f), (8, 2), null}, // Collinear intersections are ignored
+                { (-3, 3), (-1, 3), (-3, 2), (-1, 2), null },
+                { (-4, 3), (-4, 1), (-5, 3), (-5, 1), null },
+                { (0, 0), (4, 1), (4, 1), (8, 2), null }, // Collinear intersections are ignored
+                { (0, 0), (4, 1), (4, 1.0001f), (8, 2), null }, // Collinear intersections are ignored
             };
 
         [Theory]
