@@ -189,7 +189,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             private readonly TPixel transparentPixel;
 
-            private readonly ThreadLocal<ThreadContextData> threadContextData;
+            private ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
 
             private bool isDisposed;
 
@@ -220,9 +220,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.centerPixel = centerColor.ToPixel<TPixel>();
                 this.maxDistance = points.Select(p => (Vector2)(p - this.center)).Max(d => d.Length());
                 this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
-                this.threadContextData = new ThreadLocal<ThreadContextData>(
-                    () => new ThreadContextData(configuration.MemoryAllocator, source.Width),
-                    true);
+                this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
             }
 
             internal TPixel this[int x, int y]
@@ -285,9 +283,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <inheritdoc />
             public override void Apply(Span<float> scanline, int x, int y)
             {
-                ThreadContextData contextData = this.threadContextData.Value;
-                Span<float> amounts = contextData.AmountSpan.Slice(0, scanline.Length);
-                Span<TPixel> overlays = contextData.OverlaySpan.Slice(0, scanline.Length);
+                Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
+                Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
                 float blendPercentage = this.Options.BlendPercentage;
 
                 // TODO: Remove bounds checks.
@@ -324,12 +321,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                 if (disposing)
                 {
-                    foreach (ThreadContextData data in this.threadContextData.Values)
-                    {
-                        data.Dispose();
-                    }
-
-                    this.threadContextData.Dispose();
+                    this.blenderBuffers.Dispose();
                 }
 
                 this.isDisposed = true;
@@ -393,33 +385,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 u = ((d11 * d20) - (d01 * d21)) / denominator;
                 v = ((d00 * d21) - (d01 * d20)) / denominator;
                 return true;
-            }
-
-            private sealed class ThreadContextData : IDisposable
-            {
-                private bool isDisposed;
-                private readonly IMemoryOwner<float> amountBuffer;
-                private readonly IMemoryOwner<TPixel> overlayBuffer;
-
-                public ThreadContextData(MemoryAllocator allocator, int scanlineLength)
-                {
-                    this.amountBuffer = allocator.Allocate<float>(scanlineLength);
-                    this.overlayBuffer = allocator.Allocate<TPixel>(scanlineLength);
-                }
-
-                public Span<float> AmountSpan => this.amountBuffer.Memory.Span;
-
-                public Span<TPixel> OverlaySpan => this.overlayBuffer.Memory.Span;
-
-                public void Dispose()
-                {
-                    if (!this.isDisposed)
-                    {
-                        this.isDisposed = true;
-                        this.amountBuffer.Dispose();
-                        this.overlayBuffer.Dispose();
-                    }
-                }
             }
         }
     }
