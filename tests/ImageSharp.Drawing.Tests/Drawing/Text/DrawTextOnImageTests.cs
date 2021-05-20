@@ -23,8 +23,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         private const string TestText = "Sphinx of black quartz, judge my vow\n0123456789";
 
-        private static readonly ImageComparer TextDrawingComparer = TestEnvironment.IsFramework
-            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework
+        private static readonly ImageComparer TextDrawingComparer = TestEnvironment.IsFramework || TestEnvironment.NetCoreVersion.StartsWith("2")
+            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework and .NET Core 2.x
             : ImageComparer.TolerantPercentage(1e-5f);
 
         private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);

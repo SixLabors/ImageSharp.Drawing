@@ -24,7 +24,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         private static readonly Lazy<string> SolutionDirectoryFullPathLazy = new Lazy<string>(GetSolutionDirectoryFullPathImpl);
 
+        private static readonly Lazy<string> NetCoreVersionLazy = new Lazy<string>(GetNetCoreVersion);
+
         internal static bool IsFramework => RuntimeInformation.FrameworkDescription.StartsWith(".NET Framework");
+
+        /// <summary>
+        /// Gets the .NET Core version, if running on .NET Core, otherwise returns an empty string.
+        /// </summary>
+        internal static string NetCoreVersion => NetCoreVersionLazy.Value;
 
         /// <summary>
         /// Gets a value indicating whether test execution runs on CI.
@@ -131,6 +138,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             }
 
             return path;
+        }
+
+        /// <summary>
+        /// Solution borrowed from:
+        /// https://github.com/dotnet/BenchmarkDotNet/issues/448#issuecomment-308424100
+        /// </summary>
+        private static string GetNetCoreVersion()
+        {
+            Assembly assembly = typeof(System.Runtime.GCSettings).GetTypeInfo().Assembly;
+            string[] assemblyPath = assembly.Location.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+            int netCoreAppIndex = Array.IndexOf(assemblyPath, "Microsoft.NETCore.App");
+            if (netCoreAppIndex > 0 && netCoreAppIndex < assemblyPath.Length - 2)
+            {
+                return assemblyPath[netCoreAppIndex + 1];
+            }
+
+            return string.Empty;
         }
     }
 }
