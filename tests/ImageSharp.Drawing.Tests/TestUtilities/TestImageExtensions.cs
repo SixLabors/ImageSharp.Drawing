@@ -62,7 +62,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             if (TestEnvironment.RunsOnCI)
             {
-                // return image;
+                return image;
             }
 
             // We are running locally then we want to save it out
@@ -101,7 +101,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             if (TestEnvironment.RunsOnCI)
             {
-                // return;
+                return;
             }
 
             // We are running locally then we want to save it out
@@ -122,7 +122,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             if (TestEnvironment.RunsOnCI)
             {
-                // return image;
+                return image;
             }
 
             // We are running locally then we want to save it out
