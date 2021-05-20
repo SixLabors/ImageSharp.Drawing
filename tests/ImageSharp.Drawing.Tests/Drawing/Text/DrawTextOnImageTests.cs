@@ -23,8 +23,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         private const string TestText = "Sphinx of black quartz, judge my vow\n0123456789";
 
-        private static readonly ImageComparer TextDrawingComparer = TestEnvironment.IsFramework
-            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework
+        private static readonly ImageComparer TextDrawingComparer = TestEnvironment.IsFramework || TestEnvironment.NetCoreVersion.StartsWith("2")
+            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework and .NET Core 2.x
             : ImageComparer.TolerantPercentage(1e-5f);
 
         private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);
@@ -65,6 +65,40 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                   img.Mutate(i => i.DrawText(textGraphicOptions, text, font, color, center));
               },
               $"ColorFontsEnabled-{enableColorFonts}");
+        }
+
+        [Theory]
+        [WithSolidFilledImages(400, 200, "White", PixelTypes.Rgba32)]
+        public void FallbackFontRendering<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            // https://github.com/SixLabors/Fonts/issues/171
+            var collection = new FontCollection();
+            FontFamily whitney = collection.Install(TestFontUtilities.GetPath("whitney-book.ttf"));
+            FontFamily malgun = collection.Install(TestFontUtilities.GetPath("malgun.ttf"));
+            Font font = whitney.CreateFont(25);
+
+            Color color = Color.Black;
+            const string text = "亞DARKSOUL亞";
+
+            var textGraphicOptions = new DrawingOptions
+            {
+                TextOptions =
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    FallbackFonts = { malgun },
+                    ApplyKerning = true
+                }
+            };
+
+            provider.VerifyOperation(
+              TextDrawingComparer,
+              img =>
+              {
+                  var center = new PointF(img.Width / 2, img.Height / 2);
+                  img.Mutate(i => i.DrawText(textGraphicOptions, text, font, color, center));
+              });
         }
 
         [Theory]
@@ -249,7 +283,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             string str = Repeat(" ", 78) + "THISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDS";
             sb.Append(str);
 
-            string newLines = Repeat(Environment.NewLine, 80);
+            string newLines = Repeat(Environment.NewLine, 61);
             sb.Append(newLines);
 
             for (int i = 0; i < 10; i++)

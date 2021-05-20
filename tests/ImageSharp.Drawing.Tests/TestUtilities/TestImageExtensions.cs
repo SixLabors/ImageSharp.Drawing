@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             bool appendSourceFileOrDescription = true,
             IImageEncoder encoder = null)
         {
-            if (TestEnvironment.RunsOnCI)
+            if (TestEnvironment.RunsWithCodeCoverage)
             {
                 return image;
             }
@@ -99,7 +99,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             object testOutputDetails = null,
             bool appendPixelTypeToFileName = true)
         {
-            if (TestEnvironment.RunsOnCI)
+            if (TestEnvironment.RunsWithCodeCoverage)
             {
                 return;
             }
@@ -120,7 +120,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             bool appendPixelTypeToFileName = true)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            if (TestEnvironment.RunsOnCI)
+            if (TestEnvironment.RunsWithCodeCoverage)
             {
                 return image;
             }
