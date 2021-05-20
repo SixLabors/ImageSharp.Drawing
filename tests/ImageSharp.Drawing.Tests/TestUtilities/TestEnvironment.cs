@@ -24,15 +24,25 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         private static readonly Lazy<string> SolutionDirectoryFullPathLazy = new Lazy<string>(GetSolutionDirectoryFullPathImpl);
 
-        private static readonly Lazy<bool> RunsOnCiLazy = new Lazy<bool>(
-            () => bool.TryParse(Environment.GetEnvironmentVariable("CI"), out bool isCi) && isCi);
-
         internal static bool IsFramework => RuntimeInformation.FrameworkDescription.StartsWith(".NET Framework");
 
         /// <summary>
         /// Gets a value indicating whether test execution runs on CI.
         /// </summary>
-        internal static bool RunsOnCI => RunsOnCiLazy.Value;
+#if ENV_CI
+        internal static bool RunsOnCI => true;
+#else
+        internal static bool RunsOnCI => false;
+#endif
+
+        /// <summary>
+        /// Gets a value indicating whether test execution is running with code coverage testing enabled.
+        /// </summary>
+#if ENV_CODECOV
+        internal static bool RunsWithCodeCoverage => true;
+#else
+        internal static bool RunsWithCodeCoverage => false;
+#endif
 
         internal static string SolutionDirectoryFullPath => SolutionDirectoryFullPathLazy.Value;
 
