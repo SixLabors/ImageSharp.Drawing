@@ -23,7 +23,7 @@
     <None Update="TestFonts\*.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="TestFonts\SixLaborsSampleAB.woff">
+    <None Update="TestFonts\*.woff">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="xunit.runner.json">
