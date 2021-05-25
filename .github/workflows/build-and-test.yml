@@ -52,6 +52,7 @@ jobs:
             - name: Git Checkout
               uses: actions/checkout@v2
               with:
+                fetch-depth: 2
                 submodules: recursive
             
             # See https://github.com/actions/checkout/issues/165#issuecomment-657673315
@@ -122,6 +123,7 @@ jobs:
             - name: Git Checkout
               uses: actions/checkout@v2
               with:
+                fetch-depth: 2
                 submodules: recursive
 
             - name: NuGet Install
