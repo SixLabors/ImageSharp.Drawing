@@ -44,6 +44,11 @@ jobs:
 
         steps:
             - uses: actions/checkout@v2
+              with:
+                submodules: recursive
+              run: |
+                  git config --global core.autocrlf false
+                  git config --global core.longpaths true
             
             # See https://github.com/actions/checkout/issues/165#issuecomment-657673315
             - name: Create LFS file list
@@ -61,14 +66,6 @@ jobs:
 
             - name: Install NuGet
               uses: NuGet/setup-nuget@v1
-
-            - name: Setup Git
-              shell: bash
-              run: |
-                  git config --global core.autocrlf false
-                  git config --global core.longpaths true
-                  git fetch --prune --unshallow
-                  git submodule -q update --init --recursive
 
             - name: Setup NuGet Cache
               uses: actions/cache@v2
@@ -113,17 +110,14 @@ jobs:
 
         steps:
             - uses: actions/checkout@v2
-
-            - name: Install NuGet
-              uses: NuGet/setup-nuget@v1
-
-            - name: Setup Git
-              shell: bash
+              with:
+                submodules: recursive
               run: |
                   git config --global core.autocrlf false
                   git config --global core.longpaths true
-                  git fetch --prune --unshallow
-                  git submodule -q update --init --recursive
+
+            - name: Install NuGet
+              uses: NuGet/setup-nuget@v1
 
             - name: Pack
               shell: pwsh
