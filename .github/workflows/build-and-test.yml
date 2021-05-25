@@ -46,7 +46,7 @@ jobs:
             - uses: actions/checkout@v2
               with:
                 submodules: recursive
-              run: |
+            - run: |
                   git config --global core.autocrlf false
                   git config --global core.longpaths true
             
@@ -112,7 +112,7 @@ jobs:
             - uses: actions/checkout@v2
               with:
                 submodules: recursive
-              run: |
+            - run: |
                   git config --global core.autocrlf false
                   git config --global core.longpaths true
 
