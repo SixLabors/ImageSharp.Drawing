@@ -144,8 +144,7 @@ jobs:
             - name: MyGet Publish
               shell: pwsh
               run: |
-                  $apiKey = ${{secrets.MYGET_TOKEN}}
                   $source = "https://www.myget.org/F/sixlabors/api/v2/package"
                   $symbolSource = "https://www.myget.org/F/sixlabors/api/v3/index.json"
-                  dotnet nuget push .\artifacts\*.nupkg -k = $apiKey -sk $apiKey -s $source -ss $symbolSource
+                  dotnet nuget push .\artifacts\*.nupkg -k ${{secrets.MYGET_TOKEN}} -sk ${{secrets.MYGET_TOKEN}} -s $source -ss $symbolSource
               # TODO: If github.ref starts with 'refs/tags' then it was tag push and we can optionally push out package to nuget.org
