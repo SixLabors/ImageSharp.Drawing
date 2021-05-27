@@ -109,7 +109,7 @@ jobs:
     Publish:
         needs: [Build]
 
-        runs-on: windows-latest
+        runs-on: ubuntu-latest
 
         if: (github.event_name == 'push')
 
@@ -128,6 +128,14 @@ jobs:
 
             - name: NuGet Install
               uses: NuGet/setup-nuget@v1
+
+            - name: NuGet Setup Cache
+              uses: actions/cache@v2
+              id: nuget-cache
+              with:
+                  path: ~/.nuget
+                  key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
+                  restore-keys: ${{ runner.os }}-nuget-
 
             - name: DotNet Pack
               shell: pwsh
