@@ -146,5 +146,5 @@ jobs:
               run: |
                   $source = "https://www.myget.org/F/sixlabors/api/v2/package"
                   $symbolSource = "https://www.myget.org/F/sixlabors/api/v3/index.json"
-                  dotnet nuget push .\artifacts\*.nupkg ${{secrets.MYGET_TOKEN}} --source $source --symbol-source $symbolSource
+                  dotnet nuget push .\artifacts\*.nupkg --symbol-api-key ${{secrets.MYGET_TOKEN}} --source $source --symbol-source $symbolSource
               # TODO: If github.ref starts with 'refs/tags' then it was tag push and we can optionally push out package to nuget.org
