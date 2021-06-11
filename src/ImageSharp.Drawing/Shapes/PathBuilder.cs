@@ -199,6 +199,16 @@ namespace SixLabors.ImageSharp.Drawing
             return this;
         }
 
+        /// <summary>
+        /// Adds a elliptical arc to the current  figure
+        /// </summary>
+        /// <param name="center">center point of the arc</param>
+        /// <param name="firstRadius">first radius</param>
+        /// <param name="secondRadius">second radius</param>
+        /// <param name="rotation">rotation of the first radius to the x Axis</param>
+        /// <param name="startAngle">starting angle of arc</param>
+        /// <param name="sweepAngle">sweeping angel of the arc</param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(PointF center, float firstRadius, float secondRadius, float rotation, float startAngle, float sweepAngle)
         {
             EllipticalArcLineSegment arc = new EllipticalArcLineSegment(center, firstRadius, secondRadius, rotation, startAngle, sweepAngle);
