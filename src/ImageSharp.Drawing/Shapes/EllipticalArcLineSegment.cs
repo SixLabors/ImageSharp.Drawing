@@ -5,7 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes
+namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
     /// Represents a line segment that contains radii and angles that will be rendered as a elliptical arc
@@ -69,6 +69,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             }
 
             // TODO
+            return this;
         }
 
         /// <summary>
@@ -88,31 +89,40 @@ namespace SixLabors.ImageSharp.Drawing.Shapes
             for (float i = this.startAngle; i < this.startAngle + this.sweepAngle; i++)
             {
                 float end = i + 1;
-                if (end <= this.startAngle + this.sweepAngle)
+                if (end >= this.startAngle + this.sweepAngle)
                 {
                     end = this.startAngle + this.sweepAngle;
                 }
 
-                points.AddRange(this.GetDrawingPoints(points[points.Count - 1], i, end));
+                points.AddRange(this.GetDrawingPoints( i, end,0));
             }
 
             return points.ToArray();
         }
 
-        private List<PointF> GetDrawingPoints(PointF start, float startAngle, float end)
+        private List<PointF> GetDrawingPoints(float start, float end, int depth)
         {
+            if (depth > 1000)
+            {
+                return new List<PointF>();
+            }
+
             var points = new List<PointF>();
+
+            float startX = (float)((this.firstRadius * Math.Sin(Math.PI * start / 180) * Math.Cos(Math.PI * this.rotation / 180)) - (this.secondRadius * Math.Cos(Math.PI * start / 180) * Math.Sin(Math.PI * this.rotation / 180)) + this.center.X);
+            float startY = (float)((this.firstRadius * Math.Sin(Math.PI * start / 180) * Math.Sin(Math.PI * this.rotation / 180)) + (this.secondRadius * Math.Cos(Math.PI * start / 180) * Math.Cos(Math.PI * this.rotation / 180)) + this.center.Y);
+
             float endX = (float)((this.firstRadius * Math.Sin(Math.PI * end / 180) * Math.Cos(Math.PI * this.rotation / 180)) - (this.secondRadius * Math.Cos(Math.PI * end / 180) * Math.Sin(Math.PI * this.rotation / 180)) + this.center.X);
             float endY = (float)((this.firstRadius * Math.Sin(Math.PI * end / 180) * Math.Sin(Math.PI * this.rotation / 180)) + (this.secondRadius * Math.Cos(Math.PI * end / 180) * Math.Cos(Math.PI * this.rotation / 180)) + this.center.Y);
-            if ((new Vector2(endX, endY) - new Vector2(start.X, start.Y)).LengthSquared() < MinimumSqrDistance)
+            if ((new Vector2(endX, endY) - new Vector2(startX, startY)).LengthSquared() < MinimumSqrDistance)
             {
                 points.Add(new PointF(endX, endY));
             }
             else
             {
-                float mid = startAngle + ((startAngle - end) / 2);
-                points.AddRange(this.GetDrawingPoints(start, startAngle, mid));
-                points.AddRange(this.GetDrawingPoints(points[points.Count - 1], mid, end));
+                float mid = start + ((end - start) / 2);
+                points.AddRange(this.GetDrawingPoints(start, mid, depth + 1));
+                points.AddRange(this.GetDrawingPoints(mid, end, depth + 1));
             }
 
             return points;
