@@ -35,15 +35,20 @@ namespace SixLabors.ImageSharp.Drawing
         {
             Guard.MustBeGreaterThan(firstRadius, 0, nameof(firstRadius));
             Guard.MustBeGreaterThan(secondRadius, 0, nameof(secondRadius));
-            Guard.MustBeBetweenOrEqualTo(rotation, 0, 360, nameof(rotation));
-            Guard.MustBeBetweenOrEqualTo(startAngle, 0, 360, nameof(startAngle));
-            Guard.MustBeBetweenOrEqualTo(sweepAngle, 0, 360, nameof(sweepAngle));
+            Guard.MustBeGreaterThanOrEqualTo(rotation, 0, nameof(rotation));
+            Guard.MustBeGreaterThanOrEqualTo(startAngle, 0, nameof(startAngle));
+            Guard.MustBeGreaterThanOrEqualTo(sweepAngle, 0, nameof(sweepAngle));
             this.center = center;
             this.firstRadius = firstRadius;
             this.secondRadius = secondRadius;
-            this.rotation = rotation;
-            this.startAngle = startAngle;
+            this.rotation = rotation % 360;
+            this.startAngle = startAngle % 360;
             this.sweepAngle = sweepAngle;
+            if (sweepAngle > 360)
+            {
+                sweepAngle = 360;
+            }
+
             this.linePoints = this.GetDrawingPoints();
             this.EndPoint = this.linePoints[this.linePoints.Length - 1];
         }
