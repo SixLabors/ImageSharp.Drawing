@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing
             this.sweepAngle = sweepAngle;
             if (sweepAngle > 360)
             {
-                sweepAngle = 360;
+                this.sweepAngle = 360;
             }
 
             this.linePoints = this.GetDrawingPoints();
@@ -86,11 +86,10 @@ namespace SixLabors.ImageSharp.Drawing
 
         private PointF[] GetDrawingPoints()
         {
-            var points = new List<PointF>();
+            var points = new List<PointF>() {
+            this.calculatePoint(this.startAngle)
+            };
 
-            float startX = (float)((this.firstRadius * Math.Sin(Math.PI * this.startAngle / 180) * Math.Cos(Math.PI * this.rotation / 180)) - (this.secondRadius * Math.Cos(Math.PI * this.startAngle / 180) * Math.Sin(Math.PI * this.rotation / 180)) + this.center.X);
-            float startY = (float)((this.firstRadius * Math.Sin(Math.PI * this.startAngle / 180) * Math.Sin(Math.PI * this.rotation / 180)) + (this.secondRadius * Math.Cos(Math.PI * this.startAngle / 180) * Math.Cos(Math.PI * this.rotation / 180)) + this.center.Y);
-            points.Add(new PointF(startX, startY));
             for (float i = this.startAngle; i < this.startAngle + this.sweepAngle; i++)
             {
                 float end = i + 1;
@@ -114,14 +113,11 @@ namespace SixLabors.ImageSharp.Drawing
 
             var points = new List<PointF>();
 
-            float startX = (float)((this.firstRadius * Math.Sin(Math.PI * start / 180) * Math.Cos(Math.PI * this.rotation / 180)) - (this.secondRadius * Math.Cos(Math.PI * start / 180) * Math.Sin(Math.PI * this.rotation / 180)) + this.center.X);
-            float startY = (float)((this.firstRadius * Math.Sin(Math.PI * start / 180) * Math.Sin(Math.PI * this.rotation / 180)) + (this.secondRadius * Math.Cos(Math.PI * start / 180) * Math.Cos(Math.PI * this.rotation / 180)) + this.center.Y);
-
-            float endX = (float)((this.firstRadius * Math.Sin(Math.PI * end / 180) * Math.Cos(Math.PI * this.rotation / 180)) - (this.secondRadius * Math.Cos(Math.PI * end / 180) * Math.Sin(Math.PI * this.rotation / 180)) + this.center.X);
-            float endY = (float)((this.firstRadius * Math.Sin(Math.PI * end / 180) * Math.Sin(Math.PI * this.rotation / 180)) + (this.secondRadius * Math.Cos(Math.PI * end / 180) * Math.Cos(Math.PI * this.rotation / 180)) + this.center.Y);
-            if ((new Vector2(endX, endY) - new Vector2(startX, startY)).LengthSquared() < MinimumSqrDistance)
+            PointF startP = calculatePoint(start);
+            PointF endP = calculatePoint(end);
+            if ((new Vector2(endP.X, endP.Y) - new Vector2(startP.X, startP.Y)).LengthSquared() < MinimumSqrDistance)
             {
-                points.Add(new PointF(endX, endY));
+                points.Add(endP);
             }
             else
             {
@@ -131,6 +127,13 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             return points;
+        }
+
+        private PointF calculatePoint(float angle)
+        {
+            float x = (float)((this.firstRadius * Math.Sin(Math.PI * angle / 180) * Math.Cos(Math.PI * this.rotation / 180)) - (this.secondRadius * Math.Cos(Math.PI * angle / 180) * Math.Sin(Math.PI * this.rotation / 180)) + this.center.X);
+            float y = (float)((this.firstRadius * Math.Sin(Math.PI * angle / 180) * Math.Sin(Math.PI * this.rotation / 180)) + (this.secondRadius * Math.Cos(Math.PI * angle / 180) * Math.Cos(Math.PI * this.rotation / 180)) + this.center.Y);
+            return new PointF(x, y);
         }
 
         /// <summary>
