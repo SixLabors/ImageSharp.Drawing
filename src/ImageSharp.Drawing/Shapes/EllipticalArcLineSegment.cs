@@ -21,6 +21,7 @@ namespace SixLabors.ImageSharp.Drawing
         private readonly float rotation;
         private readonly float startAngle;
         private readonly float sweepAngle;
+        private readonly Matrix3x2 transformation;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EllipticalArcLineSegment"/> class.
@@ -31,7 +32,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="rotation">The rotation of First radius to the X-Axis</param>
         /// <param name="startAngle">The Start angle of the ellipsis</param>
         /// <param name="sweepAngle"> The sweeping angle of the arc</param>
-        public EllipticalArcLineSegment(PointF center, float firstRadius, float secondRadius, float rotation, float startAngle, float sweepAngle)
+        /// <param name="transformation">The TRanformation matrix, that should be used on the arc</param>
+        public EllipticalArcLineSegment(PointF center, float firstRadius, float secondRadius, float rotation, float startAngle, float sweepAngle, Matrix3x2 transformation)
         {
             Guard.MustBeGreaterThan(firstRadius, 0, nameof(firstRadius));
             Guard.MustBeGreaterThan(secondRadius, 0, nameof(secondRadius));
@@ -51,6 +53,7 @@ namespace SixLabors.ImageSharp.Drawing
 
             this.linePoints = this.GetDrawingPoints();
             this.EndPoint = this.linePoints[this.linePoints.Length - 1];
+            this.transformation = transformation;
         }
 
         /// <summary>
@@ -64,7 +67,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.
         /// </summary>
-        /// <param name="matrix">The matrix.</param>
+        /// <param name="matrix">The transformation matrix.</param>
         /// <returns>A line segment with the matrix applied to it.</returns>
         public EllipticalArcLineSegment Transform(Matrix3x2 matrix)
         {
@@ -73,15 +76,7 @@ namespace SixLabors.ImageSharp.Drawing
                 return this;
             }
 
-            PointF center = PointF.Transform(this.center, matrix);
-            PointF helpFirstRadius = PointF.Transform(CalculatePoint(90, this.firstRadius, this.secondRadius, this.rotation, this.center), matrix);
-            PointF helpSecondRadius = PointF.Transform(CalculatePoint(0, this.firstRadius, this.secondRadius, this.rotation, this.center), matrix);
-            float firstRadius = new Vector2(center.X - helpFirstRadius.X, center.Y - helpFirstRadius.Y).Length();
-            float secondRadius = new Vector2(center.X - helpSecondRadius.X, center.Y - helpSecondRadius.Y).Length();
-            Vector2 helperRotation1 = new Vector2(helpFirstRadius.X - center.X, helpFirstRadius.Y - center.Y);
-            Vector2 helperRotation2 = new Vector2(firstRadius, 0);
-            float rotatation = (float)Math.Acos(Vector2.Dot(helperRotation1, helperRotation2) / (helperRotation1.Length() * helperRotation2.Length()));
-            return new EllipticalArcLineSegment(center, firstRadius, secondRadius, rotation,);
+            return new EllipticalArcLineSegment(this.center, this.firstRadius, this.secondRadius, this.rotation, this.startAngle, this.sweepAngle, Matrix3x2.Multiply(this.transformation, matrix));
         }
 
         /// <summary>
@@ -93,8 +88,9 @@ namespace SixLabors.ImageSharp.Drawing
 
         private PointF[] GetDrawingPoints()
         {
-            var points = new List<PointF>() {
-            CalculatePoint(this.startAngle, this.firstRadius, this.secondRadius, this.rotation, this.center)
+            var points = new List<PointF>()
+            {
+            this.CalculatePoint(this.startAngle)
             };
 
             for (float i = this.startAngle; i < this.startAngle + this.sweepAngle; i++)
@@ -120,8 +116,8 @@ namespace SixLabors.ImageSharp.Drawing
 
             var points = new List<PointF>();
 
-            PointF startP = CalculatePoint(start, this.firstRadius, this.secondRadius, this.rotation, this.center);
-            PointF endP = CalculatePoint(end, this.firstRadius, this.secondRadius, this.rotation, this.center);
+            PointF startP = this.CalculatePoint(start);
+            PointF endP = this.CalculatePoint(end);
             if ((new Vector2(endP.X, endP.Y) - new Vector2(startP.X, startP.Y)).LengthSquared() < MinimumSqrDistance)
             {
                 points.Add(endP);
@@ -136,11 +132,11 @@ namespace SixLabors.ImageSharp.Drawing
             return points;
         }
 
-        private static PointF CalculatePoint(float angle, float firstRadius, float secondRadius, float rotation, PointF center)
+        private PointF CalculatePoint(float angle)
         {
-            float x = (float)((firstRadius * Math.Sin(Math.PI * angle / 180) * Math.Cos(Math.PI * rotation / 180)) - (secondRadius * Math.Cos(Math.PI * angle / 180) * Math.Sin(Math.PI * rotation / 180)) + center.X);
-            float y = (float)((firstRadius * Math.Sin(Math.PI * angle / 180) * Math.Sin(Math.PI * rotation / 180)) + (secondRadius * Math.Cos(Math.PI * angle / 180) * Math.Cos(Math.PI * rotation / 180)) + center.Y);
-            return new PointF(x, y);
+            float x = (float)((this.firstRadius * Math.Sin(Math.PI * angle / 180) * Math.Cos(Math.PI * this.rotation / 180)) - (this.secondRadius * Math.Cos(Math.PI * angle / 180) * Math.Sin(Math.PI * this.rotation / 180)) + this.center.X);
+            float y = (float)((this.firstRadius * Math.Sin(Math.PI * angle / 180) * Math.Sin(Math.PI * this.rotation / 180)) + (this.secondRadius * Math.Cos(Math.PI * angle / 180) * Math.Cos(Math.PI * this.rotation / 180)) + this.center.Y);
+            return PointF.Transform(new PointF(x, y), this.transformation);
         }
 
         /// <summary>
@@ -149,9 +145,6 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>
         /// Returns the current <see cref="ILineSegment" /> as simple linear path.
         /// </returns>
-        public ReadOnlyMemory<PointF> Flatten()
-        {
-            return this.linePoints;
-        }
+        public ReadOnlyMemory<PointF> Flatten() => this.linePoints;
     }
 }
