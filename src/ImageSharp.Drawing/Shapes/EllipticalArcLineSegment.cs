@@ -45,6 +45,7 @@ namespace SixLabors.ImageSharp.Drawing
             this.secondRadius = secondRadius;
             this.rotation = rotation % 360;
             this.startAngle = startAngle % 360;
+            this.transformation = transformation;
             this.sweepAngle = sweepAngle;
             if (sweepAngle > 360)
             {
@@ -53,7 +54,6 @@ namespace SixLabors.ImageSharp.Drawing
 
             this.linePoints = this.GetDrawingPoints();
             this.EndPoint = this.linePoints[this.linePoints.Length - 1];
-            this.transformation = transformation;
         }
 
         /// <summary>
@@ -136,7 +136,8 @@ namespace SixLabors.ImageSharp.Drawing
         {
             float x = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) - (this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + this.center.X;
             float y = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + (this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) + this.center.Y;
-            return PointF.Transform(new PointF(x, y), this.transformation);
+            var currPoint = new PointF(x, y);
+            return PointF.Transform(currPoint, this.transformation);
         }
 
         /// <summary>
