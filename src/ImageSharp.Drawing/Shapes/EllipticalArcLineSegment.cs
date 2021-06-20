@@ -134,8 +134,8 @@ namespace SixLabors.ImageSharp.Drawing
 
         private PointF CalculatePoint(float angle)
         {
-            float x = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) - ((this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + this.center.X);
-            float y = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + ((this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) + this.center.Y);
+            float x = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) - (this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + this.center.X;
+            float y = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + (this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) + this.center.Y;
             return PointF.Transform(new PointF(x, y), this.transformation);
         }
 
