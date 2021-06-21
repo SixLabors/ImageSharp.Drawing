@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ClipperLib;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
+namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
     /// <summary>
     /// Wrapper for clipper offset
@@ -30,11 +30,22 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         /// </summary>
         /// <param name="width">Width</param>
         /// <returns>path offset</returns>
-        /// <exception cref="ClipperException">Execute: </exception>
+        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
         public ComplexPolygon Execute(float width)
         {
             var tree = new List<List<IntPoint>>();
-            this.innerClipperOffest.Execute(ref tree, width * ScalingFactor / 2);
+            lock (this.syncRoot)
+            {
+                try
+                {
+                    this.innerClipperOffest.Execute(ref tree, width * ScalingFactor / 2);
+                }
+                catch (ClipperLib.ClipperException exception)
+                {
+                    throw new PolygonClipper.ClipperException(exception.Message);
+                }
+            }
+
             var polygons = new List<Polygon>();
             foreach (List<IntPoint> pt in tree)
             {
@@ -51,6 +62,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         /// <param name="pathPoints">The path points</param>
         /// <param name="jointStyle">Joint Style</param>
         /// <param name="endCapStyle">Endcap Style</param>
+        /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         public void AddPath(ReadOnlySpan<PointF> pathPoints, JointStyle jointStyle, EndCapStyle endCapStyle) =>
             this.AddPath(pathPoints, jointStyle, this.Convert(endCapStyle));
 
@@ -60,6 +72,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         /// <param name="path">The path.</param>
         /// <param name="jointStyle">Joint Style</param>
         /// <param name="endCapStyle">Endcap Style</param>
+        /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         public void AddPath(IPath path, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
             if (path is null)
@@ -92,23 +105,25 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         /// <param name="pathPoints">The path points</param>
         /// <param name="jointStyle">Joint Style</param>
         /// <param name="endCapStyle">Endcap Style</param>
-        /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
+        /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         private void AddPath(ReadOnlySpan<PointF> pathPoints, JointStyle jointStyle, EndType endCapStyle)
         {
             var points = new List<IntPoint>();
             foreach (PointF v in pathPoints)
             {
-                if (float.IsNaN(v.X) || float.IsNaN(v.Y))
-                {
-                    throw new ClipperException("Invalid Point");
-                }
-
                 points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
             }
 
             lock (this.syncRoot)
             {
-                this.innerClipperOffest.AddPath(points, this.Convert(jointStyle), endCapStyle);
+                try
+                {
+                    this.innerClipperOffest.AddPath(points, this.Convert(jointStyle), endCapStyle);
+                }
+                catch (ClipperLib.ClipperException exception)
+                {
+                    throw new PolygonClipper.ClipperException(exception.Message);
+                }
             }
         }
 

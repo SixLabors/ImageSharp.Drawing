@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -42,13 +42,21 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <returns>
         /// Returns the <see cref="IPath" /> array containing the converted polygons.
         /// </returns>
+        /// <exception cref="ClipperException">GenerateClippedShapes: Open paths have been disabled.</exception>
         public IPath[] GenerateClippedShapes()
         {
             var results = new List<PolyNode>();
 
             lock (this.syncRoot)
             {
-                this.innerClipper.Execute(ClipType.ctDifference, results);
+                try
+                {
+                    this.innerClipper.Execute(ClipType.ctDifference, results);
+                }
+                catch (ClipperLib.ClipperException exception)
+                {
+                    throw new PolygonClipper.ClipperException(exception.Message);
+                }
             }
 
             var shapes = new IPath[results.Count];
@@ -79,6 +87,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// Adds the paths.
         /// </summary>
         /// <param name="paths">The paths.</param>
+        /// <exception cref="ClipperException">AddPath: Open paths have been disabled</exception>
         public void AddPaths(ClippablePath[] paths)
         {
             if (paths == null)
@@ -99,6 +108,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="paths">The paths.</param>
         /// <param name="clippingType">The clipping type.</param>
+        /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
         public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
             if (paths is null)
@@ -117,6 +127,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="clippingType">The clipping type.</param>
+        /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
         public void AddPath(IPath path, ClippingType clippingType)
         {
             if (path is null)
@@ -149,7 +160,14 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
             PolyType type = clippingType == ClippingType.Clip ? PolyType.ptClip : PolyType.ptSubject;
             lock (this.syncRoot)
             {
-                this.innerClipper.AddPath(points, type, path.IsClosed);
+                try
+                {
+                    this.innerClipper.AddPath(points, type, path.IsClosed);
+                }
+                catch (ClipperLib.ClipperException exception)
+                {
+                    throw new PolygonClipper.ClipperException(exception.Message);
+                }
             }
         }
     }
