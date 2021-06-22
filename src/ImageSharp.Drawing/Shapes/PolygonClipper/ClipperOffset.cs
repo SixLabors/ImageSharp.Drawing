@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
     /// <summary>
     /// Wrapper for clipper offset
     /// </summary>
-    public class ClipperOffset
+    internal class ClipperOffset
     {
         private const float ScalingFactor = 1000.0f;
 
