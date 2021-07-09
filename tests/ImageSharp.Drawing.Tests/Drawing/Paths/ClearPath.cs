@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Path);
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -55,7 +55,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Path);
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -72,7 +72,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Path);
             Assert.NotEqual(this.brush, processor.Brush);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
@@ -91,7 +91,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Path);
             Assert.NotEqual(this.brush, processor.Brush);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);

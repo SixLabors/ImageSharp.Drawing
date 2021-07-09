@@ -53,8 +53,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Collection(
                 processors,
-                p => Assert.Equal(this.path1, p.Shape),
-                p => Assert.Equal(this.path2, p.Shape));
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
         }
 
         [Fact]
@@ -71,8 +71,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Collection(
                 processors,
-                p => Assert.Equal(this.path1, p.Shape),
-                p => Assert.Equal(this.path2, p.Shape));
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
         }
 
         [Fact]
@@ -90,8 +90,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Collection(
                 processors,
-                p => Assert.Equal(this.path1, p.Shape),
-                p => Assert.Equal(this.path2, p.Shape));
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
         }
 
         [Fact]
@@ -109,8 +109,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Collection(
                 processors,
-                p => Assert.Equal(this.path1, p.Shape),
-                p => Assert.Equal(this.path2, p.Shape));
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
         }
 
         [Fact]
@@ -129,8 +129,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Collection(
                 processors,
-                p => Assert.Equal(this.path1, p.Shape),
-                p => Assert.Equal(this.path2, p.Shape));
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
         }
 
         [Fact]
@@ -149,8 +149,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             Assert.Collection(
                 processors,
-                p => Assert.Equal(this.path1, p.Shape),
-                p => Assert.Equal(this.path2, p.Shape));
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
         }
     }
 }
