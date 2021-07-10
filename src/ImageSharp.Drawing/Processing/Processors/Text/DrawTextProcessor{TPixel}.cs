@@ -325,6 +325,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 {
                     IPath path = this.builder.Build();
 
+                    if (path.Bounds.Equals(RectangleF.Empty))
+                    {
+                        return;
+                    }
+
                     // if we are using the fonts color layers we ignore the request to draw an outline only
                     // cause that wont really work and instead force drawing with fill with the requested color
                     // if color fonts disabled then this.currentColor will always be null
