@@ -325,6 +325,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 {
                     IPath path = this.builder.Build();
 
+                    if (path.Bounds.Equals(RectangleF.Empty))
+                    {
+                        return;
+                    }
+
                     // if we are using the fonts color layers we ignore the request to draw an outline only
                     // cause that wont really work and instead force drawing with fill with the requested color
                     // if color fonts disabled then this.currentColor will always be null
@@ -384,7 +389,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                 size = new Size(size.Width + (this.offset * 2), size.Height + (this.offset * 2));
 
-                int subpixelCount = FillRegionProcessor.MinimumSubpixelCount;
+                int subpixelCount = FillPathProcessor.MinimumSubpixelCount;
                 float xOffset = 0.5f;
                 GraphicsOptions graphicsOptions = this.Options.GraphicsOptions;
                 if (graphicsOptions.Antialias)

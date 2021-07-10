@@ -7,42 +7,30 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Adds extensions that allow the filling of polygon outlines to the <see cref="Image{TPixel}"/> type.
+    /// Adds extensions that allow the filling of polygon outlines.
     /// </summary>
     public static class FillPathExtensions
     {
         /// <summary>
-        /// Flood fills the image in the shape of the provided polygon with the specified brush.
+        /// Flood fills the image in the shape of the provided polygon with the specified brush..
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="options">The graphics options.</param>
-        /// <param name="brush">The brush.</param>
-        /// <param name="path">The shape.</param>
+        /// <param name="source">The image processing context.</param>
+        /// <param name="color">The color.</param>
+        /// <param name="path">The logic path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            DrawingOptions options,
-            IBrush brush,
+            Color color,
             IPath path) =>
-            source.ApplyProcessor(new FillPathProcessor(options, brush, path));
-
-        /// <summary>
-        /// Flood fills the image in the shape of the provided polygon with the specified brush.
-        /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="brush">The brush.</param>
-        /// <param name="path">The path.</param>
-        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Fill(this IImageProcessingContext source, IBrush brush, IPath path) =>
-            source.Fill(source.GetDrawingOptions(), brush, path);
+            source.Fill(new SolidBrush(color), path);
 
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush..
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="options">The options.</param>
+        /// <param name="source">The image processing context.</param>
+        /// <param name="options">The drawing options.</param>
         /// <param name="color">The color.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="path">The logic path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
@@ -52,13 +40,31 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.Fill(options, new SolidBrush(color), path);
 
         /// <summary>
-        /// Flood fills the image in the shape of the provided polygon with the specified brush..
+        /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
-        /// <param name="color">The color.</param>
-        /// <param name="path">The path.</param>
+        /// <param name="source">The image processing context.</param>
+        /// <param name="brush">The brush.</param>
+        /// <param name="path">The logic path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Fill(this IImageProcessingContext source, Color color, IPath path) =>
-            source.Fill(new SolidBrush(color), path);
+        public static IImageProcessingContext Fill(
+            this IImageProcessingContext source,
+            IBrush brush,
+            IPath path) =>
+            source.Fill(source.GetDrawingOptions(), brush, path);
+
+        /// <summary>
+        /// Flood fills the image in the shape of the provided polygon with the specified brush.
+        /// </summary>
+        /// <param name="source">The image processing context.</param>
+        /// <param name="options">The drawing options.</param>
+        /// <param name="brush">The brush.</param>
+        /// <param name="path">The shape.</param>
+        /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
+        public static IImageProcessingContext Fill(
+            this IImageProcessingContext source,
+            DrawingOptions options,
+            IBrush brush,
+            IPath path) =>
+            source.ApplyProcessor(new FillPathProcessor(options, brush, path));
     }
 }

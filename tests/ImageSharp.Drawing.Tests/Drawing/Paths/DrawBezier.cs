@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            this.VerifyPoints(this.points, processor.Shape);
+            this.VerifyPoints(this.points, processor.Path);
             Assert.Equal(this.pen, processor.Pen);
         }
 
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            this.VerifyPoints(this.points, processor.Shape);
+            this.VerifyPoints(this.points, processor.Path);
             Assert.Equal(this.pen, processor.Pen);
         }
 
@@ -63,7 +63,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            this.VerifyPoints(this.points, processor.Shape);
+            this.VerifyPoints(this.points, processor.Path);
             Assert.Equal(this.pen.StrokeFill, processor.Pen.StrokeFill);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }
@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            this.VerifyPoints(this.points, processor.Shape);
+            this.VerifyPoints(this.points, processor.Path);
             Assert.Equal(this.pen.StrokeFill, processor.Pen.StrokeFill);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }
@@ -89,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            this.VerifyPoints(this.points, processor.Shape);
+            this.VerifyPoints(this.points, processor.Path);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
@@ -103,7 +103,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            this.VerifyPoints(this.points, processor.Shape);
+            this.VerifyPoints(this.points, processor.Path);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);

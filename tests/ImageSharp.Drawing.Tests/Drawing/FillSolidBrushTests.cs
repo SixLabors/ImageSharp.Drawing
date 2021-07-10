@@ -159,9 +159,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
                 if (triggerFillRegion)
                 {
-                    var region = new ShapeRegion(new RectangularPolygon(0, 0, 16, 16));
-
-                    image.Mutate(c => c.SetGraphicsOptions(options).Fill(new SolidBrush(fillColor), region));
+                    var path = new RectangularPolygon(0, 0, 16, 16);
+                    image.Mutate(c => c.SetGraphicsOptions(options).Fill(new SolidBrush(fillColor), path));
                 }
                 else
                 {
