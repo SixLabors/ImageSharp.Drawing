@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="target">The target image frame.</param>
-        internal BrushApplicator(Configuration configuration, GraphicsOptions options, ImageFrame<TPixel> target)
+        protected BrushApplicator(Configuration configuration, GraphicsOptions options, ImageFrame<TPixel> target)
         {
             this.Configuration = configuration;
             this.Target = target;
