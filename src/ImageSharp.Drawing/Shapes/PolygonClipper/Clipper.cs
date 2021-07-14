@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
     /// <summary>
     /// Library to clip polygons.
     /// </summary>
-    public class Clipper
+    internal class Clipper
     {
         private const float ScalingFactor = 1000.0f;
 
