@@ -144,7 +144,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
             }
             catch (System.Exception ex)
             {
-                Assert.True(ex is ClipperLib.ClipperException);
+                Assert.True(ex is ClipperException);
             }
         }
     }
