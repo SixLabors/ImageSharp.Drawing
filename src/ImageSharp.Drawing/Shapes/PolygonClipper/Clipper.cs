@@ -49,14 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 
             lock (this.syncRoot)
             {
-                try
-                {
-                    this.innerClipper.Execute(ClipType.ctDifference, results);
-                }
-                catch (ClipperLib.ClipperException exception)
-                {
-                    throw new PolygonClipper.ClipperException(exception.Message);
-                }
+                this.innerClipper.Execute(ClipType.ctDifference, results);
             }
 
             var shapes = new IPath[results.Count];
@@ -151,14 +144,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
             PolyType type = clippingType == ClippingType.Clip ? PolyType.ptClip : PolyType.ptSubject;
             lock (this.syncRoot)
             {
-                try
-                {
-                    this.innerClipper.AddPath(points, type, path.IsClosed);
-                }
-                catch (ClipperLib.ClipperException exception)
-                {
-                    throw new PolygonClipper.ClipperException(exception.Message);
-                }
+                this.innerClipper.AddPath(points, type, path.IsClosed);
             }
         }
     }

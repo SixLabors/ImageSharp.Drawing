@@ -138,14 +138,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
             PointF naan = new PointF(float.NaN, float.NaN);
             Polygon path = new Polygon(new LinearLineSegment(new[] { naan, naan, naan, naan }));
 
-            // Throws internal exception:
             try
             {
                 path.GenerateOutline(10);
             }
             catch (System.Exception ex)
             {
-                Assert.True(ex is ClipperException);
+                Assert.True(ex is ClipperLib.ClipperException);
             }
         }
     }

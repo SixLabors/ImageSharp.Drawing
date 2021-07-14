@@ -30,20 +30,13 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="width">Width</param>
         /// <returns>path offset</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public ComplexPolygon Execute(float width)
         {
             var tree = new List<List<IntPoint>>();
             lock (this.syncRoot)
             {
-                try
-                {
-                    this.innerClipperOffest.Execute(ref tree, width * ScalingFactor / 2);
-                }
-                catch (ClipperLib.ClipperException exception)
-                {
-                    throw new PolygonClipper.ClipperException(exception.Message);
-                }
+                this.innerClipperOffest.Execute(ref tree, width * ScalingFactor / 2);
             }
 
             var polygons = new List<Polygon>();
@@ -113,14 +106,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 
             lock (this.syncRoot)
             {
-                try
-                {
-                    this.innerClipperOffest.AddPath(points, this.Convert(jointStyle), endCapStyle);
-                }
-                catch (ClipperLib.ClipperException exception)
-                {
-                    throw new PolygonClipper.ClipperException(exception.Message);
-                }
+                this.innerClipperOffest.AddPath(points, this.Convert(jointStyle), endCapStyle);
             }
         }
 

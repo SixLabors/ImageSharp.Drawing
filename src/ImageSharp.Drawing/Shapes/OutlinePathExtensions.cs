@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="width">The final width outline</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public static IPath GenerateOutline(this IPath path, float width, float[] pattern)
             => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern));
 
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="width">The final width outline</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern)
             => path.GenerateOutline(width, pattern, false);
 
@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public static IPath GenerateOutline(this IPath path, float width, float[] pattern, bool startOff)
             => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern), startOff);
 
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
             => GenerateOutline(path, width, pattern, startOff, JointStyle.Square, EndCapStyle.Butt);
 
@@ -71,7 +71,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="patternSectionCapStyle">The style to render between sections of the specified pattern.</param>
         /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle = JointStyle.Square, EndCapStyle patternSectionCapStyle = EndCapStyle.Butt)
         {
             if (pattern.Length < 2)
@@ -172,7 +172,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="path">the path to outline</param>
         /// <param name="width">The final width outline</param>
         /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public static IPath GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, JointStyle.Square, EndCapStyle.Butt);
 
         /// <summary>
@@ -183,7 +183,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="endCapStyle">The style to render the end caps of open paths (ignored on closed paths).</param>
         /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Execute: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Square)
         {
             var offset = new ClipperOffset(MiterOffsetDelta);
