@@ -131,5 +131,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
 
             Assert.Equal(8, points.Count);
         }
+
+        [Fact]
+        public void ClipperOffsetThrowsPublicException()
+        {
+            PointF naan = new PointF(float.NaN, float.NaN);
+            Polygon path = new Polygon(new LinearLineSegment(new[] { naan, naan, naan, naan }));
+
+            try
+            {
+                path.GenerateOutline(10);
+            }
+            catch (System.Exception ex)
+            {
+                Assert.True(ex is ClipperException);
+            }
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -6,17 +6,16 @@ using System;
 namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
     /// <summary>
-    /// Clipper Exception
+    /// The exception that is thrown when an error occurs clipping a polygon.
     /// </summary>
-    /// <seealso cref="System.Exception" />
-    internal class ClipperException : Exception
+    public class ClipperException : Exception
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="ClipperException"/> class.
         /// </summary>
-        /// <param name="description">The description.</param>
-        public ClipperException(string description)
-            : base(description)
+        /// <param name="message">The message that describes the error.</param>
+        public ClipperException(string message)
+            : base(message)
         {
         }
     }
