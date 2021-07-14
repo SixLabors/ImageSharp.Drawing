@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -42,6 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <returns>
         /// Returns the <see cref="IPath" /> array containing the converted polygons.
         /// </returns>
+        /// <exception cref="ClipperException">GenerateClippedShapes: Open paths have been disabled.</exception>
         public IPath[] GenerateClippedShapes()
         {
             var results = new List<PolyNode>();
@@ -79,12 +80,10 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// Adds the paths.
         /// </summary>
         /// <param name="paths">The paths.</param>
+        /// <exception cref="ClipperException">AddPath: Open paths have been disabled</exception>
         public void AddPaths(ClippablePath[] paths)
         {
-            if (paths == null)
-            {
-                throw new ArgumentNullException(nameof(paths));
-            }
+            Guard.NotNull(paths, nameof(paths));
 
             for (int i = 0; i < paths.Length; i++)
             {
@@ -99,12 +98,10 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="paths">The paths.</param>
         /// <param name="clippingType">The clipping type.</param>
+        /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
         public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
-            if (paths is null)
-            {
-                throw new ArgumentNullException(nameof(paths));
-            }
+            Guard.NotNull(paths, nameof(paths));
 
             foreach (IPath p in paths)
             {
@@ -117,12 +114,10 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="clippingType">The clipping type.</param>
+        /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
         public void AddPath(IPath path, ClippingType clippingType)
         {
-            if (path is null)
-            {
-                throw new ArgumentNullException(nameof(path));
-            }
+            Guard.NotNull(path, nameof(path));
 
             foreach (ISimplePath p in path.Flatten())
             {
