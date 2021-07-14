@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="width">Width</param>
         /// <returns>path offset</returns>
-        /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
+        /// <exception cref="ClipperException">Execute: Couldn't calculate Offset</exception>
         public ComplexPolygon Execute(float width)
         {
             var tree = new List<List<IntPoint>>();
