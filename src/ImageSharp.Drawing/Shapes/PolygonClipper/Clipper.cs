@@ -80,7 +80,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// Adds the paths.
         /// </summary>
         /// <param name="paths">The paths.</param>
-        /// <exception cref="ClipperException">AddPath: Open paths have been disabled</exception>
+        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         public void AddPaths(ClippablePath[] paths)
         {
             Guard.NotNull(paths, nameof(paths));
@@ -98,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="paths">The paths.</param>
         /// <param name="clippingType">The clipping type.</param>
-        /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
+        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
             Guard.NotNull(paths, nameof(paths));
@@ -114,7 +114,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="clippingType">The clipping type.</param>
-        /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
+        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         public void AddPath(IPath path, ClippingType clippingType)
         {
             Guard.NotNull(path, nameof(path));
@@ -130,7 +130,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="clippingType">Type of the poly.</param>
-        /// <exception cref="ClipperException">AddPath: Open paths have been disabled.</exception>
+        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
             ReadOnlySpan<PointF> vectors = path.Points.Span;

@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="shape">The shape.</param>
         /// <param name="holes">The holes.</param>
         /// <returns>Returns a new shape with the holes clipped out of the shape.</returns>
-        /// <exception cref="ClipperException">GenerateClippedShapes: Open paths have been disabled.</exception>
+        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         public static IPath Clip(this IPath shape, IEnumerable<IPath> holes)
         {
             var clipper = new Clipper();
@@ -36,7 +36,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="shape">The shape.</param>
         /// <param name="holes">The holes.</param>
         /// <returns>Returns a new shape with the holes clipped out of the shape.</returns>
-        /// <exception cref="ClipperException">GenerateClippedShapes: Open paths have been disabled.</exception>
+        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         public static IPath Clip(this IPath shape, params IPath[] holes)
             => shape.Clip((IEnumerable<IPath>)holes);
     }
