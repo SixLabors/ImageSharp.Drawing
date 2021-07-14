@@ -75,10 +75,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         public void AddPath(IPath path, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
-            if (path is null)
-            {
-                throw new ArgumentNullException(nameof(path));
-            }
+            Guard.NotNull(path, nameof(path));
 
             foreach (ISimplePath p in path.Flatten())
             {

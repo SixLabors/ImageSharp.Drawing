@@ -90,10 +90,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled</exception>
         public void AddPaths(ClippablePath[] paths)
         {
-            if (paths == null)
-            {
-                throw new ArgumentNullException(nameof(paths));
-            }
+            Guard.NotNull(paths, nameof(paths));
 
             for (int i = 0; i < paths.Length; i++)
             {
@@ -111,10 +108,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
         public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
-            if (paths is null)
-            {
-                throw new ArgumentNullException(nameof(paths));
-            }
+            Guard.NotNull(paths, nameof(paths));
 
             foreach (IPath p in paths)
             {
@@ -130,10 +124,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Open paths have been disabled </exception>
         public void AddPath(IPath path, ClippingType clippingType)
         {
-            if (path is null)
-            {
-                throw new ArgumentNullException(nameof(path));
-            }
+            Guard.NotNull(path, nameof(path));
 
             foreach (ISimplePath p in path.Flatten())
             {
