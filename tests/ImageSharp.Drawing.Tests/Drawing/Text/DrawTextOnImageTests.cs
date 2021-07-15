@@ -40,8 +40,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         public void EmojiFontRendering<TPixel>(TestImageProvider<TPixel> provider, bool enableColorFonts)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Font font = CreateFont("OpenSans-Regular.ttf", 70);
-            FontFamily emjoiFontFamily = CreateFont("TwemojiMozilla.ttf", 36).Family;
+            Font font = CreateFont(TestFonts.OpenSans, 70);
+            FontFamily emjoiFontFamily = CreateFont(TestFonts.TwemojiMozilla, 36).Family;
 
             Color color = Color.Black;
             string text = "A short piece of text 😀 with an emoji";
@@ -74,9 +74,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             // https://github.com/SixLabors/Fonts/issues/171
             var collection = new FontCollection();
-            FontFamily whitney = collection.Install(TestFontUtilities.GetPath("whitney-book.ttf"));
-            FontFamily malgun = collection.Install(TestFontUtilities.GetPath("malgun.ttf"));
-            Font font = whitney.CreateFont(25);
+            Font whitney = CreateFont(TestFonts.WhitneyBook, 25);
+            FontFamily malgun = CreateFont(TestFonts.Malgun, 25).Family;
 
             Color color = Color.Black;
             const string text = "亞DARKSOUL亞";
@@ -97,7 +96,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
               img =>
               {
                   var center = new PointF(img.Width / 2, img.Height / 2);
-                  img.Mutate(i => i.DrawText(textGraphicOptions, text, font, color, center));
+                  img.Mutate(i => i.DrawText(textGraphicOptions, text, whitney, color, center));
               });
         }
 
@@ -106,7 +105,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         public void DoesntThrowExceptionWhenOverlappingRightEdge_Issue688<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Font font = CreateFont("OpenSans-Regular.ttf", 36);
+            Font font = CreateFont(TestFonts.OpenSans, 36);
             Color color = Color.Black;
             string text = "A short piece of text";
 
@@ -142,7 +141,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             using (Image<TPixel> img = provider.GetImage())
             {
-                Font font = CreateFont("OpenSans-Regular.ttf", 39);
+                Font font = CreateFont(TestFonts.OpenSans, 39);
                 string text = new string('a', 10000);
 
                 Rgba32 color = Color.Black;
@@ -159,7 +158,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             using (Image<TPixel> img = provider.GetImage())
             {
-                Font font = CreateFont("OpenSans-Regular.ttf", 50);
+                Font font = CreateFont(TestFonts.OpenSans, 50);
                 Color color = Color.Black;
 
                 img.Mutate(ctx => ctx.DrawText(TestText, font, Color.Black, new PointF(-50, 2)));
@@ -169,11 +168,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(20, 50, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", "i")]
-        [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "SixLaborsSampleAB.woff", AB)]
-        [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", TestText)]
-        [WithSolidFilledImages(400, 45, "White", PixelTypes.Rgba32, 20, 0, 0, "OpenSans-Regular.ttf", TestText)]
-        [WithSolidFilledImages(1100, 200, "White", PixelTypes.Rgba32, 50, 150, 50, "OpenSans-Regular.ttf", TestText)]
+        [WithSolidFilledImages(20, 50, "White", PixelTypes.Rgba32, 50, 0, 0, TestFonts.OpenSans, "i")]
+        [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, TestFonts.SixLaborsSampleAB, AB)]
+        [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, TestFonts.OpenSans, TestText)]
+        [WithSolidFilledImages(400, 45, "White", PixelTypes.Rgba32, 20, 0, 0, TestFonts.OpenSans, TestText)]
+        [WithSolidFilledImages(1100, 200, "White", PixelTypes.Rgba32, 50, 150, 50, TestFonts.OpenSans, TestText)]
         public void FontShapesAreRenderedCorrectly<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize,
@@ -194,10 +193,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, "OpenSans-Regular.ttf", "i", 45, 25, 25)]
-        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, "SixLaborsSampleAB.woff", AB, 45, 100, 100)]
-        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, "OpenSans-Regular.ttf", TestText, 45, 550, 550)]
-        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, "OpenSans-Regular.ttf", TestText, 45, 200, 200)]
+        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, TestFonts.OpenSans, "i", 45, 25, 25)]
+        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, TestFonts.SixLaborsSampleAB, AB, 45, 100, 100)]
+        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, TestFonts.OpenSans, TestText, 45, 550, 550)]
+        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, TestFonts.OpenSans, TestText, 45, 200, 200)]
         public void FontShapesAreRenderedCorrectly_WithRotationApplied<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize,
@@ -230,10 +229,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, "OpenSans-Regular.ttf", "i", -12, 0, 25, 25)]
-        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, "SixLaborsSampleAB.woff", AB, 10, 0, 100, 100)]
-        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, "OpenSans-Regular.ttf", TestText, 0, 10, 550, 550)]
-        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, "OpenSans-Regular.ttf", TestText, 0, -10, 200, 200)]
+        [WithSolidFilledImages(50, 50, "White", PixelTypes.Rgba32, 50, 25, 25, TestFonts.OpenSans, "i", -12, 0, 25, 25)]
+        [WithSolidFilledImages(200, 200, "White", PixelTypes.Rgba32, 50, 100, 100, TestFonts.SixLaborsSampleAB, AB, 10, 0, 100, 100)]
+        [WithSolidFilledImages(1100, 1100, "White", PixelTypes.Rgba32, 50, 550, 550, TestFonts.OpenSans, TestText, 0, 10, 550, 550)]
+        [WithSolidFilledImages(400, 400, "White", PixelTypes.Rgba32, 20, 200, 200, TestFonts.OpenSans, TestText, 0, -10, 200, 200)]
         public void FontShapesAreRenderedCorrectly_WithSkewApplied<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize,
@@ -277,7 +276,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Font font = CreateFont("OpenSans-Regular.ttf", 36);
+            Font font = CreateFont(TestFonts.OpenSans, 36);
 
             var sb = new StringBuilder();
             string str = Repeat(" ", 78) + "THISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDS";
@@ -327,7 +326,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             bool wrap)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Font font = CreateFont("OpenSans-Regular.ttf", 16);
+            Font font = CreateFont(TestFonts.OpenSans, 16);
 
             var sb = new StringBuilder();
             string str = "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Maecenas porttitor congue massa. Fusce posuere, magna sed pulvinar ultricies, purus lectus malesuada libero, sit amet commodo magna eros quis urna.";
@@ -369,9 +368,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "SixLaborsSampleAB.woff", AB)]
-        [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", TestText)]
-        [WithSolidFilledImages(1100, 200, "White", PixelTypes.Rgba32, 50, 150, 50, "OpenSans-Regular.ttf", TestText)]
+        [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, TestFonts.SixLaborsSampleAB, AB)]
+        [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, TestFonts.OpenSans, TestText)]
+        [WithSolidFilledImages(1100, 200, "White", PixelTypes.Rgba32, 50, 150, 50, TestFonts.OpenSans, TestText)]
         public void FontShapesAreRenderedCorrectlyWithAPen<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize,
@@ -393,9 +392,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "SixLaborsSampleAB.woff", AB)]
-        [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, "OpenSans-Regular.ttf", TestText)]
-        [WithSolidFilledImages(1100, 200, "White", PixelTypes.Rgba32, 50, 150, 50, "OpenSans-Regular.ttf", TestText)]
+        [WithSolidFilledImages(200, 150, "White", PixelTypes.Rgba32, 50, 0, 0, TestFonts.SixLaborsSampleAB, AB)]
+        [WithSolidFilledImages(900, 150, "White", PixelTypes.Rgba32, 50, 0, 0, TestFonts.OpenSans, TestText)]
+        [WithSolidFilledImages(1100, 200, "White", PixelTypes.Rgba32, 50, 150, 50, TestFonts.OpenSans, TestText)]
         public void FontShapesAreRenderedCorrectlyWithAPenPatterned<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize,
@@ -417,7 +416,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(1000, 1500, "White", PixelTypes.Rgba32, "OpenSans-Regular.ttf")]
+        [WithSolidFilledImages(1000, 1500, "White", PixelTypes.Rgba32, TestFonts.OpenSans)]
         public void TextPositioningIsRobust<TPixel>(TestImageProvider<TPixel> provider, string fontName)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -448,21 +447,34 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 appendSourceFileOrDescription: false);
         }
 
+        [Fact]
+        public void CanDrawTextWithEmptyPath()
+        {
+            // The following font/text combination generates an empty path.
+            Font font = CreateFont(TestFonts.WendyOne, 72);
+            const string text = "Hello\0World";
+            var renderOptions = new RendererOptions(font);
+            FontRectangle textSize = TextMeasurer.Measure(text, renderOptions);
+
+            Assert.NotEqual(FontRectangle.Empty, textSize);
+
+            using var image = new Image<Rgba32>(Configuration.Default, (int)textSize.Width + 20, (int)textSize.Height + 20);
+            image.Mutate(x => x.DrawText(
+                text,
+                font,
+                Color.Black,
+                Vector2.Zero));
+        }
+
         private static string Repeat(string str, int times) => string.Concat(Enumerable.Repeat(str, times));
 
         private static string ToTestOutputDisplayText(string text)
         {
             string fnDisplayText = text.Replace("\n", string.Empty);
-            fnDisplayText = fnDisplayText.Substring(0, Math.Min(fnDisplayText.Length, 4));
-            return fnDisplayText;
+            return fnDisplayText.Substring(0, Math.Min(fnDisplayText.Length, 4));
         }
 
         private static Font CreateFont(string fontName, int size)
-        {
-            var fontCollection = new FontCollection();
-            string fontPath = TestFontUtilities.GetPath(fontName);
-            Font font = fontCollection.Install(fontPath).CreateFont(size);
-            return font;
-        }
+            => TestFontUtilities.GetFont(fontName, size);
     }
 }
