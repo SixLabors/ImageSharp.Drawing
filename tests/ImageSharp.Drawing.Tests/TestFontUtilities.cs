@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using SixLabors.Fonts;
 using IOPath = System.IO.Path;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
@@ -15,20 +16,37 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     public static class TestFontUtilities
     {
         /// <summary>
+        /// Gets a font with the given name and size.
+        /// </summary>
+        /// <param name="name">The name of the font.</param>
+        /// <param name="size">The font size.</param>
+        /// <returns>The <see cref="Font"/></returns>
+        public static Font GetFont(string name, float size)
+            => GetFont(new FontCollection(), name, size);
+
+        /// <summary>
+        /// Gets a font with the given name and size.
+        /// </summary>
+        /// <param name="collection">The collection to add the font to</param>
+        /// <param name="name">The name of the font.</param>
+        /// <param name="size">The font size.</param>
+        /// <returns>The <see cref="Font"/></returns>
+        public static Font GetFont(FontCollection collection, string name, float size)
+            => collection.Install(GetPath(name)).CreateFont(size);
+
+        /// <summary>
         /// The formats directory.
         /// </summary>
-        private static readonly string FormatsDirectory = GetFontsDirectory();
+        private static readonly string FontsDirectory = GetFontsDirectory();
 
         /// <summary>
         /// Gets the full qualified path to the file.
         /// </summary>
-        /// <param name="file">
-        /// The file path.
-        /// </param>
+        /// <param name="file">The file path.</param>
         /// <returns>
         /// The <see cref="string"/>.
         /// </returns>
-        public static string GetPath(string file) => IOPath.Combine(FormatsDirectory, file);
+        public static string GetPath(string file) => IOPath.Combine(FontsDirectory, file);
 
         /// <summary>
         /// Gets the correct path to the formats directory.
@@ -53,7 +71,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             AddFormatsDirectoryFromTestAssemblyPath(directories);
 
-            string directory = directories.FirstOrDefault(Directory.Exists);
+            string directory = directories.Find(Directory.Exists);
 
             if (directory != null)
             {
