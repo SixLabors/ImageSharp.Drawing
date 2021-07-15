@@ -3,10 +3,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
-using System.Runtime.InteropServices;
-using ClipperLib;
+using SixLabors.ImageSharp.Drawing.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -16,7 +14,6 @@ namespace SixLabors.ImageSharp.Drawing
     public static class OutlinePathExtensions
     {
         private const double MiterOffsetDelta = 20;
-        private const float ScalingFactor = 1000.0f;
 
         /// <summary>
         /// Generates a outline of the path with alternating on and off segments based on the pattern.
@@ -25,6 +22,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="width">The final width outline</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
         public static IPath GenerateOutline(this IPath path, float width, float[] pattern)
             => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern));
 
@@ -35,6 +33,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="width">The final width outline</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern)
             => path.GenerateOutline(width, pattern, false);
 
@@ -46,6 +45,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
         public static IPath GenerateOutline(this IPath path, float width, float[] pattern, bool startOff)
             => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern), startOff);
 
@@ -57,6 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
             => GenerateOutline(path, width, pattern, startOff, JointStyle.Square, EndCapStyle.Butt);
 
@@ -70,6 +71,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="patternSectionCapStyle">The style to render between sections of the specified pattern.</param>
         /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle = JointStyle.Square, EndCapStyle patternSectionCapStyle = EndCapStyle.Butt)
         {
             if (pattern.Length < 2)
@@ -77,17 +79,10 @@ namespace SixLabors.ImageSharp.Drawing
                 return path.GenerateOutline(width, jointStyle: jointStyle);
             }
 
-            JoinType style = Convert(jointStyle);
-            EndType patternSectionCap = Convert(patternSectionCapStyle);
-
             IEnumerable<ISimplePath> paths = path.Flatten();
 
-            var offset = new ClipperOffset()
-            {
-                MiterLimit = MiterOffsetDelta
-            };
-
-            var buffer = new List<IntPoint>(3);
+            var offset = new ClipperOffset(MiterOffsetDelta);
+            var buffer = new List<PointF>();
             foreach (ISimplePath p in paths)
             {
                 bool online = !startOff;
@@ -116,13 +111,13 @@ namespace SixLabors.ImageSharp.Drawing
                         float t = targetLength / distToNext;
 
                         Vector2 point = (currentPoint * (1 - t)) + (targetPoint * t);
-                        buffer.Add(currentPoint.ToPoint());
-                        buffer.Add(point.ToPoint());
+                        buffer.Add(currentPoint);
+                        buffer.Add(point);
 
                         // we now inset a line joining
                         if (online)
                         {
-                            offset.AddPath(buffer, style, patternSectionCap);
+                            offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, patternSectionCapStyle);
                         }
 
                         online = !online;
@@ -137,7 +132,7 @@ namespace SixLabors.ImageSharp.Drawing
                     }
                     else if (distToNext <= targetLength)
                     {
-                        buffer.Add(currentPoint.ToPoint());
+                        buffer.Add(currentPoint);
                         currentPoint = targetPoint;
                         i++;
                         targetLength -= distToNext;
@@ -148,16 +143,16 @@ namespace SixLabors.ImageSharp.Drawing
                 {
                     if (p.IsClosed)
                     {
-                        buffer.Add(points[0].ToPoint());
+                        buffer.Add(points[0]);
                     }
                     else
                     {
-                        buffer.Add(points[points.Length - 1].ToPoint());
+                        buffer.Add(points[points.Length - 1]);
                     }
 
                     if (online)
                     {
-                        offset.AddPath(buffer, style, patternSectionCap);
+                        offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, patternSectionCapStyle);
                     }
 
                     online = !online;
@@ -168,7 +163,7 @@ namespace SixLabors.ImageSharp.Drawing
                 }
             }
 
-            return ExecuteOutliner(width, offset);
+            return offset.Execute(width);
         }
 
         /// <summary>
@@ -177,6 +172,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="path">the path to outline</param>
         /// <param name="width">The final width outline</param>
         /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
         public static IPath GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, JointStyle.Square, EndCapStyle.Butt);
 
         /// <summary>
@@ -187,69 +183,13 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="endCapStyle">The style to render the end caps of open paths (ignored on closed paths).</param>
         /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
         public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Square)
         {
-            var offset = new ClipperOffset()
-            {
-                MiterLimit = MiterOffsetDelta
-            };
+            var offset = new ClipperOffset(MiterOffsetDelta);
+            offset.AddPath(path, jointStyle, endCapStyle);
 
-            JoinType style = Convert(jointStyle);
-            EndType openEndCapStyle = Convert(endCapStyle);
-
-            // Pattern can be applied to the path by cutting it into segments
-            IEnumerable<ISimplePath> paths = path.Flatten();
-            foreach (ISimplePath p in paths)
-            {
-                ReadOnlySpan<Vector2> vectors = MemoryMarshal.Cast<PointF, Vector2>(p.Points.Span);
-                var points = new List<IntPoint>(vectors.Length);
-                foreach (Vector2 v in vectors)
-                {
-                    points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
-                }
-
-                EndType type = p.IsClosed ? EndType.etClosedLine : openEndCapStyle;
-
-                offset.AddPath(points, style, type);
-            }
-
-            return ExecuteOutliner(width, offset);
+            return offset.Execute(width);
         }
-
-        private static ComplexPolygon ExecuteOutliner(float width, ClipperOffset offset)
-        {
-            var tree = new List<List<IntPoint>>();
-            offset.Execute(ref tree, width * ScalingFactor / 2);
-            var polygons = new List<Polygon>();
-            foreach (List<IntPoint> pt in tree)
-            {
-                PointF[] points = pt.Select(p => new PointF(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
-                polygons.Add(new Polygon(new LinearLineSegment(points)));
-            }
-
-            return new ComplexPolygon(polygons.ToArray());
-        }
-
-        private static IntPoint ToPoint(this PointF vector)
-            => new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
-
-        private static IntPoint ToPoint(this Vector2 vector)
-            => new IntPoint(vector.X * ScalingFactor, vector.Y * ScalingFactor);
-
-        private static JoinType Convert(JointStyle style)
-            => style switch
-            {
-                JointStyle.Round => JoinType.jtRound,
-                JointStyle.Miter => JoinType.jtMiter,
-                _ => JoinType.jtSquare,
-            };
-
-        private static EndType Convert(EndCapStyle style)
-            => style switch
-            {
-                EndCapStyle.Round => EndType.etOpenRound,
-                EndCapStyle.Square => EndType.etOpenSquare,
-                _ => EndType.etOpenButt,
-            };
     }
 }
