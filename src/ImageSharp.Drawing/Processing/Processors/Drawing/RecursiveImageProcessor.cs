@@ -77,17 +77,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             public void Execute()
             {
                 // Perform any processing logic you want here, in this case we are going to
-                // clone the source image then apply the changes requested before cropping
-                // down and using an image brush to draw that portion the the original image
+                // clone the source image then apply the changes requested before using an
+                // image brush to draw that portion the the original image
                 // so clone out our source image so we can apply
                 // various effects to it without mutating the origional yet.
                 using Image<TPixel> clone = this.source.Clone(this.recursiveImageProcessor.Operation);
 
-                // Crop it down to just the size of the shape
-                clone.Mutate(x => x.Crop((Rectangle)this.recursiveImageProcessor.Path.Bounds));
-
-                // Use an image brush to apply cloned image as the source for filling the shape
-                var brush = new ImageBrush(clone);
+                // Use an image brush to apply cloned image as the source for filling the shape.
+                // We pass explicit bounds to avoid the need to crop the clone;
+                RectangleF bounds = this.recursiveImageProcessor.Path.Bounds;
+                var brush = new ImageBrush(clone, new RectangleF(0, 0, bounds.Width, bounds.Height));
 
                 // Grab hold of an image processor that can fill paths with a brush to allow it to do the hard pixel pushing for us
                 var processor = new FillPathProcessor(this.recursiveImageProcessor.Options, brush, this.recursiveImageProcessor.Path);
