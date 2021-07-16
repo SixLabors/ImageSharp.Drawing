@@ -76,11 +76,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
             public void Execute()
             {
-                // Perform any processing logic you want here, in this case we are going to
-                // clone the source image then apply the changes requested before using an
-                // image brush to draw that portion the the original image
-                // so clone out our source image so we can apply
-                // various effects to it without mutating the origional yet.
+                // Clone out our source image so we can apply various effects to it without mutating
+                // the original yet.
                 using Image<TPixel> clone = this.source.Clone(this.recursiveImageProcessor.Operation);
 
                 // Use an image brush to apply cloned image as the source for filling the shape.
