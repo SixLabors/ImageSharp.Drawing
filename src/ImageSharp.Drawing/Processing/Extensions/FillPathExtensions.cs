@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.Fill(new SolidBrush(color), path);
 
         /// <summary>
-        /// Flood fills the image in the shape of the provided polygon with the specified brush..
+        /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
         /// <param name="source">The image processing context.</param>
         /// <param name="options">The drawing options.</param>
