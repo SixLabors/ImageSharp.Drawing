@@ -9,7 +9,7 @@ using SixLabors.ImageSharp.Processing.Processors;
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 {
     /// <summary>
-    /// Allows the recursive application of processing operations against and image.
+    /// Allows the recursive application of processing operations against an image.
     /// </summary>
     public class RecursiveImageProcessor : IImageProcessor
     {
