@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         [Fact]
         public void CanRenderCustomFont()
         {
-            Font font = CreateFont("icomoon-events.ttf", 175);
+            Font font = CreateFont(TestFonts.IcoMoonEvents, 175);
 
             var options = new RendererOptions(font)
             {
