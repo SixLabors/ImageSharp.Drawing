@@ -14,10 +14,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     public class ClipTests
     {
         [Theory]
-        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 0, 0)]
-        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, -20, -20)]
-        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 20, 20)]
-        public void Clip<TPixel>(TestImageProvider<TPixel> provider, float dx, float dy)
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 0, 0, 0.5)]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, -20, -20, 0.5)]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 20, 20, 0.5)]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 40, 60, 0.2)]
+        public void Clip<TPixel>(TestImageProvider<TPixel> provider, float dx, float dy, float sizeMult)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             FormattableString testDetails = $"offset_x{dx}_y{dy}";
@@ -25,7 +26,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 x =>
                 {
                     Size size = x.GetCurrentSize();
-                    int outerRadii = Math.Min(size.Width, size.Height) / 2;
+                    int outerRadii = (int)(Math.Min(size.Width, size.Height) * sizeMult);
                     var star = new Star(new PointF(size.Width / 2, size.Height / 2), 5, outerRadii / 2, outerRadii);
 
                     var builder = Matrix3x2.CreateTranslation(new Vector2(dx, dy));
