@@ -48,6 +48,7 @@ namespace SixLabors.ImageSharp.Drawing
             {
                 this.sweepAngle = 360;
             }
+
             if (sweepAngle < -360)
             {
                 this.sweepAngle = -360;
