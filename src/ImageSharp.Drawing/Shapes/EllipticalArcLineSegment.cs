@@ -29,9 +29,9 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="center"> The center point of the ellipsis that the arc is a part of</param>
         /// <param name="firstRadius">First radius of the ellipsis</param>
         /// <param name="secondRadius">Second radius of the ellipsis</param>
-        /// <param name="rotation">The rotation of First radius to the X-Axis</param>
-        /// <param name="startAngle">The Start angle of the ellipsis</param>
-        /// <param name="sweepAngle"> The sweeping angle of the arc</param>
+        /// <param name="rotation">The rotation of First radius to the X-Axis in degree</param>
+        /// <param name="startAngle">The Start angle of the ellipsis in degree </param>
+        /// <param name="sweepAngle"> The sweeping angle of the arc in degree</param>
         /// <param name="transformation">The TRanformation matrix, that should be used on the arc</param>
         public EllipticalArcLineSegment(PointF center, float firstRadius, float secondRadius, float rotation, float startAngle, float sweepAngle, Matrix3x2 transformation)
         {
