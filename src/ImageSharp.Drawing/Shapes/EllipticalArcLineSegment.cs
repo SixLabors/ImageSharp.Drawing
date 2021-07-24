@@ -37,9 +37,6 @@ namespace SixLabors.ImageSharp.Drawing
         {
             Guard.MustBeGreaterThan(firstRadius, 0, nameof(firstRadius));
             Guard.MustBeGreaterThan(secondRadius, 0, nameof(secondRadius));
-            Guard.MustBeGreaterThanOrEqualTo(rotation, 0, nameof(rotation));
-            Guard.MustBeGreaterThanOrEqualTo(startAngle, 0, nameof(startAngle));
-            Guard.MustBeGreaterThanOrEqualTo(sweepAngle, 0, nameof(sweepAngle));
             this.center = center;
             this.firstRadius = firstRadius;
             this.secondRadius = secondRadius;
@@ -50,6 +47,10 @@ namespace SixLabors.ImageSharp.Drawing
             if (sweepAngle > 360)
             {
                 this.sweepAngle = 360;
+            }
+            if (sweepAngle < -360)
+            {
+                this.sweepAngle = -360;
             }
 
             this.linePoints = this.GetDrawingPoints();
@@ -92,16 +93,31 @@ namespace SixLabors.ImageSharp.Drawing
             {
             this.CalculatePoint(this.startAngle)
             };
-
-            for (float i = this.startAngle; i < this.startAngle + this.sweepAngle; i++)
+            if (this.sweepAngle < 0)
             {
-                float end = i + 1;
-                if (end >= this.startAngle + this.sweepAngle)
+                for (float i = this.startAngle; i > this.startAngle + this.sweepAngle; i--)
                 {
-                    end = this.startAngle + this.sweepAngle;
-                }
+                    float end = i - 1;
+                    if (end <= this.startAngle + this.sweepAngle)
+                    {
+                        end = this.startAngle + this.sweepAngle;
+                    }
 
-                points.AddRange(this.GetDrawingPoints(i, end, 0));
+                    points.AddRange(this.GetDrawingPoints(i, end, 0));
+                }
+            }
+            else
+            {
+                for (float i = this.startAngle; i < this.startAngle + this.sweepAngle; i++)
+                {
+                    float end = i + 1;
+                    if (end >= this.startAngle + this.sweepAngle)
+                    {
+                        end = this.startAngle + this.sweepAngle;
+                    }
+
+                    points.AddRange(this.GetDrawingPoints(i, end, 0));
+                }
             }
 
             return points.ToArray();
