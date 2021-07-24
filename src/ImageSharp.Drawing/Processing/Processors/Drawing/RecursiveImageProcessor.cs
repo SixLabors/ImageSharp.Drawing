@@ -83,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 // Use an image brush to apply cloned image as the source for filling the shape.
                 // We pass explicit bounds to avoid the need to crop the clone;
                 RectangleF bounds = this.recursiveImageProcessor.Path.Bounds;
-                var brush = new ImageBrush(clone, new RectangleF(0, 0, bounds.Width, bounds.Height));
+                var brush = new ImageBrush(clone, bounds);
 
                 // Grab hold of an image processor that can fill paths with a brush to allow it to do the hard pixel pushing for us
                 var processor = new FillPathProcessor(this.recursiveImageProcessor.Options, brush, this.recursiveImageProcessor.Path);
