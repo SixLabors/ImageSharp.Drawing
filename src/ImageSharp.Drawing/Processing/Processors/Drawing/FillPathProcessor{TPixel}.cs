@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             Rectangle sourceRectangle)
             : base(configuration, source, sourceRectangle)
         {
-            IPath path = definition.Path;
+            IPath path = definition.Region;
             int left = (int)MathF.Floor(path.Bounds.Left);
             int top = (int)MathF.Floor(path.Bounds.Top);
             int right = (int)MathF.Ceiling(path.Bounds.Right);

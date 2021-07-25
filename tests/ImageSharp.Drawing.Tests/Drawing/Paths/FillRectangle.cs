@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Path));
+            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Path));
+            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Path));
+            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
             Assert.NotEqual(this.brush, processor.Brush);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
@@ -63,7 +63,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Path));
+            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
             Assert.NotEqual(this.brush, processor.Brush);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);

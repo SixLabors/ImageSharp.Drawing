@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <param name="path">The logic path to be filled.</param>
         public FillPathProcessor(DrawingOptions options, IBrush brush, IPath path)
         {
-            this.Path = path;
+            this.Region = path;
             this.Brush = brush;
             this.Options = options;
         }
@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <summary>
         /// Gets the logic path that this processor applies to.
         /// </summary>
-        public IPath Path { get; }
+        public IPath Region { get; }
 
         /// <summary>
         /// Gets the <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.
@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            IPath shape = this.Path.Transform(this.Options.Transform);
+            IPath shape = this.Region.Transform(this.Options.Transform);
 
             if (shape is RectangularPolygon rectPoly)
             {
@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                     var interest = Rectangle.Intersect(sourceRectangle, rect);
 
                     // Cast as in and back are the same or we are using anti-aliasing
-                    return new FillProcessor(this.Options.GraphicsOptions, this.Brush)
+                    return new FillProcessor(this.Options, this.Brush)
                         .CreatePixelSpecificProcessor(configuration, source, interest);
                 }
             }
