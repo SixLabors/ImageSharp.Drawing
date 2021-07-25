@@ -16,13 +16,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Applies the processing operation against a given clipping path.
         /// </summary>
         /// <param name="source">The image processing context.</param>
-        /// <param name="path">The target path to operate within.</param>
+        /// <param name="region">The target path to operate within.</param>
         /// <param name="operation">The operation to perform on the source.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clip(
             this IImageProcessingContext source,
-            IPath path,
+            IPath region,
             Action<IImageProcessingContext> operation)
-            => source.ApplyProcessor(new RecursiveImageProcessor(source.GetDrawingOptions(), path, operation));
+            => source.ApplyProcessor(new RecursiveImageProcessor(source.GetDrawingOptions(), region, operation));
     }
 }

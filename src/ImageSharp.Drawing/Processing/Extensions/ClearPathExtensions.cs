@@ -11,53 +11,53 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public static class ClearPathExtensions
     {
         /// <summary>
-        /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified brush without any blending.
+        /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified color without any blending.
         /// </summary>
         /// <param name="source">The image processing context.</param>
         /// <param name="color">The color.</param>
-        /// <param name="path">The logic path.</param>
+        /// <param name="region">The region of interest to flood fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             Color color,
-            IPath path) =>
-            source.Clear(new SolidBrush(color), path);
+            IPath region) =>
+            source.Clear(new SolidBrush(color), region);
 
         /// <summary>
-        /// Flood fills the image in the path of the provided polygon with the specified brush without any blending.
+        /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified color without any blending.
         /// </summary>
         /// <param name="source">The image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="color">The color.</param>
-        /// <param name="path">The logic path.</param>
+        /// <param name="region">The region of interest to flood fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             DrawingOptions options,
             Color color,
-            IPath path) =>
-            source.Clear(options, new SolidBrush(color), path);
+            IPath region) =>
+            source.Clear(options, new SolidBrush(color), region);
 
         /// <summary>
-        /// Flood fills the image in the path of the provided polygon with the specified brush without any blending.
+        /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified brush without any blending.
         /// </summary>
         /// <param name="source">The image processing context.</param>
         /// <param name="brush">The brush.</param>
-        /// <param name="path">The logic path.</param>
+        /// <param name="region">The region of interest to flood fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             IBrush brush,
-            IPath path) =>
-            source.Clear(source.GetDrawingOptions(), brush, path);
+            IPath region) =>
+            source.Clear(source.GetDrawingOptions(), brush, region);
 
         /// <summary>
-        /// Flood fills the image in the path of the provided polygon with the specified brush without any blending.
+        /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified brush without any blending.
         /// </summary>
         /// <param name="source">The image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="brush">The brush.</param>
-        /// <param name="path">The logic path.</param>
+        /// <param name="path">The region of interest to flood fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
@@ -65,20 +65,5 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IBrush brush,
             IPath path) =>
             source.Fill(options.CloneForClearOperation(), brush, path);
-
-        /// <summary>
-        /// Clones the path graphic options and applies changes required to force clearing.
-        /// </summary>
-        /// <param name="shapeOptions">The drawing options to clone</param>
-        /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
-        internal static DrawingOptions CloneForClearOperation(this DrawingOptions shapeOptions)
-        {
-            GraphicsOptions options = shapeOptions.GraphicsOptions.DeepClone();
-            options.ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Normal;
-            options.AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Src;
-            options.BlendPercentage = 1F;
-
-            return new DrawingOptions(options, shapeOptions.ShapeOptions, shapeOptions.TextOptions, shapeOptions.Transform);
-        }
     }
 }

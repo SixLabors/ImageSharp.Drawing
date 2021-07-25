@@ -9,7 +9,7 @@ using SixLabors.ImageSharp.Processing.Processors;
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 {
     /// <summary>
-    /// Allows the recursive application of processing operations against an image.
+    /// Allows the recursive application of processing operations against an image within a given region.
     /// </summary>
     public class RecursiveImageProcessor : IImageProcessor
     {
@@ -17,12 +17,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// Initializes a new instance of the <see cref="RecursiveImageProcessor"/> class.
         /// </summary>
         /// <param name="options">The drawing options.</param>
-        /// <param name="path">The logic path.</param>
+        /// <param name="path">The <see cref="IPath"/> defining the region to operate within.</param>
         /// <param name="operation">The operation to perform on the source.</param>
         public RecursiveImageProcessor(DrawingOptions options, IPath path, Action<IImageProcessingContext> operation)
         {
             this.Options = options;
-            this.Path = path;
+            this.Region = path;
             this.Operation = operation;
         }
 
@@ -32,9 +32,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public DrawingOptions Options { get; }
 
         /// <summary>
-        /// Gets the logic path.
+        /// Gets the <see cref="IPath"/> defining the region to operate within.
         /// </summary>
-        public IPath Path { get; }
+        public IPath Region { get; }
 
         /// <summary>
         /// Gets the operation to perform on the source.
@@ -57,14 +57,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         private class RecursiveImageProcessorInner<TPixel> : IImageProcessor<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            private readonly RecursiveImageProcessor recursiveImageProcessor;
+            private readonly RecursiveImageProcessor definition;
             private readonly Image<TPixel> source;
             private readonly Configuration configuration;
             private readonly Rectangle sourceRectangle;
 
-            public RecursiveImageProcessorInner(RecursiveImageProcessor recursiveImageProcessor, Image<TPixel> source, Configuration configuration, Rectangle sourceRectangle)
+            public RecursiveImageProcessorInner(RecursiveImageProcessor definition, Image<TPixel> source, Configuration configuration, Rectangle sourceRectangle)
             {
-                this.recursiveImageProcessor = recursiveImageProcessor;
+                this.definition = definition;
                 this.source = source;
                 this.configuration = configuration;
                 this.sourceRectangle = sourceRectangle;
@@ -78,15 +78,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             {
                 // Clone out our source image so we can apply various effects to it without mutating
                 // the original yet.
-                using Image<TPixel> clone = this.source.Clone(this.recursiveImageProcessor.Operation);
+                using Image<TPixel> clone = this.source.Clone(this.definition.Operation);
 
                 // Use an image brush to apply cloned image as the source for filling the shape.
                 // We pass explicit bounds to avoid the need to crop the clone;
-                RectangleF bounds = this.recursiveImageProcessor.Path.Bounds;
+                RectangleF bounds = this.definition.Region.Bounds;
                 var brush = new ImageBrush(clone, bounds);
 
                 // Grab hold of an image processor that can fill paths with a brush to allow it to do the hard pixel pushing for us
-                var processor = new FillPathProcessor(this.recursiveImageProcessor.Options, brush, this.recursiveImageProcessor.Path);
+                var processor = new FillPathProcessor(this.definition.Options, brush, this.definition.Region);
                 using IImageProcessor<TPixel> p = processor.CreatePixelSpecificProcessor(this.configuration, this.source, this.sourceRectangle);
 
                 // Fill the shape using the image brush

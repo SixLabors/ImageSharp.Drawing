@@ -15,12 +15,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Flood fills the image with the specified brush.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
-        /// <param name="options">The graphics options.</param>
+        /// <param name="options">The drawing options.</param>
         /// <param name="brush">The details how to fill the region of interest.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            DrawingOptions options,
             IBrush brush) =>
             source.ApplyProcessor(new FillProcessor(options, brush));
 
@@ -31,18 +31,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The details how to fill the region of interest.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(this IImageProcessingContext source, IBrush brush) =>
-            source.Fill(source.GetGraphicsOptions(), brush);
+            source.Fill(source.GetDrawingOptions(), brush);
 
         /// <summary>
         /// Flood fills the image with the specified color.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
-        /// <param name="options">The graphics options.</param>
+        /// <param name="options">The drawing options.</param>
         /// <param name="color">The color.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            GraphicsOptions options,
+            DrawingOptions options,
             Color color) =>
             source.Fill(options, new SolidBrush(color));
 
