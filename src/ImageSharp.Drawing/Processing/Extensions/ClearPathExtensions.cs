@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="source">The image processing context.</param>
         /// <param name="color">The color.</param>
-        /// <param name="region">The region of interest to flood fill.</param>
+        /// <param name="region">The <see cref="IPath"/> defining the region to fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
