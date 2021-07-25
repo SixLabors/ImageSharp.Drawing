@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public static class ClearPathExtensions
     {
         /// <summary>
-        /// Flood fills the image in the path of the provided polygon with the specified brush without any blending.
+        /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified brush without any blending.
         /// </summary>
         /// <param name="source">The image processing context.</param>
         /// <param name="color">The color.</param>
