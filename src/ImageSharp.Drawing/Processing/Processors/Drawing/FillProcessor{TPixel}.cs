@@ -22,9 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
         public FillProcessor(Configuration configuration, FillProcessor definition, Image<TPixel> source, Rectangle sourceRectangle)
             : base(configuration, source, sourceRectangle)
-        {
-            this.definition = definition;
-        }
+            => this.definition = definition;
 
         /// <inheritdoc/>
         protected override void OnFrameApply(ImageFrame<TPixel> source)
@@ -37,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 
             Configuration configuration = this.Configuration;
             IBrush brush = this.definition.Brush;
-            GraphicsOptions options = this.definition.Options;
+            GraphicsOptions options = this.definition.Options.GraphicsOptions;
 
             // If there's no reason for blending, then avoid it.
             if (this.IsSolidBrushWithoutBlending(out SolidBrush solidBrush))
@@ -81,7 +79,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                 return false;
             }
 
-            return this.definition.Options.IsOpaqueColorWithoutBlending(solidBrush.Color);
+            return this.definition.Options.GraphicsOptions.IsOpaqueColorWithoutBlending(solidBrush.Color);
         }
 
         private readonly struct SolidBrushRowIntervalOperation : IRowIntervalOperation

@@ -389,7 +389,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                 size = new Size(size.Width + (this.offset * 2), size.Height + (this.offset * 2));
 
-                int subpixelCount = FillRegionProcessor.MinimumSubpixelCount;
+                int subpixelCount = FillPathProcessor.MinimumSubpixelCount;
                 float xOffset = 0.5f;
                 GraphicsOptions graphicsOptions = this.Options.GraphicsOptions;
                 if (graphicsOptions.Antialias)

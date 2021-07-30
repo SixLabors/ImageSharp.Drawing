@@ -19,12 +19,31 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         private readonly Image image;
 
         /// <summary>
+        /// The region of the source image we will be using to paint.
+        /// </summary>
+        private readonly RectangleF region;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ImageBrush"/> class.
         /// </summary>
         /// <param name="image">The image.</param>
         public ImageBrush(Image image)
+            : this(image, image.Bounds())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+        /// </summary>
+        /// <param name="image">The image.</param>
+        /// <param name="region">
+        /// The region of interest.
+        /// This overrides any region used to intitialize the brush applicator.
+        /// </param>
+        internal ImageBrush(Image image, RectangleF region)
         {
             this.image = image;
+            this.region = region;
         }
 
         /// <inheritdoc />
@@ -37,17 +56,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
             if (this.image is Image<TPixel> specificImage)
             {
-                return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, false);
+                return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, false);
             }
 
             specificImage = this.image.CloneAs<TPixel>();
-
-            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, true);
+            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, true);
         }
 
         /// <summary>
         /// The image brush applicator.
         /// </summary>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
         private class ImageBrushApplicator<TPixel> : BrushApplicator<TPixel>
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -58,14 +77,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             private readonly bool shouldDisposeImage;
 
             /// <summary>
-            /// The y-length.
+            /// The region of the source image we will be using to draw from.
             /// </summary>
-            private readonly int yLength;
-
-            /// <summary>
-            /// The x-length.
-            /// </summary>
-            private readonly int xLength;
+            private readonly Rectangle sourceRegion;
 
             /// <summary>
             /// The Y offset.
@@ -76,7 +90,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// The X offset.
             /// </summary>
             private readonly int offsetX;
-
             private bool isDisposed;
 
             /// <summary>
@@ -86,32 +99,35 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <param name="options">The graphics options.</param>
             /// <param name="target">The target image.</param>
             /// <param name="image">The image.</param>
-            /// <param name="region">The region.</param>
+            /// <param name="targetRegion">The region of the target image we will be drawing to.</param>
+            /// <param name="sourceRegion">The region of the source image we will be using to source pixels to draw from.</param>
             /// <param name="shouldDisposeImage">Whether to dispose the image on disposal of the applicator.</param>
             public ImageBrushApplicator(
                 Configuration configuration,
                 GraphicsOptions options,
                 ImageFrame<TPixel> target,
                 Image<TPixel> image,
-                RectangleF region,
+                RectangleF targetRegion,
+                RectangleF sourceRegion,
                 bool shouldDisposeImage)
                 : base(configuration, options, target)
             {
                 this.sourceImage = image;
                 this.sourceFrame = image.Frames.RootFrame;
                 this.shouldDisposeImage = shouldDisposeImage;
-                this.xLength = image.Width;
-                this.yLength = image.Height;
-                this.offsetY = (int)MathF.Max(MathF.Floor(region.Top), 0);
-                this.offsetX = (int)MathF.Max(MathF.Floor(region.Left), 0);
+
+                this.sourceRegion = Rectangle.Intersect(image.Bounds(), (Rectangle)sourceRegion);
+
+                this.offsetY = (int)MathF.Max(MathF.Floor(targetRegion.Top), 0);
+                this.offsetX = (int)MathF.Max(MathF.Floor(targetRegion.Left), 0);
             }
 
             internal TPixel this[int x, int y]
             {
                 get
                 {
-                    int srcX = (x - this.offsetX) % this.xLength;
-                    int srcY = (y - this.offsetY) % this.yLength;
+                    int srcX = ((x - this.offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
+                    int srcY = ((y - this.offsetY) % this.sourceRegion.Width) + this.sourceRegion.Y;
                     return this.sourceFrame[srcX, srcY];
                 }
             }
@@ -139,32 +155,31 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             {
                 // Create a span for colors
                 MemoryAllocator allocator = this.Configuration.MemoryAllocator;
-                using (IMemoryOwner<float> amountBuffer = allocator.Allocate<float>(scanline.Length))
-                using (IMemoryOwner<TPixel> overlay = allocator.Allocate<TPixel>(scanline.Length))
+                using IMemoryOwner<float> amountBuffer = allocator.Allocate<float>(scanline.Length);
+                using IMemoryOwner<TPixel> overlay = allocator.Allocate<TPixel>(scanline.Length);
+                Span<float> amountSpan = amountBuffer.Memory.Span;
+                Span<TPixel> overlaySpan = overlay.Memory.Span;
+
+                int offsetX = x - this.offsetX;
+                int sourceY = ((y - this.offsetY) % this.sourceRegion.Width) + this.sourceRegion.Y;
+                Span<TPixel> sourceRow = this.sourceFrame.GetPixelRowSpan(sourceY);
+
+                for (int i = 0; i < scanline.Length; i++)
                 {
-                    Span<float> amountSpan = amountBuffer.Memory.Span;
-                    Span<TPixel> overlaySpan = overlay.Memory.Span;
+                    amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
 
-                    int sourceY = (y - this.offsetY) % this.yLength;
-                    int offsetX = x - this.offsetX;
-                    Span<TPixel> sourceRow = this.sourceFrame.GetPixelRowSpan(sourceY);
+                    int sourceX = ((i + offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
 
-                    for (int i = 0; i < scanline.Length; i++)
-                    {
-                        amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
-
-                        int sourceX = (i + offsetX) % this.xLength;
-                        overlaySpan[i] = sourceRow[sourceX];
-                    }
-
-                    Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
-                    this.Blender.Blend(
-                        this.Configuration,
-                        destinationRow,
-                        destinationRow,
-                        overlaySpan,
-                        amountSpan);
+                    overlaySpan[i] = sourceRow[sourceX];
                 }
+
+                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
+                this.Blender.Blend(
+                    this.Configuration,
+                    destinationRow,
+                    destinationRow,
+                    overlaySpan,
+                    amountSpan);
             }
         }
     }

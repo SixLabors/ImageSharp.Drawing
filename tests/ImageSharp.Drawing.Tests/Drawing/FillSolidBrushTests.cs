@@ -150,18 +150,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             {
                 TPixel bgColor = image[0, 0];
 
-                var options = new GraphicsOptions
+                var options = new DrawingOptions
                 {
-                    Antialias = false,
-                    ColorBlendingMode = blenderMode,
-                    BlendPercentage = blendPercentage
+                    GraphicsOptions = new GraphicsOptions
+                    {
+                        Antialias = false,
+                        ColorBlendingMode = blenderMode,
+                        BlendPercentage = blendPercentage
+                    }
                 };
 
                 if (triggerFillRegion)
                 {
-                    var region = new ShapeRegion(new RectangularPolygon(0, 0, 16, 16));
-
-                    image.Mutate(c => c.SetGraphicsOptions(options).Fill(new SolidBrush(fillColor), region));
+                    var path = new RectangularPolygon(0, 0, 16, 16);
+                    image.Mutate(c => c.SetGraphicsOptions(options.GraphicsOptions).Fill(new SolidBrush(fillColor), path));
                 }
                 else
                 {

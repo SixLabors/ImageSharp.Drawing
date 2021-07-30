@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         protected readonly IImageProcessingContext operations;
         private readonly FakeImageOperationsProvider.FakeImageOperations<Rgba32> internalOperations;
         protected readonly Rectangle rect;
-        protected readonly GraphicsOptions options;
+        protected readonly GraphicsOptions graphicsOptions;
         protected readonly TextOptions textOptions;
         protected readonly ShapeOptions shapeOptions;
         private readonly Image<Rgba32> source;
@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 
         public BaseImageOperationsExtensionTest()
         {
-            this.options = new GraphicsOptions
+            this.graphicsOptions = new GraphicsOptions
             {
                 AntialiasSubpixelDepth = 99,
                 Antialias = false,
@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             this.internalOperations = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(this.source.GetConfiguration(), this.source, false);
             this.internalOperations.SetShapeOptions(this.shapeOptions);
             this.internalOperations.SetTextOptions(this.textOptions);
-            this.internalOperations.SetGraphicsOptions(this.options);
+            this.internalOperations.SetGraphicsOptions(this.graphicsOptions);
             this.operations = this.internalOperations;
         }
 
