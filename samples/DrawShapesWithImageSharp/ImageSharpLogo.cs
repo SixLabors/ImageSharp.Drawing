@@ -1,7 +1,12 @@
+// Copyright (c) Six Labors.
+// Licensed under the Apache License, Version 2.0.
+
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -16,13 +21,15 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             var center = new Vector2(603);
 
-            // segment whose center of rotation should be 
+            // segment whose center of rotation should be
             var segmentOffset = new Vector2(301.16968f, 301.16974f);
-            IPath segment = new Polygon(new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
-                new CubicBezierLineSegment(new Vector2(5.8641942f, 361.46031f),
-                new Vector2(-11.715693f, 259.54052f),
-                new Vector2(24.441609f, 158.17478f),
-                new Vector2(78.26f, 97.0461f))).Translate(center - segmentOffset);
+            IPath segment = new Polygon(
+                new LinearLineSegment(new Vector2(230.54f, 361.0261f), new Vector2(5.8641942f, 361.46031f)),
+                new CubicBezierLineSegment(
+                    new Vector2(5.8641942f, 361.46031f),
+                    new Vector2(-11.715693f, 259.54052f),
+                    new Vector2(24.441609f, 158.17478f),
+                    new Vector2(78.26f, 97.0461f))).Translate(center - segmentOffset);
 
             // we need to create 6 of theses all rotated about the center point
             var segments = new List<IPath>();
@@ -33,13 +40,14 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 segments.Add(s);
             }
 
-            var colors = new List<Rgba32>() {
-                Rgba32.FromHex("35a849"),
-                Rgba32.FromHex("fcee21"),
-                Rgba32.FromHex("ed7124"),
-                Rgba32.FromHex("cb202d"),
-                Rgba32.FromHex("5f2c83"),
-                Rgba32.FromHex("085ba7"),
+            var colors = new List<Rgba32>()
+            {
+                Color.ParseHex("35a849"),
+                Color.ParseHex("fcee21"),
+                Color.ParseHex("ed7124"),
+                Color.ParseHex("cb202d"),
+                Color.ParseHex("5f2c83"),
+                Color.ParseHex("085ba7"),
             };
 
             var scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
@@ -47,9 +55,9 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             int dimensions = (int)Math.Ceiling(size);
             using (var img = new Image<Rgba32>(dimensions, dimensions))
             {
-                img.Mutate(i => i.Fill(Rgba32.Black));
-                img.Mutate(i => i.Fill(Rgba32.FromHex("e1e1e1ff"), new EllipsePolygon(center, 600f).Transform(scaler)));
-                img.Mutate(i => i.Fill(Rgba32.White, new EllipsePolygon(center, 600f - 60).Transform(scaler)));
+                img.Mutate(i => i.Fill(Color.Black));
+                img.Mutate(i => i.Fill(Color.ParseHex("e1e1e1ff"), new EllipsePolygon(center, 600f).Transform(scaler)));
+                img.Mutate(i => i.Fill(Color.White, new EllipsePolygon(center, 600f - 60).Transform(scaler)));
 
                 for (int s = 0; s < 6; s++)
                 {
