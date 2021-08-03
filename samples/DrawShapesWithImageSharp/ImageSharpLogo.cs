@@ -40,7 +40,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 segments.Add(s);
             }
 
-            var colors = new List<Rgba32>()
+            var colors = new List<Color>()
             {
                 Color.ParseHex("35a849"),
                 Color.ParseHex("fcee21"),
