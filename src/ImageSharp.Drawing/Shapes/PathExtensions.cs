@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing
@@ -121,5 +122,39 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
         public static IPath Scale(this IPath path, float scale)
             => path.Transform(Matrix3x2.CreateScale(scale, RectangleF.Center(path.Bounds)));
+
+        /// <summary>
+        /// Calculates the length of the path as though each segment were unrolled into a line.
+        /// </summary>
+        /// <param name="path">The path to compute the length for.</param>
+        /// <returns>
+        /// The <see cref="int"/> representing the unrolled length.
+        /// For closed paths, the length includes an implicit closing segment.
+        /// </returns>
+        public static float ComputeLength(this IPath path)
+        {
+            float dist = 0;
+            foreach (ISimplePath s in path.Flatten())
+            {
+                ReadOnlySpan<PointF> points = s.Points.Span;
+                if (points.Length < 2)
+                {
+                    // Only a single point
+                    continue;
+                }
+
+                for (int i = 1; i < points.Length; i++)
+                {
+                    dist += Vector2.Distance(points[i - 1], points[i]);
+                }
+
+                if (s.IsClosed)
+                {
+                    dist += Vector2.Distance(points[0], points[points.Length - 1]);
+                }
+            }
+
+            return dist;
+        }
     }
 }

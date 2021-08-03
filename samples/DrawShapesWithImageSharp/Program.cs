@@ -77,7 +77,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             var font = new Font(fam, 30);
             var style = new RendererOptions(font, 72)
             {
-                WrappingWidth = path.Bounds.Width,
+                WrappingWidth = path.ComputeLength(),
                 VerticalAlignment = VerticalAlignment.Top,
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
