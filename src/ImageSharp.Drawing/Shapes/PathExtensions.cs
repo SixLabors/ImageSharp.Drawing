@@ -128,7 +128,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="path">The path to compute the length for.</param>
         /// <returns>
-        /// The <see cref="int"/> representing the unrolled length.
+        /// The <see cref="float"/> representing the unrolled length.
         /// For closed paths, the length includes an implicit closing segment.
         /// </returns>
         public static float ComputeLength(this IPath path)
