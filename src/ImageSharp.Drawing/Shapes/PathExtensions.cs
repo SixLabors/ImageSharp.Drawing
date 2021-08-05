@@ -124,7 +124,7 @@ namespace SixLabors.ImageSharp.Drawing
             => path.Transform(Matrix3x2.CreateScale(scale, RectangleF.Center(path.Bounds)));
 
         /// <summary>
-        /// Calculates the length of the path as though each segment were unrolled into a line.
+        /// Calculates the approximate length of the path as though each segment were unrolled into a line.
         /// </summary>
         /// <param name="path">The path to compute the length for.</param>
         /// <returns>
