@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <param name="size">The font size.</param>
         /// <returns>The <see cref="Font"/></returns>
         public static Font GetFont(FontCollection collection, string name, float size)
-            => collection.Install(GetPath(name)).CreateFont(size);
+            => collection.Add(GetPath(name)).CreateFont(size);
 
         /// <summary>
         /// The formats directory.

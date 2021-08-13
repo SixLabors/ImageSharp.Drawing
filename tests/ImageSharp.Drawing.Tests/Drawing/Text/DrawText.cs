@@ -24,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         public DrawText()
         {
             this.fontCollection = new FontCollection();
-            this.font = this.fontCollection.Install(TestFontUtilities.GetPath("SixLaborsSampleAB.woff")).CreateFont(12);
+            this.font = this.fontCollection.Add(TestFontUtilities.GetPath("SixLaborsSampleAB.woff")).CreateFont(12);
         }
 
         [Fact]

@@ -63,7 +63,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void DrawText(string text)
         {
-            FontFamily fam = SystemFonts.Find("Arial");
+            FontFamily fam = SystemFonts.Get("Arial");
             var font = new Font(fam, 30);
             var style = new RendererOptions(font, 72);
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, style);
@@ -73,7 +73,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void DrawText(string text, IPath path)
         {
-            FontFamily fam = SystemFonts.Find("Arial");
+            FontFamily fam = SystemFonts.Get("Arial");
             var font = new Font(fam, 30);
             var style = new RendererOptions(font, 72)
             {
