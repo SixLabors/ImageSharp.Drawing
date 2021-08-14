@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             // Creates a new image with empty pixel data.
             using (var image = new Image<Rgba32>(width, height))
             {
-                FontFamily family = SystemFonts.Find("verdana");
+                FontFamily family = SystemFonts.Get("verdana");
                 Font font = family.CreateFont(48, FontStyle.Bold);
 
                 // The options are optional

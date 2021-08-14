@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         {
             var fontCollection = new FontCollection();
             string fontPath = TestFontUtilities.GetPath(fontName);
-            return fontCollection.Install(fontPath).CreateFont(size);
+            return fontCollection.Add(fontPath).CreateFont(size);
         }
     }
 }
