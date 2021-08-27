@@ -16,8 +16,8 @@ namespace SixLabors.ImageSharp.Drawing
         private const float MinimumSqrDistance = 1.75f;
         private readonly PointF[] linePoints;
         private PointF center;
-        private readonly float firstRadius;
-        private readonly float secondRadius;
+        private readonly float radiusX;
+        private readonly float radiusY;
         private readonly float rotation;
         private readonly float startAngle;
         private readonly float sweepAngle;
@@ -26,20 +26,20 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="EllipticalArcLineSegment"/> class.
         /// </summary>
-        /// <param name="center"> The center point of the ellipsis that the arc is a part of</param>
-        /// <param name="firstRadius">First radius of the ellipsis</param>
-        /// <param name="secondRadius">Second radius of the ellipsis</param>
-        /// <param name="rotation">The rotation of First radius to the X-Axis in degree</param>
-        /// <param name="startAngle">The Start angle of the ellipsis in degree </param>
-        /// <param name="sweepAngle"> The sweeping angle of the arc in degree</param>
-        /// <param name="transformation">The TRanformation matrix, that should be used on the arc</param>
-        public EllipticalArcLineSegment(PointF center, float firstRadius, float secondRadius, float rotation, float startAngle, float sweepAngle, Matrix3x2 transformation)
+        /// <param name="center"> The center point of the ellipsis the arc is a part of.</param>
+        /// <param name="radiusX">X radius of the ellipsis.</param>
+        /// <param name="radiusY">Y radius of the ellipsis.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis,measured in degrees anticlockwise.</param>
+        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
+        /// <param name="transformation">The Tranformation matrix, that should be used on the arc.</param>
+        public EllipticalArcLineSegment(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle, Matrix3x2 transformation)
         {
-            Guard.MustBeGreaterThan(firstRadius, 0, nameof(firstRadius));
-            Guard.MustBeGreaterThan(secondRadius, 0, nameof(secondRadius));
+            Guard.MustBeGreaterThan(radiusX, 0, nameof(radiusX));
+            Guard.MustBeGreaterThan(radiusY, 0, nameof(radiusY));
             this.center = center;
-            this.firstRadius = firstRadius;
-            this.secondRadius = secondRadius;
+            this.radiusX = radiusX;
+            this.radiusY = radiusY;
             this.rotation = rotation % 360;
             this.startAngle = startAngle % 360;
             this.transformation = transformation;
@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing
                 return this;
             }
 
-            return new EllipticalArcLineSegment(this.center, this.firstRadius, this.secondRadius, this.rotation, this.startAngle, this.sweepAngle, Matrix3x2.Multiply(this.transformation, matrix));
+            return new EllipticalArcLineSegment(this.center, this.radiusX, this.radiusY, this.rotation, this.startAngle, this.sweepAngle, Matrix3x2.Multiply(this.transformation, matrix));
         }
 
         /// <summary>
@@ -151,8 +151,8 @@ namespace SixLabors.ImageSharp.Drawing
 
         private PointF CalculatePoint(float angle)
         {
-            float x = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) - (this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + this.center.X;
-            float y = (this.firstRadius * MathF.Sin(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + (this.secondRadius * MathF.Cos(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) + this.center.Y;
+            float x = (this.radiusX * MathF.Sin(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) - (this.radiusY * MathF.Cos(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + this.center.X;
+            float y = (this.radiusX * MathF.Sin(MathF.PI * angle / 180) * MathF.Sin(MathF.PI * this.rotation / 180)) + (this.radiusY * MathF.Cos(MathF.PI * angle / 180) * MathF.Cos(MathF.PI * this.rotation / 180)) + this.center.Y;
             var currPoint = new PointF(x, y);
             return PointF.Transform(currPoint, this.transformation);
         }

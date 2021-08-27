@@ -202,16 +202,16 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Adds a elliptical arc to the current  figure
         /// </summary>
-        /// <param name="center">center point of the arc</param>
-        /// <param name="firstRadius">first radius</param>
-        /// <param name="secondRadius">second radius</param>
-        /// <param name="rotation">rotation of the first radius to the x Axis in degree</param>
-        /// <param name="startAngle">starting angle of arc in degree</param>
-        /// <param name="sweepAngle">sweeping angel of the arc in degree</param>
+        /// <param name="center"> The center point of the ellipsis the arc is a part of.</param>
+        /// <param name="radiusX">X radius of the ellipsis.</param>
+        /// <param name="radiusY">Y radius of the ellipsis.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis,measured in degrees anticlockwise.</param>
+        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(PointF center, float firstRadius, float secondRadius, float rotation, float startAngle, float sweepAngle)
+        public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
         {
-            this.currentFigure.AddSegment(new EllipticalArcLineSegment(center, firstRadius, secondRadius, rotation, startAngle, sweepAngle, this.currentTransform));
+            this.currentFigure.AddSegment(new EllipticalArcLineSegment(center, radiusX, radiusY, rotation, startAngle, sweepAngle, this.currentTransform));
 
             return this;
         }
