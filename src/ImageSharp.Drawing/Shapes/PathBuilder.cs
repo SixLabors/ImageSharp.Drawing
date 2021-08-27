@@ -200,18 +200,41 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
-        /// Adds a elliptical arc to the current  figure
+        /// Adds an elliptical arc to the current  figure
         /// </summary>
-        /// <param name="center"> The center point of the ellipsis the arc is a part of.</param>
-        /// <param name="radiusX">X radius of the ellipsis.</param>
-        /// <param name="radiusY">Y radius of the ellipsis.</param>
-        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis,measured in degrees anticlockwise.</param>
+        /// <param name="rect"> A <see cref="RectangleF"/> that represents the rectangular bounds of the ellipse from which the arc is taken.</param>
+        /// <param name="rotation">The rotation of (<paramref name="rect"/>, measured in degrees anticlockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+        public PathBuilder AddEllipticalArc(RectangleF rect, float rotation, float startAngle, float sweepAngle) => this.AddEllipticalArc((rect.Right + rect.Left) / 2, (rect.Bottom + rect.Top) / 2, rect.Width / 2, rect.Height / 2, rotation, startAngle, sweepAngle);
+
+        /// <summary>
+        /// Adds an elliptical arc to the current  figure
+        /// </summary>
+        /// <param name="center"> The center point of the ellips from which the arc is taken.</param>
+        /// <param name="radiusX">X radius of the ellipsis.</param>
+        /// <param name="radiusY">Y radius of the ellipsis.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees anticlockwise.</param>
+        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
+        public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle) => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
+
+        /// <summary>
+        /// Adds an elliptical arc to the current  figure
+        /// </summary>
+        /// <param name="x"> The x-coordinate of the center point of the ellips from which the arc is taken.</param>
+        /// <param name="y"> The y-coordinate of the center point of the ellips from which the arc is taken.</param>
+        /// <param name="radiusX">X radius of the ellipsis.</param>
+        /// <param name="radiusY">Y radius of the ellipsis.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees anticlockwise.</param>
+        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
+        public PathBuilder AddEllipticalArc(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
         {
-            this.currentFigure.AddSegment(new EllipticalArcLineSegment(center, radiusX, radiusY, rotation, startAngle, sweepAngle, this.currentTransform));
+            this.currentFigure.AddSegment(new EllipticalArcLineSegment(x, y, radiusX, radiusY, rotation, startAngle, sweepAngle, this.currentTransform));
 
             return this;
         }
