@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing
             this.y = y;
             this.radiusX = radiusX;
             this.radiusY = radiusY;
-            this.rotation = rotation % 360;
+            this.rotation = -rotation % 360;
             this.startAngle = startAngle % 360;
             this.transformation = transformation;
             this.sweepAngle = sweepAngle;
