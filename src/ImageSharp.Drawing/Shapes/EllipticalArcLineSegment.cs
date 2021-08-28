@@ -37,8 +37,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="transformation">The Tranformation matrix, that should be used on the arc.</param>
         public EllipticalArcLineSegment(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle, Matrix3x2 transformation)
         {
-            Guard.MustBeGreaterThan(radiusX, 0, nameof(radiusX));
-            Guard.MustBeGreaterThan(radiusY, 0, nameof(radiusY));
+            Guard.MustBeGreaterThanOrEqualTo(radiusX, 0, nameof(radiusX));
+            Guard.MustBeGreaterThanOrEqualTo(radiusY, 0, nameof(radiusY));
             this.x = x;
             this.y = y;
             this.radiusX = radiusX;

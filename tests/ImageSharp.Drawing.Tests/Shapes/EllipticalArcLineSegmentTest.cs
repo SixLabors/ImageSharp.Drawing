@@ -19,5 +19,28 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Assert.Equal(20, segment.EndPoint.X, 5);
             Assert.Equal(10, segment.EndPoint.Y, 5);
         }
+
+        [Fact]
+        public void checkZeroRadii()
+        {
+            IReadOnlyCollection<PointF> xRadiusZero = new EllipticalArcLineSegment(20, 10, 0, 20, 0, 0, 360, Matrix3x2.Identity).Flatten().ToArray();
+            IReadOnlyCollection<PointF> yRadiusZero = new EllipticalArcLineSegment(20, 10, 30, 0, 0, 0, 360, Matrix3x2.Identity).Flatten().ToArray();
+            IReadOnlyCollection<PointF> bothRadiiZero = new EllipticalArcLineSegment(20, 10, 0, 0, 0, 0, 360, Matrix3x2.Identity).Flatten().ToArray();
+            foreach (PointF point in xRadiusZero)
+            {
+                Assert.Equal(20, point.X);
+            }
+
+            foreach (PointF point in yRadiusZero)
+            {
+                Assert.Equal(10, point.Y);
+            }
+
+            foreach (PointF point in bothRadiiZero)
+            {
+                Assert.Equal(20, point.X);
+                Assert.Equal(10, point.Y);
+            }
+        }
     }
 }
