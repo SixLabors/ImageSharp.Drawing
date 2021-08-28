@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithBasicTestPatternImages(100, 100, PixelTypes.Rgba32)]
         public void Fill_RectangularPolygon_Solid_Transformed<TPixel>(TestImageProvider<TPixel> provider)
-   where TPixel : unmanaged, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             var polygon = new RectangularPolygon(25, 25, 50, 50);
 
@@ -90,7 +90,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [Theory]
         [WithBasicTestPatternImages(100, 100, PixelTypes.Rgba32)]
         public void Fill_RectangularPolygon_Solid_TransformedUsingConfiguration<TPixel>(TestImageProvider<TPixel> provider)
-  where TPixel : unmanaged, IPixel<TPixel>
+            where TPixel : unmanaged, IPixel<TPixel>
         {
             var polygon = new RectangularPolygon(25, 25, 50, 50);
             provider.Configuration.SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)));
@@ -220,6 +220,33 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 provider.RunValidatingProcessorTest(
                     c => c.FillPolygon(brush, simplePath),
                     System.IO.Path.GetFileNameWithoutExtension(brushImageName),
+                    appendSourceFileOrDescription: false);
+            }
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, TestImages.Png.Ducky)]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, TestImages.Bmp.Car)]
+        public void FillPolygon_ImageBrush_Rect<TPixel>(TestImageProvider<TPixel> provider, string brushImageName)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] simplePath =
+                {
+                    new Vector2(10, 10), new Vector2(200, 50), new Vector2(50, 200)
+                };
+
+            using (var brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes))
+            {
+                float top = brushImage.Height / 4;
+                float left = brushImage.Width / 4;
+                float height = top * 2;
+                float width = left * 2;
+
+                var brush = new ImageBrush(brushImage, new RectangleF(left, top, width, height));
+
+                provider.RunValidatingProcessorTest(
+                    c => c.FillPolygon(brush, simplePath),
+                    System.IO.Path.GetFileNameWithoutExtension(brushImageName) + "_rect",
                     appendSourceFileOrDescription: false);
             }
         }

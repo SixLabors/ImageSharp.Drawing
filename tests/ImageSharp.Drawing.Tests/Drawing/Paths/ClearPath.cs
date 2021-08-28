@@ -4,14 +4,12 @@
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class ClearPath : BaseImageOperationsExtensionTest
     {
-        private readonly GraphicsOptionsComparer clearComparer = new GraphicsOptionsComparer() { SkipClearOptions = true };
         private readonly DrawingOptions nonDefaultOptions = new DrawingOptions()
         {
             GraphicsOptions =
@@ -32,13 +30,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-            DrawingOptions expectedOptions = this.nonDefaultOptions;
-            Assert.Equal(expectedOptions.ShapeOptions, processor.Options.ShapeOptions);
+            ShapeOptions expectedOptions = this.shapeOptions;
+            Assert.NotEqual(expectedOptions, processor.Options.ShapeOptions);
             Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Region);
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -55,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Region);
             Assert.Equal(this.brush, processor.Brush);
         }
 
@@ -66,13 +64,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 
             FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-            DrawingOptions expectedOptions = this.nonDefaultOptions;
-            Assert.Equal(expectedOptions.ShapeOptions, processor.Options.ShapeOptions);
+            ShapeOptions expectedOptions = this.shapeOptions;
+            Assert.NotEqual(expectedOptions, processor.Options.ShapeOptions);
 
             Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Region);
             Assert.NotEqual(this.brush, processor.Brush);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
@@ -91,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
             Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-            Assert.Equal(this.path, processor.Shape);
+            Assert.Equal(this.path, processor.Region);
             Assert.NotEqual(this.brush, processor.Brush);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);

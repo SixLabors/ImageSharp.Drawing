@@ -18,10 +18,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// </summary>
         /// <param name="options">The graphics options.</param>
         /// <param name="pen">The details how to outline the region of interest.</param>
-        /// <param name="shape">The shape to be filled.</param>
-        public DrawPathProcessor(DrawingOptions options, IPen pen, IPath shape)
+        /// <param name="path">The path to be filled.</param>
+        public DrawPathProcessor(DrawingOptions options, IPen pen, IPath path)
         {
-            this.Shape = shape;
+            this.Path = path;
             this.Pen = pen;
             this.Options = options;
         }
@@ -32,9 +32,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IPen Pen { get; }
 
         /// <summary>
-        /// Gets the region that this processor applies to.
+        /// Gets the path that this processor applies to.
         /// </summary>
-        public IPath Shape { get; }
+        public IPath Path { get; }
 
         /// <summary>
         /// Gets the <see cref="DrawingOptions"/> defining how to blend the brush pixels over the image pixels.
@@ -45,10 +45,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            // offset drawlines to align drawing outlines to pixel centers, and apply global transform
-            Matrix3x2 transform = Matrix3x2.CreateTranslation(0.5f, 0.5f) * this.Options.Transform;
-            IPath shape = this.Shape.Transform(transform);
-            return new FillRegionProcessor(this.Options, this.Pen.StrokeFill, new ShapePath(shape, this.Pen)).CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
+            // Offset drawlines to align drawing outlines to pixel centers.
+            // The global transform is applied in the FillPathProcessor.
+            IPath outline = this.Path
+                .Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F))
+                .GenerateOutline(this.Pen.StrokeWidth, this.Pen.StrokePattern);
+
+            return new FillPathProcessor(this.Options, this.Pen.StrokeFill, outline)
+                .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
         }
     }
 }

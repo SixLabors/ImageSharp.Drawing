@@ -25,7 +25,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         /// <summary>
         /// Gets or sets a value indicating whether antialiasing should be applied.
-        /// Defaults to true.
+        /// <para/>
+        /// Defaults to <see cref="SixLabors.ImageSharp.Drawing.IntersectionRule.OddEven"/>.
         /// </summary>
         public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.OddEven;
 

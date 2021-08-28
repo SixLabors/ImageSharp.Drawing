@@ -40,12 +40,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         /// <summary>
         /// Gets or sets a value indicating whether the text should be drawing with kerning enabled.
-        /// Defaults to true;
+        /// <para/>
+        /// Defaults to true.
         /// </summary>
         public bool ApplyKerning { get; set; } = true;
 
         /// <summary>
         /// Gets or sets a value indicating the number of space widths a tab should lock to.
+        /// <para/>
         /// Defaults to 4.
         /// </summary>
         public float TabWidth
@@ -61,12 +63,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         /// <summary>
         /// Gets or sets a value, if greater than 0, indicating the width at which text should wrap.
+        /// <para/>
         /// Defaults to 0.
         /// </summary>
         public float WrapTextWidth { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating the DPI (Dots Per Inch) to render text along the X axis.
+        /// <para/>
         /// Defaults to 72.
         /// </summary>
         public float DpiX
@@ -82,6 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         /// <summary>
         /// Gets or sets a value indicating the DPI (Dots Per Inch) to render text along the Y axis.
+        /// <para/>
         /// Defaults to 72.
         /// </summary>
         public float DpiY
@@ -97,6 +102,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         /// <summary>
         /// Gets or sets the line spacing. Applied as a multiple of the line height.
+        /// <para/>
         /// Defaults to 1.
         /// </summary>
         public float LineSpacing
@@ -115,24 +121,28 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// If <see cref="WrapTextWidth"/> is greater than zero it will align relative to the space
         /// defined by the location and width, if <see cref="WrapTextWidth"/> equals zero, and thus
         /// wrapping disabled, then the alignment is relative to the drawing location.
-        /// Defaults to <see cref="HorizontalAlignment.Left"/>.
+        /// <para/>
+        /// Defaults to <see cref="SixLabors.Fonts.HorizontalAlignment.Left"/>.
         /// </summary>
         public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Left;
 
         /// <summary>
         /// Gets or sets a value indicating how to align the text relative to the rendering space.
-        /// Defaults to <see cref="VerticalAlignment.Top"/>.
+        /// <para/>
+        /// Defaults to <see cref="SixLabors.Fonts.VerticalAlignment.Top"/>.
         /// </summary>
         public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Top;
 
         /// <summary>
         /// Gets the list of fallback font families to apply to the text drawing operation.
-        /// Defaults to <see cref="VerticalAlignment.Top"/>.
+        /// <para/>
+        /// Defaults to the empty list.
         /// </summary>
         public List<FontFamily> FallbackFonts { get; } = new List<FontFamily>();
 
         /// <summary>
         /// Gets or sets a value indicating whether we should render color(emoji) fonts.
+        /// <para/>
         /// Defaults to true.
         /// </summary>
         public bool RenderColorFonts { get; set; } = true;

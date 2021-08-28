@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Returns this path with all figures closed.
         /// </summary>
-        /// <returns>Returns the path as a closed path.</returns>
+        /// <returns>A new close <see cref="IPath"/>.</returns>
         IPath AsClosedPath();
     }
 }

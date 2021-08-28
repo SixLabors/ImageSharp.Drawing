@@ -24,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         public DrawText()
         {
             this.fontCollection = new FontCollection();
-            this.font = this.fontCollection.Install(TestFontUtilities.GetPath("SixLaborsSampleAB.woff")).CreateFont(12);
+            this.font = this.fontCollection.Add(TestFontUtilities.GetPath("SixLaborsSampleAB.woff")).CreateFont(12);
         }
 
         [Fact]
@@ -40,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
             Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.options, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
             Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.options, processor.Options.GraphicsOptions);
+            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
             Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.options, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -70,7 +70,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
             Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.options, processor.Options.GraphicsOptions);
+            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -83,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
             Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.options, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -96,7 +96,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.options, processor.Options.GraphicsOptions);
+            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -112,7 +112,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
             Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.options, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -122,7 +122,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
             Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.options, processor.Options.GraphicsOptions);
+            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -132,7 +132,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
             Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.options, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -149,7 +149,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.Equal(1, processor.Pen.StrokeWidth);
             Assert.Equal(PointF.Empty, processor.Location);
             Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.options, processor.Options.GraphicsOptions);
+            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
 
         [Fact]
@@ -174,7 +174,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.Equal(Color.Red, penBrush.Color);
             Assert.Equal(1, processor.Pen.StrokeWidth);
             Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.options, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
         }
     }
 }

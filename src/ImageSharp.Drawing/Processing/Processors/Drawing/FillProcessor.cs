@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// </summary>
         /// <param name="options">The <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.</param>
         /// <param name="brush">The brush to use for filling.</param>
-        public FillProcessor(GraphicsOptions options, IBrush brush)
+        public FillProcessor(DrawingOptions options, IBrush brush)
         {
             this.Brush = brush;
             this.Options = options;
@@ -29,9 +29,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         public IBrush Brush { get; }
 
         /// <summary>
-        /// Gets the <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.
+        /// Gets the <see cref="DrawingOptions"/> defining how to blend the brush pixels over the image pixels.
         /// </summary>
-        public GraphicsOptions Options { get; }
+        public DrawingOptions Options { get; }
 
         /// <inheritdoc />
         public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
