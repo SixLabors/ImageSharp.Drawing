@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void ContainsStartandEnd()
         {
-            var segment = new EllipticalArcLineSegment(new PointF(10, 10), 10, 20, 0, 0, 90, Matrix3x2.Identity);
+            var segment = new EllipticalArcLineSegment(10, 10, 10, 20, 0, 0, 90, Matrix3x2.Identity);
             IReadOnlyList<PointF> points = segment.Flatten().ToArray();
             Assert.Equal(10, points[0].X, 5);
             Assert.Equal(30, points[0].Y, 5);

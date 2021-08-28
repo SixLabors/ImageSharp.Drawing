@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="y"> The y-coordinate of the center point of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
-        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees anticlockwise.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <param name="transformation">The Tranformation matrix, that should be used on the arc.</param>
@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing
             this.y = y;
             this.radiusX = radiusX;
             this.radiusY = radiusY;
-            this.rotation = -rotation % 360;
+            this.rotation = rotation % 360;
             this.startAngle = startAngle % 360;
             this.transformation = transformation;
             this.sweepAngle = sweepAngle;

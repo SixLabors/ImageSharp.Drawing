@@ -203,7 +203,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// Adds an elliptical arc to the current  figure
         /// </summary>
         /// <param name="rect"> A <see cref="RectangleF"/> that represents the rectangular bounds of the ellipse from which the arc is taken.</param>
-        /// <param name="rotation">The rotation of (<paramref name="rect"/>, measured in degrees anticlockwise.</param>
+        /// <param name="rotation">The rotation of (<paramref name="rect"/>, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
@@ -213,7 +213,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// Adds an elliptical arc to the current  figure
         /// </summary>
         /// <param name="rect"> A <see cref="Rectangle"/> that represents the rectangular bounds of the ellipse from which the arc is taken.</param>
-        /// <param name="rotation">The rotation of (<paramref name="rect"/>, measured in degrees anticlockwise.</param>
+        /// <param name="rotation">The rotation of (<paramref name="rect"/>, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
@@ -225,7 +225,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="center"> The center <see cref="PointF"/> of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
-        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees anticlockwise.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
@@ -237,7 +237,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="center"> The center <see cref="Point"/> of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
-        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees anticlockwise.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
@@ -250,7 +250,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="y"> The y-coordinate of the center point of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
-        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees anticlockwise.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
@@ -268,7 +268,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="y"> The y-coordinate of the center point of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
-        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees anticlockwise.</param>
+        /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
