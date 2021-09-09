@@ -33,6 +33,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Fact]
+        public void AddEllipticArc()
+        {
+            var builder = new PathBuilder();
+
+            builder.AddEllipticalArc(new PointF(10, 10), 10, 10, 0, 0, 360);
+
+            Assert.IsType<Path>(builder.Build());
+        }
+
+        [Fact]
         public void DrawLinesOpenFigure()
         {
             var builder = new PathBuilder();

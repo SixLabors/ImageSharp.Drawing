@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             };
 
         [Theory]
-        [WithSolidFilledImages(nameof(DrawPathData), 300, 450, "Blue", PixelTypes.Rgba32)]
+        [WithSolidFilledImages(nameof(DrawPathData), 300, 600, "Blue", PixelTypes.Rgba32)]
         public void DrawPath<TPixel>(TestImageProvider<TPixel> provider, string colorName, byte alpha, float thickness)
             where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -36,8 +36,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 new Vector2(500, 500),
                 new Vector2(60, 10),
                 new Vector2(10, 400));
+            var ellipticArcSegment1 = new EllipticalArcLineSegment(80, 425, (float)Math.Sqrt(5525), 40, (float)(Math.Atan2(25, 70) * 180 / Math.PI), -90, -180, Matrix3x2.Identity);
+            var ellipticArcSegment2 = new EllipticalArcLineSegment(150, 520, 140, 70, 0, 180, 360, Matrix3x2.Identity);
 
-            var path = new Path(linearSegment, bezierSegment);
+            var path = new Path(linearSegment, bezierSegment, ellipticArcSegment1, ellipticArcSegment2);
 
             Rgba32 rgba = TestUtils.GetColorByName(colorName);
             rgba.A = alpha;
