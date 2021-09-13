@@ -48,6 +48,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
+        [WithBlankImage(16, 16, PixelTypes.RgbaVector)]
+        public void WorksAtHighPrecision<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            using (var image = provider.GetImage() as Image<RgbaVector>)
+            {
+                var pixel = new RgbaVector(1e-38f, 2e-38f, 3e-38f);
+                var brush = new SolidBrush<RgbaVector>(pixel);
+                image.Mutate(c => c.Fill(brush));
+
+                image.DebugSave(provider, appendSourceFileOrDescription: false);
+                image.ComparePixelBufferTo(pixel);
+            }
+        }
+
+        [Theory]
         [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, "Blue")]
         [WithSolidFilledImages(16, 16, "Yellow", PixelTypes.Rgba32, "Khaki")]
         public void WhenColorIsOpaque_OverridePreviousColor<TPixel>(
