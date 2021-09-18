@@ -57,6 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 LineSpacing = this.Options.TextOptions.LineSpacing,
                 FallbackFontFamilies = this.Options.TextOptions.FallbackFonts,
                 ColorFontSupport = this.definition.Options.TextOptions.RenderColorFonts ? ColorFontSupport.MicrosoftColrFormat : ColorFontSupport.None,
+                WordBreaking = this.definition.Options.TextOptions.WordBreaking
             };
 
             this.textRenderer = new CachingGlyphRenderer(
