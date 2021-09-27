@@ -122,16 +122,23 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// defined by the location and width, if <see cref="WrapTextWidth"/> equals zero, and thus
         /// wrapping disabled, then the alignment is relative to the drawing location.
         /// <para/>
-        /// Defaults to <see cref="SixLabors.Fonts.HorizontalAlignment.Left"/>.
+        /// Defaults to <see cref="HorizontalAlignment.Left"/>.
         /// </summary>
         public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Left;
 
         /// <summary>
         /// Gets or sets a value indicating how to align the text relative to the rendering space.
         /// <para/>
-        /// Defaults to <see cref="SixLabors.Fonts.VerticalAlignment.Top"/>.
+        /// Defaults to <see cref="VerticalAlignment.Top"/>.
         /// </summary>
         public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Top;
+
+        /// <summary>
+        /// Gets or sets a value indicating what word breaking mode to use when wrapping text.
+        /// <para/>
+        /// Defaults to <see cref="WordBreaking.Normal"/>.
+        /// </summary>
+        public WordBreaking WordBreaking { get; set; } = WordBreaking.Normal;
 
         /// <summary>
         /// Gets the list of fallback font families to apply to the text drawing operation.
