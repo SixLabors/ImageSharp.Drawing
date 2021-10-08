@@ -12,61 +12,61 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
     public class RectangleTests
     {
         public static TheoryData<TestPoint, TestSize, TestPoint, bool> PointInPolygonTheoryData =
-            new TheoryData<TestPoint, TestSize, TestPoint, bool>
+            new()
             {
-               {
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(10, 10), // test
                     true
-               }, // corner is inside
-               {
+                }, // corner is inside
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(9, 9), // test
                     false
-               }, // corner is inside
+                }, // corner is inside
             };
 
         public static TheoryData<TestPoint, TestSize, TestPoint, float> DistanceTheoryData =
-            new TheoryData<TestPoint, TestSize, TestPoint, float>
+            new()
             {
-               {
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(10, 10), // test
                     0f
-               }, // corner is inside
-               {
+                }, // corner is inside
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(9, 10), // test
                     1f
-               },
-               {
+                },
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(10, 13), // test
                     0f
-               },
-               {
+                },
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(14, 13), // test
                     -3f
-               },
-               {
+                },
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(13, 14), // test
                     -3f
-               },
-               {
+                },
+                {
                     new PointF(10, 10), // loc
                     new SizeF(100, 100), // size
                     new PointF(7, 6), // test
                     5f
-               },
+                },
             };
 
         [Fact]
@@ -116,14 +116,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         }
 
         [Fact]
-        public void LienearSegements()
+        public void LinearSegments()
         {
             IPath shape = new RectangularPolygon(10, 11, 12, 13);
-            IReadOnlyList<PointF> segemnts = shape.Flatten().ToArray()[0].Points.ToArray();
-            Assert.Equal(new PointF(10, 11), segemnts[0]);
-            Assert.Equal(new PointF(22, 11), segemnts[1]);
-            Assert.Equal(new PointF(22, 24), segemnts[2]);
-            Assert.Equal(new PointF(10, 24), segemnts[3]);
+            IReadOnlyList<PointF> segments = shape.Flatten().ToArray()[0].Points.ToArray();
+            Assert.Equal(new PointF(10, 11), segments[0]);
+            Assert.Equal(new PointF(22, 11), segments[1]);
+            Assert.Equal(new PointF(22, 24), segments[2]);
+            Assert.Equal(new PointF(10, 24), segments[3]);
         }
 
         [Fact]
@@ -145,12 +145,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         }
 
         [Fact]
-        public void TransformIdnetityReturnsSahpeObject()
+        public void TransformIdentityReturnsShapeObject()
         {
             IPath shape = new RectangularPolygon(0, 0, 200, 60);
-            IPath transformdShape = shape.Transform(Matrix3x2.Identity);
+            IPath transformedShape = shape.Transform(Matrix3x2.Identity);
 
-            Assert.Same(shape, transformdShape);
+            Assert.Same(shape, transformedShape);
         }
 
         [Fact]

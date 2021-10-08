@@ -8,7 +8,6 @@ using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-
 using SDRectangleF = System.Drawing.RectangleF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing

@@ -8,7 +8,6 @@ using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-
 using SDRectangle = System.Drawing.Rectangle;
 using SDSize = System.Drawing.Size;
 

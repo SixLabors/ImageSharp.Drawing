@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Drawing.Utilities;
 
@@ -40,10 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 
         private Span<int> ActiveEdges => this.Buffer.Slice(0, this.count);
 
-        public void EnterEdge(int edgeIdx)
-        {
-            this.Buffer[this.count++] = edgeIdx | EnteringEdgeFlag;
-        }
+        public void EnterEdge(int edgeIdx) => this.Buffer[this.count++] = edgeIdx | EnteringEdgeFlag;
 
         public void LeaveEdge(int edgeIdx)
         {

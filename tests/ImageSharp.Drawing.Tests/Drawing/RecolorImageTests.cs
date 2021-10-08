@@ -45,7 +45,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     Size size = x.GetCurrentSize();
                     var rectangle = new Rectangle(0, (size.Height / 2) - (size.Height / 4), size.Width, size.Height / 2);
                     x.Fill(brush, rectangle);
-                }, testInfo);
+                },
+                testInfo);
         }
     }
 }

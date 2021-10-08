@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Utilities
@@ -14,10 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
         // If targeting .NET 5, we can call span based sort, but probably not worth it only for that API.
         private static class KeyValueSort<TValue>
         {
-            public static void Sort(Span<float> keys, Span<TValue> values)
-            {
-                IntrospectiveSort(keys, values);
-            }
+            public static void Sort(Span<float> keys, Span<TValue> values) => IntrospectiveSort(keys, values);
 
             private static void SwapIfGreaterWithValues(Span<float> keys, Span<TValue> values, int i, int j)
             {
@@ -117,8 +113,15 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
                 while (left < right)
                 {
 #pragma warning disable SA1503, SA1106
-                    while (keys[++left] < pivot);
-                    while (pivot < keys[--right]);
+                    while (keys[++left] < pivot)
+                    {
+                        ;
+                    }
+
+                    while (pivot < keys[--right])
+                    {
+                        ;
+                    }
 #pragma warning restore SA1503, SA1106
 
                     if (left >= right)

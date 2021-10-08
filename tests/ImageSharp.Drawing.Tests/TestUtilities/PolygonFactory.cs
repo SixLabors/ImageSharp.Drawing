@@ -76,8 +76,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public static PointF[][] GetGeoJsonPoints(string geoJsonContent) =>
             GetGeoJsonPoints(geoJsonContent, Matrix3x2.Identity);
 
-        public static Polygon CreatePolygon(params (float x, float y)[] coords)
-            => new Polygon(new LinearLineSegment(CreatePointArray(coords)))
+        public static Polygon CreatePolygon(params (float X, float Y)[] coords)
+            => new(new LinearLineSegment(CreatePointArray(coords)))
             {
                 // The default epsilon is too large for test code, we prefer the vertices not to be changed
                 RemoveCloseAndCollinearPoints = false
@@ -86,8 +86,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public static (PointF Start, PointF End) CreateHorizontalLine(float y)
             => (new PointF(-Inf, y), new PointF(Inf, y));
 
-        public static PointF[] CreatePointArray(params (float x, float y)[] coords) =>
-            coords.Select(c => new PointF(c.x, c.y)).ToArray();
+        public static PointF[] CreatePointArray(params (float X, float Y)[] coords) =>
+            coords.Select(c => new PointF(c.X, c.Y)).ToArray();
 
         public static T[] CloneArray<T>(this T[] points)
         {

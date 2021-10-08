@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
     public class PolygonTests
     {
         public static TheoryData<TestPoint[], TestPoint, bool> PointInPolygonTheoryData =
-            new TheoryData<TestPoint[], TestPoint, bool>
+            new()
             {
                 {
                     new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
@@ -36,25 +36,28 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
             };
 
         public static TheoryData<TestPoint[], TestPoint, float> DistanceTheoryData =
-           new ()
+           new()
            {
-                {
-                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
-                    new PointF(10, 10),
-                    0
-                },
-                {
+               {
                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
-                   new PointF(10, 11), 0
-                },
-                {
+                   new PointF(10, 10),
+                   0
+               },
+               {
                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
-                   new PointF(11, 11), -1
-                },
-                {
+                   new PointF(10, 11),
+                   0
+               },
+               {
                    new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
-                   new PointF(9, 10), 1
-                },
+                   new PointF(11, 11),
+                   -1
+               },
+               {
+                   new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },
+                   new PointF(9, 10),
+                   1
+               },
            };
 
         [Fact]

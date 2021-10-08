@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System.Numerics;
@@ -9,8 +9,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
 {
     public class IntersectTests
     {
-        public static TheoryData<(float x, float y), (float x, float y), (float x, float y), (float x, float y), (float x, float y)?> LineSegmentToLineSegment_Data =
-            new ()
+        public static TheoryData<(float X, float Y), (float X, float Y), (float X, float Y), (float X, float Y), (float X, float Y)?> LineSegmentToLineSegment_Data =
+            new()
             {
                 { (0, 0), (2, 3), (1, 3), (1, 0), (1, 1.5f) },
                 { (3, 1), (3, 3), (3, 2), (4, 2), (3, 2) },
@@ -26,11 +26,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
         [Theory]
         [MemberData(nameof(LineSegmentToLineSegment_Data))]
         public void LineSegmentToLineSegmentNoCollinear(
-            (float x, float y) a0,
-            (float x, float y) a1,
-            (float x, float y) b0,
-            (float x, float y) b1,
-            (float x, float y)? expected)
+            (float X, float Y) a0,
+            (float X, float Y) a1,
+            (float X, float Y) b0,
+            (float X, float Y) b1,
+            (float X, float Y)? expected)
         {
             Vector2 ip = default;
 
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
                 Assert.Equal(P(expected.Value), ip, new ApproximateFloatComparer(1e-3f));
             }
 
-            static Vector2 P((float x, float y) p) => new Vector2(p.x, p.y);
+            static Vector2 P((float X, float Y) p) => new(p.X, p.Y);
         }
     }
 }

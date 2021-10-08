@@ -31,9 +31,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         public static readonly Polygon H = PolygonFactory.CreatePolygon(
             (14, 1.88f), (16, 1.75f), (16, 2.25f), (14, 2.11f));
 
-        public static Polygon GetByName(string name)
-        {
-            return (Polygon)typeof(NumericCornerCasePolygons).GetField(name).GetValue(null);
-        }
+        public static Polygon GetByName(string name) => (Polygon)typeof(NumericCornerCasePolygons).GetField(name).GetValue(null);
     }
 }

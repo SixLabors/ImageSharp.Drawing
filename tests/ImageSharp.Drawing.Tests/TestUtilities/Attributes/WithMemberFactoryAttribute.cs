@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -24,10 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <param name="pixelTypes">The requested pixel types</param>
         /// <param name="additionalParameters">Additional theory parameter values</param>
         public WithMemberFactoryAttribute(string memberMethodName, PixelTypes pixelTypes, params object[] additionalParameters)
-            : base(null, pixelTypes, additionalParameters)
-        {
-            this.memberMethodName = memberMethodName;
-        }
+            : base(null, pixelTypes, additionalParameters) => this.memberMethodName = memberMethodName;
 
         protected override object[] GetFactoryMethodArgs(MethodInfo testMethod, Type factoryType)
         {

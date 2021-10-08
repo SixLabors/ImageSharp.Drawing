@@ -3,8 +3,6 @@
 
 using System;
 using System.Buffers;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization

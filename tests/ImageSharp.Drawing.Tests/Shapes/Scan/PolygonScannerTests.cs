@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
     {
         private readonly ITestOutputHelper output;
 
-        private static readonly DebugDraw DebugDraw = new DebugDraw(nameof(PolygonScannerTests));
+        private static readonly DebugDraw DebugDraw = new(nameof(PolygonScannerTests));
 
         public PolygonScannerTests(ITestOutputHelper output)
             => this.output = output;
@@ -431,7 +431,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         {
             IPath poly = PolygonFactory.CreatePolygon((1, -5), (5, -5), (5, -3), (10, -1), (10, 2), (12, 4), (1, 4));
 
-            FuzzyFloat[][] exected =
+            FuzzyFloat[][] expected =
             {
                 new FuzzyFloat[] { 1, 10 },
                 new FuzzyFloat[] { 1, 10 },
@@ -442,18 +442,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 new FuzzyFloat[] { 1, 11 },
             };
 
-            this.TestScan(poly, 0, 3, 2, exected);
+            this.TestScan(poly, 0, 3, 2, expected);
         }
 
-        private static (float y, FuzzyFloat[] x) Empty(float y) => (y, new FuzzyFloat[0]);
+        private static (float Y, FuzzyFloat[] X) Empty(float y) => (y, Array.Empty<FuzzyFloat>());
 
-        private static FuzzyFloat F(float x, float eps) => new FuzzyFloat(x, eps);
+        private static FuzzyFloat F(float x, float eps) => new(x, eps);
 
-        public static readonly TheoryData<string, (float y, FuzzyFloat[] x)[]> NumericCornerCasesData =
-            new TheoryData<string, (float y, FuzzyFloat[] x)[]>
+        public static readonly TheoryData<string, (float Y, FuzzyFloat[] X)[]> NumericCornerCasesData =
+            new()
             {
                 {
-                    "A", new[]
+                    "A",
+                    new[]
                     {
                         Empty(2f), Empty(2.25f),
 
@@ -466,7 +467,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     }
                 },
                 {
-                    "B", new[]
+                    "B",
+                    new[]
                     {
                         Empty(2f), Empty(2.25f),
 
@@ -479,7 +481,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     }
                 },
                 {
-                    "C", new[]
+                    "C",
+                    new[]
                     {
                         Empty(3f), Empty(3.25f),
 
@@ -489,7 +492,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     }
                 },
                 {
-                    "D", new[]
+                    "D",
+                    new[]
                     {
                         Empty(3f),
 
@@ -500,41 +504,45 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                     }
                 },
                 {
-                    "E", new[]
+                    "E",
+                    new[]
                     {
                         Empty(4f), Empty(4.25f),
 
                         (4.5f, new FuzzyFloat[] { 3, 3, 6, 6 }),
-                        (4.75f, new FuzzyFloat[] { F(2.4166667f, 0.5f), 4, 4, 6 }),
+                        (4.75f, new[] { F(2.4166667f, 0.5f), 4, 4, 6 }),
                         (5f, new FuzzyFloat[] { 2, 6 }),
                     }
                 },
                 {
-                    "F", new[]
+                    "F",
+                    new[]
                     {
                         Empty(4f),
 
                         // Eps = 0.01 to address inaccuracies on .NET Framework
-                        (4.25f, new FuzzyFloat[] { F(13, 0.01f), F(13, 0.01f) }),
-                        (4.5f, new FuzzyFloat[] { F(12.714286f, 0.5f), F(13.444444f, 0.5f), 16, 16 }),
-                        (4.75f, new FuzzyFloat[] { F(12.357143f, 0.5f), 14, 14, 16 }),
+                        (4.25f, new[] { F(13, 0.01f), F(13, 0.01f) }),
+                        (4.5f, new[] { F(12.714286f, 0.5f), F(13.444444f, 0.5f), 16, 16 }),
+                        (4.75f, new[] { F(12.357143f, 0.5f), 14, 14, 16 }),
                         (5f, new FuzzyFloat[] { 12, 16 }),
                     }
                 },
                 {
-                    "G", new[]
+                    "G",
+                    new[]
                     {
                         Empty(1f), Empty(1.25f), Empty(1.5f),
 
                         (1.75f, new FuzzyFloat[] { 6, 6 }),
-                        (2f, new FuzzyFloat[] { F(4.6315789f, 1f), F(7.3684211f, 1f) }),
+                        (2f, new[] { F(4.6315789f, 1f), F(7.3684211f, 1f) }),
                         (2.25f, new FuzzyFloat[] { 2, 10 }),
 
                         Empty(2.5f), Empty(1.75f), Empty(3f),
                     }
                 },
                 {
-                    "H", new[]
+                    "H",
+                    new[]
                     {
                         Empty(1f), Empty(1.25f), Empty(1.5f),
 
@@ -549,20 +557,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
         [Theory]
         [MemberData(nameof(NumericCornerCasesData))]
-        public void NumericCornerCases(string name, (float y, FuzzyFloat[] x)[] expectedIntersections)
+        public void NumericCornerCases(string name, (float Y, FuzzyFloat[] X)[] expectedIntersections)
         {
             Polygon poly = NumericCornerCasePolygons.GetByName(name);
             DebugDraw.Polygon(poly, 0.25f, 100f, $"{nameof(this.NumericCornerCases)}_{name}");
 
-            int min = (int)expectedIntersections.First().y;
-            int max = (int)expectedIntersections.Last().y;
+            int min = (int)expectedIntersections.First().Y;
+            int max = (int)expectedIntersections.Last().Y;
 
-            this.TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.x).ToArray());
+            this.TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.X).ToArray());
         }
 
-        public static TheoryData<float, string, (float y, FuzzyFloat[] x)[]> NumericCornerCases_Offset_Data()
+        public static TheoryData<float, string, (float Y, FuzzyFloat[] X)[]> NumericCornerCases_Offset_Data()
         {
-            var result = new TheoryData<float, string, (float y, FuzzyFloat[] x)[]>();
+            var result = new TheoryData<float, string, (float Y, FuzzyFloat[] X)[]>();
 
             float[] offsets = { 1e3f, 1e4f, 1e5f };
 
@@ -570,7 +578,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             {
                 foreach (object[] data in NumericCornerCasesData)
                 {
-                    result.Add(offset, (string)data[0], ((float y, FuzzyFloat[] x)[])data[1]);
+                    result.Add(offset, (string)data[0], ((float Y, FuzzyFloat[] X)[])data[1]);
                 }
             }
 
@@ -579,7 +587,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
 
         [Theory]
         [MemberData(nameof(NumericCornerCases_Offset_Data))]
-        public void NumericCornerCases_Offset(float offset, string name, (float y, FuzzyFloat[] x)[] expectedIntersections)
+        public void NumericCornerCases_Offset(float offset, string name, (float Y, FuzzyFloat[] X)[] expectedIntersections)
         {
             float dx = offset;
             float dy = offset;
@@ -587,14 +595,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             IPath poly = NumericCornerCasePolygons.GetByName(name).Transform(Matrix3x2.CreateTranslation(dx, dy));
             expectedIntersections = TranslateIntersections(expectedIntersections, dx, dy);
 
-            int min = (int)expectedIntersections.First().y;
-            int max = (int)expectedIntersections.Last().y;
+            int min = (int)expectedIntersections.First().Y;
+            int max = (int)expectedIntersections.Last().Y;
 
-            this.TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.x).ToArray());
+            this.TestScan(poly, min, max, 4, expectedIntersections.Select(i => i.X).ToArray());
         }
 
-        private static (float y, FuzzyFloat[] x)[] TranslateIntersections(
-            (float y, FuzzyFloat[] x)[] ex, float dx, float dy)
-            => ex.Select(e => (e.y + dy, e.x.Select(xx => xx + dx).ToArray())).ToArray();
+        private static (float Y, FuzzyFloat[] X)[] TranslateIntersections(
+            (float Y, FuzzyFloat[] X)[] ex, float dx, float dy)
+            => ex.Select(e => (e.Y + dy, e.X.Select(xx => xx + dx).ToArray())).ToArray();
     }
 }

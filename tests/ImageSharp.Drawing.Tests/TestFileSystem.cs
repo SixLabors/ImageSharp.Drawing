@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -10,9 +10,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     /// <summary>
     /// A test image file.
     /// </summary>
-    public class TestFileSystem : ImageSharp.IO.IFileSystem
+    public class TestFileSystem : IO.IFileSystem
     {
-        private readonly Dictionary<string, Stream> fileSystem = new Dictionary<string, Stream>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Stream> fileSystem = new(StringComparer.OrdinalIgnoreCase);
 
         public void AddFile(string path, Stream data)
         {

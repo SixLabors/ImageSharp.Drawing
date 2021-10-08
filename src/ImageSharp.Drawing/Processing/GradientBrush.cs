@@ -2,9 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Buffers;
 using System.Numerics;
-using System.Threading;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -197,7 +195,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.isDisposed = true;
             }
 
-            private (ColorStop from, ColorStop to) GetGradientSegment(float positionOnCompleteGradient)
+            private (ColorStop From, ColorStop To) GetGradientSegment(float positionOnCompleteGradient)
             {
                 ColorStop localGradientFrom = this.colorStops[0];
                 ColorStop localGradientTo = default;
