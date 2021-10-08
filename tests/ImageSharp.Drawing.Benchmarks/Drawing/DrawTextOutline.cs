@@ -11,7 +11,7 @@ using SixLabors.ImageSharp.Processing;
 
 using SDRectangleF = System.Drawing.RectangleF;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks
+namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
 {
     [MemoryDiagnoser]
     public class DrawTextOutline

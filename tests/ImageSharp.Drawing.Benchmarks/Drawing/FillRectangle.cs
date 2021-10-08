@@ -12,7 +12,7 @@ using SixLabors.ImageSharp.Processing;
 using SDRectangle = System.Drawing.Rectangle;
 using SDSize = System.Drawing.Size;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks
+namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
 {
     public class FillRectangle
     {

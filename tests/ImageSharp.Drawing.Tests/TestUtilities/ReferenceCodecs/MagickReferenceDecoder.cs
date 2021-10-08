@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using ImageMagick;
-using ImageMagick.Formats.Bmp;
+using ImageMagick.Formats;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Metadata;
@@ -25,15 +25,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
         {
         }
 
-        public MagickReferenceDecoder(bool validate)
-        {
-            this.validate = validate;
-        }
+        public MagickReferenceDecoder(bool validate) => this.validate = validate;
 
         public static MagickReferenceDecoder Instance { get; } = new MagickReferenceDecoder();
 
         private static void FromRgba32Bytes<TPixel>(Configuration configuration, Span<byte> rgbaBytes, IMemoryGroup<TPixel> destinationGroup)
-            where TPixel : unmanaged, ImageSharp.PixelFormats.IPixel<TPixel>
+            where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
         {
             foreach (Memory<TPixel> m in destinationGroup)
             {
@@ -48,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
         }
 
         private static void FromRgba64Bytes<TPixel>(Configuration configuration, Span<byte> rgbaBytes, IMemoryGroup<TPixel> destinationGroup)
-            where TPixel : unmanaged, ImageSharp.PixelFormats.IPixel<TPixel>
+            where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
         {
             foreach (Memory<TPixel> m in destinationGroup)
             {
@@ -63,11 +60,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
         }
 
         public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            where TPixel : unmanaged, ImageSharp.PixelFormats.IPixel<TPixel>
+            where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
             => Task.FromResult(this.Decode<TPixel>(configuration, stream));
 
         public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream)
-            where TPixel : unmanaged, ImageSharp.PixelFormats.IPixel<TPixel>
+            where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
         {
             var bmpReadDefines = new BmpReadDefines
             {
@@ -87,7 +84,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs
                 MemoryGroup<TPixel> framePixels = frame.PixelBuffer.FastMemoryGroup;
 
                 using IUnsafePixelCollection<ushort> pixels = magicFrame.GetPixelsUnsafe();
-                if (magicFrame.Depth == 8 || magicFrame.Depth == 1)
+                if (magicFrame.Depth is 8 or 1)
                 {
                     byte[] data = pixels.ToByteArray(PixelMapping.RGBA);
 

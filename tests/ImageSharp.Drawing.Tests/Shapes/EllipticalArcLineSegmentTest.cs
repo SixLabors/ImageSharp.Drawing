@@ -5,12 +5,12 @@ using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class EllipticalArcLineSegmentTest
     {
         [Fact]
-        public void ContainsStartandEnd()
+        public void ContainsStartAndEnd()
         {
             var segment = new EllipticalArcLineSegment(10, 10, 10, 20, 0, 0, 90, Matrix3x2.Identity);
             IReadOnlyList<PointF> points = segment.Flatten().ToArray();
@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Fact]
-        public void checkZeroRadii()
+        public void CheckZeroRadii()
         {
             IReadOnlyCollection<PointF> xRadiusZero = new EllipticalArcLineSegment(20, 10, 0, 20, 0, 0, 360, Matrix3x2.Identity).Flatten().ToArray();
             IReadOnlyCollection<PointF> yRadiusZero = new EllipticalArcLineSegment(20, 10, 30, 0, 0, 0, 360, Matrix3x2.Identity).Flatten().ToArray();

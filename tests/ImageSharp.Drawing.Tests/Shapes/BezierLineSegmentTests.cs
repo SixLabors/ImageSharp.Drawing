@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class BezierLineSegmentTests
     {
@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Fact]
-        public void MustHaveAtleast4Points()
+        public void MustHaveAtLeast4Points()
         {
             ArgumentOutOfRangeException error = Assert.Throws<ArgumentOutOfRangeException>(() => new CubicBezierLineSegment(new[] { new PointF(0, 0) }));
         }
