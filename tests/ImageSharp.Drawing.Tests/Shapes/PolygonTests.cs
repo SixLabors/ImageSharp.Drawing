@@ -5,12 +5,12 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class PolygonTests
     {
         public static TheoryData<TestPoint[], TestPoint, bool> PointInPolygonTheoryData =
-            new TheoryData<TestPoint[], TestPoint, bool>
+            new ()
             {
                 {
                     new TestPoint[] { new PointF(10, 10), new PointF(10, 100), new PointF(100, 100), new PointF(100, 10) },

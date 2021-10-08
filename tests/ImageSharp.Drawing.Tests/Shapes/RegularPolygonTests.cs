@@ -7,7 +7,7 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class RegularPolygonTests
     {
@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData(2, true)]
         [InlineData(3, false)]
         [InlineData(4, false)]
-        public void RequiresAtleast3Verticies(int points, bool throws)
+        public void RequiresAtLeast3Verticies(int points, bool throws)
         {
             if (throws)
             {
@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData(0, true)]
         [InlineData(0.00001, false)]
         [InlineData(1, false)]
-        public void RadiusMustBeGreateThan0(float radius, bool throws)
+        public void RadiusMustBeGreaterThan0(float radius, bool throws)
         {
             if (throws)
             {
@@ -55,10 +55,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void GeneratesCorrectPath()
         {
-            const float Radius = 10;
+            const float radius = 10;
             int pointsCount = new Random().Next(3, 20);
 
-            var poly = new RegularPolygon(Vector2.Zero, pointsCount, Radius, 0);
+            var poly = new RegularPolygon(Vector2.Zero, pointsCount, radius, 0);
 
             IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
@@ -76,22 +76,22 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
                 float actual = Vector2.Distance(points[i], points[j]);
                 Assert.Equal(baseline, actual, 3);
-                Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
             }
         }
 
         [Fact]
         public void AngleChangesOnePointToStartAtThatPosition()
         {
-            const double TwoPI = 2 * Math.PI;
-            const float Radius = 10;
-            double anAngle = new Random().NextDouble() * TwoPI;
+            const double twoPI = 2 * Math.PI;
+            const float radius = 10;
+            double anAngle = new Random().NextDouble() * twoPI;
 
-            var poly = new RegularPolygon(Vector2.Zero, 3, Radius, (float)anAngle);
+            var poly = new RegularPolygon(Vector2.Zero, 3, radius, (float)anAngle);
             IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
             IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
-                .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
+                .Select(x => x < 0 ? x + twoPI : x); // normalise it from +/- PI to 0 to TwoPI
 
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
         }

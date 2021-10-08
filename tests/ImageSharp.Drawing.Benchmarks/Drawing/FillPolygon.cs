@@ -18,7 +18,7 @@ using SkiaSharp;
 using SDBitmap = System.Drawing.Bitmap;
 using SDPointF = System.Drawing.PointF;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks
+namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
 {
     public abstract class FillPolygon
     {

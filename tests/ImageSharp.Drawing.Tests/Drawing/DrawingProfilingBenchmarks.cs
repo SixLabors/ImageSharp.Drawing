@@ -46,9 +46,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [InlineData(IntersectionRule.Nonzero)]
         public void FillPolygon(IntersectionRule intersectionRule)
         {
-            const int Times = 100;
+            const int times = 100;
 
-            for (int i = 0; i < Times; i++)
+            for (int i = 0; i < times; i++)
             {
                 this.image.Mutate(c =>
                 {
@@ -69,13 +69,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         [InlineData(10)]
         public void DrawText(int textIterations)
         {
-            const int Times = 20;
-            const string TextPhrase = "asdfghjkl123456789{}[]+$%?";
-            string textToRender = string.Join("/n", Enumerable.Repeat(TextPhrase, textIterations));
+            const int times = 20;
+            const string textPhrase = "asdfghjkl123456789{}[]+$%?";
+            string textToRender = string.Join("/n", Enumerable.Repeat(textPhrase, textIterations));
 
             Font font = SystemFonts.CreateFont("Arial", 12);
 
-            for (int i = 0; i < Times; i++)
+            for (int i = 0; i < times; i++)
             {
                 this.image.Mutate(x => x
                     .SetGraphicsOptions(o => o.Antialias = true)

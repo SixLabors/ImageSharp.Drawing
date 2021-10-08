@@ -7,7 +7,7 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class StarTests
     {
@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData(2, true)]
         [InlineData(3, false)]
         [InlineData(4, false)]
-        public void RequiresAtleast3Verticies(int points, bool throws)
+        public void RequiresAtLeast3Verticies(int points, bool throws)
         {
             if (throws)
             {
@@ -57,11 +57,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void GeneratesCorrectPath()
         {
-            const float Radius = 5;
-            const float Radius2 = 30;
+            const float radius = 5;
+            const float radius2 = 30;
             int pointsCount = new Random().Next(3, 20);
 
-            var poly = new Star(Vector2.Zero, pointsCount, Radius, Radius2, 0);
+            var poly = new Star(Vector2.Zero, pointsCount, radius, radius2, 0);
 
             PointF[] points = poly.Flatten().ToArray()[0].Points.ToArray();
 
@@ -82,11 +82,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 Assert.Equal(baseline, actual, 3);
                 if (i % 2 == 1)
                 {
-                    Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                    Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
                 }
                 else
                 {
-                    Assert.Equal(Radius2, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                    Assert.Equal(radius2, Vector2.Distance(Vector2.Zero, points[i]), 3);
                 }
             }
         }
@@ -94,16 +94,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void AngleChangesOnePointToStartAtThatPosition()
         {
-            const double TwoPI = 2 * Math.PI;
-            const float Radius = 10;
-            const float Radius2 = 20;
-            double anAngle = new Random().NextDouble() * TwoPI;
+            const double twoPI = 2 * Math.PI;
+            const float radius = 10;
+            const float radius2 = 20;
+            double anAngle = new Random().NextDouble() * twoPI;
 
-            var poly = new Star(Vector2.Zero, 3, Radius, Radius2, (float)anAngle);
+            var poly = new Star(Vector2.Zero, 3, radius, radius2, (float)anAngle);
             ISimplePath[] points = poly.Flatten().ToArray();
 
             IEnumerable<double> allAngles = points[0].Points.ToArray().Select(b => Math.Atan2(b.Y, b.X))
-                .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
+                .Select(x => x < 0 ? x + twoPI : x); // normalise it from +/- PI to 0 to TwoPI
 
             Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
         }
