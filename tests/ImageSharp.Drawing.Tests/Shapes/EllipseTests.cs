@@ -4,7 +4,7 @@
 using System;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
+namespace SixLabors.ImageSharp.Drawing.Tests
 {
     public class EllipseTests
     {
@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         [InlineData(0, true)]
         [InlineData(0.00001, false)]
         [InlineData(1, false)]
-        public void WidthMustBeGreaterThan0(float width, bool throws)
+        public void WidthMustBeGreateThan0(float width, bool throws)
         {
             if (throws)
             {
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         [InlineData(0, true)]
         [InlineData(0.00001, false)]
         [InlineData(1, false)]
-        public void HeightMustBeGreaterThan0(float height, bool throws)
+        public void HeightMustBeGreateThan0(float height, bool throws)
         {
             if (throws)
             {

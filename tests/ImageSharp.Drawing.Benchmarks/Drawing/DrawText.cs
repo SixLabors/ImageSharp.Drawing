@@ -13,7 +13,7 @@ using SDBitmap = System.Drawing.Bitmap;
 using SDFont = System.Drawing.Font;
 using SDRectangleF = System.Drawing.RectangleF;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
+namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     [MemoryDiagnoser]
     public class DrawText
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         public void Setup()
         {
             this.image = new Image<Rgba32>(Width, Height);
-            this.sdBitmap = new SDBitmap(Width, Height);
+            this.sdBitmap = new Bitmap(Width, Height);
             this.sdGraphics = Graphics.FromImage(this.sdBitmap);
             this.sdGraphics.InterpolationMode = InterpolationMode.Default;
             this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;

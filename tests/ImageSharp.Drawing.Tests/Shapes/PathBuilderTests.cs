@@ -6,7 +6,7 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
+namespace SixLabors.ImageSharp.Drawing.Tests
 {
     public class PathBuilderTests
     {

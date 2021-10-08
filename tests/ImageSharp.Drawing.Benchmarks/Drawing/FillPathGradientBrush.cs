@@ -1,4 +1,4 @@
-// Copyright (c) Six Labors.
+﻿// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using BenchmarkDotNet.Attributes;
@@ -6,7 +6,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
+namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     public class FillPathGradientBrush
     {
@@ -23,11 +23,8 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         {
             var star = new Star(50, 50, 5, 20, 45);
             PointF[] points = star.Points.ToArray();
-            Color[] colors =
-            {
-                Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple,
-                Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple
-            };
+            Color[] colors = { Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple,
+                Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple };
 
             var brush = new PathGradientBrush(points, colors, Color.White);
 

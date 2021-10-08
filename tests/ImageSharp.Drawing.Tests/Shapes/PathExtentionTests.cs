@@ -6,11 +6,11 @@ using System.Numerics;
 using Moq;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
+namespace SixLabors.ImageSharp.Drawing.Tests
 {
     public class PathExtentionTests
     {
-        private readonly RectangleF bounds;
+        private RectangleF bounds;
         private readonly Mock<IPath> mockPath;
 
         public PathExtentionTests()
@@ -23,18 +23,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         [Fact]
         public void RotateInRadians()
         {
-            const float angle = (float)Math.PI;
+            const float Angle = (float)Math.PI;
 
             this.mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
                 .Callback<Matrix3x2>(m =>
                 {
                     // validate matrix in here
-                    var targetMatrix = Matrix3x2.CreateRotation(angle, RectangleF.Center(this.bounds));
+                    var targetMatrix = Matrix3x2.CreateRotation(Angle, RectangleF.Center(this.bounds));
 
                     Assert.Equal(targetMatrix, m);
                 }).Returns(this.mockPath.Object);
 
-            this.mockPath.Object.Rotate(angle);
+            this.mockPath.Object.Rotate(Angle);
 
             this.mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
         }
@@ -42,20 +42,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         [Fact]
         public void RotateInDegrees()
         {
-            const float angle = 90;
+            const float Angle = 90;
 
             this.mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
                 .Callback<Matrix3x2>(m =>
                 {
                     // validate matrix in here
-                    const float radians = (float)(Math.PI * angle / 180.0);
+                    const float Radians = (float)(Math.PI * Angle / 180.0);
 
-                    var targetMatrix = Matrix3x2.CreateRotation(radians, RectangleF.Center(this.bounds));
+                    var targetMatrix = Matrix3x2.CreateRotation(Radians, RectangleF.Center(this.bounds));
 
                     Assert.Equal(targetMatrix, m);
                 }).Returns(this.mockPath.Object);
 
-            this.mockPath.Object.RotateDegree(angle);
+            this.mockPath.Object.RotateDegree(Angle);
 
             this.mockPath.Verify(x => x.Transform(It.IsAny<Matrix3x2>()), Times.Once);
         }
@@ -82,19 +82,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         [Fact]
         public void TranslateXY()
         {
-            const float x = 76;
-            const float y = 7;
+            const float X = 76;
+            const float Y = 7;
 
             this.mockPath.Setup(p => p.Transform(It.IsAny<Matrix3x2>()))
                 .Callback<Matrix3x2>(m =>
                 {
                     // validate matrix in here
-                    var targetMatrix = Matrix3x2.CreateTranslation(new Vector2(x, y));
+                    var targetMatrix = Matrix3x2.CreateTranslation(new Vector2(X, Y));
 
                     Assert.Equal(targetMatrix, m);
                 }).Returns(this.mockPath.Object);
 
-            this.mockPath.Object.Translate(x, y);
+            this.mockPath.Object.Translate(X, Y);
 
             this.mockPath.Verify(p => p.Transform(It.IsAny<Matrix3x2>()), Times.Once);
         }

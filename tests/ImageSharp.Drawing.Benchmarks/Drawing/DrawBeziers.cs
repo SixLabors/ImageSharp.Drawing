@@ -12,7 +12,7 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SDPointF = System.Drawing.PointF;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
+namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     public class DrawBeziers
     {

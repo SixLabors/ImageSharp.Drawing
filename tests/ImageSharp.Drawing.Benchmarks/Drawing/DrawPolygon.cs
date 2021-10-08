@@ -14,9 +14,10 @@ using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
+using SDPoint = System.Drawing.Point;
 using SDPointF = System.Drawing.PointF;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
+namespace SixLabors.ImageSharp.Drawing.Benchmarks
 {
     public abstract class DrawPolygon
     {
@@ -25,7 +26,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         private Image<Rgba32> image;
 
         private SDPointF[][] sdPoints;
-        private Bitmap sdBitmap;
+        private System.Drawing.Bitmap sdBitmap;
         private Graphics sdGraphics;
 
         private SKPath skPath;
