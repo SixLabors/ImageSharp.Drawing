@@ -27,14 +27,14 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="EllipticalArcLineSegment"/> class.
         /// </summary>
-        /// <param name="x"> The x-coordinate of the center point of the ellips from which the arc is taken.</param>
-        /// <param name="y"> The y-coordinate of the center point of the ellips from which the arc is taken.</param>
+        /// <param name="x"> The x-coordinate of the center point of the ellipse from which the arc is taken.</param>
+        /// <param name="y"> The y-coordinate of the center point of the ellipse from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
         /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
-        /// <param name="transformation">The Tranformation matrix, that should be used on the arc.</param>
+        /// <param name="transformation">The Transformation matrix, that should be used on the arc.</param>
         public EllipticalArcLineSegment(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle, Matrix3x2 transformation)
         {
             Guard.MustBeGreaterThanOrEqualTo(radiusX, 0, nameof(radiusX));

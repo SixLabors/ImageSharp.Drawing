@@ -6,7 +6,7 @@ using System.Numerics;
 using Moq;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class PathExtentionTests
     {

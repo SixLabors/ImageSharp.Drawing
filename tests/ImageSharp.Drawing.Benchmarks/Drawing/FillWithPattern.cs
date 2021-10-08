@@ -11,7 +11,7 @@ using SixLabors.ImageSharp.Processing;
 using CoreBrushes = SixLabors.ImageSharp.Drawing.Processing.Brushes;
 using SDRectangle = System.Drawing.Rectangle;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks
+namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
 {
     public class FillWithPattern
     {

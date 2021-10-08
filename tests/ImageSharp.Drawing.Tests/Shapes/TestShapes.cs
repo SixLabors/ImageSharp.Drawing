@@ -1,10 +1,10 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
 using System.Numerics;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public static class TestShapes
     {
@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             var center = new Vector2(603);
             var segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
             IPath segment = new Polygon(
-                new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
+                new LinearLineSegment(new Vector2(230.54f, 361.0261f), new Vector2(5.8641942f, 361.46031f)),
                 new CubicBezierLineSegment(
                     new Vector2(5.8641942f, 361.46031f),
                     new Vector2(-11.715693f, 259.54052f),
@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             var center = new Vector2(603);
             var segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
             IPath segment = new Polygon(
-                new LinearLineSegment(new Vector2(230.54f, 361.0261f), new System.Numerics.Vector2(5.8641942f, 361.46031f)),
+                new LinearLineSegment(new Vector2(230.54f, 361.0261f), new Vector2(5.8641942f, 361.46031f)),
                 new CubicBezierLineSegment(
                     new Vector2(5.8641942f, 361.46031f),
                     new Vector2(-11.715693f, 259.54052f),
