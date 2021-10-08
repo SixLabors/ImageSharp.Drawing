@@ -221,10 +221,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             paths.SaveImage("Clipping", "RectangleWithTopClipped.png");
         }
 
-        public static void SaveImage(this IPath shape, params string[] path)
-        {
-            new PathCollection(shape).SaveImage(path);
-        }
+        public static void SaveImage(this IPath shape, params string[] path) => new PathCollection(shape).SaveImage(path);
 
         public static void SaveImage(this IPathCollection shape, params string[] path)
         {
@@ -232,6 +229,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                     .Translate(new Vector2(10)); // move in from top left
 
             string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
+
             // pad even amount around shape
             int width = (int)(shape.Bounds.Left + shape.Bounds.Right);
             int height = (int)(shape.Bounds.Top + shape.Bounds.Bottom);

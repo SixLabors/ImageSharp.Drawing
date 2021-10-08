@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class PolygonTests
     {

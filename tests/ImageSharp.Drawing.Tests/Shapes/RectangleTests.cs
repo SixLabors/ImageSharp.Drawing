@@ -7,7 +7,7 @@ using System.Linq;
 using System.Numerics;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class RectangleTests
     {

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Numerics;
 using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 {
     public class LinearLineSegmentTests
     {
@@ -21,15 +21,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         [Fact]
-        public void MustHaveAtleast2Points()
+        public void MustHaveAtLeast2Points()
         {
             ArgumentOutOfRangeException error = Assert.Throws<ArgumentOutOfRangeException>(() => new LinearLineSegment(new[] { new PointF(0, 0) }));
         }
 
         [Fact]
-        public void NullPointsArrayThrowsCountException()
-        {
-            Assert.ThrowsAny<ArgumentNullException>(() => new LinearLineSegment(null));
-        }
+        public void NullPointsArrayThrowsCountException() => Assert.ThrowsAny<ArgumentNullException>(() => new LinearLineSegment(null));
     }
 }
