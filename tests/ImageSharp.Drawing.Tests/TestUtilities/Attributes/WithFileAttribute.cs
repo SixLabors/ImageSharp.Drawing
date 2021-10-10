@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -22,10 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <param name="pixelTypes">The requested pixel types</param>
         /// <param name="additionalParameters">Additional theory parameter values</param>
         public WithFileAttribute(string fileName, PixelTypes pixelTypes, params object[] additionalParameters)
-            : base(null, pixelTypes, additionalParameters)
-        {
-            this.fileName = fileName;
-        }
+            : base(null, pixelTypes, additionalParameters) => this.fileName = fileName;
 
         /// <summary>
         /// Triggers passing <see cref="TestImageProvider{TPixel}"/> instances which read an image from the given file
@@ -35,10 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <param name="pixelTypes">The requested pixel types</param>
         /// <param name="additionalParameters">Additional theory parameter values</param>
         public WithFileAttribute(string fileName, string dataMemberName, PixelTypes pixelTypes, params object[] additionalParameters)
-            : base(dataMemberName, pixelTypes, additionalParameters)
-        {
-            this.fileName = fileName;
-        }
+            : base(dataMemberName, pixelTypes, additionalParameters) => this.fileName = fileName;
 
         protected override object[] GetFactoryMethodArgs(MethodInfo testMethod, Type factoryType) => new object[] { this.fileName };
 

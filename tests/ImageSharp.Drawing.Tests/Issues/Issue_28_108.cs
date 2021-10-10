@@ -30,8 +30,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         new PointF(0, 0),
                         new PointF(100, 0)));
 
-            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0));
-            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
+            IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 0));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.X, l.Y]));
         }
 
         [Theory]
@@ -50,8 +50,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         new PointF(0, 99),
                         new PointF(100, 99)));
 
-            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 99));
-            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
+            IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: i, y: 99));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.X, l.Y]));
         }
 
         [Theory]
@@ -70,8 +70,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         new PointF(0, 0),
                         new PointF(0, 99)));
 
-            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: 0, y: i));
-            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
+            IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: 0, y: i));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.X, l.Y]));
         }
 
         [Theory]
@@ -90,8 +90,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                         new PointF(99, 0),
                         new PointF(99, 99)));
 
-            IEnumerable<(int x, int y)> locations = Enumerable.Range(0, 100).Select(i => (x: 99, y: i));
-            Assert.All(locations, l => Assert.Equal(this.red, image[l.x, l.y]));
+            IEnumerable<(int X, int Y)> locations = Enumerable.Range(0, 100).Select(i => (x: 99, y: i));
+            Assert.All(locations, l => Assert.Equal(this.red, image[l.X, l.Y]));
         }
     }
 }

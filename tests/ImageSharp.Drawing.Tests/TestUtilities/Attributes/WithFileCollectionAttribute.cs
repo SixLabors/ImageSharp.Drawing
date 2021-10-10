@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 using System;
@@ -27,10 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             string fileEnumeratorMemberName,
             PixelTypes pixelTypes,
             params object[] additionalParameters)
-            : base(null, pixelTypes, additionalParameters)
-        {
-            this.fileEnumeratorMemberName = fileEnumeratorMemberName;
-        }
+            : base(null, pixelTypes, additionalParameters) => this.fileEnumeratorMemberName = fileEnumeratorMemberName;
 
         /// <summary>
         /// Triggers passing <see cref="TestImageProvider{TPixel}"/> instances which read an image for each file being enumerated by the (static) test class field/property defined by enumeratorMemberName
@@ -45,10 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             string memberName,
             PixelTypes pixelTypes,
             params object[] additionalParameters)
-            : base(memberName, pixelTypes, additionalParameters)
-        {
-            this.fileEnumeratorMemberName = fileEnumeratorMemberName;
-        }
+            : base(memberName, pixelTypes, additionalParameters) => this.fileEnumeratorMemberName = fileEnumeratorMemberName;
 
         /// <summary>
         /// Generates the collection of method arguments from the given test.

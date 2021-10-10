@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Helpers
         private static int GetPolygonOrientation(ReadOnlySpan<PointF> polygon)
         {
             float sum = 0f;
-            for (var i = 0; i < polygon.Length - 1; ++i)
+            for (int i = 0; i < polygon.Length - 1; ++i)
             {
                 PointF curr = polygon[i];
                 PointF next = polygon[i + 1];

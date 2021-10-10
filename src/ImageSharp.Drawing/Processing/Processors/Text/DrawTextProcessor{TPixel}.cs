@@ -25,10 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private readonly DrawTextProcessor definition;
 
         public DrawTextProcessor(Configuration configuration, DrawTextProcessor definition, Image<TPixel> source, Rectangle sourceRectangle)
-            : base(configuration, source, sourceRectangle)
-        {
-            this.definition = definition;
-        }
+            : base(configuration, source, sourceRectangle) => this.definition = definition;
 
         private DrawingOptions Options => this.definition.Options;
 
@@ -112,7 +109,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     {
                         foreach (DrawingOperation operation in operations)
                         {
-                            var currentApp = app;
+                            BrushApplicator<TPixel> currentApp = app;
                             if (operation.Color != null)
                             {
                                 brushes.TryGetValue(operation.Color.Value, out currentApp);
@@ -162,7 +159,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         }
                     }
 
-                    foreach (var app in brushes.Values)
+                    foreach (BrushApplicator<TPixel> app in brushes.Values)
                     {
                         app.Dispose();
                     }
@@ -191,13 +188,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private readonly PathBuilder builder;
 
             private Point currentRenderPosition;
-            private (GlyphRendererParameters glyph, PointF subPixelOffset) currentGlyphRenderParams;
+            private (GlyphRendererParameters Glyph, PointF SubPixelOffset) currentGlyphRenderParams;
             private readonly int offset;
             private PointF currentPoint;
             private Color? currentColor;
 
-            private readonly Dictionary<(GlyphRendererParameters glyph, PointF subPixelOffset), GlyphRenderData>
-                glyphData = new Dictionary<(GlyphRendererParameters glyph, PointF subPixelOffset), GlyphRenderData>();
+            private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData>
+                glyphData = new Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData>();
 
             private readonly bool renderOutline;
             private readonly bool renderFill;
@@ -236,25 +233,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public DrawingOptions Options { get; internal set; }
 
-            protected void SetLayerColor(Color color)
-            {
-                this.currentColor = color;
-            }
+            protected void SetLayerColor(Color color) => this.currentColor = color;
 
-            public void SetColor(GlyphColor color)
-            {
-                this.SetLayerColor(new Color(new Rgba32(color.Red, color.Green, color.Blue, color.Alpha)));
-            }
+            public void SetColor(GlyphColor color) => this.SetLayerColor(new Color(new Rgba32(color.Red, color.Green, color.Blue, color.Alpha)));
 
-            public void BeginFigure()
-            {
-                this.builder.StartFigure();
-            }
+            public void BeginFigure() => this.builder.StartFigure();
 
             public bool BeginGlyph(FontRectangle bounds, GlyphRendererParameters parameters)
             {
                 this.currentColor = null;
-                var currentBounds = new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height)
+                RectangleF currentBounds = new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height)
                     .Transform(this.transform)
                     .Bounds;
 
@@ -279,10 +267,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.builder.Clear();
 
                 // ensure all glyphs render around [zero, zero]  so offset negative root positions so when we draw the glyph we can offset it back
-                var origionTransform = new Vector2(-(int)currentBounds.X + this.offset, -(int)currentBounds.Y + this.offset);
+                var originTransform = new Vector2(-(int)currentBounds.X + this.offset, -(int)currentBounds.Y + this.offset);
 
-                var transform = this.transform;
-                transform.Translation = transform.Translation + origionTransform;
+                Matrix3x2 transform = this.transform;
+                transform.Translation = transform.Translation + originTransform;
                 this.builder.SetTransform(transform);
 
                 this.rasterizationRequired = true;
@@ -304,7 +292,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public void Dispose()
             {
-                foreach (KeyValuePair<(GlyphRendererParameters glyph, PointF subPixelOffset), GlyphRenderData> kv in this.glyphData)
+                foreach (KeyValuePair<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> kv in this.glyphData)
                 {
                     kv.Value.Dispose();
                 }
@@ -312,10 +300,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.glyphData.Clear();
             }
 
-            public void EndFigure()
-            {
-                this.builder.CloseFigure();
-            }
+            public void EndFigure() => this.builder.CloseFigure();
 
             public void EndGlyph()
             {

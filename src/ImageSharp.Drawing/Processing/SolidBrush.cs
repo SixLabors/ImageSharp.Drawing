@@ -3,7 +3,6 @@
 
 using System;
 using System.Buffers;
-using System.Threading;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;

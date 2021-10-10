@@ -1,5 +1,7 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
+
+using System;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
@@ -12,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         private static readonly float[] DashDotDotPattern = { 3f, 1f, 1f, 1f, 1f, 1f };
         private static readonly float[] DottedPattern = { 1f, 1f };
         private static readonly float[] DashedPattern = { 3f, 1f };
-        internal static readonly float[] EmptyPattern = new float[0];
+        internal static readonly float[] EmptyPattern = Array.Empty<float>();
 
         /// <summary>
         /// Create a solid pen with out any drawing patterns

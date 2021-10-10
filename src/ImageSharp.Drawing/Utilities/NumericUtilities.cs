@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
                 ref Vector<float> currentVec = ref Unsafe.As<float, Vector<float>>(ref current);
                 ref Vector<float> maxVec = ref Unsafe.Add(ref currentVec, n);
 
-                Vector<float> vecVal = new Vector<float>(value);
+                var vecVal = new Vector<float>(value);
                 while (Unsafe.IsAddressLessThan(ref currentVec, ref maxVec))
                 {
                     currentVec += vecVal;
@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Utilities
         // TODO: Ideally this should have a separate definition in Build.props, but that adaption should be done cross-repo. Using a workaround until then.
 #if SUPPORTS_RUNTIME_INTRINSICS
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int Log2(uint value) => System.Numerics.BitOperations.Log2(value);
+        public static int Log2(uint value) => BitOperations.Log2(value);
 
 #else
 

@@ -2,13 +2,10 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using System.Threading;
 using SixLabors.ImageSharp.Drawing.Utilities;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -114,7 +111,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         private static float DistanceBetween(PointF p1, PointF p2) => ((Vector2)(p2 - p1)).Length();
 
-        private struct Intersection
+        private readonly struct Intersection
         {
             public Intersection(PointF point, float distance)
             {
@@ -189,7 +186,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
             private readonly TPixel transparentPixel;
 
-            private ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
+            private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
 
             private bool isDisposed;
 
@@ -218,7 +215,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.centerColor = (Vector4)centerColor;
                 this.hasSpecialCenterColor = hasSpecialCenterColor;
                 this.centerPixel = centerColor.ToPixel<TPixel>();
-                this.maxDistance = points.Select(p => (Vector2)(p - this.center)).Max(d => d.Length());
+                this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
                 this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
                 this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
             }
@@ -259,15 +256,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     var direction = Vector2.Normalize(point - this.center);
                     Vector2 end = point + (direction * this.maxDistance);
 
-                    (Edge edge, Vector2 point)? isc = this.FindIntersection(point, end);
+                    (Edge Edge, Vector2 Point)? isc = this.FindIntersection(point, end);
 
                     if (!isc.HasValue)
                     {
                         return this.transparentPixel;
                     }
 
-                    Vector2 intersection = isc.Value.point;
-                    Vector4 edgeColor = isc.Value.edge.ColorAt(intersection);
+                    Vector2 intersection = isc.Value.Point;
+                    Vector4 edgeColor = isc.Value.Edge.ColorAt(intersection);
 
                     float length = DistanceBetween(intersection, this.center);
                     float ratio = length > 0 ? DistanceBetween(intersection, point) / length : 0;
@@ -327,7 +324,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.isDisposed = true;
             }
 
-            private (Edge edge, Vector2 point)? FindIntersection(
+            private (Edge Edge, Vector2 Point)? FindIntersection(
                 PointF start,
                 PointF end)
             {
@@ -350,7 +347,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     }
                 }
 
-                return closestEdge != null ? (closestEdge, closestIntersection) : ((Edge edge, Vector2 point)?)null;
+                return closestEdge != null ? (closestEdge, closestIntersection) : ((Edge Edge, Vector2 Point)?)null;
             }
 
             private static bool FindPointOnTriangle(Vector2 v1, Vector2 v2, Vector2 v3, Vector2 point, out float u, out float v)
