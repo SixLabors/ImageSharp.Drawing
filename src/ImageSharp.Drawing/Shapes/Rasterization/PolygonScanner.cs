@@ -153,6 +153,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
 
                 if (!hasMore0 && !hasMore1)
                 {
+                    // The entire polygon is outside the scan region, we skipped all edges,
+                    // scanning will not find any intersections.
                     break;
                 }
 
