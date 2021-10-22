@@ -427,7 +427,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
 
         [Fact]
-        public void OutOfBounds()
+        public void OutOfBounds1()
         {
             IPath poly = PolygonFactory.CreatePolygon((1, -5), (5, -5), (5, -3), (10, -1), (10, 2), (12, 4), (1, 4));
 
@@ -443,6 +443,34 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             };
 
             this.TestScan(poly, 0, 3, 2, expected);
+        }
+
+        [Fact]
+        public void OutOfBounds2()
+        {
+            IPath poly = PolygonFactory.CreatePolygon((3, -3),  (3, 1), (1, 1), (1, -1), (2, -1.5f), (2, 0.5f), (3, -3));
+            FuzzyFloat[][] expected =
+            {
+                new FuzzyFloat[] { 1, 2, 2.14285707, 3 },
+                new FuzzyFloat[] { 1, 2, 2, 3 },
+                new FuzzyFloat[] { 1, 3 }
+            };
+
+            this.TestScan(poly, 0, 1, 2, expected);
+        }
+
+        [Fact]
+        public void AllOutOfBounds()
+        {
+            IPath poly = PolygonFactory.CreatePolygon((1, -3), (3, -3), (2, -1));
+            FuzzyFloat[][] expected =
+            {
+                Array.Empty<FuzzyFloat>(),
+                Array.Empty<FuzzyFloat>(),
+                Array.Empty<FuzzyFloat>(),
+            };
+
+            this.TestScan(poly, 0, 1, 2, expected);
         }
 
         private static (float Y, FuzzyFloat[] X) Empty(float y) => (y, Array.Empty<FuzzyFloat>());

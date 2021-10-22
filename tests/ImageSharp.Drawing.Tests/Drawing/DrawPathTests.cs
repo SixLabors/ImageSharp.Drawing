@@ -5,6 +5,7 @@ using System;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
@@ -73,6 +74,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                     },
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: false);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(40, 40, "White", PixelTypes.Rgba32)]
+        public void DrawPathClippedOnTop<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            PointF[] points =
+            {
+                new PointF(10f, -10f),
+                new PointF(20f, 20f),
+                new PointF(30f, -30f)
+            };
+
+            IPath path = new PathBuilder().AddLines(points).Build();
+
+            provider.VerifyOperation(
+                image => image.Mutate(x => x.Draw(Color.Black, 1, path)),
+                appendSourceFileOrDescription: false,
+                appendPixelTypeToFileName: false);
         }
     }
 }
