@@ -139,9 +139,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             int i0 = 1;
             int i1 = 0;
 
-            // Do fake scans for the lines that start before minY. belonging to edge start and endpoints before minY
-            // Only "scan" at start edge positions (defined by values in sorted0) and end positions (defined by values in sorted1).
-            // Walk both lists simultaneously following "merge sort" logic.
+            // Do fake scans of the lines that start before minY.
+            // Instead of fake scanning at every possible subpixel Y location,
+            // only "scan" at start edge Y positions (defined by values in sorted0) and end Y positions (defined by values in sorted1).
+            // Walk the two lists simultaneously following mergesort logic.
             while (this.SubPixelY < this.minY)
             {
                 this.EnterEdges();
