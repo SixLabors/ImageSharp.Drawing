@@ -139,24 +139,37 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             int i0 = 1;
             int i1 = 0;
 
-            // Do fake scans for the lines belonging to edge start and endpoints before minY
+            // Do fake scans of the lines that start before minY.
+            // Instead of fake scanning at every possible subpixel Y location,
+            // only "scan" at start edge Y positions (defined by values in sorted0) and end Y positions (defined by values in sorted1).
+            // Walk the two lists simultaneously following mergesort logic.
             while (this.SubPixelY < this.minY)
             {
                 this.EnterEdges();
                 this.LeaveEdges();
                 this.activeEdges.RemoveLeavingEdges();
 
-                float y0 = this.edges[this.sorted0[i0]].Y0;
-                float y1 = this.edges[this.sorted1[i1]].Y1;
+                bool hasMore0 = i0 < this.sorted0.Length;
+                bool hasMore1 = i1 < this.sorted1.Length;
+
+                if (!hasMore0 && !hasMore1)
+                {
+                    // The entire polygon is outside the scan region, we skipped all edges,
+                    // scanning will not find any intersections.
+                    break;
+                }
+
+                float y0 = hasMore0 ? this.edges[this.sorted0[i0]].Y0 : float.MaxValue;
+                float y1 = hasMore1 ? this.edges[this.sorted1[i1]].Y1 : float.MaxValue;
 
                 if (y0 < y1)
                 {
-                    this.SubPixelY = y1;
+                    this.SubPixelY = y0;
                     i0++;
                 }
                 else
                 {
-                    this.SubPixelY = y0;
+                    this.SubPixelY = y1;
                     i1++;
                 }
             }
