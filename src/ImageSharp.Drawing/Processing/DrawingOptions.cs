@@ -12,7 +12,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     {
         private GraphicsOptions graphicsOptions;
         private ShapeOptions shapeOptions;
-        private TextOptions textOptions;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DrawingOptions"/> class.
@@ -21,23 +20,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
             this.graphicsOptions = new GraphicsOptions();
             this.shapeOptions = new ShapeOptions();
-            this.textOptions = new TextOptions();
             this.Transform = Matrix3x2.Identity;
         }
 
         internal DrawingOptions(
             GraphicsOptions graphicsOptions,
             ShapeOptions shapeOptions,
-            TextOptions textOptions,
             Matrix3x2 transform)
         {
             DebugGuard.NotNull(graphicsOptions, nameof(graphicsOptions));
             DebugGuard.NotNull(shapeOptions, nameof(shapeOptions));
-            DebugGuard.NotNull(textOptions, nameof(textOptions));
 
             this.graphicsOptions = graphicsOptions;
             this.shapeOptions = shapeOptions;
-            this.textOptions = textOptions;
             this.Transform = transform;
         }
 
@@ -64,19 +59,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             {
                 Guard.NotNull(value, nameof(this.ShapeOptions));
                 this.shapeOptions = value;
-            }
-        }
-
-        /// <summary>
-        /// Gets or sets the Text Options.
-        /// </summary>
-        public TextOptions TextOptions
-        {
-            get => this.textOptions;
-            set
-            {
-                Guard.NotNull(value, nameof(this.TextOptions));
-                this.textOptions = value;
             }
         }
 

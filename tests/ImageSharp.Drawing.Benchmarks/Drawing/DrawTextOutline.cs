@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
+using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -31,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
                 graphics.InterpolationMode = InterpolationMode.Default;
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 using (var pen = new System.Drawing.Pen(System.Drawing.Color.HotPink, 10))
-                using (var font = new Font("Arial", 12, GraphicsUnit.Point))
+                using (var font = new System.Drawing.Font("Arial", 12, GraphicsUnit.Point))
                 using (var gp = new GraphicsPath())
                 {
                     gp.AddString(
@@ -50,17 +51,18 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         [Benchmark(Description = "ImageSharp Draw Text Outline - Cached Glyphs")]
         public void DrawTextCore()
         {
-            using (var image = new Image<Rgba32>(800, 800))
+            using var image = new Image<Rgba32>(800, 800);
+            Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
+            TextOptions textOptions = new(font)
             {
-                Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
+                WrappingLength = 780,
+                Origin = new PointF(10, 10)
+            };
 
-                image.Mutate(x => x.DrawText(
-                    new DrawingOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
-                    this.TextToRender,
-                    font,
-                    Processing.Pens.Solid(Color.HotPink, 10),
-                    new PointF(10, 10)));
-            }
+            image.Mutate(x => x.DrawText(
+                textOptions,
+                this.TextToRender,
+                Processing.Pens.Solid(Color.HotPink, 10)));
         }
 
         [Benchmark(Description = "ImageSharp Draw Text Outline - Naive")]
@@ -69,36 +71,31 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
             using (var image = new Image<Rgba32>(800, 800))
             {
                 Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
+                TextOptions textOptions = new(font)
+                {
+                    WrappingLength = 780,
+                    Origin = new PointF(10, 10)
+                };
+
                 image.Mutate(
                     x => DrawTextOldVersion(
                         x,
-                        new DrawingOptions { GraphicsOptions = { Antialias = true }, TextOptions = { WrapTextWidth = 780 } },
+                        new DrawingOptions { GraphicsOptions = { Antialias = true } },
+                        textOptions,
                         this.TextToRender,
-                        font,
                         null,
-                        Processing.Pens.Solid(Color.HotPink, 10),
-                        new PointF(10, 10)));
+                        Processing.Pens.Solid(Color.HotPink, 10)));
             }
 
             static IImageProcessingContext DrawTextOldVersion(
                 IImageProcessingContext source,
                 DrawingOptions options,
+                TextOptions textOptions,
                 string text,
-                Fonts.Font font,
                 IBrush brush,
-                IPen pen,
-                PointF location)
+                IPen pen)
             {
-                var style = new Fonts.RendererOptions(font, options.TextOptions.DpiX, options.TextOptions.DpiY, location)
-                {
-                    ApplyKerning = options.TextOptions.ApplyKerning,
-                    TabWidth = options.TextOptions.TabWidth,
-                    WrappingWidth = options.TextOptions.WrapTextWidth,
-                    HorizontalAlignment = options.TextOptions.HorizontalAlignment,
-                    VerticalAlignment = options.TextOptions.VerticalAlignment
-                };
-
-                IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, style);
+                IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
                 var pathOptions = new DrawingOptions() { GraphicsOptions = options.GraphicsOptions };
                 if (brush != null)

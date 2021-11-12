@@ -7,53 +7,39 @@ using SixLabors.ImageSharp.Drawing.Text;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Text drawing extensions for a PathBuilder
+    /// Provides mechanisms for building <see cref="IPathCollection"/> instances from text strings.
     /// </summary>
     public static class TextBuilder
     {
         /// <summary>
-        /// Generates the shapes corresponding the glyphs described by the font and with the settings withing the FontSpan
+        /// Generates the shapes corresponding the glyphs described by the text options.
         /// </summary>
-        /// <param name="text">The text to generate glyphs for</param>
-        /// <param name="location">The location</param>
-        /// <param name="style">The style and settings to use while rendering the glyphs</param>
+        /// <param name="text">The text to generate glyphs for.</param>
+        /// <param name="textOptions">The text rendering options.</param>
         /// <returns>The <see cref="IPathCollection"/></returns>
-        public static IPathCollection GenerateGlyphs(string text, PointF location, RendererOptions style)
+        public static IPathCollection GenerateGlyphs(string text, TextOptions textOptions)
         {
-            var glyphBuilder = new GlyphBuilder(location);
+            GlyphBuilder glyphBuilder = new(textOptions.Origin);
+            TextRenderer renderer = new(glyphBuilder);
 
-            var renderer = new TextRenderer(glyphBuilder);
-
-            renderer.RenderText(text, style);
+            renderer.RenderText(text, textOptions);
 
             return glyphBuilder.Paths;
         }
 
         /// <summary>
-        /// Generates the shapes corresponding the glyphs described by the font and with the settings withing the FontSpan
-        /// </summary>
-        /// <param name="text">The text to generate glyphs for</param>
-        /// <param name="style">The style and settings to use while rendering the glyphs</param>
-        /// <returns>The <see cref="IPathCollection"/></returns>
-        public static IPathCollection GenerateGlyphs(string text, RendererOptions style)
-        {
-            return GenerateGlyphs(text, PointF.Empty, style);
-        }
-
-        /// <summary>
-        /// Generates the shapes corresponding the glyphs described by the font and with the setting in within the FontSpan along the described path.
+        /// Generates the shapes corresponding the glyphs described by the text options along the described path.
         /// </summary>
         /// <param name="text">The text to generate glyphs for</param>
         /// <param name="path">The path to draw the text in relation to</param>
-        /// <param name="style">The style and settings to use while rendering the glyphs</param>
+        /// <param name="textOptions">The text rendering options.</param>
         /// <returns>The <see cref="IPathCollection"/></returns>
-        public static IPathCollection GenerateGlyphs(string text, IPath path, RendererOptions style)
+        public static IPathCollection GenerateGlyphs(string text, IPath path, TextOptions textOptions)
         {
-            PathGlyphBuilder glyphBuilder = new PathGlyphBuilder(path);
+            PathGlyphBuilder glyphBuilder = new(path);
+            TextRenderer renderer = new(glyphBuilder);
 
-            TextRenderer renderer = new TextRenderer(glyphBuilder);
-
-            renderer.RenderText(text, style);
+            renderer.RenderText(text, textOptions);
 
             return glyphBuilder.Paths;
         }

@@ -26,15 +26,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 Font font = family.CreateFont(48, FontStyle.Bold);
 
                 // The options are optional
-                var options = new DrawingOptions()
+                TextOptions textOptions = new(font)
                 {
-                    TextOptions = new TextOptions()
-                    {
-                        ApplyKerning = true,
-                        TabWidth = 8, // a tab renders as 8 spaces wide
-                        WrapTextWidth = width, // greater than zero so we will word wrap at 100 pixels wide
-                        HorizontalAlignment = HorizontalAlignment.Center // right align
-                    }
+                    TabWidth = 8, // a tab renders as 8 spaces wide
+                    WrappingLength = width, // greater than zero so we will word wrap at 100 pixels wide
+                    HorizontalAlignment = HorizontalAlignment.Right, // right align,
+                    Origin = new PointF(0, 100)
                 };
 
                 IBrush brush = Brushes.Solid(Color.White);
@@ -42,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 string text = "sample text";
 
                 // Draw the text
-                image.Mutate(x => x.DrawText(options, text, font, brush, pen, new PointF(0, 100)));
+                image.Mutate(x => x.DrawText(textOptions, text, brush, pen));
             }
         }
 

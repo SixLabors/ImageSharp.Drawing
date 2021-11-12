@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
+using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -78,15 +79,15 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
 
         [Benchmark]
         public void ImageSharp()
-            => this.image.Mutate(
-                x => x
-                .SetGraphicsOptions(o => o.Antialias = true)
-                .SetTextOptions(o => o.WrapTextWidth = 780)
-                .DrawText(
-                    this.TextToRender,
-                    this.font,
-                    Processing.Brushes.Solid(Color.HotPink),
-                    new PointF(10, 10)));
+        {
+            TextOptions textOptions = new(this.font)
+            {
+                WrappingLength = 780,
+                Origin = new PointF(10, 10)
+            };
+
+            this.image.Mutate(x => x.DrawText(textOptions, this.TextToRender, Processing.Brushes.Solid(Color.HotPink)));
+        }
 
         [Benchmark(Baseline = true)]
         public void SkiaSharp()

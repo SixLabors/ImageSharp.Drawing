@@ -21,54 +21,29 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private CachingGlyphRenderer textRenderer;
-
         private readonly DrawTextProcessor definition;
 
         public DrawTextProcessor(Configuration configuration, DrawTextProcessor definition, Image<TPixel> source, Rectangle sourceRectangle)
-            : base(configuration, source, sourceRectangle) => this.definition = definition;
-
-        private DrawingOptions Options => this.definition.Options;
-
-        private Font Font => this.definition.Font;
-
-        private PointF Location => this.definition.Location;
-
-        private string Text => this.definition.Text;
-
-        private IPen Pen => this.definition.Pen;
-
-        private IBrush Brush => this.definition.Brush;
+            : base(configuration, source, sourceRectangle)
+            => this.definition = definition;
 
         protected override void BeforeImageApply()
         {
             base.BeforeImageApply();
 
-            // do everything at the image level as we are delegating the processing down to other processors
-            var style = new RendererOptions(this.Font, this.Options.TextOptions.DpiX, this.Options.TextOptions.DpiY, this.Location)
-            {
-                ApplyKerning = this.Options.TextOptions.ApplyKerning,
-                TabWidth = this.Options.TextOptions.TabWidth,
-                WrappingWidth = this.Options.TextOptions.WrapTextWidth,
-                HorizontalAlignment = this.Options.TextOptions.HorizontalAlignment,
-                VerticalAlignment = this.Options.TextOptions.VerticalAlignment,
-                LineSpacing = this.Options.TextOptions.LineSpacing,
-                FallbackFontFamilies = this.Options.TextOptions.FallbackFonts,
-                ColorFontSupport = this.definition.Options.TextOptions.RenderColorFonts ? ColorFontSupport.MicrosoftColrFormat : ColorFontSupport.None,
-                WordBreaking = this.definition.Options.TextOptions.WordBreaking
-            };
-
+            // Do everything at the image level as we are delegating the processing down to other processors
             this.textRenderer = new CachingGlyphRenderer(
                 this.Configuration.MemoryAllocator,
-                this.Text.Length,
-                this.Pen,
-                this.Brush != null,
-                this.Options.Transform)
+                this.definition.Text.Length,
+                this.definition.Pen,
+                this.definition.Brush != null,
+                this.definition.DrawingOptions.Transform)
             {
-                Options = this.Options
+                Options = this.definition.DrawingOptions
             };
 
             var renderer = new TextRenderer(this.textRenderer);
-            renderer.RenderText(this.Text, style);
+            renderer.RenderText(this.definition.Text, this.definition.TextOptions);
         }
 
         protected override void AfterImageApply()
@@ -81,9 +56,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         /// <inheritdoc/>
         protected override void OnFrameApply(ImageFrame<TPixel> source)
         {
-            // this is a no-op as we have processes all as an image, we should be able to pass out of before email apply a skip frames outcome
-            Draw(this.textRenderer.FillOperations, this.Brush);
-            Draw(this.textRenderer.OutlineOperations, this.Pen?.StrokeFill);
+            Draw(this.textRenderer.FillOperations, this.definition.Brush);
+            Draw(this.textRenderer.OutlineOperations, this.definition.Pen?.StrokeFill);
 
             void Draw(List<DrawingOperation> operations, IBrush brush)
             {
@@ -193,8 +167,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private PointF currentPoint;
             private Color? currentColor;
 
-            private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData>
-                glyphData = new Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData>();
+            private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> glyphData = new();
 
             private readonly bool renderOutline;
             private readonly bool renderFill;
@@ -252,25 +225,25 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 subPixelOffset.X = MathF.Round(subPixelOffset.X * AccuracyMultiple) / AccuracyMultiple;
                 subPixelOffset.Y = MathF.Round(subPixelOffset.Y * AccuracyMultiple) / AccuracyMultiple;
 
-                // we have offset our rendering origin a little bit down to prevent edge cropping, move the draw origin up to compensate
+                // We have offset our rendering origin a little bit down to prevent edge cropping, move the draw origin up to compensate
                 this.currentRenderPosition = new Point(this.currentRenderPosition.X - this.offset, this.currentRenderPosition.Y - this.offset);
                 this.currentGlyphRenderParams = (parameters, subPixelOffset);
 
                 if (this.glyphData.ContainsKey(this.currentGlyphRenderParams))
                 {
-                    // we have already drawn the glyph vectors skip trying again
+                    // We have already drawn the glyph vectors skip trying again
                     this.rasterizationRequired = false;
                     return false;
                 }
 
-                // we check to see if we have a render cache and if we do then we render else
+                // We check to see if we have a render cache and if we do then we render else
                 this.builder.Clear();
 
-                // ensure all glyphs render around [zero, zero]  so offset negative root positions so when we draw the glyph we can offset it back
+                // Ensure all glyphs render around [zero, zero]  so offset negative root positions so when we draw the glyph we can offset it back
                 var originTransform = new Vector2(-(int)currentBounds.X + this.offset, -(int)currentBounds.Y + this.offset);
 
                 Matrix3x2 transform = this.transform;
-                transform.Translation = transform.Translation + originTransform;
+                transform.Translation += originTransform;
                 this.builder.SetTransform(transform);
 
                 this.rasterizationRequired = true;
@@ -279,7 +252,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public void BeginText(FontRectangle bounds)
             {
-                // not concerned about this one
+                // Not concerned about this one
                 this.OutlineOperations?.Clear();
                 this.FillOperations?.Clear();
             }
@@ -306,7 +279,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 GlyphRenderData renderData = default;
 
-                // has the glyph been rendered already?
+                // Has the glyph been rendered already?
                 if (this.rasterizationRequired)
                 {
                     IPath path = this.builder.Build();
@@ -316,7 +289,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         return;
                     }
 
-                    // if we are using the fonts color layers we ignore the request to draw an outline only
+                    // If we are using the fonts color layers we ignore the request to draw an outline only
                     // cause that wont really work and instead force drawing with fill with the requested color
                     // if color fonts disabled then this.currentColor will always be null
                     if (this.renderFill || this.currentColor != null)
@@ -380,11 +353,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 GraphicsOptions graphicsOptions = this.Options.GraphicsOptions;
                 if (graphicsOptions.Antialias)
                 {
-                    xOffset = 0f; // we are antialiasing skip offsetting as real antialiasing should take care of offset.
+                    xOffset = 0f; // We are antialiasing skip offsetting as real antialiasing should take care of offset.
                     subpixelCount = Math.Max(subpixelCount, graphicsOptions.AntialiasSubpixelDepth);
                 }
 
-                // take the path inside the path builder, scan thing and generate a Buffer2d representing the glyph and cache it.
+                // Take the path inside the path builder, scan thing and generate a Buffer2d representing the glyph and cache it.
                 Buffer2D<float> fullBuffer = this.MemoryAllocator.Allocate2D<float>(size.Width + 1, size.Height + 1, AllocationOptions.Clean);
 
                 var scanner = PolygonScanner.Create(
@@ -420,7 +393,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 }
                 finally
                 {
-                    // ref structs can't implement interfaces so technically PolygonScanner is not IDisposable
+                    // Can't use ref struct as a 'ref' or 'out' value when 'using' so as it is readonly explicitly dispose.
                     scanner.Dispose();
                 }
 

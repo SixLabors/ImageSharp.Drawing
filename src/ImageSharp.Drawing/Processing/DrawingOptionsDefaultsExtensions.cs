@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="context">The image processing context to retrieve defaults from.</param>
         /// <returns>The globally configured default options.</returns>
         public static DrawingOptions GetDrawingOptions(this IImageProcessingContext context)
-            => new DrawingOptions(context.GetGraphicsOptions(), context.GetShapeOptions(), context.GetTextOptions(), context.GetDrawingTransform());
+            => new(context.GetGraphicsOptions(), context.GetShapeOptions(), context.GetDrawingTransform());
 
         /// <summary>
         /// Sets the 2D transformation matrix to be used during rasterization when drawing shapes or text.
@@ -39,9 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="configuration">The configuration to store default against.</param>
         /// <param name="matrix">The default matrix to use.</param>
         public static void SetDrawingTransform(this Configuration configuration, Matrix3x2 matrix)
-        {
-            configuration.Properties[DrawingTransformMatrixKey] = matrix;
-        }
+            => configuration.Properties[DrawingTransformMatrixKey] = matrix;
 
         /// <summary>
         /// Gets the default 2D transformation matrix to be used during rasterization when drawing shapes or text.
@@ -50,16 +48,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The matrix.</returns>
         public static Matrix3x2 GetDrawingTransform(this IImageProcessingContext context)
         {
-            if (context.Properties.TryGetValue(DrawingTransformMatrixKey, out var options) && options is Matrix3x2 go)
+            if (context.Properties.TryGetValue(DrawingTransformMatrixKey, out object options) && options is Matrix3x2 go)
             {
                 return go;
             }
 
-            Matrix3x2 matrix = context.Configuration.GetDrawingTransform();
-
             // do not cache the fall back to config into the processing context
             // in case someone want to change the value on the config and expects it re-flow thru.
-            return matrix;
+            return context.Configuration.GetDrawingTransform();
         }
 
         /// <summary>
@@ -69,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The globally configured default matrix.</returns>
         public static Matrix3x2 GetDrawingTransform(this Configuration configuration)
         {
-            if (configuration.Properties.TryGetValue(DrawingTransformMatrixKey, out var options) && options is Matrix3x2 go)
+            if (configuration.Properties.TryGetValue(DrawingTransformMatrixKey, out object options) && options is Matrix3x2 go)
             {
                 return go;
             }

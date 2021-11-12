@@ -15,19 +15,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
         }
 
-        private ShapeOptions(ShapeOptions source)
-        {
-            this.IntersectionRule = source.IntersectionRule;
-        }
+        private ShapeOptions(ShapeOptions source) => this.IntersectionRule = source.IntersectionRule;
 
         /// <summary>
         /// Gets or sets a value indicating whether antialiasing should be applied.
         /// <para/>
-        /// Defaults to <see cref="SixLabors.ImageSharp.Drawing.IntersectionRule.OddEven"/>.
+        /// Defaults to <see cref="IntersectionRule.OddEven"/>.
         /// </summary>
         public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.OddEven;
 
         /// <inheritdoc/>
-        public ShapeOptions DeepClone() => new ShapeOptions(this);
+        public ShapeOptions DeepClone() => new(this);
     }
 }
