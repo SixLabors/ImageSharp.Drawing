@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
                       TextAlignment = TextAlignment.Center,
-                      FallbackFontFamilies = { emojiFontFamily },
+                      FallbackFontFamilies = new[] { emojiFontFamily },
                       ColorFontSupport = colorFontSupport,
                       Origin = new PointF(img.Width / 2, img.Height / 2)
                   };
@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
                       TextAlignment = TextAlignment.Center,
-                      FallbackFontFamilies = { malgun },
+                      FallbackFontFamilies = new[] { malgun },
                       KerningMode = KerningMode.Normal,
                       Origin = new PointF(img.Width / 2, img.Height / 2)
                   };
