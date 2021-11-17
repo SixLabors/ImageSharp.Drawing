@@ -17,7 +17,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         private readonly FakeImageOperationsProvider.FakeImageOperations<Rgba32> internalOperations;
         protected readonly Rectangle rect;
         protected readonly GraphicsOptions graphicsOptions;
-        //protected readonly TextOptions textOptions;
         protected readonly ShapeOptions shapeOptions;
         private readonly Image<Rgba32> source;
 
@@ -33,10 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
                 AlphaCompositionMode = PixelAlphaCompositionMode.DestOut,
                 ColorBlendingMode = PixelColorBlendingMode.Multiply
             };
-            //this.textOptions = new TextOptions
-            //{
-            //    TabWidth = 99
-            //};
+
             this.shapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.Nonzero };
             this.source = new Image<Rgba32>(91 + 324, 123 + 56);
             this.rect = new Rectangle(91, 123, 324, 56); // make this random?
