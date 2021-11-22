@@ -17,21 +17,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         {
             Font font = CreateFont(TestFonts.IcoMoonEvents, 175);
 
-            var options = new RendererOptions(font)
+            TextOptions options = new(font)
             {
                 VerticalAlignment = VerticalAlignment.Center
             };
 
-            const int ImageSize = 300;
+            const int imageSize = 300;
 
-            var image = new Image<Rgba32>(ImageSize, ImageSize);
+            using var image = new Image<Rgba32>(imageSize, imageSize);
 
             string iconText = char.ConvertFromUtf32(int.Parse("e926", NumberStyles.HexNumber));
 
             FontRectangle rect = TextMeasurer.Measure(iconText, options);
 
-            float textX = ((ImageSize - rect.Width) * 0.5F) + rect.Left;
-            float textY = ((ImageSize - rect.Height) * 0.5F) + (rect.Top * 0.25F);
+            float textX = ((imageSize - rect.Width) * 0.5F) + rect.Left;
+            float textY = ((imageSize - rect.Height) * 0.5F) + (rect.Top * 0.25F);
 
             image.Mutate(x => x.DrawText(iconText, font, Color.Black, new PointF(textX, textY)));
             image.Save(TestFontUtilities.GetPath("e96.png"));

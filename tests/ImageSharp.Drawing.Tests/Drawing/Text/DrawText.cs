@@ -13,9 +13,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
     public class DrawText : BaseImageOperationsExtensionTest
     {
         private readonly FontCollection fontCollection;
-        private readonly DrawingOptions otherTextOptions = new DrawingOptions()
+        private readonly TextOptions textOptions;
+        private readonly DrawingOptions otherDrawingOptions = new()
         {
-            TextOptions = new TextOptions(),
             GraphicsOptions = new GraphicsOptions()
         };
 
@@ -25,13 +25,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             this.fontCollection = new FontCollection();
             this.font = this.fontCollection.Add(TestFontUtilities.GetPath("SixLaborsSampleAB.woff")).CreateFont(12);
+            this.textOptions = new(this.font) { WrappingLength = 99 };
         }
 
         [Fact]
         public void FillsForEachACharacterWhenBrushSetAndNotPen()
         {
             this.operations.DrawText(
-                this.otherTextOptions,
+                this.otherDrawingOptions,
                 "123",
                 this.font,
                 Brushes.Solid(Color.Red),
@@ -39,71 +40,71 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 Vector2.Zero);
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
-            Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.textOptions, processor.TextOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void FillsForEachACharacterWhenBrushSetAndNotPenDefaultOptions()
         {
-            this.operations.DrawText("123", this.font, Brushes.Solid(Color.Red), null, Vector2.Zero);
+            this.operations.DrawText(this.textOptions, "123", Brushes.Solid(Color.Red));
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
-            Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.Equal(this.textOptions, processor.TextOptions);
+            Assert.Equal(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void FillsForEachACharacterWhenBrushSet()
         {
-            this.operations.DrawText(this.otherTextOptions, "123", this.font, Brushes.Solid(Color.Red), Vector2.Zero);
+            this.operations.DrawText(this.otherDrawingOptions, "123", this.font, Brushes.Solid(Color.Red), Vector2.Zero);
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
-            Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.textOptions, processor.TextOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void FillsForEachACharacterWhenBrushSetDefaultOptions()
         {
-            this.operations.DrawText("123", this.font, Brushes.Solid(Color.Red), Vector2.Zero);
+            this.operations.DrawText(this.textOptions, "123", Brushes.Solid(Color.Red));
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
-            Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.Equal(this.textOptions, processor.TextOptions);
+            Assert.Equal(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void FillsForEachACharacterWhenColorSet()
         {
-            this.operations.DrawText(this.otherTextOptions, "123", this.font, Color.Red, Vector2.Zero);
+            this.operations.DrawText(this.otherDrawingOptions, "123", this.font, Color.Red, Vector2.Zero);
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
 
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
-            Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.textOptions, processor.TextOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void FillsForEachACharacterWhenColorSetDefaultOptions()
         {
-            this.operations.DrawText("123", this.font, Color.Red, Vector2.Zero);
+            this.operations.DrawText(this.textOptions, "123", Color.Red);
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
 
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
-            Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.Equal(this.textOptions, processor.TextOptions);
+            Assert.Equal(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void DrawForEachACharacterWhenPenSetAndNotBrush()
         {
             this.operations.DrawText(
-                this.otherTextOptions,
+                this.otherDrawingOptions,
                 "123",
                 this.font,
                 null,
@@ -111,52 +112,52 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 Vector2.Zero);
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
-            Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.textOptions, processor.TextOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void DrawForEachACharacterWhenPenSetAndNotBrushDefaultOptions()
         {
-            this.operations.DrawText("123", this.font, null, Pens.Dash(Color.Red, 1), Vector2.Zero);
+            this.operations.DrawText(this.textOptions, "123", Pens.Dash(Color.Red, 1));
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
-            Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.Equal(this.textOptions, processor.TextOptions);
+            Assert.Equal(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void DrawForEachACharacterWhenPenSet()
         {
-            this.operations.DrawText(this.otherTextOptions, "123", this.font, Pens.Dash(Color.Red, 1), Vector2.Zero);
+            this.operations.DrawText(this.otherDrawingOptions, "123", this.font, Pens.Dash(Color.Red, 1), Vector2.Zero);
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
-            Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.textOptions, processor.TextOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void DrawForEachACharacterWhenPenSetDefaultOptions()
         {
-            this.operations.DrawText("123", this.font, Pens.Dash(Color.Red, 1), Vector2.Zero);
+            this.operations.DrawText(this.textOptions, "123", Pens.Dash(Color.Red, 1));
 
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
 
             Assert.Equal("123", processor.Text);
-            Assert.Equal(this.font, processor.Font);
+            Assert.Equal(this.font, processor.TextOptions.Font);
             SolidBrush penBrush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, penBrush.Color);
             Assert.Equal(1, processor.Pen.StrokeWidth);
             Assert.Equal(PointF.Empty, processor.Location);
-            Assert.Equal(this.textOptions, processor.Options.TextOptions);
-            Assert.Equal(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.Equal(this.textOptions, processor.TextOptions);
+            Assert.Equal(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
 
         [Fact]
         public void DrawForEachACharacterWhenPenSetAndFillFroEachWhenBrushSet()
         {
             this.operations.DrawText(
-                this.otherTextOptions,
+                this.otherDrawingOptions,
                 "123",
                 this.font,
                 Brushes.Solid(Color.Red),
@@ -166,15 +167,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             DrawTextProcessor processor = this.Verify<DrawTextProcessor>(0);
 
             Assert.Equal("123", processor.Text);
-            Assert.Equal(this.font, processor.Font);
+            Assert.Equal(this.font, processor.TextOptions.Font);
             SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(PointF.Empty, processor.Location);
             SolidBrush penBrush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
             Assert.Equal(Color.Red, penBrush.Color);
             Assert.Equal(1, processor.Pen.StrokeWidth);
-            Assert.NotEqual(this.textOptions, processor.Options.TextOptions);
-            Assert.NotEqual(this.graphicsOptions, processor.Options.GraphicsOptions);
+            Assert.NotEqual(this.textOptions, processor.TextOptions);
+            Assert.NotEqual(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);
         }
     }
 }

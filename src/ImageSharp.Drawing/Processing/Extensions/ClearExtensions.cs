@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             options.AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Src;
             options.BlendPercentage = 1F;
 
-            return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.TextOptions, drawingOptions.Transform);
+            return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.Transform);
         }
     }
 }

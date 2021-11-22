@@ -13,7 +13,6 @@ using SixLabors.ImageSharp.Processing;
 using Xunit;
 using Xunit.Abstractions;
 
-// ReSharper disable InconsistentNaming
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 {
     [GroupOutput("Drawing/Text")]
@@ -24,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         private const string TestText = "Sphinx of black quartz, judge my vow\n0123456789";
 
         private static readonly ImageComparer TextDrawingComparer = TestEnvironment.IsFramework || TestEnvironment.NetCoreVersion.StartsWith("2")
-            ? ImageComparer.TolerantPercentage(1e-3f) // Relax comparison on .NET Framework and .NET Core 2.x
+            ? ImageComparer.TolerantPercentage(1e-2f) // Relax comparison on .NET Framework and .NET Core 2.x
             : ImageComparer.TolerantPercentage(1e-5f);
 
         private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);
@@ -35,36 +34,34 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         private ITestOutputHelper Output { get; }
 
         [Theory]
-        [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, true)]
-        [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, false)]
-        public void EmojiFontRendering<TPixel>(TestImageProvider<TPixel> provider, bool enableColorFonts)
+        [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, ColorFontSupport.MicrosoftColrFormat)]
+        [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, ColorFontSupport.None)]
+        public void EmojiFontRendering<TPixel>(TestImageProvider<TPixel> provider, ColorFontSupport colorFontSupport)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont(TestFonts.OpenSans, 70);
-            FontFamily emjoiFontFamily = CreateFont(TestFonts.TwemojiMozilla, 36).Family;
+            FontFamily emojiFontFamily = CreateFont(TestFonts.TwemojiMozilla, 36).Family;
 
             Color color = Color.Black;
             string text = "A short piece of text 😀 with an emoji";
-
-            var textGraphicOptions = new DrawingOptions
-            {
-                TextOptions =
-                {
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    FallbackFonts = { emjoiFontFamily },
-                    RenderColorFonts = enableColorFonts
-                }
-            };
 
             provider.VerifyOperation(
               TextDrawingComparer,
               img =>
               {
-                  var center = new PointF(img.Width / 2, img.Height / 2);
-                  img.Mutate(i => i.DrawText(textGraphicOptions, text, font, color, center));
+                  TextOptions textOptions = new(font)
+                  {
+                      HorizontalAlignment = HorizontalAlignment.Center,
+                      VerticalAlignment = VerticalAlignment.Center,
+                      TextAlignment = TextAlignment.Center,
+                      FallbackFontFamilies = new[] { emojiFontFamily },
+                      ColorFontSupport = colorFontSupport,
+                      Origin = new PointF(img.Width / 2, img.Height / 2)
+                  };
+
+                  img.Mutate(i => i.DrawText(textOptions, text, color));
               },
-              $"ColorFontsEnabled-{enableColorFonts}");
+              $"ColorFontsEnabled-{colorFontSupport == ColorFontSupport.MicrosoftColrFormat}");
         }
 
         [Theory]
@@ -80,23 +77,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Color color = Color.Black;
             const string text = "亞DARKSOUL亞";
 
-            var textGraphicOptions = new DrawingOptions
-            {
-                TextOptions =
-                {
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    FallbackFonts = { malgun },
-                    ApplyKerning = true
-                }
-            };
-
             provider.VerifyOperation(
               TextDrawingComparer,
               img =>
               {
-                  var center = new PointF(img.Width / 2, img.Height / 2);
-                  img.Mutate(i => i.DrawText(textGraphicOptions, text, whitney, color, center));
+                  TextOptions textOptions = new(whitney)
+                  {
+                      HorizontalAlignment = HorizontalAlignment.Center,
+                      VerticalAlignment = VerticalAlignment.Center,
+                      TextAlignment = TextAlignment.Center,
+                      FallbackFontFamilies = new[] { malgun },
+                      KerningMode = KerningMode.Normal,
+                      Origin = new PointF(img.Width / 2, img.Height / 2)
+                  };
+
+                  img.Mutate(i => i.DrawText(textOptions, text, color));
               });
         }
 
@@ -107,31 +102,27 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             Font font = CreateFont(TestFonts.OpenSans, 36);
             Color color = Color.Black;
-            string text = "A short piece of text";
+            const string text = "A short piece of text";
 
-            using (Image<TPixel> img = provider.GetImage())
+            using Image<TPixel> img = provider.GetImage();
+
+            // Measure the text size
+            FontRectangle size = TextMeasurer.Measure(text, new TextOptions(font));
+
+            // Find out how much we need to scale the text to fill the space (up or down)
+            float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
+
+            // Create a new font
+            var scaledFont = new Font(font, scalingFactor * font.Size);
+            TextOptions textOptions = new(scaledFont)
             {
-                // measure the text size
-                FontRectangle size = TextMeasurer.Measure(text, new RendererOptions(font));
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Origin = new PointF(img.Width / 2, img.Height / 2)
+            };
 
-                // find out how much we need to scale the text to fill the space (up or down)
-                float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
-
-                // create a new font
-                var scaledFont = new Font(font, scalingFactor * font.Size);
-
-                var center = new PointF(img.Width / 2, img.Height / 2);
-                var textGraphicOptions = new DrawingOptions
-                {
-                    TextOptions =
-                    {
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center
-                    }
-                };
-
-                img.Mutate(i => i.DrawText(textGraphicOptions, text, scaledFont, color, center));
-            }
+            img.Mutate(i => i.DrawText(textOptions, text, color));
         }
 
         [Theory]
@@ -139,16 +130,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         public void DoesntThrowExceptionWhenOverlappingRightEdge_Issue688_2<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            using (Image<TPixel> img = provider.GetImage())
-            {
-                Font font = CreateFont(TestFonts.OpenSans, 39);
-                string text = new string('a', 10000);
+            Font font = CreateFont(TestFonts.OpenSans, 39);
+            string text = new('a', 10000);
+            Rgba32 color = Color.Black;
+            var point = new PointF(100, 100);
 
-                Rgba32 color = Color.Black;
-                var point = new PointF(100, 100);
-
-                img.Mutate(ctx => ctx.DrawText(text, font, color, point));
-            }
+            using Image<TPixel> img = provider.GetImage();
+            img.Mutate(ctx => ctx.DrawText(text, font, color, point));
         }
 
         [Theory]
@@ -156,15 +144,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         public void OpenSansJWithNoneZeroShouldntExtendPastGlyphe<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            using (Image<TPixel> img = provider.GetImage())
-            {
-                Font font = CreateFont(TestFonts.OpenSans, 50);
-                Color color = Color.Black;
+            Font font = CreateFont(TestFonts.OpenSans, 50);
+            Color color = Color.Black;
 
-                img.Mutate(ctx => ctx.DrawText(TestText, font, Color.Black, new PointF(-50, 2)));
+            using Image<TPixel> img = provider.GetImage();
+            img.Mutate(ctx => ctx.DrawText(TestText, font, Color.Black, new PointF(-50, 2)));
 
-                Assert.Equal(Color.White.ToPixel<TPixel>(), img[173, 2]);
-            }
+            Assert.Equal(Color.White.ToPixel<TPixel>(), img[173, 2]);
         }
 
         [Theory]
@@ -210,18 +196,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont(fontName, fontSize);
+            float radians = GeometryUtilities.DegreeToRadian(angle);
 
-            var radians = (float)Math.PI * angle / 180f;
+            TextOptions textOptions = new(font)
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Origin = new PointF(x, y)
+            };
 
             provider.RunValidatingProcessorTest(
-                c => c
-                    .SetTextOptions(o =>
-                    {
-                        o.HorizontalAlignment = HorizontalAlignment.Center;
-                        o.VerticalAlignment = VerticalAlignment.Center;
-                    })
-                    .SetDrawingTransform(Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY)))
-                    .DrawText(text, font, Color.Black, new PointF(x, y)),
+                x => x
+                .SetDrawingTransform(Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY)))
+                .DrawText(textOptions, text, Color.Black),
                 $"F({fontName})-S({fontSize})-A({angle})-{ToTestOutputDisplayText(text)}-({x},{y})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
@@ -247,19 +235,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont(fontName, fontSize);
+            float radianX = GeometryUtilities.DegreeToRadian(angleX);
+            float radianY = GeometryUtilities.DegreeToRadian(angleY);
 
-            var radianX = (float)Math.PI * angleX / 180f;
-            var radianY = (float)Math.PI * angleY / 180f;
+            TextOptions textOptions = new(font)
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Origin = new PointF(x, y)
+            };
 
             provider.RunValidatingProcessorTest(
-                c => c
-                    .SetTextOptions(o =>
-                    {
-                        o.HorizontalAlignment = HorizontalAlignment.Center;
-                        o.VerticalAlignment = VerticalAlignment.Center;
-                    })
-                    .SetDrawingTransform(Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY)))
-                    .DrawText(text, font, Color.Black, new PointF(x, y)),
+                x => x
+                .SetDrawingTransform(Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY)))
+                .DrawText(textOptions, text, Color.Black),
                 $"F({fontName})-S({fontSize})-A({angleX},{angleY})-{ToTestOutputDisplayText(text)}-({x},{y})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
@@ -290,24 +280,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            var textOptions = new DrawingOptions
-            {
-                TextOptions =
-                {
-                    ApplyKerning = true,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                }
-            };
-
-            Color color = Color.Black;
-
             // Strict comparer, because the image is sparse:
             var comparer = ImageComparer.TolerantPercentage(1e-6f);
 
             provider.VerifyOperation(
                 comparer,
-                img => img.Mutate(c => c.DrawText(textOptions, sb.ToString(), font, color, new PointF(10, 1))),
+                img => img.Mutate(c => c.DrawText(sb.ToString(), font, Color.Black, new PointF(10, 1))),
                 false,
                 false);
         }
@@ -336,32 +314,28 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            var textOptions = new TextOptions
+            TextOptions textOptions = new(font)
             {
-                ApplyKerning = true,
+                KerningMode = KerningMode.Normal,
                 VerticalAlignment = VerticalAlignment.Top,
                 HorizontalAlignment = HorizontalAlignment.Left,
-                LineSpacing = lineSpacing
+                LineSpacing = lineSpacing,
+                Origin = new PointF(10, 1)
             };
 
             if (wrap)
             {
-                textOptions.WrapTextWidth = 300;
+                textOptions.WrappingLength = 300;
             }
-
-            var textGraphicsOptions = new DrawingOptions
-            {
-                TextOptions = textOptions
-            };
 
             Color color = Color.Black;
 
-            // NET472 is 0.0002 different.
-            var comparer = ImageComparer.TolerantPercentage(0.0003f);
+            // NET472 is 0.0032 different.
+            var comparer = ImageComparer.TolerantPercentage(0.004f);
 
             provider.VerifyOperation(
                 comparer,
-                img => img.Mutate(c => c.DrawText(textGraphicsOptions, sb.ToString(), font, color, new PointF(10, 1))),
+                img => img.Mutate(c => c.DrawText(textOptions, sb.ToString(), color)),
                 $"linespacing_{lineSpacing}_linecount_{lineCount}_wrap_{wrap}",
                 false,
                 false);
@@ -385,7 +359,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             provider.VerifyOperation(
                 OutlinedTextDrawingComparer,
-                img => img.Mutate(c => c.DrawText(text, new Font(font, fontSize), null, Pens.Solid(color, 1), new PointF(x, y))),
+                img => img.Mutate(c => c.DrawText(text, new Font(font, fontSize), Pens.Solid(color, 1), new PointF(x, y))),
                 $"pen_{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
@@ -409,7 +383,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             provider.VerifyOperation(
                 OutlinedTextDrawingComparer,
-                img => img.Mutate(c => c.DrawText(text, new Font(font, fontSize), null, Pens.DashDot(color, 3), new PointF(x, y))),
+                img => img.Mutate(c => c.DrawText(text, new Font(font, fontSize), Pens.DashDot(color, 3), new PointF(x, y))),
                 $"pen_{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
@@ -425,12 +399,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             string text = Repeat(
                 "Beware the Jabberwock, my son!  The jaws that bite, the claws that catch!  Beware the Jubjub bird, and shun The frumious Bandersnatch!\n",
                 20);
-            var textOptions = new DrawingOptions
+
+            TextOptions textOptions = new(font)
             {
-                TextOptions =
-                {
-                    WrapTextWidth = 1000
-                }
+                WrappingLength = 1000,
+                Origin = new PointF(10, 50)
             };
 
             string details = fontName.Replace(" ", string.Empty);
@@ -440,7 +413,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             var comparer = ImageComparer.TolerantPercentage(0.2f);
 
             provider.RunValidatingProcessorTest(
-                x => x.DrawText(textOptions, text, font, Color.Black, new PointF(10, 50)),
+                x => x.DrawText(textOptions, text, Color.Black),
                 details,
                 comparer,
                 appendPixelTypeToFileName: false,
@@ -453,8 +426,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             // The following font/text combination generates an empty path.
             Font font = CreateFont(TestFonts.WendyOne, 72);
             const string text = "Hello\0World";
-            var renderOptions = new RendererOptions(font);
-            FontRectangle textSize = TextMeasurer.Measure(text, renderOptions);
+            TextOptions textOptions = new(font);
+            FontRectangle textSize = TextMeasurer.Measure(text, textOptions);
 
             Assert.NotEqual(FontRectangle.Empty, textSize);
 
