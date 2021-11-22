@@ -54,11 +54,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawText("Hello World");
             DrawText(
                 "Hello World Hello World Hello World Hello World Hello World Hello World Hello World",
-                new Path(new CubicBezierLineSegment(
-                new Vector2(0, 0),
-                new Vector2(150, -150),
-                new Vector2(250, -150),
-                new Vector2(400, 0))));
+                new EllipsePolygon(PointF.Empty, 100));
         }
 
         private static void DrawText(string text)
@@ -79,8 +75,12 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             {
                 WrappingLength = path.ComputeLength(),
                 VerticalAlignment = VerticalAlignment.Top,
-                HorizontalAlignment = HorizontalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Left,
+
+                // Enable this to test vertical layout mode.
+                LayoutMode = LayoutMode.VerticalLeftRight
             };
+
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
 
             glyphs.SaveImage("Text-Path", text + ".png");
@@ -236,7 +236,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             using (var img = new Image<Rgba32>(width, height))
             {
-                img.Mutate(i => i.Fill(Color.DarkBlue));
+                img.Mutate(i => i.Fill(Color.DarkBlue).Draw(Color.HotPink, 3, new EllipsePolygon(width / 2F, height / 2F, 93)));
 
                 foreach (IPath s in shape)
                 {
