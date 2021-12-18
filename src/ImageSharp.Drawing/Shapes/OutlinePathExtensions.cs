@@ -67,6 +67,19 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="path">the path to outline</param>
         /// <param name="width">The final width outline</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
+        /// <param name="jointStyle">The style to render the joints.</param>
+        /// <param name="patternSectionCapStyle">The style to render between sections of the specified pattern.</param>
+        /// <returns>A new path representing the outline.</returns>
+        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
+        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, JointStyle jointStyle, EndCapStyle patternSectionCapStyle)
+            => GenerateOutline(path, width, pattern, false, jointStyle, patternSectionCapStyle);
+
+        /// <summary>
+        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// </summary>
+        /// <param name="path">the path to outline</param>
+        /// <param name="width">The final width outline</param>
+        /// <param name="pattern">The pattern made of multiples of the width.</param>
         /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
         /// <param name="jointStyle">The style to render the joints.</param>
         /// <param name="patternSectionCapStyle">The style to render between sections of the specified pattern.</param>

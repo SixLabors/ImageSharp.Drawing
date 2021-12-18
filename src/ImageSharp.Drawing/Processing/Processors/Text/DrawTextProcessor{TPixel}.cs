@@ -306,7 +306,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         }
                         else
                         {
-                            path = path.GenerateOutline(this.Pen.StrokeWidth, this.Pen.StrokePattern);
+                            path = path.GenerateOutline(this.Pen.StrokeWidth, this.Pen.StrokePattern, this.Pen.StrokeJoint, this.Pen.EndCap);
                         }
 
                         renderData.OutlineMap = this.Render(path);
