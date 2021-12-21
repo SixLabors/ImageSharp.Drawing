@@ -12,13 +12,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 {
     internal class TestMemoryAllocator : MemoryAllocator
     {
-        private readonly List<AllocationRequest> allocationLog = new List<AllocationRequest>();
-        private readonly List<ReturnRequest> returnLog = new List<ReturnRequest>();
+        private readonly List<AllocationRequest> allocationLog = new();
+        private readonly List<ReturnRequest> returnLog = new();
 
-        public TestMemoryAllocator(byte dirtyValue = 42)
-        {
-            this.DirtyValue = dirtyValue;
-        }
+        public TestMemoryAllocator(byte dirtyValue = 42) => this.DirtyValue = dirtyValue;
 
         /// <summary>
         /// Gets the value to initialize the result buffer with, with non-clean options (<see cref="AllocationOptions.None"/>)
@@ -39,17 +36,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             return new BasicArrayBuffer<T>(array, length, this);
         }
 
-        public override IManagedByteBuffer AllocateManagedByteBuffer(int length, AllocationOptions options = AllocationOptions.None)
-        {
-            byte[] array = this.AllocateArray<byte>(length, options);
-            return new ManagedByteBuffer(array, this);
-        }
-
         private T[] AllocateArray<T>(int length, AllocationOptions options)
             where T : struct
         {
             var array = new T[length + 42];
-            this.allocationLog.Add(AllocationRequest.Create<T>(options, length, array));
+            this.allocationLog.Add(AllocationRequest.Create(options, length, array));
 
             if (options == AllocationOptions.None)
             {
@@ -61,10 +52,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         }
 
         private void Return<T>(BasicArrayBuffer<T> buffer)
-            where T : struct
-        {
-            this.returnLog.Add(new ReturnRequest(buffer.Array.GetHashCode()));
-        }
+            where T : struct => this.returnLog.Add(new ReturnRequest(buffer.Array.GetHashCode()));
 
         public struct AllocationRequest
         {
@@ -101,10 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         public struct ReturnRequest
         {
-            public ReturnRequest(int hashCodeOfBuffer)
-            {
-                this.HashCodeOfBuffer = hashCodeOfBuffer;
-            }
+            public ReturnRequest(int hashCodeOfBuffer) => this.HashCodeOfBuffer = hashCodeOfBuffer;
 
             public int HashCodeOfBuffer { get; }
         }
@@ -154,10 +139,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 return new MemoryHandle(ptr, this.pinHandle);
             }
 
-            public override void Unpin()
-            {
-                throw new NotImplementedException();
-            }
+            public override void Unpin() => throw new NotImplementedException();
 
             /// <inheritdoc />
             protected override void Dispose(bool disposing)
@@ -166,14 +148,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 {
                     this.allocator.Return(this);
                 }
-            }
-        }
-
-        private class ManagedByteBuffer : BasicArrayBuffer<byte>, IManagedByteBuffer
-        {
-            public ManagedByteBuffer(byte[] array, TestMemoryAllocator allocator)
-                : base(array, allocator)
-            {
             }
         }
     }
