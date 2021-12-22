@@ -127,7 +127,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                             for (int row = firstRow; row < end; row++)
                             {
                                 int y = startY + row;
-                                Span<float> span = buffer.GetRowSpan(row).Slice(offsetSpan);
+                                Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan);
                                 currentApp.Apply(span, startX, y);
                             }
                         }
@@ -372,7 +372,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 {
                     while (scanner.MoveToNextPixelLine())
                     {
-                        Span<float> scanline = fullBuffer.GetRowSpan(scanner.PixelLineY);
+                        Span<float> scanline = fullBuffer.DangerousGetRowSpan(scanner.PixelLineY);
                         bool scanlineDirty = scanner.ScanCurrentPixelLineInto(0, xOffset, scanline);
 
                         if (scanlineDirty && !graphicsOptions.Antialias)

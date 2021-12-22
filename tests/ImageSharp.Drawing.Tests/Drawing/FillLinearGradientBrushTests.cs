@@ -210,7 +210,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             {
                 for (int y = 0; y < image.Height; y++)
                 {
-                    Span<TPixel> row = image.GetPixelRowSpan(y);
+                    Span<TPixel> row = image.GetRootFramePixelBuffer().DangerousGetRowSpan(y);
                     TPixel firstColorOfRow = row[0];
                     foreach (TPixel p in row)
                     {
