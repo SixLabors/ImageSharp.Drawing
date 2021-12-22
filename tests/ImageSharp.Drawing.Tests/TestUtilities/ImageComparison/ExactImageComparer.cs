@@ -32,8 +32,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
 
             for (int y = 0; y < actual.Height; y++)
             {
-                Span<TPixelA> aSpan = expected.GetPixelRowSpan(y);
-                Span<TPixelB> bSpan = actual.GetPixelRowSpan(y);
+                Span<TPixelA> aSpan = expected.PixelBuffer.DangerousGetRowSpan(y);
+                Span<TPixelB> bSpan = actual.PixelBuffer.DangerousGetRowSpan(y);
 
                 PixelOperations<TPixelA>.Instance.ToRgba64(configuration, aSpan, aBuffer);
                 PixelOperations<TPixelB>.Instance.ToRgba64(configuration, bSpan, bBuffer);

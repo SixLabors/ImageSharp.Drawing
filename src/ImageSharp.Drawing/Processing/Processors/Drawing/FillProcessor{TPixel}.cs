@@ -102,7 +102,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             {
                 for (int y = rows.Min; y < rows.Max; y++)
                 {
-                    this.source.GetPixelRowSpan(y).Slice(this.bounds.X, this.bounds.Width).Fill(this.color);
+                    this.source.PixelBuffer.DangerousGetRowSpan(y).Slice(this.bounds.X, this.bounds.Width).Fill(this.color);
                 }
             }
         }
