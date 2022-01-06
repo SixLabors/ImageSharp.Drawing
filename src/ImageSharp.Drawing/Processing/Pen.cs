@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public ReadOnlySpan<float> StrokePattern => this.pattern;
 
         /// <inheritdoc/>
-        public JointStyle StrokeJoint { get; }
+        public JointStyle JointStyle { get; }
 
         /// <inheritdoc/>
         public EndCapStyle EndCap { get; }

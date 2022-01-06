@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Gets the stroke joint style
         /// </summary>
-        public JointStyle StrokeJoint { get; }
+        public JointStyle JointStyle { get; }
 
         /// <summary>
         /// Gets the endcap style
