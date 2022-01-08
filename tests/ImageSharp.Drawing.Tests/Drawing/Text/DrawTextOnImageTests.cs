@@ -439,6 +439,60 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 Vector2.Zero));
         }
 
+        [Theory]
+        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, TestFonts.OpenSans, 32, 75F)]
+        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, TestFonts.OpenSans, 40, 90F)]
+        public void CanRotateFilledFont_Issue175<TPixel>(
+            TestImageProvider<TPixel> provider,
+            string fontName,
+            int fontSize,
+            float angle)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(fontName, fontSize);
+            const string text = "QuickTYZ";
+            AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
+
+            TextOptions textOptions = new(font);
+            FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
+            Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
+
+            provider.RunValidatingProcessorTest(
+                x => x.SetDrawingTransform(transform).DrawText(textOptions, text, Color.Black),
+                $"F({fontName})-S({fontSize})-A({angle})-{ToTestOutputDisplayText(text)})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, TestFonts.OpenSans, 32, 75F, 1)]
+        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, TestFonts.OpenSans, 40, 90F, 2)]
+        public void CanRotateOutlineFont_Issue175<TPixel>(
+            TestImageProvider<TPixel> provider,
+            string fontName,
+            int fontSize,
+            float angle,
+            int strokeWidth)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(fontName, fontSize);
+            const string text = "QuickTYZ";
+            AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
+
+            TextOptions textOptions = new(font);
+            FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
+            Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
+
+            provider.RunValidatingProcessorTest(
+                x => x.SetDrawingTransform(transform)
+                .DrawText(textOptions, text, Pens.Solid(Color.Black, strokeWidth)),
+                $"F({fontName})-S({fontSize})-A({angle})-STR({strokeWidth})-{ToTestOutputDisplayText(text)})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
         private static string Repeat(string str, int times) => string.Concat(Enumerable.Repeat(str, times));
 
         private static string ToTestOutputDisplayText(string text)
