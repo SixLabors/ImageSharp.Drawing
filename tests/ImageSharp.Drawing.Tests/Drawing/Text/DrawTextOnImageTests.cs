@@ -24,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         private static readonly ImageComparer TextDrawingComparer = TestEnvironment.IsFramework || TestEnvironment.NetCoreVersion.StartsWith("2")
             ? ImageComparer.TolerantPercentage(1e-2f) // Relax comparison on .NET Framework and .NET Core 2.x
-            : ImageComparer.TolerantPercentage(1e-5f);
+            : ImageComparer.TolerantPercentage(1e-4f);
 
         private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);
 
