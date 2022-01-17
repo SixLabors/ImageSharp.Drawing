@@ -35,6 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             this.textRenderer = new CachingGlyphRenderer(
                 this.Configuration.MemoryAllocator,
                 this.definition.Text.Length,
+                this.definition.TextOptions,
                 this.definition.Pen,
                 this.definition.Brush != null,
                 this.definition.DrawingOptions.Transform)
@@ -173,14 +174,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private readonly bool renderFill;
             private bool rasterizationRequired;
 
-            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, IPen pen, bool renderFill, Matrix3x2 transform)
+            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, TextOptions textOptions, IPen pen, bool renderFill, Matrix3x2 transform)
             {
                 this.MemoryAllocator = memoryAllocator;
                 this.currentRenderPosition = default;
                 this.Pen = pen;
                 this.renderFill = renderFill;
                 this.renderOutline = pen != null;
-                this.offset = 2;
+                this.offset = (int)textOptions.Font.Size;
                 if (this.renderFill)
                 {
                     this.FillOperations = new List<DrawingOperation>(size);
@@ -188,7 +189,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                 if (this.renderOutline)
                 {
-                    this.offset = (int)MathF.Ceiling((pen.StrokeWidth * 2) + 2);
                     this.OutlineOperations = new List<DrawingOperation>(size);
                 }
 
