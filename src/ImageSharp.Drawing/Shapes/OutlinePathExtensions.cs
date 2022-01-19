@@ -89,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing
         {
             if (pattern.Length < 2)
             {
-                return path.GenerateOutline(width, jointStyle: jointStyle);
+                return path.GenerateOutline(width, jointStyle: jointStyle, endCapStyle: patternSectionCapStyle);
             }
 
             IEnumerable<ISimplePath> paths = path.Flatten();
