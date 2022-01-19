@@ -70,6 +70,78 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
         }
 
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        public void DrawLines_EndCapRound<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+            var pen = new Pen(color, thickness);
+            pen.EndCap = EndCapStyle.Round;
+
+            DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        public void DrawLines_EndCapButt<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+    where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+            var pen = new Pen(color, thickness);
+            pen.EndCap = EndCapStyle.Butt;
+
+            DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        public void DrawLines_EndCapSquare<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+    where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+            var pen = new Pen(color, thickness);
+            pen.EndCap = EndCapStyle.Square;
+
+            DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        public void DrawLines_JointStyleRound<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+    where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+            var pen = new Pen(color, thickness);
+            pen.JointStyle = JointStyle.Round;
+
+            DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        public void DrawLines_JointStyleSquare<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+ where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+            var pen = new Pen(color, thickness);
+            pen.JointStyle = JointStyle.Square;
+
+            DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+        }
+
+        [Theory]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        public void DrawLines_JointStyleMiter<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+ where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+            var pen = new Pen(color, thickness);
+            pen.JointStyle = JointStyle.Miter;
+
+            DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+        }
+
         private static void DrawLinesImpl<TPixel>(
             TestImageProvider<TPixel> provider,
             string colorName,
