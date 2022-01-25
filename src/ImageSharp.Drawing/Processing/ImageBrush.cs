@@ -162,7 +162,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                 int offsetX = x - this.offsetX;
                 int sourceY = ((y - this.offsetY) % this.sourceRegion.Width) + this.sourceRegion.Y;
-                Span<TPixel> sourceRow = this.sourceFrame.GetPixelRowSpan(sourceY);
+                Span<TPixel> sourceRow = this.sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceY);
 
                 for (int i = 0; i < scanline.Length; i++)
                 {
@@ -173,7 +173,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     overlaySpan[i] = sourceRow[sourceX];
                 }
 
-                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x, scanline.Length);
+                Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
                 this.Blender.Blend(
                     this.Configuration,
                     destinationRow,

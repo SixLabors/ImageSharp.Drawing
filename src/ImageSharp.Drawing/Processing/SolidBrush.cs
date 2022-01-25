@@ -73,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             /// <inheritdoc />
             public override void Apply(Span<float> scanline, int x, int y)
             {
-                Span<TPixel> destinationRow = this.Target.GetPixelRowSpan(y).Slice(x);
+                Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x);
 
                 // Constrain the spans to each other
                 if (destinationRow.Length > scanline.Length)

@@ -252,7 +252,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
         private struct TestPixelForAgnosticDecode : IPixel<TestPixelForAgnosticDecode>
         {
-            public PixelOperations<TestPixelForAgnosticDecode> CreatePixelOperations() => new PixelOperations<TestPixelForAgnosticDecode>();
+            public PixelOperations<TestPixelForAgnosticDecode> CreatePixelOperations() => new();
 
             public void FromScaledVector4(Vector4 vector)
             {
@@ -315,6 +315,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             }
 
             public void FromRgba64(Rgba64 source)
+            {
+            }
+
+            public void FromAbgr32(Abgr32 source)
             {
             }
 

@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="IPathCollection"/></returns>
         public static IPathCollection GenerateGlyphs(string text, TextOptions textOptions)
         {
-            GlyphBuilder glyphBuilder = new(textOptions.Origin);
+            GlyphBuilder glyphBuilder = new();
             TextRenderer renderer = new(glyphBuilder);
 
             renderer.RenderText(text, textOptions);

@@ -388,12 +388,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             Span<TPixel> expectedPixels)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Assert.True(image.TryGetSinglePixelSpan(out Span<TPixel> actual));
-            Assert.True(expectedPixels.Length == actual.Length, "Buffer sizes are not equal!");
-
-            for (int i = 0; i < expectedPixels.Length; i++)
+            foreach (ImageFrame<TPixel> imageFrame in image.Frames)
             {
-                Assert.True(expectedPixels[i].Equals(actual[i]), $"Pixels are different on position {i}!");
+                imageFrame.ComparePixelBufferTo(expectedPixels);
             }
 
             return image;
@@ -450,7 +447,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public static ImageFrame<TPixel> ComparePixelBufferTo<TPixel>(this ImageFrame<TPixel> imageFrame, TPixel expectedPixel)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            Assert.True(imageFrame.TryGetSinglePixelSpan(out Span<TPixel> actualPixels));
+            Assert.True(imageFrame.DangerousTryGetSinglePixelMemory(out Memory<TPixel> actual));
+            Span<TPixel> actualPixels = actual.Span;
 
             for (int i = 0; i < actualPixels.Length; i++)
             {
@@ -465,7 +463,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     Span<TPixel> expectedPixels)
                     where TPixel : unmanaged, IPixel<TPixel>
         {
-            Assert.True(image.TryGetSinglePixelSpan(out Span<TPixel> actualPixels));
+            Assert.True(image.DangerousTryGetSinglePixelMemory(out Memory<TPixel> actual));
+            Span<TPixel> actualPixels = actual.Span;
 
             Assert.True(expectedPixels.Length == actualPixels.Length, "Buffer sizes are not equal!");
 
@@ -647,7 +646,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 Rectangle sourceRectangle = this.SourceRectangle;
                 Configuration configuration = this.Configuration;
 
-                var operation = new RowIntervalOperation(configuration, sourceRectangle, source);
+                var operation = new RowIntervalOperation(configuration, sourceRectangle, source.PixelBuffer);
                 ParallelRowIterator.IterateRowIntervals<RowIntervalOperation, Vector4>(
                     configuration,
                     sourceRectangle,
@@ -658,10 +657,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 private readonly Configuration configuration;
                 private readonly Rectangle bounds;
-                private readonly ImageFrame<TPixel> source;
+                private readonly Buffer2D<TPixel> source;
 
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]
-                public RowIntervalOperation(Configuration configuration, Rectangle bounds, ImageFrame<TPixel> source)
+                public RowIntervalOperation(Configuration configuration, Rectangle bounds, Buffer2D<TPixel> source)
                 {
                     this.configuration = configuration;
                     this.bounds = bounds;
@@ -674,7 +673,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 {
                     for (int y = rows.Min; y < rows.Max; y++)
                     {
-                        Span<TPixel> rowSpan = this.source.GetPixelRowSpan(y).Slice(this.bounds.Left, this.bounds.Width);
+                        Span<TPixel> rowSpan = this.source.DangerousGetRowSpan(y).Slice(this.bounds.Left, this.bounds.Width);
                         PixelOperations<TPixel>.Instance.ToVector4(this.configuration, rowSpan, span, PixelConversionModifiers.Scale);
                         for (int i = 0; i < span.Length; i++)
                         {

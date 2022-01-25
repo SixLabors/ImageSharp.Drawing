@@ -121,7 +121,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
                             {
                                 if (hasOnes)
                                 {
-                                    source.GetPixelRowSpan(y).Slice(minX, scanlineWidth).Fill(solidBrushColor);
+                                    source.PixelBuffer.DangerousGetRowSpan(y).Slice(minX, scanlineWidth).Fill(solidBrushColor);
                                 }
 
                                 continue;

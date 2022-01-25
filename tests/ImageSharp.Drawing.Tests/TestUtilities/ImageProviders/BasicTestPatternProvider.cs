@@ -3,6 +3,7 @@
 
 using System;
 using System.Numerics;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -38,10 +39,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
                 int midY = this.Height / 2;
                 int midX = this.Width / 2;
-
+                Buffer2D<TPixel> imageBuffer = result.GetRootFramePixelBuffer();
                 for (int y = 0; y < midY; y++)
                 {
-                    Span<TPixel> row = result.GetPixelRowSpan(y);
+                    Span<TPixel> row = imageBuffer.DangerousGetRowSpan(y);
 
                     row.Slice(0, midX).Fill(topLeftColor);
                     row.Slice(midX, this.Width - midX).Fill(topRightColor);
@@ -49,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
                 for (int y = midY; y < this.Height; y++)
                 {
-                    Span<TPixel> row = result.GetPixelRowSpan(y);
+                    Span<TPixel> row = imageBuffer.DangerousGetRowSpan(y);
 
                     row.Slice(0, midX).Fill(bottomLeftColor);
                     row.Slice(midX, this.Width - midX).Fill(bottomRightColor);

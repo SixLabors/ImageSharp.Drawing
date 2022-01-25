@@ -249,7 +249,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             using (Image<TPixel> image0 = provider.GetImage())
             {
-                Assert.True(image0.TryGetSinglePixelSpan(out Span<TPixel> imageSpan));
+                Assert.True(image0.DangerousTryGetSinglePixelMemory(out Memory<TPixel> imageMem));
+                Span<TPixel> imageSpan = imageMem.Span;
                 var mmg = TestMemoryManager<TPixel>.CreateAsCopyOf(imageSpan);
 
                 using (var image1 = Image.WrapMemory(mmg.Memory, image0.Width, image0.Height))
