@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            var pen = new Pen(color, thickness);
+            Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
             pen.EndCap = EndCapStyle.Round;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            var pen = new Pen(color, thickness);
+            Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
             pen.EndCap = EndCapStyle.Butt;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
@@ -100,14 +100,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            var pen = new Pen(color, thickness);
+            Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
             pen.EndCap = EndCapStyle.Square;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
         }
 
         [Theory]
-        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 10, true)]
         public void DrawLines_JointStyleRound<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
     where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -119,7 +119,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 10, true)]
         public void DrawLines_JointStyleSquare<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
  where TPixel : unmanaged, IPixel<TPixel>
         {
@@ -131,7 +131,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory]
-        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 5, true)]
+        [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1f, 10, true)]
         public void DrawLines_JointStyleMiter<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
  where TPixel : unmanaged, IPixel<TPixel>
         {
