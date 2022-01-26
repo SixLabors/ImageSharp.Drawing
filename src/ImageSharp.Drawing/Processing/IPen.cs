@@ -26,12 +26,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         ReadOnlySpan<float> StrokePattern { get; }
 
         /// <summary>
-        /// Gets the stroke joint style
+        /// Gets or sets the stroke joint style
         /// </summary>
         public JointStyle JointStyle { get; set; }
 
         /// <summary>
-        /// Gets the endcap style
+        /// Gets or sets the endcap style
         /// </summary>
         public EndCapStyle EndCap { get; set; }
     }
