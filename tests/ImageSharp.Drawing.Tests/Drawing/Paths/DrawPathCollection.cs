@@ -151,5 +151,43 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
                 p => Assert.Equal(this.path1, p.Path),
                 p => Assert.Equal(this.path2, p.Path));
         }
+
+        [Fact]
+        public void JointAndEndCapStyle()
+        {
+            this.operations.Draw(new DrawingOptions(), this.pen.StrokeFill, 10, this.pathCollection);
+            IEnumerable<DrawPathProcessor> processors = this.VerifyAll<DrawPathProcessor>();
+
+            Assert.All(processors, p =>
+            {
+                Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
+                Assert.Equal(this.pen.JointStyle, p.Pen.JointStyle);
+                Assert.Equal(this.pen.EndCapStyle, p.Pen.EndCapStyle);
+            });
+
+            Assert.Collection(
+                processors,
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
+        }
+
+        [Fact]
+        public void JointAndEndCapStyleDefaultOptions()
+        {
+            this.operations.Draw(this.pen.StrokeFill, 10, this.pathCollection);
+            IEnumerable<DrawPathProcessor> processors = this.VerifyAll<DrawPathProcessor>();
+
+            Assert.All(processors, p =>
+            {
+                Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
+                Assert.Equal(this.pen.JointStyle, p.Pen.JointStyle);
+                Assert.Equal(this.pen.EndCapStyle, p.Pen.EndCapStyle);
+            });
+
+            Assert.Collection(
+                processors,
+                p => Assert.Equal(this.path1, p.Path),
+                p => Assert.Equal(this.path2, p.Path));
+        }
     }
 }

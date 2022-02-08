@@ -1,15 +1,15 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// The style we use to generate the joints when outlining.
+    /// The style to apply to the joints when generating an outline.
     /// </summary>
     public enum JointStyle
     {
         /// <summary>
-        /// Joints will generate to a long point unless the end of the point will exceed 20 times the width then we generate the joint using <see cref="JointStyle.Square"/>.
+        /// Joints will generate to a long point unless the end of the point will exceed 20 times the width then we generate the joint using <see cref="Square"/>.
         /// </summary>
         Miter = 2,
 

@@ -108,5 +108,31 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(Color.Red, brush.Color);
             Assert.Equal(10, processor.Pen.StrokeWidth);
         }
+
+        [Fact]
+        public void JointAndEndCapStyle()
+        {
+            this.operations.DrawBeziers(new DrawingOptions(), this.pen.StrokeFill, 10, this.points);
+
+            DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
+
+            Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
+            this.VerifyPoints(this.points, processor.Path);
+            Assert.Equal(this.pen.JointStyle, processor.Pen.JointStyle);
+            Assert.Equal(this.pen.EndCapStyle, processor.Pen.EndCapStyle);
+        }
+
+        [Fact]
+        public void JointAndEndCapStyleDefaultOptions()
+        {
+            this.operations.DrawBeziers(this.pen.StrokeFill, 10, this.points);
+
+            DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
+
+            Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
+            this.VerifyPoints(this.points, processor.Path);
+            Assert.Equal(this.pen.JointStyle, processor.Pen.JointStyle);
+            Assert.Equal(this.pen.EndCapStyle, processor.Pen.EndCapStyle);
+        }
     }
 }
