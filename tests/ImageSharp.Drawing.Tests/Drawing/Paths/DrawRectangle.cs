@@ -109,7 +109,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Path));
             Assert.NotEqual(this.pen, processor.Pen);
             Assert.Equal(this.pen.JointStyle, processor.Pen.JointStyle);
-            Assert.Equal(this.pen.EndCap, processor.Pen.EndCap);
+            Assert.Equal(this.pen.EndCapStyle, processor.Pen.EndCapStyle);
         }
     }
 }

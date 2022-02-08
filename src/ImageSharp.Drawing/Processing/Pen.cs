@@ -79,6 +79,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public JointStyle JointStyle { get; set; }
 
         /// <inheritdoc/>
-        public EndCapStyle EndCap { get; set; }
+        public EndCapStyle EndCapStyle { get; set; }
     }
 }

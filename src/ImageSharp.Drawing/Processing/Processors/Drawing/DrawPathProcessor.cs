@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             // The global transform is applied in the FillPathProcessor.
             IPath outline = this.Path
                 .Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F))
-                .GenerateOutline(this.Pen.StrokeWidth, this.Pen.StrokePattern, this.Pen.JointStyle, this.Pen.EndCap);
+                .GenerateOutline(this.Pen.StrokeWidth, this.Pen.StrokePattern, this.Pen.JointStyle, this.Pen.EndCapStyle);
 
             return new FillPathProcessor(this.Options, this.Pen.StrokeFill, outline)
                 .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);

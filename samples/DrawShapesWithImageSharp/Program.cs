@@ -189,7 +189,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             float offset = outer + 10;
 
             var star = new Star(offset, offset, points, inner, outer);
-            IPath outline = star.GenerateOutline(width, jointStyle);
+            IPath outline = star.GenerateOutline(width, jointStyle, EndCapStyle.Butt);
             outline.SaveImage("Stars", $"StarOutline_{points}_{jointStyle}.png");
         }
 

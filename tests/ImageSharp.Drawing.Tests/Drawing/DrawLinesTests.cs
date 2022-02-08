@@ -77,7 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
             Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
-            pen.EndCap = EndCapStyle.Round;
+            pen.EndCapStyle = EndCapStyle.Round;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
         }
@@ -89,7 +89,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
             Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
-            pen.EndCap = EndCapStyle.Butt;
+            pen.EndCapStyle = EndCapStyle.Butt;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
         }
@@ -101,7 +101,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
             Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
-            pen.EndCap = EndCapStyle.Square;
+            pen.EndCapStyle = EndCapStyle.Square;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
         }

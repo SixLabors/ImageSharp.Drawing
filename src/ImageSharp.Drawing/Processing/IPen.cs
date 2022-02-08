@@ -31,8 +31,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public JointStyle JointStyle { get; set; }
 
         /// <summary>
-        /// Gets or sets the endcap style
+        /// Gets or sets the stroke endcap style
         /// </summary>
-        public EndCapStyle EndCap { get; set; }
+        public EndCapStyle EndCapStyle { get; set; }
     }
 }

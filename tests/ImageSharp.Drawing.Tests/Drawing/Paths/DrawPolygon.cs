@@ -115,7 +115,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
             this.VerifyPoints(this.points, processor.Path);
             Assert.Equal(this.pen.JointStyle, processor.Pen.JointStyle);
-            Assert.Equal(this.pen.EndCap, processor.Pen.EndCap);
+            Assert.Equal(this.pen.EndCapStyle, processor.Pen.EndCapStyle);
         }
 
         [Fact]
@@ -128,7 +128,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
             this.VerifyPoints(this.points, processor.Path);
             Assert.Equal(this.pen.JointStyle, processor.Pen.JointStyle);
-            Assert.Equal(this.pen.EndCap, processor.Pen.EndCap);
+            Assert.Equal(this.pen.EndCapStyle, processor.Pen.EndCapStyle);
         }
     }
 }

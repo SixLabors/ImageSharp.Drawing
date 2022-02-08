@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         private const float ScalingFactor = 1000.0f;
 
         private readonly ClipperLib.ClipperOffset innerClipperOffest;
-        private readonly object syncRoot = new object();
+        private readonly object syncRoot = new();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ClipperOffset"/> class.
@@ -111,19 +111,19 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         }
 
         private JoinType Convert(JointStyle style)
-        => style switch
-        {
-            JointStyle.Round => JoinType.jtRound,
-            JointStyle.Miter => JoinType.jtMiter,
-            _ => JoinType.jtSquare,
-        };
+            => style switch
+            {
+                JointStyle.Round => JoinType.jtRound,
+                JointStyle.Miter => JoinType.jtMiter,
+                _ => JoinType.jtSquare,
+            };
 
         private EndType Convert(EndCapStyle style)
-        => style switch
-        {
-            EndCapStyle.Round => EndType.etOpenRound,
-            EndCapStyle.Square => EndType.etOpenSquare,
-            _ => EndType.etOpenButt,
-        };
+            => style switch
+            {
+                EndCapStyle.Round => EndType.etOpenRound,
+                EndCapStyle.Square => EndType.etOpenSquare,
+                _ => EndType.etOpenButt,
+            };
     }
 }
