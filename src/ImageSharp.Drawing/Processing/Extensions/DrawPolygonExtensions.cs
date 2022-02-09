@@ -6,12 +6,12 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Adds extensions that allow the drawing of closed linear polygons to the <see cref="Image{TPixel}"/> type.
+    /// Adds extensions that allow the drawing of closed linear polygons.
     /// </summary>
     public static class DrawPolygonExtensions
     {
         /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
+        /// Draws the provided points as a closed linear polygon with the provided pen.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="pen">The pen.</param>
@@ -24,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.Draw(source.GetDrawingOptions(), pen, new Polygon(new LinearLineSegment(points)));
 
         /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided Pen.
+        /// Draws the provided points as a closed linear polygon with the provided pen.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.Draw(options, pen, new Polygon(new LinearLineSegment(points)));
 
         /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided brush at the provided thickness.
+        /// Draws the provided points as a closed linear polygon with the provided brush at the provided thickness.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
@@ -56,7 +56,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.DrawPolygon(options, new Pen(brush, thickness), points);
 
         /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided brush at the provided thickness.
+        /// Draws the provided points as a closed linear polygon with the provided brush at the provided thickness.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The brush.</param>
@@ -71,7 +71,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.DrawPolygon(new Pen(brush, thickness), points);
 
         /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided brush at the provided thickness.
+        /// Draws the provided points as a closed linear polygon with the provided brush at the provided thickness.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>
@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.DrawPolygon(new SolidBrush(color), thickness, points);
 
         /// <summary>
-        /// Draws the provided Points as a closed Linear Polygon with the provided brush at the provided thickness.
+        /// Draws the provided points as a closed linear polygon with the provided brush at the provided thickness.
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
