@@ -20,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta15.24" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="2.0.0-alpha.0.156" />
+    <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta16" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.0.0" />
   </ItemGroup>
 
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />

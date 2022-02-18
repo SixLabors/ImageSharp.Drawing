@@ -9,80 +9,98 @@ using SixLabors.ImageSharp.Drawing.PolygonClipper;
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Path extensions to generate outlines of paths.
+    /// Extensions to <see cref="IPath"/> that allow the generation of outlines.
     /// </summary>
     public static class OutlinePathExtensions
     {
         private const double MiterOffsetDelta = 20;
+        private const JointStyle DefaultJointStyle = JointStyle.Square;
+        private const EndCapStyle DefaultEndCapStyle = EndCapStyle.Butt;
 
         /// <summary>
-        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// Generates an outline of the path.
         /// </summary>
-        /// <param name="path">the path to outline</param>
-        /// <param name="width">The final width outline</param>
-        /// <param name="pattern">The pattern made of multiples of the width.</param>
-        /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
-        public static IPath GenerateOutline(this IPath path, float width, float[] pattern)
-            => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern));
+        /// <param name="path">The path to outline</param>
+        /// <param name="width">The outline width.</param>
+        /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+        /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
+        public static IPath GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, DefaultJointStyle, DefaultEndCapStyle);
 
         /// <summary>
-        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// Generates an outline of the path.
         /// </summary>
-        /// <param name="path">the path to outline</param>
-        /// <param name="width">The final width outline</param>
+        /// <param name="path">The path to outline</param>
+        /// <param name="width">The outline width.</param>
+        /// <param name="jointStyle">The style to apply to the joints.</param>
+        /// <param name="endCapStyle">The style to apply to the end caps.</param>
+        /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+        /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
+        public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
+        {
+            ClipperOffset offset = new(MiterOffsetDelta);
+            offset.AddPath(path, jointStyle, endCapStyle);
+
+            return offset.Execute(width);
+        }
+
+        /// <summary>
+        /// Generates an outline of the path with alternating on and off segments based on the pattern.
+        /// </summary>
+        /// <param name="path">The path to outline</param>
+        /// <param name="width">The outline width.</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
-        /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
+        /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+        /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern)
             => path.GenerateOutline(width, pattern, false);
 
         /// <summary>
-        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// Generates an outline of the path with alternating on and off segments based on the pattern.
         /// </summary>
-        /// <param name="path">the path to outline</param>
-        /// <param name="width">The final width outline</param>
+        /// <param name="path">The path to outline</param>
+        /// <param name="width">The outline width.</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
-        /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
-        /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
-        public static IPath GenerateOutline(this IPath path, float width, float[] pattern, bool startOff)
-            => path.GenerateOutline(width, new ReadOnlySpan<float>(pattern), startOff);
-
-        /// <summary>
-        /// Generates a outline of the path with alternating on and off segments based on the pattern.
-        /// </summary>
-        /// <param name="path">the path to outline</param>
-        /// <param name="width">The final width outline</param>
-        /// <param name="pattern">The pattern made of multiples of the width.</param>
-        /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
-        /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
+        /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
+        /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+        /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
-            => GenerateOutline(path, width, pattern, startOff, JointStyle.Square, EndCapStyle.Butt);
+            => GenerateOutline(path, width, pattern, startOff, DefaultJointStyle, DefaultEndCapStyle);
 
         /// <summary>
-        /// Generates a outline of the path with alternating on and off segments based on the pattern.
+        /// Generates an outline of the path with alternating on and off segments based on the pattern.
         /// </summary>
-        /// <param name="path">the path to outline</param>
-        /// <param name="width">The final width outline</param>
+        /// <param name="path">The path to outline</param>
+        /// <param name="width">The outline width.</param>
         /// <param name="pattern">The pattern made of multiples of the width.</param>
-        /// <param name="startOff">Weather the first item in the pattern is on or off.</param>
-        /// <param name="jointStyle">The style to render the joints.</param>
-        /// <param name="patternSectionCapStyle">The style to render between sections of the specified pattern.</param>
-        /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
-        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle = JointStyle.Square, EndCapStyle patternSectionCapStyle = EndCapStyle.Butt)
+        /// <param name="jointStyle">The style to apply to the joints.</param>
+        /// <param name="endCapStyle">The style to apply to the end caps.</param>
+        /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+        /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
+        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, JointStyle jointStyle, EndCapStyle endCapStyle)
+            => GenerateOutline(path, width, pattern, false, jointStyle, endCapStyle);
+
+        /// <summary>
+        /// Generates an outline of the path with alternating on and off segments based on the pattern.
+        /// </summary>
+        /// <param name="path">The path to outline</param>
+        /// <param name="width">The outline width.</param>
+        /// <param name="pattern">The pattern made of multiples of the width.</param>
+        /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
+        /// <param name="jointStyle">The style to apply to the joints.</param>
+        /// <param name="endCapStyle">The style to apply to the end caps.</param>
+        /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+        /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
+        public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
             if (pattern.Length < 2)
             {
-                return path.GenerateOutline(width, jointStyle: jointStyle);
+                return path.GenerateOutline(width, jointStyle, endCapStyle);
             }
 
             IEnumerable<ISimplePath> paths = path.Flatten();
 
-            var offset = new ClipperOffset(MiterOffsetDelta);
-            var buffer = new List<PointF>();
+            ClipperOffset offset = new(MiterOffsetDelta);
+            List<PointF> buffer = new();
             foreach (ISimplePath p in paths)
             {
                 bool online = !startOff;
@@ -117,7 +135,7 @@ namespace SixLabors.ImageSharp.Drawing
                         // we now inset a line joining
                         if (online)
                         {
-                            offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, patternSectionCapStyle);
+                            offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, endCapStyle);
                         }
 
                         online = !online;
@@ -152,7 +170,7 @@ namespace SixLabors.ImageSharp.Drawing
 
                     if (online)
                     {
-                        offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, patternSectionCapStyle);
+                        offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, endCapStyle);
                     }
 
                     online = !online;
@@ -162,32 +180,6 @@ namespace SixLabors.ImageSharp.Drawing
                     targetLength = pattern[patternPos] * width;
                 }
             }
-
-            return offset.Execute(width);
-        }
-
-        /// <summary>
-        /// Generates a solid outline of the path.
-        /// </summary>
-        /// <param name="path">the path to outline</param>
-        /// <param name="width">The final width outline</param>
-        /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
-        public static IPath GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, JointStyle.Square, EndCapStyle.Butt);
-
-        /// <summary>
-        /// Generates a solid outline of the path.
-        /// </summary>
-        /// <param name="path">the path to outline</param>
-        /// <param name="width">The final width outline</param>
-        /// <param name="jointStyle">The style to render the joints.</param>
-        /// <param name="endCapStyle">The style to render the end caps of open paths (ignored on closed paths).</param>
-        /// <returns>A new path representing the outline.</returns>
-        /// <exception cref="ClipperException">Couldn't calculate offset.</exception>
-        public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle = JointStyle.Square, EndCapStyle endCapStyle = EndCapStyle.Square)
-        {
-            var offset = new ClipperOffset(MiterOffsetDelta);
-            offset.AddPath(path, jointStyle, endCapStyle);
 
             return offset.Execute(width);
         }

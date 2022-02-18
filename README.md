@@ -1,6 +1,6 @@
 <h1 align="center">
 
-<img src="https://raw.githubusercontent.com/SixLabors/Branding/master/icons/imagesharp.drawing/sixlabors.imagesharp.drawing.512.png" alt="SixLabors.ImageSharp.Drawing" width="256"/>
+<img src="https://raw.githubusercontent.com/SixLabors/Branding/main/icons/imagesharp.drawing/sixlabors.imagesharp.drawing.512.png" alt="SixLabors.ImageSharp.Drawing" width="256"/>
 <br/>
 SixLabors.ImageSharp.Drawing
 </h1>
@@ -8,9 +8,9 @@ SixLabors.ImageSharp.Drawing
 
 <div align="center">
 
-[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/master)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
+[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/main)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/master/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
+[![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/main/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
 [![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
 
 </div>
@@ -37,12 +37,12 @@ Support the efforts of the development of the Six Labors projects.
 ## Documentation
 
 - [Detailed documentation](https://sixlabors.github.io/docs/) for the ImageSharp.Drawing API is available. This includes additional conceptual documentation to help you get started.
-- Our [Samples Repository](https://github.com/SixLabors/Samples/tree/master/ImageSharp) is also available containing buildable code samples demonstrating common activities.
+- Our [Samples Repository](https://github.com/SixLabors/Samples/tree/main/ImageSharp) is also available containing buildable code samples demonstrating common activities.
 
 ## Questions?
 
 - Do you have questions? We are happy to help! Please [join our Discussions Forum](https://github.com/SixLabors/ImageSharp.Drawing/discussions/category_choices), or ask them on [stackoverflow](https://stackoverflow.com) using the `ImageSharp` tag. **Do not** open issues for questions!
-- Please read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/master/.github/CONTRIBUTING.md) before opening issues or pull requests!
+- Please read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/.github/CONTRIBUTING.md) before opening issues or pull requests!
 
 ## Code of Conduct  
 This project has adopted the code of conduct defined by the [Contributor Covenant](https://contributor-covenant.org/) to clarify expected behavior in our community.
@@ -94,7 +94,7 @@ git submodule update --init --recursive
 
 ## How can you help?
 
-Please... Spread the word, contribute algorithms, submit performance improvements, unit tests, no input is too little. Make sure to read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/master/.github/CONTRIBUTING.md) before opening a PR.
+Please... Spread the word, contribute algorithms, submit performance improvements, unit tests, no input is too little. Make sure to read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/.github/CONTRIBUTING.md) before opening a PR.
 
 ## The ImageSharp Team
 

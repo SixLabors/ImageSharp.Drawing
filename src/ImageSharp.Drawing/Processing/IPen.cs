@@ -24,5 +24,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Gets the stoke pattern.
         /// </summary>
         ReadOnlySpan<float> StrokePattern { get; }
+
+        /// <summary>
+        /// Gets or sets the stroke joint style
+        /// </summary>
+        public JointStyle JointStyle { get; set; }
+
+        /// <summary>
+        /// Gets or sets the stroke endcap style
+        /// </summary>
+        public EndCapStyle EndCapStyle { get; set; }
     }
 }

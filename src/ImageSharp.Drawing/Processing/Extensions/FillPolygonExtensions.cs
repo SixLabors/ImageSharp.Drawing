@@ -6,12 +6,12 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Adds extensions that allow the filling of closed linear polygons to the <see cref="Image{TPixel}"/> type.
+    /// Adds extensions that allow the filling of closed linear polygons.
     /// </summary>
     public static class FillPolygonExtensions
     {
         /// <summary>
-        /// Flood fills the image in the shape of a Linear polygon described by the points
+        /// Flood fills the image in the shape of a linear polygon described by the points
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
@@ -26,7 +26,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.Fill(options, brush, new Polygon(new LinearLineSegment(points)));
 
         /// <summary>
-        /// Flood fills the image in the shape of a Linear polygon described by the points
+        /// Flood fills the image in the shape of a linear polygon described by the points
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="brush">The brush.</param>
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.Fill(brush, new Polygon(new LinearLineSegment(points)));
 
         /// <summary>
-        /// Flood fills the image in the shape of a Linear polygon described by the points
+        /// Flood fills the image in the shape of a linear polygon described by the points
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="options">The options.</param>
@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             source.Fill(options, new SolidBrush(color), new Polygon(new LinearLineSegment(points)));
 
         /// <summary>
-        /// Flood fills the image in the shape of a Linear polygon described by the points
+        /// Flood fills the image in the shape of a linear polygon described by the points
         /// </summary>
         /// <param name="source">The image this method extends.</param>
         /// <param name="color">The color.</param>

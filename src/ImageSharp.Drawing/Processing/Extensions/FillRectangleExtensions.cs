@@ -6,7 +6,7 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Adds extensions that allow the filling of rectangles to the <see cref="Image{TPixel}"/> type.
+    /// Adds extensions that allow the filling of rectangles.
     /// </summary>
     public static class FillRectangleExtensions
     {
