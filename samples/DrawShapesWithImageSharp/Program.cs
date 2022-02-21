@@ -52,9 +52,11 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
             DrawFatL();
 
             DrawText("Hello World");
+
             DrawText(
                 "Hello World Hello World Hello World Hello World Hello World Hello World Hello World",
-                new EllipsePolygon(PointF.Empty, 100));
+                 new EllipsePolygon(PointF.Empty, 100));
+            // new RectangularPolygon(PointF.Empty, new SizeF(100, 100)));
         }
 
         private static void DrawText(string text)
@@ -69,8 +71,8 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         private static void DrawText(string text, IPath path)
         {
-            FontFamily fam = SystemFonts.Get("Arial");
-            var font = new Font(fam, 30);
+            FontFamily family = SystemFonts.Get("Arial");
+            Font font = new(family, 30);
             TextOptions textOptions = new(font)
             {
                 WrappingLength = path.ComputeLength(),
@@ -78,12 +80,12 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 HorizontalAlignment = HorizontalAlignment.Left,
 
                 // Enable this to test vertical layout mode.
-                LayoutMode = LayoutMode.VerticalLeftRight
+                //LayoutMode = LayoutMode.VerticalLeftRight
             };
 
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
 
-            glyphs.SaveImage("Text-Path", text + ".png");
+            glyphs.SaveImageWithPath(path, "Text-Path", text + ".png");
         }
 
         private static void DrawFatL()
@@ -223,34 +225,51 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         public static void SaveImage(this IPath shape, params string[] path) => new PathCollection(shape).SaveImage(path);
 
-        public static void SaveImage(this IPathCollection shape, params string[] path)
+        public static void SaveImage(this IPathCollection collection, params string[] path)
         {
-            shape = shape.Translate(-shape.Bounds.Location) // touch top left
-                    .Translate(new Vector2(10)); // move in from top left
+            // Offset the path collection to ensure our resultant image is
+            // large enough to contain the rendered output.
+            collection = collection.Translate(-collection.Bounds.Location);
 
+            int width = (int)(collection.Bounds.Left + collection.Bounds.Right);
+            int height = (int)(collection.Bounds.Top + collection.Bounds.Bottom);
+            using var img = new Image<Rgba32>(width, height);
+
+            // Fill the canvas background and draw our shape
+            img.Mutate(i => i.Fill(Color.DarkBlue));
+
+            // Draw our path collection.
+            img.Mutate(i => i.Fill(Color.HotPink, collection));
+
+            // Ensure directory exists
             string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
+            IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
+            img.Save(fullPath);
+        }
 
-            // pad even amount around shape
-            int width = (int)(shape.Bounds.Left + shape.Bounds.Right);
-            int height = (int)(shape.Bounds.Top + shape.Bounds.Bottom);
+        public static void SaveImageWithPath(this IPathCollection collection, IPath shape, params string[] path)
+        {
+            // Offset the shape and path collection to ensure our resultant image is
+            // large enough to contain the rendered output.
+            shape = shape.Translate(-collection.Bounds.Location);
+            collection = collection.Translate(-collection.Bounds.Location);
 
-            using (var img = new Image<Rgba32>(width, height))
-            {
-                img.Mutate(i => i.Fill(Color.DarkBlue).Draw(Color.HotPink, 3, new EllipsePolygon(width / 2F, height / 2F, 93)));
+            var bounds = RectangleF.Union(shape.Bounds, collection.Bounds);
+            int width = (int)(bounds.Left + bounds.Right);
+            int height = (int)(bounds.Top + bounds.Bottom);
 
-                foreach (IPath s in shape)
-                {
-                    // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
-                    img.Mutate(i => i.Fill(Color.HotPink, s));
-                }
+            using var img = new Image<Rgba32>(width, height);
 
-                // img.Draw(Color.LawnGreen, 1, new ShapePath(shape));
+            // Fill the canvas background and draw our shape
+            img.Mutate(i => i.Fill(Color.DarkBlue).Fill(Color.White.WithAlpha(.25F), shape));
 
-                // Ensure directory exists
-                IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
+            // Draw our path collection.
+            img.Mutate(i => i.Fill(Color.HotPink, collection));
 
-                img.Save(fullPath);
-            }
+            // Ensure directory exists
+            string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
+            IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
+            img.Save(fullPath);
         }
 
         public static void SaveImage(this IPath shape, int width, int height, params string[] path)
@@ -258,26 +277,15 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
         public static void SaveImage(this IPathCollection shape, int width, int height, params string[] path)
         {
+            using var img = new Image<Rgba32>(width, height);
+            img.Mutate(i => i.Fill(Color.DarkBlue));
+            img.Mutate(i => i.Fill(Color.HotPink, shape));
+
+            // Ensure directory exists
             string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
+            IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
 
-            using (var img = new Image<Rgba32>(width, height))
-            {
-                img.Mutate(i => i.Fill(Color.DarkBlue));
-
-                // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
-                foreach (IPath s in shape)
-                {
-                    // In ImageSharp.Drawing.Paths there is an extension method that takes in an IShape directly.
-                    img.Mutate(i => i.Fill(Color.HotPink, s));
-                }
-
-                // img.Draw(Color.LawnGreen, 1, new ShapePath(shape));
-
-                // Ensure directory exists
-                IODirectory.CreateDirectory(IOPath.GetDirectoryName(fullPath));
-
-                img.Save(fullPath);
-            }
+            img.Save(fullPath);
         }
     }
 }
