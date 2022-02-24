@@ -43,9 +43,15 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 Origin = new PointF(0, 0)
             };
 
-            provider.RunValidatingProcessorTest(x => x
+            var comparer = ImageComparer.TolerantPercentage(0.001f);
+#if !NETCOREAPP
+            comparer = ImageComparer.TolerantPercentage(0.002f);
+#endif
+            provider.RunValidatingProcessorTest(
+                x => x
                  .SetGraphicsOptions(o => o.Antialias = false)
-                 .DrawText(textOpt, "Hello, World!", Color.Black));
+                 .DrawText(textOpt, "Hello, World!", Color.Black),
+                comparer: comparer);
         }
     }
 }
