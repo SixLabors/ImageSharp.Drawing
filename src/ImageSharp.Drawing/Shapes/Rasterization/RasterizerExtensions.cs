@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                     float subpixelWidth = (startX + 1 - scanStart) / scanner.SubpixelDistance;
 
                     scanline[startX] += subpixelWidth * scanner.SubpixelArea;
-                    scanlineDirty = subpixelWidth > 0;
+                    scanlineDirty |= subpixelWidth > 0;
                 }
 
                 if (endX >= 0 && endX < scanline.Length)
@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
                     float subpixelWidth = (scanEnd - endX) / scanner.SubpixelDistance;
 
                     scanline[endX] += subpixelWidth * scanner.SubpixelArea;
-                    scanlineDirty = subpixelWidth > 0;
+                    scanlineDirty |= subpixelWidth > 0;
                 }
 
                 int nextX = startX + 1;
