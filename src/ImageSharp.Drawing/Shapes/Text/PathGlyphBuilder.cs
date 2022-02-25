@@ -47,7 +47,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void TransformGlyph(FontRectangle bounds)
         {
-            // Find the intersection point. This should be offset to ensure we rotate at the center of the glyph.
+            // Find the intersection point. This should be offset to ensure we rotate at the bottom-center of the glyph.
             float halfWidth = (bounds.Right - bounds.Left) * .5F;
             Vector2 intersectPoint = new(bounds.Left + halfWidth, bounds.Top);
 
@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
             // Due to how matrix combining works you have to combine this in the reverse order of operation.
             // First rotate the glyph then move it.
             Matrix3x2 matrix = Matrix3x2.CreateTranslation(targetPoint - bounds.Location) * Matrix3x2.CreateRotation(pathPoint.Angle - Pi, pathPoint.Point);
-            this.builder.SetTransform(matrix);
+            this.Builder.SetTransform(matrix);
         }
     }
 }

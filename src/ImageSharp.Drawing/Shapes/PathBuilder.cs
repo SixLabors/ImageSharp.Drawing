@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// </summary>
     public class PathBuilder
     {
-        private readonly List<Figure> figures = new List<Figure>();
+        private readonly List<Figure> figures = new();
         private readonly Matrix3x2 defaultTransform;
         private Figure currentFigure = null;
         private Matrix3x2 currentTransform;
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder SetOrigin(PointF origin)
         {
-            // the new origin should be transofrmed based on the default transform
+            // The new origin should be transformed based on the default transform
             this.setTransform.Translation = origin;
             this.currentTransform = this.setTransform * this.defaultTransform;
 
@@ -207,7 +207,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(RectangleF rect, float rotation, float startAngle, float sweepAngle) => this.AddEllipticalArc((rect.Right + rect.Left) / 2, (rect.Bottom + rect.Top) / 2, rect.Width / 2, rect.Height / 2, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(RectangleF rect, float rotation, float startAngle, float sweepAngle)
+            => this.AddEllipticalArc((rect.Right + rect.Left) / 2, (rect.Bottom + rect.Top) / 2, rect.Width / 2, rect.Height / 2, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -217,7 +218,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(Rectangle rect, int rotation, int startAngle, int sweepAngle) => this.AddEllipticalArc((float)(rect.Right + rect.Left) / 2, (float)(rect.Bottom + rect.Top) / 2, (float)rect.Width / 2, (float)rect.Height / 2, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(Rectangle rect, int rotation, int startAngle, int sweepAngle)
+            => this.AddEllipticalArc((float)(rect.Right + rect.Left) / 2, (float)(rect.Bottom + rect.Top) / 2, (float)rect.Width / 2, (float)rect.Height / 2, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -229,7 +231,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle) => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+            => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -241,7 +244,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(Point center, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle) => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(Point center, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
+            => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
