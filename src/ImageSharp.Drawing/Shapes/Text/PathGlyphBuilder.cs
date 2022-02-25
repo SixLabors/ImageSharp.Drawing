@@ -15,8 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
     {
         private const float Pi = MathF.PI;
         private readonly IPathInternals path;
-        private float xOffset;
-        private float yOffset;
+        private Vector2 textOffset;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PathGlyphBuilder"/> class.
@@ -35,11 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         }
 
         /// <inheritdoc/>
-        protected override void BeginText(FontRectangle bounds)
-        {
-            this.yOffset = bounds.Bottom;
-            this.xOffset = bounds.Left;
-        }
+        protected override void BeginText(FontRectangle bounds) => this.textOffset = new(bounds.Left, bounds.Bottom);
 
         /// <inheritdoc/>
         protected override void BeginGlyph(FontRectangle bounds) => this.TransformGlyph(bounds);
@@ -47,19 +42,21 @@ namespace SixLabors.ImageSharp.Drawing.Text
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void TransformGlyph(FontRectangle bounds)
         {
-            // Find the intersection point. This should be offset to ensure we rotate at the bottom-center of the glyph.
-            float halfWidth = (bounds.Right - bounds.Left) * .5F;
-            Vector2 intersectPoint = new(bounds.Left + halfWidth, bounds.Top);
+            // Find the intersection point.
+            // This should be offset to ensure we rotate at the bottom-center of the glyph.
+            float halfWidth = bounds.Width * .5F;
 
             // Find the point of this intersection along the given path.
-            SegmentInfo pathPoint = this.path.PointAlongPath(intersectPoint.X - this.xOffset);
+            SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + halfWidth);
 
             // Now offset our target point since we're aligning the bottom-left location of our glyph against the path.
-            Vector2 targetPoint = pathPoint.Point + new PointF(-halfWidth, intersectPoint.Y - this.yOffset);
+            // TODO: This is good and accurate when we are vertically alligned to the path however the distance between
+            // characters in multiline text scales with the angle and vertical offset.
+            // It would be good to be able to fix this.
+            Vector2 targetPoint = (Vector2)pathPoint.Point + new Vector2(-halfWidth, bounds.Top) - bounds.Location - this.textOffset;
 
             // Due to how matrix combining works you have to combine this in the reverse order of operation.
-            // First rotate the glyph then move it.
-            Matrix3x2 matrix = Matrix3x2.CreateTranslation(targetPoint - bounds.Location) * Matrix3x2.CreateRotation(pathPoint.Angle - Pi, pathPoint.Point);
+            Matrix3x2 matrix = Matrix3x2.CreateTranslation(targetPoint) * Matrix3x2.CreateRotation(pathPoint.Angle - Pi, pathPoint.Point);
             this.Builder.SetTransform(matrix);
         }
     }
