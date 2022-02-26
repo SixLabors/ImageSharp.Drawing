@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
             SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + halfWidth);
 
             // Now offset our target point since we're aligning the bottom-left location of our glyph against the path.
-            // TODO: This is good and accurate when we are vertically alligned to the path however the distance between
+            // TODO: This is good and accurate when we are vertically aligned to the path however the distance between
             // characters in multiline text scales with the angle and vertical offset.
             // It would be good to be able to fix this.
             Vector2 targetPoint = (Vector2)pathPoint.Point + new Vector2(-halfWidth, bounds.Top) - bounds.Location - this.textOffset;
