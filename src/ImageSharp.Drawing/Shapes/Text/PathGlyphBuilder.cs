@@ -16,12 +16,14 @@ namespace SixLabors.ImageSharp.Drawing.Text
         private const float Pi = MathF.PI;
         private readonly IPathInternals path;
         private Vector2 textOffset;
+        private TextOptions textOptions;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PathGlyphBuilder"/> class.
         /// </summary>
         /// <param name="path">The path to render the glyphs along.</param>
-        public PathGlyphBuilder(IPath path)
+        /// <param name="textOptions">The text rendering options.</param>
+        public PathGlyphBuilder(IPath path, TextOptions textOptions)
         {
             if (path is IPathInternals internals)
             {
@@ -31,10 +33,30 @@ namespace SixLabors.ImageSharp.Drawing.Text
             {
                 this.path = new ComplexPolygon(path);
             }
+
+            this.textOptions = textOptions;
         }
 
         /// <inheritdoc/>
-        protected override void BeginText(FontRectangle bounds) => this.textOffset = new(bounds.Left, bounds.Bottom);
+        protected override void BeginText(FontRectangle bounds)
+        {
+            float yOffset = this.textOptions.VerticalAlignment switch
+            {
+                VerticalAlignment.Center => bounds.Bottom - (bounds.Height * .5F),
+                VerticalAlignment.Bottom => bounds.Bottom,
+                VerticalAlignment.Top => bounds.Top,
+                _ => bounds.Top,
+            };
+
+            float xOffset = this.textOptions.HorizontalAlignment switch
+            {
+                HorizontalAlignment.Center => bounds.Right - (bounds.Width * .5F),
+                HorizontalAlignment.Right => bounds.Right,
+                HorizontalAlignment.Left => bounds.Left,
+                _ => bounds.Left,
+            };
+            this.textOffset = new(xOffset, yOffset);
+        }
 
         /// <inheritdoc/>
         protected override void BeginGlyph(FontRectangle bounds) => this.TransformGlyph(bounds);
