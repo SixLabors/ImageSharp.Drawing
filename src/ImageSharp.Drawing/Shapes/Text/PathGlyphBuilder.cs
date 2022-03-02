@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
             // Due to how matrix combining works you have to combine this in the reverse order of operation
             // this one rotates the glype then moves it.
             Matrix3x2 matrix = Matrix3x2.CreateTranslation(targetPoint - rect.Location) * Matrix3x2.CreateRotation(point.Angle - Pi, point.Point);
-            this.drawer.SetTransform(matrix);
+            this.builder.SetTransform(matrix);
         }
     }
 }

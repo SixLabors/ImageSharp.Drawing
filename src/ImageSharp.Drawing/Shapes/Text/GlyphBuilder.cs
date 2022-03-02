@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         public GlyphBuilder(Vector2 origin)
             : base()
         {
-            this.drawer.SetOrigin(origin);
+            this.builder.SetOrigin(origin);
         }
     }
 }
