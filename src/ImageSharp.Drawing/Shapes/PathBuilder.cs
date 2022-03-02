@@ -109,6 +109,15 @@ namespace SixLabors.ImageSharp.Drawing
             => this.AddLine(this.currentPoint, point);
 
         /// <summary>
+        /// Draws the line connecting the current the current point to the new point.
+        /// </summary>
+        /// <param name="x">The x.</param>
+        /// <param name="y">The y.</param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
+        public PathBuilder LineTo(float x, float y)
+            => this.LineTo(new PointF(x, y));
+
+        /// <summary>
         /// Adds the line connecting the current point to the new point.
         /// </summary>
         /// <param name="start">The start.</param>
@@ -216,6 +225,85 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddBezier(PointF startPoint, PointF controlPoint1, PointF controlPoint2, PointF endPoint)
             => this.AddSegment(new CubicBezierLineSegment(startPoint, controlPoint1, controlPoint2, endPoint));
+
+        public PathBuilder ArcTo(float rx/*radiusX*/, float ry/*radiusY*/, float phi/*rotation*/, bool fa /*largeArc*/, bool fs /*sweep*/, PointF point)
+        {
+            var x1 = currentPoint.X;
+            var y1 = currentPoint.Y;
+            var x2 = point.X;
+            var y2 = point.Y;
+
+            static float pow(float n) => MathF.Pow(n, 2);
+            static float vectorAngle(float ux, float uy, float vx, float vy)
+            {
+                var sign = ux * vy - uy * vx < 0 ? -1 : 1;
+                var ua = MathF.Sqrt(ux * ux + uy * uy);
+                var va = MathF.Sqrt(vx * vx + vy * vy);
+                var dot = ux * vx + uy * vy;
+
+                return sign * MathF.Acos(dot / (ua * va));
+            }
+
+            static float deg(float rad) => rad * 180 / MathF.PI;
+
+            var sinphi = MathF.Sin(phi);
+            var cosphi = MathF.Cos(phi);
+
+            // Step 1: simplify through translation/rotation
+            var x = cosphi * (x1 - x2) / 2 + sinphi * (y1 - y2) / 2;
+            var y = -sinphi * (x1 - x2) / 2 + cosphi * (y1 - y2) / 2;
+
+            var px = pow(x);
+            var py = pow(y);
+            var prx = pow(rx);
+            var pry = pow(ry);
+
+            // correct of out-of-range radii
+            var L = px / prx + py / pry;
+
+            if (L > 1)
+            {
+                rx = MathF.Sqrt(L) * MathF.Abs(rx);
+                ry = MathF.Sqrt(L) * MathF.Abs(ry);
+            }
+            else
+            {
+                rx = MathF.Abs(rx);
+                ry = MathF.Abs(ry);
+            }
+
+            // Step 2 + 3: compute center
+            var sign = fa == fs ? -1 : 1;
+            var M = MathF.Sqrt((prx * pry - prx * py - pry * px) / (prx * py + pry * px)) * sign;
+
+            var _cx = M * (rx * y) / ry;
+            var _cy = M * (-ry * x) / rx;
+
+            var cx = cosphi * _cx - sinphi * _cy + (x1 + x2) / 2;
+            var cy = sinphi * _cx + cosphi * _cy + (y1 + y2) / 2;
+
+            // Step 4: compute θ and dθ
+            var theta = vectorAngle(1, 0, (x - _cx) / rx, (y - _cy) / ry);
+
+            var _dTheta = deg(vectorAngle(
+                (x - _cx) / rx,
+                (y - _cy) / ry,
+                (-x - _cx) / rx,
+                (-y - _cy) / ry
+            )) % 360;
+
+            if (!fs && _dTheta > 0)
+            {
+                _dTheta -= 360;
+            }
+
+            if (fs && _dTheta < 0)
+            {
+                _dTheta += 360;
+            }
+
+            return this.AddEllipticalArc(new PointF(cx, cy), rx, ry, 0, phi, _dTheta);
+        }
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
