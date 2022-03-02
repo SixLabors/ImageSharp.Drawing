@@ -19,6 +19,8 @@ namespace SixLabors.ImageSharp.Drawing
         private Matrix3x2 currentTransform;
         private Matrix3x2 setTransform;
 
+        private Vector2 currentPoint = default;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="PathBuilder" /> class.
         /// </summary>
@@ -89,19 +91,31 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
+        /// Moves to current point to the supplied vector.
+        /// </summary>
+        /// <param name="point">The point.</param>
+        public void MoveTo(Vector2 point)
+        {
+            this.StartFigure();
+            this.currentPoint = PointF.Transform(point, this.currentTransform);
+        }
+
+        /// <summary>
+        /// Draws the line connecting the current the current point to the new point.
+        /// </summary>
+        /// <param name="point">The point.</param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
+        public PathBuilder LineTo(PointF point)
+            => this.AddLine(this.currentPoint, point);
+
+        /// <summary>
         /// Adds the line connecting the current point to the new point.
         /// </summary>
         /// <param name="start">The start.</param>
         /// <param name="end">The end.</param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddLine(PointF start, PointF end)
-        {
-            end = PointF.Transform(end, this.currentTransform);
-            start = PointF.Transform(start, this.currentTransform);
-            this.currentFigure.AddSegment(new LinearLineSegment(start, end));
-
-            return this;
-        }
+            => this.AddSegment(new LinearLineSegment(start, end));
 
         /// <summary>
         /// Adds the line connecting the current point to the new point.
@@ -112,11 +126,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="y2">The y2.</param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddLine(float x1, float y1, float x2, float y2)
-        {
-            this.AddLine(new PointF(x1, y1), new PointF(x2, y2));
-
-            return this;
-        }
+            => this.AddLine(new PointF(x1, y1), new PointF(x2, y2));
 
         /// <summary>
         /// Adds a series of line segments connecting the current point to the new points.
@@ -141,11 +151,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddLines(params PointF[] points)
-        {
-            this.AddSegment(new LinearLineSegment(points));
-
-            return this;
-        }
+            => this.AddSegment(new LinearLineSegment(points));
 
         /// <summary>
         /// Adds the segment.
@@ -154,10 +160,30 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddSegment(ILineSegment segment)
         {
-            this.currentFigure.AddSegment(segment.Transform(this.currentTransform));
-
+            segment = segment.Transform(this.currentTransform);
+            this.currentFigure.AddSegment(segment);
+            this.currentPoint = segment.EndPoint;
             return this;
         }
+
+        /// <summary>
+        /// Draws a quadratics bezier from the current point  to the <paramref name="point"/>
+        /// </summary>
+        /// <param name="secondControlPoint">The second control point.</param>
+        /// <param name="point">The point.</param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
+        public PathBuilder QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
+            => this.AddBezier(this.currentPoint, secondControlPoint, point);
+
+        /// <summary>
+        /// Draws a quadratics bezier from the current point  to the <paramref name="point"/>
+        /// </summary>
+        /// <param name="secondControlPoint">The second control point.</param>
+        /// <param name="thirdControlPoint">The third control point.</param>
+        /// <param name="point">The point.</param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
+        public PathBuilder CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
+            => this.AddBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
 
         /// <summary>
         /// Adds a quadratic bezier curve to the current figure joining the last point to the endPoint.
@@ -189,15 +215,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="endPoint">The end point.</param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddBezier(PointF startPoint, PointF controlPoint1, PointF controlPoint2, PointF endPoint)
-        {
-            this.currentFigure.AddSegment(new CubicBezierLineSegment(
-                PointF.Transform(startPoint, this.currentTransform),
-                PointF.Transform(controlPoint1, this.currentTransform),
-                PointF.Transform(controlPoint2, this.currentTransform),
-                PointF.Transform(endPoint, this.currentTransform)));
-
-            return this;
-        }
+            => this.AddSegment(new CubicBezierLineSegment(startPoint, controlPoint1, controlPoint2, endPoint));
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -207,7 +225,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(RectangleF rect, float rotation, float startAngle, float sweepAngle) => this.AddEllipticalArc((rect.Right + rect.Left) / 2, (rect.Bottom + rect.Top) / 2, rect.Width / 2, rect.Height / 2, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(RectangleF rect, float rotation, float startAngle, float sweepAngle)
+            => this.AddEllipticalArc((rect.Right + rect.Left) / 2, (rect.Bottom + rect.Top) / 2, rect.Width / 2, rect.Height / 2, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -217,7 +236,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(Rectangle rect, int rotation, int startAngle, int sweepAngle) => this.AddEllipticalArc((float)(rect.Right + rect.Left) / 2, (float)(rect.Bottom + rect.Top) / 2, (float)rect.Width / 2, (float)rect.Height / 2, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(Rectangle rect, int rotation, int startAngle, int sweepAngle)
+            => this.AddEllipticalArc((float)(rect.Right + rect.Left) / 2, (float)(rect.Bottom + rect.Top) / 2, (float)rect.Width / 2, (float)rect.Height / 2, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -229,7 +249,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle) => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+            => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -241,7 +262,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
-        public PathBuilder AddEllipticalArc(Point center, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle) => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
+        public PathBuilder AddEllipticalArc(Point center, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
+            => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -255,11 +277,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(int x, int y, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
-        {
-            this.currentFigure.AddSegment(new EllipticalArcLineSegment(x, y, radiusX, radiusY, rotation, startAngle, sweepAngle, this.currentTransform));
-
-            return this;
-        }
+            => this.AddSegment(new EllipticalArcLineSegment(x, y, radiusX, radiusY, rotation, startAngle, sweepAngle, Matrix3x2.Identity));
 
         /// <summary>
         /// Adds an elliptical arc to the current  figure
@@ -273,11 +291,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
-        {
-            this.currentFigure.AddSegment(new EllipticalArcLineSegment(x, y, radiusX, radiusY, rotation, startAngle, sweepAngle, this.currentTransform));
-
-            return this;
-        }
+            => this.AddSegment(new EllipticalArcLineSegment(x, y, radiusX, radiusY, rotation, startAngle, sweepAngle, Matrix3x2.Identity));
 
         /// <summary>
         /// Starts a new figure but leaves the previous one open.
@@ -349,6 +363,7 @@ namespace SixLabors.ImageSharp.Drawing
         {
             this.Clear();
             this.ResetTransform();
+            this.currentPoint = default;
 
             return this;
         }

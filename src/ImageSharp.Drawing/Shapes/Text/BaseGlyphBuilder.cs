@@ -17,14 +17,15 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// The builder. TODO: Should this be a property?
         /// </summary>
         // ReSharper disable once InconsistentNaming
-        protected readonly PathDrawer drawer;
+        protected readonly PathBuilder drawer;
 #pragma warning restore SA1401 // Fields should be private
         private readonly List<IPath> paths = new();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
         /// </summary>
-        public BaseGlyphBuilder() => this.drawer = new PathDrawer();
+        public BaseGlyphBuilder()
+            => this.drawer = new PathBuilder();
 
         /// <summary>
         /// Gets the paths that have been rendered by this.
