@@ -494,31 +494,51 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, 32)]
-        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, 40)]
+        [WithSolidFilledImages(500, 200, nameof(Color.White), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(500, 200, nameof(Color.White), PixelTypes.Rgba32, 40)]
         public void DrawRichTextWithMixOfPensAndBrushes<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont(TestFonts.OpenSans, fontSize);
-            const string text = "QuickTYZ";
+            Font font2 = CreateFont(TestFonts.OpenSans, fontSize * 1.5f);
+            const string text = "The quick brown fox jumps over the lazy log.";
 
             TextDrawingOptions textOptions = new(font)
             {
+                WrappingLength = 400,
                 TextRuns = new[]
                 {
                     new TextDrawingRun
                     {
-                        Start = 2,
-                        End = 2,
+                        Start = 4,
+                        End = 10,
+                        TextAttributes = TextAttribute.Strikethrough,
                         Brush = Brushes.Solid(Color.Red),
                     },
+
                     new TextDrawingRun
                     {
-                        Start = 4,
-                        End = 5,
-                        Pen = Pens.Dot(Color.Red, 0.2f),
+                        Start = 10,
+                        End = 13,
+                        Font = font2,
+                        TextAttributes = TextAttribute.Strikethrough,
+                    },
+
+                    new TextDrawingRun
+                    {
+                        Start = 19,
+                        End = 23,
+                        TextAttributes = TextAttribute.Underline,
+                        Brush = Brushes.Solid(Color.Blue),
+                    },
+
+                    new TextDrawingRun
+                    {
+                        Start = 23,
+                        End = 26,
+                        TextAttributes = TextAttribute.Underline
                     }
                 }
             };
@@ -538,7 +558,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             return fnDisplayText.Substring(0, Math.Min(fnDisplayText.Length, 4));
         }
 
-        private static Font CreateFont(string fontName, int size)
+        private static Font CreateFont(string fontName, float size)
             => TestFontUtilities.GetFont(fontName, size);
     }
 }

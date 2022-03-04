@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
@@ -57,87 +58,75 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         /// <inheritdoc/>
         protected override void OnFrameApply(ImageFrame<TPixel> source)
         {
-            Draw(this.textRenderer.FillOperations, this.definition.Brush);
-            Draw(this.textRenderer.OutlineOperations, this.definition.Pen?.StrokeFill);
-
-            void Draw(List<DrawingOperation> operations, IBrush brush)
+            if (this.textRenderer.DrawingOperations.Count > 0)
             {
-                if (operations?.Count > 0)
+                Draw(this.textRenderer.DrawingOperations.OrderBy(x => x.RenderPass));
+            }
+
+            void Draw(IEnumerable<DrawingOperation> operations)
+            {
+                var brushes = new Dictionary<IBrush, BrushApplicator<TPixel>>();
+                foreach (DrawingOperation operation in operations)
                 {
-                    var brushes = new Dictionary<Color, BrushApplicator<TPixel>>();
-                    foreach (DrawingOperation operation in operations)
+                    if (operation.Brush != null)
                     {
-                        if (operation.Color.HasValue)
+                        if (!brushes.TryGetValue(operation.Brush, out _))
                         {
-                            if (!brushes.TryGetValue(operation.Color.Value, out _))
-                            {
-                                brushes[operation.Color.Value] = new SolidBrush(operation.Color.Value).CreateApplicator(
-                                    this.Configuration,
-                                    this.textRenderer.Options.GraphicsOptions,
-                                    source,
-                                    this.SourceRectangle);
-                            }
+                            brushes[operation.Brush] = operation.Brush.CreateApplicator(this.Configuration, this.textRenderer.Options.GraphicsOptions, source, this.SourceRectangle);
                         }
                     }
+                }
 
-                    using (BrushApplicator<TPixel> app = brush.CreateApplicator(this.Configuration, this.textRenderer.Options.GraphicsOptions, source, this.SourceRectangle))
+                foreach (DrawingOperation operation in operations)
+                {
+                    var app = brushes[operation.Brush];
+
+                    Buffer2D<float> buffer = operation.Map;
+                    int startY = operation.Location.Y;
+                    int startX = operation.Location.X;
+                    int offsetSpan = 0;
+
+                    if (startX + buffer.Height < 0)
                     {
-                        foreach (DrawingOperation operation in operations)
-                        {
-                            BrushApplicator<TPixel> currentApp = app;
-                            if (operation.Color != null)
-                            {
-                                brushes.TryGetValue(operation.Color.Value, out currentApp);
-                            }
-
-                            Buffer2D<float> buffer = operation.Map;
-                            int startY = operation.Location.Y;
-                            int startX = operation.Location.X;
-                            int offsetSpan = 0;
-
-                            if (startX + buffer.Height < 0)
-                            {
-                                continue;
-                            }
-
-                            if (startX + buffer.Width < 0)
-                            {
-                                continue;
-                            }
-
-                            if (startX < 0)
-                            {
-                                offsetSpan = -startX;
-                                startX = 0;
-                            }
-
-                            if (startX >= source.Width)
-                            {
-                                continue;
-                            }
-
-                            int firstRow = 0;
-                            if (startY < 0)
-                            {
-                                firstRow = -startY;
-                            }
-
-                            int maxHeight = source.Height - startY;
-                            int end = Math.Min(operation.Map.Height, maxHeight);
-
-                            for (int row = firstRow; row < end; row++)
-                            {
-                                int y = startY + row;
-                                Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan);
-                                currentApp.Apply(span, startX, y);
-                            }
-                        }
+                        continue;
                     }
 
-                    foreach (BrushApplicator<TPixel> app in brushes.Values)
+                    if (startX + buffer.Width < 0)
                     {
-                        app.Dispose();
+                        continue;
                     }
+
+                    if (startX < 0)
+                    {
+                        offsetSpan = -startX;
+                        startX = 0;
+                    }
+
+                    if (startX >= source.Width)
+                    {
+                        continue;
+                    }
+
+                    int firstRow = 0;
+                    if (startY < 0)
+                    {
+                        firstRow = -startY;
+                    }
+
+                    int maxHeight = source.Height - startY;
+                    int end = Math.Min(operation.Map.Height, maxHeight);
+
+                    for (int row = firstRow; row < end; row++)
+                    {
+                        int y = startY + row;
+                        Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan);
+                        app.Apply(span, startX, y);
+                    }
+                }
+
+                foreach (BrushApplicator<TPixel> app in brushes.Values)
+                {
+                    app.Dispose();
                 }
             }
         }
@@ -146,9 +135,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         {
             public Buffer2D<float> Map { get; set; }
 
-            public Point Location { get; set; }
+            public byte RenderPass { get; set; }
 
-            public Color? Color { get; set; }
+            public Point Location { get; set; }
 
             public IBrush Brush { get; internal set; }
         }
@@ -163,14 +152,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private const float AccuracyMultiple = 8;
             private readonly Matrix3x2 transform;
             private readonly PathBuilder builder;
+            private readonly Dictionary<Color, IBrush> brushLookup = new();
 
             private Point currentRenderPosition;
             private (GlyphRendererParameters Glyph, PointF SubPixelOffset) currentGlyphRenderParams;
             private readonly int offset;
             private PointF currentPoint;
             private Color? currentColor;
-            private IBrush? currentBrush;
-            private IPen? currentPen;
+            private IBrush currentBrush;
+            private IPen currentPen;
 
             private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> glyphData = new();
 
@@ -183,15 +173,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.Pen = pen;
                 this.Brush = brush;
                 this.offset = (int)textOptions.Font.Size;
-                this.FillOperations = new List<DrawingOperation>(size);
-                this.OutlineOperations = new List<DrawingOperation>(size);
+                this.DrawingOperations = new List<DrawingOperation>(size);
                 this.transform = transform;
                 this.builder = new PathBuilder();
             }
 
-            public List<DrawingOperation> FillOperations { get; }
-
-            public List<DrawingOperation> OutlineOperations { get; }
+            public List<DrawingOperation> DrawingOperations { get; }
 
             public MemoryAllocator MemoryAllocator { get; internal set; }
 
@@ -260,8 +247,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             public void BeginText(FontRectangle bounds)
             {
                 // Not concerned about this one
-                this.OutlineOperations?.Clear();
-                this.FillOperations?.Clear();
+                this.DrawingOperations.Clear();
             }
 
             public void CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
@@ -296,29 +282,48 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         return;
                     }
 
+                    // fix up the text runs colors
+                    // only if both brush and pen is null do we fallback to the defualt value
+                    if (this.currentBrush == null && this.currentPen == null)
+                    {
+                        this.currentBrush = this.Brush;
+                        this.currentPen = this.Pen;
+                    }
+
                     // If we are using the fonts color layers we ignore the request to draw an outline only
                     // cause that wont really work and instead force drawing with fill with the requested color
                     // if color fonts disabled then this.currentColor will always be null
-                    var brush = this.Brush ?? this.currentBrush;
-                    if (brush != null || this.currentColor != null)
+                    if (this.currentBrush != null || this.currentColor != null)
                     {
                         renderData.FillMap = this.Render(path);
-                        renderData.Color = this.currentColor;
+
+                        if (this.currentColor.HasValue)
+                        {
+                            if (this.brushLookup.TryGetValue(this.currentColor.Value, out var brush))
+                            {
+                                this.currentBrush = brush;
+                            }
+                            else
+                            {
+                                this.currentBrush = new SolidBrush(this.currentColor.Value);
+                                this.brushLookup[this.currentColor.Value] = this.currentBrush;
+                            }
+                        }
                     }
 
-                    var pen = this.currentPen ?? this.Pen;
-                    if (pen != null && this.currentColor == null)
+                    if (this.currentPen != null && this.currentColor == null)
                     {
-                        if (pen.StrokePattern.Length == 0)
+                        if (this.currentPen.StrokePattern.Length == 0)
                         {
-                            path = path.GenerateOutline(pen.StrokeWidth);
+                            path = path.GenerateOutline(this.currentPen.StrokeWidth);
                         }
                         else
                         {
-                            path = path.GenerateOutline(pen.StrokeWidth, pen.StrokePattern, pen.JointStyle, pen.EndCapStyle);
+                            path = path.GenerateOutline(this.currentPen.StrokeWidth, this.currentPen.StrokePattern, this.currentPen.JointStyle, this.currentPen.EndCapStyle);
                         }
 
                         renderData.OutlineMap = this.Render(path);
+                        this.currentBrush = this.currentPen.StrokeFill;
                     }
 
                     this.glyphData[this.currentGlyphRenderParams] = renderData;
@@ -330,22 +335,23 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                 if (renderData.FillMap != null)
                 {
-                    this.FillOperations.Add(new DrawingOperation
+                    this.DrawingOperations.Add(new DrawingOperation
                     {
                         Location = this.currentRenderPosition,
                         Map = renderData.FillMap,
-                        Color = this.currentColor,
                         Brush = this.currentBrush,
+                        RenderPass = 1
                     });
                 }
 
                 if (renderData.OutlineMap != null)
                 {
-                    this.OutlineOperations.Add(new DrawingOperation
+                    this.DrawingOperations.Add(new DrawingOperation
                     {
                         Location = this.currentRenderPosition,
                         Map = renderData.OutlineMap,
-                        Brush = this.currentPen?.StrokeFill,
+                        Brush = this.currentBrush,
+                        RenderPass = 2 // render outlines 2nd to ensure they are always ontop of fills
                     });
                 }
             }
