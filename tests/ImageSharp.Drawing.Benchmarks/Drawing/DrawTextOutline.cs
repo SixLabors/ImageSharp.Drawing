@@ -53,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         {
             using var image = new Image<Rgba32>(800, 800);
             Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
-            TextOptions textOptions = new(font)
+            TextDrawingOptions textOptions = new(font)
             {
                 WrappingLength = 780,
                 Origin = new PointF(10, 10)
@@ -71,7 +71,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
             using (var image = new Image<Rgba32>(800, 800))
             {
                 Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
-                TextOptions textOptions = new(font)
+                TextDrawingOptions textOptions = new(font)
                 {
                     WrappingLength = 780,
                     Origin = new PointF(10, 10)
@@ -90,7 +90,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
             static IImageProcessingContext DrawTextOldVersion(
                 IImageProcessingContext source,
                 DrawingOptions options,
-                TextOptions textOptions,
+                TextDrawingOptions textOptions,
                 string text,
                 IBrush brush,
                 IPen pen)

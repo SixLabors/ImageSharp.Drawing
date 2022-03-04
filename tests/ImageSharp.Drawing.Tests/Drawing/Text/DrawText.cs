@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
     public class DrawText : BaseImageOperationsExtensionTest
     {
         private readonly FontCollection fontCollection;
-        private readonly TextOptions textOptions;
+        private readonly TextDrawingOptions textOptions;
         private readonly DrawingOptions otherDrawingOptions = new()
         {
             GraphicsOptions = new GraphicsOptions()

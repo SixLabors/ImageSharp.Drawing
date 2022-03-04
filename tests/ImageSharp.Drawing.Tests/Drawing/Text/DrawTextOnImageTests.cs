@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
               TextDrawingComparer,
               img =>
               {
-                  TextOptions textOptions = new(font)
+                  TextDrawingOptions textOptions = new(font)
                   {
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
@@ -81,7 +81,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
               TextDrawingComparer,
               img =>
               {
-                  TextOptions textOptions = new(whitney)
+                  TextDrawingOptions textOptions = new(whitney)
                   {
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
@@ -107,14 +107,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             using Image<TPixel> img = provider.GetImage();
 
             // Measure the text size
-            FontRectangle size = TextMeasurer.Measure(text, new TextOptions(font));
+            FontRectangle size = TextMeasurer.Measure(text, new TextDrawingOptions(font));
 
             // Find out how much we need to scale the text to fill the space (up or down)
             float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
 
             // Create a new font
             var scaledFont = new Font(font, scalingFactor * font.Size);
-            TextOptions textOptions = new(scaledFont)
+            TextDrawingOptions textOptions = new(scaledFont)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -198,7 +198,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Font font = CreateFont(fontName, fontSize);
             float radians = GeometryUtilities.DegreeToRadian(angle);
 
-            TextOptions textOptions = new(font)
+            TextDrawingOptions textOptions = new(font)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -238,7 +238,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             float radianX = GeometryUtilities.DegreeToRadian(angleX);
             float radianY = GeometryUtilities.DegreeToRadian(angleY);
 
-            TextOptions textOptions = new(font)
+            TextDrawingOptions textOptions = new(font)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -314,7 +314,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            TextOptions textOptions = new(font)
+            TextDrawingOptions textOptions = new(font)
             {
                 KerningMode = KerningMode.Normal,
                 VerticalAlignment = VerticalAlignment.Top,
@@ -400,7 +400,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 "Beware the Jabberwock, my son!  The jaws that bite, the claws that catch!  Beware the Jubjub bird, and shun The frumious Bandersnatch!\n",
                 20);
 
-            TextOptions textOptions = new(font)
+            TextDrawingOptions textOptions = new(font)
             {
                 WrappingLength = 1000,
                 Origin = new PointF(10, 50)
@@ -426,7 +426,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             // The following font/text combination generates an empty path.
             Font font = CreateFont(TestFonts.WendyOne, 72);
             const string text = "Hello\0World";
-            TextOptions textOptions = new(font);
+            TextDrawingOptions textOptions = new(font);
             FontRectangle textSize = TextMeasurer.Measure(text, textOptions);
 
             Assert.NotEqual(FontRectangle.Empty, textSize);
@@ -453,7 +453,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "QuickTYZ";
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
-            TextOptions textOptions = new(font);
+            TextDrawingOptions textOptions = new(font);
             FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
@@ -480,7 +480,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "QuickTYZ";
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
-            TextOptions textOptions = new(font);
+            TextDrawingOptions textOptions = new(font);
             FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
@@ -488,6 +488,43 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 x => x.SetDrawingTransform(transform)
                 .DrawText(textOptions, text, Pens.Solid(Color.Black, strokeWidth)),
                 $"F({fontName})-S({fontSize})-A({angle})-STR({strokeWidth})-{ToTestOutputDisplayText(text)})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(300, 200, nameof(Color.White), PixelTypes.Rgba32, 40)]
+        public void DrawRichTextWithMixOfPensAndBrushes<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, fontSize);
+            const string text = "QuickTYZ";
+
+            TextDrawingOptions textOptions = new(font)
+            {
+                TextRuns = new[]
+                {
+                    new TextDrawingRun
+                    {
+                        Start = 2,
+                        End = 2,
+                        Brush = Brushes.Solid(Color.Red),
+                    },
+                    new TextDrawingRun
+                    {
+                        Start = 4,
+                        End = 5,
+                        Pen = Pens.Dot(Color.Red, 0.2f),
+                    }
+                }
+            };
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.Black),
+                $"RichText-F({fontSize})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);

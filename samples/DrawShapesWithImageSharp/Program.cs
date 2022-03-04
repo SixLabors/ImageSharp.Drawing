@@ -65,7 +65,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         {
             FontFamily fam = SystemFonts.Get("Arial");
             var font = new Font(fam, 30);
-            TextOptions textOptions = new(font);
+            TextDrawingOptions textOptions = new(font);
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
             glyphs.SaveImage("Text", text + ".png");
@@ -75,7 +75,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
         {
             FontFamily fam = SystemFonts.Get("Arial");
             var font = new Font(fam, 30);
-            TextOptions textOptions = new(font)
+            TextDrawingOptions textOptions = new(font)
             {
                 WrappingLength = path.ComputeLength(),
                 VerticalAlignment = VerticalAlignment.Top,

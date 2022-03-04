@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.definition.Text.Length,
                 this.definition.TextOptions,
                 this.definition.Pen,
-                this.definition.Brush != null,
+                this.definition.Brush,
                 this.definition.DrawingOptions.Transform)
             {
                 Options = this.definition.DrawingOptions
@@ -149,6 +149,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             public Point Location { get; set; }
 
             public Color? Color { get; set; }
+
+            public IBrush Brush { get; internal set; }
         }
 
         private class CachingGlyphRenderer : IColorGlyphRenderer, IDisposable
@@ -167,31 +169,22 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private readonly int offset;
             private PointF currentPoint;
             private Color? currentColor;
+            private IBrush? currentBrush;
+            private IPen? currentPen;
 
             private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> glyphData = new();
 
-            private readonly bool renderOutline;
-            private readonly bool renderFill;
             private bool rasterizationRequired;
 
-            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, TextOptions textOptions, IPen pen, bool renderFill, Matrix3x2 transform)
+            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, TextDrawingOptions textOptions, IPen pen, IBrush brush, Matrix3x2 transform)
             {
                 this.MemoryAllocator = memoryAllocator;
                 this.currentRenderPosition = default;
                 this.Pen = pen;
-                this.renderFill = renderFill;
-                this.renderOutline = pen != null;
+                this.Brush = brush;
                 this.offset = (int)textOptions.Font.Size;
-                if (this.renderFill)
-                {
-                    this.FillOperations = new List<DrawingOperation>(size);
-                }
-
-                if (this.renderOutline)
-                {
-                    this.OutlineOperations = new List<DrawingOperation>(size);
-                }
-
+                this.FillOperations = new List<DrawingOperation>(size);
+                this.OutlineOperations = new List<DrawingOperation>(size);
                 this.transform = transform;
                 this.builder = new PathBuilder();
             }
@@ -204,6 +197,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public IPen Pen { get; internal set; }
 
+            public IBrush Brush { get; internal set; }
+
             public DrawingOptions Options { get; internal set; }
 
             protected void SetLayerColor(Color color) => this.currentColor = color;
@@ -215,6 +210,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             public bool BeginGlyph(FontRectangle bounds, GlyphRendererParameters parameters)
             {
                 this.currentColor = null;
+
+                if (parameters.TextRun is TextDrawingRun drawingRun)
+                {
+                    this.currentBrush = drawingRun.Brush;
+                    this.currentPen = drawingRun.Pen;
+                }
+                else
+                {
+                    this.currentBrush = null;
+                    this.currentPen = null;
+                }
+
                 RectangleF currentBounds = new RectangularPolygon(bounds.X, bounds.Y, bounds.Width, bounds.Height)
                     .Transform(this.transform)
                     .Bounds;
@@ -292,21 +299,23 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     // If we are using the fonts color layers we ignore the request to draw an outline only
                     // cause that wont really work and instead force drawing with fill with the requested color
                     // if color fonts disabled then this.currentColor will always be null
-                    if (this.renderFill || this.currentColor != null)
+                    var brush = this.Brush ?? this.currentBrush;
+                    if (brush != null || this.currentColor != null)
                     {
                         renderData.FillMap = this.Render(path);
                         renderData.Color = this.currentColor;
                     }
 
-                    if (this.renderOutline && this.currentColor == null)
+                    var pen = this.currentPen ?? this.Pen;
+                    if (pen != null && this.currentColor == null)
                     {
-                        if (this.Pen.StrokePattern.Length == 0)
+                        if (pen.StrokePattern.Length == 0)
                         {
-                            path = path.GenerateOutline(this.Pen.StrokeWidth);
+                            path = path.GenerateOutline(pen.StrokeWidth);
                         }
                         else
                         {
-                            path = path.GenerateOutline(this.Pen.StrokeWidth, this.Pen.StrokePattern, this.Pen.JointStyle, this.Pen.EndCapStyle);
+                            path = path.GenerateOutline(pen.StrokeWidth, pen.StrokePattern, pen.JointStyle, pen.EndCapStyle);
                         }
 
                         renderData.OutlineMap = this.Render(path);
@@ -325,7 +334,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     {
                         Location = this.currentRenderPosition,
                         Map = renderData.FillMap,
-                        Color = renderData.Color
+                        Color = this.currentColor,
+                        Brush = this.currentBrush,
                     });
                 }
 
@@ -334,7 +344,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     this.OutlineOperations.Add(new DrawingOperation
                     {
                         Location = this.currentRenderPosition,
-                        Map = renderData.OutlineMap
+                        Map = renderData.OutlineMap,
+                        Brush = this.currentPen?.StrokeFill,
                     });
                 }
             }

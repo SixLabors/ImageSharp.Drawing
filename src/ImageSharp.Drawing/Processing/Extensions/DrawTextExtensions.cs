@@ -58,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextOptions textOptions,
+            TextDrawingOptions textOptions,
             string text,
             Color color) =>
             source.DrawText(textOptions, text, Brushes.Solid(color), null);
@@ -115,7 +115,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IPen pen,
             PointF location)
         {
-            TextOptions textOptions = new(font) { Origin = location };
+            TextDrawingOptions textOptions = new(font) { Origin = location };
             return source.DrawText(textOptions, text, brush, pen);
         }
 
@@ -129,7 +129,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextOptions textOptions,
+            TextDrawingOptions textOptions,
             string text,
             IBrush brush) =>
             source.DrawText(source.GetDrawingOptions(), textOptions, text, brush, null);
@@ -144,7 +144,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextOptions textOptions,
+            TextDrawingOptions textOptions,
             string text,
             IPen pen) =>
             source.DrawText(source.GetDrawingOptions(), textOptions, text, null, pen);
@@ -160,7 +160,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
-            TextOptions textOptions,
+            TextDrawingOptions textOptions,
             string text,
             IBrush brush,
             IPen pen) =>
@@ -224,7 +224,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IPen pen,
             PointF location)
         {
-            TextOptions textOptions = new(font) { Origin = location };
+            TextDrawingOptions textOptions = new(font) { Origin = location };
             return source.ApplyProcessor(new DrawTextProcessor(drawingOptions, textOptions, text, brush, pen));
         }
 
@@ -241,7 +241,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext DrawText(
             this IImageProcessingContext source,
             DrawingOptions drawingOptions,
-            TextOptions textOptions,
+            TextDrawingOptions textOptions,
             string text,
             IBrush brush,
             IPen pen)

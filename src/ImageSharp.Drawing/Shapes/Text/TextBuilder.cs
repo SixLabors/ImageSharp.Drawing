@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="text">The text to generate glyphs for.</param>
         /// <param name="textOptions">The text rendering options.</param>
         /// <returns>The <see cref="IPathCollection"/></returns>
-        public static IPathCollection GenerateGlyphs(string text, TextOptions textOptions)
+        public static IPathCollection GenerateGlyphs(string text, TextDrawingOptions textOptions)
         {
             GlyphBuilder glyphBuilder = new();
             TextRenderer renderer = new(glyphBuilder);
@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="path">The path to draw the text in relation to</param>
         /// <param name="textOptions">The text rendering options.</param>
         /// <returns>The <see cref="IPathCollection"/></returns>
-        public static IPathCollection GenerateGlyphs(string text, IPath path, TextOptions textOptions)
+        public static IPathCollection GenerateGlyphs(string text, IPath path, TextDrawingOptions textOptions)
         {
             PathGlyphBuilder glyphBuilder = new(path);
             TextRenderer renderer = new(glyphBuilder);
