@@ -68,12 +68,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 var brushes = new Dictionary<IBrush, BrushApplicator<TPixel>>();
                 foreach (DrawingOperation operation in operations)
                 {
-                    if (operation.Brush != null)
+                    if (!brushes.TryGetValue(operation.Brush, out _))
                     {
-                        if (!brushes.TryGetValue(operation.Brush, out _))
-                        {
-                            brushes[operation.Brush] = operation.Brush.CreateApplicator(this.Configuration, this.textRenderer.Options.GraphicsOptions, source, this.SourceRectangle);
-                        }
+                        brushes[operation.Brush] = operation.Brush.CreateApplicator(this.Configuration, this.textRenderer.Options.GraphicsOptions, source, this.SourceRectangle);
                     }
                 }
 
@@ -272,6 +269,42 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 GlyphRenderData renderData = default;
 
+                // fix up the text runs colors
+                // only if both brush and pen is null do we fallback to the defualt value
+                if (this.currentBrush == null && this.currentPen == null)
+                {
+                    this.currentBrush = this.Brush;
+                    this.currentPen = this.Pen;
+                }
+
+                var renderFill = false;
+                var renderOutline = false;
+
+                // If we are using the fonts color layers we ignore the request to draw an outline only
+                // cause that wont really work and instead force drawing with fill with the requested color
+                // if color fonts disabled then this.currentColor will always be null
+                if (this.currentBrush != null || this.currentColor != null)
+                {
+                    renderFill = true;
+                    if (this.currentColor.HasValue)
+                    {
+                        if (this.brushLookup.TryGetValue(this.currentColor.Value, out var brush))
+                        {
+                            this.currentBrush = brush;
+                        }
+                        else
+                        {
+                            this.currentBrush = new SolidBrush(this.currentColor.Value);
+                            this.brushLookup[this.currentColor.Value] = this.currentBrush;
+                        }
+                    }
+                }
+
+                if (this.currentPen != null && this.currentColor == null)
+                {
+                    renderOutline = true;
+                }
+
                 // Has the glyph been rendered already?
                 if (this.rasterizationRequired)
                 {
@@ -282,48 +315,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         return;
                     }
 
-                    // fix up the text runs colors
-                    // only if both brush and pen is null do we fallback to the defualt value
-                    if (this.currentBrush == null && this.currentPen == null)
-                    {
-                        this.currentBrush = this.Brush;
-                        this.currentPen = this.Pen;
-                    }
-
                     // If we are using the fonts color layers we ignore the request to draw an outline only
                     // cause that wont really work and instead force drawing with fill with the requested color
                     // if color fonts disabled then this.currentColor will always be null
-                    if (this.currentBrush != null || this.currentColor != null)
+                    if (renderFill)
                     {
                         renderData.FillMap = this.Render(path);
-
-                        if (this.currentColor.HasValue)
-                        {
-                            if (this.brushLookup.TryGetValue(this.currentColor.Value, out var brush))
-                            {
-                                this.currentBrush = brush;
-                            }
-                            else
-                            {
-                                this.currentBrush = new SolidBrush(this.currentColor.Value);
-                                this.brushLookup[this.currentColor.Value] = this.currentBrush;
-                            }
-                        }
                     }
 
-                    if (this.currentPen != null && this.currentColor == null)
+                    if (renderOutline)
                     {
-                        if (this.currentPen.StrokePattern.Length == 0)
-                        {
-                            path = path.GenerateOutline(this.currentPen.StrokeWidth);
-                        }
-                        else
-                        {
-                            path = path.GenerateOutline(this.currentPen.StrokeWidth, this.currentPen.StrokePattern, this.currentPen.JointStyle, this.currentPen.EndCapStyle);
-                        }
-
+                        path = path.GenerateOutline(this.currentPen.StrokeWidth, this.currentPen.StrokePattern, this.currentPen.JointStyle, this.currentPen.EndCapStyle);
                         renderData.OutlineMap = this.Render(path);
-                        this.currentBrush = this.currentPen.StrokeFill;
                     }
 
                     this.glyphData[this.currentGlyphRenderParams] = renderData;
@@ -350,7 +353,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     {
                         Location = this.currentRenderPosition,
                         Map = renderData.OutlineMap,
-                        Brush = this.currentBrush,
+                        Brush = this.currentPen?.StrokeFill ?? this.currentBrush,
                         RenderPass = 2 // render outlines 2nd to ensure they are always ontop of fills
                     });
                 }
