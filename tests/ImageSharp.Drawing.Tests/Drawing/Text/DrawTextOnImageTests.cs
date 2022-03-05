@@ -494,8 +494,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(500, 200, nameof(Color.White), PixelTypes.Rgba32, 32)]
-        [WithSolidFilledImages(500, 200, nameof(Color.White), PixelTypes.Rgba32, 40)]
+        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 40)]
         public void DrawRichTextWithMixOfPensAndBrushes<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize)
@@ -503,7 +503,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         {
             Font font = CreateFont(TestFonts.OpenSans, fontSize);
             Font font2 = CreateFont(TestFonts.OpenSans, fontSize * 1.5f);
-            const string text = "The quick brown fox jumps over the lazy log.";
+            const string text = "The quick brown fox jumps over the lazy dog";
 
             TextDrawingOptions textOptions = new(font)
             {
@@ -543,7 +543,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 }
             };
             provider.RunValidatingProcessorTest(
-                x => x.DrawText(textOptions, text, Color.Black),
+                x => x.DrawText(textOptions, text, Color.White),
                 $"RichText-F({fontSize})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
