@@ -3,6 +3,7 @@
 
 using System;
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -33,6 +34,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             RectangleF region)
             where TPixel : unmanaged, IPixel<TPixel>
             => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
+
+        public bool Equals(IBrush other)
+        {
+            if (other is SolidBrush sb)
+            {
+                return sb.Color.Equals(this.Color);
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// The solid brush applicator.

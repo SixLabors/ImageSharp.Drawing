@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -12,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// A brush is a simple class that will return an <see cref="BrushApplicator{TPixel}" /> that will perform the
     /// logic for retrieving pixel values for specific locations.
     /// </remarks>
-    public interface IBrush
+    public interface IBrush : IEquatable<IBrush>
     {
         /// <summary>
         /// Creates the applicator for this brush.

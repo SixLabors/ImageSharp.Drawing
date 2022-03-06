@@ -132,6 +132,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         {
             public Buffer2D<float> Map { get; set; }
 
+            public IPath Path { get; set; }
+
             public byte RenderPass { get; set; }
 
             public Point Location { get; set; }
@@ -139,8 +141,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             public IBrush Brush { get; internal set; }
         }
 
-        private class CachingGlyphRenderer : IColorGlyphRenderer, IDisposable
+        private struct TextDecorationDetails
         {
+            public Vector2 Start { get; set; }
+
+            public Vector2 End { get; set; }
+
+            public IPen Pen { get; set; }
+
+            public float Thickness { get; internal set; }
+        }
+
+        private class CachingGlyphRenderer : IColorGlyphRenderer, IGlyphDecorationRenderer, IDisposable
+        {
+
+
             // just enough accuracy to allow for 1/8 pixel differences which
             // later are accumulated while rendering, but do not grow into full pixel offsets
             // The value 8 is benchmarked to:
@@ -156,8 +171,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private readonly int offset;
             private PointF currentPoint;
             private Color? currentColor;
+            private TextRun currentTextRun;
             private IBrush currentBrush;
             private IPen currentPen;
+
+            private TextDecorationDetails? currentUnderline = null;
+            private TextDecorationDetails? currentStrikout = null;
+            private TextDecorationDetails? currentOverline = null;
 
             private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> glyphData = new();
 
@@ -191,10 +211,157 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public void BeginFigure() => this.builder.StartFigure();
 
+            public TextDecoration EnabledDecorations()
+            {
+                var decorations = this.currentTextRun.TextDecorations;
+                if (this.currentTextRun is TextDrawingRun drawingRun)
+                {
+                    if (drawingRun.UnderlinePen != null)
+                    {
+                        decorations |= TextDecoration.Underline;
+                    }
+
+                    if (drawingRun.StrikeoutPen != null)
+                    {
+                        decorations |= TextDecoration.Strikeout;
+                    }
+
+                    if (drawingRun.OverlinePen != null)
+                    {
+                        decorations |= TextDecoration.Overline;
+                    }
+                }
+
+                return decorations;
+            }
+
+            public void SetDecoration(TextDecoration textDecoration, Vector2 start, Vector2 end, float thickness)
+            {
+                ref var targetDecoration = ref this.currentStrikout;
+                if (textDecoration == TextDecoration.Strikeout)
+                {
+                    targetDecoration = ref this.currentStrikout;
+                }
+                else if (textDecoration == TextDecoration.Underline)
+                {
+                    targetDecoration = ref this.currentUnderline;
+                }
+                else if (textDecoration == TextDecoration.Overline)
+                {
+                    targetDecoration = ref this.currentOverline;
+                }
+                else
+                {
+                    return;
+                }
+
+                IPen pen = null;
+                if (this.currentTextRun is TextDrawingRun drawingRun)
+                {
+                    if (textDecoration == TextDecoration.Strikeout)
+                    {
+                        pen = drawingRun.StrikeoutPen ?? pen;
+                    }
+                    else if (textDecoration == TextDecoration.Underline)
+                    {
+                        pen = drawingRun.UnderlinePen ?? pen;
+                    }
+                    else if (textDecoration == TextDecoration.Overline)
+                    {
+                        pen = drawingRun.OverlinePen;
+                    }
+                }
+
+                //fix up the thickness/Y position so that the line render nicly
+                var thicknessOffset = new Vector2(0, thickness * .5f);
+                var tl = start - thicknessOffset;
+                var bl = start + thicknessOffset;
+                var tr = end - thicknessOffset;
+                var br = end + thicknessOffset;
+
+                // Do the same for vertical components.
+                tl.Y = MathF.Floor(tl.Y);
+                tr.Y = MathF.Floor(tr.Y);
+                br.Y = MathF.Ceiling(br.Y);
+                bl.Y = MathF.Ceiling(bl.Y);
+                tl.X = MathF.Floor(tl.X);
+                tr.X = MathF.Floor(tr.X);
+
+                var newThickness = bl.Y - tl.Y;
+                var offsetNew = new Vector2(0, newThickness * .5f);
+
+                pen ??= new SolidPen(this.currentBrush ?? this.Brush);
+                this.AppendDecoration(ref targetDecoration, tl + offsetNew, tr + offsetNew, pen, newThickness);
+            }
+
+            private void FinaliseDecoration(ref TextDecorationDetails? decoration)
+            {
+                if (decoration != null)
+                {
+                    var path = new Path(new LinearLineSegment(decoration.Value.Start, decoration.Value.End));
+                    var currentBounds = path.Bounds;
+                    var currentRenderPosition = Point.Truncate(currentBounds.Location);
+                    PointF subPixelOffset = currentBounds.Location - this.currentRenderPosition;
+
+                    subPixelOffset.X = MathF.Round(subPixelOffset.X * AccuracyMultiple) / AccuracyMultiple;
+                    subPixelOffset.Y = MathF.Round(subPixelOffset.Y * AccuracyMultiple) / AccuracyMultiple;
+
+                    var additionalOffset = new Size(2, 2);
+                    var offsetPath = path.Translate(new Point(-currentRenderPosition.X, -currentRenderPosition.Y) + additionalOffset);
+                    var outline = decoration.Value.Pen.GeneratePath(offsetPath, decoration.Value.Thickness);
+
+                    if (outline.Bounds.Width != 0 || outline.Bounds.Height != 0)
+                    {
+                        // render the Path here
+                        this.DrawingOperations.Add(new DrawingOperation
+                        {
+                            Brush = decoration.Value.Pen.StrokeFill,
+                            Location = currentRenderPosition - additionalOffset,
+                            Map = this.Render(outline),
+                            RenderPass = 3 // after outlines !!
+                        });
+                    }
+
+                    decoration = null;
+                }
+            }
+
+            private void AppendDecoration(ref TextDecorationDetails? decoration, Vector2 start, Vector2 end, IPen pen, float thickness)
+            {
+                if (decoration != null)
+                {
+                    // lets try and expand it first
+                    // do we need some leway here, does it only need to be the same line height?
+                    if (thickness == decoration.Value.Thickness &&
+                        decoration.Value.End.Y == start.Y &&
+                        (decoration.Value.End.X + 1) >= start.X &&
+                        decoration.Value.Pen.Equals(pen))
+                    {
+                        // expand the line
+                        start = decoration.Value.Start;
+
+                        // if this is null finalize does nothing we then set it again before we leave
+                        decoration = null;
+                    }
+                }
+
+                this.FinaliseDecoration(ref decoration);
+                var result = new TextDecorationDetails
+                {
+                    Start = start,
+                    End = end,
+                    Pen = pen,
+                    Thickness = MathF.Abs(thickness)
+                };
+
+                decoration = result;
+            }
+
             public bool BeginGlyph(FontRectangle bounds, GlyphRendererParameters parameters)
             {
                 this.currentColor = null;
 
+                this.currentTextRun = parameters.TextRun;
                 if (parameters.TextRun is TextDrawingRun drawingRun)
                 {
                     this.currentBrush = drawingRun.Brush;
@@ -325,7 +492,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                     if (renderOutline)
                     {
-                        path = path.GenerateOutline(this.currentPen.StrokeWidth, this.currentPen.StrokePattern, this.currentPen.JointStyle, this.currentPen.EndCapStyle);
+                        path = this.currentPen.GeneratePath(path);
                         renderData.OutlineMap = this.Render(path);
                     }
 
@@ -422,6 +589,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public void EndText()
             {
+                // ensure we have captured the last underline/strikeout path
+                this.FinaliseDecoration(ref this.currentUnderline);
+                this.FinaliseDecoration(ref this.currentStrikout);
             }
 
             public void LineTo(Vector2 point)
@@ -441,6 +611,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.builder.AddBezier(this.currentPoint, secondControlPoint, point);
                 this.currentPoint = point;
             }
+
+
 
             private struct GlyphRenderData : IDisposable
             {

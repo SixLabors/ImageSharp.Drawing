@@ -2,10 +2,12 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
@@ -495,8 +497,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         [Theory]
         [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
-        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 40)]
-        public void DrawRichTextWithMixOfPensAndBrushes<TPixel>(
+        [WithSolidFilledImages(500, 300, nameof(Color.Black), PixelTypes.Rgba32, 40)]
+        public void DrawRichText<TPixel>(
             TestImageProvider<TPixel> provider,
             int fontSize)
             where TPixel : unmanaged, IPixel<TPixel>
@@ -507,6 +509,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             TextDrawingOptions textOptions = new(font)
             {
+                Origin = new Vector2(15),
                 WrappingLength = 400,
                 TextRuns = new[]
                 {
@@ -514,7 +517,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                     {
                         Start = 4,
                         End = 10,
-                        TextAttributes = TextAttribute.Strikethrough,
+                        TextDecorations = TextDecoration.Strikeout,
+                        StrikeoutPen = Pens.Solid(Color.Red),
                         Brush = Brushes.Solid(Color.Red),
                     },
 
@@ -523,28 +527,108 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         Start = 10,
                         End = 13,
                         Font = font2,
-                        TextAttributes = TextAttribute.Strikethrough,
+                        TextDecorations = TextDecoration.Strikeout,
+                        StrikeoutPen = Pens.Solid(Color.White),
                     },
 
                     new TextDrawingRun
                     {
                         Start = 19,
                         End = 23,
-                        TextAttributes = TextAttribute.Underline,
+                        TextDecorations = TextDecoration.Underline,
+                        UnderlinePen = Pens.Solid(Color.Fuchsia),
                         Brush = Brushes.Solid(Color.Blue),
                     },
 
                     new TextDrawingRun
                     {
                         Start = 23,
-                        End = 26,
-                        TextAttributes = TextAttribute.Underline
+                        End = 25,
+                        TextDecorations = TextDecoration.Underline,
+                        UnderlinePen = Pens.Solid(Color.White),
                     }
                 }
             };
             provider.RunValidatingProcessorTest(
                 x => x.DrawText(textOptions, text, Color.White),
                 $"RichText-F({fontSize})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(500, 300, nameof(Color.Black), PixelTypes.Rgba32, 40)]
+        public void DrawRichTextArabic<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.MeQuranVolyNewmet, fontSize);
+            string text = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٟنِ ٱلرَّحِيمِ";
+
+            TextDrawingOptions textOptions = new(font)
+            {
+                Origin = new Vector2(15),
+                WrappingLength = 400,
+                TextRuns = new[]
+                {
+                    new TextDrawingRun { Start = 0, End = CodePoint.GetCodePointCount(text.AsSpan()), TextDecorations = TextDecoration.Underline }
+                }
+            };
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.White),
+                $"RichText-Arabic-F({fontSize})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(500, 300, nameof(Color.Black), PixelTypes.Rgba32, 40)]
+        public void DrawRichTextRainbow<TPixel>(
+           TestImageProvider<TPixel> provider,
+           int fontSize)
+           where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, fontSize);
+            const string text = "The quick brown fox jumps over the lazy dog";
+
+            var colors = new[]
+            {
+                new SolidPen(Color.Red),
+                new SolidPen(Color.Orange),
+                new SolidPen(Color.Yellow),
+                new SolidPen(Color.Green),
+                new SolidPen(Color.Blue),
+                new SolidPen(Color.Indigo),
+                new SolidPen(Color.Violet)
+            };
+
+            var runs = new List<TextDrawingRun>();
+            for (var i = 0; i < text.Length; i++)
+            {
+                var pen = colors[i % colors.Length];
+                runs.Add(new TextDrawingRun
+                {
+                    Start = i,
+                    End = i + 1,
+                    UnderlinePen = pen
+                });
+            }
+
+            TextDrawingOptions textOptions = new(font)
+            {
+                Origin = new Vector2(15),
+                WrappingLength = 400,
+                TextRuns = runs
+            };
+
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.White),
+                $"RichText-ArabicRainbow-F({fontSize})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);

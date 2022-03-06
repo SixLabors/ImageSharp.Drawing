@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
@@ -78,6 +79,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
+        public bool Equals(IBrush other)
+        {
+            if (other is PathGradientBrush sb)
+            {
+                return Enumerable.SequenceEqual(sb.edges, this.edges);
+            }
+
+            return false;
+        }
+
+        /// <inheritdoc />
         public BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
@@ -127,7 +139,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// An edge of the polygon that represents the gradient area.
         /// </summary>
-        private class Edge
+        private class Edge : IEquatable<Edge>
         {
             private readonly float length;
 
@@ -163,6 +175,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             }
 
             public Vector4 ColorAt(PointF point) => this.ColorAt(DistanceBetween(point, this.Start));
+
+            public bool Equals(Edge other)
+                => other.Start == this.Start &&
+                    other.End == this.End &&
+                    other.StartColor.Equals(this.StartColor) &&
+                    other.EndColor.Equals(this.EndColor);
         }
 
         /// <summary>

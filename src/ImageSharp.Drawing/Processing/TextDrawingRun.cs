@@ -34,6 +34,12 @@ namespace SixLabors.Fonts
 
         public IPen Pen { get; set; }
 
+        public IPen StrikeoutPen { get; set; }
+
+        public IPen UnderlinePen { get; set; }
+
+        public IPen OverlinePen { get; set; }
+
         public TextDrawingRun()
         {
         }

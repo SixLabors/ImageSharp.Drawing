@@ -61,7 +61,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = Color.White;
-            Pen pen = Pens.Solid(color, 5f);
+            SolidPen pen = Pens.Solid(color, 5f);
 
             provider.RunValidatingProcessorTest(
                 x =>

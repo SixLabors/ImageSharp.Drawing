@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
@@ -56,6 +57,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.SourceColor.ToPixel<TPixel>(),
                 this.TargetColor.ToPixel<TPixel>(),
                 this.Threshold);
+
+        /// <inheritdoc />
+        public bool Equals(IBrush other)
+        {
+            if (other is RecolorBrush sb)
+            {
+                return sb.SourceColor.Equals(this.SourceColor) &&
+                    sb.TargetColor.Equals(this.TargetColor) &&
+                    sb.Threshold == this.Threshold;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// The recolor brush applicator.

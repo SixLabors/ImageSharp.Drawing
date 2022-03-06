@@ -56,7 +56,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 testDetails += "_Dashed";
             }
 
-            Pen pen = dashed ? Pens.Dash(color, 5f) : Pens.Solid(color, 5f);
+            IPen pen = dashed ? Pens.Dash(color, 5f) : Pens.Solid(color, 5f);
 
             provider.RunValidatingProcessorTest(
                 x => x.Draw(pen, clipped),

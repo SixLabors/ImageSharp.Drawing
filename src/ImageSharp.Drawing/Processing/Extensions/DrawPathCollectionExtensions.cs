@@ -58,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IBrush brush,
             float thickness,
             IPathCollection paths) =>
-            source.Draw(options, new Pen(brush, thickness), paths);
+            source.Draw(options, new SolidPen(brush, thickness), paths);
 
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
@@ -73,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             IBrush brush,
             float thickness,
             IPathCollection paths) =>
-            source.Draw(new Pen(brush, thickness), paths);
+            source.Draw(new SolidPen(brush, thickness), paths);
 
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
