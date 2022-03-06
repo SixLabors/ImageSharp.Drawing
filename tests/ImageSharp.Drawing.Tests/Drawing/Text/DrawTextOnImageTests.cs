@@ -536,7 +536,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         Start = 19,
                         End = 23,
                         TextDecorations = TextDecoration.Underline,
-                        UnderlinePen = Pens.Solid(Color.Fuchsia),
+                        UnderlinePen = Pens.Dot(Color.Fuchsia, 2),
                         Brush = Brushes.Solid(Color.Blue),
                     },
 
