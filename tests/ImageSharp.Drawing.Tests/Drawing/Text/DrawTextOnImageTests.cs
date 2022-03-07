@@ -517,7 +517,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                     {
                         Start = 4,
                         End = 10,
-                        TextDecorations = TextDecoration.Strikeout,
+                        TextDecorations = TextDecorations.Strikeout,
                         StrikeoutPen = Pens.Solid(Color.Red),
                         Brush = Brushes.Solid(Color.Red),
                     },
@@ -527,7 +527,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         Start = 10,
                         End = 13,
                         Font = font2,
-                        TextDecorations = TextDecoration.Strikeout,
+                        TextDecorations = TextDecorations.Strikeout,
                         StrikeoutPen = Pens.Solid(Color.White),
                     },
 
@@ -535,7 +535,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                     {
                         Start = 19,
                         End = 23,
-                        TextDecorations = TextDecoration.Underline,
+                        TextDecorations = TextDecorations.Underline,
                         UnderlinePen = Pens.Dot(Color.Fuchsia, 2),
                         Brush = Brushes.Solid(Color.Blue),
                     },
@@ -544,7 +544,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                     {
                         Start = 23,
                         End = 25,
-                        TextDecorations = TextDecoration.Underline,
+                        TextDecorations = TextDecorations.Underline,
                         UnderlinePen = Pens.Solid(Color.White),
                     }
                 }
@@ -574,7 +574,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 WrappingLength = 400,
                 TextRuns = new[]
                 {
-                    new TextDrawingRun { Start = 0, End = CodePoint.GetCodePointCount(text.AsSpan()), TextDecorations = TextDecoration.Underline }
+                    new TextDrawingRun { Start = 0, End = CodePoint.GetCodePointCount(text.AsSpan()), TextDecorations = TextDecorations.Underline }
                 }
             };
             provider.RunValidatingProcessorTest(

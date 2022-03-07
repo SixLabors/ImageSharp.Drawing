@@ -211,42 +211,42 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public void BeginFigure() => this.builder.StartFigure();
 
-            public TextDecoration EnabledDecorations()
+            public TextDecorations EnabledDecorations()
             {
-                var decorations = this.currentTextRun.TextDecorations;
+                TextDecorations decorations = this.currentTextRun.TextDecorations;
                 if (this.currentTextRun is TextDrawingRun drawingRun)
                 {
                     if (drawingRun.UnderlinePen != null)
                     {
-                        decorations |= TextDecoration.Underline;
+                        decorations |= TextDecorations.Underline;
                     }
 
                     if (drawingRun.StrikeoutPen != null)
                     {
-                        decorations |= TextDecoration.Strikeout;
+                        decorations |= TextDecorations.Strikeout;
                     }
 
                     if (drawingRun.OverlinePen != null)
                     {
-                        decorations |= TextDecoration.Overline;
+                        decorations |= TextDecorations.Overline;
                     }
                 }
 
                 return decorations;
             }
 
-            public void SetDecoration(TextDecoration textDecoration, Vector2 start, Vector2 end, float thickness)
+            public void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
             {
-                ref var targetDecoration = ref this.currentStrikout;
-                if (textDecoration == TextDecoration.Strikeout)
+                ref TextDecorationDetails? targetDecoration = ref this.currentStrikout;
+                if (textDecorations == TextDecorations.Strikeout)
                 {
                     targetDecoration = ref this.currentStrikout;
                 }
-                else if (textDecoration == TextDecoration.Underline)
+                else if (textDecorations == TextDecorations.Underline)
                 {
                     targetDecoration = ref this.currentUnderline;
                 }
-                else if (textDecoration == TextDecoration.Overline)
+                else if (textDecorations == TextDecorations.Overline)
                 {
                     targetDecoration = ref this.currentOverline;
                 }
@@ -258,20 +258,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 IPen pen = null;
                 if (this.currentTextRun is TextDrawingRun drawingRun)
                 {
-                    if (textDecoration == TextDecoration.Strikeout)
+                    if (textDecorations == TextDecorations.Strikeout)
                     {
                         pen = drawingRun.StrikeoutPen ?? pen;
                     }
-                    else if (textDecoration == TextDecoration.Underline)
+                    else if (textDecorations == TextDecorations.Underline)
                     {
                         pen = drawingRun.UnderlinePen ?? pen;
                     }
-                    else if (textDecoration == TextDecoration.Overline)
+                    else if (textDecorations == TextDecorations.Overline)
                     {
                         pen = drawingRun.OverlinePen;
                     }
                 }
 
+                // TODO:Isn't this already handled in font via GetEnds?
                 //fix up the thickness/Y position so that the line render nicly
                 var thicknessOffset = new Vector2(0, thickness * .5f);
                 var tl = start - thicknessOffset;
