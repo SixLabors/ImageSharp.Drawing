@@ -218,76 +218,191 @@ namespace SixLabors.ImageSharp.Drawing
             => this.AddSegment(new CubicBezierLineSegment(startPoint, controlPoint1, controlPoint2, endPoint));
 
         /// <summary>
-        /// Adds an elliptical arc to the current  figure
+        /// <para>
+        /// Adds an arc to the current figure. The arc curves from the last point to <paramref name="point"/>,
+        /// choosing one of four possible routes: clockwise or counterclockwise, and smaller or larger.
+        /// </para>
+        /// <para>
+        /// Th arc sweep is always less than 360 degrees. The method appends a line
+        /// to the last point if either radii are zero, or if last point is equal to <paramref name="point"/>.
+        /// In addition the method scales the radii to fit last point and <paramref name="point"/> if both
+        /// are greater than zero but too small to describe an arc.
+        /// </para>
+        /// </summary>
+        /// <param name="radiusX">X radius of the ellipsis.</param>
+        /// <param name="radiusY">Y radius of the ellipsis.</param>
+        /// <param name="rotation">The rotation along the X-axis; measured in degrees clockwise.</param>
+        /// <param name="largeArc">Whether to use a larger arc.</param>
+        /// <param name="sweep">Whether to move the arc clockwise or counter-clockwise.</param>
+        /// <param name="point">The end point.</param>
+        /// <returns>The <see cref="PathBuilder"/>.</returns>
+        public PathBuilder ArcTo(float radiusX, float radiusY, float rotation, bool largeArc, bool sweep, Vector2 point)
+        {
+            // If rx = 0 or ry = 0 then this arc is treated as a straight line segment
+            // joining the endpoints.
+            // http://www.w3.org/TR/SVG/implnote.html#ArcOutOfRangeParameters
+            if (radiusX == 0 || radiusY == 0)
+            {
+                return this.LineTo(point);
+            }
+
+            // If the current point and target point for the arc are identical, it should be treated as a
+            // zero length path. This ensures continuity in animations.
+            Vector2 start = this.currentPoint;
+            if (start == point)
+            {
+                return this.LineTo(point);
+            }
+
+            radiusX = MathF.Abs(radiusX);
+            radiusY = MathF.Abs(radiusY);
+
+            // Check if the radii are big enough to draw the arc, scale radii if not.
+            // http://www.w3.org/TR/SVG/implnote.html#ArcCorrectionOutOfRangeRadii
+            Vector2 midPointDistance = (start - point) * .5F;
+            Matrix3x2 matrix = Matrix3x2Extensions.CreateRotationDegrees(-rotation);
+            var xy = Vector2.Transform(midPointDistance, matrix);
+
+            float squareRx = radiusX * radiusX;
+            float squareRy = radiusY * radiusY;
+            float squareX = xy.X * xy.X;
+            float squareY = xy.Y * xy.Y;
+
+            float radiiScale = (squareX / squareRx) + (squareY / squareRy);
+            if (radiiScale > 1)
+            {
+                radiusX = MathF.Sqrt(radiiScale) * radiusX;
+                radiusY = MathF.Sqrt(radiiScale) * radiusY;
+            }
+
+            // Compute center
+            matrix.M11 = 1 / radiusX;
+            matrix.M22 = 1 / radiusY;
+            matrix = Matrix3x2Extensions.CreateRotationDegrees(-rotation) * matrix;
+
+            var unit1 = Vector2.Transform(start, matrix);
+            var unit2 = Vector2.Transform(point, matrix);
+            Vector2 delta = unit2 - unit1;
+
+            float dot = Vector2.Dot(delta, delta);
+            float scaleFactorSquared = MathF.Max((1 / dot) - .25F, 0F);
+            float scaleFactor = MathF.Sqrt(scaleFactorSquared);
+
+            if (largeArc == sweep)
+            {
+                scaleFactor = -scaleFactor;
+            }
+
+            delta *= scaleFactor;
+            Vector2 scaledCenter = unit1 + unit2;
+            scaledCenter *= .5F;
+            scaledCenter += new Vector2(-delta.Y, delta.X);
+            unit1 -= scaledCenter;
+            unit2 -= scaledCenter;
+
+            // Compute θ and Δθ
+            float theta1 = MathF.Atan2(unit1.Y, unit1.X);
+            float theta2 = MathF.Atan2(unit2.Y, unit2.X);
+            float sweepAngle = GeometryUtilities.RadianToDegree(theta2 - theta1);
+
+            // Fix the range to −360° < Δθ < 360°
+            if (!sweep && sweepAngle > 0)
+            {
+                sweepAngle -= 360;
+            }
+
+            if (sweep && sweepAngle < 0)
+            {
+                sweepAngle += 360;
+            }
+
+            // Skia notes an issue with very small sweep angles.
+            // Epsilon is based upon their fix.
+            if (MathF.Abs(sweepAngle) < 0.001F)
+            {
+                return this.LineTo(point);
+            }
+
+            var center = Vector2.Lerp(start, point, .5F);
+
+            // TODO: This is wrong and is the source of our problems when we use uneven radii.
+            // The rotation parameter does not appear to serve as the correct option either.
+            // Maybe passing both in the correct form is required?
+            float startAngle = GeometryUtilities.RadianToDegree(MathF.Atan2(start.Y - point.Y, start.X - point.X));
+            return this.AddEllipticalArc(center, radiusX, radiusY, 0, startAngle, sweepAngle);
+        }
+
+        /// <summary>
+        /// Adds an elliptical arc to the current figure.
         /// </summary>
         /// <param name="rect"> A <see cref="RectangleF"/> that represents the rectangular bounds of the ellipse from which the arc is taken.</param>
         /// <param name="rotation">The rotation of (<paramref name="rect"/>, measured in degrees clockwise.</param>
-        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="startAngle">The start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(RectangleF rect, float rotation, float startAngle, float sweepAngle)
             => this.AddEllipticalArc((rect.Right + rect.Left) / 2, (rect.Bottom + rect.Top) / 2, rect.Width / 2, rect.Height / 2, rotation, startAngle, sweepAngle);
 
         /// <summary>
-        /// Adds an elliptical arc to the current  figure
+        /// Adds an elliptical arc to the current figure.
         /// </summary>
         /// <param name="rect"> A <see cref="Rectangle"/> that represents the rectangular bounds of the ellipse from which the arc is taken.</param>
         /// <param name="rotation">The rotation of (<paramref name="rect"/>, measured in degrees clockwise.</param>
-        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="startAngle">The start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(Rectangle rect, int rotation, int startAngle, int sweepAngle)
             => this.AddEllipticalArc((float)(rect.Right + rect.Left) / 2, (float)(rect.Bottom + rect.Top) / 2, (float)rect.Width / 2, (float)rect.Height / 2, rotation, startAngle, sweepAngle);
 
         /// <summary>
-        /// Adds an elliptical arc to the current  figure
+        /// Adds an elliptical arc to the current figure.
         /// </summary>
         /// <param name="center"> The center <see cref="PointF"/> of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
         /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
-        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="startAngle">The start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(PointF center, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
             => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
 
         /// <summary>
-        /// Adds an elliptical arc to the current  figure
+        /// Adds an elliptical arc to the current figure.
         /// </summary>
         /// <param name="center"> The center <see cref="Point"/> of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
         /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
-        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="startAngle">The start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(Point center, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
             => this.AddEllipticalArc(center.X, center.Y, radiusX, radiusY, rotation, startAngle, sweepAngle);
 
         /// <summary>
-        /// Adds an elliptical arc to the current  figure
+        /// Adds an elliptical arc to the current figure.
         /// </summary>
         /// <param name="x"> The x-coordinate of the center point of the ellips from which the arc is taken.</param>
         /// <param name="y"> The y-coordinate of the center point of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
         /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
-        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="startAngle">The start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(int x, int y, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
             => this.AddSegment(new EllipticalArcLineSegment(x, y, radiusX, radiusY, rotation, startAngle, sweepAngle, Matrix3x2.Identity));
 
         /// <summary>
-        /// Adds an elliptical arc to the current  figure
+        /// Adds an elliptical arc to the current figure.
         /// </summary>
         /// <param name="x"> The x-coordinate of the center point of the ellips from which the arc is taken.</param>
         /// <param name="y"> The y-coordinate of the center point of the ellips from which the arc is taken.</param>
         /// <param name="radiusX">X radius of the ellipsis.</param>
         /// <param name="radiusY">Y radius of the ellipsis.</param>
         /// <param name="rotation">The rotation of (<paramref name="radiusX"/> to the X-axis and (<paramref name="radiusY"/> to the Y-axis, measured in degrees clockwise.</param>
-        /// <param name="startAngle">The Start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
+        /// <param name="startAngle">The start angle of the ellipsis, measured in degrees anticlockwise from the Y-axis.</param>
         /// <param name="sweepAngle"> The angle between (<paramref name="startAngle"/> and the end of the arc. </param>
         /// <returns>The <see cref="PathBuilder"/></returns>
         public PathBuilder AddEllipticalArc(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)

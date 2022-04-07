@@ -95,5 +95,29 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
         }
+
+        [Theory]
+        [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32)]
+        public void DrawPathArcTo<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            var pb = new PathBuilder();
+
+            // This fails
+            pb.MoveTo(new Vector2(50, 50));
+            pb.ArcTo(20, 50, -72, false, true, new Vector2(200, 200));
+            IPath path = pb.Build();
+
+            // This works.
+            //pb.MoveTo(new Vector2(50, 50));
+            //pb.ArcTo(20, 20, -72, true, true, new Vector2(200, 200));
+            //IPath path = pb.Build();
+
+            // Filling for the moment for visibility.
+            provider.VerifyOperation(
+                image => image.Mutate(x => x.Fill(Color.Black, path)),
+                appendSourceFileOrDescription: false,
+                appendPixelTypeToFileName: false);
+        }
     }
 }
