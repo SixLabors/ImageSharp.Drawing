@@ -101,21 +101,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void DrawPathArcTo<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
         {
+            // TODO:
+            // There's something wrong with EllipticalArcLineSegment.
             var pb = new PathBuilder();
 
-            // This fails
+            // This works using code derived from SVGSharpie
             pb.MoveTo(new Vector2(50, 50));
             pb.ArcTo(20, 50, -72, false, true, new Vector2(200, 200));
             IPath path = pb.Build();
 
-            // This works.
-            //pb.MoveTo(new Vector2(50, 50));
-            //pb.ArcTo(20, 20, -72, true, true, new Vector2(200, 200));
-            //IPath path = pb.Build();
+            // This fails using the same derived properties.
+            pb = new PathBuilder();
+            pb.AddEllipticalArc(new(125, 125), 61.218582F, 153.046448F, -72, -38.1334763F, 180);
+            IPath path2 = pb.Build();
 
             // Filling for the moment for visibility.
             provider.VerifyOperation(
-                image => image.Mutate(x => x.Fill(Color.Black, path)),
+                image => image.Mutate(x => x.Fill(Color.Black, path).Fill(Color.Red.WithAlpha(.5F), path2)),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
         }

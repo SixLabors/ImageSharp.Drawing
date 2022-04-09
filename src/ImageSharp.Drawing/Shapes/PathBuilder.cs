@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -278,7 +279,7 @@ namespace SixLabors.ImageSharp.Drawing
             // Compute center
             matrix.M11 = 1 / radiusX;
             matrix.M22 = 1 / radiusY;
-            matrix = Matrix3x2Extensions.CreateRotationDegrees(-rotation) * matrix;
+            matrix *= Matrix3x2Extensions.CreateRotationDegrees(-rotation);
 
             var unit1 = Vector2.Transform(start, matrix);
             var unit2 = Vector2.Transform(point, matrix);
@@ -294,15 +295,19 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             delta *= scaleFactor;
+            var deltaXY = new Vector2(-delta.Y, delta.X);
             Vector2 scaledCenter = unit1 + unit2;
             scaledCenter *= .5F;
-            scaledCenter += new Vector2(-delta.Y, delta.X);
+            scaledCenter += deltaXY;
             unit1 -= scaledCenter;
             unit2 -= scaledCenter;
 
             // Compute θ and Δθ
             float theta1 = MathF.Atan2(unit1.Y, unit1.X);
             float theta2 = MathF.Atan2(unit2.Y, unit2.X);
+
+            // startAngle copied from https://github.com/UkooLabs/SVGSharpie/blob/5f7be977d487d416c4cf62578d6342b799a5c507/src/UkooLabs.SVGSharpie.ImageSharp/Shapes/ArcLineSegment.cs#L160
+            float startAngle = -GeometryUtilities.RadianToDegree(VectorAngle(Vector2.UnitX, (xy - deltaXY) / new Vector2(radiusX, radiusY)));
             float sweepAngle = GeometryUtilities.RadianToDegree(theta2 - theta1);
 
             // Fix the range to −360° < Δθ < 360°
@@ -324,13 +329,94 @@ namespace SixLabors.ImageSharp.Drawing
             }
 
             var center = Vector2.Lerp(start, point, .5F);
+            foreach (ILineSegment item in EllipticArcToBezierCurveInner(start, center, new(radiusX, radiusY), rotation, startAngle, sweepAngle))
+            {
+                this.AddSegment(item);
+            }
 
-            // TODO: This is wrong and is the source of our problems when we use uneven radii.
-            // The rotation parameter does not appear to serve as the correct option either.
-            // Maybe passing both in the correct form is required?
-            float startAngle = GeometryUtilities.RadianToDegree(MathF.Atan2(start.Y - point.Y, start.X - point.X));
-            return this.AddEllipticalArc(center, radiusX, radiusY, 0, startAngle, sweepAngle);
+            return this;
+
+            // TODO: Fix this.
+            // return this.AddEllipticalArc(center, radiusX, radiusY, rotation, startAngle, sweepAngle);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float Clamp(float value, float min, float max)
+        {
+            if (value > max)
+            {
+                return max;
+            }
+
+            if (value < min)
+            {
+                return min;
+            }
+
+            return value;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float VectorAngle(Vector2 u, Vector2 v)
+        {
+            float dot = Vector2.Dot(u, v);
+            float length = u.Length() * v.Length();
+            float angle = (float)Math.Acos(Clamp(dot / length, -1, 1)); // floating point precision, slightly over values appear
+            if (((u.X * v.Y) - (u.X * v.Y)) < 0)
+            {
+                angle = -angle;
+            }
+
+            return angle;
+        }
+
+        private static IEnumerable<ILineSegment> EllipticArcToBezierCurveInner(Vector2 from, Vector2 center, Vector2 radius, float xAngle, float startAngle, float deltaAngle)
+        {
+            xAngle = GeometryUtilities.DegreeToRadian(xAngle);
+            startAngle = GeometryUtilities.DegreeToRadian(startAngle);
+            deltaAngle = GeometryUtilities.DegreeToRadian(deltaAngle);
+
+            float s = startAngle;
+            float e = s + deltaAngle;
+            bool neg = e < s;
+            float sign = neg ? -1 : 1;
+            float remain = Math.Abs(e - s);
+
+            Vector2 prev = EllipticArcPoint(center, radius, xAngle, s);
+
+            while (remain > 1e-05f)
+            {
+                float step = (float)Math.Min(remain, Math.PI / 4);
+                float signStep = step * sign;
+
+                Vector2 p1 = prev;
+                Vector2 p2 = EllipticArcPoint(center, radius, xAngle, s + signStep);
+
+                float alphaT = (float)Math.Tan(signStep / 2);
+                float alpha = (float)(Math.Sin(signStep) * (Math.Sqrt(4 + (3 * alphaT * alphaT)) - 1) / 3);
+                Vector2 q1 = p1 + (alpha * EllipticArcDerivative(radius, xAngle, s));
+                Vector2 q2 = p2 - (alpha * EllipticArcDerivative(radius, xAngle, s + signStep));
+
+                yield return new CubicBezierLineSegment(from, q1, q2, p2);
+                from = p2;
+
+                s += signStep;
+                remain -= step;
+                prev = p2;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector2 EllipticArcDerivative(Vector2 r, float xAngle, float t)
+            => new(
+                (-r.X * MathF.Cos(xAngle) * MathF.Sin(t)) - (r.Y * MathF.Sin(xAngle) * MathF.Cos(t)),
+                (-r.X * MathF.Sin(xAngle) * MathF.Sin(t)) + (r.Y * MathF.Cos(xAngle) * MathF.Cos(t)));
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Vector2 EllipticArcPoint(Vector2 c, Vector2 r, float xAngle, float t)
+            => new(
+                c.X + (r.X * MathF.Cos(xAngle) * MathF.Cos(t)) - (r.Y * MathF.Sin(xAngle) * MathF.Sin(t)),
+                c.Y + (r.X * MathF.Sin(xAngle) * MathF.Cos(t)) + (r.Y * MathF.Cos(xAngle) * MathF.Sin(t)));
 
         /// <summary>
         /// Adds an elliptical arc to the current figure.
