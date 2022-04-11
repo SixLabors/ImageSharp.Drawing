@@ -2,8 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Threading;
 using SixLabors.ImageSharp.Diagnostics;
 using Xunit;
@@ -12,53 +10,68 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 {
     public static class MemoryAllocatorValidator
     {
-        private static List<string> traces = new List<string>();
+        private static readonly AsyncLocal<TestMemoryDiagnostics> LocalInstance = new();
 
-        public static void MonitorStackTraces() => MemoryDiagnostics.UndisposedAllocation += MemoryDiagnostics_UndisposedAllocation;
+        public static bool MonitoringAllocations => LocalInstance.Value != null;
 
-        public static List<string> GetStackTraces()
+        static MemoryAllocatorValidator()
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            return traces;
+            MemoryDiagnostics.MemoryAllocated += MemoryDiagnostics_MemoryAllocated;
+            MemoryDiagnostics.MemoryReleased += MemoryDiagnostics_MemoryReleased;
         }
 
-        private static void MemoryDiagnostics_UndisposedAllocation(string allocationStackTrace)
+        private static void MemoryDiagnostics_MemoryReleased()
         {
-            lock (traces)
+            TestMemoryDiagnostics backing = LocalInstance.Value;
+            if (backing != null)
             {
-                traces.Add(allocationStackTrace);
+                backing.TotalRemainingAllocated--;
             }
         }
 
-        public static TestMemoryAllocatorDisposable MonitorAllocations()
+        private static void MemoryDiagnostics_MemoryAllocated()
         {
-            MemoryDiagnostics.Current = new();
-            return new TestMemoryAllocatorDisposable();
-        }
-
-        public static void StopMonitoringAllocations() => MemoryDiagnostics.Current = null;
-
-        public static void ValidateAllocation(int max = 0)
-        {
-            var count = MemoryDiagnostics.TotalUndisposedAllocationCount;
-
-            var pass = count <= max;
-            Assert.True(pass, $"Expected a max of {max} undisposed buffers but found {count}");
-
-            if (count > 0)
+            TestMemoryDiagnostics backing = LocalInstance.Value;
+            if (backing != null)
             {
-                Debug.WriteLine("We should have Zero undisposed memory allocations.");
+                backing.TotalAllocated++;
+                backing.TotalRemainingAllocated++;
             }
         }
 
-        public struct TestMemoryAllocatorDisposable : IDisposable
+        public static TestMemoryDiagnostics MonitorAllocations()
         {
+            var diag = new TestMemoryDiagnostics();
+            LocalInstance.Value = diag;
+            return diag;
+        }
+
+        public static void StopMonitoringAllocations() => LocalInstance.Value = null;
+
+        public static void ValidateAllocations(int expectedAllocationCount = 0)
+            => LocalInstance.Value?.Validate(expectedAllocationCount);
+
+        public class TestMemoryDiagnostics : IDisposable
+        {
+            public int TotalAllocated { get; set; }
+
+            public int TotalRemainingAllocated { get; set; }
+
+            public void Validate(int expectedAllocationCount)
+            {
+                var count = this.TotalRemainingAllocated;
+                var pass = expectedAllocationCount == count;
+                Assert.True(pass, $"Expected a {expectedAllocationCount} undisposed buffers but found {count}");
+            }
+
             public void Dispose()
-                => StopMonitoringAllocations();
-
-            public void Validate(int maxAllocations = 0)
-                => ValidateAllocation(maxAllocations);
+            {
+                this.Validate(0);
+                if (LocalInstance.Value == this)
+                {
+                    StopMonitoringAllocations();
+                }
+            }
         }
     }
 }
