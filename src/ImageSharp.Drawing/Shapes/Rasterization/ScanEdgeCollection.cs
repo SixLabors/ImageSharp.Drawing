@@ -40,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             MemoryAllocator allocator,
             int subsampling)
         {
-            TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
+            using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
             return Create(multipolygon, allocator, subsampling);
         }
     }

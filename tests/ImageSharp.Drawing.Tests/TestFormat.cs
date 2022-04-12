@@ -199,7 +199,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             public int HeaderSize => this.testFormat.HeaderSize;
 
-            public Image<TPixel> Decode<TPixel>(Configuration config, Stream stream)
+            public Image<TPixel> Decode<TPixel>(Configuration config, Stream stream, CancellationToken cancellationToken)
                 where TPixel : unmanaged, IPixel<TPixel>
             {
                 var ms = new MemoryStream();
@@ -218,7 +218,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             public bool IsSupportedFileFormat(Span<byte> header) => this.testFormat.IsSupportedFileFormat(header);
 
-            public Image Decode(Configuration configuration, Stream stream) => this.Decode<TestPixelForAgnosticDecode>(configuration, stream);
+            public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<TestPixelForAgnosticDecode>(configuration, stream, cancellationToken);
 
             public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
                 where TPixel : unmanaged, IPixel<TPixel>

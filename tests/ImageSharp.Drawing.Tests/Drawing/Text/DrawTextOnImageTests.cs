@@ -16,6 +16,7 @@ using Xunit.Abstractions;
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 {
     [GroupOutput("Drawing/Text")]
+    [ValidateDisposedMemoryAllocations]
     public class DrawTextOnImageTests
     {
         private const string AB = "AB\nAB";
