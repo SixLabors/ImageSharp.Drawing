@@ -91,7 +91,7 @@ namespace SixLabors.ImageSharp.Drawing
             return new CubicBezierLineSegment(transformedPoints);
         }
 
-        /// <inheritdoc/> the matrix applied to it.</returns>
+        /// <inheritdoc/>
         ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
         private static PointF[] GetDrawingPoints(PointF[] controlPoints)

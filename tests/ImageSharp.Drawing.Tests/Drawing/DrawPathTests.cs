@@ -38,17 +38,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 new Vector2(60, 10),
                 new Vector2(10, 400));
 
-            // OLD
-            // var ellipticArcSegment1 = new EllipticalArcLineSegment(80, 425, (float)Math.Sqrt(5525), 40, GeometryUtilities.RadianToDegree((float)Math.Atan2(25, 70)), -90, -180, Matrix3x2.Identity);
-            // var ellipticArcSegment2 = new EllipticalArcLineSegment(150, 520, 140, 70, 0, 180, 360, Matrix3x2.Identity);
-
-            // NEW - END PARAMS - WORKING!!
             var ellipticArcSegment1 = new ArcLineSegment(new Vector2(10, 400), new Vector2(150, 450), new SizeF((float)Math.Sqrt(5525), 40), GeometryUtilities.RadianToDegree((float)Math.Atan2(25, 70)), true, true);
             var ellipticArcSegment2 = new ArcLineSegment(new(150, 450), new(149F, 450), new SizeF(140, 70), 0, true, true);
-
-            // NEW CENTER PARAMS
-            // var ellipticArcSegment1 = new ArcLineSegment(new Vector2(80, 425), new SizeF((float)Math.Sqrt(5525), 40), GeometryUtilities.RadianToDegree((float)Math.Atan2(25, 70)), 180, 180);
-            // var ellipticArcSegment2 = new ArcLineSegment(new Vector2(150, 520), new SizeF(140, 70), 0, 270, 360);
 
             var path = new Path(linearSegment, bezierSegment, ellipticArcSegment1, ellipticArcSegment2);
 
