@@ -420,7 +420,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 var pathBuilder = new PathBuilder();
                 pathBuilder.AddLine(new PointF(0, 0), new PointF(imageWidth, 0));
                 pathBuilder.AddLine(new PointF(imageWidth, 0), new PointF(imageWidth, imageHeight * 0.4f));
-                pathBuilder.AddBezier(new PointF(imageWidth, imageHeight * 0.4f), new PointF(imageWidth / 2, imageHeight * 0.6f), new PointF(0, imageHeight * 0.4f));
+                pathBuilder.AddQuadraticBezier(new PointF(imageWidth, imageHeight * 0.4f), new PointF(imageWidth / 2, imageHeight * 0.6f), new PointF(0, imageHeight * 0.4f));
                 pathBuilder.CloseFigure();
                 return new PathCollection(pathBuilder.Build());
             }
