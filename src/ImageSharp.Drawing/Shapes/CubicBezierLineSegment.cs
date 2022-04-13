@@ -60,29 +60,13 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Gets the control points.
         /// </summary>
-        /// <value>
-        /// The control points.
-        /// </value>
         public IReadOnlyList<PointF> ControlPoints => this.controlPoints;
 
-        /// <summary>
-        /// Gets the end point.
-        /// </summary>
-        /// <value>
-        /// The end point.
-        /// </value>
+        /// <inheritdoc/>
         public PointF EndPoint { get; }
 
-        /// <summary>
-        /// Returns the current <see cref="ILineSegment" /> a simple linear path.
-        /// </summary>
-        /// <returns>
-        /// Returns the current <see cref="ILineSegment" /> as simple linear path.
-        /// </returns>
-        public ReadOnlyMemory<PointF> Flatten()
-        {
-            return this.linePoints;
-        }
+        /// <inheritdoc/>
+        public ReadOnlyMemory<PointF> Flatten() => this.linePoints;
 
         /// <summary>
         /// Transforms the current LineSegment using specified matrix.
@@ -107,11 +91,7 @@ namespace SixLabors.ImageSharp.Drawing
             return new CubicBezierLineSegment(transformedPoints);
         }
 
-        /// <summary>
-        /// Transforms the current LineSegment using specified matrix.
-        /// </summary>
-        /// <param name="matrix">The matrix.</param>
-        /// <returns>A line segment with the matrix applied to it.</returns>
+        /// <inheritdoc/>
         ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
         private static PointF[] GetDrawingPoints(PointF[] controlPoints)
