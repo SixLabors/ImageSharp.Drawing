@@ -244,7 +244,7 @@ namespace SixLabors.ImageSharp.Drawing
                         data = FindPoint(data, out point1, relative, c);
                         data = FindPoint(data, out point2, relative, c);
                         builder.QuadraticBezierTo(point1, point2);
-                        lastc = point2;
+                        lastc = point1;
                         c = point2;
                         break;
                     case 'T':
