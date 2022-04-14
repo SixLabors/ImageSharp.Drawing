@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit;
 
@@ -25,7 +26,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White).Draw(Color.Red, 5, path),
-                new { type = exampleImageKey });
+                new { type = exampleImageKey },
+                comparer: ImageComparer.TolerantPercentage(0.002f));
         }
     }
 }
