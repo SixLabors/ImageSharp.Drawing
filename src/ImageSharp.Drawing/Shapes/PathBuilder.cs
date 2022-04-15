@@ -109,6 +109,15 @@ namespace SixLabors.ImageSharp.Drawing
             => this.AddLine(this.currentPoint, point);
 
         /// <summary>
+        /// Draws the line connecting the current the current point to the new point.
+        /// </summary>
+        /// <param name="x">The x.</param>
+        /// <param name="y">The y.</param>
+        /// <returns>The <see cref="PathBuilder"/></returns>
+        public PathBuilder LineTo(float x, float y)
+            => this.LineTo(new PointF(x, y));
+
+        /// <summary>
         /// Adds the line connecting the current point to the new point.
         /// </summary>
         /// <param name="start">The start.</param>
