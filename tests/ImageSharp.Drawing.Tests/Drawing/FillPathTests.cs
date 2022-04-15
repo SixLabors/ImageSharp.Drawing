@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             pb.MoveTo(new Vector2(80, 80))
               .ArcTo(45, 45, 0, false, false, new Vector2(125, 125))
               .LineTo(new Vector2(125, 80))
-              .LineTo(new Vector2(80, 80));
+              .CloseFigure();
 
             IPath path = pb.Build();
 
@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             pb.MoveTo(new Vector2(230, 80))
               .ArcTo(45, 45, 0, true, false, new Vector2(275, 125))
               .LineTo(new Vector2(275, 80))
-              .LineTo(new Vector2(230, 80));
+              .CloseFigure();
 
             IPath path2 = pb.Build();
 
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             pb.MoveTo(new Vector2(80, 230))
               .ArcTo(45, 45, 0, false, true, new Vector2(125, 275))
               .LineTo(new Vector2(125, 230))
-              .LineTo(new Vector2(80, 230));
+              .CloseFigure();
 
             IPath path3 = pb.Build();
 
@@ -47,7 +47,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             pb.MoveTo(new Vector2(230, 230))
               .ArcTo(45, 45, 0, true, true, new Vector2(275, 275))
               .LineTo(new Vector2(275, 230))
-              .LineTo(new Vector2(230, 230));
+              .CloseFigure();
 
             IPath path4 = pb.Build();
 

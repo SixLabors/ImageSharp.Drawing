@@ -3,10 +3,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -161,15 +159,15 @@ namespace SixLabors.ImageSharp.Drawing
                 char ch = data[0];
                 if (char.IsDigit(ch) || ch == '-' || ch == '+' || ch == '.')
                 {
-                    // are we are the end of the string or we are at the end of the path
+                    // Are we are the end of the string or we are at the end of the path?
                     if (data.Length == 0 || op == 'Z')
                     {
                         return false;
                     }
                 }
-                else if (IsSeperator(ch))
+                else if (IsSeparator(ch))
                 {
-                    data = TrimSeperator(data);
+                    data = TrimSeparator(data);
                 }
                 else
                 {
@@ -181,7 +179,7 @@ namespace SixLabors.ImageSharp.Drawing
                         relative = true;
                     }
 
-                    data = TrimSeperator(data.Slice(1));
+                    data = TrimSeparator(data.Slice(1));
                 }
 
                 switch (op)
@@ -262,16 +260,16 @@ namespace SixLabors.ImageSharp.Drawing
                         break;
                     case 'A':
                         data = FindScaler(data, out float radiiX);
-                        data = TrimSeperator(data);
+                        data = TrimSeparator(data);
                         data = FindScaler(data, out float radiiY);
-                        data = TrimSeperator(data);
+                        data = TrimSeparator(data);
                         data = FindScaler(data, out float angle);
-                        data = TrimSeperator(data);
+                        data = TrimSeparator(data);
                         data = FindScaler(data, out float largeArc);
-                        data = TrimSeperator(data);
+                        data = TrimSeparator(data);
                         data = FindScaler(data, out float sweep);
 
-                        data = FindPoint(data, out var point, relative, c);
+                        data = FindPoint(data, out PointF point, relative, c);
                         if (data.Length > 0)
                         {
                             builder.ArcTo(radiiX, radiiY, angle, largeArc == 1, sweep == 1, point);
@@ -304,10 +302,10 @@ namespace SixLabors.ImageSharp.Drawing
             value = builder.Build();
             return true;
 
-            static bool IsSeperator(char ch)
+            static bool IsSeparator(char ch)
                 => char.IsWhiteSpace(ch) || ch == ',';
 
-            static ReadOnlySpan<char> TrimSeperator(ReadOnlySpan<char> data)
+            static ReadOnlySpan<char> TrimSeparator(ReadOnlySpan<char> data)
             {
                 if (data.Length == 0)
                 {
@@ -317,7 +315,7 @@ namespace SixLabors.ImageSharp.Drawing
                 int idx = 0;
                 for (; idx < data.Length; idx++)
                 {
-                    if (!IsSeperator(data[idx]))
+                    if (!IsSeparator(data[idx]))
                     {
                         break;
                     }
@@ -326,7 +324,7 @@ namespace SixLabors.ImageSharp.Drawing
                 return data.Slice(idx);
             }
 
-            static ReadOnlySpan<char> FindPoint(ReadOnlySpan<char> str, out PointF value, bool isRelative, in PointF relative)
+            static ReadOnlySpan<char> FindPoint(ReadOnlySpan<char> str, out PointF value, bool isRelative, PointF relative)
             {
                 str = FindScaler(str, out float x);
                 str = FindScaler(str, out float y);
@@ -342,16 +340,15 @@ namespace SixLabors.ImageSharp.Drawing
 
             static ReadOnlySpan<char> FindScaler(ReadOnlySpan<char> str, out float scaler)
             {
-                str = TrimSeperator(str);
+                str = TrimSeparator(str);
                 scaler = 0;
 
-                for (var i = 0; i < str.Length; i++)
+                for (int i = 0; i < str.Length; i++)
                 {
-                    if (IsSeperator(str[i]) || i == str.Length)
+                    if (IsSeparator(str[i]) || i == str.Length)
                     {
                         scaler = ParseFloat(str.Slice(0, i));
-                        str = str.Slice(i);
-                        return str;
+                        return str.Slice(i);
                     }
                 }
 
@@ -360,8 +357,7 @@ namespace SixLabors.ImageSharp.Drawing
                     scaler = ParseFloat(str);
                 }
 
-                str = ReadOnlySpan<char>.Empty;
-                return str;
+                return ReadOnlySpan<char>.Empty;
             }
 
 #if !NETCOREAPP2_1_OR_GREATER
