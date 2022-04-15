@@ -98,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             IntersectionRule intersectionRule,
             MemoryAllocator allocator)
         {
-            var multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
+            using var multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
             var edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
             var scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, minY, maxY, subsampling, intersectionRule, allocator);
             scanner.Init();
