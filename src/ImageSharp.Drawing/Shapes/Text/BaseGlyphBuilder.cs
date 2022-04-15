@@ -13,7 +13,6 @@ namespace SixLabors.ImageSharp.Drawing.Text
     internal class BaseGlyphBuilder : IGlyphRenderer
     {
         private readonly List<IPath> paths = new();
-        private Vector2 currentPoint;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
@@ -58,10 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// <param name="thirdControlPoint">The third control point.</param>
         /// <param name="point">The point.</param>
         void IGlyphRenderer.CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
-        {
-            this.Builder.AddBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
-            this.currentPoint = point;
-        }
+            => this.Builder.CubicBezierTo(secondControlPoint, thirdControlPoint, point);
 
         /// <summary>
         /// Ends the glyph.
@@ -77,21 +73,13 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// Draws a line from the current point  to the <paramref name="point"/>.
         /// </summary>
         /// <param name="point">The point.</param>
-        void IGlyphRenderer.LineTo(Vector2 point)
-        {
-            this.Builder.AddLine(this.currentPoint, point);
-            this.currentPoint = point;
-        }
+        void IGlyphRenderer.LineTo(Vector2 point) => this.Builder.LineTo(point);
 
         /// <summary>
         /// Moves to current point to the supplied vector.
         /// </summary>
         /// <param name="point">The point.</param>
-        void IGlyphRenderer.MoveTo(Vector2 point)
-        {
-            this.Builder.StartFigure();
-            this.currentPoint = point;
-        }
+        void IGlyphRenderer.MoveTo(Vector2 point) => this.Builder.MoveTo(point);
 
         /// <summary>
         /// Draws a quadratics bezier from the current point  to the <paramref name="point"/>
@@ -99,10 +87,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// <param name="secondControlPoint">The second control point.</param>
         /// <param name="point">The point.</param>
         void IGlyphRenderer.QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
-        {
-            this.Builder.AddBezier(this.currentPoint, secondControlPoint, point);
-            this.currentPoint = point;
-        }
+            => this.Builder.QuadraticBezierTo(secondControlPoint, point);
 
         /// <summary>Called before any glyphs have been rendered.</summary>
         /// <param name="bounds">The bounds the text will be rendered at and at what size.</param>
