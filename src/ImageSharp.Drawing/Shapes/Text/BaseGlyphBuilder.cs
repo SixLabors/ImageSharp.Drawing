@@ -59,7 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// <param name="point">The point.</param>
         void IGlyphRenderer.CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
         {
-            this.Builder.AddBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
+            this.Builder.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
             this.currentPoint = point;
         }
 
@@ -100,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// <param name="point">The point.</param>
         void IGlyphRenderer.QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
         {
-            this.Builder.AddBezier(this.currentPoint, secondControlPoint, point);
+            this.Builder.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
             this.currentPoint = point;
         }
 

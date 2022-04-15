@@ -494,6 +494,60 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 appendSourceFileOrDescription: true);
         }
 
+        [Theory]
+        [WithBlankImage(100, 100, PixelTypes.Rgba32, "M10,90 Q90,90 90,45 Q90,10 50,10 Q10,10 10,40 Q10,70 45,70 Q70,70 75,50", "spiral")]
+        [WithBlankImage(350, 350, PixelTypes.Rgba32, "M275 175 A100 100 0 1 1 275 174", "circle")]
+        [WithBlankImage(120, 120, PixelTypes.Rgba32, "M50,10 L 90 90 L 10 90 L50 10", "triangle")]
+        public void CanDrawTextAlongPathHorizontal<TPixel>(TestImageProvider<TPixel> provider, string svgPath, string exampleImageKey)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            bool parsed = Path.TryParseSvgPath(svgPath, out IPath path);
+            Assert.True(parsed);
+
+            Font font = CreateFont(TestFonts.OpenSans, 13);
+            TextOptions textOptions = new(font)
+            {
+                WrappingLength = path.ComputeLength(),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+
+            const string text = "Quick brown fox jumps over the lazy dog.";
+            IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
+                new { type = exampleImageKey },
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
+
+        [Theory]
+        [WithBlankImage(350, 350, PixelTypes.Rgba32, "M225 175 A50 50 0 1 1 225 174", "circle")]
+        [WithBlankImage(250, 250, PixelTypes.Rgba32, "M100,60 L 140 140 L 60 140 L100 60", "triangle")]
+        public void CanDrawTextAlongPathVertical<TPixel>(TestImageProvider<TPixel> provider, string svgPath, string exampleImageKey)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            bool parsed = Path.TryParseSvgPath(svgPath, out IPath path);
+            Assert.True(parsed);
+
+            Font font = CreateFont(TestFonts.OpenSans, 13);
+            TextOptions textOptions = new(font)
+            {
+                WrappingLength = path.ComputeLength() / 4,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                LayoutMode = LayoutMode.VerticalLeftRight
+            };
+
+            const string text = "Quick brown fox jumps over the lazy dog.";
+            IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
+                new { type = exampleImageKey },
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
+
         private static string Repeat(string str, int times) => string.Concat(Enumerable.Repeat(str, times));
 
         private static string ToTestOutputDisplayText(string text)

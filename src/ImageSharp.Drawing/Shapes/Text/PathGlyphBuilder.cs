@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         private const float Pi = MathF.PI;
         private readonly IPathInternals path;
         private Vector2 textOffset;
-        private TextOptions textOptions;
+        private readonly TextOptions textOptions;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="PathGlyphBuilder"/> class.
@@ -72,9 +72,9 @@ namespace SixLabors.ImageSharp.Drawing.Text
             SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + halfWidth);
 
             // Now offset our target point since we're aligning the bottom-left location of our glyph against the path.
-            // TODO: This is good and accurate when we are vertically aligned to the path however the distance between
+            // This is good and accurate when we are vertically aligned to the path however the distance between
             // characters in multiline text scales with the angle and vertical offset.
-            // It would be good to be able to fix this.
+            // This is expected and consistant with other libraries. Multiple line text should be rendered using multiple paths to avoid this behavior.
             Vector2 targetPoint = (Vector2)pathPoint.Point + new Vector2(-halfWidth, bounds.Top) - bounds.Location - this.textOffset;
 
             // Due to how matrix combining works you have to combine this in the reverse order of operation.

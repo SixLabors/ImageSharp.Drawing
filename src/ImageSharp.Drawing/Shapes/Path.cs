@@ -274,9 +274,11 @@ namespace SixLabors.ImageSharp.Drawing
                         svgPath = FindScaler(svgPath, out float largeArc);
                         svgPath = TrimSeparator(svgPath);
                         svgPath = FindScaler(svgPath, out float sweep);
-
                         svgPath = FindPoint(svgPath, out PointF point, relative, c);
-                        if (svgPath.Length > 0)
+
+                        // TODO: Skia compares the input SVG with the chars not the length.
+                        // Maybe we can do something with SpanAction<T>?
+                        // if (svgPath.Length > 0)
                         {
                             builder.ArcTo(radiiX, radiiY, angle, largeArc == 1, sweep == 1, point);
                             c = point;
