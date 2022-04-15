@@ -118,21 +118,27 @@ namespace SixLabors.ImageSharp.Drawing
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };
 
         /// <summary>
-        /// Converts an svg path into a Path
+        /// Converts an SVG path string into an <see cref="IPath"/>.
         /// </summary>
-        /// <param name="data">data</param>
-        /// <param name="value">path</param>
-        /// <returns>true if successful</returns>
-        public static bool TryParseSvgPath(string data, out IPath value)
-            => TryParseSvgPath(data.AsSpan(), out value);
+        /// <param name="svgPath">The string containing the SVG path data.</param>
+        /// <param name="value">
+        /// When this method returns, contains the logic path converted from the given SVG path string; otherwise, <see langword="null"/>.
+        /// This parameter is passed uninitialized.
+        /// </param>
+        /// <returns><see langword="true"/> if the input value can be parsed and converted; otherwise, <see langword="false"/>.</returns>
+        public static bool TryParseSvgPath(string svgPath, out IPath value)
+            => TryParseSvgPath(svgPath.AsSpan(), out value);
 
         /// <summary>
-        /// Converts an svg path into a Path
+        /// Converts an SVG path string into an <see cref="IPath"/>.
         /// </summary>
-        /// <param name="data">data</param>
-        /// <param name="value">path</param>
-        /// <returns>true if successful</returns>
-        public static bool TryParseSvgPath(ReadOnlySpan<char> data, out IPath value)
+        /// <param name="svgPath">The string containing the SVG path data.</param>
+        /// <param name="value">
+        /// When this method returns, contains the logic path converted from the given SVG path string; otherwise, <see langword="null"/>.
+        /// This parameter is passed uninitialized.
+        /// </param>
+        /// <returns><see langword="true"/> if the input value can be parsed and converted; otherwise, <see langword="false"/>.</returns>
+        public static bool TryParseSvgPath(ReadOnlySpan<char> svgPath, out IPath value)
         {
             value = null;
 
@@ -150,24 +156,24 @@ namespace SixLabors.ImageSharp.Drawing
             bool relative = false;
             while (true)
             {
-                data = data.TrimStart();
-                if (data.Length == 0)
+                svgPath = svgPath.TrimStart();
+                if (svgPath.Length == 0)
                 {
                     break;
                 }
 
-                char ch = data[0];
+                char ch = svgPath[0];
                 if (char.IsDigit(ch) || ch == '-' || ch == '+' || ch == '.')
                 {
                     // Are we are the end of the string or we are at the end of the path?
-                    if (data.Length == 0 || op == 'Z')
+                    if (svgPath.Length == 0 || op == 'Z')
                     {
                         return false;
                     }
                 }
                 else if (IsSeparator(ch))
                 {
-                    data = TrimSeparator(data);
+                    svgPath = TrimSeparator(svgPath);
                 }
                 else
                 {
@@ -179,25 +185,25 @@ namespace SixLabors.ImageSharp.Drawing
                         relative = true;
                     }
 
-                    data = TrimSeparator(data.Slice(1));
+                    svgPath = TrimSeparator(svgPath.Slice(1));
                 }
 
                 switch (op)
                 {
                     case 'M':
-                        data = FindPoint(data, out point1, relative, c);
+                        svgPath = FindPoint(svgPath, out point1, relative, c);
                         builder.MoveTo(point1);
                         previousOp = '\0';
                         op = 'L';
                         c = point1;
                         break;
                     case 'L':
-                        data = FindPoint(data, out point1, relative, c);
+                        svgPath = FindPoint(svgPath, out point1, relative, c);
                         builder.LineTo(point1);
                         c = point1;
                         break;
                     case 'H':
-                        data = FindScaler(data, out float x);
+                        svgPath = FindScaler(svgPath, out float x);
                         if (relative)
                         {
                             x += c.X;
@@ -207,7 +213,7 @@ namespace SixLabors.ImageSharp.Drawing
                         c.X = x;
                         break;
                     case 'V':
-                        data = FindScaler(data, out float y);
+                        svgPath = FindScaler(svgPath, out float y);
                         if (relative)
                         {
                             y += c.Y;
@@ -217,16 +223,16 @@ namespace SixLabors.ImageSharp.Drawing
                         c.Y = y;
                         break;
                     case 'C':
-                        data = FindPoint(data, out point1, relative, c);
-                        data = FindPoint(data, out point2, relative, c);
-                        data = FindPoint(data, out point3, relative, c);
+                        svgPath = FindPoint(svgPath, out point1, relative, c);
+                        svgPath = FindPoint(svgPath, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, out point3, relative, c);
                         builder.CubicBezierTo(point1, point2, point3);
                         lastc = point2;
                         c = point3;
                         break;
                     case 'S':
-                        data = FindPoint(data, out point2, relative, c);
-                        data = FindPoint(data, out point3, relative, c);
+                        svgPath = FindPoint(svgPath, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, out point3, relative, c);
                         point1 = c;
                         if (previousOp is 'C' or 'S')
                         {
@@ -239,14 +245,14 @@ namespace SixLabors.ImageSharp.Drawing
                         c = point3;
                         break;
                     case 'Q': // Quadratic Bezier Curve
-                        data = FindPoint(data, out point1, relative, c);
-                        data = FindPoint(data, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, out point1, relative, c);
+                        svgPath = FindPoint(svgPath, out point2, relative, c);
                         builder.QuadraticBezierTo(point1, point2);
                         lastc = point1;
                         c = point2;
                         break;
                     case 'T':
-                        data = FindPoint(data, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, out point2, relative, c);
                         point1 = c;
                         if (previousOp is 'Q' or 'T')
                         {
@@ -259,18 +265,18 @@ namespace SixLabors.ImageSharp.Drawing
                         c = point2;
                         break;
                     case 'A':
-                        data = FindScaler(data, out float radiiX);
-                        data = TrimSeparator(data);
-                        data = FindScaler(data, out float radiiY);
-                        data = TrimSeparator(data);
-                        data = FindScaler(data, out float angle);
-                        data = TrimSeparator(data);
-                        data = FindScaler(data, out float largeArc);
-                        data = TrimSeparator(data);
-                        data = FindScaler(data, out float sweep);
+                        svgPath = FindScaler(svgPath, out float radiiX);
+                        svgPath = TrimSeparator(svgPath);
+                        svgPath = FindScaler(svgPath, out float radiiY);
+                        svgPath = TrimSeparator(svgPath);
+                        svgPath = FindScaler(svgPath, out float angle);
+                        svgPath = TrimSeparator(svgPath);
+                        svgPath = FindScaler(svgPath, out float largeArc);
+                        svgPath = TrimSeparator(svgPath);
+                        svgPath = FindScaler(svgPath, out float sweep);
 
-                        data = FindPoint(data, out PointF point, relative, c);
-                        if (data.Length > 0)
+                        svgPath = FindPoint(svgPath, out PointF point, relative, c);
+                        if (svgPath.Length > 0)
                         {
                             builder.ArcTo(radiiX, radiiY, angle, largeArc == 1, sweep == 1, point);
                             c = point;
@@ -282,8 +288,8 @@ namespace SixLabors.ImageSharp.Drawing
                         c = first;
                         break;
                     case '~':
-                        data = FindPoint(data, out point1, relative, c);
-                        data = FindPoint(data, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, out point1, relative, c);
+                        svgPath = FindPoint(svgPath, out point2, relative, c);
                         builder.MoveTo(point1);
                         builder.LineTo(point2);
                         break;
