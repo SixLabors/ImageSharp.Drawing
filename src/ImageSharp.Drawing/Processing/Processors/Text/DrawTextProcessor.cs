@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using SixLabors.Fonts;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
 
@@ -47,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         public DrawingOptions DrawingOptions { get; }
 
         /// <summary>
-        /// Gets the <see cref="Fonts.TextDrawingOptions"/> defining text-specific drawing settings.
+        /// Gets the <see cref="Processing.TextDrawingOptions"/> defining text-specific drawing settings.
         /// </summary>
         public TextDrawingOptions TextOptions { get; }
 

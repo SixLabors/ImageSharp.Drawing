@@ -152,10 +152,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             public float Thickness { get; internal set; }
         }
 
+        // TODO: Why doesn't this inherit BaseGlyphBuilder?
+        // Ideally we should look to making text drawing capable of rendering rich text along a path.
         private class CachingGlyphRenderer : IColorGlyphRenderer, IGlyphDecorationRenderer, IDisposable
         {
-
-
             // just enough accuracy to allow for 1/8 pixel differences which
             // later are accumulated while rendering, but do not grow into full pixel offsets
             // The value 8 is benchmarked to:
@@ -273,7 +273,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 }
 
                 // TODO:Isn't this already handled in font via GetEnds?
-                //fix up the thickness/Y position so that the line render nicly
+                // fix up the thickness/Y position so that the line render nicly
                 var thicknessOffset = new Vector2(0, thickness * .5f);
                 var tl = start - thicknessOffset;
                 var bl = start + thicknessOffset;
@@ -612,8 +612,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.builder.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
                 this.currentPoint = point;
             }
-
-
 
             private struct GlyphRenderData : IDisposable
             {
