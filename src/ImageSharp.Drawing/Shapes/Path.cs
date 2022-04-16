@@ -191,14 +191,14 @@ namespace SixLabors.ImageSharp.Drawing
                 switch (op)
                 {
                     case 'M':
-                        svgPath = FindPoint(svgPath, out point1, relative, c);
+                        svgPath = FindPoint(svgPath, relative, c, out point1);
                         builder.MoveTo(point1);
                         previousOp = '\0';
                         op = 'L';
                         c = point1;
                         break;
                     case 'L':
-                        svgPath = FindPoint(svgPath, out point1, relative, c);
+                        svgPath = FindPoint(svgPath, relative, c, out point1);
                         builder.LineTo(point1);
                         c = point1;
                         break;
@@ -223,16 +223,16 @@ namespace SixLabors.ImageSharp.Drawing
                         c.Y = y;
                         break;
                     case 'C':
-                        svgPath = FindPoint(svgPath, out point1, relative, c);
-                        svgPath = FindPoint(svgPath, out point2, relative, c);
-                        svgPath = FindPoint(svgPath, out point3, relative, c);
+                        svgPath = FindPoint(svgPath, relative, c, out point1);
+                        svgPath = FindPoint(svgPath, relative, c, out point2);
+                        svgPath = FindPoint(svgPath, relative, c, out point3);
                         builder.CubicBezierTo(point1, point2, point3);
                         lastc = point2;
                         c = point3;
                         break;
                     case 'S':
-                        svgPath = FindPoint(svgPath, out point2, relative, c);
-                        svgPath = FindPoint(svgPath, out point3, relative, c);
+                        svgPath = FindPoint(svgPath, relative, c, out point2);
+                        svgPath = FindPoint(svgPath, relative, c, out point3);
                         point1 = c;
                         if (previousOp is 'C' or 'S')
                         {
@@ -245,14 +245,14 @@ namespace SixLabors.ImageSharp.Drawing
                         c = point3;
                         break;
                     case 'Q': // Quadratic Bezier Curve
-                        svgPath = FindPoint(svgPath, out point1, relative, c);
-                        svgPath = FindPoint(svgPath, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, relative, c, out point1);
+                        svgPath = FindPoint(svgPath, relative, c, out point2);
                         builder.QuadraticBezierTo(point1, point2);
                         lastc = point1;
                         c = point2;
                         break;
                     case 'T':
-                        svgPath = FindPoint(svgPath, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, relative, c, out point2);
                         point1 = c;
                         if (previousOp is 'Q' or 'T')
                         {
@@ -265,18 +265,16 @@ namespace SixLabors.ImageSharp.Drawing
                         c = point2;
                         break;
                     case 'A':
-                        svgPath = FindScaler(svgPath, out float radiiX);
-                        svgPath = TrimSeparator(svgPath);
-                        svgPath = FindScaler(svgPath, out float radiiY);
-                        svgPath = TrimSeparator(svgPath);
-                        svgPath = FindScaler(svgPath, out float angle);
-                        svgPath = TrimSeparator(svgPath);
-                        svgPath = FindScaler(svgPath, out float largeArc);
-                        svgPath = TrimSeparator(svgPath);
-                        svgPath = FindScaler(svgPath, out float sweep);
-
-                        svgPath = FindPoint(svgPath, out PointF point, relative, c);
-                        if (svgPath.Length > 0)
+                        if (TryFindScaler(ref svgPath, out float radiiX)
+                            && TryTrimSeparator(ref svgPath)
+                            && TryFindScaler(ref svgPath, out float radiiY)
+                            && TryTrimSeparator(ref svgPath)
+                            && TryFindScaler(ref svgPath, out float angle)
+                            && TryTrimSeparator(ref svgPath)
+                            && TryFindScaler(ref svgPath, out float largeArc)
+                            && TryTrimSeparator(ref svgPath)
+                            && TryFindScaler(ref svgPath, out float sweep)
+                            && TryFindPoint(ref svgPath, relative, c, out PointF point))
                         {
                             builder.ArcTo(radiiX, radiiY, angle, largeArc == 1, sweep == 1, point);
                             c = point;
@@ -288,8 +286,8 @@ namespace SixLabors.ImageSharp.Drawing
                         c = first;
                         break;
                     case '~':
-                        svgPath = FindPoint(svgPath, out point1, relative, c);
-                        svgPath = FindPoint(svgPath, out point2, relative, c);
+                        svgPath = FindPoint(svgPath, relative, c, out point1);
+                        svgPath = FindPoint(svgPath, relative, c, out point2);
                         builder.MoveTo(point1);
                         builder.LineTo(point2);
                         break;
@@ -307,77 +305,117 @@ namespace SixLabors.ImageSharp.Drawing
 
             value = builder.Build();
             return true;
+        }
 
-            static bool IsSeparator(char ch)
-                => char.IsWhiteSpace(ch) || ch == ',';
-
-            static ReadOnlySpan<char> TrimSeparator(ReadOnlySpan<char> data)
+        private static bool TryTrimSeparator(ref ReadOnlySpan<char> str)
+        {
+            ReadOnlySpan<char> result = TrimSeparator(str);
+            if (str.Slice(str.Length - result.Length).StartsWith(result))
             {
-                if (data.Length == 0)
-                {
-                    return data;
-                }
-
-                int idx = 0;
-                for (; idx < data.Length; idx++)
-                {
-                    if (!IsSeparator(data[idx]))
-                    {
-                        break;
-                    }
-                }
-
-                return data.Slice(idx);
+                str = result;
+                return true;
             }
 
-            static ReadOnlySpan<char> FindPoint(ReadOnlySpan<char> str, out PointF value, bool isRelative, PointF relative)
-            {
-                str = FindScaler(str, out float x);
-                str = FindScaler(str, out float y);
-                if (isRelative)
-                {
-                    x += relative.X;
-                    y += relative.Y;
-                }
+            return false;
+        }
 
-                value = new PointF(x, y);
-                return str;
+        private static bool TryFindScaler(ref ReadOnlySpan<char> str, out float value)
+        {
+            ReadOnlySpan<char> result = FindScaler(str, out float valueInner);
+            if (str.Slice(str.Length - result.Length).StartsWith(result))
+            {
+                value = valueInner;
+                str = result;
+                return true;
             }
 
-            static ReadOnlySpan<char> FindScaler(ReadOnlySpan<char> str, out float scaler)
+            value = default;
+            return false;
+        }
+
+        private static bool TryFindPoint(ref ReadOnlySpan<char> str, bool relative, PointF current, out PointF value)
+        {
+            ReadOnlySpan<char> result = FindPoint(str, relative, current, out PointF valueInner);
+            if (str.Slice(str.Length - result.Length).StartsWith(result))
             {
-                str = TrimSeparator(str);
-                scaler = 0;
-
-                for (int i = 0; i < str.Length; i++)
-                {
-                    if (IsSeparator(str[i]) || i == str.Length)
-                    {
-                        scaler = ParseFloat(str.Slice(0, i));
-                        return str.Slice(i);
-                    }
-                }
-
-                if (str.Length > 0)
-                {
-                    scaler = ParseFloat(str);
-                }
-
-                return ReadOnlySpan<char>.Empty;
+                value = valueInner;
+                str = result;
+                return true;
             }
+
+            value = default;
+            return false;
+        }
+
+        private static ReadOnlySpan<char> FindPoint(ReadOnlySpan<char> str, bool isRelative, PointF relative, out PointF value)
+        {
+            str = FindScaler(str, out float x);
+            str = FindScaler(str, out float y);
+            if (isRelative)
+            {
+                x += relative.X;
+                y += relative.Y;
+            }
+
+            value = new PointF(x, y);
+            return str;
+        }
+
+        private static ReadOnlySpan<char> FindScaler(ReadOnlySpan<char> str, out float scaler)
+        {
+            str = TrimSeparator(str);
+            scaler = 0;
+
+            for (int i = 0; i < str.Length; i++)
+            {
+                if (IsSeparator(str[i]) || i == str.Length)
+                {
+                    scaler = ParseFloat(str.Slice(0, i));
+                    return str.Slice(i);
+                }
+            }
+
+            if (str.Length > 0)
+            {
+                scaler = ParseFloat(str);
+            }
+
+            return ReadOnlySpan<char>.Empty;
+        }
+
+        private static bool IsSeparator(char ch)
+            => char.IsWhiteSpace(ch) || ch == ',';
+
+        private static ReadOnlySpan<char> TrimSeparator(ReadOnlySpan<char> data)
+        {
+            if (data.Length == 0)
+            {
+                return data;
+            }
+
+            int idx = 0;
+            for (; idx < data.Length; idx++)
+            {
+                if (!IsSeparator(data[idx]))
+                {
+                    break;
+                }
+            }
+
+            return data.Slice(idx);
+        }
 
 #if !NETCOREAPP2_1_OR_GREATER
-            static unsafe float ParseFloat(ReadOnlySpan<char> str)
+        private static unsafe float ParseFloat(ReadOnlySpan<char> str)
+        {
+            fixed (char* p = str)
             {
-                fixed (char* p = str)
-                {
-                    return float.Parse(new string(p, 0, str.Length));
-                }
+                return float.Parse(new string(p, 0, str.Length));
             }
-#else
-            static float ParseFloat(ReadOnlySpan<char> str)
-                => float.Parse(str);
-#endif
         }
+#else
+        private static float ParseFloat(ReadOnlySpan<char> str)
+            => float.Parse(str);
+#endif
     }
 }

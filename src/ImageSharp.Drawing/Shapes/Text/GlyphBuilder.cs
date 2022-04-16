@@ -22,10 +22,6 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// Initializes a new instance of the <see cref="GlyphBuilder"/> class.
         /// </summary>
         /// <param name="origin">The origin.</param>
-        public GlyphBuilder(Vector2 origin)
-            : base()
-        {
-            this.builder.SetOrigin(origin);
-        }
+        public GlyphBuilder(Vector2 origin) => this.Builder.SetOrigin(origin);
     }
 }

@@ -451,6 +451,8 @@ namespace SixLabors.ImageSharp.Drawing
             this.currentFigure = new Figure();
             this.figures.Clear();
             this.figures.Add(this.currentFigure);
+
+            // TODO: Should we reset currentPoint here instead?
         }
 
         private class Figure
