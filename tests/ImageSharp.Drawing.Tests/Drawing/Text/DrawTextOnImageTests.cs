@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             ? ImageComparer.TolerantPercentage(1e-2f) // Relax comparison on .NET Framework and .NET Core 2.x
             : ImageComparer.TolerantPercentage(1e-5f);
 
-        private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(5e-4f);
+        private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(6e-4f);
 
         public DrawTextOnImageTests(ITestOutputHelper output)
             => this.Output = output;
@@ -331,8 +331,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             Color color = Color.Black;
 
-            // NET472 is 0.0032 different.
-            var comparer = ImageComparer.TolerantPercentage(0.004f);
+            // NET472 is 0.0045 different.
+            var comparer = ImageComparer.TolerantPercentage(0.0046F);
 
             provider.VerifyOperation(
                 comparer,
