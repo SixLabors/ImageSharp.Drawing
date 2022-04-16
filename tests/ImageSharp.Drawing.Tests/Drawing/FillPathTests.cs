@@ -99,7 +99,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                             }
                             else
                             {
-                                image.Mutate(x => x.Draw(new Pen(Color.Black, 1), pb.Build()));
+                                image.Mutate(x => x.Draw(new SolidPen(Color.Black, 1), pb.Build()));
                             }
                         }
                     }

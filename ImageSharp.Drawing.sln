@@ -334,12 +334,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{5286
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DrawShapesWithImageSharp", "samples\DrawShapesWithImageSharp\DrawShapesWithImageSharp.csproj", "{5493F024-0A3F-420C-AC2D-05B77A36025B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SixLabors.Fonts", "..\Fonts\src\SixLabors.Fonts\SixLabors.Fonts.csproj", "{4D91946D-29EC-4F16-958C-DFEE706363CE}"
-EndProject
 Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{2e33181e-6e28-4662-a801-e2e7dc206029}*SharedItemsImports = 5
-		..\Fonts\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{4d91946d-29ec-4f16-958c-dfee706363ce}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{68a8cc40-6aed-4e96-b524-31b1158fdeea}*SharedItemsImports = 13
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -363,10 +360,6 @@ Global
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Release|Any CPU.Build.0 = Release|Any CPU
-		{4D91946D-29EC-4F16-958C-DFEE706363CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{4D91946D-29EC-4F16-958C-DFEE706363CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{4D91946D-29EC-4F16-958C-DFEE706363CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{4D91946D-29EC-4F16-958C-DFEE706363CE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
