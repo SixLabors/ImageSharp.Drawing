@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         {
             var builder = new PathBuilder();
 
-            builder.AddBezier(new Vector2(10, 10), new Vector2(20, 20), new Vector2(20, 30), new Vector2(10, 40));
+            builder.AddCubicBezier(new Vector2(10, 10), new Vector2(20, 20), new Vector2(20, 30), new Vector2(10, 40));
 
             Assert.IsType<Path>(builder.Build());
         }
@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         {
             var builder = new PathBuilder();
 
-            builder.AddEllipticalArc(new PointF(10, 10), 10, 10, 0, 0, 360);
+            builder.AddArc(new PointF(10, 10), 10, 10, 0, 0, 360);
 
             Assert.IsType<Path>(builder.Build());
         }

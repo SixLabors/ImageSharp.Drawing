@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
 namespace SixLabors.ImageSharp.Drawing
@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing
         public PointF Point;
 
         /// <summary>
-        /// The angle of the segment.
+        /// The angle of the segment. Measured in radians.
         /// </summary>
         public float Angle;
     }

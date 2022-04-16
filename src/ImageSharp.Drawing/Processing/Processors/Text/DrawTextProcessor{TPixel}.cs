@@ -417,7 +417,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public void CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
             {
-                this.builder.AddBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
+                this.builder.AddCubicBezier(this.currentPoint, secondControlPoint, thirdControlPoint, point);
                 this.currentPoint = point;
             }
 
@@ -609,7 +609,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public void QuadraticBezierTo(Vector2 secondControlPoint, Vector2 point)
             {
-                this.builder.AddBezier(this.currentPoint, secondControlPoint, point);
+                this.builder.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
                 this.currentPoint = point;
             }
 

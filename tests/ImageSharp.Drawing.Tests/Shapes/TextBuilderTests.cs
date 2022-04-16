@@ -18,12 +18,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
                 Origin = position
             };
 
-            string text = "Hello World";
+            const string text = "Hello World";
 
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, options);
 
             RectangleF builderBounds = glyphs.Bounds;
-            FontRectangle measuredBounds = TextMeasurer.MeasureBounds(text, options);
+            FontRectangle directMeasured = TextMeasurer.MeasureBounds(text, options);
+            var measuredBounds = new FontRectangle(new(0, 0), directMeasured.Size + directMeasured.Location);
 
             Assert.Equal(measuredBounds.X, builderBounds.X);
             Assert.Equal(measuredBounds.Y, builderBounds.Y);

@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     public class DrawPathTests
     {
         public static readonly TheoryData<string, byte, float> DrawPathData =
-            new TheoryData<string, byte, float>
+            new()
             {
                 { "White", 255, 1.5f },
                 { "Red", 255, 3 },
@@ -37,8 +37,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 new Vector2(500, 500),
                 new Vector2(60, 10),
                 new Vector2(10, 400));
-            var ellipticArcSegment1 = new EllipticalArcLineSegment(80, 425, (float)Math.Sqrt(5525), 40, (float)(Math.Atan2(25, 70) * 180 / Math.PI), -90, -180, Matrix3x2.Identity);
-            var ellipticArcSegment2 = new EllipticalArcLineSegment(150, 520, 140, 70, 0, 180, 360, Matrix3x2.Identity);
+
+            var ellipticArcSegment1 = new ArcLineSegment(new Vector2(10, 400), new Vector2(150, 450), new SizeF((float)Math.Sqrt(5525), 40), GeometryUtilities.RadianToDegree((float)Math.Atan2(25, 70)), true, true);
+            var ellipticArcSegment2 = new ArcLineSegment(new(150, 450), new(149F, 450), new SizeF(140, 70), 0, true, true);
 
             var path = new Path(linearSegment, bezierSegment, ellipticArcSegment1, ellipticArcSegment2);
 

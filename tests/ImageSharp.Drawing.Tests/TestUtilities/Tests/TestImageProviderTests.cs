@@ -350,7 +350,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 }
             }
 
-            public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream)
+            public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
                 where TPixel : unmanaged, IPixel<TPixel>
             {
                 InvocationCounts[this.callerName]++;
@@ -365,7 +365,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 InvocationCounts[name] = 0;
             }
 
-            public Image Decode(Configuration configuration, Stream stream) => this.Decode<Rgba32>(configuration, stream);
+            public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<Rgba32>(configuration, stream, cancellationToken);
 
             public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
                 where TPixel : unmanaged, IPixel<TPixel>
@@ -396,7 +396,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 }
             }
 
-            public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream)
+            public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
                 where TPixel : unmanaged, IPixel<TPixel>
             {
                 InvocationCounts[this.callerName]++;
@@ -411,7 +411,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 InvocationCounts[name] = 0;
             }
 
-            public Image Decode(Configuration configuration, Stream stream) => this.Decode<Rgba32>(configuration, stream);
+            public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<Rgba32>(configuration, stream, cancellationToken);
 
             public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
                 where TPixel : unmanaged, IPixel<TPixel>
