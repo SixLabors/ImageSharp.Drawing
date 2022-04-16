@@ -17,14 +17,6 @@
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <ItemGroup>
-    <!--<PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta16" />-->
-    <PackageReference Include="SixLabors.ImageSharp" Version="2.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\Fonts\src\SixLabors.Fonts\SixLabors.Fonts.csproj" />
-  </ItemGroup>
-
     <PackageReference Include="SixLabors.Fonts" Version="1.0.0-beta16.13" />
     <PackageReference Include="SixLabors.ImageSharp" Version="2.1.1-alpha.0.2" />
   </ItemGroup>
