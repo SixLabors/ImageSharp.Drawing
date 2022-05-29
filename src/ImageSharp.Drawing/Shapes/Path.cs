@@ -42,6 +42,11 @@ namespace SixLabors.ImageSharp.Drawing
         public Path(params ILineSegment[] segments)
             => this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
 
+        /// <summary>
+        /// Gets the default empty path.
+        /// </summary>
+        public static IPath Empty { get; } = EmptyPath.OpenPath;
+
         /// <inheritdoc/>
         bool ISimplePath.IsClosed => this.IsClosed;
 
