@@ -40,11 +40,17 @@ namespace SixLabors.ImageSharp.Drawing
             }
             else
             {
-                float minX = this.paths.Min(x => x.Bounds.Left);
-                float maxX = this.paths.Max(x => x.Bounds.Right);
+                float minX, minY, maxX, maxY;
+                minX = minY = float.MaxValue;
+                maxX = maxY = float.MinValue;
 
-                float minY = this.paths.Min(x => x.Bounds.Top);
-                float maxY = this.paths.Max(x => x.Bounds.Bottom);
+                foreach (var path in this.paths)
+                {
+                    minX = Math.Min(path.Bounds.Left, minX);
+                    minY = Math.Min(path.Bounds.Top, minY);
+                    maxX = Math.Max(path.Bounds.Right, maxX);
+                    maxY = Math.Max(path.Bounds.Bottom, maxY);
+                }
 
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
             }
