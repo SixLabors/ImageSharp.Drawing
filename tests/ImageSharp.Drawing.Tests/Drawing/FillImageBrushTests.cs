@@ -33,17 +33,52 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
-            using (Image<TPixel> background = provider.GetImage())
-            using (Image overlay = provider.PixelType == PixelTypes.Rgba32
-                                       ? (Image)Image.Load<Bgra32>(data)
-                                       : Image.Load<Rgba32>(data))
-            {
-                var brush = new ImageBrush(overlay);
-                background.Mutate(c => c.Fill(brush));
+            using Image<TPixel> background = provider.GetImage();
+            using Image overlay = provider.PixelType == PixelTypes.Rgba32
+                                       ? Image.Load<Bgra32>(data)
+                                       : Image.Load<Rgba32>(data);
 
-                background.DebugSave(provider, appendSourceFileOrDescription: false);
-                background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
-            }
+            var brush = new ImageBrush(overlay);
+            background.Mutate(c => c.Fill(brush));
+
+            background.DebugSave(provider, appendSourceFileOrDescription: false);
+            background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+        }
+
+        [Theory]
+        [WithTestPatternImage(200, 200, PixelTypes.Rgba32)]
+        public void CanDrawLandscapeImage<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
+            using Image<TPixel> background = provider.GetImage();
+            using Image overlay = Image.Load<Rgba32>(data);
+
+            overlay.Mutate(c => c.Crop(new Rectangle(0, 0, 125, 90)));
+
+            var brush = new ImageBrush(overlay);
+            background.Mutate(c => c.Fill(brush));
+
+            background.DebugSave(provider, appendSourceFileOrDescription: false);
+            background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+        }
+
+        [Theory]
+        [WithTestPatternImage(200, 200, PixelTypes.Rgba32)]
+        public void CanDrawPortraitImage<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
+            using Image<TPixel> background = provider.GetImage();
+            using Image overlay = Image.Load<Rgba32>(data);
+
+            overlay.Mutate(c => c.Crop(new Rectangle(0, 0, 90, 125)));
+
+            var brush = new ImageBrush(overlay);
+            background.Mutate(c => c.Fill(brush));
+
+            background.DebugSave(provider, appendSourceFileOrDescription: false);
+            background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
         }
     }
 }

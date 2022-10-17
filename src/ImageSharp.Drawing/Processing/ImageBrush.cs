@@ -172,7 +172,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 Span<TPixel> overlaySpan = overlay.Memory.Span;
 
                 int offsetX = x - this.offsetX;
-                int sourceY = ((y - this.offsetY) % this.sourceRegion.Width) + this.sourceRegion.Y;
+                int sourceY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
                 Span<TPixel> sourceRow = this.sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceY);
 
                 for (int i = 0; i < scanline.Length; i++)

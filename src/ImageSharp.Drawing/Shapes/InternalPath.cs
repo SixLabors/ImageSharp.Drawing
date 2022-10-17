@@ -80,13 +80,22 @@ namespace SixLabors.ImageSharp.Drawing
 
             if (this.points.Length > 0)
             {
-                float minX = this.points.Min(x => x.Point.X);
-                float maxX = this.points.Max(x => x.Point.X);
-                float minY = this.points.Min(x => x.Point.Y);
-                float maxY = this.points.Max(x => x.Point.Y);
+                float minX, minY, maxX, maxY, length;
+                length = 0;
+                minX = minY = float.MaxValue;
+                maxX = maxY = float.MinValue;
+
+                foreach (var point in this.points)
+                {
+                    length += point.Length;
+                    minX = Math.Min(point.Point.X, minX);
+                    minY = Math.Min(point.Point.Y, minY);
+                    maxX = Math.Max(point.Point.X, maxX);
+                    maxY = Math.Max(point.Point.Y, maxY);
+                }
 
                 this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
-                this.Length = this.points.Sum(x => x.Length);
+                this.Length = length;
             }
             else
             {

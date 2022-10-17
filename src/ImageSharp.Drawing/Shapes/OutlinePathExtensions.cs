@@ -38,6 +38,11 @@ namespace SixLabors.ImageSharp.Drawing
         /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
         public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
+            if (width <= 0)
+            {
+                return Path.Empty;
+            }
+
             ClipperOffset offset = new(MiterOffsetDelta);
             offset.AddPath(path, jointStyle, endCapStyle);
 
@@ -93,6 +98,11 @@ namespace SixLabors.ImageSharp.Drawing
         /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
         public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
+            if (width <= 0)
+            {
+                return Path.Empty;
+            }
+
             if (pattern.Length < 2)
             {
                 return path.GenerateOutline(width, jointStyle, endCapStyle);
