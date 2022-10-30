@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Processing;
 using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
