@@ -8,7 +8,7 @@ SixLabors.ImageSharp.Drawing
 
 <div align="center">
 
-[![Build Status](https://img.shields.io/github/workflow/status/SixLabors/ImageSharp.Drawing/Build/main)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/SixLabors/ImageSharp.Drawing/build-and-test.yml?branch=main)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/main/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
 [![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
