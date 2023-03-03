@@ -4,6 +4,7 @@
 using System;
 using System.Linq;
 using Moq;
+using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.IO;
 using Xunit;
@@ -87,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void ConstructorCallConfigureOnFormatProvider()
         {
-            var provider = new Mock<IConfigurationModule>();
+            var provider = new Mock<IImageFormatConfigurationModule>();
             var config = new Configuration(provider.Object);
 
             provider.Verify(x => x.Configure(config));
@@ -96,7 +97,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [Fact]
         public void AddFormatCallsConfig()
         {
-            var provider = new Mock<IConfigurationModule>();
+            var provider = new Mock<IImageFormatConfigurationModule>();
             var config = new Configuration();
             config.Configure(provider.Object);
 

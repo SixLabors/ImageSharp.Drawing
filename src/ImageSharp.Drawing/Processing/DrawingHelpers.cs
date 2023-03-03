@@ -1,7 +1,5 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
-
-using SixLabors.ImageSharp.PixelFormats;
+// Licensed under the Six Labors Split License.
 
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
@@ -10,11 +8,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Convert a <see cref="DenseMatrix{Color}"/> to a <see cref="DenseMatrix{T}"/> of the given pixel type.
         /// </summary>
-        public static DenseMatrix<TPixel> ToPixelMatrix<TPixel>(this DenseMatrix<Color> colorMatrix, Configuration configuration)
+        public static DenseMatrix<TPixel> ToPixelMatrix<TPixel>(this DenseMatrix<Color> colorMatrix)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             var result = new DenseMatrix<TPixel>(colorMatrix.Columns, colorMatrix.Rows);
-            Color.ToPixel(configuration, colorMatrix.Span, result.Span);
+            Color.ToPixel(colorMatrix.Span, result.Span);
             return result;
         }
     }

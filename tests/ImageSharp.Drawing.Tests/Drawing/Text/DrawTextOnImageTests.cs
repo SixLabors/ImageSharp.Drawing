@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                       VerticalAlignment = VerticalAlignment.Center,
                       TextAlignment = TextAlignment.Center,
                       FallbackFontFamilies = new[] { malgun },
-                      KerningMode = KerningMode.Normal,
+                      KerningMode = KerningMode.Standard,
                       Origin = new PointF(img.Width / 2, img.Height / 2)
                   };
 
@@ -317,7 +317,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             TextOptions textOptions = new(font)
             {
-                KerningMode = KerningMode.Normal,
+                KerningMode = KerningMode.Standard,
                 VerticalAlignment = VerticalAlignment.Top,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 LineSpacing = lineSpacing,

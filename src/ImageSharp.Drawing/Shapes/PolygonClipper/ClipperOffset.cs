@@ -1,5 +1,5 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
 using System;
 using System.Collections.Generic;
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <param name="endCapStyle">Endcap Style</param>
         /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         public void AddPath(ReadOnlySpan<PointF> pathPoints, JointStyle jointStyle, EndCapStyle endCapStyle) =>
-            this.AddPath(pathPoints, jointStyle, this.Convert(endCapStyle));
+            this.AddPath(pathPoints, jointStyle, Convert(endCapStyle));
 
         /// <summary>
         /// Adds the path.
@@ -85,7 +85,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         private void AddPath(ISimplePath path, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
             ReadOnlySpan<PointF> vectors = path.Points.Span;
-            EndType type = path.IsClosed ? EndType.etClosedLine : this.Convert(endCapStyle);
+            EndType type = path.IsClosed ? EndType.etClosedLine : Convert(endCapStyle);
             this.AddPath(vectors, jointStyle, type);
         }
 
@@ -106,11 +106,11 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 
             lock (this.syncRoot)
             {
-                this.innerClipperOffest.AddPath(points, this.Convert(jointStyle), endCapStyle);
+                this.innerClipperOffest.AddPath(points, Convert(jointStyle), endCapStyle);
             }
         }
 
-        private JoinType Convert(JointStyle style)
+        private static JoinType Convert(JointStyle style)
             => style switch
             {
                 JointStyle.Round => JoinType.jtRound,
@@ -118,7 +118,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
                 _ => JoinType.jtSquare,
             };
 
-        private EndType Convert(EndCapStyle style)
+        private static EndType Convert(EndCapStyle style)
             => style switch
             {
                 EndCapStyle.Round => EndType.etOpenRound,

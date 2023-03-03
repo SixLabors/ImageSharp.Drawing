@@ -1,9 +1,7 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
 using System.Numerics;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
@@ -111,11 +109,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.center = center;
                 this.referenceAxisEnd = referenceAxisEnd;
                 this.axisRatio = axisRatio;
-                this.rotation = this.AngleBetween(
+                this.rotation = AngleBetween(
                     this.center,
                     new PointF(this.center.X + 1, this.center.Y),
                     this.referenceAxisEnd);
-                this.referenceRadius = this.DistanceBetween(this.center, this.referenceAxisEnd);
+                this.referenceRadius = DistanceBetween(this.center, this.referenceAxisEnd);
                 this.secondRadius = this.referenceRadius * this.axisRatio;
 
                 this.referenceRadiusSquared = this.referenceRadius * this.referenceRadius;
@@ -140,14 +138,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 return (xSquared / this.referenceRadiusSquared) + (ySquared / this.secondRadiusSquared);
             }
 
-            private float AngleBetween(PointF junction, PointF a, PointF b)
+            private static float AngleBetween(PointF junction, PointF a, PointF b)
             {
                 PointF vA = a - junction;
                 PointF vB = b - junction;
                 return MathF.Atan2(vB.Y, vB.X) - MathF.Atan2(vA.Y, vA.X);
             }
 
-            private float DistanceBetween(PointF p1, PointF p2) => Vector2.Distance(p1, p2);
+            private static float DistanceBetween(PointF p1, PointF p2) => Vector2.Distance(p1, p2);
         }
     }
 }

@@ -122,13 +122,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// </returns>
         public Image<Rgba32> CreateRgba32Image() => this.Image.Clone();
 
-        /// <summary>
-        /// Creates a new image.
-        /// </summary>
-        /// <returns>
-        /// The <see cref="ImageSharp.Image"/>.
-        /// </returns>
-        public Image<Rgba32> CreateRgba32Image(IImageDecoder decoder)
-            => ImageSharp.Image.Load<Rgba32>(this.Image.GetConfiguration(), this.Bytes, decoder);
+        ///// <summary>
+        ///// Creates a new image.
+        ///// </summary>
+        ///// <returns>
+        ///// The <see cref="ImageSharp.Image"/>.
+        ///// </returns>
+        //public Image<Rgba32> CreateRgba32Image(IImageDecoder decoder)
+        //{
+        //    DecoderOptions options = new() { Configuration = this.Image.GetConfiguration() };
+        //    return ImageSharp.Image.Load<Rgba32>(options, this.Bytes, decoder);
+        //}
     }
 }

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <RootNamespace>SixLabors.ImageSharp.Drawing.Benchmarks</RootNamespace>
-    <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;net472</TargetFrameworks>
+    <TargetFramework>net6.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <GenerateProgramFile>false</GenerateProgramFile>
     <IsTestProject>false</IsTestProject>

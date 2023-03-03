@@ -75,8 +75,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 }
 
                 float actual = Vector2.Distance(points[i], points[j]);
-                Assert.Equal(baseline, actual, 3);
-                Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                Assert.Equal(baseline, actual, 3F);
+                Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3F);
             }
         }
 

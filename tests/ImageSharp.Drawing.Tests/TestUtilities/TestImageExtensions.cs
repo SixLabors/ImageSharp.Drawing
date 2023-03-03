@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Advanced;
@@ -13,7 +10,6 @@ using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors;
-using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
@@ -318,7 +314,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             decoder ??= TestEnvironment.GetReferenceDecoder(referenceOutputFile);
 
-            return Image.Load<TPixel>(referenceOutputFile, decoder);
+            using FileStream stream = File.OpenRead(referenceOutputFile);
+            return decoder.Decode<TPixel>(DecoderOptions.Default, stream);
         }
 
         public static Image<TPixel> GetReferenceOutputImageMultiFrame<TPixel>(
@@ -343,10 +340,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             {
                 if (!File.Exists(path))
                 {
-                    throw new Exception("Reference output file missing: " + path);
+                    throw new FileNotFoundException("Reference output file missing: " + path);
                 }
 
-                var tempImage = Image.Load<TPixel>(path, decoder);
+                using FileStream stream = File.OpenRead(path);
+                Image<TPixel> tempImage = decoder.Decode<TPixel>(DecoderOptions.Default, stream);
                 temporaryFrameImages.Add(tempImage);
             }
 
@@ -360,7 +358,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 fi.Dispose();
             }
 
-            // remove the initial empty frame:
+            // Remove the initial empty frame:
             result.Frames.RemoveFrame(0);
             return result;
         }
@@ -486,7 +484,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             this Image<TPixel> image,
             ITestImageProvider provider,
             ImageComparer comparer,
-            IImageDecoder referenceDecoder = null)
+            IImageDecoder referenceDecoder = null,
+            DecoderOptions referenceDecoderOptions = null)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             string path = TestImageProvider<TPixel>.GetFilePathOrNull(provider);
@@ -495,11 +494,12 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 throw new InvalidOperationException("CompareToOriginal() works only with file providers!");
             }
 
-            var testFile = TestFile.Create(path);
+            TestFile testFile = TestFile.Create(path);
 
             referenceDecoder ??= TestEnvironment.GetReferenceDecoder(path);
 
-            using (var original = Image.Load<TPixel>(testFile.Bytes, referenceDecoder))
+            using MemoryStream stream = new(testFile.Bytes);
+            using (Image<TPixel> original = referenceDecoder.Decode<TPixel>(referenceDecoderOptions ?? DecoderOptions.Default, stream))
             {
                 comparer.VerifySimilarity(original, image);
             }
@@ -619,11 +619,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             referenceDecoder ??= TestEnvironment.GetReferenceDecoder(actualOutputFile);
 
-            using (var actualImage = Image.Load<TPixel>(actualOutputFile, referenceDecoder))
-            {
-                ImageComparer comparer = customComparer ?? ImageComparer.Exact;
-                comparer.VerifySimilarity(actualImage, image);
-            }
+            using FileStream stream = File.OpenRead(actualOutputFile);
+            using Image<TPixel> encodedImage = referenceDecoder.Decode<TPixel>(DecoderOptions.Default, stream);
+
+            ImageComparer comparer = customComparer ?? ImageComparer.Exact;
+            comparer.VerifySimilarity(encodedImage, image);
         }
 
         private class MakeOpaqueProcessor : IImageProcessor
@@ -666,6 +666,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                     this.bounds = bounds;
                     this.source = source;
                 }
+
+                public int GetRequiredBufferLength(Rectangle bounds)
+                    => bounds.Width;
 
                 /// <inheritdoc/>
                 [MethodImpl(MethodImplOptions.AggressiveInlining)]

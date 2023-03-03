@@ -1,24 +1,19 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Threading;
-using System.Threading.Tasks;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Metadata;
 using SixLabors.ImageSharp.PixelFormats;
-using Xunit;
 
 namespace SixLabors.ImageSharp.Drawing.Tests
 {
     /// <summary>
     /// A test image file.
     /// </summary>
-    public class TestFormat : IConfigurationModule, IImageFormat
+    public class TestFormat : IImageFormatConfigurationModule, IImageFormat
     {
         private readonly Dictionary<Type, object> sampleImages = new Dictionary<Type, object>();
 
@@ -172,22 +167,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         {
             private readonly TestFormat testFormat;
 
-            public TestHeader(TestFormat testFormat) => this.testFormat = testFormat;
-
             public int HeaderSize => this.testFormat.HeaderSize;
 
-            public IImageFormat DetectFormat(ReadOnlySpan<byte> header)
+            public bool TryDetectFormat(ReadOnlySpan<byte> header, [NotNullWhen(true)] out IImageFormat? format)
             {
-                if (this.testFormat.IsSupportedFileFormat(header))
-                {
-                    return this.testFormat;
-                }
+                format = this.testFormat.IsSupportedFileFormat(header) ? this.testFormat : null;
 
-                return null;
+                return format != null;
             }
+
+            public TestHeader(TestFormat testFormat) => this.testFormat = testFormat;
         }
 
-        public class TestDecoder : IImageDecoder
+        public class TestDecoder : SpecializedImageDecoder<TestDecoderOptions>
         {
             private readonly TestFormat testFormat;
 
@@ -199,16 +191,30 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             public int HeaderSize => this.testFormat.HeaderSize;
 
-            public Image<TPixel> Decode<TPixel>(Configuration config, Stream stream, CancellationToken cancellationToken)
-                where TPixel : unmanaged, IPixel<TPixel>
+            public bool IsSupportedFileFormat(Span<byte> header) => this.testFormat.IsSupportedFileFormat(header);
+
+            protected override ImageInfo Identify(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
             {
-                var ms = new MemoryStream();
-                stream.CopyTo(ms);
+                Image<TestPixelForAgnosticDecode> image =
+                    this.Decode<TestPixelForAgnosticDecode>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
+                ImageFrameCollection<TestPixelForAgnosticDecode> m = image.Frames;
+
+                return new(image.PixelType, image.Size, image.Metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)));
+            }
+
+            protected override TestDecoderOptions CreateDefaultSpecializedOptions(DecoderOptions options)
+                => new() { GeneralOptions = options };
+
+            protected override Image<TPixel> Decode<TPixel>(TestDecoderOptions options, Stream stream, CancellationToken cancellationToken)
+            {
+                Configuration configuration = options.GeneralOptions.Configuration;
+                using MemoryStream ms = new();
+                stream.CopyTo(ms, configuration.StreamProcessingBufferSize);
                 byte[] marker = ms.ToArray().Skip(this.testFormat.header.Length).ToArray();
                 this.testFormat.DecodeCalls.Add(new DecodeOperation
                 {
                     Marker = marker,
-                    Config = config,
+                    Config = configuration,
                     PixelType = typeof(TPixel)
                 });
 
@@ -216,28 +222,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 return this.testFormat.Sample<TPixel>();
             }
 
-            public bool IsSupportedFileFormat(Span<byte> header) => this.testFormat.IsSupportedFileFormat(header);
+            protected override Image Decode(TestDecoderOptions options, Stream stream, CancellationToken cancellationToken)
+                => this.Decode<TestPixelForAgnosticDecode>(options, stream, cancellationToken);
+        }
 
-            public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<TestPixelForAgnosticDecode>(configuration, stream, cancellationToken);
-
-            public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-                where TPixel : unmanaged, IPixel<TPixel>
-                => throw new NotImplementedException();
-
-            public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-                => throw new NotImplementedException();
+        public class TestDecoderOptions : ISpecializedDecoderOptions
+        {
+            public DecoderOptions GeneralOptions { get; init; } = DecoderOptions.Default;
         }
 
         public class TestEncoder : IImageEncoder
         {
             private readonly TestFormat testFormat;
 
-            public TestEncoder(TestFormat testFormat)
-                => this.testFormat = testFormat;
+            public TestEncoder(TestFormat testFormat) => this.testFormat = testFormat;
 
             public IEnumerable<string> MimeTypes => new[] { this.testFormat.MimeType };
 
             public IEnumerable<string> FileExtensions => this.testFormat.SupportedExtensions;
+
+            public bool SkipMetadata { get; init; }
 
             public void Encode<TPixel>(Image<TPixel> image, Stream stream)
                 where TPixel : unmanaged, IPixel<TPixel>
@@ -247,7 +251,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream, CancellationToken cancellationToken)
                 where TPixel : unmanaged, IPixel<TPixel>
-                => throw new NotImplementedException();
+                => Task.CompletedTask;  // TODO record this happened so we can verify it.
         }
 
         private struct TestPixelForAgnosticDecode : IPixel<TestPixelForAgnosticDecode>

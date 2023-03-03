@@ -82,18 +82,36 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         /// <summary>
         /// Returns an <see cref="Image{TPixel}"/> instance to the test case with the necessary traits.
         /// </summary>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <returns>A test image.</returns>
         public abstract Image<TPixel> GetImage();
 
         Image ITestImageProvider.GetImage() => this.GetImage();
 
-        public virtual Image<TPixel> GetImage(IImageDecoder decoder)
+        public Image<TPixel> GetImage(IImageDecoder decoder)
+            => this.GetImage(decoder, new());
+
+        public Task<Image<TPixel>> GetImageAsync(IImageDecoder decoder)
+             => this.GetImageAsync(decoder, new());
+
+        public virtual Image<TPixel> GetImage(IImageDecoder decoder, DecoderOptions options)
             => throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");
+
+        public virtual Task<Image<TPixel>> GetImageAsync(IImageDecoder decoder, DecoderOptions options)
+            => throw new NotSupportedException($"Decoder specific GetImageAsync() is not supported with {this.GetType().Name}!");
+
+        public virtual Image<TPixel> GetImage<T>(ISpecializedImageDecoder<T> decoder, T options)
+            where T : class, ISpecializedDecoderOptions, new()
+            => throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");
+
+        public virtual Task<Image<TPixel>> GetImageAsync<T>(ISpecializedImageDecoder<T> decoder, T options)
+            where T : class, ISpecializedDecoderOptions, new()
+            => throw new NotSupportedException($"Decoder specific GetImageAsync() is not supported with {this.GetType().Name}!");
 
         /// <summary>
         /// Returns an <see cref="Image{TPixel}"/> instance to the test case with the necessary traits.
         /// </summary>
-        /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+        /// <param name="operationsToApply">The operation to apply to the image before returning.</param>
+        /// <returns>A test image.</returns>
         public Image<TPixel> GetImage(Action<IImageProcessingContext> operationsToApply)
         {
             Image<TPixel> img = this.GetImage();

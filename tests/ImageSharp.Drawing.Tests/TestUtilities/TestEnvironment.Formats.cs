@@ -22,20 +22,21 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         internal static IImageDecoder GetReferenceDecoder(string filePath)
         {
             IImageFormat format = GetImageFormat(filePath);
-            return Configuration.ImageFormatsManager.FindDecoder(format);
+            return Configuration.ImageFormatsManager.GetDecoder(format);
         }
 
         internal static IImageEncoder GetReferenceEncoder(string filePath)
         {
             IImageFormat format = GetImageFormat(filePath);
-            return Configuration.ImageFormatsManager.FindEncoder(format);
+            return Configuration.ImageFormatsManager.GetEncoder(format);
         }
 
         internal static IImageFormat GetImageFormat(string filePath)
         {
             string extension = IOPath.GetExtension(filePath);
 
-            return Configuration.ImageFormatsManager.FindFormatByFileExtension(extension);
+            Configuration.ImageFormatsManager.TryFindFormatByFileExtension(extension, out IImageFormat format);
+            return format;
         }
 
         private static void ConfigureCodecs(

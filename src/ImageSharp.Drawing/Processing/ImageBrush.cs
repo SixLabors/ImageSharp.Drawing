@@ -1,5 +1,5 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
 using System;
 using System.Buffers;
@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="image">The image.</param>
         public ImageBrush(Image image)
-            : this(image, image.Bounds())
+            : this(image, image.Bounds)
         {
         }
 
@@ -116,7 +116,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.sourceFrame = image.Frames.RootFrame;
                 this.shouldDisposeImage = shouldDisposeImage;
 
-                this.sourceRegion = Rectangle.Intersect(image.Bounds(), (Rectangle)sourceRegion);
+                this.sourceRegion = Rectangle.Intersect(image.Bounds, (Rectangle)sourceRegion);
 
                 this.offsetY = (int)MathF.Max(MathF.Floor(targetRegion.Top), 0);
                 this.offsetX = (int)MathF.Max(MathF.Floor(targetRegion.Left), 0);
