@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
         /// <param name="pattern">The pattern.</param>
-        public Pen(IBrush brush, float width, float[] pattern)
+        public Pen(Brush brush, float width, float[] pattern)
         {
             Guard.MustBeGreaterThan(width, 0, nameof(width));
 
@@ -61,13 +61,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
-        public Pen(IBrush brush, float width)
+        public Pen(Brush brush, float width)
             : this(brush, width, Pens.EmptyPattern)
         {
         }
 
         /// <inheritdoc/>
-        public IBrush StrokeFill { get; }
+        public Brush StrokeFill { get; }
 
         /// <inheritdoc/>
         public float StrokeWidth { get; }

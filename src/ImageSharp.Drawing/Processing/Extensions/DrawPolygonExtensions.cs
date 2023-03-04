@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             float thickness,
             params PointF[] points) =>
             source.DrawPolygon(options, new Pen(brush, thickness), points);
@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            IBrush brush,
+            Brush brush,
             float thickness,
             params PointF[] points) =>
             source.DrawPolygon(new Pen(brush, thickness), points);

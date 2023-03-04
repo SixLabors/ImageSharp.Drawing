@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         /// <param name="text">The text we want to render</param>
         /// <param name="brush">The brush to source pixel colors from.</param>
         /// <param name="pen">The pen to outline text with.</param>
-        public DrawTextProcessor(DrawingOptions drawingOptions, TextOptions textOptions, string text, IBrush brush, IPen pen)
+        public DrawTextProcessor(DrawingOptions drawingOptions, TextOptions textOptions, string text, Brush brush, IPen pen)
         {
             Guard.NotNull(text, nameof(text));
             if (brush is null && pen is null)
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         /// <summary>
         /// Gets the brush used to fill the glyphs.
         /// </summary>
-        public IBrush Brush { get; }
+        public Brush Brush { get; }
 
         /// <summary>
         /// Gets the <see cref="Processing.DrawingOptions"/> defining blending modes and shape drawing settings.

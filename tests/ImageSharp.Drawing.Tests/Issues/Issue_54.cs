@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                     Origin = new PointF(0, 100)
                 };
 
-                IBrush brush = Brushes.Solid(Color.White);
+                Brush brush = Brushes.Solid(Color.White);
                 IPen pen = Pens.Solid(Color.White, 1);
                 string text = "sample text";
 

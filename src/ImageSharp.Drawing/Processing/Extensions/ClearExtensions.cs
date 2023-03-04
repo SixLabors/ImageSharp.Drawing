@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="source">The image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Clear(this IImageProcessingContext source, IBrush brush) =>
+        public static IImageProcessingContext Clear(this IImageProcessingContext source, Brush brush) =>
             source.Clear(source.GetDrawingOptions(), brush);
 
         /// <summary>
@@ -45,7 +45,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="options">The drawing options.</param>
         /// <param name="brush">The brush.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Clear(this IImageProcessingContext source, DrawingOptions options, IBrush brush)
+        public static IImageProcessingContext Clear(this IImageProcessingContext source, DrawingOptions options, Brush brush)
             => source.Fill(options.CloneForClearOperation(), brush);
 
         /// <summary>

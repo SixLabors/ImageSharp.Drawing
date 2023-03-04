@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             IPathCollection paths)
         {
             foreach (IPath s in paths)
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
-            IBrush brush,
+            Brush brush,
             IPathCollection paths) =>
             source.Fill(source.GetDrawingOptions(), brush, paths);
 

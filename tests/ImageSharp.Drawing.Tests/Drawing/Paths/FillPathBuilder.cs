@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class FillPathBuilder : BaseImageOperationsExtensionTest
     {
-        private readonly IBrush brush = Brushes.Solid(Color.HotPink);
+        private readonly Brush brush = Brushes.Solid(Color.HotPink);
         private readonly IPath path = null;
         private readonly Action<PathBuilder> builder = pb =>
         {

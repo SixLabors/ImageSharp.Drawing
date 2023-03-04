@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             Draw(this.textRenderer.FillOperations, this.definition.Brush);
             Draw(this.textRenderer.OutlineOperations, this.definition.Pen?.StrokeFill);
 
-            void Draw(List<DrawingOperation> operations, IBrush brush)
+            void Draw(List<DrawingOperation> operations, Brush brush)
             {
                 if (operations?.Count > 0)
                 {

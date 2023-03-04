@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 {
     /// <summary>
     /// Defines a processor to fill <see cref="Image"/> pixels withing a given <see cref="IPath"/>
-    /// with the given <see cref="IBrush"/> and blending defined by the given <see cref="DrawingOptions"/>.
+    /// with the given <see cref="Brush"/> and blending defined by the given <see cref="DrawingOptions"/>.
     /// </summary>
     public class DrawPathProcessor : IImageProcessor
     {
@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         }
 
         /// <summary>
-        /// Gets the <see cref="IBrush"/> used for filling the destination image.
+        /// Gets the <see cref="Brush"/> used for filling the destination image.
         /// </summary>
         public IPen Pen { get; }
 

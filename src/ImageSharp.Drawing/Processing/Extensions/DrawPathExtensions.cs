@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             float thickness,
             IPath path) =>
             source.Draw(options, new Pen(brush, thickness), path);
@@ -63,7 +63,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            IBrush brush,
+            Brush brush,
             float thickness,
             IPath path) =>
             source.Draw(new Pen(brush, thickness), path);

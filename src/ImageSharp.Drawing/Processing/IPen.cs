@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Gets the stroke fill.
         /// </summary>
-        IBrush StrokeFill { get; }
+        Brush StrokeFill { get; }
 
         /// <summary>
         /// Gets the width to apply to the stroke
