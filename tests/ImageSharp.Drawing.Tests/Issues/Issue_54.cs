@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         {
             ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             {
-                Pen pen = new Pen(Color.White, 0);
+                Pen pen = new Pen(new PenOptions(Color.White, 0));
             });
 
             Assert.StartsWith("Parameter \"width\" (System.Single) must be greater than 0, was 0", ex.Message);

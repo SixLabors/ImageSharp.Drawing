@@ -20,14 +20,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     {
         private readonly float[] pattern;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Pen"/> class.
-        /// </summary>
-        /// <param name="color">The color.</param>
-        /// <param name="width">The width.</param>
-        /// <param name="pattern">The pattern.</param>
-        public Pen(Color color, float width, float[] pattern)
-            : this(new SolidBrush(color), width, pattern)
+        public Pen(Brush strokeFill)
+            : this(strokeFill, 0)
+        {
+        }
+
+        public Pen(Brush strokeFill, float strokeWidth)
+            : this(strokeFill, strokeWidth, Pens.EmptyPattern)
+        {
+        }
+
+        public Pen(PenOptions options)
+            : this(options.StrokeFill, options.StrokeWidth)
         {
         }
 
@@ -37,33 +41,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
         /// <param name="pattern">The pattern.</param>
-        public Pen(Brush brush, float width, float[] pattern)
+        private Pen(Brush brush, float width, float[] pattern)
         {
             Guard.MustBeGreaterThan(width, 0, nameof(width));
 
             this.StrokeFill = brush;
             this.StrokeWidth = width;
             this.pattern = pattern;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Pen"/> class.
-        /// </summary>
-        /// <param name="color">The color.</param>
-        /// <param name="width">The width.</param>
-        public Pen(Color color, float width)
-            : this(new SolidBrush(color), width)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Pen"/> class.
-        /// </summary>
-        /// <param name="brush">The brush.</param>
-        /// <param name="width">The width.</param>
-        public Pen(Brush brush, float width)
-            : this(brush, width, Pens.EmptyPattern)
-        {
         }
 
         /// <inheritdoc/>

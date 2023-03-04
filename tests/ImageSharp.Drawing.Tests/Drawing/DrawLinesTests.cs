@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            var pen = new Pen(color, thickness);
+            var pen = new Pen(new PenOptions(color, thickness));
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
         }
@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
+            Pen pen = new Pen(new PenOptions(color, thickness, new float[] { 3f, 3f }));
             pen.EndCapStyle = EndCapStyle.Round;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
+            Pen pen = new Pen(new PenOptions(color, thickness, new float[] { 3f, 3f }));
             pen.EndCapStyle = EndCapStyle.Butt;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
@@ -100,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            Pen pen = new Pen(color, thickness, new float[] { 3f, 3f });
+            Pen pen = new Pen(new PenOptions(color, thickness, new float[] { 3f, 3f }));
             pen.EndCapStyle = EndCapStyle.Square;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
@@ -112,7 +112,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
     where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            var pen = new Pen(color, thickness);
+            var pen = new Pen(new PenOptions(color, thickness));
             pen.JointStyle = JointStyle.Round;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
@@ -124,7 +124,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
  where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            var pen = new Pen(color, thickness);
+            var pen = new Pen(new PenOptions(color, thickness));
             pen.JointStyle = JointStyle.Square;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
@@ -136,7 +136,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
  where TPixel : unmanaged, IPixel<TPixel>
         {
             Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-            var pen = new Pen(color, thickness);
+            var pen = new Pen(new PenOptions(color, thickness));
             pen.JointStyle = JointStyle.Miter;
 
             DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
