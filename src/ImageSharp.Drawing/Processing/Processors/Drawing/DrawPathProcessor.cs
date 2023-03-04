@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <param name="options">The graphics options.</param>
         /// <param name="pen">The details how to outline the region of interest.</param>
         /// <param name="path">The path to be filled.</param>
-        public DrawPathProcessor(DrawingOptions options, IPen pen, IPath path)
+        public DrawPathProcessor(DrawingOptions options, Pen pen, IPath path)
         {
             this.Path = path;
             this.Pen = pen;
@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <summary>
         /// Gets the <see cref="Brush"/> used for filling the destination image.
         /// </summary>
-        public IPen Pen { get; }
+        public Pen Pen { get; }
 
         /// <summary>
         /// Gets the path that this processor applies to.

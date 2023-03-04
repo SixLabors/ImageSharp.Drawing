@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
     {
         private static readonly Brush TestBrush = Brushes.Solid(Color.Red);
 
-        private static readonly IPen GridPen = Pens.Solid(Color.Aqua, 0.5f);
+        private static readonly Pen GridPen = Pens.Solid(Color.Aqua, 0.5f);
 
         private readonly string outputDir;
 

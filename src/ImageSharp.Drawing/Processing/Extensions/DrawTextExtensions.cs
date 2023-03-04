@@ -93,7 +93,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             string text,
             Font font,
-            IPen pen,
+            Pen pen,
             PointF location) =>
             source.DrawText(source.GetDrawingOptions(), text, font, pen, location);
 
@@ -112,7 +112,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             string text,
             Font font,
             Brush brush,
-            IPen pen,
+            Pen pen,
             PointF location)
         {
             TextOptions textOptions = new(font) { Origin = location };
@@ -146,7 +146,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             TextOptions textOptions,
             string text,
-            IPen pen) =>
+            Pen pen) =>
             source.DrawText(source.GetDrawingOptions(), textOptions, text, null, pen);
 
         /// <summary>
@@ -163,7 +163,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             TextOptions textOptions,
             string text,
             Brush brush,
-            IPen pen) =>
+            Pen pen) =>
             source.DrawText(source.GetDrawingOptions(), textOptions, text, brush, pen);
 
         /// <summary>
@@ -181,7 +181,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions drawingOptions,
             string text,
             Font font,
-            IPen pen,
+            Pen pen,
             PointF location)
             => source.DrawText(drawingOptions, text, font, null, pen, location);
 
@@ -221,7 +221,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             string text,
             Font font,
             Brush brush,
-            IPen pen,
+            Pen pen,
             PointF location)
         {
             TextOptions textOptions = new(font) { Origin = location };
@@ -244,7 +244,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             TextOptions textOptions,
             string text,
             Brush brush,
-            IPen pen)
+            Pen pen)
             => source.ApplyProcessor(new DrawTextProcessor(drawingOptions, textOptions, text, brush, pen));
     }
 }

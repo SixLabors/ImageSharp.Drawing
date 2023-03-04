@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
-            IPen pen,
+            Pen pen,
             params PointF[] points) =>
             source.Draw(source.GetDrawingOptions(), pen, new Polygon(new LinearLineSegment(points)));
 
@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext DrawPolygon(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IPen pen,
+            Pen pen,
             params PointF[] points) =>
             source.Draw(options, pen, new Polygon(new LinearLineSegment(points)));
 

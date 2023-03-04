@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 };
 
                 Brush brush = Brushes.Solid(Color.White);
-                IPen pen = Pens.Solid(Color.White, 1);
+                Pen pen = Pens.Solid(Color.White, 1);
                 string text = "sample text";
 
                 // Draw the text
@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         {
             ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             {
-                IPen pen = new Pen(Color.White, 0);
+                Pen pen = new Pen(Color.White, 0);
             });
 
             Assert.StartsWith("Parameter \"width\" (System.Single) must be greater than 0, was 0", ex.Message);

@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IPen pen,
+            Pen pen,
             RectangleF shape) =>
             source.Draw(options, pen, new RectangularPolygon(shape.X, shape.Y, shape.Width, shape.Height));
 
@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="pen">The pen.</param>
         /// <param name="shape">The shape.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Draw(this IImageProcessingContext source, IPen pen, RectangleF shape) =>
+        public static IImageProcessingContext Draw(this IImageProcessingContext source, Pen pen, RectangleF shape) =>
             source.Draw(source.GetDrawingOptions(), pen, shape);
 
         /// <summary>

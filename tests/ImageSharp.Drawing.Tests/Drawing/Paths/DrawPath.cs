@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class DrawPath : BaseImageOperationsExtensionTest
     {
-        private readonly IPen pen = Pens.Solid(Color.HotPink, 2);
+        private readonly Pen pen = Pens.Solid(Color.HotPink, 2);
         private readonly IPath path = new EllipsePolygon(10, 10, 100);
 
         [Fact]

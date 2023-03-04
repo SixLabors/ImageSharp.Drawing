@@ -174,7 +174,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private readonly bool renderFill;
             private bool rasterizationRequired;
 
-            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, TextOptions textOptions, IPen pen, bool renderFill, Matrix3x2 transform)
+            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, TextOptions textOptions, Pen pen, bool renderFill, Matrix3x2 transform)
             {
                 this.MemoryAllocator = memoryAllocator;
                 this.currentRenderPosition = default;
@@ -202,7 +202,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public MemoryAllocator MemoryAllocator { get; internal set; }
 
-            public IPen Pen { get; internal set; }
+            public Pen Pen { get; internal set; }
 
             public DrawingOptions Options { get; internal set; }
 

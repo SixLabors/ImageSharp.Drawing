@@ -10,6 +10,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Brush = SixLabors.ImageSharp.Drawing.Processing.Brush;
+using Pen = SixLabors.ImageSharp.Drawing.Processing.Pen;
 using SDRectangleF = System.Drawing.RectangleF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
@@ -94,7 +95,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
                 TextOptions textOptions,
                 string text,
                 Brush brush,
-                IPen pen)
+                Pen pen)
             {
                 IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 

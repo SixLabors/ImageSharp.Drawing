@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class DrawRectangle : BaseImageOperationsExtensionTest
     {
-        private readonly IPen pen = Pens.Solid(Color.HotPink, 2);
+        private readonly Pen pen = Pens.Solid(Color.HotPink, 2);
         private RectangleF rectangle = new RectangleF(10, 10, 20, 20);
 
         private RectangularPolygon RectanglePolygon => new RectangularPolygon(this.rectangle);

@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// section 3 will be width/2 long and will be filled
     /// the pattern will immediately repeat without gap.
     /// </remarks>
-    public class Pen : IPen
+    public sealed class Pen
     {
         private readonly float[] pattern;
 
