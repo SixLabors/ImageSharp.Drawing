@@ -1,10 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using ClipperLib;
+using Clipper2Lib;
+
 
 namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
@@ -15,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
     {
         private const float ScalingFactor = 1000.0f;
 
-        private readonly ClipperLib.ClipperOffset innerClipperOffest;
+        private readonly Clipper2Lib.ClipperOffset innerClipperOffest;
         private readonly object syncRoot = new();
 
         /// <summary>
@@ -23,7 +21,8 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="meterLimit">meter limit</param>
         /// <param name="arcTolerance">arc tolerance</param>
-        public ClipperOffset(double meterLimit = 2, double arcTolerance = 0.25) => this.innerClipperOffest = new ClipperLib.ClipperOffset(meterLimit, arcTolerance);
+        public ClipperOffset(double meterLimit = 2, double arcTolerance = 0.25)
+            => this.innerClipperOffest = new Clipper2Lib.ClipperOffset(meterLimit, arcTolerance);
 
         /// <summary>
         /// Calcualte Offset
@@ -33,15 +32,16 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">Calculate: Couldn't caculate Offset</exception>
         public ComplexPolygon Execute(float width)
         {
-            var tree = new List<List<IntPoint>>();
+            Paths64 tree;
             lock (this.syncRoot)
             {
-                this.innerClipperOffest.Execute(ref tree, width * ScalingFactor / 2);
+                tree = this.innerClipperOffest.Execute(width * ScalingFactor);
             }
 
             var polygons = new List<Polygon>();
-            foreach (List<IntPoint> pt in tree)
+            foreach (Path64 pt in tree)
             {
+                // TODO: No Linq
                 PointF[] points = pt.Select(p => new PointF(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
                 polygons.Add(new Polygon(new LinearLineSegment(points)));
             }
@@ -85,7 +85,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         private void AddPath(ISimplePath path, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
             ReadOnlySpan<PointF> vectors = path.Points.Span;
-            EndType type = path.IsClosed ? EndType.etClosedLine : Convert(endCapStyle);
+            EndType type = path.IsClosed ? EndType.Joined : Convert(endCapStyle);
             this.AddPath(vectors, jointStyle, type);
         }
 
@@ -98,10 +98,10 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         private void AddPath(ReadOnlySpan<PointF> pathPoints, JointStyle jointStyle, EndType endCapStyle)
         {
-            var points = new List<IntPoint>();
+            Path64 points = new();
             foreach (PointF v in pathPoints)
             {
-                points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
+                points.Add(new Point64(v.X * ScalingFactor, v.Y * ScalingFactor));
             }
 
             lock (this.syncRoot)
@@ -113,17 +113,17 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         private static JoinType Convert(JointStyle style)
             => style switch
             {
-                JointStyle.Round => JoinType.jtRound,
-                JointStyle.Miter => JoinType.jtMiter,
-                _ => JoinType.jtSquare,
+                JointStyle.Round => JoinType.Round,
+                JointStyle.Miter => JoinType.Miter,
+                _ => JoinType.Square,
             };
 
         private static EndType Convert(EndCapStyle style)
             => style switch
             {
-                EndCapStyle.Round => EndType.etOpenRound,
-                EndCapStyle.Square => EndType.etOpenSquare,
-                _ => EndType.etOpenButt,
+                EndCapStyle.Round => EndType.Round,
+                EndCapStyle.Square => EndType.Square,
+                _ => EndType.Butt,
             };
     }
 }

@@ -4,7 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using ClipperLib;
+using Clipper2Lib;
+using Clipper2 = Clipper2Lib.Clipper;
 
 namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
@@ -14,16 +15,16 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
     internal class Clipper
     {
         private const float ScalingFactor = 1000.0f;
-
-        private readonly ClipperLib.Clipper innerClipper;
         private readonly object syncRoot = new object();
+        private readonly Clipper2Lib.Clipper64 innerClipper;
+
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Clipper"/> class.
         /// </summary>
         public Clipper()
         {
-            this.innerClipper = new ClipperLib.Clipper();
+            this.innerClipper = new Clipper64();
         }
 
         /// <summary>
@@ -45,22 +46,22 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">GenerateClippedShapes: Open paths have been disabled.</exception>
         public IPath[] GenerateClippedShapes()
         {
-            var results = new List<PolyNode>();
+            PolyTree64 results = new();
 
             lock (this.syncRoot)
             {
-                this.innerClipper.Execute(ClipType.ctDifference, results);
+                this.innerClipper.Execute(ClipType.Difference, FillRule.EvenOdd, results);
             }
 
             var shapes = new IPath[results.Count];
 
             for (int i = 0; i < results.Count; i++)
             {
-                var points = new PointF[results[i].Contour.Count];
+                var points = new PointF[results[i].Polygon.Count];
 
-                for (int j = 0; j < results[i].Contour.Count; j++)
+                for (int j = 0; j < results[i].Polygon.Count; j++)
                 {
-                    IntPoint p = results[i].Contour[j];
+                    Point64 p = results[i].Polygon[j];
 
                     // to make the floating point polygons compatable with clipper we had
                     // to scale them up to make them ints but still retain some level of precision
@@ -68,7 +69,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
                     points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
                 }
 
-                shapes[i] = results[i].IsOpen
+                shapes[i] = results[i].IsHole
                     ? new Path(new LinearLineSegment(points))
                     : new Polygon(new LinearLineSegment(points));
             }
@@ -134,14 +135,13 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
             ReadOnlySpan<PointF> vectors = path.Points.Span;
-
-            var points = new List<IntPoint>(vectors.Length);
+            Path64 points = new(vectors.Length);
             foreach (PointF v in vectors)
             {
-                points.Add(new IntPoint(v.X * ScalingFactor, v.Y * ScalingFactor));
+                points.Add(new Point64(v.X * ScalingFactor, v.Y * ScalingFactor));
             }
 
-            PolyType type = clippingType == ClippingType.Clip ? PolyType.ptClip : PolyType.ptSubject;
+            PathType type = clippingType == ClippingType.Clip ? PathType.Clip : PathType.Subject;
             lock (this.syncRoot)
             {
                 this.innerClipper.AddPath(points, type, path.IsClosed);
