@@ -1,11 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
 using System.Numerics;
 using Clipper2Lib;
-using Clipper2 = Clipper2Lib.Clipper;
 
 namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
@@ -15,8 +12,8 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
     internal class Clipper
     {
         private const float ScalingFactor = 1000.0f;
-        private readonly object syncRoot = new object();
-        private readonly Clipper2Lib.Clipper64 innerClipper;
+        private readonly object syncRoot = new();
+        private readonly Clipper64 innerClipper;
 
 
         /// <summary>
@@ -48,16 +45,17 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         {
             PolyTree64 results = new();
 
+            // TODO: Why are we locking?
             lock (this.syncRoot)
             {
                 this.innerClipper.Execute(ClipType.Difference, FillRule.EvenOdd, results);
             }
 
-            var shapes = new IPath[results.Count];
+            IPath[] shapes = new IPath[results.Count];
 
             for (int i = 0; i < results.Count; i++)
             {
-                var points = new PointF[results[i].Polygon.Count];
+                PointF[] points = new PointF[results[i].Polygon.Count];
 
                 for (int j = 0; j < results[i].Polygon.Count; j++)
                 {
@@ -136,12 +134,15 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         {
             ReadOnlySpan<PointF> vectors = path.Points.Span;
             Path64 points = new(vectors.Length);
-            foreach (PointF v in vectors)
+            for (int i = 0; i < vectors.Length; i++)
             {
+                PointF v = vectors[i];
                 points.Add(new Point64(v.X * ScalingFactor, v.Y * ScalingFactor));
             }
 
             PathType type = clippingType == ClippingType.Clip ? PathType.Clip : PathType.Subject;
+
+            // TODO: Why are we locking?
             lock (this.syncRoot)
             {
                 this.innerClipper.AddPath(points, type, path.IsClosed);

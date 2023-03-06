@@ -3,7 +3,6 @@
 
 using Clipper2Lib;
 
-
 namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
     /// <summary>
@@ -38,12 +37,13 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
                 tree = this.innerClipperOffest.Execute(width * ScalingFactor);
             }
 
-            var polygons = new List<Polygon>();
-            foreach (Path64 pt in tree)
+            Polygon[] polygons = new Polygon[tree.Count];
+            for (int i = 0; i < tree.Count; i++)
             {
-                // TODO: No Linq
+                Path64 pt = tree[i];
+
                 PointF[] points = pt.Select(p => new PointF(p.X / ScalingFactor, p.Y / ScalingFactor)).ToArray();
-                polygons.Add(new Polygon(new LinearLineSegment(points)));
+                polygons[i] = new Polygon(new LinearLineSegment(points));
             }
 
             return new ComplexPolygon(polygons.ToArray());
@@ -104,6 +104,7 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
                 points.Add(new Point64(v.X * ScalingFactor, v.Y * ScalingFactor));
             }
 
+            // TODO: Why are we locking?
             lock (this.syncRoot)
             {
                 this.innerClipperOffest.AddPath(points, Convert(jointStyle), endCapStyle);
