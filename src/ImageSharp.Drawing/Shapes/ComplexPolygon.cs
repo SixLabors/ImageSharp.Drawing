@@ -21,6 +21,16 @@ namespace SixLabors.ImageSharp.Drawing
         private readonly float length;
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
+        /// </summary>
+        /// <param name="contour">The contour path.</param>
+        /// <param name="hole">The hole path.</param>
+        public ComplexPolygon(PointF[] contour, PointF[] hole)
+            : this(new Path(new LinearLineSegment(contour)), new Path(new LinearLineSegment(hole)))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ComplexPolygon" /> class.
         /// </summary>
         /// <param name="paths">The paths.</param>
