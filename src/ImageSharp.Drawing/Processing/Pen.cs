@@ -20,49 +20,68 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     {
         private readonly float[] pattern;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Pen"/> class.
+        /// </summary>
+        /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
         public Pen(Brush strokeFill)
-            : this(strokeFill, 0)
-        {
-        }
-
-        public Pen(Brush strokeFill, float strokeWidth)
-            : this(strokeFill, strokeWidth, Pens.EmptyPattern)
-        {
-        }
-
-        public Pen(PenOptions options)
-            : this(options.StrokeFill, options.StrokeWidth)
+            : this(strokeFill, 1)
         {
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Pen"/> class.
         /// </summary>
-        /// <param name="brush">The brush.</param>
-        /// <param name="width">The width.</param>
-        /// <param name="pattern">The pattern.</param>
-        private Pen(Brush brush, float width, float[] pattern)
+        /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
+        /// <param name="strokeWidth">The stroke width in px units.</param>
+        public Pen(Brush strokeFill, float strokeWidth)
+            : this(strokeFill, strokeWidth, Pens.EmptyPattern)
         {
-            Guard.MustBeGreaterThan(width, 0, nameof(width));
-
-            this.StrokeFill = brush;
-            this.StrokeWidth = width;
-            this.pattern = pattern;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Pen"/> class.
+        /// </summary>
+        /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
+        /// <param name="strokeWidth">The stroke width in px units.</param>
+        /// <param name="strokePattern">The stroke pattern.</param>
+        private Pen(Brush strokeFill, float strokeWidth, float[] strokePattern)
+        {
+            Guard.MustBeGreaterThan(strokeWidth, 0, nameof(strokeWidth));
+
+            this.StrokeFill = strokeFill;
+            this.StrokeWidth = strokeWidth;
+            this.pattern = strokePattern;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Pen"/> class.
+        /// </summary>
+        /// <param name="options">The pen options.</param>
+        public Pen(PenOptions options)
+        {
+            Guard.NotNull(options, nameof(options));
+
+            this.StrokeFill = options.StrokeFill;
+            this.StrokeWidth = options.StrokeWidth;
+            this.pattern = options.StrokePattern;
+            this.JointStyle = options.JointStyle;
+            this.EndCapStyle = options.EndCapStyle;
+        }
+
+        /// <inheritdoc cref="PenOptions.StrokeFill"/>
         public Brush StrokeFill { get; }
 
-        /// <inheritdoc/>
+        /// <inheritdoc cref="PenOptions.StrokeWidth"/>
         public float StrokeWidth { get; }
 
-        /// <inheritdoc/>
+        /// <inheritdoc cref="PenOptions.StrokePattern"/>
         public ReadOnlySpan<float> StrokePattern => this.pattern;
 
-        /// <inheritdoc/>
-        public JointStyle JointStyle { get; set; }
+        /// <inheritdoc cref="PenOptions.JointStyle"/>
+        public JointStyle JointStyle { get; }
 
-        /// <inheritdoc/>
-        public EndCapStyle EndCapStyle { get; set; }
+        /// <inheritdoc cref="PenOptions.EndCapStyle"/>
+        public EndCapStyle EndCapStyle { get; }
     }
 }

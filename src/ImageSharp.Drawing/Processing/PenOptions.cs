@@ -1,45 +1,81 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-using System.Collections.Generic;
-
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Options for the Pen
+    /// Provides a set of configurations options for pens.
     /// </summary>
     public class PenOptions
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// </summary>
+        /// <param name="strokeWidth">The stroke width in px units.</param>
         public PenOptions(float strokeWidth)
             : this(Color.Black, strokeWidth)
         {
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// </summary>
+        /// <param name="color">The color.</param>
+        /// <param name="strokeWidth">The stroke width in px units.</param>
         public PenOptions(Color color, float strokeWidth)
             : this(color, strokeWidth, null)
         {
         }
 
-        public PenOptions(Color color, float strokeWidth, IEnumerable<float>? strokePattern)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// </summary>
+        /// <param name="color">The color.</param>
+        /// <param name="strokeWidth">The stroke width in px units.</param>
+        /// <param name="strokePattern">The stroke pattern.</param>
+        public PenOptions(Color color, float strokeWidth, float[] strokePattern)
             : this(new SolidBrush(color), strokeWidth, strokePattern)
         {
         }
 
-        public PenOptions(Brush strokeFill, float strokeWidth, IEnumerable<float>? strokePattern)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// </summary>
+        /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
+        /// <param name="strokeWidth">The stroke width in px units.</param>
+        /// <param name="strokePattern">The stroke pattern.</param>
+        public PenOptions(Brush strokeFill, float strokeWidth, float[] strokePattern)
         {
+            Guard.MustBeGreaterThan(strokeWidth, 0, nameof(strokeWidth));
+
             this.StrokeFill = strokeFill;
             this.StrokeWidth = strokeWidth;
             this.StrokePattern = strokePattern;
         }
 
-        public Brush StrokeFill { get; set; } // defaults to black solid brush when undefined
+        /// <summary>
+        /// Gets the brush used to fill the stroke outline. Defaults to <see cref="SolidBrush"/>.
+        /// </summary>
+        public Brush StrokeFill { get; }
 
-        public float StrokeWidth { get; set; }
+        /// <summary>
+        /// Gets the stroke width in px units. Defaults to 1px.
+        /// </summary>
+        public float StrokeWidth { get; }
 
-        IEnumerable<float>? StrokePattern { get; set; }
+        /// <summary>
+        /// Gets the stroke pattern.
+        /// </summary>
+        public float[] StrokePattern { get; }
 
-        public JointStyle? JointStyle { get; set; }
+        /// <summary>
+        /// Gets or sets the joint style.
+        /// </summary>
+        public JointStyle JointStyle { get; set; }
 
-        public EndCapStyle? EndCap { get; set; }
+        /// <summary>
+        /// Gets or sets the end cap style.
+        /// </summary>
+        public EndCapStyle EndCapStyle { get; set; }
     }
 }
