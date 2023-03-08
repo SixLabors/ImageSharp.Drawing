@@ -44,14 +44,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         }
 
         [Fact]
-        public void PenMustHaveAWidthGraterThanZero()
+        public void PenMustHaveAWidthGreaterThanZero()
         {
             ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             {
                 Pen pen = new Pen(new PenOptions(Color.White, 0));
             });
 
-            Assert.StartsWith("Parameter \"width\" (System.Single) must be greater than 0, was 0", ex.Message);
+            Assert.StartsWith("Parameter \"strokeWidth\" (System.Single) must be greater than 0, was 0", ex.Message);
         }
 
         [Fact]
