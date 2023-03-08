@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             string text,
             Font font,
-            IBrush brush,
+            Brush brush,
             PointF location) =>
             source.DrawText(source.GetDrawingOptions(), text, font, brush, location);
 
@@ -93,7 +93,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             string text,
             Font font,
-            IPen pen,
+            Pen pen,
             PointF location) =>
             source.DrawText(source.GetDrawingOptions(), text, font, pen, location);
 
@@ -111,8 +111,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             string text,
             Font font,
-            IBrush brush,
-            IPen pen,
+            Brush brush,
+            Pen pen,
             PointF location)
         {
             TextOptions textOptions = new(font) { Origin = location };
@@ -131,7 +131,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             TextOptions textOptions,
             string text,
-            IBrush brush) =>
+            Brush brush) =>
             source.DrawText(source.GetDrawingOptions(), textOptions, text, brush, null);
 
         /// <summary>
@@ -146,7 +146,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             TextOptions textOptions,
             string text,
-            IPen pen) =>
+            Pen pen) =>
             source.DrawText(source.GetDrawingOptions(), textOptions, text, null, pen);
 
         /// <summary>
@@ -162,8 +162,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             TextOptions textOptions,
             string text,
-            IBrush brush,
-            IPen pen) =>
+            Brush brush,
+            Pen pen) =>
             source.DrawText(source.GetDrawingOptions(), textOptions, text, brush, pen);
 
         /// <summary>
@@ -181,7 +181,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions drawingOptions,
             string text,
             Font font,
-            IPen pen,
+            Pen pen,
             PointF location)
             => source.DrawText(drawingOptions, text, font, null, pen, location);
 
@@ -200,7 +200,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions drawingOptions,
             string text,
             Font font,
-            IBrush brush,
+            Brush brush,
             PointF location)
             => source.DrawText(drawingOptions, text, font, brush, null, location);
 
@@ -220,8 +220,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions drawingOptions,
             string text,
             Font font,
-            IBrush brush,
-            IPen pen,
+            Brush brush,
+            Pen pen,
             PointF location)
         {
             TextOptions textOptions = new(font) { Origin = location };
@@ -243,8 +243,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions drawingOptions,
             TextOptions textOptions,
             string text,
-            IBrush brush,
-            IPen pen)
+            Brush brush,
+            Pen pen)
             => source.ApplyProcessor(new DrawTextProcessor(drawingOptions, textOptions, text, brush, pen));
     }
 }

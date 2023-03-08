@@ -9,9 +9,9 @@ namespace SixLabors.ImageSharp.Drawing
     public enum JointStyle
     {
         /// <summary>
-        /// Joints will generate to a long point unless the end of the point will exceed 20 times the width then we generate the joint using <see cref="Square"/>.
+        /// Joints are squared off 1 width distance from the corner.
         /// </summary>
-        Miter = 2,
+        Square = 0,
 
         /// <summary>
         /// Rounded joints. Joints generate with a rounded profile.
@@ -19,8 +19,8 @@ namespace SixLabors.ImageSharp.Drawing
         Round = 1,
 
         /// <summary>
-        /// Joints are squared off 1 width distance from the corner.
+        /// Joints will generate to a long point unless the end of the point will exceed 20 times the width then we generate the joint using <see cref="Square"/>.
         /// </summary>
-        Square = 0
+        Miter = 2
     }
 }

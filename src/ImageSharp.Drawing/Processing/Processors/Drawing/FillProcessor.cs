@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Processing.Processors;
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 {
     /// <summary>
-    /// Defines a processor to fill an <see cref="Image"/> with the given <see cref="IBrush"/>
+    /// Defines a processor to fill an <see cref="Image"/> with the given <see cref="Processing.Brush"/>
     /// using blending defined by the given <see cref="GraphicsOptions"/>.
     /// </summary>
     public class FillProcessor : IImageProcessor
@@ -17,16 +17,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// </summary>
         /// <param name="options">The <see cref="GraphicsOptions"/> defining how to blend the brush pixels over the image pixels.</param>
         /// <param name="brush">The brush to use for filling.</param>
-        public FillProcessor(DrawingOptions options, IBrush brush)
+        public FillProcessor(DrawingOptions options, Brush brush)
         {
             this.Brush = brush;
             this.Options = options;
         }
 
         /// <summary>
-        /// Gets the <see cref="IBrush"/> used for filling the destination image.
+        /// Gets the <see cref="Processing.Brush"/> used for filling the destination image.
         /// </summary>
-        public IBrush Brush { get; }
+        public Brush Brush { get; }
 
         /// <summary>
         /// Gets the <see cref="DrawingOptions"/> defining how to blend the brush pixels over the image pixels.

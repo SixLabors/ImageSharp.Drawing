@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Provides an implementation of a brush for painting gradients between multiple color positions in 2D coordinates.
     /// </summary>
-    public sealed class PathGradientBrush : IBrush
+    public sealed class PathGradientBrush : Brush
     {
         private readonly Edge[] edges;
         private readonly Color centerColor;
@@ -78,12 +78,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
-        public BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
             ImageFrame<TPixel> source,
             RectangleF region)
-            where TPixel : unmanaged, IPixel<TPixel>
             => new PathGradientBrushApplicator<TPixel>(
                 configuration,
                 options,

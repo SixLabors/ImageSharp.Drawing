@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             Configuration configuration = this.Configuration;
             ShapeOptions shapeOptions = this.definition.Options.ShapeOptions;
             GraphicsOptions graphicsOptions = this.definition.Options.GraphicsOptions;
-            IBrush brush = this.definition.Brush;
+            Brush brush = this.definition.Brush;
             bool isSolidBrushWithoutBlending = IsSolidBrushWithoutBlending(graphicsOptions, brush, out SolidBrush solidBrush);
             TPixel solidBrushColor = isSolidBrushWithoutBlending ? solidBrush.Color.ToPixel<TPixel>() : default;
 
@@ -138,7 +138,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             }
         }
 
-        private static bool IsSolidBrushWithoutBlending(GraphicsOptions options, IBrush inputBrush, out SolidBrush solidBrush)
+        private static bool IsSolidBrushWithoutBlending(GraphicsOptions options, Brush inputBrush, out SolidBrush solidBrush)
         {
             solidBrush = inputBrush as SolidBrush;
 

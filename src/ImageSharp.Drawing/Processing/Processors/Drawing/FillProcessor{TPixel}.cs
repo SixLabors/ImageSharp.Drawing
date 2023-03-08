@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
             }
 
             Configuration configuration = this.Configuration;
-            IBrush brush = this.definition.Brush;
+            Brush brush = this.definition.Brush;
             GraphicsOptions options = this.definition.Options.GraphicsOptions;
 
             // If there's no reason for blending, then avoid it.

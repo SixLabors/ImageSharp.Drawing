@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class DrawBezier : BaseImageOperationsExtensionTest
     {
-        private readonly IPen pen = Pens.Solid(Color.HotPink, 2);
+        private readonly Pen pen = Pens.Solid(Color.HotPink, 2);
         private readonly PointF[] points = new PointF[]
         {
             new PointF(10, 10),

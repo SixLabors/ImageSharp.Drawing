@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
                 new LinearLineSegment(new PointF(bounds.Left, bounds.Bottom), new PointF(bounds.Left, bounds.Top))
             };
             var path = new Path(points);
-            var brush = new Mock<IBrush>();
+            var brush = new Mock<Brush>();
             var options = new GraphicsOptions { Antialias = true };
             var processor = new FillPathProcessor(new DrawingOptions() { GraphicsOptions = options }, brush.Object, path);
             var img = new Image<Rgba32>(10, 10);
@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
             using (var img = new Image<Rgba32>(10, 10))
             {
                 img.Mutate(x => x.DrawLines(
-                    new Pen(Color.Black, 10),
+                    new Pen(new PenOptions(Color.Black, 10)),
                     new Vector2(-10, 5),
                     new Vector2(20, 5)));
             }

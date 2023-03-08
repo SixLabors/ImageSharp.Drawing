@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext Fill(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             RectangleF shape) =>
             source.Fill(options, brush, new RectangularPolygon(shape.X, shape.Y, shape.Width, shape.Height));
 
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="shape">The shape.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext
-            Fill(this IImageProcessingContext source, IBrush brush, RectangleF shape) =>
+            Fill(this IImageProcessingContext source, Brush brush, RectangleF shape) =>
             source.Fill(brush, new RectangularPolygon(shape.X, shape.Y, shape.Width, shape.Height));
 
         /// <summary>

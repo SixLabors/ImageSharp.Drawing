@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Performs the application of an <see cref="IBrush"/> implementation against individual scanlines.
+    /// Performs the application of an <see cref="Brush"/> implementation against individual scanlines.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <seealso cref="IDisposable" />

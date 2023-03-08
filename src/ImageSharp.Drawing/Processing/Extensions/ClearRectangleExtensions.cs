@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
-            IBrush brush,
+            Brush brush,
             RectangleF rectangle)
             => source.Clear(brush, new RectangularPolygon(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height));
 
@@ -59,7 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext Clear(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             RectangleF rectangle)
             => source.Clear(options, brush, new RectangularPolygon(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height));
     }

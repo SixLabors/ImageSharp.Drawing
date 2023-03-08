@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Provides an implementation of a solid brush for painting solid color areas.
     /// </summary>
-    public sealed class SolidBrush : IBrush
+    public sealed class SolidBrush : Brush
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="SolidBrush"/> class.
@@ -26,13 +26,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public Color Color { get; }
 
         /// <inheritdoc />
-        public BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
             ImageFrame<TPixel> source,
-            RectangleF region)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
+            RectangleF region) => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
 
         /// <summary>
         /// The solid brush applicator.

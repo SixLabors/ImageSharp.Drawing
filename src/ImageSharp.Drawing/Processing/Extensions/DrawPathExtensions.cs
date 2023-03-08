@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IPen pen,
+            Pen pen,
             IPath path) =>
             source.ApplyProcessor(new DrawPathProcessor(options, pen, path));
 
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="pen">The pen.</param>
         /// <param name="path">The path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext Draw(this IImageProcessingContext source, IPen pen, IPath path) =>
+        public static IImageProcessingContext Draw(this IImageProcessingContext source, Pen pen, IPath path) =>
             source.Draw(source.GetDrawingOptions(), pen, path);
 
         /// <summary>
@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             float thickness,
             IPath path) =>
             source.Draw(options, new Pen(brush, thickness), path);
@@ -63,7 +63,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Draw(
             this IImageProcessingContext source,
-            IBrush brush,
+            Brush brush,
             float thickness,
             IPath path) =>
             source.Draw(new Pen(brush, thickness), path);
