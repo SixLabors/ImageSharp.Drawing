@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
 {
     /// <summary>
     /// Defines a processor to fill <see cref="Image"/> pixels withing a given <see cref="IPath"/>
-    /// with the given <see cref="IBrush"/> and blending defined by the given <see cref="DrawingOptions"/>.
+    /// with the given <see cref="Processing.Brush"/> and blending defined by the given <see cref="DrawingOptions"/>.
     /// </summary>
     public class FillPathProcessor : IImageProcessor
     {
@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         /// <param name="options">The graphics options.</param>
         /// <param name="brush">The details how to fill the region of interest.</param>
         /// <param name="path">The logic path to be filled.</param>
-        public FillPathProcessor(DrawingOptions options, IBrush brush, IPath path)
+        public FillPathProcessor(DrawingOptions options, Brush brush, IPath path)
         {
             this.Region = path;
             this.Brush = brush;
@@ -31,9 +31,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         }
 
         /// <summary>
-        /// Gets the <see cref="IBrush"/> used for filling the destination image.
+        /// Gets the <see cref="Processing.Brush"/> used for filling the destination image.
         /// </summary>
-        public IBrush Brush { get; }
+        public Brush Brush { get; }
 
         /// <summary>
         /// Gets the logic path that this processor applies to.

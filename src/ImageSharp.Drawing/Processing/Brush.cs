@@ -7,13 +7,13 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Brush represents a logical configuration of a brush which can be used to source pixel colors
+    /// Represents a logical configuration of a brush which can be used to source pixel colors.
     /// </summary>
     /// <remarks>
     /// A brush is a simple class that will return an <see cref="BrushApplicator{TPixel}" /> that will perform the
     /// logic for retrieving pixel values for specific locations.
     /// </remarks>
-    public interface IBrush : IEquatable<IBrush>
+    public abstract class Brush : IEquatable<Brush>
     {
         /// <summary>
         /// Creates the applicator for this brush.
@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// The <paramref name="region" /> when being applied to things like shapes would usually be the
         /// bounding box of the shape not necessarily the bounds of the whole image.
         /// </remarks>
-        BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        public abstract BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
             ImageFrame<TPixel> source,

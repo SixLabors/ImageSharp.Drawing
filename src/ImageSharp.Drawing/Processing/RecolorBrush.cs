@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Provides an implementation of a brush that can recolor an image
     /// </summary>
-    public sealed class RecolorBrush : IBrush
+    public sealed class RecolorBrush : Brush
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="RecolorBrush" /> class.
@@ -44,13 +44,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public Color TargetColor { get; }
 
         /// <inheritdoc />
-        public BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
             ImageFrame<TPixel> source,
-            RectangleF region)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => new RecolorBrushApplicator<TPixel>(
+            RectangleF region) => new RecolorBrushApplicator<TPixel>(
                 configuration,
                 options,
                 source,

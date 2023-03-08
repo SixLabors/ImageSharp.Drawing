@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <returns>The Pen</returns>
-        public static SolidPen Solid(IBrush brush) => new SolidPen(brush);
+        public static SolidPen Solid(Brush brush) => new SolidPen(brush);
 
         /// <summary>
         /// Create a solid pen with out any drawing patterns
@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
         /// <returns>The Pen</returns>
-        public static SolidPen Solid(IBrush brush, float width) => new SolidPen(brush, width);
+        public static SolidPen Solid(Brush brush, float width) => new SolidPen(brush, width);
 
         /// <summary>
         /// Create a pen with a 'Dash' drawing patterns
@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
         /// <returns>The Pen</returns>
-        public static PatternPen Dash(IBrush brush, float width) => new PatternPen(brush, width, DashedPattern);
+        public static PatternPen Dash(Brush brush, float width) => new PatternPen(brush, width, DashedPattern);
 
         /// <summary>
         /// Create a pen with a 'Dot' drawing patterns
@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
         /// <returns>The Pen</returns>
-        public static PatternPen Dot(IBrush brush, float width) => new PatternPen(brush, width, DottedPattern);
+        public static PatternPen Dot(Brush brush, float width) => new PatternPen(brush, width, DottedPattern);
 
         /// <summary>
         /// Create a pen with a 'Dash Dot' drawing patterns
@@ -92,7 +92,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
         /// <returns>The Pen</returns>
-        public static PatternPen DashDot(IBrush brush, float width) => new PatternPen(brush, width, DashDotPattern);
+        public static PatternPen DashDot(Brush brush, float width) => new PatternPen(brush, width, DashDotPattern);
 
         /// <summary>
         /// Create a pen with a 'Dash Dot Dot' drawing patterns
@@ -108,6 +108,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
         /// <returns>The Pen</returns>
-        public static PatternPen DashDotDot(IBrush brush, float width) => new PatternPen(brush, width, DashDotDotPattern);
+        public static PatternPen DashDotDot(Brush brush, float width) => new PatternPen(brush, width, DashDotDotPattern);
     }
 }

@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     ///  0
     /// </para>
     /// </remarks>
-    public sealed class PatternBrush : IBrush
+    public sealed class PatternBrush : Brush
     {
         /// <summary>
         /// The pattern.
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
-        public bool Equals(IBrush other)
+        public override bool Equals(Brush other)
         {
             if (other is PatternBrush sb)
             {
@@ -100,12 +100,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
-        public BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
             ImageFrame<TPixel> source,
-            RectangleF region)
-            where TPixel : unmanaged, IPixel<TPixel> =>
+            RectangleF region) =>
             new PatternBrushApplicator<TPixel>(
                 configuration,
                 options,

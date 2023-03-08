@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext DrawLines(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             float thickness,
             params PointF[] points) =>
             source.Draw(options, new SolidPen(brush, thickness), new Path(new LinearLineSegment(points)));
@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawLines(
             this IImageProcessingContext source,
-            IBrush brush,
+            Brush brush,
             float thickness,
             params PointF[] points) =>
             source.Draw(new SolidPen(brush, thickness), new Path(new LinearLineSegment(points)));
@@ -85,7 +85,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext DrawLines(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IPen pen,
+            Pen pen,
             params PointF[] points) =>
             source.Draw(options, pen, new Path(new LinearLineSegment(points)));
 
@@ -98,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext DrawLines(
             this IImageProcessingContext source,
-            IPen pen,
+            Pen pen,
             params PointF[] points) =>
             source.Draw(pen, new Path(new LinearLineSegment(points)));
     }

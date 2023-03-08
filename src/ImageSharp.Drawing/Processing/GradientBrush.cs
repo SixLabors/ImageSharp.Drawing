@@ -13,9 +13,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Base class for Gradient brushes
     /// </summary>
-    public abstract class GradientBrush : IBrush
+    public abstract class GradientBrush : Brush
     {
-        /// <inheritdoc cref="IBrush"/>
+        /// <inheritdoc cref="Brush"/>
         /// <param name="repetitionMode">Defines how the colors are repeated beyond the interval [0..1]</param>
         /// <param name="colorStops">The gradient colors.</param>
         protected GradientBrush(GradientRepetitionMode repetitionMode, params ColorStop[] colorStops)
@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         protected ColorStop[] ColorStops { get; }
 
         /// <inheritdoc />
-        public bool Equals(IBrush other)
+        public override bool Equals(Brush other)
         {
             if (other is GradientBrush sb)
             {

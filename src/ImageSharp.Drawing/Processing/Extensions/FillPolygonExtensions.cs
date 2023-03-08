@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static IImageProcessingContext FillPolygon(
             this IImageProcessingContext source,
             DrawingOptions options,
-            IBrush brush,
+            Brush brush,
             params PointF[] points) =>
             source.Fill(options, brush, new Polygon(new LinearLineSegment(points)));
 
@@ -34,7 +34,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext FillPolygon(
             this IImageProcessingContext source,
-            IBrush brush,
+            Brush brush,
             params PointF[] points) =>
             source.Fill(brush, new Polygon(new LinearLineSegment(points)));
 

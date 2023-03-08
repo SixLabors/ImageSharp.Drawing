@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Provides an implementation of an image brush for painting images within areas.
     /// </summary>
-    public class ImageBrush : IBrush
+    public class ImageBrush : Brush
     {
         /// <summary>
         /// The image to paint.
@@ -47,7 +47,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
-        public bool Equals(IBrush other)
+        public override bool Equals(Brush other)
         {
             if (other is ImageBrush sb)
             {
@@ -58,12 +58,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
-        public BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
             ImageFrame<TPixel> source,
             RectangleF region)
-            where TPixel : unmanaged, IPixel<TPixel>
         {
             if (this.image is Image<TPixel> specificImage)
             {

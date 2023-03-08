@@ -199,7 +199,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public MemoryAllocator MemoryAllocator { get; internal set; }
 
-            public IPen Pen { get; internal set; }
+            public Pen Pen { get; internal set; }
 
             public IBrush Brush { get; internal set; }
 

@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             }
         };
 
-        private readonly IBrush brush = new SolidBrush(Color.HotPink);
+        private readonly Brush brush = new SolidBrush(Color.HotPink);
 
         [Fact]
         public void Brush()

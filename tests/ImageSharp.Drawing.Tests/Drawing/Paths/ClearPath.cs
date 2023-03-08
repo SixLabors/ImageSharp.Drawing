@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             }
         };
 
-        private readonly IBrush brush = Brushes.Solid(Color.HotPink);
+        private readonly Brush brush = Brushes.Solid(Color.HotPink);
         private readonly IPath path = new Star(1, 10, 5, 23, 56);
 
         [Fact]

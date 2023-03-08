@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
 {
     public class FillPolygon : BaseImageOperationsExtensionTest
     {
-        private readonly IBrush brush = Brushes.Solid(Color.HotPink);
+        private readonly Brush brush = Brushes.Solid(Color.HotPink);
         private readonly PointF[] path = new[]
         {
             new PointF(10, 10),
