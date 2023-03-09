@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
@@ -57,13 +56,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.Threshold);
 
         /// <inheritdoc />
-        public bool Equals(IBrush other)
+        public override bool Equals(Brush other)
         {
-            if (other is RecolorBrush sb)
+            if (other is RecolorBrush brush)
             {
-                return sb.SourceColor.Equals(this.SourceColor) &&
-                    sb.TargetColor.Equals(this.TargetColor) &&
-                    sb.Threshold == this.Threshold;
+                return this.SourceColor.Equals(brush.SourceColor)
+                    && this.TargetColor.Equals(brush.TargetColor)
+                    && this.Threshold == brush.Threshold;
             }
 
             return false;

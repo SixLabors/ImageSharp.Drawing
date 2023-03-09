@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Linq;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
@@ -92,8 +91,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
             if (other is PatternBrush sb)
             {
-                return sb.pattern.Equals(this.pattern) &&
-                    sb.patternVector.Equals(this.patternVector);
+                return sb.pattern.Equals(this.pattern)
+                    && sb.patternVector.Equals(this.patternVector);
             }
 
             return false;

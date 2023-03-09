@@ -6,10 +6,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Provides a set of configurations options for pens.
     /// </summary>
-    public class PenOptions
+    public struct PenOptions
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// Initializes a new instance of the <see cref="PenOptions"/> struct.
         /// </summary>
         /// <param name="strokeWidth">The stroke width in px units.</param>
         public PenOptions(float strokeWidth)
@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// Initializes a new instance of the <see cref="PenOptions"/> struct.
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="strokeWidth">The stroke width in px units.</param>
@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// Initializes a new instance of the <see cref="PenOptions"/> struct.
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="strokeWidth">The stroke width in px units.</param>
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PenOptions"/> class.
+        /// Initializes a new instance of the <see cref="PenOptions"/> struct.
         /// </summary>
         /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
         /// <param name="strokeWidth">The stroke width in px units.</param>
@@ -51,6 +51,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this.StrokeFill = strokeFill;
             this.StrokeWidth = strokeWidth;
             this.StrokePattern = strokePattern;
+            this.JointStyle = JointStyle.Square;
+            this.EndCapStyle = EndCapStyle.Butt;
         }
 
         /// <summary>

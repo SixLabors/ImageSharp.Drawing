@@ -13,26 +13,26 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Gets or sets the brush used for filling this run.
         /// </summary>
-        public IBrush Brush { get; set; }
+        public Brush Brush { get; set; }
 
         /// <summary>
         /// Gets or sets the pen used for outlining this run.
         /// </summary>
-        public IPen Pen { get; set; }
+        public Pen Pen { get; set; }
 
         /// <summary>
         /// Gets or sets the pen used for drawing strikeout features for this run.
         /// </summary>
-        public IPen StrikeoutPen { get; set; }
+        public Pen StrikeoutPen { get; set; }
 
         /// <summary>
         /// Gets or sets the pen used for drawing underline features for this run.
         /// </summary>
-        public IPen UnderlinePen { get; set; }
+        public Pen UnderlinePen { get; set; }
 
         /// <summary>
         /// Gets or sets the pen used for drawing overline features for this run.
         /// </summary>
-        public IPen OverlinePen { get; set; }
+        public Pen OverlinePen { get; set; }
     }
 }

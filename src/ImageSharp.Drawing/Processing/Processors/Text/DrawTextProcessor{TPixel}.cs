@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             void Draw(IEnumerable<DrawingOperation> operations)
             {
-                var brushes = new Dictionary<IBrush, BrushApplicator<TPixel>>();
+                var brushes = new Dictionary<Brush, BrushApplicator<TPixel>>();
                 foreach (DrawingOperation operation in operations)
                 {
                     if (!brushes.TryGetValue(operation.Brush, out _))
@@ -76,7 +76,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                 foreach (DrawingOperation operation in operations)
                 {
-                    var app = brushes[operation.Brush];
+                    BrushApplicator<TPixel> app = brushes[operation.Brush];
 
                     Buffer2D<float> buffer = operation.Map;
                     int startY = operation.Location.Y;
@@ -138,7 +138,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public Point Location { get; set; }
 
-            public IBrush Brush { get; internal set; }
+            public Brush Brush { get; internal set; }
         }
 
         private struct TextDecorationDetails
@@ -147,7 +147,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public Vector2 End { get; set; }
 
-            public IPen Pen { get; set; }
+            public Pen Pen { get; set; }
 
             public float Thickness { get; internal set; }
         }
@@ -164,7 +164,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private const float AccuracyMultiple = 8;
             private readonly Matrix3x2 transform;
             private readonly PathBuilder builder;
-            private readonly Dictionary<Color, IBrush> brushLookup = new();
+            private readonly Dictionary<Color, Brush> brushLookup = new();
 
             private Point currentRenderPosition;
             private (GlyphRendererParameters Glyph, PointF SubPixelOffset) currentGlyphRenderParams;
@@ -172,8 +172,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             private PointF currentPoint;
             private Color? currentColor;
             private TextRun currentTextRun;
-            private IBrush currentBrush;
-            private IPen currentPen;
+            private Brush currentBrush;
+            private Pen currentPen;
 
             private TextDecorationDetails? currentUnderline = null;
             private TextDecorationDetails? currentStrikout = null;
@@ -183,7 +183,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             private bool rasterizationRequired;
 
-            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, TextDrawingOptions textOptions, IPen pen, IBrush brush, Matrix3x2 transform)
+            public CachingGlyphRenderer(MemoryAllocator memoryAllocator, int size, TextDrawingOptions textOptions, Pen pen, Brush brush, Matrix3x2 transform)
             {
                 this.MemoryAllocator = memoryAllocator;
                 this.currentRenderPosition = default;
@@ -201,7 +201,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public Pen Pen { get; internal set; }
 
-            public IBrush Brush { get; internal set; }
+            public Brush Brush { get; internal set; }
 
             public DrawingOptions Options { get; internal set; }
 
@@ -255,7 +255,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     return;
                 }
 
-                IPen pen = null;
+                Pen pen = null;
                 if (this.currentTextRun is TextDrawingRun drawingRun)
                 {
                     if (textDecorations == TextDecorations.Strikeout)
@@ -275,10 +275,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 // TODO:Isn't this already handled in font via GetEnds?
                 // fix up the thickness/Y position so that the line render nicly
                 var thicknessOffset = new Vector2(0, thickness * .5f);
-                var tl = start - thicknessOffset;
-                var bl = start + thicknessOffset;
-                var tr = end - thicknessOffset;
-                var br = end + thicknessOffset;
+                Vector2 tl = start - thicknessOffset;
+                Vector2 bl = start + thicknessOffset;
+                Vector2 tr = end - thicknessOffset;
+                Vector2 br = end + thicknessOffset;
 
                 // Do the same for vertical components.
                 tl.Y = MathF.Floor(tl.Y);
@@ -288,7 +288,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 tl.X = MathF.Floor(tl.X);
                 tr.X = MathF.Floor(tr.X);
 
-                var newThickness = bl.Y - tl.Y;
+                float newThickness = bl.Y - tl.Y;
                 var offsetNew = new Vector2(0, newThickness * .5f);
 
                 pen ??= new SolidPen(this.currentBrush ?? this.Brush);
@@ -300,7 +300,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 if (decoration != null)
                 {
                     var path = new Path(new LinearLineSegment(decoration.Value.Start, decoration.Value.End));
-                    var currentBounds = path.Bounds;
+                    RectangleF currentBounds = path.Bounds;
                     var currentRenderPosition = Point.Truncate(currentBounds.Location);
                     PointF subPixelOffset = currentBounds.Location - this.currentRenderPosition;
 
@@ -308,8 +308,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     subPixelOffset.Y = MathF.Round(subPixelOffset.Y * AccuracyMultiple) / AccuracyMultiple;
 
                     var additionalOffset = new Size(2, 2);
-                    var offsetPath = path.Translate(new Point(-currentRenderPosition.X, -currentRenderPosition.Y) + additionalOffset);
-                    var outline = decoration.Value.Pen.GeneratePath(offsetPath, decoration.Value.Thickness);
+                    IPath offsetPath = path.Translate(new Point(-currentRenderPosition.X, -currentRenderPosition.Y) + additionalOffset);
+                    IPath outline = decoration.Value.Pen.GeneratePath(offsetPath, decoration.Value.Thickness);
 
                     if (outline.Bounds.Width != 0 || outline.Bounds.Height != 0)
                     {
@@ -327,7 +327,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 }
             }
 
-            private void AppendDecoration(ref TextDecorationDetails? decoration, Vector2 start, Vector2 end, IPen pen, float thickness)
+            private void AppendDecoration(ref TextDecorationDetails? decoration, Vector2 start, Vector2 end, Pen pen, float thickness)
             {
                 if (decoration != null)
                 {
@@ -409,11 +409,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 return true;
             }
 
-            public void BeginText(FontRectangle bounds)
-            {
+            public void BeginText(FontRectangle bounds) =>
+
                 // Not concerned about this one
                 this.DrawingOperations.Clear();
-            }
 
             public void CubicBezierTo(Vector2 secondControlPoint, Vector2 thirdControlPoint, Vector2 point)
             {
@@ -445,8 +444,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     this.currentPen = this.Pen;
                 }
 
-                var renderFill = false;
-                var renderOutline = false;
+                bool renderFill = false;
+                bool renderOutline = false;
 
                 // If we are using the fonts color layers we ignore the request to draw an outline only
                 // cause that wont really work and instead force drawing with fill with the requested color
@@ -456,7 +455,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     renderFill = true;
                     if (this.currentColor.HasValue)
                     {
-                        if (this.brushLookup.TryGetValue(this.currentColor.Value, out var brush))
+                        if (this.brushLookup.TryGetValue(this.currentColor.Value, out Brush brush))
                         {
                             this.currentBrush = brush;
                         }
@@ -615,8 +614,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             private struct GlyphRenderData : IDisposable
             {
-                public Color? Color;
-
+                // public Color? Color;
                 public Buffer2D<float> FillMap;
 
                 public Buffer2D<float> OutlineMap;

@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.PolygonClipper;
-using SixLabors.ImageSharp.Drawing.Processing;
 
 namespace SixLabors.ImageSharp.Drawing
 {

@@ -3,7 +3,6 @@
 
 using System;
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -33,7 +32,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region) => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
 
-        public bool Equals(IBrush other)
+        /// <inheritdoc/>
+        public override bool Equals(Brush other)
         {
             if (other is SolidBrush sb)
             {

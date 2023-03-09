@@ -37,22 +37,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <inheritdoc />
         public override bool Equals(Brush other)
         {
-            if (other is GradientBrush sb)
+            if (other is GradientBrush brush)
             {
-                return sb.RepetitionMode == this.RepetitionMode &&
-                    Enumerable.SequenceEqual(sb.ColorStops, this.ColorStops);
+                return this.RepetitionMode == brush.RepetitionMode
+                    && this.ColorStops?.SequenceEqual(brush.ColorStops) == true;
             }
 
             return false;
         }
-
-        /// <inheritdoc />
-        public abstract BrushApplicator<TPixel> CreateApplicator<TPixel>(
-            Configuration configuration,
-            GraphicsOptions options,
-            ImageFrame<TPixel> source,
-            RectangleF region)
-            where TPixel : unmanaged, IPixel<TPixel>;
 
         /// <summary>
         /// Base class for gradient brush applicators
@@ -124,7 +116,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                             break;
                         case GradientRepetitionMode.DontFill:
-                            if (positionOnCompleteGradient > 1 || positionOnCompleteGradient < 0)
+                            if (positionOnCompleteGradient is > 1 or < 0)
                             {
                                 return Transparent;
                             }

@@ -36,5 +36,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region)
             where TPixel : unmanaged, IPixel<TPixel>;
+
+        /// <inheritdoc/>
+        public abstract bool Equals(Brush other);
     }
 }

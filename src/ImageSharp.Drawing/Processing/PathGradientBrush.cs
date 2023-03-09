@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
@@ -81,9 +80,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <inheritdoc />
         public override bool Equals(Brush other)
         {
-            if (other is PathGradientBrush sb)
+            if (other is PathGradientBrush brush)
             {
-                return Enumerable.SequenceEqual(sb.edges, this.edges);
+                return this.centerColor.Equals(brush.centerColor)
+                    && this.hasSpecialCenterColor.Equals(brush.hasSpecialCenterColor)
+                    && this.edges?.SequenceEqual(brush.edges) == true;
             }
 
             return false;
@@ -364,7 +365,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     }
                 }
 
-                return closestEdge != null ? (closestEdge, closestIntersection) : ((Edge Edge, Vector2 Point)?)null;
+                return closestEdge != null ? (closestEdge, closestIntersection) : null;
             }
 
             private static bool FindPointOnTriangle(Vector2 v1, Vector2 v2, Vector2 v3, Vector2 point, out float u, out float v)
