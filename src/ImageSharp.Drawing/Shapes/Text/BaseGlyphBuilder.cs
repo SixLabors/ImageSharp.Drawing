@@ -8,12 +8,13 @@ using SixLabors.Fonts;
 namespace SixLabors.ImageSharp.Drawing.Text
 {
     /// <summary>
-    /// rendering surface that Fonts can use to generate Shapes.
+    /// Defines a rendering surface that Fonts can use to generate Shapes.
     /// </summary>
     internal class BaseGlyphBuilder : IGlyphRenderer
     {
         private readonly List<IPath> paths = new();
         private Vector2 currentPoint;
+        private GlyphRendererParameters parameters;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
@@ -36,11 +37,12 @@ namespace SixLabors.ImageSharp.Drawing.Text
         }
 
         /// <inheritdoc/>
-        void IGlyphRenderer.BeginText(FontRectangle bounds) => this.BeginText(bounds);
+        void IGlyphRenderer.BeginText(in FontRectangle bounds) => this.BeginText(bounds);
 
         /// <inheritdoc/>
-        bool IGlyphRenderer.BeginGlyph(FontRectangle bounds, GlyphRendererParameters paramaters)
+        bool IGlyphRenderer.BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters paramaters)
         {
+            this.parameters = paramaters;
             this.Builder.Clear();
             this.BeginGlyph(bounds);
             return true;
@@ -106,14 +108,40 @@ namespace SixLabors.ImageSharp.Drawing.Text
 
         /// <summary>Called before any glyphs have been rendered.</summary>
         /// <param name="bounds">The bounds the text will be rendered at and at what size.</param>
-        protected virtual void BeginText(FontRectangle bounds)
+        protected virtual void BeginText(in FontRectangle bounds)
         {
         }
 
         /// <summary>Begins the glyph.</summary>
         /// <param name="bounds">The bounds the glyph will be rendered at and at what size.</param>
-        protected virtual void BeginGlyph(FontRectangle bounds)
+        protected virtual void BeginGlyph(in FontRectangle bounds)
         {
+        }
+
+        public virtual TextDecorations EnabledDecorations()
+            => this.parameters.TextRun.TextDecorations;
+
+        public virtual void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
+        {
+            if (thickness == 0)
+            {
+                return;
+            }
+
+            var renderer = (IGlyphRenderer)this;
+
+            Vector2 height = new(0, thickness);
+            Vector2 tl = start;
+            Vector2 tr = end;
+            Vector2 bl = start + height;
+            Vector2 br = end + height;
+
+            // MoveTo calls StartFigure();
+            renderer.MoveTo(tl);
+            renderer.LineTo(bl);
+            renderer.LineTo(br);
+            renderer.LineTo(tr);
+            renderer.EndFigure();
         }
     }
 }

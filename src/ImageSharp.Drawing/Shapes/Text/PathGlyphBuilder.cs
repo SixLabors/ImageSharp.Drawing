@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         }
 
         /// <inheritdoc/>
-        protected override void BeginText(FontRectangle bounds)
+        protected override void BeginText(in FontRectangle bounds)
         {
             float yOffset = this.textOptions.VerticalAlignment switch
             {
@@ -59,10 +59,10 @@ namespace SixLabors.ImageSharp.Drawing.Text
         }
 
         /// <inheritdoc/>
-        protected override void BeginGlyph(FontRectangle bounds) => this.TransformGlyph(bounds);
+        protected override void BeginGlyph(in FontRectangle bounds) => this.TransformGlyph(in bounds);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void TransformGlyph(FontRectangle bounds)
+        private void TransformGlyph(in FontRectangle bounds)
         {
             // Find the intersection point.
             // This should be offset to ensure we rotate at the bottom-center of the glyph.
