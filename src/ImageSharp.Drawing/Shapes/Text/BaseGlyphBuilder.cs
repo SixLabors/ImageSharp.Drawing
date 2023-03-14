@@ -32,19 +32,17 @@ namespace SixLabors.ImageSharp.Drawing.Text
         protected PathBuilder Builder { get; }
 
         /// <inheritdoc/>
-        void IGlyphRenderer.EndText()
-        {
-        }
+        void IGlyphRenderer.EndText() => this.EndText();
 
         /// <inheritdoc/>
         void IGlyphRenderer.BeginText(in FontRectangle bounds) => this.BeginText(bounds);
 
         /// <inheritdoc/>
-        bool IGlyphRenderer.BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters paramaters)
+        bool IGlyphRenderer.BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
         {
-            this.parameters = paramaters;
+            this.parameters = parameters;
             this.Builder.Clear();
-            this.BeginGlyph(bounds);
+            this.BeginGlyph(in bounds, in parameters);
             return true;
         }
 
@@ -68,7 +66,11 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// <summary>
         /// Ends the glyph.
         /// </summary>
-        void IGlyphRenderer.EndGlyph() => this.paths.Add(this.Builder.Build());
+        void IGlyphRenderer.EndGlyph()
+        {
+            this.paths.Add(this.Builder.Build());
+            this.EndGlyph();
+        }
 
         /// <summary>
         /// Ends the figure.
@@ -112,9 +114,18 @@ namespace SixLabors.ImageSharp.Drawing.Text
         {
         }
 
-        /// <summary>Begins the glyph.</summary>
-        /// <param name="bounds">The bounds the glyph will be rendered at and at what size.</param>
-        protected virtual void BeginGlyph(in FontRectangle bounds)
+        /// <inheritdoc cref="IGlyphRenderer.BeginGlyph(in FontRectangle, in GlyphRendererParameters)"/>
+        protected virtual void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
+        {
+        }
+
+        /// <inheritdoc cref="IGlyphRenderer.EndGlyph()"/>
+        protected virtual void EndGlyph()
+        {
+        }
+
+        /// <inheritdoc cref="IGlyphRenderer.EndText()"/>
+        protected virtual void EndText()
         {
         }
 

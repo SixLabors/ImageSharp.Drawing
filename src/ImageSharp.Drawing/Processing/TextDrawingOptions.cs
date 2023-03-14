@@ -38,5 +38,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             get => (IReadOnlyList<TextDrawingRun>)base.TextRuns;
             set => base.TextRuns = value;
         }
+
+        /// <summary>
+        /// Gets or sets an optional path to draw the text along.
+        /// </summary>
+        public IPath Path { get; set; }
     }
 }

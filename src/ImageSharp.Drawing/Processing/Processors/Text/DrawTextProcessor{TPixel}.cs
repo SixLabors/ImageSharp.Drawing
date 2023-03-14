@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -19,7 +20,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
     internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        private CachingGlyphRenderer textRenderer;
+        // private CachingGlyphRenderer textRenderer;
+        private RichTextGlyphRenderer textRenderer;
         private readonly DrawTextProcessor definition;
 
         public DrawTextProcessor(Configuration configuration, DrawTextProcessor definition, Image<TPixel> source, Rectangle sourceRectangle)
@@ -31,16 +33,23 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             base.BeforeImageApply();
 
             // Do everything at the image level as we are delegating the processing down to other processors
-            this.textRenderer = new CachingGlyphRenderer(
-                this.Configuration.MemoryAllocator,
-                this.definition.Text.GetGraphemeCount(),
+            //this.textRenderer = new CachingGlyphRenderer(
+            //    this.Configuration.MemoryAllocator,
+            //    this.definition.Text.GetGraphemeCount(),
+            //    this.definition.TextOptions,
+            //    this.definition.Pen,
+            //    this.definition.Brush,
+            //    this.definition.DrawingOptions.Transform)
+            //{
+            //    Options = this.definition.DrawingOptions
+            //};
+
+            this.textRenderer = new RichTextGlyphRenderer(
                 this.definition.TextOptions,
+                this.definition.DrawingOptions,
+                this.Configuration.MemoryAllocator,
                 this.definition.Pen,
-                this.definition.Brush,
-                this.definition.DrawingOptions.Transform)
-            {
-                Options = this.definition.DrawingOptions
-            };
+                this.definition.Brush);
 
             TextRenderer renderer = new(this.textRenderer);
             renderer.RenderText(this.definition.Text, this.definition.TextOptions);
@@ -49,6 +58,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         protected override void AfterImageApply()
         {
             base.AfterImageApply();
+
+            foreach (var path in this.textRenderer.Paths)
+            {
+                new FillPathProcessor(
+                    this.definition.DrawingOptions,
+                    new SolidBrush(Color.HotPink.WithAlpha(.5F)),
+                    path).Execute(this.Configuration, this.Source, this.SourceRectangle);
+            }
+
+
+
             this.textRenderer?.Dispose();
             this.textRenderer = null;
         }
@@ -62,7 +82,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 {
                     using BrushApplicator<TPixel> app = operation.Brush.CreateApplicator(
                              this.Configuration,
-                             this.textRenderer.Options.GraphicsOptions,
+                             this.definition.DrawingOptions.GraphicsOptions,
                              source,
                              this.SourceRectangle);
 

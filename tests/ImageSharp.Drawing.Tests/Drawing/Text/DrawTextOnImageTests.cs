@@ -587,7 +587,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
         }
 
         [Theory]
-        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(1000, 1000, nameof(Color.Black), PixelTypes.Rgba32, 32)]
         [WithSolidFilledImages(500, 300, nameof(Color.Black), PixelTypes.Rgba32, 40)]
         public void DrawRichTextRainbow<TPixel>(
            TestImageProvider<TPixel> provider,
@@ -595,7 +595,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
            where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font = CreateFont(TestFonts.OpenSans, fontSize);
-            const string text = "The quick brown fox jumps over the lazy dog";
+            const string text = "abcdefg";//"The quick brown fox jumps over the lazy dog";
 
             SolidPen[] colors = new[]
             {
@@ -616,15 +616,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 {
                     Start = i,
                     End = i + 1,
-                    UnderlinePen = pen
+                    StrikeoutPen = pen
                 });
             }
 
+            string svgPath = "M275 175 A100 100 0 1 1 275 174";
+            bool parsed = Path.TryParseSvgPath(svgPath, out IPath path);
+            Assert.True(parsed);
+
             TextDrawingOptions textOptions = new(font)
             {
-                Origin = new Vector2(15),
+                //Origin = new Vector2(-100),
                 WrappingLength = 400,
-                TextRuns = runs
+                TextRuns = runs,
+                Path = path
             };
 
             provider.RunValidatingProcessorTest(

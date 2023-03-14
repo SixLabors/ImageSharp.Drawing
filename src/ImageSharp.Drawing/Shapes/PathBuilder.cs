@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="PathBuilder"/>.</returns>
         public PathBuilder SetOrigin(PointF origin)
         {
-            // the new origin should be transofrmed based on the default transform
+            // the new origin should be transformed based on the default transform
             this.setTransform.Translation = origin;
             this.currentTransform = this.setTransform * this.defaultTransform;
 
