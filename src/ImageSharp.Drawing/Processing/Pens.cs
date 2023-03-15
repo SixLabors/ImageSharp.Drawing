@@ -17,21 +17,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         internal static readonly float[] EmptyPattern = Array.Empty<float>();
 
         /// <summary>
-        /// Create a solid pen with out any drawing patterns
+        /// Create a solid pen without any drawing patterns
         /// </summary>
         /// <param name="color">The color.</param>
         /// <returns>The Pen</returns>
         public static SolidPen Solid(Color color) => new(color);
 
         /// <summary>
-        /// Create a solid pen with out any drawing patterns
+        /// Create a solid pen without any drawing patterns
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <returns>The Pen</returns>
         public static SolidPen Solid(Brush brush) => new(brush);
 
         /// <summary>
-        /// Create a solid pen with out any drawing patterns
+        /// Create a solid pen without any drawing patterns
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="width">The width.</param>
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         public static SolidPen Solid(Color color, float width) => new(color, width);
 
         /// <summary>
-        /// Create a solid pen with out any drawing patterns
+        /// Create a solid pen without any drawing patterns
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
