@@ -24,7 +24,7 @@
   <!--Add Feedz.io restore sources while we wait for the ability to update shared infrastructure-->
   <PropertyGroup>
     <RestoreSources>
-      $(RestoreSources);
+      $(RestoreSources)
       https://f.feedz.io/sixlabors/sixlabors/nuget/index.json;
     </RestoreSources>
   </PropertyGroup>
