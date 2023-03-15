@@ -22,7 +22,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private const byte RenderOrderOutline = 1;
         private const byte RenderOrderDecoration = 2;
 
-        private readonly TextDrawingOptions textOptions;
+        private readonly RichTextOptions textOptions;
         private readonly DrawingOptions drawingOptions;
         private readonly MemoryAllocator memoryAllocator;
         private readonly Pen defaultPen;
@@ -52,7 +52,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private (GlyphRendererParameters Glyph, PointF SubPixelOffset) currentCacheKey;
 
         public RichTextGlyphRenderer(
-            TextDrawingOptions textOptions,
+            RichTextOptions textOptions,
             DrawingOptions drawingOptions,
             MemoryAllocator memoryAllocator,
             Pen pen,
@@ -122,7 +122,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             this.currentColor = null;
 
             this.currentTextRun = parameters.TextRun;
-            if (parameters.TextRun is TextDrawingRun drawingRun)
+            if (parameters.TextRun is RichTextRun drawingRun)
             {
                 this.currentBrush = drawingRun.Brush;
                 this.currentPen = drawingRun.Pen;
@@ -166,7 +166,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             TextRun run = this.currentTextRun;
             TextDecorations decorations = run.TextDecorations;
 
-            if (this.currentTextRun is TextDrawingRun drawingRun)
+            if (this.currentTextRun is RichTextRun drawingRun)
             {
                 if (drawingRun.UnderlinePen != null)
                 {
@@ -213,7 +213,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             }
 
             Pen pen = null;
-            if (this.currentTextRun is TextDrawingRun drawingRun)
+            if (this.currentTextRun is RichTextRun drawingRun)
             {
                 if (textDecorations == TextDecorations.Strikeout)
                 {

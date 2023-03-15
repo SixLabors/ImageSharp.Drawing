@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             where TPixel : unmanaged, IPixel<TPixel>
         {
             Font font36 = TestFontUtilities.GetFont(TestFonts.OpenSans, 20);
-            var textOpt = new TextDrawingOptions(font36)
+            var textOpt = new RichTextOptions(font36)
             {
                 Dpi = 96,
                 Origin = new PointF(0, 0)

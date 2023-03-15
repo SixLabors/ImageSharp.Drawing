@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             // Do everything at the image level as we are delegating
             // the processing down to other processors
-            TextDrawingOptions textOptions = ConfigureOptions(this.definition.TextOptions);
+            RichTextOptions textOptions = ConfigureOptions(this.definition.TextOptions);
 
             this.textRenderer = new RichTextGlyphRenderer(
                 textOptions,
@@ -115,10 +115,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             }
         }
 
-        private static TextDrawingOptions ConfigureOptions(TextDrawingOptions options)
+        private static RichTextOptions ConfigureOptions(RichTextOptions options)
         {
             // When a path is specified we should explicitly follow that path
-            // and not adjust the origin. Any tranlation should be applied to the path.
+            // and not adjust the origin. Any translation should be applied to the path.
             if (options.Path is not null && options.Origin != Vector2.Zero)
             {
                 return new(options)

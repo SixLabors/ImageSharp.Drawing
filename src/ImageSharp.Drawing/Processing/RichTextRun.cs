@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// Represents a run of drawable text spanning a series of graphemes within a string.
     /// </summary>
-    public class TextDrawingRun : TextRun
+    public class RichTextRun : TextRun
     {
         /// <summary>
         /// Gets or sets the brush used for filling this run.

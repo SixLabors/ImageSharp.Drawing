@@ -26,7 +26,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 Font font = family.CreateFont(48, FontStyle.Bold);
 
                 // The options are optional
-                TextDrawingOptions textOptions = new(font)
+                RichTextOptions textOptions = new(font)
                 {
                     TabWidth = 8, // a tab renders as 8 spaces wide
                     WrappingLength = width, // greater than zero so we will word wrap at 100 pixels wide

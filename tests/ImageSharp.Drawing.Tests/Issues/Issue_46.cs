@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         {
             Font font = CreateFont(TestFonts.IcoMoonEvents, 175);
 
-            TextDrawingOptions options = new(font)
+            RichTextOptions options = new(font)
             {
                 VerticalAlignment = VerticalAlignment.Center
             };

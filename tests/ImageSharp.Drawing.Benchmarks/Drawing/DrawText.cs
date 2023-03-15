@@ -79,7 +79,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         [Benchmark]
         public void ImageSharp()
         {
-            TextDrawingOptions textOptions = new(this.font)
+            RichTextOptions textOptions = new(this.font)
             {
                 WrappingLength = 780,
                 Origin = new PointF(10, 10)

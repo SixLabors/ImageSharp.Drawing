@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
         public void TextBuilder_Bounds_AreCorrect()
         {
             Vector2 position = new(5, 5);
-            var options = new TextDrawingOptions(TestFontUtilities.GetFont(TestFonts.OpenSans, 16))
+            var options = new RichTextOptions(TestFontUtilities.GetFont(TestFonts.OpenSans, 16))
             {
                 Origin = position
             };

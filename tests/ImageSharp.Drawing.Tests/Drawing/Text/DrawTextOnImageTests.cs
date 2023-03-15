@@ -52,7 +52,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
               TextDrawingComparer,
               img =>
               {
-                  TextDrawingOptions textOptions = new(font)
+                  RichTextOptions textOptions = new(font)
                   {
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
@@ -84,7 +84,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
               TextDrawingComparer,
               img =>
               {
-                  TextDrawingOptions textOptions = new(whitney)
+                  RichTextOptions textOptions = new(whitney)
                   {
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
@@ -110,14 +110,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             using Image<TPixel> img = provider.GetImage();
 
             // Measure the text size
-            FontRectangle size = TextMeasurer.Measure(text, new TextDrawingOptions(font));
+            FontRectangle size = TextMeasurer.Measure(text, new RichTextOptions(font));
 
             // Find out how much we need to scale the text to fill the space (up or down)
             float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
 
             // Create a new font
             var scaledFont = new Font(font, scalingFactor * font.Size);
-            TextDrawingOptions textOptions = new(scaledFont)
+            RichTextOptions textOptions = new(scaledFont)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -201,7 +201,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Font font = CreateFont(fontName, fontSize);
             float radians = GeometryUtilities.DegreeToRadian(angle);
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -241,7 +241,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             float radianX = GeometryUtilities.DegreeToRadian(angleX);
             float radianY = GeometryUtilities.DegreeToRadian(angleY);
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -317,7 +317,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 KerningMode = KerningMode.Standard,
                 VerticalAlignment = VerticalAlignment.Top,
@@ -403,7 +403,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 "Beware the Jabberwock, my son!  The jaws that bite, the claws that catch!  Beware the Jubjub bird, and shun The frumious Bandersnatch!\n",
                 20);
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = 1000,
                 Origin = new PointF(10, 50)
@@ -429,7 +429,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             // The following font/text combination generates an empty path.
             Font font = CreateFont(TestFonts.WendyOne, 72);
             const string text = "Hello\0World";
-            TextDrawingOptions textOptions = new(font);
+            RichTextOptions textOptions = new(font);
             FontRectangle textSize = TextMeasurer.Measure(text, textOptions);
 
             Assert.NotEqual(FontRectangle.Empty, textSize);
@@ -456,7 +456,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "QuickTYZ";
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
-            TextDrawingOptions textOptions = new(font);
+            RichTextOptions textOptions = new(font);
             FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
@@ -483,7 +483,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "QuickTYZ";
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
-            TextDrawingOptions textOptions = new(font);
+            RichTextOptions textOptions = new(font);
             FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
@@ -508,13 +508,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Font font2 = CreateFont(TestFonts.OpenSans, fontSize * 1.5f);
             const string text = "The quick brown fox jumps over the lazy dog";
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 Origin = new Vector2(15),
                 WrappingLength = 400,
                 TextRuns = new[]
                 {
-                    new TextDrawingRun
+                    new RichTextRun
                     {
                         Start = 4,
                         End = 10,
@@ -523,7 +523,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         Brush = Brushes.Solid(Color.Red),
                     },
 
-                    new TextDrawingRun
+                    new RichTextRun
                     {
                         Start = 10,
                         End = 13,
@@ -532,7 +532,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         StrikeoutPen = Pens.Solid(Color.White),
                     },
 
-                    new TextDrawingRun
+                    new RichTextRun
                     {
                         Start = 19,
                         End = 23,
@@ -541,7 +541,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         Brush = Brushes.Solid(Color.Blue),
                     },
 
-                    new TextDrawingRun
+                    new RichTextRun
                     {
                         Start = 23,
                         End = 25,
@@ -569,13 +569,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Font font = CreateFont(TestFonts.MeQuranVolyNewmet, fontSize);
             string text = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٟنِ ٱلرَّحِيمِ";
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 Origin = new Vector2(15),
                 WrappingLength = 400,
                 TextRuns = new[]
                 {
-                    new TextDrawingRun { Start = 0, End = CodePoint.GetCodePointCount(text.AsSpan()), TextDecorations = TextDecorations.Underline }
+                    new RichTextRun { Start = 0, End = CodePoint.GetCodePointCount(text.AsSpan()), TextDecorations = TextDecorations.Underline }
                 }
             };
             provider.RunValidatingProcessorTest(
@@ -608,11 +608,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 new SolidPen(Color.Violet)
             };
 
-            var runs = new List<TextDrawingRun>();
+            var runs = new List<RichTextRun>();
             for (int i = 0; i < text.Length; i++)
             {
                 SolidPen pen = colors[i % colors.Length];
-                runs.Add(new TextDrawingRun
+                runs.Add(new RichTextRun
                 {
                     Start = i,
                     End = i + 1,
@@ -620,7 +620,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 });
             }
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 Origin = new Vector2(15),
                 WrappingLength = 400,
@@ -648,14 +648,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Font font = CreateFont(TestFonts.OpenSans, 13);
 
             const string text = "Quick brown fox jumps over the lazy dog.";
-            TextDrawingRun run = new()
+            RichTextRun run = new()
             {
                 Start = 0,
                 End = text.GetGraphemeCount(),
                 StrikeoutPen = new SolidPen(Color.Red)
             };
 
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = path.ComputeLength(),
                 VerticalAlignment = VerticalAlignment.Bottom,
@@ -683,7 +683,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.True(parsed);
 
             Font font = CreateFont(TestFonts.OpenSans, 13);
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = path.ComputeLength(),
                 VerticalAlignment = VerticalAlignment.Bottom,
@@ -709,7 +709,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.True(parsed);
 
             Font font = CreateFont(TestFonts.OpenSans, 13);
-            TextDrawingOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = path.ComputeLength() / 4,
                 VerticalAlignment = VerticalAlignment.Bottom,

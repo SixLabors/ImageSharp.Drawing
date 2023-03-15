@@ -7,34 +7,34 @@ using SixLabors.Fonts;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Provides configuration options for rendering and shaping of drawable text.
+    /// Provides configuration options for rendering and shaping of rich text.
     /// </summary>
-    public class TextDrawingOptions : TextOptions
+    public class RichTextOptions : TextOptions
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="TextDrawingOptions" /> class.
+        /// Initializes a new instance of the <see cref="RichTextOptions" /> class.
         /// </summary>
         /// <param name="font">The font.</param>
-        public TextDrawingOptions(Font font)
+        public RichTextOptions(Font font)
             : base(font)
         {
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="TextDrawingOptions" /> class from properties
+        /// Initializes a new instance of the <see cref="RichTextOptions" /> class from properties
         /// copied from the given instance.
         /// </summary>
         /// <param name="options">The options whose properties are copied into this instance.</param>
-        public TextDrawingOptions(TextDrawingOptions options)
+        public RichTextOptions(RichTextOptions options)
             : base(options)
             => this.Path = options.Path;
 
         /// <summary>
         /// Gets or sets an optional collection of text runs to apply to the body of text.
         /// </summary>
-        public new IReadOnlyList<TextDrawingRun> TextRuns
+        public new IReadOnlyList<RichTextRun> TextRuns
         {
-            get => (IReadOnlyList<TextDrawingRun>)base.TextRuns;
+            get => (IReadOnlyList<RichTextRun>)base.TextRuns;
             set => base.TextRuns = value;
         }
 
