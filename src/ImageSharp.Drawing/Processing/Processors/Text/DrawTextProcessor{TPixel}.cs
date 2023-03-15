@@ -19,7 +19,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
     internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        // private CachingGlyphRenderer textRenderer;
         private RichTextGlyphRenderer textRenderer;
         private readonly DrawTextProcessor definition;
 
