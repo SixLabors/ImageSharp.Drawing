@@ -7,8 +7,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// Defines a pen that can apply a pattern to a line with a set brush and thickness
     /// </summary>
     /// <remarks>
-    /// The pattern will be in to the form of <code>new float[]{ 1f, 2f, 0.5f}</code> this will be
-    /// converted into a pattern that is 3.5 times longer that the width with 3 sections.
+    /// The pattern will be in to the form of
+    /// <code>
+    /// new float[]{ 1f, 2f, 0.5f}
+    /// </code>
+    /// this will be converted into a pattern that is 3.5 times longer that the width with 3 sections.
     /// <list type="bullet">
     /// <item>Section 1 will be width long (making a square) and will be filled by the brush.</item>
     /// <item>Section 2 will be width * 2 long and will be empty.</item>
