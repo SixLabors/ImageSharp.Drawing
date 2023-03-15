@@ -309,7 +309,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     renderData.OutlineMap = this.Render(path);
                 }
 
-                this.glyphData[this.currentCacheKey] = renderData;
+                if (!this.noCache)
+                {
+                    this.glyphData[this.currentCacheKey] = renderData;
+                }
             }
             else
             {
@@ -386,7 +389,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             if (decoration != null)
             {
                 // TODO: This only works well if we are not trying to follow a path.
-                if (this.path is not null)
+                if (this.path is null)
                 {
                     // Let's try and expand it first.
                     if (thickness == decoration.Value.Thickness

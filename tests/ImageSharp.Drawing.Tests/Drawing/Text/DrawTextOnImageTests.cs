@@ -629,7 +629,44 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             provider.RunValidatingProcessorTest(
                 x => x.DrawText(textOptions, text, Color.White),
-                $"RichText-ArabicRainbow-F({fontSize})",
+                $"RichText-Rainbow-F({fontSize})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, "M10,90 Q90,90 90,45 Q90,10 50,10 Q10,10 10,40 Q10,70 45,70 Q70,70 75,50", "spiral")]
+        [WithSolidFilledImages(350, 350, nameof(Color.Black), PixelTypes.Rgba32, "M275 175 A100 100 0 1 1 275 174", "circle")]
+        [WithSolidFilledImages(120, 120, nameof(Color.Black), PixelTypes.Rgba32, "M50,10 L 90 90 L 10 90 L50 10", "triangle")]
+        public void CanDrawRichTextAlongPathHorizontal<TPixel>(TestImageProvider<TPixel> provider, string svgPath, string exampleImageKey)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            bool parsed = Path.TryParseSvgPath(svgPath, out IPath path);
+            Assert.True(parsed);
+
+            Font font = CreateFont(TestFonts.OpenSans, 13);
+
+            const string text = "Quick brown fox jumps over the lazy dog.";
+            TextDrawingRun run = new()
+            {
+                Start = 0,
+                End = text.GetGraphemeCount(),
+                StrikeoutPen = new SolidPen(Color.Red)
+            };
+
+            TextDrawingOptions textOptions = new(font)
+            {
+                WrappingLength = path.ComputeLength(),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Path = path,
+                TextRuns = new[] { run }
+            };
+
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.White),
+                $"RichText-Path-({exampleImageKey})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
