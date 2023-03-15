@@ -13,6 +13,17 @@
     <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
     <TargetFrameworks>netcoreapp3.1;netcoreapp2.1;netstandard2.1;netstandard2.0;net472</TargetFrameworks>
   </PropertyGroup>
+
+  <!--Add Feedz.io restore sources while we wait for the ability to update shared infrastructure-->
+  <PropertyGroup>
+    <RestoreSources>
+      $(RestoreSources)
+      https://api.nuget.org/v3/index.json;
+      https://f.feedz.io/sixlabors/sixlabors/nuget/index.json;
+      https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-eng/nuget/v3/index.json;
+    </RestoreSources>
+  </PropertyGroup>
+  
   <ItemGroup>
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
