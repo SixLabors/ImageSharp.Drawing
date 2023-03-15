@@ -40,6 +40,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private TextDecorationDetails? currentStrikout;
         private TextDecorationDetails? currentOverline;
 
+        // Just enough accuracy to allow for 1/8 px differences which later are accumulated while rendering,
+        // but do not grow into full px offsets.
+        // The value 8 is benchmarked to:
+        // - Provide a good accuracy (smaller than 0.2% image difference compared to the non-caching variant)
+        // - Cache hit ratio above 60%
+        private const float AccuracyMultiple = 8;
+        private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> glyphData = new();
+        private bool rasterizationRequired;
+        private readonly bool noCache;
+        private (GlyphRendererParameters Glyph, PointF SubPixelOffset) currentCacheKey;
+
         public RichTextGlyphRenderer(
             TextDrawingOptions textOptions,
             DrawingOptions drawingOptions,
@@ -60,6 +71,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             IPath path = textOptions.Path;
             if (path is not null)
             {
+                // Turn of caching. The chances of a hit are near-zero.
+                this.rasterizationRequired = true;
+                this.noCache = true;
+
                 if (path is IPathInternals internals)
                 {
                     this.path = internals;
@@ -118,7 +133,28 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 this.currentPen = null;
             }
 
+            if (!this.noCache)
+            {
+                // Create a cache entry for the glyph.
+                var currentBounds = RectangleF.Transform(
+                        new RectangleF(bounds.Location, new(bounds.Width, bounds.Height)),
+                        this.drawingOptions.Transform);
+
+                PointF subPixelOffset = currentBounds.Location - Point.Truncate(currentBounds.Location);
+                subPixelOffset.X = MathF.Round(subPixelOffset.X * AccuracyMultiple) / AccuracyMultiple;
+                subPixelOffset.Y = MathF.Round(subPixelOffset.Y * AccuracyMultiple) / AccuracyMultiple;
+
+                this.currentCacheKey = (parameters, subPixelOffset);
+                if (this.glyphData.ContainsKey(this.currentCacheKey))
+                {
+                    // We have already drawn the glyph vectors.
+                    this.rasterizationRequired = false;
+                    return;
+                }
+            }
+
             this.TransformGlyph(in bounds);
+            this.rasterizationRequired = true;
         }
 
         /// <inheritdoc/>
@@ -214,8 +250,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         {
             GlyphRenderData renderData = default;
 
-            // fix up the text runs colors
-            // only if both brush and pen is null do we fallback to the defualt value
+            // Fix up the text runs colors.
+            // Only if both brush and pen is null do we fallback to the defualt value
             if (this.currentBrush == null && this.currentPen == null)
             {
                 this.currentBrush = this.defaultBrush;
@@ -252,23 +288,32 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             // Path has already been added to the collection via the base class.
             IPath path = this.Paths.Last();
-            if (path.Bounds.Equals(RectangleF.Empty))
+            if (this.noCache || this.rasterizationRequired)
             {
-                return;
-            }
+                if (path.Bounds.Equals(RectangleF.Empty))
+                {
+                    return;
+                }
 
-            // If we are using the fonts color layers we ignore the request to draw an outline only
-            // cause that wont really work and instead force drawing with fill with the requested color
-            // if color fonts disabled then this.currentColor will always be null
-            if (renderFill)
-            {
-                renderData.FillMap = this.Render(path);
-            }
+                // If we are using the fonts color layers we ignore the request to draw an outline only
+                // cause that wont really work and instead force drawing with fill with the requested color
+                // if color fonts disabled then this.currentColor will always be null
+                if (renderFill)
+                {
+                    renderData.FillMap = this.Render(path);
+                }
 
-            if (renderOutline)
+                if (renderOutline)
+                {
+                    path = this.currentPen.GeneratePath(path);
+                    renderData.OutlineMap = this.Render(path);
+                }
+
+                this.glyphData[this.currentCacheKey] = renderData;
+            }
+            else
             {
-                path = this.currentPen.GeneratePath(path);
-                renderData.OutlineMap = this.Render(path);
+                renderData = this.glyphData[this.currentCacheKey];
             }
 
             if (renderData.FillMap != null)
@@ -302,7 +347,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             this.FinalizeDecoration(ref this.currentStrikout);
         }
 
-        public void Dispose() => this.Dispose(disposing: true);
+        public void Dispose() => this.Dispose(true);
 
         private void FinalizeDecoration(ref TextDecorationDetails? decoration)
         {
@@ -469,10 +514,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 if (disposing)
                 {
+                    foreach (KeyValuePair<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> kv in this.glyphData)
+                    {
+                        kv.Value.Dispose();
+                    }
+
+                    this.glyphData.Clear();
+
                     foreach (DrawingOperation operation in this.DrawingOperations)
                     {
                         operation.Map.Dispose();
                     }
+
+                    this.DrawingOperations.Clear();
                 }
 
                 this.isDisposed = true;
