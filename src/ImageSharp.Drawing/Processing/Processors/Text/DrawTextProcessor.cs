@@ -46,7 +46,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         public DrawingOptions DrawingOptions { get; }
 
         /// <summary>
-        /// Gets the <see cref="Processing.TextDrawingOptions"/> defining text-specific drawing settings.
+        /// Gets the <see cref="TextDrawingOptions"/> defining text-specific drawing settings.
         /// </summary>
         public TextDrawingOptions TextOptions { get; }
 

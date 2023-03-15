@@ -15,16 +15,20 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 {
-    // TODO: Fix path rendering and add caching.
-    internal sealed class RichTextGlyphRenderer : GlyphBuilder, IColorGlyphRenderer, IDisposable
+    // TODO: Add caching.
+    internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRenderer, IDisposable
     {
+        private const byte RenderOrderFill = 0;
+        private const byte RenderOrderOutline = 1;
+        private const byte RenderOrderDecoration = 2;
+
         private readonly TextDrawingOptions textOptions;
         private readonly DrawingOptions drawingOptions;
         private readonly MemoryAllocator memoryAllocator;
         private readonly Pen defaultPen;
         private readonly Brush defaultBrush;
         private readonly IPathInternals path;
-        private Vector2 textOffset;
+        private Vector2 textPathOffset;
         private bool isDisposed;
 
         private readonly Dictionary<Color, Brush> brushLookup = new();
@@ -35,8 +39,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private TextDecorationDetails? currentUnderline;
         private TextDecorationDetails? currentStrikout;
         private TextDecorationDetails? currentOverline;
-        private Point currentRenderPosition;
-        private Matrix3x2 currentTransform;
 
         public RichTextGlyphRenderer(
             TextDrawingOptions textOptions,
@@ -44,15 +46,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             MemoryAllocator memoryAllocator,
             Pen pen,
             Brush brush)
-            : base(textOptions.Origin)
         {
             this.textOptions = textOptions;
             this.drawingOptions = drawingOptions;
-            this.currentTransform = this.drawingOptions.Transform;
             this.memoryAllocator = memoryAllocator;
             this.defaultPen = pen;
             this.defaultBrush = brush;
             this.DrawingOperations = new List<DrawingOperation>();
+
+            // Set the default transform.
+            this.Builder.SetTransform(drawingOptions.Transform);
 
             IPath path = textOptions.Path;
             if (path is not null)
@@ -95,7 +98,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 HorizontalAlignment.Left => bounds.Left,
                 _ => bounds.Left,
             };
-            this.textOffset = new(xOffset, yOffset);
+            this.textPathOffset = new(xOffset, yOffset);
         }
 
         /// <inheritdoc/>
@@ -272,10 +275,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 this.DrawingOperations.Add(new DrawingOperation
                 {
-                    Location = this.currentRenderPosition,
+                    Location = Point.Truncate(path.Bounds.Location),
                     Map = renderData.FillMap,
                     Brush = this.currentBrush,
-                    RenderPass = 1
+                    RenderPass = RenderOrderFill
                 });
             }
 
@@ -283,10 +286,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 this.DrawingOperations.Add(new DrawingOperation
                 {
-                    Location = this.currentRenderPosition,
+                    Location = Point.Truncate(path.Bounds.Location),
                     Map = renderData.OutlineMap,
                     Brush = this.currentPen?.StrokeFill ?? this.currentBrush,
-                    RenderPass = 2 // Render outlines 2nd to ensure they are always on top of fills
+                    RenderPass = RenderOrderOutline
                 });
             }
         }
@@ -305,12 +308,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         {
             if (decoration != null)
             {
-                // TODO: If the path is curved ths does not work well.
+                // TODO: If the path is curved a line segment does not work well.
                 // What would be great would be if we could take a slice of a path given an offset and length.
                 IPath path = new Path(new LinearLineSegment(decoration.Value.Start, decoration.Value.End));
-                path = path.Transform(this.currentTransform);
-
                 IPath outline = decoration.Value.Pen.GeneratePath(path, decoration.Value.Thickness);
+
+                // Calculate the transform for this path.
+                // We cannot use the pathbuilder transform as this path is rendered independently.
+                FontRectangle rectangle = new(outline.Bounds.Location, new(outline.Bounds.Width, outline.Bounds.Height));
+                Matrix3x2 pathTransform = this.ComputeTransform(in rectangle);
+                Matrix3x2 defaultTransform = this.drawingOptions.Transform;
+                outline = outline.Transform(pathTransform * defaultTransform);
 
                 if (outline.Bounds.Width != 0 && outline.Bounds.Height != 0)
                 {
@@ -320,7 +328,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         Brush = decoration.Value.Pen.StrokeFill,
                         Location = Point.Truncate(outline.Bounds.Location),
                         Map = this.Render(outline),
-                        RenderPass = 3 // after outlines !!
+                        RenderPass = RenderOrderDecoration
                     });
                 }
 
@@ -336,15 +344,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 if (this.path is not null)
                 {
                     // Let's try and expand it first.
-                    if (thickness == decoration.Value.Thickness &&
-                        decoration.Value.End.Y == start.Y &&
-                        (decoration.Value.End.X + 1) >= start.X &&
-                        decoration.Value.Pen.Equals(pen))
+                    if (thickness == decoration.Value.Thickness
+                        && decoration.Value.End.Y == start.Y
+                        && (decoration.Value.End.X + 1) >= start.X
+                        && decoration.Value.Pen.Equals(pen))
                     {
                         // Expand the line
                         start = decoration.Value.Start;
 
-                        // If this is null finalize does nothing we then set it again before we leave
+                        // If this is null finalize does nothing.
                         decoration = null;
                     }
                 }
@@ -363,12 +371,20 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void TransformGlyph(in FontRectangle bounds)
         {
-            // We don't have access to the pathbuilder transform here so we recreate it from the origin.
-            var origin = Matrix3x2.CreateTranslation(this.textOptions.Origin);
             if (this.path is null)
             {
-                this.currentRenderPosition = Point.Truncate(PointF.Transform(bounds.Location, origin));
                 return;
+            }
+
+            this.Builder.SetTransform(this.ComputeTransform(in bounds));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Matrix3x2 ComputeTransform(in FontRectangle bounds)
+        {
+            if (this.path is null)
+            {
+                return Matrix3x2.Identity;
             }
 
             // Find the intersection point.
@@ -383,18 +399,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             // characters in multiline text scales with the angle and vertical offset.
             // This is expected and consistant with other libraries.
             // Multiple line text should be rendered using multiple paths to avoid this behavior.
-            Vector2 targetPoint = (Vector2)pathPoint.Point + new Vector2(-halfWidth, bounds.Top) - bounds.Location - this.textOffset;
+            Vector2 targetPoint = (Vector2)pathPoint.Point + new Vector2(-halfWidth, bounds.Top) - bounds.Location - this.textPathOffset;
 
             // Due to how matrix combining works you have to combine this in the reverse order of operation.
-            this.currentTransform = Matrix3x2.CreateTranslation(targetPoint)
-                * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, pathPoint.Point)
-                * this.drawingOptions.Transform;
-
-            // TODO: This is incorrect. It looks like width/height depends on the rotation.
-            this.currentRenderPosition = Point.Truncate(
-                PointF.Transform(new(bounds.Left + halfWidth, bounds.Bottom), this.currentTransform * origin));
-
-            this.Builder.SetTransform(this.currentTransform);
+            return Matrix3x2.CreateTranslation(targetPoint)
+                * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, pathPoint.Point);
         }
 
         private Buffer2D<float> Render(IPath path)

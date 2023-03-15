@@ -27,8 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="options">The options whose properties are copied into this instance.</param>
         public TextDrawingOptions(TextDrawingOptions options)
             : base(options)
-        {
-        }
+            => this.Path = options.Path;
 
         /// <summary>
         /// Gets or sets an optional collection of text runs to apply to the body of text.

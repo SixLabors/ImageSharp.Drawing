@@ -4,9 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using SixLabors.Fonts;
-using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -32,43 +31,24 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         {
             base.BeforeImageApply();
 
-            // Do everything at the image level as we are delegating the processing down to other processors
-            //this.textRenderer = new CachingGlyphRenderer(
-            //    this.Configuration.MemoryAllocator,
-            //    this.definition.Text.GetGraphemeCount(),
-            //    this.definition.TextOptions,
-            //    this.definition.Pen,
-            //    this.definition.Brush,
-            //    this.definition.DrawingOptions.Transform)
-            //{
-            //    Options = this.definition.DrawingOptions
-            //};
+            // Do everything at the image level as we are delegating
+            // the processing down to other processors
+            TextDrawingOptions textOptions = ConfigureOptions(this.definition.TextOptions);
 
             this.textRenderer = new RichTextGlyphRenderer(
-                this.definition.TextOptions,
+                textOptions,
                 this.definition.DrawingOptions,
                 this.Configuration.MemoryAllocator,
                 this.definition.Pen,
                 this.definition.Brush);
 
             TextRenderer renderer = new(this.textRenderer);
-            renderer.RenderText(this.definition.Text, this.definition.TextOptions);
+            renderer.RenderText(this.definition.Text, textOptions);
         }
 
         protected override void AfterImageApply()
         {
             base.AfterImageApply();
-
-            foreach (var path in this.textRenderer.Paths)
-            {
-                new FillPathProcessor(
-                    this.definition.DrawingOptions,
-                    new SolidBrush(Color.HotPink.WithAlpha(.5F)),
-                    path).Execute(this.Configuration, this.Source, this.SourceRectangle);
-            }
-
-
-
             this.textRenderer?.Dispose();
             this.textRenderer = null;
         }
@@ -134,6 +114,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 Draw(this.textRenderer.DrawingOperations.OrderBy(x => x.RenderPass));
             }
+        }
+
+        private static TextDrawingOptions ConfigureOptions(TextDrawingOptions options)
+        {
+            // When a path is specified we should explicitly follow that path
+            // and not adjust the origin. Any tranlation should be applied to the path.
+            if (options.Path is not null && options.Origin != Vector2.Zero)
+            {
+                return new(options)
+                {
+                    Origin = Vector2.Zero
+                };
+            }
+
+            return options;
         }
     }
 }

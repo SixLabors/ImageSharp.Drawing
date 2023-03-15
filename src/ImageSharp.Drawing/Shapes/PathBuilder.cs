@@ -41,11 +41,11 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Sets the translation to be applied to all items to follow being applied to the <see cref="PathBuilder"/>.
         /// </summary>
-        /// <param name="translation">The translation.</param>
+        /// <param name="transform">The transform.</param>
         /// <returns>The <see cref="PathBuilder"/>.</returns>
-        public PathBuilder SetTransform(Matrix3x2 translation)
+        public PathBuilder SetTransform(Matrix3x2 transform)
         {
-            this.setTransform = translation;
+            this.setTransform = transform;
             this.currentTransform = this.setTransform * this.defaultTransform;
             return this;
         }
@@ -57,7 +57,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="PathBuilder"/>.</returns>
         public PathBuilder SetOrigin(PointF origin)
         {
-            // the new origin should be transformed based on the default transform
+            // The new origin should be transformed based on the default transform
             this.setTransform.Translation = origin;
             this.currentTransform = this.setTransform * this.defaultTransform;
 
