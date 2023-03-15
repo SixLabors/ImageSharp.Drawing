@@ -41,6 +41,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Gets or sets an optional path to draw the text along.
         /// </summary>
+        /// <remarks>
+        /// When this property is not <see langword="null"/> the <see cref="TextOptions.Origin"/>
+        /// property is ignored. The text will be drawn along the path starting at the origin of the path.
+        /// </remarks>
         public IPath Path { get; set; }
     }
 }
