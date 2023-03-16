@@ -37,29 +37,30 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="IPathCollection"/></returns>
         public static IPathCollection GenerateGlyphs(string text, IPath path, TextOptions textOptions)
         {
-            TextOptions options = ConfigureOptions(textOptions, path);
-
-            PathGlyphBuilder glyphBuilder = new(path, options);
+            (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
+            PathGlyphBuilder glyphBuilder = new(transformed.Path, transformed.TextOptions);
             TextRenderer renderer = new(glyphBuilder);
 
-            renderer.RenderText(text, options);
+            renderer.RenderText(text, transformed.TextOptions);
 
             return glyphBuilder.Paths;
         }
 
-        private static TextOptions ConfigureOptions(TextOptions options, IPath path)
+        private static (IPath Path, TextOptions TextOptions) ConfigureOptions(TextOptions options, IPath path)
         {
             // When a path is specified we should explicitly follow that path
             // and not adjust the origin. Any translation should be applied to the path.
             if (path is not null && options.Origin != Vector2.Zero)
             {
-                return new(options)
+                TextOptions clone = new(options)
                 {
                     Origin = Vector2.Zero
                 };
+
+                return (path.Translate(options.Origin), clone);
             }
 
-            return options;
+            return (path, options);
         }
     }
 }

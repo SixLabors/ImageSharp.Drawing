@@ -15,7 +15,9 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 {
-    // TODO: Add caching.
+    /// <summary>
+    /// Allows the rendering of rich text configured via <see cref="RichTextOptions"/>.
+    /// </summary>
     internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRenderer, IDisposable
     {
         private const byte RenderOrderFill = 0;
@@ -230,20 +232,42 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             }
 
             // Clamp the line to whole pixels
-            Vector2 thicknessOffset = new(0, thickness * .5F);
-            Vector2 tl = start - thicknessOffset;
-            Vector2 bl = start + thicknessOffset;
-            Vector2 tr = end - thicknessOffset;
-            tl.Y = MathF.Floor(tl.Y);
-            tr.Y = MathF.Floor(tr.Y);
-            bl.Y = MathF.Ceiling(bl.Y);
-            tl.X = MathF.Floor(tl.X);
-            tr.X = MathF.Floor(tr.X);
-            float newThickness = bl.Y - tl.Y;
-            Vector2 offsetNew = new(0, newThickness * .5f);
+            Vector2 pad = new(0, thickness * .5F);
+            Vector2 tl = start - pad;
+            Vector2 bl = start + pad;
+            Vector2 tr = end - pad;
 
-            pen ??= new SolidPen(this.currentBrush ?? this.defaultBrush);
-            this.AppendDecoration(ref targetDecoration, tl + offsetNew, tr + offsetNew, pen, newThickness);
+            tl.Y = MathF.Round(tl.Y, MidpointRounding.AwayFromZero);
+            tr.Y = MathF.Round(tr.Y, MidpointRounding.AwayFromZero);
+            bl.Y = MathF.Round(bl.Y, MidpointRounding.AwayFromZero);
+            tl.X = MathF.Round(tl.X, MidpointRounding.AwayFromZero);
+            tr.X = MathF.Round(tr.X, MidpointRounding.AwayFromZero);
+
+            // Always respect the pen stroke width if explicitly set.
+            if (pen is null)
+            {
+                thickness = bl.Y - tl.Y;
+                pen = new SolidPen(this.currentBrush ?? this.defaultBrush, thickness);
+            }
+            else
+            {
+                thickness = pen.StrokeWidth;
+            }
+
+            // Drawing is always centered around the point so we need to offset by half.
+            Vector2 offset = Vector2.Zero;
+            if (textDecorations == TextDecorations.Overline)
+            {
+                // CSS overline is drawn above the position, so we need to move it up.
+                offset = new Vector2(0, -(thickness * .5F));
+            }
+            else if (textDecorations == TextDecorations.Underline)
+            {
+                // CSS underline is drawn below the position, so we need to move it down.
+                offset = new Vector2(0, thickness * .5F);
+            }
+
+            this.AppendDecoration(ref targetDecoration, tl + offset, tr + offset, pen, thickness);
         }
 
         protected override void EndGlyph()
@@ -357,7 +381,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             if (decoration != null)
             {
                 // TODO: If the path is curved a line segment does not work well.
-                // What would be great would be if we could take a slice of a path given an offset and length.
+                // What would be great would be if we could take a slice of a path given start and end positions.
                 IPath path = new Path(new LinearLineSegment(decoration.Value.Start, decoration.Value.End));
                 IPath outline = decoration.Value.Pen.GeneratePath(path, decoration.Value.Thickness);
 

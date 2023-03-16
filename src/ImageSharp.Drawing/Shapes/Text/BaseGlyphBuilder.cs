@@ -147,11 +147,24 @@ namespace SixLabors.ImageSharp.Drawing.Text
             Vector2 bl = start + height;
             Vector2 br = end + height;
 
+            // Drawing is always centered around the point so we need to offset by half.
+            Vector2 offset = Vector2.Zero;
+            if (textDecorations == TextDecorations.Overline)
+            {
+                // CSS overline is drawn above the position, so we need to move it up.
+                offset = new(0, -(thickness * .5F));
+            }
+            else if (textDecorations == TextDecorations.Underline)
+            {
+                // CSS underline is drawn below the position, so we need to move it down.
+                offset = new Vector2(0, thickness * .5F);
+            }
+
             // MoveTo calls StartFigure();
-            renderer.MoveTo(tl);
-            renderer.LineTo(bl);
-            renderer.LineTo(br);
-            renderer.LineTo(tr);
+            renderer.MoveTo(tl + offset);
+            renderer.LineTo(bl + offset);
+            renderer.LineTo(br + offset);
+            renderer.LineTo(tr + offset);
             renderer.EndFigure();
         }
     }

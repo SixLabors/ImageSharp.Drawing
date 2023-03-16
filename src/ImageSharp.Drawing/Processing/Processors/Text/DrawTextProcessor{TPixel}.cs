@@ -123,7 +123,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 return new(options)
                 {
-                    Origin = Vector2.Zero
+                    Origin = Vector2.Zero,
+                    Path = options.Path.Translate(options.Origin)
                 };
             }
 

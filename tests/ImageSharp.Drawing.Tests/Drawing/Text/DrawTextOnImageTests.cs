@@ -516,10 +516,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 {
                     new RichTextRun
                     {
+                        Start = 0,
+                        End = 3,
+                        OverlinePen = Pens.Solid(Color.Yellow, 1),
+                        StrikeoutPen = Pens.Solid(Color.HotPink, 5),
+                    },
+
+                    new RichTextRun
+                    {
                         Start = 4,
                         End = 10,
                         TextDecorations = TextDecorations.Strikeout,
                         StrikeoutPen = Pens.Solid(Color.Red),
+                        OverlinePen = Pens.Solid(Color.Green, 9),
                         Brush = Brushes.Solid(Color.Red),
                     },
 
@@ -529,7 +538,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         End = 13,
                         Font = font2,
                         TextDecorations = TextDecorations.Strikeout,
-                        StrikeoutPen = Pens.Solid(Color.White),
+                        StrikeoutPen = Pens.Solid(Color.White, 6),
+                        OverlinePen = Pens.Solid(Color.Orange, 2),
                     },
 
                     new RichTextRun
@@ -537,7 +547,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                         Start = 19,
                         End = 23,
                         TextDecorations = TextDecorations.Underline,
-                        UnderlinePen = Pens.Dot(Color.Fuchsia, 2),
+                        UnderlinePen = Pens.Dot(Color.Fuchsia, 5),
                         Brush = Brushes.Solid(Color.Blue),
                     },
 

@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <remarks>
         /// When this property is not <see langword="null"/> the <see cref="TextOptions.Origin"/>
-        /// property is ignored. The text will be drawn along the path starting at the origin of the path.
+        /// property is automatically applied as a translation to a copy of the path for processing.
         /// </remarks>
         public IPath Path { get; set; }
     }
