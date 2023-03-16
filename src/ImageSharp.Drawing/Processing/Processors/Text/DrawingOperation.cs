@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
         public byte RenderPass { get; set; }
 
-        public Point Location { get; set; }
+        public Point RenderLocation { get; set; }
 
         public Brush Brush { get; internal set; }
     }

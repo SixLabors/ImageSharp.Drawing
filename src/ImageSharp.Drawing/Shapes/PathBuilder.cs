@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
-        /// Resets the translation to the default.
+        /// Resets the transform to the default.
         /// </summary>
         /// <returns>The <see cref="PathBuilder"/>.</returns>
         public PathBuilder ResetTransform()
@@ -451,8 +451,6 @@ namespace SixLabors.ImageSharp.Drawing
             this.currentFigure = new Figure();
             this.figures.Clear();
             this.figures.Add(this.currentFigure);
-
-            // TODO: Should we reset currentPoint here instead?
         }
 
         private class Figure

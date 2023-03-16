@@ -22,6 +22,12 @@ namespace SixLabors.ImageSharp.Drawing.Text
         public BaseGlyphBuilder() => this.Builder = new PathBuilder();
 
         /// <summary>
+        /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
+        /// </summary>
+        /// <param name="transform">The default transform.</param>
+        public BaseGlyphBuilder(Matrix3x2 transform) => this.Builder = new PathBuilder(transform);
+
+        /// <summary>
         /// Gets the paths that have been rendered by the current instance.
         /// </summary>
         public IPathCollection Paths => new PathCollection(this.paths);

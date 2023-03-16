@@ -66,8 +66,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                              this.SourceRectangle);
 
                     Buffer2D<float> buffer = operation.Map;
-                    int startY = operation.Location.Y;
-                    int startX = operation.Location.X;
+                    int startY = operation.RenderLocation.Y;
+                    int startX = operation.RenderLocation.X;
                     int offsetSpan = 0;
 
                     if (startX + buffer.Height < 0)

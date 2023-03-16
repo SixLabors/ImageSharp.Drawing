@@ -48,10 +48,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         // - Provide a good accuracy (smaller than 0.2% image difference compared to the non-caching variant)
         // - Cache hit ratio above 60%
         private const float AccuracyMultiple = 8;
-        private readonly Dictionary<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> glyphData = new();
+        private readonly Dictionary<(GlyphRendererParameters Glyph, RectangleF Bounds), GlyphRenderData> glyphData = new();
         private bool rasterizationRequired;
         private readonly bool noCache;
-        private (GlyphRendererParameters Glyph, PointF SubPixelOffset) currentCacheKey;
+        private (GlyphRendererParameters Glyph, RectangleF Bounds) currentCacheKey;
 
         public RichTextGlyphRenderer(
             RichTextOptions textOptions,
@@ -59,6 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             MemoryAllocator memoryAllocator,
             Pen pen,
             Brush brush)
+            : base(drawingOptions.Transform)
         {
             this.textOptions = textOptions;
             this.drawingOptions = drawingOptions;
@@ -66,9 +67,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             this.defaultPen = pen;
             this.defaultBrush = brush;
             this.DrawingOperations = new List<DrawingOperation>();
-
-            // Set the default transform.
-            this.Builder.SetTransform(drawingOptions.Transform);
 
             IPath path = textOptions.Path;
             if (path is not null)
@@ -138,15 +136,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             if (!this.noCache)
             {
                 // Create a cache entry for the glyph.
+                // We need to apply the default transform to the bounds to get the correct size
+                // for comparison with future glyphs. We can use this cached glyph anywhere in the text block.
                 var currentBounds = RectangleF.Transform(
-                        new RectangleF(bounds.Location, new(bounds.Width, bounds.Height)),
-                        this.drawingOptions.Transform);
+                       new RectangleF(bounds.Location, new(bounds.Width, bounds.Height)),
+                       this.drawingOptions.Transform);
 
-                PointF subPixelOffset = currentBounds.Location - ClampToPixel(currentBounds.Location);
-                subPixelOffset.X = MathF.Round(subPixelOffset.X * AccuracyMultiple) / AccuracyMultiple;
-                subPixelOffset.Y = MathF.Round(subPixelOffset.Y * AccuracyMultiple) / AccuracyMultiple;
+                SizeF subPixelSize = new(
+                    MathF.Round(currentBounds.Width * AccuracyMultiple) / AccuracyMultiple,
+                    MathF.Round(currentBounds.Height * AccuracyMultiple) / AccuracyMultiple);
 
-                this.currentCacheKey = (parameters, subPixelOffset);
+                this.currentCacheKey = (parameters, new RectangleF(new(0, 0), subPixelSize));
                 if (this.glyphData.ContainsKey(this.currentCacheKey))
                 {
                     // We have already drawn the glyph vectors.
@@ -155,6 +155,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 }
             }
 
+            // Transform the glyph vectors using the original bounds
+            // The default transform will automatically be applied.
             this.TransformGlyph(in bounds);
             this.rasterizationRequired = true;
         }
@@ -273,7 +275,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             GlyphRenderData renderData = default;
 
             // Fix up the text runs colors.
-            // Only if both brush and pen is null do we fallback to the defualt value
+            // Only if both brush and pen is null do we fallback to the default value.
             if (this.currentBrush == null && this.currentPen == null)
             {
                 this.currentBrush = this.defaultBrush;
@@ -284,8 +286,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             bool renderOutline = false;
 
             // If we are using the fonts color layers we ignore the request to draw an outline only
-            // cause that wont really work and instead force drawing with fill with the requested color
-            // if color fonts disabled then this.currentColor will always be null
+            // because that won't really work. Instead we force drawing using fill with the requested color.
+            // If color fonts are disabled then this.currentColor will always be null.
             if (this.currentBrush != null || this.currentColor != null)
             {
                 renderFill = true;
@@ -310,6 +312,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             // Path has already been added to the collection via the base class.
             IPath path = this.Paths.Last();
+            Point renderLocation = ClampToPixel(path.Bounds.Location);
             if (this.noCache || this.rasterizationRequired)
             {
                 if (path.Bounds.Equals(RectangleF.Empty))
@@ -317,9 +320,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     return;
                 }
 
-                // If we are using the fonts color layers we ignore the request to draw an outline only
-                // cause that wont really work and instead force drawing with fill with the requested color
-                // if color fonts disabled then this.currentColor will always be null
                 if (renderFill)
                 {
                     renderData.FillMap = this.Render(path);
@@ -331,6 +331,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     renderData.OutlineMap = this.Render(path);
                 }
 
+                // Capture the delta between the location and the truncated render location.
+                // We can use this to offset the render location on the next instance of this glyph.
+                renderData.LocationDelta = (Vector2)(path.Bounds.Location - renderLocation);
+
                 if (!this.noCache)
                 {
                     this.glyphData[this.currentCacheKey] = renderData;
@@ -339,13 +343,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             else
             {
                 renderData = this.glyphData[this.currentCacheKey];
+
+                // Offset the render location by the delta from the cached glyph and this one.
+                renderLocation = (Point)(path.Bounds.Location - (PointF)renderData.LocationDelta);
             }
 
             if (renderData.FillMap != null)
             {
                 this.DrawingOperations.Add(new DrawingOperation
                 {
-                    Location = ClampToPixel(path.Bounds.Location),
+                    RenderLocation = renderLocation,
                     Map = renderData.FillMap,
                     Brush = this.currentBrush,
                     RenderPass = RenderOrderFill
@@ -356,7 +363,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 this.DrawingOperations.Add(new DrawingOperation
                 {
-                    Location = ClampToPixel(path.Bounds.Location),
+                    RenderLocation = renderLocation,
                     Map = renderData.OutlineMap,
                     Brush = this.currentPen?.StrokeFill ?? this.currentBrush,
                     RenderPass = RenderOrderOutline
@@ -375,9 +382,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         public void Dispose() => this.Dispose(true);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Point ClampToPixel(PointF point)
-            => Point.Truncate(point);
+        private static Point ClampToPixel(PointF point) => Point.Truncate(point);
 
+        // Point.Truncate(point);
         private void FinalizeDecoration(ref TextDecorationDetails? decoration)
         {
             if (decoration != null)
@@ -396,11 +403,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                 if (outline.Bounds.Width != 0 && outline.Bounds.Height != 0)
                 {
-                    // Render the Path here
+                    // Render the path here. Decorations are uncached.
                     this.DrawingOperations.Add(new DrawingOperation
                     {
                         Brush = decoration.Value.Pen.StrokeFill,
-                        Location = ClampToPixel(outline.Bounds.Location),
+                        RenderLocation = ClampToPixel(outline.Bounds.Location),
                         Map = this.Render(outline),
                         RenderPass = RenderOrderDecoration
                     });
@@ -444,14 +451,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void TransformGlyph(in FontRectangle bounds)
-        {
-            if (this.path is null)
-            {
-                return;
-            }
-
-            this.Builder.SetTransform(this.ComputeTransform(in bounds));
-        }
+            => this.Builder.SetTransform(this.ComputeTransform(in bounds));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Matrix3x2 ComputeTransform(in FontRectangle bounds)
@@ -482,15 +482,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
         private Buffer2D<float> Render(IPath path)
         {
-            // We need to offset the path now against 0,0 for rasterization.
-            IPath offsetPath = path.Translate(-path.Bounds.Location);
+            // We need to offset the path now against the equivalent pixel position of [0,0] for rasterization.
+            IPath offsetPath = path.Translate(-ClampToPixel(path.Bounds.Location));
             Size size = Rectangle.Ceiling(offsetPath.Bounds).Size;
+
+            // Pad to prevent edge clipping.
+            size += new Size(2, 2);
+
             int subpixelCount = FillPathProcessor.MinimumSubpixelCount;
             float xOffset = .5F;
             GraphicsOptions graphicsOptions = this.drawingOptions.GraphicsOptions;
             if (graphicsOptions.Antialias)
             {
-                xOffset = 0F; // We are antialiasing skip offsetting as real antialiasing should take care of offset.
+                xOffset = 0F; // We are antialiasing. Skip offsetting as real antialiasing should take care of offset.
                 subpixelCount = Math.Max(subpixelCount, graphicsOptions.AntialiasSubpixelDepth);
             }
 
@@ -543,7 +547,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 if (disposing)
                 {
-                    foreach (KeyValuePair<(GlyphRendererParameters Glyph, PointF SubPixelOffset), GlyphRenderData> kv in this.glyphData)
+                    foreach (KeyValuePair<(GlyphRendererParameters Glyph, RectangleF Bounds), GlyphRenderData> kv in this.glyphData)
                     {
                         kv.Value.Dispose();
                     }
@@ -564,7 +568,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
         private struct GlyphRenderData : IDisposable
         {
-            // public Color? Color;
+            public Vector2 LocationDelta;
+
             public Buffer2D<float> FillMap;
 
             public Buffer2D<float> OutlineMap;
