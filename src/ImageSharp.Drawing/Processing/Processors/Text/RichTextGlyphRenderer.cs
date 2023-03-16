@@ -142,7 +142,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                         new RectangleF(bounds.Location, new(bounds.Width, bounds.Height)),
                         this.drawingOptions.Transform);
 
-                PointF subPixelOffset = currentBounds.Location - Point.Truncate(currentBounds.Location);
+                PointF subPixelOffset = currentBounds.Location - ClampToPixel(currentBounds.Location);
                 subPixelOffset.X = MathF.Round(subPixelOffset.X * AccuracyMultiple) / AccuracyMultiple;
                 subPixelOffset.Y = MathF.Round(subPixelOffset.Y * AccuracyMultiple) / AccuracyMultiple;
 
@@ -237,11 +237,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             Vector2 bl = start + pad;
             Vector2 tr = end - pad;
 
-            tl.Y = MathF.Round(tl.Y, MidpointRounding.AwayFromZero);
-            tr.Y = MathF.Round(tr.Y, MidpointRounding.AwayFromZero);
-            bl.Y = MathF.Round(bl.Y, MidpointRounding.AwayFromZero);
-            tl.X = MathF.Round(tl.X, MidpointRounding.AwayFromZero);
-            tr.X = MathF.Round(tr.X, MidpointRounding.AwayFromZero);
+            tl = ClampToPixel(tl);
+            bl = ClampToPixel(bl);
+            tr = ClampToPixel(tr);
 
             // Always respect the pen stroke width if explicitly set.
             if (pen is null)
@@ -347,7 +345,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 this.DrawingOperations.Add(new DrawingOperation
                 {
-                    Location = Point.Truncate(path.Bounds.Location),
+                    Location = ClampToPixel(path.Bounds.Location),
                     Map = renderData.FillMap,
                     Brush = this.currentBrush,
                     RenderPass = RenderOrderFill
@@ -358,7 +356,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             {
                 this.DrawingOperations.Add(new DrawingOperation
                 {
-                    Location = Point.Truncate(path.Bounds.Location),
+                    Location = ClampToPixel(path.Bounds.Location),
                     Map = renderData.OutlineMap,
                     Brush = this.currentPen?.StrokeFill ?? this.currentBrush,
                     RenderPass = RenderOrderOutline
@@ -375,6 +373,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         }
 
         public void Dispose() => this.Dispose(true);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Point ClampToPixel(PointF point)
+            => Point.Truncate(point);
 
         private void FinalizeDecoration(ref TextDecorationDetails? decoration)
         {
@@ -398,7 +400,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     this.DrawingOperations.Add(new DrawingOperation
                     {
                         Brush = decoration.Value.Pen.StrokeFill,
-                        Location = Point.Truncate(outline.Bounds.Location),
+                        Location = ClampToPixel(outline.Bounds.Location),
                         Map = this.Render(outline),
                         RenderPass = RenderOrderDecoration
                     });
