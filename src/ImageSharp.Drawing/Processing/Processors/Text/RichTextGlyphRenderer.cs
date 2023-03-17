@@ -74,7 +74,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 // Turn of caching. The chances of a hit are near-zero.
                 this.rasterizationRequired = true;
                 this.noCache = true;
-
                 if (path is IPathInternals internals)
                 {
                     this.path = internals;
@@ -142,11 +141,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                        new RectangleF(bounds.Location, new(bounds.Width, bounds.Height)),
                        this.drawingOptions.Transform);
 
+                PointF currentBoundsDelta = currentBounds.Location - ClampToPixel(currentBounds.Location);
+                PointF subPixelLocation = new(
+                    MathF.Round(currentBoundsDelta.X * AccuracyMultiple) / AccuracyMultiple,
+                    MathF.Round(currentBoundsDelta.Y * AccuracyMultiple) / AccuracyMultiple);
+
                 SizeF subPixelSize = new(
                     MathF.Round(currentBounds.Width * AccuracyMultiple) / AccuracyMultiple,
                     MathF.Round(currentBounds.Height * AccuracyMultiple) / AccuracyMultiple);
 
-                this.currentCacheKey = (parameters, new RectangleF(new(0, 0), subPixelSize));
+                this.currentCacheKey = (parameters, new RectangleF(subPixelLocation, subPixelSize));
                 if (this.glyphData.ContainsKey(this.currentCacheKey))
                 {
                     // We have already drawn the glyph vectors.
@@ -345,7 +349,32 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 renderData = this.glyphData[this.currentCacheKey];
 
                 // Offset the render location by the delta from the cached glyph and this one.
-                renderLocation = (Point)(path.Bounds.Location - (PointF)renderData.LocationDelta);
+                Vector2 previousDelta = renderData.LocationDelta;
+                Vector2 currentLocation = path.Bounds.Location;
+                Vector2 currentDelta = path.Bounds.Location - ClampToPixel(path.Bounds.Location);
+
+                if (previousDelta.Y > currentDelta.Y)
+                {
+                    // Move the location down to match the previous location offset.
+                    currentLocation += new Vector2(0, previousDelta.Y - currentDelta.Y);
+                }
+                else if (previousDelta.Y < currentDelta.Y)
+                {
+                    // Move the location up to match the previous location offset.
+                    currentLocation -= new Vector2(0, currentDelta.Y - previousDelta.Y);
+                }
+                else if (previousDelta.X > currentDelta.X)
+                {
+                    // Move the location right to match the previous location offset.
+                    currentLocation += new Vector2(previousDelta.X - currentDelta.X, 0);
+                }
+                else if (previousDelta.X < currentDelta.X)
+                {
+                    // Move the location left to match the previous location offset.
+                    currentLocation -= new Vector2(currentDelta.X - previousDelta.X, 0);
+                }
+
+                renderLocation = ClampToPixel(currentLocation);
             }
 
             if (renderData.FillMap != null)
@@ -482,7 +511,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
         private Buffer2D<float> Render(IPath path)
         {
-            // We need to offset the path now against the equivalent pixel position of [0,0] for rasterization.
+            // We need to offset the path now by the difference between the clamped location and the
+            // path location.
             IPath offsetPath = path.Translate(-ClampToPixel(path.Bounds.Location));
             Size size = Rectangle.Ceiling(offsetPath.Bounds).Size;
 
