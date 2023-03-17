@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using SixLabors.Fonts;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
 
@@ -21,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         /// <param name="text">The text we want to render</param>
         /// <param name="brush">The brush to source pixel colors from.</param>
         /// <param name="pen">The pen to outline text with.</param>
-        public DrawTextProcessor(DrawingOptions drawingOptions, TextOptions textOptions, string text, Brush brush, Pen pen)
+        public DrawTextProcessor(DrawingOptions drawingOptions, RichTextOptions textOptions, string text, Brush brush, Pen pen)
         {
             Guard.NotNull(text, nameof(text));
             if (brush is null && pen is null)
@@ -47,9 +46,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         public DrawingOptions DrawingOptions { get; }
 
         /// <summary>
-        /// Gets the <see cref="Fonts.TextOptions"/> defining text-specific drawing settings.
+        /// Gets the <see cref="RichTextOptions"/> defining text-specific drawing settings.
         /// </summary>
-        public TextOptions TextOptions { get; }
+        public RichTextOptions TextOptions { get; }
 
         /// <summary>
         /// Gets the text to draw.

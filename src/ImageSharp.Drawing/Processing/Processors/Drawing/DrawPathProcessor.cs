@@ -47,9 +47,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
         {
             // Offset drawlines to align drawing outlines to pixel centers.
             // The global transform is applied in the FillPathProcessor.
-            IPath outline = this.Path
-                .Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F))
-                .GenerateOutline(this.Pen.StrokeWidth, this.Pen.StrokePattern, this.Pen.JointStyle, this.Pen.EndCapStyle);
+            IPath outline = this.Pen.GeneratePath(this.Path.Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
 
             return new FillPathProcessor(this.Options, this.Pen.StrokeFill, outline)
                 .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);

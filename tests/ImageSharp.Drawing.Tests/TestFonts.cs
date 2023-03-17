@@ -18,5 +18,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public const string WendyOne = "WendyOne-Regular.ttf";
 
         public const string WhitneyBook = "whitney-book.ttf";
+
+        public const string MeQuranVolyNewmet = "me_quran_volt_newmet.ttf";
     }
 }

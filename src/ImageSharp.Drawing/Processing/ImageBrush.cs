@@ -47,6 +47,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
+        public override bool Equals(Brush other)
+        {
+            if (other is ImageBrush sb)
+            {
+                return sb.image == this.image && sb.region == this.region;
+            }
+
+            return false;
+        }
+
+        /// <inheritdoc />
         public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,

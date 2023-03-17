@@ -14,21 +14,21 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
         private readonly int minY;
         private readonly int maxY;
         private readonly IntersectionRule intersectionRule;
-        private ScanEdgeCollection edgeCollection;
-        private Span<ScanEdge> edges;
+        private readonly ScanEdgeCollection edgeCollection;
+        private readonly Span<ScanEdge> edges;
 
         // Common contiguous buffer for sorted0, sorted1, intersections, activeEdges [,intersectionTypes]
-        private IMemoryOwner<int> dataBuffer;
+        private readonly IMemoryOwner<int> dataBuffer;
 
         // | <- edgeCnt -> | <- edgeCnt -> | <- edgeCnt -> | <- maxIntersectionCount -> | <- maxIntersectionCount -> |
         // |---------------|---------------|---------------|----------------------------|----------------------------|
         // | sorted0       | sorted1       | activeEdges   | intersections              | intersectionTypes          |
         // |---------------|---------------|---------------|----------------------------|----------------------------|
-        private Span<int> sorted0;
-        private Span<int> sorted1;
+        private readonly Span<int> sorted0;
+        private readonly Span<int> sorted1;
         private ActiveEdgeList activeEdges;
-        private Span<float> intersections;
-        private Span<NonZeroIntersectionType> intersectionTypes;
+        private readonly Span<float> intersections;
+        private readonly Span<NonZeroIntersectionType> intersectionTypes;
 
         private int idx0;
         private int idx1;
@@ -192,11 +192,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
         }
 
         public ReadOnlySpan<float> ScanCurrentLine()
-        {
-            return this.intersectionRule == IntersectionRule.OddEven
-                ? this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections)
-                : this.activeEdges.ScanNonZero(this.SubPixelY, this.edges, this.intersections, this.intersectionTypes);
-        }
+            => this.intersectionRule == IntersectionRule.OddEven
+            ? this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections)
+            : this.activeEdges.ScanNonZero(this.SubPixelY, this.edges, this.intersections, this.intersectionTypes);
 
         public void Dispose()
         {

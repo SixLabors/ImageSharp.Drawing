@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
 using BenchmarkDotNet.Attributes;
-using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -80,7 +79,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         [Benchmark]
         public void ImageSharp()
         {
-            TextOptions textOptions = new(this.font)
+            RichTextOptions textOptions = new(this.font)
             {
                 WrappingLength = 780,
                 Origin = new PointF(10, 10)

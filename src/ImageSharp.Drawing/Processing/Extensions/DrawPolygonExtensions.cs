@@ -53,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Brush brush,
             float thickness,
             params PointF[] points) =>
-            source.DrawPolygon(options, new Pen(brush, thickness), points);
+            source.DrawPolygon(options, new SolidPen(brush, thickness), points);
 
         /// <summary>
         /// Draws the provided points as a closed linear polygon with the provided brush at the provided thickness.
@@ -68,7 +68,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Brush brush,
             float thickness,
             params PointF[] points) =>
-            source.DrawPolygon(new Pen(brush, thickness), points);
+            source.DrawPolygon(new SolidPen(brush, thickness), points);
 
         /// <summary>
         /// Draws the provided points as a closed linear polygon with the provided brush at the provided thickness.

@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Text;
 
@@ -36,12 +37,30 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The <see cref="IPathCollection"/></returns>
         public static IPathCollection GenerateGlyphs(string text, IPath path, TextOptions textOptions)
         {
-            PathGlyphBuilder glyphBuilder = new(path, textOptions);
+            (IPath Path, TextOptions TextOptions) transformed = ConfigureOptions(textOptions, path);
+            PathGlyphBuilder glyphBuilder = new(transformed.Path, transformed.TextOptions);
             TextRenderer renderer = new(glyphBuilder);
 
-            renderer.RenderText(text, textOptions);
+            renderer.RenderText(text, transformed.TextOptions);
 
             return glyphBuilder.Paths;
+        }
+
+        private static (IPath Path, TextOptions TextOptions) ConfigureOptions(TextOptions options, IPath path)
+        {
+            // When a path is specified we should explicitly follow that path
+            // and not adjust the origin. Any translation should be applied to the path.
+            if (path is not null && options.Origin != Vector2.Zero)
+            {
+                TextOptions clone = new(options)
+                {
+                    Origin = Vector2.Zero
+                };
+
+                return (path.Translate(options.Origin), clone);
+            }
+
+            return (path, options);
         }
     }
 }

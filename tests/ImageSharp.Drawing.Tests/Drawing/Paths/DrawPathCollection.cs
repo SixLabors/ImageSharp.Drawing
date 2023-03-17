@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
     {
         private readonly GraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
         private readonly Color color = Color.HotPink;
-        private readonly Pen pen = Pens.Solid(Color.HotPink, 1);
+        private readonly SolidPen pen = Pens.Solid(Color.HotPink, 1);
         private readonly IPath path1 = new Path(new LinearLineSegment(
             new PointF[]
             {
@@ -84,7 +84,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             {
                 Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.pen.StrokeFill, p.Pen.StrokeFill);
-                Assert.Equal(10, p.Pen.StrokeWidth);
+                var pPen = Assert.IsType<SolidPen>(p.Pen);
+                Assert.Equal(10, pPen.StrokeWidth);
             });
 
             Assert.Collection(
@@ -103,7 +104,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             {
                 Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
                 Assert.Equal(this.pen.StrokeFill, p.Pen.StrokeFill);
-                Assert.Equal(10, p.Pen.StrokeWidth);
+                var pPen = Assert.IsType<SolidPen>(p.Pen);
+                Assert.Equal(10, pPen.StrokeWidth);
             });
 
             Assert.Collection(
@@ -123,7 +125,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
                 Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
                 SolidBrush brush = Assert.IsType<SolidBrush>(p.Pen.StrokeFill);
                 Assert.Equal(Color.Pink, brush.Color);
-                Assert.Equal(10, p.Pen.StrokeWidth);
+                var pPen = Assert.IsType<SolidPen>(p.Pen);
+                Assert.Equal(10, pPen.StrokeWidth);
             });
 
             Assert.Collection(
@@ -143,7 +146,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
                 Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
                 SolidBrush brush = Assert.IsType<SolidBrush>(p.Pen.StrokeFill);
                 Assert.Equal(Color.Pink, brush.Color);
-                Assert.Equal(10, p.Pen.StrokeWidth);
+                var pPen = Assert.IsType<SolidPen>(p.Pen);
+                Assert.Equal(10, pPen.StrokeWidth);
             });
 
             Assert.Collection(
@@ -161,8 +165,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.All(processors, p =>
             {
                 Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
-                Assert.Equal(this.pen.JointStyle, p.Pen.JointStyle);
-                Assert.Equal(this.pen.EndCapStyle, p.Pen.EndCapStyle);
+                var pPen = Assert.IsType<SolidPen>(p.Pen);
+                Assert.Equal(this.pen.JointStyle, pPen.JointStyle);
+                Assert.Equal(this.pen.EndCapStyle, pPen.EndCapStyle);
             });
 
             Assert.Collection(
@@ -180,8 +185,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
             Assert.All(processors, p =>
             {
                 Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
-                Assert.Equal(this.pen.JointStyle, p.Pen.JointStyle);
-                Assert.Equal(this.pen.EndCapStyle, p.Pen.EndCapStyle);
+                var pPen = Assert.IsType<SolidPen>(p.Pen);
+                Assert.Equal(this.pen.JointStyle, pPen.JointStyle);
+                Assert.Equal(this.pen.EndCapStyle, pPen.EndCapStyle);
             });
 
             Assert.Collection(

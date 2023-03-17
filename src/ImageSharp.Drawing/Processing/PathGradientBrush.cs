@@ -78,6 +78,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
+        public override bool Equals(Brush other)
+        {
+            if (other is PathGradientBrush brush)
+            {
+                return this.centerColor.Equals(brush.centerColor)
+                    && this.hasSpecialCenterColor.Equals(brush.hasSpecialCenterColor)
+                    && this.edges?.SequenceEqual(brush.edges) == true;
+            }
+
+            return false;
+        }
+
+        /// <inheritdoc />
         public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,
@@ -126,7 +139,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// An edge of the polygon that represents the gradient area.
         /// </summary>
-        private class Edge
+        private class Edge : IEquatable<Edge>
         {
             private readonly float length;
 
@@ -162,6 +175,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             }
 
             public Vector4 ColorAt(PointF point) => this.ColorAt(DistanceBetween(point, this.Start));
+
+            public bool Equals(Edge other)
+                => other.Start == this.Start &&
+                    other.End == this.End &&
+                    other.StartColor.Equals(this.StartColor) &&
+                    other.EndColor.Equals(this.EndColor);
         }
 
         /// <summary>
@@ -346,7 +365,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                     }
                 }
 
-                return closestEdge != null ? (closestEdge, closestIntersection) : ((Edge Edge, Vector2 Point)?)null;
+                return closestEdge != null ? (closestEdge, closestIntersection) : null;
             }
 
             private static bool FindPointOnTriangle(Vector2 v1, Vector2 v2, Vector2 v3, Vector2 point, out float u, out float v)

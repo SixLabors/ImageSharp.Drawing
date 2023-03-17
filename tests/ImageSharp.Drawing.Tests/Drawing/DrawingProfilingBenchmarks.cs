@@ -75,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             Font font = SystemFonts.CreateFont("Arial", 12);
             SolidBrush brush = Brushes.Solid(Color.HotPink);
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = 780,
                 Origin = new PointF(10, 10)

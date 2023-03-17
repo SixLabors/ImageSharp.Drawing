@@ -55,6 +55,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 this.TargetColor.ToPixel<TPixel>(),
                 this.Threshold);
 
+        /// <inheritdoc />
+        public override bool Equals(Brush other)
+        {
+            if (other is RecolorBrush brush)
+            {
+                return this.SourceColor.Equals(brush.SourceColor)
+                    && this.TargetColor.Equals(brush.TargetColor)
+                    && this.Threshold == brush.Threshold;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// The recolor brush applicator.
         /// </summary>

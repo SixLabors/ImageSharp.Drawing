@@ -50,7 +50,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Brush brush,
             float thickness,
             RectangleF shape) =>
-            source.Draw(options, new Pen(brush, thickness), shape);
+            source.Draw(options, new SolidPen(brush, thickness), shape);
 
         /// <summary>
         /// Draws the outline of the rectangle with the provided brush at the provided thickness.
@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Brush brush,
             float thickness,
             RectangleF shape) =>
-            source.Draw(new Pen(brush, thickness), shape);
+            source.Draw(new SolidPen(brush, thickness), shape);
 
         /// <summary>
         /// Draws the outline of the rectangle with the provided brush at the provided thickness.

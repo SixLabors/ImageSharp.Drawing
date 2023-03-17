@@ -87,6 +87,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <inheritdoc />
+        public override bool Equals(Brush other)
+        {
+            if (other is PatternBrush sb)
+            {
+                return sb.pattern.Equals(this.pattern)
+                    && sb.patternVector.Equals(this.patternVector);
+            }
+
+            return false;
+        }
+
+        /// <inheritdoc />
         public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
             Configuration configuration,
             GraphicsOptions options,

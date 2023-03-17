@@ -14,7 +14,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public sealed class LinearGradientBrush : GradientBrush
     {
         private readonly PointF p1;
-
         private readonly PointF p2;
 
         /// <summary>
@@ -33,6 +32,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
             this.p1 = p1;
             this.p2 = p2;
+        }
+
+        /// <inheritdoc/>
+        public override bool Equals(Brush other)
+        {
+            if (other is LinearGradientBrush brush)
+            {
+                return base.Equals(other)
+                    && this.p1.Equals(brush.p1)
+                    && this.p2.Equals(brush.p2);
+            }
+
+            return false;
         }
 
         /// <inheritdoc />

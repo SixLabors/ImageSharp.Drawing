@@ -2,10 +2,12 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
@@ -50,7 +52,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
               TextDrawingComparer,
               img =>
               {
-                  TextOptions textOptions = new(font)
+                  RichTextOptions textOptions = new(font)
                   {
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
@@ -82,13 +84,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
               TextDrawingComparer,
               img =>
               {
-                  TextOptions textOptions = new(whitney)
+                  RichTextOptions textOptions = new(whitney)
                   {
                       HorizontalAlignment = HorizontalAlignment.Center,
                       VerticalAlignment = VerticalAlignment.Center,
                       TextAlignment = TextAlignment.Center,
                       FallbackFontFamilies = new[] { malgun },
-                      KerningMode = KerningMode.Normal,
+                      KerningMode = KerningMode.Standard,
                       Origin = new PointF(img.Width / 2, img.Height / 2)
                   };
 
@@ -108,14 +110,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             using Image<TPixel> img = provider.GetImage();
 
             // Measure the text size
-            FontRectangle size = TextMeasurer.Measure(text, new TextOptions(font));
+            FontRectangle size = TextMeasurer.Measure(text, new RichTextOptions(font));
 
             // Find out how much we need to scale the text to fill the space (up or down)
             float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
 
             // Create a new font
             var scaledFont = new Font(font, scalingFactor * font.Size);
-            TextOptions textOptions = new(scaledFont)
+            RichTextOptions textOptions = new(scaledFont)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -199,7 +201,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Font font = CreateFont(fontName, fontSize);
             float radians = GeometryUtilities.DegreeToRadian(angle);
 
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -239,7 +241,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             float radianX = GeometryUtilities.DegreeToRadian(angleX);
             float radianY = GeometryUtilities.DegreeToRadian(angleY);
 
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -315,9 +317,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 sb.AppendLine(str);
             }
 
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
-                KerningMode = KerningMode.Normal,
+                KerningMode = KerningMode.Standard,
                 VerticalAlignment = VerticalAlignment.Top,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 LineSpacing = lineSpacing,
@@ -401,7 +403,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 "Beware the Jabberwock, my son!  The jaws that bite, the claws that catch!  Beware the Jubjub bird, and shun The frumious Bandersnatch!\n",
                 20);
 
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = 1000,
                 Origin = new PointF(10, 50)
@@ -427,7 +429,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             // The following font/text combination generates an empty path.
             Font font = CreateFont(TestFonts.WendyOne, 72);
             const string text = "Hello\0World";
-            TextOptions textOptions = new(font);
+            RichTextOptions textOptions = new(font);
             FontRectangle textSize = TextMeasurer.Measure(text, textOptions);
 
             Assert.NotEqual(FontRectangle.Empty, textSize);
@@ -454,7 +456,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "QuickTYZ";
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
-            TextOptions textOptions = new(font);
+            RichTextOptions textOptions = new(font);
             FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
@@ -481,7 +483,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "QuickTYZ";
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
-            TextOptions textOptions = new(font);
+            RichTextOptions textOptions = new(font);
             FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
@@ -489,6 +491,192 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 x => x.SetDrawingTransform(transform)
                 .DrawText(textOptions, text, Pens.Solid(Color.Black, strokeWidth)),
                 $"F({fontName})-S({fontSize})-A({angle})-STR({strokeWidth})-{ToTestOutputDisplayText(text)})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(500, 300, nameof(Color.Black), PixelTypes.Rgba32, 40)]
+        public void DrawRichText<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, fontSize);
+            Font font2 = CreateFont(TestFonts.OpenSans, fontSize * 1.5f);
+            const string text = "The quick brown fox jumps over the lazy dog";
+
+            RichTextOptions textOptions = new(font)
+            {
+                Origin = new Vector2(15),
+                WrappingLength = 400,
+                TextRuns = new[]
+                {
+                    new RichTextRun
+                    {
+                        Start = 0,
+                        End = 3,
+                        OverlinePen = Pens.Solid(Color.Yellow, 1),
+                        StrikeoutPen = Pens.Solid(Color.HotPink, 5),
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 4,
+                        End = 10,
+                        TextDecorations = TextDecorations.Strikeout,
+                        StrikeoutPen = Pens.Solid(Color.Red),
+                        OverlinePen = Pens.Solid(Color.Green, 9),
+                        Brush = Brushes.Solid(Color.Red),
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 10,
+                        End = 13,
+                        Font = font2,
+                        TextDecorations = TextDecorations.Strikeout,
+                        StrikeoutPen = Pens.Solid(Color.White, 6),
+                        OverlinePen = Pens.Solid(Color.Orange, 2),
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 19,
+                        End = 23,
+                        TextDecorations = TextDecorations.Underline,
+                        UnderlinePen = Pens.Dot(Color.Fuchsia, 5),
+                        Brush = Brushes.Solid(Color.Blue),
+                    },
+
+                    new RichTextRun
+                    {
+                        Start = 23,
+                        End = 25,
+                        TextDecorations = TextDecorations.Underline,
+                        UnderlinePen = Pens.Solid(Color.White),
+                    }
+                }
+            };
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.White),
+                $"RichText-F({fontSize})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(500, 300, nameof(Color.Black), PixelTypes.Rgba32, 40)]
+        public void DrawRichTextArabic<TPixel>(
+            TestImageProvider<TPixel> provider,
+            int fontSize)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.MeQuranVolyNewmet, fontSize);
+            string text = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٟنِ ٱلرَّحِيمِ";
+
+            RichTextOptions textOptions = new(font)
+            {
+                Origin = new Vector2(15),
+                WrappingLength = 400,
+                TextRuns = new[]
+                {
+                    new RichTextRun { Start = 0, End = CodePoint.GetCodePointCount(text.AsSpan()), TextDecorations = TextDecorations.Underline }
+                }
+            };
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.White),
+                $"RichText-Arabic-F({fontSize})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(500, 200, nameof(Color.Black), PixelTypes.Rgba32, 32)]
+        [WithSolidFilledImages(500, 300, nameof(Color.Black), PixelTypes.Rgba32, 40)]
+        public void DrawRichTextRainbow<TPixel>(
+           TestImageProvider<TPixel> provider,
+           int fontSize)
+           where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, fontSize);
+            const string text = "The quick brown fox jumps over the lazy dog";
+
+            SolidPen[] colors = new[]
+            {
+                new SolidPen(Color.Red),
+                new SolidPen(Color.Orange),
+                new SolidPen(Color.Yellow),
+                new SolidPen(Color.Green),
+                new SolidPen(Color.Blue),
+                new SolidPen(Color.Indigo),
+                new SolidPen(Color.Violet)
+            };
+
+            var runs = new List<RichTextRun>();
+            for (int i = 0; i < text.Length; i++)
+            {
+                SolidPen pen = colors[i % colors.Length];
+                runs.Add(new RichTextRun
+                {
+                    Start = i,
+                    End = i + 1,
+                    UnderlinePen = pen
+                });
+            }
+
+            RichTextOptions textOptions = new(font)
+            {
+                Origin = new Vector2(15),
+                WrappingLength = 400,
+                TextRuns = runs,
+            };
+
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.White),
+                $"RichText-Rainbow-F({fontSize})",
+                TextDrawingComparer,
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: true);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(100, 100, nameof(Color.Black), PixelTypes.Rgba32, "M10,90 Q90,90 90,45 Q90,10 50,10 Q10,10 10,40 Q10,70 45,70 Q70,70 75,50", "spiral")]
+        [WithSolidFilledImages(350, 350, nameof(Color.Black), PixelTypes.Rgba32, "M275 175 A100 100 0 1 1 275 174", "circle")]
+        [WithSolidFilledImages(120, 120, nameof(Color.Black), PixelTypes.Rgba32, "M50,10 L 90 90 L 10 90 L50 10", "triangle")]
+        public void CanDrawRichTextAlongPathHorizontal<TPixel>(TestImageProvider<TPixel> provider, string svgPath, string exampleImageKey)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            bool parsed = Path.TryParseSvgPath(svgPath, out IPath path);
+            Assert.True(parsed);
+
+            Font font = CreateFont(TestFonts.OpenSans, 13);
+
+            const string text = "Quick brown fox jumps over the lazy dog.";
+            RichTextRun run = new()
+            {
+                Start = 0,
+                End = text.GetGraphemeCount(),
+                StrikeoutPen = new SolidPen(Color.Red)
+            };
+
+            RichTextOptions textOptions = new(font)
+            {
+                WrappingLength = path.ComputeLength(),
+                VerticalAlignment = VerticalAlignment.Bottom,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Path = path,
+                TextRuns = new[] { run }
+            };
+
+            provider.RunValidatingProcessorTest(
+                x => x.DrawText(textOptions, text, Color.White),
+                $"RichText-Path-({exampleImageKey})",
                 TextDrawingComparer,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: true);
@@ -505,7 +693,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.True(parsed);
 
             Font font = CreateFont(TestFonts.OpenSans, 13);
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = path.ComputeLength(),
                 VerticalAlignment = VerticalAlignment.Bottom,
@@ -531,7 +719,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Assert.True(parsed);
 
             Font font = CreateFont(TestFonts.OpenSans, 13);
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = path.ComputeLength() / 4,
                 VerticalAlignment = VerticalAlignment.Bottom,
@@ -556,7 +744,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             return fnDisplayText.Substring(0, Math.Min(fnDisplayText.Length, 4));
         }
 
-        private static Font CreateFont(string fontName, int size)
+        private static Font CreateFont(string fontName, float size)
             => TestFontUtilities.GetFont(fontName, size);
     }
 }

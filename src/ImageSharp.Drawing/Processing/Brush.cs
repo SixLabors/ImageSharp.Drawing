@@ -1,18 +1,19 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Brush represents a logical configuration of a brush which can be used to source pixel colors
+    /// Represents a logical configuration of a brush which can be used to source pixel colors.
     /// </summary>
     /// <remarks>
     /// A brush is a simple class that will return an <see cref="BrushApplicator{TPixel}" /> that will perform the
     /// logic for retrieving pixel values for specific locations.
     /// </remarks>
-    public abstract class Brush
+    public abstract class Brush : IEquatable<Brush>
     {
         /// <summary>
         /// Creates the applicator for this brush.
@@ -35,5 +36,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region)
             where TPixel : unmanaged, IPixel<TPixel>;
+
+        /// <inheritdoc/>
+        public abstract bool Equals(Brush other);
     }
 }

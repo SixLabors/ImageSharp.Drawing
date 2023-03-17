@@ -8,17 +8,24 @@ using SixLabors.Fonts;
 namespace SixLabors.ImageSharp.Drawing.Text
 {
     /// <summary>
-    /// rendering surface that Fonts can use to generate Shapes.
+    /// Defines a rendering surface that Fonts can use to generate Shapes.
     /// </summary>
     internal class BaseGlyphBuilder : IGlyphRenderer
     {
         private readonly List<IPath> paths = new();
         private Vector2 currentPoint;
+        private GlyphRendererParameters parameters;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
         /// </summary>
         public BaseGlyphBuilder() => this.Builder = new PathBuilder();
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class.
+        /// </summary>
+        /// <param name="transform">The default transform.</param>
+        public BaseGlyphBuilder(Matrix3x2 transform) => this.Builder = new PathBuilder(transform);
 
         /// <summary>
         /// Gets the paths that have been rendered by the current instance.
@@ -31,18 +38,17 @@ namespace SixLabors.ImageSharp.Drawing.Text
         protected PathBuilder Builder { get; }
 
         /// <inheritdoc/>
-        void IGlyphRenderer.EndText()
-        {
-        }
+        void IGlyphRenderer.EndText() => this.EndText();
 
         /// <inheritdoc/>
-        void IGlyphRenderer.BeginText(FontRectangle bounds) => this.BeginText(bounds);
+        void IGlyphRenderer.BeginText(in FontRectangle bounds) => this.BeginText(bounds);
 
         /// <inheritdoc/>
-        bool IGlyphRenderer.BeginGlyph(FontRectangle bounds, GlyphRendererParameters paramaters)
+        bool IGlyphRenderer.BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
         {
+            this.parameters = parameters;
             this.Builder.Clear();
-            this.BeginGlyph(bounds);
+            this.BeginGlyph(in bounds, in parameters);
             return true;
         }
 
@@ -66,7 +72,11 @@ namespace SixLabors.ImageSharp.Drawing.Text
         /// <summary>
         /// Ends the glyph.
         /// </summary>
-        void IGlyphRenderer.EndGlyph() => this.paths.Add(this.Builder.Build());
+        void IGlyphRenderer.EndGlyph()
+        {
+            this.paths.Add(this.Builder.Build());
+            this.EndGlyph();
+        }
 
         /// <summary>
         /// Ends the figure.
@@ -106,14 +116,62 @@ namespace SixLabors.ImageSharp.Drawing.Text
 
         /// <summary>Called before any glyphs have been rendered.</summary>
         /// <param name="bounds">The bounds the text will be rendered at and at what size.</param>
-        protected virtual void BeginText(FontRectangle bounds)
+        protected virtual void BeginText(in FontRectangle bounds)
         {
         }
 
-        /// <summary>Begins the glyph.</summary>
-        /// <param name="bounds">The bounds the glyph will be rendered at and at what size.</param>
-        protected virtual void BeginGlyph(FontRectangle bounds)
+        /// <inheritdoc cref="IGlyphRenderer.BeginGlyph(in FontRectangle, in GlyphRendererParameters)"/>
+        protected virtual void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
         {
+        }
+
+        /// <inheritdoc cref="IGlyphRenderer.EndGlyph()"/>
+        protected virtual void EndGlyph()
+        {
+        }
+
+        /// <inheritdoc cref="IGlyphRenderer.EndText()"/>
+        protected virtual void EndText()
+        {
+        }
+
+        public virtual TextDecorations EnabledDecorations()
+            => this.parameters.TextRun.TextDecorations;
+
+        public virtual void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
+        {
+            if (thickness == 0)
+            {
+                return;
+            }
+
+            var renderer = (IGlyphRenderer)this;
+
+            Vector2 height = new(0, thickness);
+            Vector2 tl = start;
+            Vector2 tr = end;
+            Vector2 bl = start + height;
+            Vector2 br = end + height;
+
+            // Drawing is always centered around the point so we need to offset by half.
+            Vector2 offset = Vector2.Zero;
+            if (textDecorations == TextDecorations.Overline)
+            {
+                // CSS overline is drawn above the position, so we need to move it up.
+                offset = new(0, -(thickness * .5F));
+            }
+            else if (textDecorations == TextDecorations.Underline)
+            {
+                // CSS underline is drawn below the position, so we need to move it down.
+                offset = new Vector2(0, thickness * .5F);
+            }
+
+            // MoveTo calls StartFigure();
+            renderer.MoveTo(tl + offset);
+            renderer.LineTo(bl + offset);
+            renderer.LineTo(br + offset);
+            renderer.LineTo(tr + offset);
+            renderer.EndFigure();
         }
     }
 }

@@ -32,6 +32,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             ImageFrame<TPixel> source,
             RectangleF region) => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
 
+        /// <inheritdoc/>
+        public override bool Equals(Brush other)
+        {
+            if (other is SolidBrush sb)
+            {
+                return sb.Color.Equals(this.Color);
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// The solid brush applicator.
         /// </summary>

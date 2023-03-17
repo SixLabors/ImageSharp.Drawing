@@ -26,7 +26,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 Font font = family.CreateFont(48, FontStyle.Bold);
 
                 // The options are optional
-                TextOptions textOptions = new(font)
+                RichTextOptions textOptions = new(font)
                 {
                     TabWidth = 8, // a tab renders as 8 spaces wide
                     WrappingLength = width, // greater than zero so we will word wrap at 100 pixels wide
@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         {
             ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             {
-                Pen pen = new Pen(new PenOptions(Color.White, 0));
+                Pen pen = new SolidPen(Color.White, 0);
             });
 
             Assert.StartsWith("Parameter \"strokeWidth\" (System.Single) must be greater than 0, was 0", ex.Message);

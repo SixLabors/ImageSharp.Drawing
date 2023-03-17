@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Linq;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
@@ -32,6 +33,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Gets the list of color stops for this gradient.
         /// </summary>
         protected ColorStop[] ColorStops { get; }
+
+        /// <inheritdoc />
+        public override bool Equals(Brush other)
+        {
+            if (other is GradientBrush brush)
+            {
+                return this.RepetitionMode == brush.RepetitionMode
+                    && this.ColorStops?.SequenceEqual(brush.ColorStops) == true;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Base class for gradient brush applicators
@@ -103,7 +116,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
                             break;
                         case GradientRepetitionMode.DontFill:
-                            if (positionOnCompleteGradient > 1 || positionOnCompleteGradient < 0)
+                            if (positionOnCompleteGradient is > 1 or < 0)
                             {
                                 return Transparent;
                             }

@@ -13,7 +13,6 @@ namespace SixLabors.ImageSharp.Drawing.Text
     /// </summary>
     internal sealed class PathGlyphBuilder : GlyphBuilder
     {
-        private const float Pi = MathF.PI;
         private readonly IPathInternals path;
         private Vector2 textOffset;
         private readonly TextOptions textOptions;
@@ -38,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
         }
 
         /// <inheritdoc/>
-        protected override void BeginText(FontRectangle bounds)
+        protected override void BeginText(in FontRectangle bounds)
         {
             float yOffset = this.textOptions.VerticalAlignment switch
             {
@@ -59,10 +58,11 @@ namespace SixLabors.ImageSharp.Drawing.Text
         }
 
         /// <inheritdoc/>
-        protected override void BeginGlyph(FontRectangle bounds) => this.TransformGlyph(bounds);
+        protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
+            => this.TransformGlyph(in bounds);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void TransformGlyph(FontRectangle bounds)
+        private void TransformGlyph(in FontRectangle bounds)
         {
             // Find the intersection point.
             // This should be offset to ensure we rotate at the bottom-center of the glyph.
@@ -78,7 +78,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
             Vector2 targetPoint = (Vector2)pathPoint.Point + new Vector2(-halfWidth, bounds.Top) - bounds.Location - this.textOffset;
 
             // Due to how matrix combining works you have to combine this in the reverse order of operation.
-            Matrix3x2 matrix = Matrix3x2.CreateTranslation(targetPoint) * Matrix3x2.CreateRotation(pathPoint.Angle - Pi, pathPoint.Point);
+            Matrix3x2 matrix = Matrix3x2.CreateTranslation(targetPoint) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, pathPoint.Point);
             this.Builder.SetTransform(matrix);
         }
     }

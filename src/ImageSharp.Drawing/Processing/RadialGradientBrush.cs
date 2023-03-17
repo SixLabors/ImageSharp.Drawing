@@ -12,7 +12,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public sealed class RadialGradientBrush : GradientBrush
     {
         private readonly PointF center;
-
         private readonly float radius;
 
         /// <inheritdoc cref="GradientBrush" />
@@ -29,6 +28,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
             this.center = center;
             this.radius = radius;
+        }
+
+        /// <inheritdoc/>
+        public override bool Equals(Brush other)
+        {
+            if (other is RadialGradientBrush brush)
+            {
+                return base.Equals(other)
+                    && this.center.Equals(brush.center)
+                    && this.radius.Equals(brush.radius);
+            }
+
+            return false;
         }
 
         /// <inheritdoc />

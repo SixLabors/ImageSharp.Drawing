@@ -55,8 +55,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
 
             DrawText(
                 "Hello World Hello World Hello World Hello World Hello World Hello World Hello World",
-                 new EllipsePolygon(PointF.Empty, 100));
-            // new RectangularPolygon(PointF.Empty, new SizeF(100, 100)));
+                new EllipsePolygon(PointF.Empty, 100));
         }
 
         private static void DrawText(string text)

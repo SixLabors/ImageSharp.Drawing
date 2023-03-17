@@ -28,26 +28,24 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         [Benchmark(Baseline = true, Description = "System.Drawing Draw Text Outline")]
         public void DrawTextSystemDrawing()
         {
-            using (var destination = new Bitmap(800, 800))
-            using (var graphics = Graphics.FromImage(destination))
-            {
-                graphics.InterpolationMode = InterpolationMode.Default;
-                graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (var pen = new System.Drawing.Pen(System.Drawing.Color.HotPink, 10))
-                using (var font = new System.Drawing.Font("Arial", 12, GraphicsUnit.Point))
-                using (var gp = new GraphicsPath())
-                {
-                    gp.AddString(
-                        this.TextToRender,
-                        font.FontFamily,
-                        (int)font.Style,
-                        font.Size,
-                        new SDRectangleF(10, 10, 780, 780),
-                        new StringFormat());
+            using var destination = new Bitmap(800, 800);
+            using var graphics = Graphics.FromImage(destination);
+            graphics.InterpolationMode = InterpolationMode.Default;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
-                    graphics.DrawPath(pen, gp);
-                }
-            }
+            using var pen = new System.Drawing.Pen(System.Drawing.Color.HotPink, 10);
+            using var font = new System.Drawing.Font("Arial", 12, GraphicsUnit.Point);
+            using var gp = new GraphicsPath();
+
+            gp.AddString(
+                this.TextToRender,
+                font.FontFamily,
+                (int)font.Style,
+                font.Size,
+                new SDRectangleF(10, 10, 780, 780),
+                new StringFormat());
+
+            graphics.DrawPath(pen, gp);
         }
 
         [Benchmark(Description = "ImageSharp Draw Text Outline - Cached Glyphs")]
@@ -55,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing
         {
             using var image = new Image<Rgba32>(800, 800);
             Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
-            TextOptions textOptions = new(font)
+            RichTextOptions textOptions = new(font)
             {
                 WrappingLength = 780,
                 Origin = new PointF(10, 10)
