@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             using (var img = new Image<Rgba32>(10, 10))
             {
-                img.Mutate(x => x.DrawLines(
+                img.Mutate(x => x.DrawLine(
                     new SolidPen(Color.Black, 10),
                     new Vector2(-10, 5),
                     new Vector2(20, 5)));
@@ -138,7 +138,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
                 img.Mutate(x => x.Fill(Color.Transparent));
 
                 img.Mutate(
-                    ctx => ctx.DrawLines(
+                    ctx => ctx.DrawLine(
                         Color.Red,
                         0.984252f,
                         new PointF(104.762581f, 1074.99365f),

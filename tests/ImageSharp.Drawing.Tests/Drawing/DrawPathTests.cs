@@ -70,7 +70,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                         for (int i = 0; i < 300; i += 20)
                         {
                             var points = new PointF[] { new Vector2(100, 2), new Vector2(-10, i) };
-                            x.DrawLines(pen, points);
+                            x.DrawLine(pen, points);
                         }
                     },
                 appendPixelTypeToFileName: false,

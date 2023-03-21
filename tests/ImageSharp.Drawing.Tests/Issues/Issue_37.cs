@@ -26,7 +26,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
                 var graphicsOptions = new GraphicsOptions { Antialias = false };
                 image.Mutate(
                     x => x.BackgroundColor(Color.White)
-                    .DrawLines(
+                    .DrawLine(
                         new DrawingOptions { GraphicsOptions = graphicsOptions },
                         Color.Black,
                         1,

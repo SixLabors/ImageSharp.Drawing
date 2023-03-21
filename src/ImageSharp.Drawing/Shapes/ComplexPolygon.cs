@@ -174,12 +174,14 @@ namespace SixLabors.ImageSharp.Drawing
                 distance -= p.Length;
             }
 
-            // TODO: Perf. Throwhelper
-            throw new InvalidOperationException("Should not be possible to reach this line");
+            ThrowOutOfRange();
+            return default;
         }
 
         /// <inheritdoc/>
         IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
             => this.internalPaths;
+
+        private static void ThrowOutOfRange() => new InvalidOperationException("Should not be possible to reach this line");
     }
 }
