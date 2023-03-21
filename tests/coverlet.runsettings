@@ -6,6 +6,10 @@
                 <Configuration>
                     <Format>lcov</Format>
                     <Include>[SixLabors.*]*</Include>
+                    <Exclude>
+                       <!-- Exclude everthing inside the namesapce "Clipper2Lib" --> 
+                       <Function>^Clipper2Lib\..*</Function> 
+                    </Exclude>  
                     <UseSourceLink>true</UseSourceLink>
                 </Configuration>
             </DataCollector>
