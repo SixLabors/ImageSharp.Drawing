@@ -79,7 +79,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 HorizontalAlignment = HorizontalAlignment.Left,
 
                 // Enable this to test vertical layout mode.
-                //LayoutMode = LayoutMode.VerticalLeftRight
+                // LayoutMode = LayoutMode.VerticalLeftRight
             };
 
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
