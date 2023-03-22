@@ -477,9 +477,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             Vector2 half = new(bounds.Width * .5F, 0);
             SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + half.X);
 
-            // Now offset our target point since we're aligning the top-left location of our glyph against the path.
-            Vector2 targetPoint = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
-            return Matrix3x2.CreateTranslation(targetPoint) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
+            // Now offset to our target point since we're aligning the top-left location of our glyph against the path.
+            Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
+            return Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
         }
 
         private Buffer2D<float> Render(IPath path)

@@ -171,7 +171,7 @@ namespace SixLabors.ImageSharp.Drawing
             // Closed paths will never reach this point.
             // For open paths we're going to create a new virtual point that extends past the path.
             // The position and angle for that point are calculated based upon the last two points.
-            PointF a = this.points[this.points.Length >= 2 ? this.points.Length - 2 : 0].Point;
+            PointF a = this.points[Math.Max(this.points.Length - 2, 0)].Point;
             PointF b = this.points[this.points.Length - 1].Point;
             Vector2 delta = a - b;
             float angle = (float)(Math.Atan2(delta.Y, delta.X) % (Math.PI * 2));
