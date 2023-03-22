@@ -68,11 +68,11 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 
             for (int i = 0; i < openPaths.Count; i++)
             {
-                var points = new PointF[closedPaths[i].Count];
+                var points = new PointF[openPaths[i].Count];
 
-                for (int j = 0; j < closedPaths[i].Count; j++)
+                for (int j = 0; j < openPaths[i].Count; j++)
                 {
-                    Point64 p = closedPaths[i][j];
+                    Point64 p = openPaths[i][j];
 
                     // to make the floating point polygons compatable with clipper we had
                     // to scale them up to make them ints but still retain some level of precision
