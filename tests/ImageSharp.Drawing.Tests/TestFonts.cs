@@ -20,5 +20,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public const string WhitneyBook = "whitney-book.ttf";
 
         public const string MeQuranVolyNewmet = "me_quran_volt_newmet.ttf";
+
+        public const string NettoOffc = "NettoOffc.ttf";
     }
 }
