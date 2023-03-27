@@ -22,8 +22,8 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="meterLimit">meter limit</param>
         /// <param name="arcTolerance">arc tolerance</param>
-        public ClipperOffset(double meterLimit = 2, double arcTolerance = 0.25)
-            => this.polygonClipperOffset = new((float)meterLimit, (float)arcTolerance);
+        public ClipperOffset(float meterLimit = 2F, float arcTolerance = .25F)
+            => this.polygonClipperOffset = new(meterLimit, arcTolerance);
 
         /// <summary>
         /// Calculates an offset polygon based on the given path and width.

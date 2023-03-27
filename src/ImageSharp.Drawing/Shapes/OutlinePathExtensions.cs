@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// </summary>
     public static class OutlinePathExtensions
     {
-        private const double MiterOffsetDelta = 20;
+        private const float MiterOffsetDelta = 20;
         private const JointStyle DefaultJointStyle = JointStyle.Square;
         private const EndCapStyle DefaultEndCapStyle = EndCapStyle.Butt;
 
