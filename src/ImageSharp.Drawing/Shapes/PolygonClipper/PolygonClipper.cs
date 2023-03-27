@@ -170,8 +170,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             if (ip.Y > this.currentBotY || ip.Y < topY)
             {
-                float absDx1 = Math.Abs(ae1.dx);
-                float absDx2 = Math.Abs(ae2.dx);
+                float absDx1 = MathF.Abs(ae1.dx);
+                float absDx2 = MathF.Abs(ae2.dx);
 
                 // TODO: Check threshold here once we remove upscaling.
                 if (absDx1 > 100 && absDx2 > 100)
@@ -245,7 +245,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         private static bool UpdateHorzSegment(HorzSegment hs)
         {
-            OutPt op = hs.leftOp!;
+            OutPt op = hs.leftOp;
             OutRec outrec = GetRealOutRec(op.OutRec);
             bool outrecHasEdges = outrec.frontEdge != null;
             float curr_y = op.Point.Y;
@@ -530,7 +530,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 this.AddToHorzSegList(op);
             }
 
-            OutRec currOutrec = horz.outrec!;
+            OutRec currOutrec = horz.outrec;
 
             while (true)
             {
@@ -1122,8 +1122,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         {
             foreach (HorzJoin j in this.horzJoinList)
             {
-                OutRec or1 = GetRealOutRec(j.op1.OutRec)!;
-                OutRec or2 = GetRealOutRec(j.op2.OutRec)!;
+                OutRec or1 = GetRealOutRec(j.op1.OutRec);
+                OutRec or2 = GetRealOutRec(j.op2.OutRec);
 
                 OutPt op1b = j.op1.Next;
                 OutPt op2b = j.op2.Prev;
@@ -1206,7 +1206,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 return;
             }
 
-            OutPt startOp = outrec.pts!;
+            OutPt startOp = outrec.pts;
             OutPt op2 = startOp;
             do
             {
@@ -1226,7 +1226,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                         return;
                     }
 
-                    startOp = op2!;
+                    startOp = op2;
                     continue;
                 }
 
@@ -1309,7 +1309,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void FixSelfIntersects(OutRec outrec)
         {
-            OutPt op2 = outrec.pts!;
+            OutPt op2 = outrec.pts;
 
             // triangles can't self-intersect
             while (op2.Prev != op2.Next.Next)
@@ -1575,7 +1575,13 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             // sort that ensures only adjacent edges are intersecting. Intersect info is
             // stored in FIntersectList ready to be processed in ProcessIntersectList.
             // Re merge sorts see https://stackoverflow.com/a/46319131/359538
-            Active left = this.flaggedHorizontal, right, lEnd, rEnd, currBase, prevBase, tmp;
+            Active left = this.flaggedHorizontal;
+            Active right;
+            Active lEnd;
+            Active rEnd;
+            Active currBase;
+            Active prevBase;
+            Active tmp;
 
             while (left.jump != null)
             {
@@ -1591,7 +1597,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     {
                         if (right.curX < left.curX)
                         {
-                            tmp = right.prevInSEL!;
+                            tmp = right.prevInSEL;
                             while (true)
                             {
                                 this.AddNewIntersectNode(tmp, right, topY);
@@ -1600,7 +1606,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                                     break;
                                 }
 
-                                tmp = tmp.prevInSEL!;
+                                tmp = tmp.prevInSEL;
                             }
 
                             tmp = right;
@@ -2397,17 +2403,20 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static float TopX(Active ae, float currentY)
         {
-            if ((currentY == ae.top.Y) || (ae.top.X == ae.bot.X))
+            Vector2 top = ae.top;
+            Vector2 bottom = ae.bot;
+
+            if ((currentY == top.Y) || (top.X == bottom.X))
             {
-                return ae.top.X;
+                return top.X;
             }
 
-            if (currentY == ae.bot.Y)
+            if (currentY == bottom.Y)
             {
-                return ae.bot.X;
+                return bottom.X;
             }
 
-            return ae.bot.X + (ae.dx * (currentY - ae.bot.Y));
+            return bottom.X + (ae.dx * (currentY - bottom.Y));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2751,7 +2760,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 // don't separate joined edges
                 if (ae2.joinWith == JoinWith.Right)
                 {
-                    ae2 = ae2.nextInAEL!;
+                    ae2 = ae2.nextInAEL;
                 }
 
                 ae.nextInAEL = ae2.nextInAEL;
@@ -2918,10 +2927,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         {
             // Outrec.OutPts: a circular doubly-linked-list of POutPt where ...
             // opFront[.Prev]* ~~~> opBack & opBack == opFront.Next
-            OutRec outrec = ae.outrec!;
+            OutRec outrec = ae.outrec;
             bool toFront = IsFront(ae);
-            OutPt opFront = outrec.pts!;
-            OutPt opBack = opFront.Next!;
+            OutPt opFront = outrec.pts;
+            OutPt opBack = opFront.Next;
 
             if (toFront && (pt == opFront.Point))
             {
@@ -3284,7 +3293,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             OutPt result = AddOutPt(ae1, pt);
             if (ae1.outrec == ae2.outrec)
             {
-                OutRec outrec = ae1.outrec!;
+                OutRec outrec = ae1.outrec;
                 outrec.pts = result;
 
                 if (this.usingPolytree)

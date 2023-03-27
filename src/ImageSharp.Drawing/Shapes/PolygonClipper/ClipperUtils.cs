@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         public const float FloatingPointTolerance = 1e-4F;
         public const float DefaultMinimumEdgeLength = .1F;
 
-        // TODO: rename to Pow2
+        // TODO: rename to Pow2?
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float Sqr(float value) => value * value;
 
@@ -80,16 +80,17 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             if (steps <= 2)
             {
-                steps = (int)MathF.Ceiling(MathF.PI * MathF.Sqrt((radiusX + radiusY) / 2));
+                steps = (int)MathF.Ceiling(MathF.PI * MathF.Sqrt((radiusX + radiusY) * .5F));
             }
 
             float si = MathF.Sin(2 * MathF.PI / steps);
             float co = MathF.Cos(2 * MathF.PI / steps);
             float dx = co, dy = si;
             PathF result = new(steps) { new Vector2(center.X + radiusX, center.Y) };
+            Vector2 radiusXY = new(radiusX, radiusY);
             for (int i = 1; i < steps; ++i)
             {
-                result.Add(new Vector2(center.X + (radiusX * dx), center.Y + (radiusY * dy)));
+                result.Add(center + (radiusXY * new Vector2(dx, dy)));
                 float x = (dx * co) - (dy * si);
                 dy = (dy * co) + (dx * si);
                 dx = x;
@@ -123,16 +124,14 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float PerpendicDistFromLineSqrd(Vector2 pt, Vector2 line1, Vector2 line2)
         {
-            float a = pt.X - line1.X;
-            float b = pt.Y - line1.Y;
-            float c = line2.X - line1.X;
-            float d = line2.Y - line1.Y;
-            if (c == 0 && d == 0)
+            Vector2 ab = pt - line1;
+            Vector2 cd = line2 - line1;
+            if (cd == Vector2.Zero)
             {
                 return 0;
             }
 
-            return Sqr((a * d) - (c * b)) / ((c * c) + (d * d));
+            return Sqr(CrossProduct(cd, ab) / DotProduct(cd, cd));
         }
 
         public static bool SegsIntersect(Vector2 seg1a, Vector2 seg1b, Vector2 seg2a, Vector2 seg2b, bool inclusive = false)
@@ -166,53 +165,52 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static bool GetIntersectPt(Vector2 ln1a, Vector2 ln1b, Vector2 ln2a, Vector2 ln2b, out Vector2 ip)
         {
-            float dy1 = ln1b.Y - ln1a.Y;
-            float dx1 = ln1b.X - ln1a.X;
-            float dy2 = ln2b.Y - ln2a.Y;
-            float dx2 = ln2b.X - ln2a.X;
-            float cp = (dy1 * dx2) - (dy2 * dx1);
+            Vector2 dxy1 = ln1b - ln1a;
+            Vector2 dxy2 = ln2b - ln2a;
+            float cp = CrossProduct(dxy1, dxy2);
             if (cp == 0F)
             {
                 ip = default;
                 return false;
             }
 
-            float qx = (dx1 * ln1a.Y) - (dy1 * ln1a.X);
-            float qy = (dx2 * ln2a.Y) - (dy2 * ln2a.X);
-            ip = new Vector2(((dx1 * qy) - (dx2 * qx)) / cp, ((dy1 * qy) - (dy2 * qx)) / cp);
-            return ip.X != float.MaxValue && ip.Y != float.MaxValue;
+            float qx = CrossProduct(ln1a, dxy1);
+            float qy = CrossProduct(ln2a, dxy2);
+
+            ip = ((dxy1 * qy) - (dxy2 * qx)) / cp;
+            return ip != new Vector2(float.MaxValue);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool GetIntersectPoint(Vector2 ln1a, Vector2 ln1b, Vector2 ln2a, Vector2 ln2b, out Vector2 ip)
         {
-            float dy1 = ln1b.Y - ln1a.Y;
-            float dx1 = ln1b.X - ln1a.X;
-            float dy2 = ln2b.Y - ln2a.Y;
-            float dx2 = ln2b.X - ln2a.X;
-            float q1 = (dy1 * ln1a.X) - (dx1 * ln1a.Y);
-            float q2 = (dy2 * ln2a.X) - (dx2 * ln2a.Y);
-            float cross_prod = (dy1 * dx2) - (dy2 * dx1);
-            if (cross_prod == 0F)
+            Vector2 dxy1 = ln1b - ln1a;
+            Vector2 dxy2 = ln2b - ln2a;
+            float cp = CrossProduct(dxy1, dxy2);
+            if (cp == 0F)
             {
                 ip = default;
                 return false;
             }
 
-            ip = new Vector2(((dx2 * q1) - (dx1 * q2)) / cross_prod, ((dy2 * q1) - (dy1 * q2)) / cross_prod);
+            float q1 = CrossProduct(dxy1, ln1a);
+            float q2 = CrossProduct(dxy2, ln2a);
+
+            ip = ((dxy2 * q1) - (dxy1 * q2)) / cp;
             return true;
         }
 
         public static Vector2 GetClosestPtOnSegment(Vector2 offPt, Vector2 seg1, Vector2 seg2)
         {
-            if (seg1.X == seg2.X && seg1.Y == seg2.Y)
+            if (seg1 == seg2)
             {
                 return seg1;
             }
 
-            float dx = seg2.X - seg1.X;
-            float dy = seg2.Y - seg1.Y;
-            float q = (((offPt.X - seg1.X) * dx) + ((offPt.Y - seg1.Y) * dy)) / ((dx * dx) + (dy * dy));
+            Vector2 dxy = seg2 - seg1;
+            Vector2 oxy = (offPt - seg1) * dxy;
+            float q = (oxy.X + oxy.Y) / DotProduct(dxy, dxy);
+
             if (q < 0)
             {
                 q = 0;
@@ -222,7 +220,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 q = 1;
             }
 
-            return new Vector2(seg1.X + (q * dx), seg1.Y + (q * dy));
+            return seg1 + (dxy * q);
         }
 
         public static PathF ReversePath(PathF path)

@@ -204,8 +204,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     }
                     else
                     {
-                        float d = MathF.Ceiling(this.groupDelta);
-                        BoundsF r = new(path[0].X - d, path[0].Y - d, path[0].X - d, path[0].Y - d);
+                        Vector2 d = new(MathF.Ceiling(this.groupDelta));
+                        Vector2 xy = path[0] - d;
+                        BoundsF r = new(xy.X, xy.Y, xy.X, xy.Y);
                         group.OutPath = r.AsPath();
                     }
 
@@ -317,9 +318,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             switch (this.endType)
             {
                 case EndCapStyle.Butt:
-                    group.OutPath.Add(new Vector2(
-                        path[0].X - (this.normals[0].X * this.groupDelta),
-                        path[0].Y - (this.normals[0].Y * this.groupDelta)));
+                    group.OutPath.Add(path[0] - (this.normals[0] * this.groupDelta));
                     group.OutPath.Add(this.GetPerpendic(path[0], this.normals[0]));
                     break;
                 case EndCapStyle.Round:
@@ -339,7 +338,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             // reverse normals ...
             for (int i = highI; i > 0; i--)
             {
-                this.normals[i] = new Vector2(-this.normals[i - 1].X, -this.normals[i - 1].Y);
+                this.normals[i] = Vector2.Negate(this.normals[i - 1]);
             }
 
             this.normals[0] = this.normals[highI];
@@ -612,23 +611,23 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector2 GetAvgUnitVector(Vector2 vec1, Vector2 vec2)
-            => NormalizeVector(new Vector2(vec1.X + vec2.X, vec1.Y + vec2.Y));
+            => NormalizeVector(vec1 + vec2);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static float Hypotenuse(float x, float y)
-            => MathF.Sqrt(MathF.Pow(x, 2) + MathF.Pow(y, 2));
+        private static float Hypotenuse(Vector2 vector)
+            => MathF.Sqrt(Vector2.Dot(vector, vector));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static Vector2 NormalizeVector(Vector2 vec)
+        private static Vector2 NormalizeVector(Vector2 vector)
         {
-            float h = Hypotenuse(vec.X, vec.Y);
+            float h = Hypotenuse(vector);
             if (ClipperUtils.IsAlmostZero(h))
             {
                 return default;
             }
 
             float inverseHypot = 1 / h;
-            return new Vector2(vec.X * inverseHypot, vec.Y * inverseHypot);
+            return vector * inverseHypot;
         }
 
         private class Group

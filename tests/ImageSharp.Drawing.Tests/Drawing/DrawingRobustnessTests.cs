@@ -80,7 +80,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             throw new Exception(result.DifferencePercentageString);
         }
 
-        [Theory(Skip = "For local testing")]
+        [Theory]//(Skip = "For local testing")]
         [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
         public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
         {
