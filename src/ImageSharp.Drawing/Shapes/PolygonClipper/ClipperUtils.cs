@@ -10,6 +10,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
     internal static class ClipperUtils
     {
         public const float DefaultArcTolerance = .25F;
+
+        // TODO: review tolerence.
         public const float FloatingPointTolerance = 1e-4F;
         public const float DefaultMinimumEdgeLength = .1F;
 
@@ -117,8 +119,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsAlmostZero(float value)
-
-            // TODO: review tolerence.
             => MathF.Abs(value) <= FloatingPointTolerance;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -86,10 +86,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         public PathF AsPath()
             => new(4)
             {
-                new PointF(this.Left, this.Top),
-                new PointF(this.Right, this.Top),
-                new PointF(this.Right, this.Bottom),
-                new PointF(this.Left, this.Bottom)
+                new Vector2(this.Left, this.Top),
+                new Vector2(this.Right, this.Top),
+                new Vector2(this.Right, this.Bottom),
+                new Vector2(this.Left, this.Bottom)
             };
     }
 }
