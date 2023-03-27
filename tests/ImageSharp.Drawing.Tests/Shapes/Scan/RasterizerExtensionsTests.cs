@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         [Fact]
         public void DoesNotOverwriteIsDirtyFlagWhenOnlyFillingSubpixels()
         {
-            var scanner = PolygonScanner.Create(new RectangularPolygon(0.3f, 0.2f, 0.7f, 1.423f), 0, 20, 1, IntersectionRule.OddEven, MemoryAllocator.Default);
+            var scanner = PolygonScanner.Create(new RectangularPolygon(0.3f, 0.2f, 0.7f, 1.423f), 0, 20, 1, IntersectionRule.EvenOdd, MemoryAllocator.Default);
 
             float[] buffer = new float[12];
 

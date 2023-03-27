@@ -4,7 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using Clipper2Lib;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 {
@@ -13,14 +13,15 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
     /// </summary>
     internal class Clipper
     {
-        private const float ScalingFactor = 1000.0f;
-        private readonly object syncRoot = new();
-        private readonly Clipper64 innerClipper;
+        // To make the floating point polygons compatable with clipper we have to scale them.
+        private const float ScalingFactor = 1000F;
+        private readonly Shapes.PolygonClipper.PolygonClipper polygonClipper;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Clipper"/> class.
         /// </summary>
-        public Clipper() => this.innerClipper = new Clipper64();
+        public Clipper()
+            => this.polygonClipper = new Shapes.PolygonClipper.PolygonClipper();
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Clipper" /> class.
@@ -38,16 +39,13 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <exception cref="ClipperException">GenerateClippedShapes: Open paths have been disabled.</exception>
         public IPath[] GenerateClippedShapes()
         {
-            Paths64 closedPaths = new();
-            Paths64 openPaths = new();
+            PathsF closedPaths = new();
+            PathsF openPaths = new();
 
-            // TODO: Why are we locking?
-            lock (this.syncRoot)
-            {
-                this.innerClipper.Execute(ClipType.Difference, FillRule.EvenOdd, closedPaths, openPaths);
-            }
+            this.polygonClipper.Execute(ClipType.Difference, FillRule.EvenOdd, closedPaths, openPaths);
 
             var shapes = new IPath[closedPaths.Count + openPaths.Count];
+            const float scale = 1F / ScalingFactor;
 
             for (int i = 0; i < closedPaths.Count; i++)
             {
@@ -55,12 +53,8 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 
                 for (int j = 0; j < closedPaths[i].Count; j++)
                 {
-                    Point64 p = closedPaths[i][j];
-
-                    // to make the floating point polygons compatable with clipper we had
-                    // to scale them up to make them ints but still retain some level of precision
-                    // thus we have to scale them back down
-                    points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
+                    Vector2 v = closedPaths[i][j];
+                    points[j] = v * scale;
                 }
 
                 shapes[i] = new Polygon(new LinearLineSegment(points));
@@ -72,12 +66,8 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
 
                 for (int j = 0; j < closedPaths[i].Count; j++)
                 {
-                    Point64 p = closedPaths[i][j];
-
-                    // to make the floating point polygons compatable with clipper we had
-                    // to scale them up to make them ints but still retain some level of precision
-                    // thus we have to scale them back down
-                    points[j] = new Vector2(p.X / ScalingFactor, p.Y / ScalingFactor);
+                    Vector2 v = closedPaths[i][j];
+                    points[j] = v * scale;
                 }
 
                 shapes[i] = new Path(new LinearLineSegment(points));
@@ -144,20 +134,14 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
             ReadOnlySpan<PointF> vectors = path.Points.Span;
-            Path64 points = new(vectors.Length);
+            PathF points = new(vectors.Length);
             for (int i = 0; i < vectors.Length; i++)
             {
-                PointF v = vectors[i];
-                points.Add(new Point64(v.X * ScalingFactor, v.Y * ScalingFactor));
+                Vector2 v = vectors[i];
+                points.Add(v * ScalingFactor);
             }
 
-            PathType type = clippingType == ClippingType.Clip ? PathType.Clip : PathType.Subject;
-
-            // TODO: Why are we locking?
-            lock (this.syncRoot)
-            {
-                this.innerClipper.AddPath(points, type, !path.IsClosed);
-            }
+            this.polygonClipper.AddPath(points, clippingType, !path.IsClosed);
         }
     }
 }

@@ -100,10 +100,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data { get; } =
             new TheoryData<bool, IntersectionRule>()
             {
-                { false, IntersectionRule.OddEven },
-                { false, IntersectionRule.Nonzero },
-                { true, IntersectionRule.OddEven },
-                { true, IntersectionRule.Nonzero },
+                { false, IntersectionRule.EvenOdd },
+                { false, IntersectionRule.NonZero },
+                { true, IntersectionRule.EvenOdd },
+                { true, IntersectionRule.NonZero },
             };
 
         [Theory]
@@ -288,10 +288,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
             new TheoryData<bool, IntersectionRule>()
             {
-                { false, IntersectionRule.OddEven },
-                { false, IntersectionRule.Nonzero },
-                { true, IntersectionRule.OddEven },
-                { true, IntersectionRule.Nonzero },
+                { false, IntersectionRule.EvenOdd },
+                { false, IntersectionRule.NonZero },
+                { true, IntersectionRule.EvenOdd },
+                { true, IntersectionRule.NonZero },
             };
 
         [Theory]
@@ -344,7 +344,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 img.Mutate(c => c.Fill(
                     new DrawingOptions
                     {
-                        ShapeOptions = { IntersectionRule = IntersectionRule.OddEven },
+                        ShapeOptions = { IntersectionRule = IntersectionRule.EvenOdd },
                     },
                     Color.HotPink,
                     poly));
@@ -378,7 +378,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 img.Mutate(c => c.Fill(
                     new DrawingOptions
                     {
-                        ShapeOptions = { IntersectionRule = IntersectionRule.Nonzero },
+                        ShapeOptions = { IntersectionRule = IntersectionRule.NonZero },
                     },
                     Color.HotPink,
                     poly));
