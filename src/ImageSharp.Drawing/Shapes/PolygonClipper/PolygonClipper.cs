@@ -11,7 +11,12 @@ using SixLabors.ImageSharp.Drawing.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 {
-    internal class PolygonClipper
+    /// <summary>
+    /// Contains functions that cover most polygon boolean and offsetting needs.
+    /// Ported from <see href="https://github.com/AngusJohnson/Clipper2"/> and originally licensed
+    /// under <see href="http://www.boost.org/LICENSE_1_0.txt"/>
+    /// </summary>
+    internal sealed class PolygonClipper
     {
         private ClipType clipType;
         private FillRule fillRule;
@@ -3597,18 +3602,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         public int Count => this.items.Count;
 
-        public PolyPathF this[int index]
-        {
-            get
-            {
-                if (index < 0 || index >= this.items.Count)
-                {
-                    throw new InvalidOperationException();
-                }
-
-                return this.items[index];
-            }
-        }
+        public PolyPathF this[int index] => this.items[index];
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public PolyPathF AddChild(PathF p)
@@ -3620,16 +3614,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             this.items.Add(child);
             return child;
-        }
-
-        public PolyPathF Child(int index)
-        {
-            if (index < 0 || index >= this.items.Count)
-            {
-                throw new InvalidOperationException();
-            }
-
-            return this.items[index];
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

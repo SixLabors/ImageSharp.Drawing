@@ -9,6 +9,11 @@ using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 {
+    /// <summary>
+    /// Contains functions to offset paths (inflate/shrink).
+    /// Ported from <see href="https://github.com/AngusJohnson/Clipper2"/> and originally licensed
+    /// under <see href="http://www.boost.org/LICENSE_1_0.txt"/>
+    /// </summary>
     internal sealed class PolygonOffsetter
     {
         private readonly List<Group> groupList = new();
@@ -311,7 +316,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         private void OffsetOpenPath(Group group, PathF path)
         {
-            group.OutPath.Clear();
+            group.OutPath = new(path.Count);
             int highI = path.Count - 1;
 
             // do the line start cap
@@ -370,27 +375,22 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static Vector2 GetUnitNormal(Vector2 pt1, Vector2 pt2)
+        private static Vector2 GetUnitNormal(Vector2 pt1, Vector2 pt2)
         {
-            // TODO: Use Vector2
-            float dx = pt2.X - pt1.X;
-            float dy = pt2.Y - pt1.Y;
-            if ((dx == 0) && (dy == 0))
+            Vector2 dxy = pt2 - pt1;
+            if(dxy == Vector2.Zero)
             {
                 return default;
             }
 
-            float f = 1F / MathF.Sqrt((dx * dx) + (dy * dy));
-            dx *= f;
-            dy *= f;
-
-            return new Vector2(dy, -dx);
+            dxy *= (1F / MathF.Sqrt(ClipperUtils.DotProduct(dxy, dxy)));
+            return new(dxy.Y, -dxy.X);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void OffsetPolygon(Group group, PathF path)
         {
-            group.OutPath.Clear();
+            group.OutPath = new(path.Count);
             int cnt = path.Count, prev = cnt - 1;
             for (int i = 0; i < cnt; i++)
             {
@@ -419,18 +419,18 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             }
 
             // almost straight - less than 8 degrees
-            if (cosA > 0.99)
+            if (cosA > .99F)
             {
                 group.OutPath.Add(this.GetPerpendic(path[j], this.normals[k]));
 
                 // greater than 1 degree (#424)
-                if (cosA < 0.9998)
+                if (cosA < .9998F)
                 {
                     // (#418)
                     group.OutPath.Add(this.GetPerpendic(path[j], this.normals[j]));
                 }
             }
-            else if (cosA > -0.99 && (sinA * this.groupDelta < 0))
+            else if (cosA > -.99F && (sinA * this.groupDelta < 0))
             {
                 // is concave
                 group.OutPath.Add(this.GetPerpendic(path[j], this.normals[k]));
@@ -459,7 +459,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             // don't bother squaring angles that deviate < ~20 degrees because
             // squaring will be indistinguishable from mitering and just be a lot slower
-            else if (cosA > 0.9)
+            else if (cosA > .9F)
             {
                 this.DoMiter(group, path, j, k, cosA);
             }
@@ -544,7 +544,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             group.OutPath.Add(pt + offsetVec);
 
             // avoid 180deg concave
-            if (angle > -MathF.PI + 0.01F)
+            if (angle > -MathF.PI + .01F)
             {
                 int steps = Math.Max(2, (int)Math.Ceiling(this.stepsPerRad * Math.Abs(angle)));
 
