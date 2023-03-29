@@ -33,7 +33,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         private float currentBotY;
         private bool isSortedMinimaList;
         private bool hasOpenPaths;
-        private bool usingPolytree;
         private bool succeeded;
 
         public PolygonClipper()
@@ -65,9 +64,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void AddPaths(PathsF paths, ClippingType polytype, bool isOpen = false)
         {
-            // TODO: Remove
-            this.usingPolytree = false;
-
             if (isOpen)
             {
                 this.hasOpenPaths = true;
@@ -1152,39 +1148,14 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                         or1.pts.OutRec = or1;
                     }
 
-                    if (this.usingPolytree)
-                    {
-                        if (Path1InsidePath2(or2.pts, or1.pts))
-                        {
-                            SetOwner(or2, or1);
-                        }
-                        else if (Path1InsidePath2(or1.pts, or2.pts))
-                        {
-                            SetOwner(or1, or2);
-                        }
-                        else
-                        {
-                            or2.owner = or1;
-                        }
-                    }
-                    else
-                    {
-                        or2.owner = or1;
-                    }
+                    or2.owner = or1;
 
                     this.outrecList.Add(or2);
                 }
                 else
                 {
                     or2.pts = null;
-                    if (this.usingPolytree)
-                    {
-                        SetOwner(or2, or1);
-                    }
-                    else
-                    {
-                        or2.owner = or1;
-                    }
+                    or2.owner = or1;
                 }
             }
         }
@@ -1297,12 +1268,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 newOutRec.owner = outrec.owner;
                 splitOp.OutRec = newOutRec;
                 splitOp.Next.OutRec = newOutRec;
-
-                if (this.usingPolytree)
-                {
-                    outrec.splits ??= new List<int>();
-                    outrec.splits.Add(newOutRec.idx);
-                }
 
                 OutPt newOp = new(ip, newOutRec) { Prev = splitOp.Next, Next = splitOp };
                 newOutRec.pts = newOp;
@@ -2344,11 +2309,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 // the ascending edge (see AddLocalMinPoly).
                 if (prevHotEdge != null)
                 {
-                    if (this.usingPolytree)
-                    {
-                        SetOwner(outrec, prevHotEdge.outrec!);
-                    }
-
                     outrec.owner = prevHotEdge.outrec;
                     if (OutrecIsAscending(prevHotEdge) == isNew)
                     {
@@ -3300,23 +3260,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             {
                 OutRec outrec = ae1.outrec;
                 outrec.pts = result;
-
-                if (this.usingPolytree)
-                {
-                    Active e = GetPrevHotEdge(ae1);
-                    if (e == null)
-                    {
-                        outrec.owner = null;
-                    }
-                    else
-                    {
-                        SetOwner(outrec, e.outrec!);
-                    }
-
-                    // nb: outRec.owner here is likely NOT the real
-                    // owner but this will be fixed in DeepCheckOwner()
-                }
-
                 UncoupleOutRec(ae1);
             }
 

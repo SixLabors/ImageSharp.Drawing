@@ -390,6 +390,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void OffsetPolygon(Group group, PathF path)
         {
+            // Dereference the current outpath.
             group.OutPath = new(path.Count);
             int cnt = path.Count, prev = cnt - 1;
             for (int i = 0; i < cnt; i++)
