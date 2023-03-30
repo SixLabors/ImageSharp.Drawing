@@ -4,6 +4,7 @@
 using System;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -182,6 +183,26 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 comparer: ImageComparer.TolerantPercentage(0.01f),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32)]
+        public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider)
+        {
+            IPath circle = new EllipsePolygon(36, 36, 36).Translate(28, 28);
+            var star = new Star(64, 64, 5, 24, 64);
+
+            foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
+            {
+                IPath shape = star.Clip(operation, IntersectionRule.EvenOdd, circle);
+
+                provider.RunValidatingProcessorTest(
+                    c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
+                    comparer: ImageComparer.TolerantPercentage(0.01f),
+                    testOutputDetails: operation.ToString(),
+                    appendSourceFileOrDescription: false,
+                    appendPixelTypeToFileName: false);
+            }
         }
 
         [Theory]
