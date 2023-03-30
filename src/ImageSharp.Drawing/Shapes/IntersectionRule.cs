@@ -4,7 +4,7 @@
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Rule for calulating intersection points.
+    /// Provides options for calculating intersection points.
     /// </summary>
     public enum IntersectionRule
     {

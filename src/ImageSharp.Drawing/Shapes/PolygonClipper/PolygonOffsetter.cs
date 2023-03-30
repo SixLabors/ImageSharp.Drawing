@@ -94,11 +94,17 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             clipper.AddSubject(this.solution);
             if (this.groupList[0].PathsReversed)
             {
-                clipper.Execute(ClipType.Union, FillRule.Negative, solution);
+                clipper.Execute(ClippingOperation.Union, FillRule.Negative, solution);
             }
             else
             {
-                clipper.Execute(ClipType.Union, FillRule.Positive, solution);
+                clipper.Execute(ClippingOperation.Union, FillRule.Positive, solution);
+            }
+
+            // PolygonClipper will throw for unhandled exceptions but we need to explcitly capture an empty result.
+            if (solution.Count == 0)
+            {
+                throw new ClipperException("An error occured while attempting to clip the polygon. Check input for invalid entries.");
             }
         }
 

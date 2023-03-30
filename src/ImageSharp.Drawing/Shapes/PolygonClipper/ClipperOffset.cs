@@ -4,9 +4,8 @@
 using System;
 using System.Linq;
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
-namespace SixLabors.ImageSharp.Drawing.PolygonClipper
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 {
     /// <summary>
     /// Wrapper for clipper offset
@@ -30,19 +29,21 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="width">Width</param>
         /// <returns>path offset</returns>
-        /// <exception cref="ClipperException">Calculate: Couldn't calculate the cffset.</exception>
         public ComplexPolygon Execute(float width)
         {
             PathsF solution = new();
             this.polygonClipperOffset.Execute(width * ScalingFactor, solution);
 
             var polygons = new Polygon[solution.Count];
-            const float scale = 1F / ScalingFactor;
             for (int i = 0; i < solution.Count; i++)
             {
                 PathF pt = solution[i];
+                var points = new PointF[pt.Count];
+                for (int j = 0; j < pt.Count; j++)
+                {
+                    points[j] = pt[j] / ScalingFactor;
+                }
 
-                PointF[] points = pt.Select(p => (PointF)(p * scale)).ToArray();
                 polygons[i] = new Polygon(new LinearLineSegment(points));
             }
 
@@ -55,7 +56,6 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <param name="pathPoints">The path points</param>
         /// <param name="jointStyle">Joint Style</param>
         /// <param name="endCapStyle">Endcap Style</param>
-        /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         public void AddPath(ReadOnlySpan<PointF> pathPoints, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
             PathF points = new(pathPoints.Length);
@@ -74,7 +74,6 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// <param name="path">The path.</param>
         /// <param name="jointStyle">Joint Style</param>
         /// <param name="endCapStyle">Endcap Style</param>
-        /// <exception cref="ClipperException">AddPath: Invalid Path</exception>
         public void AddPath(IPath path, JointStyle jointStyle, EndCapStyle endCapStyle)
         {
             Guard.NotNull(path, nameof(path));

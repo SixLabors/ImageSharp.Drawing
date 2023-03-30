@@ -4,9 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
-namespace SixLabors.ImageSharp.Drawing.PolygonClipper
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 {
     /// <summary>
     /// Library to clip polygons.
@@ -15,82 +14,58 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
     {
         // To make the floating point polygons compatable with clipper we have to scale them.
         private const float ScalingFactor = 1000F;
-        private readonly Shapes.PolygonClipper.PolygonClipper polygonClipper;
+        private readonly PolygonClipper polygonClipper;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Clipper"/> class.
         /// </summary>
         public Clipper()
-            => this.polygonClipper = new Shapes.PolygonClipper.PolygonClipper();
+            => this.polygonClipper = new PolygonClipper();
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="Clipper" /> class.
+        /// Generates the clipped shapes from the previously provided paths.
         /// </summary>
-        /// <param name="shapes">The shapes.</param>
-        public Clipper(params ClippablePath[] shapes)
-            : this() => this.AddPaths(shapes);
-
-        /// <summary>
-        /// Executes the specified clip type.
-        /// </summary>
-        /// <returns>
-        /// Returns the <see cref="IPath" /> array containing the converted polygons.
-        /// </returns>
-        /// <exception cref="ClipperException">GenerateClippedShapes: Open paths have been disabled.</exception>
-        public IPath[] GenerateClippedShapes()
+        /// <param name="operation">The clipping operation.</param>
+        /// <param name="rule">The intersection rule.</param>
+        /// <returns>The <see cref="T:IPath[]"/>.</returns>
+        public IPath[] GenerateClippedShapes(ClippingOperation operation, IntersectionRule rule)
         {
             PathsF closedPaths = new();
             PathsF openPaths = new();
 
-            this.polygonClipper.Execute(ClipType.Difference, FillRule.EvenOdd, closedPaths, openPaths);
+            FillRule fillRule = rule == IntersectionRule.EvenOdd ? FillRule.EvenOdd : FillRule.NonZero;
+            this.polygonClipper.Execute(operation, fillRule, closedPaths, openPaths);
 
             var shapes = new IPath[closedPaths.Count + openPaths.Count];
-            const float scale = 1F / ScalingFactor;
 
+            int index = 0;
             for (int i = 0; i < closedPaths.Count; i++)
             {
-                var points = new PointF[closedPaths[i].Count];
+                PathF path = closedPaths[i];
+                var points = new PointF[path.Count];
 
-                for (int j = 0; j < closedPaths[i].Count; j++)
+                for (int j = 0; j < path.Count; j++)
                 {
-                    Vector2 v = closedPaths[i][j];
-                    points[j] = v * scale;
+                    points[j] = path[j] / ScalingFactor;
                 }
 
-                shapes[i] = new Polygon(new LinearLineSegment(points));
+                shapes[index++] = new Polygon(new LinearLineSegment(points));
             }
 
             for (int i = 0; i < openPaths.Count; i++)
             {
-                var points = new PointF[closedPaths[i].Count];
+                PathF path = openPaths[i];
+                var points = new PointF[path.Count];
 
-                for (int j = 0; j < closedPaths[i].Count; j++)
+                for (int j = 0; j < path.Count; j++)
                 {
-                    Vector2 v = closedPaths[i][j];
-                    points[j] = v * scale;
+                    points[j] = path[j] / ScalingFactor;
                 }
 
-                shapes[i] = new Path(new LinearLineSegment(points));
+                shapes[index++] = new Polygon(new LinearLineSegment(points));
             }
 
             return shapes;
-        }
-
-        /// <summary>
-        /// Adds the paths.
-        /// </summary>
-        /// <param name="paths">The paths.</param>
-        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
-        public void AddPaths(ClippablePath[] paths)
-        {
-            Guard.NotNull(paths, nameof(paths));
-
-            for (int i = 0; i < paths.Length; i++)
-            {
-                ref ClippablePath p = ref paths[i];
-
-                this.AddPath(p.Path, p.Type);
-            }
         }
 
         /// <summary>
@@ -98,7 +73,6 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="paths">The paths.</param>
         /// <param name="clippingType">The clipping type.</param>
-        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
         {
             Guard.NotNull(paths, nameof(paths));
@@ -114,7 +88,6 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="clippingType">The clipping type.</param>
-        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         public void AddPath(IPath path, ClippingType clippingType)
         {
             Guard.NotNull(path, nameof(path));
@@ -130,7 +103,6 @@ namespace SixLabors.ImageSharp.Drawing.PolygonClipper
         /// </summary>
         /// <param name="path">The path.</param>
         /// <param name="clippingType">Type of the poly.</param>
-        /// <exception cref="ClipperException">Open paths have been disabled.</exception>
         internal void AddPath(ISimplePath path, ClippingType clippingType)
         {
             ReadOnlySpan<PointF> vectors = path.Points.Span;

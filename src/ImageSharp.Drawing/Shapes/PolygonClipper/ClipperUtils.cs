@@ -10,9 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
     internal static class ClipperUtils
     {
         public const float DefaultArcTolerance = .25F;
-
-        // TODO: review tolerence.
-        public const float FloatingPointTolerance = 1e-4F;
+        public const float FloatingPointTolerance = 1e-05F;
         public const float DefaultMinimumEdgeLength = .1F;
 
         // TODO: rename to Pow2?
@@ -131,7 +129,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 return 0;
             }
 
-            return Sqr(CrossProduct(cd, ab) / DotProduct(cd, cd));
+            return Sqr(CrossProduct(cd, ab)) / DotProduct(cd, cd);
         }
 
         public static bool SegsIntersect(Vector2 seg1a, Vector2 seg1b, Vector2 seg2a, Vector2 seg2b, bool inclusive = false)

@@ -7,7 +7,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp.Drawing.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 {
@@ -18,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
     /// </summary>
     internal sealed class PolygonClipper
     {
-        private ClipType clipType;
+        private ClippingOperation clipType;
         private FillRule fillRule;
         private Active actives;
         private Active flaggedHorizontal;
@@ -33,7 +32,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         private float currentBotY;
         private bool isSortedMinimaList;
         private bool hasOpenPaths;
-        private bool succeeded;
 
         public PolygonClipper()
         {
@@ -74,32 +72,32 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Execute(ClipType clipType, FillRule fillRule, PathsF solutionClosed)
+        public void Execute(ClippingOperation clipType, FillRule fillRule, PathsF solutionClosed)
             => this.Execute(clipType, fillRule, solutionClosed, new PathsF());
 
-        public bool Execute(ClipType clipType, FillRule fillRule, PathsF solutionClosed, PathsF solutionOpen)
+        public void Execute(ClippingOperation clipType, FillRule fillRule, PathsF solutionClosed, PathsF solutionOpen)
         {
             solutionClosed.Clear();
             solutionOpen.Clear();
 
-            // TODO: I don't like this lack of error capturing.
             try
             {
                 this.ExecuteInternal(clipType, fillRule);
                 this.BuildPaths(solutionClosed, solutionOpen);
             }
-            catch
+            catch (Exception ex)
             {
-                this.succeeded = false;
+                throw new ClipperException("An error occured while attempting to clip the polygon. See the inner exception for details.", ex);
             }
-
-            this.ClearSolutionOnly();
-            return this.succeeded;
+            finally
+            {
+                this.ClearSolutionOnly();
+            }
         }
 
-        private void ExecuteInternal(ClipType ct, FillRule fillRule)
+        private void ExecuteInternal(ClippingOperation ct, FillRule fillRule)
         {
-            if (ct == ClipType.None)
+            if (ct == ClippingOperation.None)
             {
                 return;
             }
@@ -112,7 +110,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 return;
             }
 
-            while (this.succeeded)
+            while (true)
             {
                 this.InsertLocalMinimaIntoAEL(y);
                 Active ae;
@@ -141,10 +139,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 }
             }
 
-            if (this.succeeded)
-            {
-                this.ProcessHorzJoins();
-            }
+            this.ProcessHorzJoins();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1326,7 +1321,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             this.currentLocMin = 0;
             this.actives = null;
             this.flaggedHorizontal = null;
-            this.succeeded = true;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1777,7 +1771,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     this.Split(ae2, pt); // needed for safety
                 }
 
-                if (this.clipType == ClipType.Union)
+                if (this.clipType == ClippingOperation.Union)
                 {
                     if (!IsHotEdge(ae2))
                     {
@@ -1954,7 +1948,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             if (IsHotEdge(ae1) && IsHotEdge(ae2))
             {
                 if ((oldE1WindCount != 0 && oldE1WindCount != 1) || (oldE2WindCount != 0 && oldE2WindCount != 1) ||
-                    (ae1.localMin.Polytype != ae2.localMin.Polytype && this.clipType != ClipType.Xor))
+                    (ae1.localMin.Polytype != ae2.localMin.Polytype && this.clipType != ClippingOperation.Xor))
                 {
                     resultOp = this.AddLocalMaxPoly(ae1, ae2, pt);
                 }
@@ -2016,7 +2010,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     resultOp = null;
                     switch (this.clipType)
                     {
-                        case ClipType.Union:
+                        case ClippingOperation.Union:
                             if (e1Wc2 > 0 && e2Wc2 > 0)
                             {
                                 return null;
@@ -2025,7 +2019,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                             resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
                             break;
 
-                        case ClipType.Difference:
+                        case ClippingOperation.Difference:
                             if (((GetPolyType(ae1) == ClippingType.Clip) && (e1Wc2 > 0) && (e2Wc2 > 0))
                                 || ((GetPolyType(ae1) == ClippingType.Subject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
                             {
@@ -2034,7 +2028,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
                             break;
 
-                        case ClipType.Xor:
+                        case ClippingOperation.Xor:
                             resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
                             break;
 
@@ -2438,7 +2432,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             switch (this.clipType)
             {
-                case ClipType.Intersection:
+                case ClippingOperation.Intersection:
                     return this.fillRule switch
                     {
                         FillRule.Positive => ae.windCount2 > 0,
@@ -2446,7 +2440,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                         _ => ae.windCount2 != 0,
                     };
 
-                case ClipType.Union:
+                case ClippingOperation.Union:
                     return this.fillRule switch
                     {
                         FillRule.Positive => ae.windCount2 <= 0,
@@ -2454,7 +2448,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                         _ => ae.windCount2 == 0,
                     };
 
-                case ClipType.Difference:
+                case ClippingOperation.Difference:
                     bool result = this.fillRule switch
                     {
                         FillRule.Positive => ae.windCount2 <= 0,
@@ -2463,7 +2457,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     };
                     return (GetPolyType(ae) == ClippingType.Subject) ? result : !result;
 
-                case ClipType.Xor:
+                case ClippingOperation.Xor:
                     return true; // XOr is always contributing unless open
 
                 default:
@@ -2493,8 +2487,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             bool result = this.clipType switch
             {
-                ClipType.Intersection => isInClip,
-                ClipType.Union => !isInSubj && !isInClip,
+                ClippingOperation.Intersection => isInClip,
+                ClippingOperation.Union => !isInSubj && !isInClip,
                 _ => !isInClip
             };
             return result;
@@ -3249,8 +3243,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     SwapFrontBackSides(ae2.outrec!);
                 }
                 else
-                {
-                    this.succeeded = false;
+                {           
                     return null;
                 }
             }

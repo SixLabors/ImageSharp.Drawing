@@ -29,14 +29,4 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         IsInside = 1,
         IsOutside = 2
     }
-
-    // Note: all clipping operations except for Difference are commutative.
-    internal enum ClipType
-    {
-        None,
-        Intersection,
-        Union,
-        Difference,
-        Xor
-    }
 }
