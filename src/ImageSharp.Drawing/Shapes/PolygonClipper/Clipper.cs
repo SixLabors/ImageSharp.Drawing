@@ -109,8 +109,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             PathF points = new(vectors.Length);
             for (int i = 0; i < vectors.Length; i++)
             {
-                Vector2 v = vectors[i];
-                points.Add(v * ScalingFactor);
+                points.Add((Vector2)vectors[i] * ScalingFactor);
             }
 
             this.polygonClipper.AddPath(points, clippingType, !path.IsClosed);

@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
-using System.Linq;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
@@ -61,8 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             PathF points = new(pathPoints.Length);
             for (int i = 0; i < pathPoints.Length; i++)
             {
-                Vector2 v = pathPoints[i];
-                points.Add(v * ScalingFactor);
+                points.Add((Vector2)pathPoints[i] * ScalingFactor);
             }
 
             this.polygonClipperOffset.AddPath(points, jointStyle, endCapStyle);
