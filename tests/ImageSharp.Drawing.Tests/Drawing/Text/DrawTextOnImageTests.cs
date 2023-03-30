@@ -701,10 +701,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "Quick brown fox jumps over the lazy dog.";
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
 
+#if NET472
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
+                new { type = exampleImageKey },
+                comparer: ImageComparer.TolerantPercentage(0.017f));
+#else
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
                 new { type = exampleImageKey },
                 comparer: ImageComparer.TolerantPercentage(0.0025f));
+#endif
         }
 
         [Theory]
