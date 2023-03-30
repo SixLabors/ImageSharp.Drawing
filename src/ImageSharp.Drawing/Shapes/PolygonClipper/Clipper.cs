@@ -46,7 +46,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
                 for (int j = 0; j < path.Count; j++)
                 {
+#if NET472
+                    Vector2 v = path[j];
+                    points[j] = new PointF((float)(v.X / (double)ScalingFactor), (float)(v.Y / (double)ScalingFactor));
+#else
                     points[j] = path[j] / ScalingFactor;
+#endif
                 }
 
                 shapes[index++] = new Polygon(new LinearLineSegment(points));
@@ -59,7 +64,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
                 for (int j = 0; j < path.Count; j++)
                 {
+#if NET472
+                    Vector2 v = path[j];
+                    points[j] = new PointF((float)(v.X / (double)ScalingFactor), (float)(v.Y / (double)ScalingFactor));
+#else
                     points[j] = path[j] / ScalingFactor;
+#endif
                 }
 
                 shapes[index++] = new Polygon(new LinearLineSegment(points));

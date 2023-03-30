@@ -192,6 +192,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             IPath circle = new EllipsePolygon(36, 36, 36).Translate(28, 28);
             var star = new Star(64, 64, 5, 24, 64);
 
+            // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
             foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
             {
                 IPath shape = star.Clip(operation, IntersectionRule.EvenOdd, circle);

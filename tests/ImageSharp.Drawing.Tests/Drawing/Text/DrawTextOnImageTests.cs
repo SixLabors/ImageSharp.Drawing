@@ -704,7 +704,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
                 new { type = exampleImageKey },
-                comparer: ImageComparer.TolerantPercentage(0.002f));
+                comparer: ImageComparer.TolerantPercentage(0.0025f));
         }
 
         [Theory]

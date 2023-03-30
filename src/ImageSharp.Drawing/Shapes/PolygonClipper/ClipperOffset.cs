@@ -40,7 +40,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 var points = new PointF[pt.Count];
                 for (int j = 0; j < pt.Count; j++)
                 {
+#if NET472
+                    Vector2 v = pt[j];
+                    points[j] = new PointF((float)(v.X / (double)ScalingFactor), (float)(v.Y / (double)ScalingFactor));
+#else
                     points[j] = pt[j] / ScalingFactor;
+#endif
                 }
 
                 polygons[i] = new Polygon(new LinearLineSegment(points));
