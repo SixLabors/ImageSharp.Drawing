@@ -12,9 +12,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
     public class ClearRectangle : BaseImageOperationsExtensionTest
     {
         private readonly Brush brush = Brushes.Solid(Color.HotPink);
-        private RectangleF rectangle = new RectangleF(10, 10, 20, 20);
+        private RectangleF rectangle = new(10, 10, 20, 20);
 
-        private RectangularPolygon RectanglePolygon => new RectangularPolygon(this.rectangle);
+        private RectangularPolygon RectanglePolygon => new(this.rectangle);
 
         [Fact]
         public void Brush()

@@ -73,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
             Assert.Equal(7, path.Count);
             foreach (Vector2 p in this.bigTriangle.Flatten().First().Points.ToArray())
             {
-                Assert.Contains(p, path, new ApproximateFloatComparer(.0001F));
+                Assert.Contains(p, path, new ApproximateFloatComparer(RectangularPolygonValueComparer.DefaultTolerance));
             }
         }
 
@@ -108,9 +108,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
 
             Assert.Equal(2, shapes.Count());
 
-            const float epsilon = 0.0001F;
-            Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.bigSquare, x, epsilon));
-            Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.hole, x, epsilon));
+            Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.bigSquare, x));
+            Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.hole, x));
         }
 
         [Fact]
