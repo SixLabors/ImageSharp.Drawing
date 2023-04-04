@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing
         public RectangleF Bounds => this.InnerPath.Bounds;
 
         /// <inheritdoc />
-        public PathTypes PathType => this.IsClosed ? PathTypes.Open : PathTypes.Closed;
+        public PathTypes PathType => this.IsClosed ? PathTypes.Closed : PathTypes.Open;
 
         /// <summary>
         /// Gets the maximum number intersections that a shape can have when testing a line.
