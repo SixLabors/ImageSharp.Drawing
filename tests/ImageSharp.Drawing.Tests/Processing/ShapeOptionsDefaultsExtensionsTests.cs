@@ -28,6 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var option = new ShapeOptions()
             {
+                ClippingOperation = ClippingOperation.Intersection,
                 IntersectionRule = IntersectionRule.NonZero
             };
             var config = new Configuration();
@@ -36,13 +37,19 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 
             context.SetShapeOptions(o =>
             {
-                Assert.Equal(IntersectionRule.NonZero, o.IntersectionRule); // has origional values
+                Assert.Equal(ClippingOperation.Intersection, o.ClippingOperation); // has original values
+                Assert.Equal(IntersectionRule.NonZero, o.IntersectionRule);
+
+                o.ClippingOperation = ClippingOperation.Xor;
                 o.IntersectionRule = IntersectionRule.EvenOdd;
             });
 
             ShapeOptions returnedOption = context.GetShapeOptions();
+
+            Assert.Equal(ClippingOperation.Xor, returnedOption.ClippingOperation);
             Assert.Equal(IntersectionRule.EvenOdd, returnedOption.IntersectionRule);
-            Assert.Equal(IntersectionRule.NonZero, option.IntersectionRule); // hasn't been mutated
+            Assert.Equal(ClippingOperation.Intersection, option.ClippingOperation); // hasn't been mutated
+            Assert.Equal(IntersectionRule.NonZero, option.IntersectionRule);
         }
 
         [Fact]
@@ -61,6 +68,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
         {
             var option = new ShapeOptions()
             {
+                ClippingOperation = ClippingOperation.Intersection,
                 IntersectionRule = IntersectionRule.NonZero
             };
             var config = new Configuration();
@@ -68,13 +76,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
 
             config.SetShapeOptions(o =>
             {
-                Assert.Equal(IntersectionRule.NonZero, o.IntersectionRule); // has origional values
+                Assert.Equal(ClippingOperation.Intersection, o.ClippingOperation); // has original values
+                Assert.Equal(IntersectionRule.NonZero, o.IntersectionRule);
+                o.ClippingOperation = ClippingOperation.Xor;
                 o.IntersectionRule = IntersectionRule.EvenOdd;
             });
 
             ShapeOptions returnedOption = config.GetShapeOptions();
+            Assert.Equal(ClippingOperation.Xor, returnedOption.ClippingOperation);
             Assert.Equal(IntersectionRule.EvenOdd, returnedOption.IntersectionRule);
-            Assert.Equal(IntersectionRule.NonZero, option.IntersectionRule); // hasn't been mutated
+            Assert.Equal(ClippingOperation.Intersection, option.ClippingOperation); // hasn't been mutated
+            Assert.Equal(IntersectionRule.NonZero, option.IntersectionRule);
         }
 
         [Fact]
