@@ -46,13 +46,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
             for (float x = rect.Left; x <= rect.Right; x += gridSize)
             {
                 PointF[] line = { P(x, rect.Top), P(x, rect.Bottom) };
-                ctx.DrawLines(GridPen, line);
+                ctx.DrawLine(GridPen, line);
             }
 
             for (float y = rect.Top; y <= rect.Bottom; y += gridSize)
             {
                 PointF[] line = { P(rect.Left, y), P(rect.Right, y) };
-                ctx.DrawLines(GridPen, line);
+                ctx.DrawLine(GridPen, line);
             }
         }
     }

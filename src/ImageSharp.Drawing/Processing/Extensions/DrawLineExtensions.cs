@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="thickness">The line thickness.</param>
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext DrawLines(
+        public static IImageProcessingContext DrawLine(
             this IImageProcessingContext source,
             DrawingOptions options,
             Brush brush,
@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="thickness">The line thickness.</param>
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext DrawLines(
+        public static IImageProcessingContext DrawLine(
             this IImageProcessingContext source,
             Brush brush,
             float thickness,
@@ -50,12 +50,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="thickness">The line thickness.</param>
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext DrawLines(
+        public static IImageProcessingContext DrawLine(
             this IImageProcessingContext source,
             Color color,
             float thickness,
             params PointF[] points) =>
-            source.DrawLines(new SolidBrush(color), thickness, points);
+            source.DrawLine(new SolidBrush(color), thickness, points);
 
         /// <summary>
         /// Draws the provided points as an open linear path at the provided thickness with the supplied brush.
@@ -66,13 +66,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="thickness">The line thickness.</param>
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>>
-        public static IImageProcessingContext DrawLines(
+        public static IImageProcessingContext DrawLine(
             this IImageProcessingContext source,
             DrawingOptions options,
             Color color,
             float thickness,
             params PointF[] points) =>
-            source.DrawLines(options, new SolidBrush(color), thickness, points);
+            source.DrawLine(options, new SolidBrush(color), thickness, points);
 
         /// <summary>
         /// Draws the provided points as an open linear path with the supplied pen.
@@ -82,7 +82,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="pen">The pen.</param>
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext DrawLines(
+        public static IImageProcessingContext DrawLine(
             this IImageProcessingContext source,
             DrawingOptions options,
             Pen pen,
@@ -96,7 +96,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="pen">The pen.</param>
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
-        public static IImageProcessingContext DrawLines(
+        public static IImageProcessingContext DrawLine(
             this IImageProcessingContext source,
             Pen pen,
             params PointF[] points) =>

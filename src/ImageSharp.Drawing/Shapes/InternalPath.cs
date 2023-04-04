@@ -141,10 +141,11 @@ namespace SixLabors.ImageSharp.Drawing
         /// <exception cref="InvalidOperationException">Thrown if no points found.</exception>
         internal SegmentInfo PointAlongPath(float distanceAlongPath)
         {
-            distanceAlongPath %= this.Length;
             int pointCount = this.PointCount;
             if (this.closedPath)
             {
+                // Move the distance back to the beginning since this is a closed polygon.
+                distanceAlongPath %= this.Length;
                 pointCount--;
             }
 
@@ -154,8 +155,7 @@ namespace SixLabors.ImageSharp.Drawing
                 if (distanceAlongPath < this.points[next].Length)
                 {
                     float t = distanceAlongPath / this.points[next].Length;
-                    Vector2 point = (this.points[i].Point * (1 - t)) + (this.points[next].Point * t);
-
+                    var point = Vector2.Lerp(this.points[i].Point, this.points[next].Point, t);
                     Vector2 diff = this.points[i].Point - this.points[next].Point;
 
                     return new SegmentInfo
@@ -168,8 +168,21 @@ namespace SixLabors.ImageSharp.Drawing
                 distanceAlongPath -= this.points[next].Length;
             }
 
-            // TODO: Perf - Throwhelper.
-            throw new InvalidOperationException("Should always reach a point along the path.");
+            // Closed paths will never reach this point.
+            // For open paths we're going to create a new virtual point that extends past the path.
+            // The position and angle for that point are calculated based upon the last two points.
+            PointF a = this.points[Math.Max(this.points.Length - 2, 0)].Point;
+            PointF b = this.points[this.points.Length - 1].Point;
+            Vector2 delta = a - b;
+            float angle = (float)(Math.Atan2(delta.Y, delta.X) % (Math.PI * 2));
+
+            Matrix3x2 transform = Matrix3x2.CreateRotation(angle - MathF.PI) * Matrix3x2.CreateTranslation(b.X, b.Y);
+
+            return new SegmentInfo
+            {
+                Point = Vector2.Transform(new Vector2(distanceAlongPath, 0), transform),
+                Angle = angle
+            };
         }
 
         internal IMemoryOwner<PointF> ExtractVertices(MemoryAllocator allocator)
@@ -198,7 +211,7 @@ namespace SixLabors.ImageSharp.Drawing
             Vector2 rq = r - q;
             float val = (qp.Y * rq.X) - (qp.X * rq.Y);
 
-            if (val > -Epsilon && val < Epsilon)
+            if (val is > -Epsilon and < Epsilon)
             {
                 return PointOrientation.Collinear;  // colinear
             }
@@ -228,7 +241,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="isClosed">Weather the path is closed or open.</param>
         /// <param name="removeCloseAndCollinear">Whether to remove close and collinear vertices</param>
         /// <returns>
-        /// The <see cref="T:Vector2[]"/>.
+        /// The <see cref="T:PointData[]"/>.
         /// </returns>
         private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed, bool removeCloseAndCollinear)
         {

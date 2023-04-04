@@ -30,7 +30,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private readonly Pen defaultPen;
         private readonly Brush defaultBrush;
         private readonly IPathInternals path;
-        private Vector2 textPathOffset;
         private bool isDisposed;
 
         private readonly Dictionary<Color, Brush> brushLookup = new();
@@ -96,23 +95,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             }
 
             this.DrawingOperations.Clear();
-
-            float yOffset = this.textOptions.VerticalAlignment switch
-            {
-                VerticalAlignment.Center => bounds.Bottom - (bounds.Height * .5F),
-                VerticalAlignment.Bottom => bounds.Bottom,
-                VerticalAlignment.Top => bounds.Top,
-                _ => bounds.Top,
-            };
-
-            float xOffset = this.textOptions.HorizontalAlignment switch
-            {
-                HorizontalAlignment.Center => bounds.Right - (bounds.Width * .5F),
-                HorizontalAlignment.Right => bounds.Right,
-                HorizontalAlignment.Left => bounds.Left,
-                _ => bounds.Left,
-            };
-            this.textPathOffset = new(xOffset, yOffset);
         }
 
         /// <inheritdoc/>
@@ -490,23 +472,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 return Matrix3x2.Identity;
             }
 
-            // Find the intersection point.
-            // This should be offset to ensure we rotate at the bottom-center of the glyph.
-            float halfWidth = bounds.Width * .5F;
-
             // Find the point of this intersection along the given path.
-            SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + halfWidth);
+            // We want to find the point on the path that is closest to the center-bottom side of the glyph.
+            Vector2 half = new(bounds.Width * .5F, 0);
+            SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + half.X);
 
-            // Now offset our target point since we're aligning the bottom-left location of our glyph against the path.
-            // This is good and accurate when we are vertically aligned to the path however the distance between
-            // characters in multiline text scales with the angle and vertical offset.
-            // This is expected and consistant with other libraries.
-            // Multiple line text should be rendered using multiple paths to avoid this behavior.
-            Vector2 targetPoint = (Vector2)pathPoint.Point + new Vector2(-halfWidth, bounds.Top) - bounds.Location - this.textPathOffset;
-
-            // Due to how matrix combining works you have to combine this in the reverse order of operation.
-            return Matrix3x2.CreateTranslation(targetPoint)
-                * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, pathPoint.Point);
+            // Now offset to our target point since we're aligning the top-left location of our glyph against the path.
+            Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
+            return Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
         }
 
         private Buffer2D<float> Render(IPath path)

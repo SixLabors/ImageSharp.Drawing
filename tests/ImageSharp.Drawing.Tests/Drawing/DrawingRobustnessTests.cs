@@ -95,7 +95,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             };
             foreach (PointF[] loop in points)
             {
-                image.Mutate(c => c.DrawLines(options, Color.White, 1.0f, loop));
+                image.Mutate(c => c.DrawLine(options, Color.White, 1.0f, loop));
             }
 
             string details = $"_{System.IO.Path.GetFileName(geoJsonFile)}_{sx}x{sy}_aa{aa}";
@@ -162,7 +162,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
 
             foreach (PointF[] loop in points)
             {
-                image.Mutate(c => c.DrawLines(Color.White, 1.0f, loop));
+                image.Mutate(c => c.DrawLine(Color.White, 1.0f, loop));
             }
 
             // Very strict tolerance, since the image is sparse (relaxed on .NET Framework)

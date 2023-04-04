@@ -24,7 +24,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
-                    .DrawLines(
+                    .DrawLine(
                         this.red,
                         stroke,
                         new PointF(0, 0),
@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
-                    .DrawLines(
+                    .DrawLine(
                         this.red,
                         stroke,
                         new PointF(0, 99),
@@ -64,7 +64,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
-                    .DrawLines(
+                    .DrawLine(
                         this.red,
                         stroke,
                         new PointF(0, 0),
@@ -84,7 +84,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
             image.Mutate(x => x
                     .SetGraphicsOptions(g => g.Antialias = false)
-                    .DrawLines(
+                    .DrawLine(
                         this.red,
                         stroke,
                         new PointF(99, 0),
