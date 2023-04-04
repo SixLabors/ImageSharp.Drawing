@@ -4,7 +4,6 @@
 using System;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -195,7 +194,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
             // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
             foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
             {
-                IPath shape = star.Clip(operation, IntersectionRule.EvenOdd, circle);
+                ShapeOptions options = new() { ClippingOperation = operation };
+                IPath shape = star.Clip(options, circle);
 
                 provider.RunValidatingProcessorTest(
                     c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),

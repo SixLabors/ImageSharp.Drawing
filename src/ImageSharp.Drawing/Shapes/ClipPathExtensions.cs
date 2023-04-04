@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System.Collections.Generic;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing
@@ -25,17 +26,15 @@ namespace SixLabors.ImageSharp.Drawing
         /// Clips the specified subject path with the provided clipping paths.
         /// </summary>
         /// <param name="subjectPath">The subject path.</param>
-        /// <param name="operation">The clipping operation.</param>
-        /// <param name="rule">The intersection rule.</param>
+        /// <param name="options">The shape options.</param>
         /// <param name="clipPaths">The clipping paths.</param>
         /// <returns>The clipped <see cref="IPath"/>.</returns>
         /// <exception cref="ClipperException">Thrown when an error occured while attempting to clip the polygon.</exception>
         public static IPath Clip(
             this IPath subjectPath,
-            ClippingOperation operation,
-            IntersectionRule rule,
+            ShapeOptions options,
             params IPath[] clipPaths)
-            => subjectPath.Clip(operation, rule, (IEnumerable<IPath>)clipPaths);
+            => subjectPath.Clip(options, (IEnumerable<IPath>)clipPaths);
 
         /// <summary>
         /// Clips the specified subject path with the provided clipping paths.
@@ -45,21 +44,19 @@ namespace SixLabors.ImageSharp.Drawing
         /// <returns>The clipped <see cref="IPath"/>.</returns>
         /// <exception cref="ClipperException">Thrown when an error occured while attempting to clip the polygon.</exception>
         public static IPath Clip(this IPath subjectPath, IEnumerable<IPath> clipPaths)
-            => subjectPath.Clip(ClippingOperation.Difference, IntersectionRule.EvenOdd, clipPaths);
+            => subjectPath.Clip(new(), clipPaths);
 
         /// <summary>
         /// Clips the specified subject path with the provided clipping paths.
         /// </summary>
         /// <param name="subjectPath">The subject path.</param>
-        /// <param name="operation">The clipping operation.</param>
-        /// <param name="rule">The intersection rule.</param>
+        /// <param name="options">The shape options.</param>
         /// <param name="clipPaths">The clipping paths.</param>
         /// <returns>The clipped <see cref="IPath"/>.</returns>
         /// <exception cref="ClipperException">Thrown when an error occured while attempting to clip the polygon.</exception>
         public static IPath Clip(
             this IPath subjectPath,
-            ClippingOperation operation,
-            IntersectionRule rule,
+            ShapeOptions options,
             IEnumerable<IPath> clipPaths)
         {
             Clipper clipper = new();
@@ -67,7 +64,7 @@ namespace SixLabors.ImageSharp.Drawing
             clipper.AddPath(subjectPath, ClippingType.Subject);
             clipper.AddPaths(clipPaths, ClippingType.Clip);
 
-            IPath[] result = clipper.GenerateClippedShapes(operation, rule);
+            IPath[] result = clipper.GenerateClippedShapes(options.ClippingOperation, options.IntersectionRule);
 
             return new ComplexPolygon(result);
         }

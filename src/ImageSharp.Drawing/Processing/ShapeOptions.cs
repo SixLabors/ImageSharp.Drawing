@@ -15,10 +15,21 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         {
         }
 
-        private ShapeOptions(ShapeOptions source) => this.IntersectionRule = source.IntersectionRule;
+        private ShapeOptions(ShapeOptions source)
+        {
+            this.IntersectionRule = source.IntersectionRule;
+            this.ClippingOperation = source.ClippingOperation;
+        }
 
         /// <summary>
-        /// Gets or sets a value indicating whether antialiasing should be applied.
+        /// Gets or sets the clipping operation.
+        /// <para/>
+        /// Defaults to <see cref="ClippingOperation.Difference"/>.
+        /// </summary>
+        public ClippingOperation ClippingOperation { get; set; } = ClippingOperation.Difference;
+
+        /// <summary>
+        /// Gets or sets the rule for calculating intersection points.
         /// <para/>
         /// Defaults to <see cref="IntersectionRule.EvenOdd"/>.
         /// </summary>
