@@ -741,6 +741,57 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                 comparer: ImageComparer.TolerantPercentage(0.002f));
         }
 
+        [Theory]
+        [WithSolidFilledImages(1000, 1000, "White", PixelTypes.Rgba32)]
+        public void PathAndTextDrawingMatch<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            // https://github.com/SixLabors/ImageSharp.Drawing/issues/234
+            Font font = CreateFont(TestFonts.NettoOffc, 300);
+            const string text = "all";
+
+            provider.VerifyOperation(
+              TextDrawingComparer,
+              img =>
+              {
+                  foreach (HorizontalAlignment ha in (HorizontalAlignment[])Enum.GetValues(typeof(HorizontalAlignment)))
+                  {
+                      foreach (VerticalAlignment va in (VerticalAlignment[])Enum.GetValues(typeof(VerticalAlignment)))
+                      {
+                          TextOptions to = new(font)
+                          {
+                              HorizontalAlignment = ha,
+                              VerticalAlignment = va,
+                          };
+
+                          FontRectangle bounds = TextMeasurer.MeasureBounds(text, to);
+                          float x = (img.Size().Width - bounds.Width) / 2;
+                          PointF[] pathLine = new[]
+                          {
+                              new PointF(x, 500),
+                              new PointF(x + bounds.Width, 500)
+                          };
+
+                          IPath path = new PathBuilder().AddLine(pathLine[0], pathLine[1]).Build();
+
+                          RichTextOptions rto = new(font)
+                          {
+                              Origin = pathLine[0],
+                              HorizontalAlignment = ha,
+                              VerticalAlignment = va,
+                          };
+
+                          IPathCollection tb = TextBuilder.GenerateGlyphs(text, path, to);
+
+                          img.Mutate(
+                              i => i.DrawLine(new SolidPen(Color.Red, 30), pathLine)
+                                    .DrawText(rto, text, Color.Black)
+                                    .Fill(Brushes.ForwardDiagonal(Color.HotPink), tb));
+                      }
+                  }
+              });
+        }
+
         private static string Repeat(string str, int times) => string.Concat(Enumerable.Repeat(str, times));
 
         private static string ToTestOutputDisplayText(string text)

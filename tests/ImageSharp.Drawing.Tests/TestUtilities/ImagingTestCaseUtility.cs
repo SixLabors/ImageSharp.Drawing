@@ -176,7 +176,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
 
             encoder ??= TestEnvironment.GetReferenceEncoder(path);
 
-            using (FileStream stream = File.OpenWrite(path))
+            using (FileStream stream = File.Open(path, FileMode.Create))
             {
                 image.Save(stream, encoder);
             }
@@ -226,7 +226,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests
                 using (Image<TPixel> frameImage = image.Frames.CloneFrame(i))
                 {
                     string filePath = files[i];
-                    using (FileStream stream = File.OpenWrite(filePath))
+                    using (FileStream stream = File.Open(filePath, FileMode.Create))
                     {
                         frameImage.Save(stream, encoder);
                     }

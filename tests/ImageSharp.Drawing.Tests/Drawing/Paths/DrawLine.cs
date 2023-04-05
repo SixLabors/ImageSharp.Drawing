@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void Pen()
         {
-            this.operations.DrawLines(new DrawingOptions(), this.pen, this.points);
+            this.operations.DrawLine(new DrawingOptions(), this.pen, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void PenDefaultOptions()
         {
-            this.operations.DrawLines(this.pen, this.points);
+            this.operations.DrawLine(this.pen, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -53,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void BrushAndThickness()
         {
-            this.operations.DrawLines(new DrawingOptions(), this.pen.StrokeFill, 10, this.points);
+            this.operations.DrawLine(new DrawingOptions(), this.pen.StrokeFill, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -67,7 +67,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void BrushAndThicknessDefaultOptions()
         {
-            this.operations.DrawLines(this.pen.StrokeFill, 10, this.points);
+            this.operations.DrawLine(this.pen.StrokeFill, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -81,7 +81,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorAndThickness()
         {
-            this.operations.DrawLines(new DrawingOptions(), Color.Red, 10, this.points);
+            this.operations.DrawLine(new DrawingOptions(), Color.Red, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -96,7 +96,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void ColorAndThicknessDefaultOptions()
         {
-            this.operations.DrawLines(Color.Red, 10, this.points);
+            this.operations.DrawLine(Color.Red, 10, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -111,7 +111,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void JointAndEndCapStyle()
         {
-            this.operations.DrawLines(new DrawingOptions(), this.pen, this.points);
+            this.operations.DrawLine(new DrawingOptions(), this.pen, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
@@ -125,7 +125,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
         [Fact]
         public void JointAndEndCapStyleDefaultOptions()
         {
-            this.operations.DrawLines(this.pen, this.points);
+            this.operations.DrawLine(this.pen, this.points);
 
             DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 

@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
             };
 
             using var image = new Image<Rgba32>(100, 100);
-            image.Mutate(imageContext => imageContext.DrawLines(new Rgba32(255, 0, 0), 1, line));
+            image.Mutate(imageContext => imageContext.DrawLine(new Rgba32(255, 0, 0), 1, line));
         }
 
         [Fact]
