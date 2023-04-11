@@ -426,19 +426,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 sinA = -1F;
             }
 
-            // almost straight - less than 8 degrees
-            if (cosA > .99F)
-            {
-                group.OutPath.Add(this.GetPerpendic(path[j], this.normals[k]));
-
-                // greater than 1 degree (#424)
-                if (cosA < .9998F)
-                {
-                    // (#418)
-                    group.OutPath.Add(this.GetPerpendic(path[j], this.normals[j]));
-                }
-            }
-            else if (cosA > -.99F && (sinA * this.groupDelta < 0))
+            if (cosA > -0.99F && (sinA * this.groupDelta < 0F))
             {
                 // is concave
                 group.OutPath.Add(this.GetPerpendic(path[j], this.normals[k]));
@@ -447,10 +435,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 // path reversals are fully cleaned with the trailing clipper
                 group.OutPath.Add(path[j]); // (#405)
                 group.OutPath.Add(this.GetPerpendic(path[j], this.normals[j]));
-            }
-            else if (this.joinType == JointStyle.Round)
-            {
-                this.DoRound(group, path, j, k, MathF.Atan2(sinA, cosA));
             }
             else if (this.joinType == JointStyle.Miter)
             {
@@ -464,16 +448,19 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     this.DoSquare(group, path, j, k);
                 }
             }
-
-            // don't bother squaring angles that deviate < ~20 degrees because
-            // squaring will be indistinguishable from mitering and just be a lot slower
-            else if (cosA > .9F)
+            else if (cosA > 0.9998F)
             {
+                // almost straight - less than 1 degree (#424)
                 this.DoMiter(group, path, j, k, cosA);
+            }
+            else if (cosA > 0.99F || this.joinType == JointStyle.Square)
+            {
+                // angle less than 8 degrees or a squared join
+                this.DoSquare(group, path, j, k);
             }
             else
             {
-                this.DoSquare(group, path, j, k);
+                this.DoRound(group, path, j, k, MathF.Atan2(sinA, cosA));
             }
 
             k = j;
