@@ -3112,9 +3112,14 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 || IsOpen(e)
                 || IsOpen(prev)
                 || !IsHotEdge(e)
-                || !IsHotEdge(prev)
-                || pt.Y < e.Top.Y + 2
-                || pt.Y < prev.Top.Y + 2)
+                || !IsHotEdge(prev))
+            {
+                return;
+            }
+
+            // Avoid trivial joins
+            if ((pt.Y < e.Top.Y + 2 || pt.Y < prev.Top.Y + 2)
+                && ((e.Bot.Y > pt.Y) || (prev.Bot.Y > pt.Y)))
             {
                 return;
             }
@@ -3162,10 +3167,14 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 || IsJoined(e)
                 || next == null
                 || IsOpen(next)
-                || !IsHotEdge(next)
+                || !IsHotEdge(next))
+            {
+                return;
+            }
 
-                // avoids trivial joins
-                || pt.Y < e.Top.Y + 2 || pt.Y < next.Top.Y + 2)
+            // Avoid trivial joins
+            if ((pt.Y < e.Top.Y + 2 || pt.Y < next.Top.Y + 2)
+                && ((e.Bot.Y > pt.Y) || (next.Bot.Y > pt.Y)))
             {
                 return;
             }
