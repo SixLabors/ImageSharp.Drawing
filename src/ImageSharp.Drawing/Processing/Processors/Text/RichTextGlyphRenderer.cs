@@ -40,6 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private TextDecorationDetails? currentUnderline;
         private TextDecorationDetails? currentStrikout;
         private TextDecorationDetails? currentOverline;
+        private bool currentDecorationsRotated;
 
         // Just enough accuracy to allow for 1/8 px differences which later are accumulated while rendering,
         // but do not grow into full px offsets.
@@ -101,7 +102,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
         {
             this.currentColor = null;
-
+            this.currentDecorationsRotated = parameters.LayoutMode.IsVertical() || parameters.LayoutMode.IsVerticalMixed();
             this.currentTextRun = parameters.TextRun;
             if (parameters.TextRun is RichTextRun drawingRun)
             {
@@ -219,41 +220,37 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 }
             }
 
-            // Clamp the line to whole pixels
-            Vector2 pad = new(0, thickness * .5F);
-            Vector2 tl = start - pad;
-            Vector2 bl = start + pad;
-            Vector2 tr = end - pad;
-
-            tl = ClampToPixel(tl);
-            bl = ClampToPixel(bl);
-            tr = ClampToPixel(tr);
-
             // Always respect the pen stroke width if explicitly set.
-            if (pen is null)
-            {
-                thickness = bl.Y - tl.Y;
-                pen = new SolidPen(this.currentBrush ?? this.defaultBrush, thickness);
-            }
-            else
+            if (pen is not null)
             {
                 thickness = pen.StrokeWidth;
             }
+
+            // Center the line at the given position.
+            bool rotated = this.currentDecorationsRotated;
+            Vector2 pad = rotated ? new(thickness * .5F, 0) : new(0, thickness * .5F);
+            Vector2 a = start - pad;
+            Vector2 b = start + pad;
+            Vector2 d = end - pad;
+            thickness = rotated ? b.X - a.X : b.Y - a.Y;
+
+            pen ??= new SolidPen(this.currentBrush ?? this.defaultBrush, thickness);
 
             // Drawing is always centered around the point so we need to offset by half.
             Vector2 offset = Vector2.Zero;
             if (textDecorations == TextDecorations.Overline)
             {
                 // CSS overline is drawn above the position, so we need to move it up.
-                offset = new Vector2(0, -(thickness * .5F));
+                offset = rotated ? new(thickness * .5F, 0) : new(0, -(thickness * .5F));
             }
             else if (textDecorations == TextDecorations.Underline)
             {
                 // CSS underline is drawn below the position, so we need to move it down.
-                offset = new Vector2(0, thickness * .5F);
+                offset = rotated ? new(-(thickness * .5F), 0) : new(0, thickness * .5F);
             }
 
-            this.AppendDecoration(ref targetDecoration, tl + offset, tr + offset, pen, thickness);
+            // Clamp the line to whole pixels
+            this.AppendDecoration(ref targetDecoration, ClampToPixel(a + offset), ClampToPixel(d + offset), pen, (float)Math.Truncate(thickness));
         }
 
         protected override void EndGlyph()

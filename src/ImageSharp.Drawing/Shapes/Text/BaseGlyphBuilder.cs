@@ -147,30 +147,32 @@ namespace SixLabors.ImageSharp.Drawing.Text
 
             var renderer = (IGlyphRenderer)this;
 
-            Vector2 height = new(0, thickness);
-            Vector2 tl = start;
-            Vector2 tr = end;
-            Vector2 bl = start + height;
-            Vector2 br = end + height;
+            // Clamp the line to whole pixels
+            bool rotated = this.parameters.LayoutMode.IsVertical() || this.parameters.LayoutMode.IsVerticalMixed();
+            Vector2 pad = rotated ? new(thickness * .5F, 0) : new(0, thickness * .5F);
+            Vector2 a = start - pad;
+            Vector2 b = start + pad;
+            Vector2 c = end + pad;
+            Vector2 d = end - pad;
 
             // Drawing is always centered around the point so we need to offset by half.
             Vector2 offset = Vector2.Zero;
             if (textDecorations == TextDecorations.Overline)
             {
                 // CSS overline is drawn above the position, so we need to move it up.
-                offset = new(0, -(thickness * .5F));
+                offset = rotated ? new(thickness * .5F, 0) : new(0, -(thickness * .5F));
             }
             else if (textDecorations == TextDecorations.Underline)
             {
                 // CSS underline is drawn below the position, so we need to move it down.
-                offset = new Vector2(0, thickness * .5F);
+                offset = rotated ? new(-(thickness * .5F), 0) : new(0, thickness * .5F);
             }
 
             // MoveTo calls StartFigure();
-            renderer.MoveTo(tl + offset);
-            renderer.LineTo(bl + offset);
-            renderer.LineTo(br + offset);
-            renderer.LineTo(tr + offset);
+            renderer.MoveTo(a + offset);
+            renderer.LineTo(b + offset);
+            renderer.LineTo(c + offset);
+            renderer.LineTo(d + offset);
             renderer.EndFigure();
         }
     }
