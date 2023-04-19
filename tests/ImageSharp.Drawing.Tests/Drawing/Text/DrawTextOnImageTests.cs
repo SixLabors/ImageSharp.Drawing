@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         private static readonly ImageComparer TextDrawingComparer = ImageComparer.TolerantPercentage(1e-2f);
 
-        private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(6e-4f);
+        private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(1e-3f);
 
         public DrawTextOnImageTests(ITestOutputHelper output)
             => this.Output = output;

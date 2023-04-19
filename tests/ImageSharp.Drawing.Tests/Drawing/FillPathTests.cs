@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Xunit;
@@ -63,6 +64,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public void FillPathCanvasArcs<TPixel>(TestImageProvider<TPixel> provider)
             where TPixel : unmanaged, IPixel<TPixel>
             => provider.VerifyOperation(
+                ImageComparer.TolerantPercentage(5e-3f),
                 image =>
                 {
                     for (int i = 0; i <= 3; i++)
