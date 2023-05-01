@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -783,6 +784,102 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
                       }
                   }
               });
+        }
+
+        [Theory]
+        [WithBlankImage(500, 400, PixelTypes.Rgba32)]
+        public void CanFillTextVertical<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, 36);
+            Font fallback = CreateFont(TestFonts.NotoSansKRRegular, 36);
+
+            const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
+            RichTextOptions textOptions = new(font)
+            {
+                Origin = new(0, 0),
+                FallbackFontFamilies = new[] { fallback.Family },
+                WrappingLength = 300,
+                LayoutMode = LayoutMode.VerticalLeftRight,
+                TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            };
+
+            IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
+
+            DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.Nonzero } };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
+
+        [Theory]
+        [WithBlankImage(500, 400, PixelTypes.Rgba32)]
+        public void CanFillTextVerticalMixed<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, 36);
+            Font fallback = CreateFont(TestFonts.NotoSansKRRegular, 36);
+
+            const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
+            RichTextOptions textOptions = new(font)
+            {
+                FallbackFontFamilies = new[] { fallback.Family },
+                WrappingLength = 400,
+                LayoutMode = LayoutMode.VerticalMixedLeftRight,
+                TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            };
+
+            IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
+            DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.Nonzero } };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
+
+        [Theory]
+        [WithBlankImage(500, 400, PixelTypes.Rgba32)]
+        public void CanDrawTextVertical<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, 36);
+            Font fallback = CreateFont(TestFonts.NotoSansKRRegular, 36);
+
+            const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
+            RichTextOptions textOptions = new(font)
+            {
+                FallbackFontFamilies = new[] { fallback.Family },
+                WrappingLength = 400,
+                LayoutMode = LayoutMode.VerticalLeftRight,
+                TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
+
+        [Theory]
+        [WithBlankImage(500, 400, PixelTypes.Rgba32)]
+        public void CanDrawTextVerticalMixed<TPixel>(TestImageProvider<TPixel> provider)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            Font font = CreateFont(TestFonts.OpenSans, 36);
+            Font fallback = CreateFont(TestFonts.NotoSansKRRegular, 36);
+
+            const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
+            RichTextOptions textOptions = new(font)
+            {
+                FallbackFontFamilies = new[] { fallback.Family },
+                WrappingLength = 400,
+                LayoutMode = LayoutMode.VerticalMixedLeftRight,
+                TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
         }
 
         private static string Repeat(string str, int times) => string.Concat(Enumerable.Repeat(str, times));
