@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing
                 ColorBlendingMode = PixelColorBlendingMode.Multiply
             };
 
-            this.shapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.Nonzero };
+            this.shapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero };
             this.source = new Image<Rgba32>(91 + 324, 123 + 56);
             this.rect = new Rectangle(91, 123, 324, 56); // make this random?
             this.internalOperations = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(this.source.GetConfiguration(), this.source, false);

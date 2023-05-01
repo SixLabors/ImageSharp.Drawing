@@ -4,7 +4,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.PolygonClipper;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using Xunit;
 
@@ -12,18 +12,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
 {
     public class ClipperTests
     {
-        private readonly RectangularPolygon bigSquare = new RectangularPolygon(10, 10, 40, 40);
-        private readonly RectangularPolygon hole = new RectangularPolygon(20, 20, 10, 10);
-        private readonly RectangularPolygon topLeft = new RectangularPolygon(0, 0, 20, 20);
-        private readonly RectangularPolygon topRight = new RectangularPolygon(30, 0, 20, 20);
-        private readonly RectangularPolygon topMiddle = new RectangularPolygon(20, 0, 10, 20);
+        private readonly RectangularPolygon bigSquare = new(10, 10, 40, 40);
+        private readonly RectangularPolygon hole = new(20, 20, 10, 10);
+        private readonly RectangularPolygon topLeft = new(0, 0, 20, 20);
+        private readonly RectangularPolygon topRight = new(30, 0, 20, 20);
+        private readonly RectangularPolygon topMiddle = new(20, 0, 10, 20);
 
-        private readonly Polygon bigTriangle = new Polygon(new LinearLineSegment(
+        private readonly Polygon bigTriangle = new(new LinearLineSegment(
                          new Vector2(10, 10),
                          new Vector2(200, 150),
                          new Vector2(50, 300)));
 
-        private readonly Polygon littleTriangle = new Polygon(new LinearLineSegment(
+        private readonly Polygon littleTriangle = new(new LinearLineSegment(
                         new Vector2(37, 85),
                         new Vector2(130, 40),
                         new Vector2(65, 137)));
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
                 }
             }
 
-            return clipper.GenerateClippedShapes();
+            return clipper.GenerateClippedShapes(ClippingOperation.Difference, IntersectionRule.EvenOdd);
         }
 
         [Fact]
@@ -69,10 +69,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
             IEnumerable<IPath> shapes = this.Clip(this.bigTriangle, this.littleTriangle);
             Assert.Single(shapes);
             IReadOnlyList<PointF> path = shapes.Single().Flatten().First().Points.ToArray();
+
             Assert.Equal(7, path.Count);
             foreach (Vector2 p in this.bigTriangle.Flatten().First().Points.ToArray())
             {
-                Assert.Contains(p, path);
+                Assert.Contains(p, path, new ApproximateFloatComparer(RectangularPolygonValueComparer.DefaultTolerance));
             }
         }
 
@@ -106,6 +107,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
                 .OfType<Polygon>().Select(x => (RectangularPolygon)x);
 
             Assert.Equal(2, shapes.Count());
+
             Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.bigSquare, x));
             Assert.Contains(shapes, x => RectangularPolygonValueComparer.Equals(this.hole, x));
         }
@@ -135,17 +137,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper
         [Fact]
         public void ClipperOffsetThrowsPublicException()
         {
-            PointF naan = new PointF(float.NaN, float.NaN);
-            Polygon path = new Polygon(new LinearLineSegment(new[] { naan, naan, naan, naan }));
+            PointF naan = new(float.NaN, float.NaN);
+            Polygon path = new(new LinearLineSegment(new[] { naan, naan, naan, naan }));
 
-            try
-            {
-                path.GenerateOutline(10);
-            }
-            catch (System.Exception ex)
-            {
-                Assert.True(ex is ClipperException);
-            }
+            Assert.Throws<ClipperException>(() => path.GenerateOutline(10));
         }
     }
 }

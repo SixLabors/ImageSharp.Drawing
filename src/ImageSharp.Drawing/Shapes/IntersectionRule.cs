@@ -4,18 +4,18 @@
 namespace SixLabors.ImageSharp.Drawing
 {
     /// <summary>
-    /// Rule for calulating intersection points,
+    /// Provides options for calculating intersection points.
     /// </summary>
     public enum IntersectionRule
     {
         /// <summary>
-        /// Use odd/even intersection rules, self intersection will cause holes.
+        /// Only odd numbered sub-regions are filled.
         /// </summary>
-        OddEven = 0,
+        EvenOdd = 0,
 
         /// <summary>
-        /// Nonzero rule treats intersecting holes as inside the path thus being ignored by intersections.
+        /// Only non-zero sub-regions are filled.
         /// </summary>
-        Nonzero = 1
+        NonZero = 1
     }
 }
