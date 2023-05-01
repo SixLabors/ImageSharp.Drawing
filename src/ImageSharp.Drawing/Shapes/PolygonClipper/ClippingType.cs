@@ -1,15 +1,15 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
-namespace SixLabors.ImageSharp.Drawing.PolygonClipper
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 {
     /// <summary>
-    /// Poly Type
+    /// Defines the polygon clipping type.
     /// </summary>
     public enum ClippingType
     {
         /// <summary>
-        /// Represent a main shape to act as a main subject who's path will be clipped or merged.
+        /// Represents a shape to act as a subject which will be clipped or merged.
         /// </summary>
         Subject,
 

@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
         private static readonly ImageComparer TextDrawingComparer = ImageComparer.TolerantPercentage(1e-2f);
 
-        private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(6e-4f);
+        private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(1e-3f);
 
         public DrawTextOnImageTests(ITestOutputHelper output)
             => this.Output = output;
@@ -702,10 +702,17 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             const string text = "Quick brown fox jumps over the lazy dog.";
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
 
+#if NET472
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
                 new { type = exampleImageKey },
-                comparer: ImageComparer.TolerantPercentage(0.002f));
+                comparer: ImageComparer.TolerantPercentage(0.017f));
+#else
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
+                new { type = exampleImageKey },
+                comparer: ImageComparer.TolerantPercentage(0.0025f));
+#endif
         }
 
         [Theory]

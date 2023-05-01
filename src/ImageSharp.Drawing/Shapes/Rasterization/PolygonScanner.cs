@@ -59,7 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             int dataBufferSize = (edgeCount * 3) + maxIntersectionCount;
 
             // In case of IntersectionRule.Nonzero, we need more space for intersectionTypes:
-            if (intersectionRule == IntersectionRule.Nonzero)
+            if (intersectionRule == IntersectionRule.NonZero)
             {
                 dataBufferSize += maxIntersectionCount;
             }
@@ -72,7 +72,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
             this.sorted1 = dataBufferInt32Span.Slice(edgeCount, edgeCount);
             this.activeEdges = new ActiveEdgeList(dataBufferInt32Span.Slice(edgeCount * 2, edgeCount));
             this.intersections = dataBufferFloatSpan.Slice(edgeCount * 3, maxIntersectionCount);
-            if (intersectionRule == IntersectionRule.Nonzero)
+            if (intersectionRule == IntersectionRule.NonZero)
             {
                 Span<int> remainder =
                     dataBufferInt32Span.Slice((edgeCount * 3) + maxIntersectionCount, maxIntersectionCount);
@@ -192,7 +192,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
         }
 
         public ReadOnlySpan<float> ScanCurrentLine()
-            => this.intersectionRule == IntersectionRule.OddEven
+            => this.intersectionRule == IntersectionRule.EvenOdd
             ? this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections)
             : this.activeEdges.ScanNonZero(this.SubPixelY, this.edges, this.intersections, this.intersectionTypes);
 

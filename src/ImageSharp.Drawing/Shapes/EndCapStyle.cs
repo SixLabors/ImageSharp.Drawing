@@ -22,5 +22,15 @@ namespace SixLabors.ImageSharp.Drawing
         /// The outlines ends squared off passed the end of the path.
         /// </summary>
         Square = 2,
+
+        /// <summary>
+        /// The outline is treated as a polygon.
+        /// </summary>
+        Polygon = 3,
+
+        /// <summary>
+        /// The outlines ends are joined and the path treated as a polyline
+        /// </summary>
+        Joined = 4
     }
 }

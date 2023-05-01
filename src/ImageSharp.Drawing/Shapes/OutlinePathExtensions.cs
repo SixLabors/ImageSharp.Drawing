@@ -4,7 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.PolygonClipper;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing
 {
@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// </summary>
     public static class OutlinePathExtensions
     {
-        private const double MiterOffsetDelta = 20;
+        private const float MiterOffsetDelta = 20;
         private const JointStyle DefaultJointStyle = JointStyle.Square;
         private const EndCapStyle DefaultEndCapStyle = EndCapStyle.Butt;
 
@@ -24,7 +24,8 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="width">The outline width.</param>
         /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
         /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
-        public static IPath GenerateOutline(this IPath path, float width) => GenerateOutline(path, width, DefaultJointStyle, DefaultEndCapStyle);
+        public static IPath GenerateOutline(this IPath path, float width)
+            => GenerateOutline(path, width, DefaultJointStyle, DefaultEndCapStyle);
 
         /// <summary>
         /// Generates an outline of the path.
@@ -183,11 +184,7 @@ namespace SixLabors.ImageSharp.Drawing
                         offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, endCapStyle);
                     }
 
-                    online = !online;
-
                     buffer.Clear();
-                    patternPos = (patternPos + 1) % pattern.Length;
-                    targetLength = pattern[patternPos] * width;
                 }
             }
 

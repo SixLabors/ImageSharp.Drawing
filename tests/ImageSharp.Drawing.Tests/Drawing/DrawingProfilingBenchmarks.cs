@@ -42,8 +42,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         }
 
         [Theory(Skip = "For local profiling only")]
-        [InlineData(IntersectionRule.OddEven)]
-        [InlineData(IntersectionRule.Nonzero)]
+        [InlineData(IntersectionRule.EvenOdd)]
+        [InlineData(IntersectionRule.NonZero)]
         public void FillPolygon(IntersectionRule intersectionRule)
         {
             const int times = 100;

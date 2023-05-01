@@ -521,7 +521,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 0,
                 size.Height,
                 subpixelCount,
-                IntersectionRule.Nonzero,
+                IntersectionRule.NonZero,
                 this.memoryAllocator);
 
             try

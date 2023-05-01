@@ -100,10 +100,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data { get; } =
             new TheoryData<bool, IntersectionRule>()
             {
-                { false, IntersectionRule.OddEven },
-                { false, IntersectionRule.Nonzero },
-                { true, IntersectionRule.OddEven },
-                { true, IntersectionRule.Nonzero },
+                { false, IntersectionRule.EvenOdd },
+                { false, IntersectionRule.NonZero },
+                { true, IntersectionRule.EvenOdd },
+                { true, IntersectionRule.NonZero },
             };
 
         [Theory]
@@ -182,6 +182,28 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 comparer: ImageComparer.TolerantPercentage(0.01f),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
+        }
+
+        [Theory]
+        [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32)]
+        public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider)
+        {
+            IPath circle = new EllipsePolygon(36, 36, 36).Translate(28, 28);
+            var star = new Star(64, 64, 5, 24, 64);
+
+            // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
+            foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
+            {
+                ShapeOptions options = new() { ClippingOperation = operation };
+                IPath shape = star.Clip(options, circle);
+
+                provider.RunValidatingProcessorTest(
+                    c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
+                    comparer: ImageComparer.TolerantPercentage(0.01f),
+                    testOutputDetails: operation.ToString(),
+                    appendSourceFileOrDescription: false,
+                    appendPixelTypeToFileName: false);
+            }
         }
 
         [Theory]
@@ -288,10 +310,10 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
         public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
             new TheoryData<bool, IntersectionRule>()
             {
-                { false, IntersectionRule.OddEven },
-                { false, IntersectionRule.Nonzero },
-                { true, IntersectionRule.OddEven },
-                { true, IntersectionRule.Nonzero },
+                { false, IntersectionRule.EvenOdd },
+                { false, IntersectionRule.NonZero },
+                { true, IntersectionRule.EvenOdd },
+                { true, IntersectionRule.NonZero },
             };
 
         [Theory]
@@ -344,7 +366,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 img.Mutate(c => c.Fill(
                     new DrawingOptions
                     {
-                        ShapeOptions = { IntersectionRule = IntersectionRule.OddEven },
+                        ShapeOptions = { IntersectionRule = IntersectionRule.EvenOdd },
                     },
                     Color.HotPink,
                     poly));
@@ -378,7 +400,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 img.Mutate(c => c.Fill(
                     new DrawingOptions
                     {
-                        ShapeOptions = { IntersectionRule = IntersectionRule.Nonzero },
+                        ShapeOptions = { IntersectionRule = IntersectionRule.NonZero },
                     },
                     Color.HotPink,
                     poly));

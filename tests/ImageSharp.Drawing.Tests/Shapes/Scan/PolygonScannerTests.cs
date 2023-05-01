@@ -60,7 +60,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
 
         private void TestScan(IPath path, int min, int max, int subsampling, FuzzyFloat[][] expected) =>
-            this.TestScan(path, min, max, subsampling, expected, IntersectionRule.OddEven);
+            this.TestScan(path, min, max, subsampling, expected, IntersectionRule.EvenOdd);
 
         private void TestScan(
             IPath path,
@@ -286,8 +286,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
 
         [Theory]
-        [InlineData(IntersectionRule.OddEven)]
-        [InlineData(IntersectionRule.Nonzero)]
+        [InlineData(IntersectionRule.EvenOdd)]
+        [InlineData(IntersectionRule.NonZero)]
         public void SelfIntersecting03(IntersectionRule rule)
         {
             IPath poly = PolygonFactory.CreatePolygon(
@@ -306,7 +306,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             DebugDraw.Polygon(poly, 1f, 100f);
 
             FuzzyFloat[][] expected;
-            if (rule == IntersectionRule.OddEven)
+            if (rule == IntersectionRule.EvenOdd)
             {
                 expected = new[]
                 {
@@ -341,8 +341,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
 
         [Theory]
-        [InlineData(IntersectionRule.OddEven)]
-        [InlineData(IntersectionRule.Nonzero)]
+        [InlineData(IntersectionRule.EvenOdd)]
+        [InlineData(IntersectionRule.NonZero)]
         public void SelfIntersecting04(IntersectionRule rule)
         {
             IPath poly = PolygonFactory.CreatePolygon(
@@ -365,7 +365,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
             DebugDraw.Polygon(poly, 1f, 100f);
 
             FuzzyFloat[][] expected;
-            if (rule == IntersectionRule.OddEven)
+            if (rule == IntersectionRule.EvenOdd)
             {
                 expected = new[]
                 {
@@ -400,8 +400,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
         }
 
         [Theory]
-        [InlineData(IntersectionRule.OddEven)]
-        [InlineData(IntersectionRule.Nonzero)]
+        [InlineData(IntersectionRule.EvenOdd)]
+        [InlineData(IntersectionRule.NonZero)]
         public void NegativeOrientation01(IntersectionRule intersectionRule)
         {
             // IPath poly = PolygonFactory.CreatePolygon((0, 0), (0, 2), (2, 2), (2, 0));

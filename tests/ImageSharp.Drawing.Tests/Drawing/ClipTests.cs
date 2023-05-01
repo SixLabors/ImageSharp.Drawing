@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0.
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
@@ -35,6 +37,23 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing
                 testOutputDetails: testDetails,
                 appendPixelTypeToFileName: false,
                 appendSourceFileOrDescription: false);
+        }
+
+        [Fact]
+        public void Issue250_Vertical_Horizontal_Count_Should_Match()
+        {
+            var clip = new PathCollection(new RectangularPolygon(new PointF(24, 16), new PointF(777, 385)));
+
+            var vert = new Path(new LinearLineSegment(new PointF(26, 384), new PointF(26, 163)));
+            var horiz = new Path(new LinearLineSegment(new PointF(26, 163), new PointF(176, 163)));
+
+            IPath reverse = vert.Clip(clip);
+            IEnumerable<ReadOnlyMemory<PointF>> result1 = vert.Clip(reverse).Flatten().Select(x => x.Points);
+
+            reverse = horiz.Clip(clip);
+            IEnumerable<ReadOnlyMemory<PointF>> result2 = horiz.Clip(reverse).Flatten().Select(x => x.Points);
+
+            bool same = result1.Count() == result2.Count();
         }
     }
 }
