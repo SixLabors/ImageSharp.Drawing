@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -813,7 +812,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
 
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
-            DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.Nonzero } };
+            // TODO: This still leaves some holes when overlaying the text (CFF NotoSansKRRegular only). We need to fix this.
+            DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.NonZero } };
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
@@ -838,7 +838,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             };
 
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
-            DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.Nonzero } };
+
+            // TODO: This still leaves some holes when overlaying the text (CFF NotoSansKRRegular only). We need to fix this.
+            DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.NonZero } };
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
