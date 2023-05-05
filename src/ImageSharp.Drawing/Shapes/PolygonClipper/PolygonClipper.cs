@@ -2967,7 +2967,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             this.InsertScanline(ae.Top.Y);
 
             this.CheckJoinLeft(ae, ae.Bot);
-            this.CheckJoinRight(ae, ae.Bot);
+            this.CheckJoinRight(ae, ae.Bot, true);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
