@@ -1,8 +1,10 @@
 // Copyright (c) Six Labors.
 // Licensed under the Apache License, Version 2.0.
 
+using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 
 namespace SixLabors.ImageSharp.Drawing.Text
@@ -145,11 +147,18 @@ namespace SixLabors.ImageSharp.Drawing.Text
                 return;
             }
 
+            thickness = MathF.Max(1F, (float)Math.Round(thickness));
             var renderer = (IGlyphRenderer)this;
 
-            // Clamp the line to whole pixels
+            // Expand the points to create a rectangle centered around the line.
             bool rotated = this.parameters.LayoutMode.IsVertical() || this.parameters.LayoutMode.IsVerticalMixed();
             Vector2 pad = rotated ? new(thickness * .5F, 0) : new(0, thickness * .5F);
+
+            // Clamp the line to the pixel grid.
+            start = ClampToPixel(start, (int)thickness, rotated);
+            end = ClampToPixel(end, (int)thickness, rotated);
+
+            // Offset to create the rectangle.
             Vector2 a = start - pad;
             Vector2 b = start + pad;
             Vector2 c = end + pad;
@@ -168,12 +177,35 @@ namespace SixLabors.ImageSharp.Drawing.Text
                 offset = rotated ? new(-(thickness * .5F), 0) : new(0, thickness * .5F);
             }
 
-            // MoveTo calls StartFigure();
-            renderer.MoveTo(a + offset);
-            renderer.LineTo(b + offset);
-            renderer.LineTo(c + offset);
-            renderer.LineTo(d + offset);
+            renderer.BeginFigure();
+
+            // Now draw the rectangle clamped to the pixel grid.
+            renderer.MoveTo(ClampToPixel(a + offset));
+            renderer.LineTo(ClampToPixel(b + offset));
+            renderer.LineTo(ClampToPixel(c + offset));
+            renderer.LineTo(ClampToPixel(d + offset));
             renderer.EndFigure();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static Point ClampToPixel(PointF point) => Point.Truncate(point);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
+        {
+            // Even. Clamp to whole pixels.
+            if ((thickness & 1) == 0)
+            {
+                return Point.Truncate(point);
+            }
+
+            // Odd. Clamp to half pixels.
+            if (rotated)
+            {
+                return Point.Truncate(point) + new Vector2(.5F, 0);
+            }
+
+            return Point.Truncate(point) + new Vector2(0, .5F);
         }
     }
 }

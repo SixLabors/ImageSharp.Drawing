@@ -225,6 +225,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             }
             else
             {
+                // Clamp the thickness to whole pixels.
+                thickness = MathF.Max(1F, MathF.Round(thickness));
                 pen = new SolidPen(this.currentBrush ?? this.defaultBrush, thickness);
             }
 
@@ -242,7 +244,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 offset = rotated ? new(-(thickness * .5F), 0) : new(0, thickness * .5F);
             }
 
-            this.AppendDecoration(ref targetDecoration, start + offset, end + offset, pen, thickness, rotated);
+            // We clamp the start and end points to the pixel grid to avoid anti-aliasing.
+            this.AppendDecoration(
+                ref targetDecoration,
+                ClampToPixel(start + offset, (int)thickness, rotated),
+                ClampToPixel(end + offset, (int)thickness, rotated),
+                pen,
+                thickness,
+                rotated);
         }
 
         protected override void EndGlyph()
@@ -384,6 +393,24 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Point ClampToPixel(PointF point) => Point.Truncate(point);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
+        {
+            // Even. Clamp to whole pixels.
+            if ((thickness & 1) == 0)
+            {
+                return Point.Truncate(point);
+            }
+
+            // Odd. Clamp to half pixels.
+            if (rotated)
+            {
+                return Point.Truncate(point) + new Vector2(.5F, 0);
+            }
+
+            return Point.Truncate(point) + new Vector2(0, .5F);
+        }
+
         // Point.Truncate(point);
         private void FinalizeDecoration(ref TextDecorationDetails? decoration)
         {
@@ -468,7 +495,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 Start = start,
                 End = end,
                 Pen = pen,
-                Thickness = MathF.Abs(thickness)
+                Thickness = thickness
             };
         }
 
