@@ -22,5 +22,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         public const string MeQuranVolyNewmet = "me_quran_volt_newmet.ttf";
 
         public const string NettoOffc = "NettoOffc.ttf";
+
+        public const string NotoSansKRRegular = "NotoSansKR-Regular.otf";
+
+        public const string NotoSerifKRRegular = "NotoSerifKR-Regular.otf";
     }
 }

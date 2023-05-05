@@ -24,7 +24,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private const byte RenderOrderOutline = 1;
         private const byte RenderOrderDecoration = 2;
 
-        private readonly RichTextOptions textOptions;
         private readonly DrawingOptions drawingOptions;
         private readonly MemoryAllocator memoryAllocator;
         private readonly Pen defaultPen;
@@ -40,6 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private TextDecorationDetails? currentUnderline;
         private TextDecorationDetails? currentStrikout;
         private TextDecorationDetails? currentOverline;
+        private bool currentDecorationRotated;
 
         // Just enough accuracy to allow for 1/8 px differences which later are accumulated while rendering,
         // but do not grow into full px offsets.
@@ -60,7 +60,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             Brush brush)
             : base(drawingOptions.Transform)
         {
-            this.textOptions = textOptions;
             this.drawingOptions = drawingOptions;
             this.memoryAllocator = memoryAllocator;
             this.defaultPen = pen;
@@ -101,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
         {
             this.currentColor = null;
-
+            this.currentDecorationRotated = parameters.LayoutMode.IsVertical() || parameters.LayoutMode.IsVerticalMixed();
             this.currentTextRun = parameters.TextRun;
             if (parameters.TextRun is RichTextRun drawingRun)
             {
@@ -219,41 +218,40 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 }
             }
 
-            // Clamp the line to whole pixels
-            Vector2 pad = new(0, thickness * .5F);
-            Vector2 tl = start - pad;
-            Vector2 bl = start + pad;
-            Vector2 tr = end - pad;
-
-            tl = ClampToPixel(tl);
-            bl = ClampToPixel(bl);
-            tr = ClampToPixel(tr);
-
             // Always respect the pen stroke width if explicitly set.
-            if (pen is null)
+            if (pen is not null)
             {
-                thickness = bl.Y - tl.Y;
-                pen = new SolidPen(this.currentBrush ?? this.defaultBrush, thickness);
+                thickness = pen.StrokeWidth;
             }
             else
             {
-                thickness = pen.StrokeWidth;
+                // Clamp the thickness to whole pixels.
+                thickness = MathF.Max(1F, MathF.Round(thickness));
+                pen = new SolidPen(this.currentBrush ?? this.defaultBrush, thickness);
             }
 
             // Drawing is always centered around the point so we need to offset by half.
             Vector2 offset = Vector2.Zero;
+            bool rotated = this.currentDecorationRotated;
             if (textDecorations == TextDecorations.Overline)
             {
                 // CSS overline is drawn above the position, so we need to move it up.
-                offset = new Vector2(0, -(thickness * .5F));
+                offset = rotated ? new(thickness * .5F, 0) : new(0, -(thickness * .5F));
             }
             else if (textDecorations == TextDecorations.Underline)
             {
                 // CSS underline is drawn below the position, so we need to move it down.
-                offset = new Vector2(0, thickness * .5F);
+                offset = rotated ? new(-(thickness * .5F), 0) : new(0, thickness * .5F);
             }
 
-            this.AppendDecoration(ref targetDecoration, tl + offset, tr + offset, pen, thickness);
+            // We clamp the start and end points to the pixel grid to avoid anti-aliasing.
+            this.AppendDecoration(
+                ref targetDecoration,
+                ClampToPixel(start + offset, (int)thickness, rotated),
+                ClampToPixel(end + offset, (int)thickness, rotated),
+                pen,
+                thickness,
+                rotated);
         }
 
         protected override void EndGlyph()
@@ -395,6 +393,24 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Point ClampToPixel(PointF point) => Point.Truncate(point);
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
+        {
+            // Even. Clamp to whole pixels.
+            if ((thickness & 1) == 0)
+            {
+                return Point.Truncate(point);
+            }
+
+            // Odd. Clamp to half pixels.
+            if (rotated)
+            {
+                return Point.Truncate(point) + new Vector2(.5F, 0);
+            }
+
+            return Point.Truncate(point) + new Vector2(0, .5F);
+        }
+
         // Point.Truncate(point);
         private void FinalizeDecoration(ref TextDecorationDetails? decoration)
         {
@@ -428,7 +444,13 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             }
         }
 
-        private void AppendDecoration(ref TextDecorationDetails? decoration, Vector2 start, Vector2 end, Pen pen, float thickness)
+        private void AppendDecoration(
+            ref TextDecorationDetails? decoration,
+            Vector2 start,
+            Vector2 end,
+            Pen pen,
+            float thickness,
+            bool rotated)
         {
             if (decoration != null)
             {
@@ -436,16 +458,33 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 if (this.path is null)
                 {
                     // Let's try and expand it first.
-                    if (thickness == decoration.Value.Thickness
-                        && decoration.Value.End.Y == start.Y
-                        && (decoration.Value.End.X + 1) >= start.X
-                        && decoration.Value.Pen.Equals(pen))
+                    if (rotated)
                     {
-                        // Expand the line
-                        start = decoration.Value.Start;
+                        if (thickness == decoration.Value.Thickness
+                        && decoration.Value.End.Y + 1 >= start.Y
+                        && decoration.Value.End.X == start.X
+                        && decoration.Value.Pen.Equals(pen))
+                        {
+                            // Expand the line
+                            start = decoration.Value.Start;
 
-                        // If this is null finalize does nothing.
-                        decoration = null;
+                            // If this is null finalize does nothing.
+                            decoration = null;
+                        }
+                    }
+                    else
+                    {
+                        if (thickness == decoration.Value.Thickness
+                        && decoration.Value.End.Y == start.Y
+                        && decoration.Value.End.X + 1 >= start.X
+                        && decoration.Value.Pen.Equals(pen))
+                        {
+                            // Expand the line
+                            start = decoration.Value.Start;
+
+                            // If this is null finalize does nothing.
+                            decoration = null;
+                        }
                     }
                 }
             }
@@ -456,7 +495,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 Start = start,
                 End = end,
                 Pen = pen,
-                Thickness = MathF.Abs(thickness)
+                Thickness = thickness
             };
         }
 
