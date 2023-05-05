@@ -137,7 +137,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 get
                 {
                     int srcX = ((x - this.offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
-                    int srcY = ((y - this.offsetY) % this.sourceRegion.Width) + this.sourceRegion.Y;
+                    int srcY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
                     return this.sourceFrame[srcX, srcY];
                 }
             }

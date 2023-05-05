@@ -70,7 +70,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                     int startX = operation.RenderLocation.X;
                     int offsetSpan = 0;
 
-                    if (startX + buffer.Height < 0)
+                    if (startY + buffer.Height < 0)
                     {
                         continue;
                     }
