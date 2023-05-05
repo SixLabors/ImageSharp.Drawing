@@ -4,7 +4,6 @@
 using System;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -118,8 +117,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             private readonly DenseMatrix<TPixel> pattern;
-            private readonly MemoryAllocator allocator;
-            private readonly int scalineWidth;
             private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
             private bool isDisposed;
 
@@ -138,8 +135,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 : base(configuration, options, source)
             {
                 this.pattern = pattern;
-                this.scalineWidth = source.Width;
-                this.allocator = configuration.MemoryAllocator;
                 this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
             }
 
