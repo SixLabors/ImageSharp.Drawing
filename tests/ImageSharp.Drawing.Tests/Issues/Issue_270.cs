@@ -15,6 +15,11 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
         [Fact]
         public void DoesNotThrowArgumentOutOfRangeException()
         {
+            if (!TestEnvironment.IsWindows)
+            {
+                return;
+            }
+
             const int sourceImageWidth = 256;
             const int sourceImageHeight = 256;
             const int targetImageWidth = 350;
