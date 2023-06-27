@@ -108,7 +108,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             using Image<TPixel> img = provider.GetImage();
 
             // Measure the text size
-            FontRectangle size = TextMeasurer.Measure(text, new RichTextOptions(font));
+            FontRectangle size = TextMeasurer.MeasureSize(text, new RichTextOptions(font));
 
             // Find out how much we need to scale the text to fill the space (up or down)
             float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
@@ -428,7 +428,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             Font font = CreateFont(TestFonts.WendyOne, 72);
             const string text = "Hello\0World";
             RichTextOptions textOptions = new(font);
-            FontRectangle textSize = TextMeasurer.Measure(text, textOptions);
+            FontRectangle textSize = TextMeasurer.MeasureSize(text, textOptions);
 
             Assert.NotEqual(FontRectangle.Empty, textSize);
 
@@ -455,7 +455,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
             RichTextOptions textOptions = new(font);
-            FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
+            FontRectangle bounds = TextMeasurer.MeasureSize(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
             provider.RunValidatingProcessorTest(
@@ -482,7 +482,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text
             AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
             RichTextOptions textOptions = new(font);
-            FontRectangle bounds = TextMeasurer.Measure(text, textOptions);
+            FontRectangle bounds = TextMeasurer.MeasureSize(text, textOptions);
             Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
 
             provider.RunValidatingProcessorTest(

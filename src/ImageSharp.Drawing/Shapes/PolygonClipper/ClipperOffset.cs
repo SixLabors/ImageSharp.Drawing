@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
     /// </summary>
     internal class ClipperOffset
     {
-        // To make the floating point polygons compatable with clipper we have to scale them.
+        // To make the floating point polygons compatible with clipper we have to scale them.
         private const float ScalingFactor = 1000F;
         private readonly PolygonOffsetter polygonClipperOffset;
 

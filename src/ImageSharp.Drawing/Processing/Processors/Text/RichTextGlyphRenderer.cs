@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private TextDecorationDetails? currentUnderline;
         private TextDecorationDetails? currentStrikout;
         private TextDecorationDetails? currentOverline;
-        private bool currentDecorationRotated;
+        private bool currentDecorationIsVertical;
 
         // Just enough accuracy to allow for 1/8 px differences which later are accumulated while rendering,
         // but do not grow into full px offsets.
@@ -100,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
         {
             this.currentColor = null;
-            this.currentDecorationRotated = parameters.LayoutMode.IsVertical() || parameters.LayoutMode.IsVerticalMixed();
+            this.currentDecorationIsVertical = parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
             this.currentTextRun = parameters.TextRun;
             if (parameters.TextRun is RichTextRun drawingRun)
             {
@@ -232,7 +232,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             // Drawing is always centered around the point so we need to offset by half.
             Vector2 offset = Vector2.Zero;
-            bool rotated = this.currentDecorationRotated;
+            bool rotated = this.currentDecorationIsVertical;
             if (textDecorations == TextDecorations.Overline)
             {
                 // CSS overline is drawn above the position, so we need to move it up.

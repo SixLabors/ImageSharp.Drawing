@@ -151,7 +151,7 @@ namespace SixLabors.ImageSharp.Drawing.Text
             var renderer = (IGlyphRenderer)this;
 
             // Expand the points to create a rectangle centered around the line.
-            bool rotated = this.parameters.LayoutMode.IsVertical() || this.parameters.LayoutMode.IsVerticalMixed();
+            bool rotated = this.parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
             Vector2 pad = rotated ? new(thickness * .5F, 0) : new(0, thickness * .5F);
 
             // Clamp the line to the pixel grid.

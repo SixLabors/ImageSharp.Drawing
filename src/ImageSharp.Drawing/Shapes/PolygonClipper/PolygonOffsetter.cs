@@ -15,6 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
     /// </summary>
     internal sealed class PolygonOffsetter
     {
+        private const float Tolerance = 1.0E-6F;
         private readonly List<Group> groupList = new();
         private readonly PathF normals = new();
         private readonly PathsF solution = new();
@@ -102,10 +103,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             Error:
 
-            // PolygonClipper will throw for unhandled exceptions but we need to explcitly capture an empty result.
+            // PolygonClipper will throw for unhandled exceptions but we need to explicitly capture an empty result.
             if (solution.Count == 0)
             {
-                throw new ClipperException("An error occured while attempting to clip the polygon. Check input for invalid entries.");
+                throw new ClipperException("An error occurred while attempting to clip the polygon. Check input for invalid entries.");
             }
         }
 
@@ -326,19 +327,27 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             group.OutPath = new(path.Count);
             int highI = path.Count - 1;
 
-            // do the line start cap
-            switch (this.endType)
+            // Further reduced extraneous vertices in solutions (#499)
+            if (MathF.Abs(this.groupDelta) < Tolerance)
             {
-                case EndCapStyle.Butt:
-                    group.OutPath.Add(path[0] - (this.normals[0] * this.groupDelta));
-                    group.OutPath.Add(this.GetPerpendic(path[0], this.normals[0]));
-                    break;
-                case EndCapStyle.Round:
-                    this.DoRound(group, path, 0, 0, MathF.PI);
-                    break;
-                default:
-                    this.DoSquare(group, path, 0, 0);
-                    break;
+                group.OutPath.Add(path[0]);
+            }
+            else
+            {
+                // do the line start cap
+                switch (this.endType)
+                {
+                    case EndCapStyle.Butt:
+                        group.OutPath.Add(path[0] - (this.normals[0] * this.groupDelta));
+                        group.OutPath.Add(this.GetPerpendic(path[0], this.normals[0]));
+                        break;
+                    case EndCapStyle.Round:
+                        this.DoRound(group, path, 0, 0, MathF.PI);
+                        break;
+                    default:
+                        this.DoSquare(group, path, 0, 0);
+                        break;
+                }
             }
 
             // offset the left side going forward
@@ -410,6 +419,13 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         private void OffsetPoint(Group group, PathF path, int j, ref int k)
         {
+            // Further reduced extraneous vertices in solutions (#499)
+            if (MathF.Abs(this.groupDelta) < Tolerance)
+            {
+                group.OutPath.Add(path[j]);
+                return;
+            }
+
             // Let A = change in angle where edges join
             // A == 0: ie no change in angle (flat join)
             // A == PI: edges 'spike'
@@ -426,7 +442,12 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 sinA = -1F;
             }
 
-            if (cosA > -0.99F && (sinA * this.groupDelta < 0F))
+            // almost straight - less than 1 degree (#424)
+            if (cosA > 0.99F)
+            {
+                this.DoMiter(group, path, j, k, cosA);
+            }
+            else if (cosA > -0.99F && (sinA * this.groupDelta < 0F))
             {
                 // is concave
                 group.OutPath.Add(this.GetPerpendic(path[j], this.normals[k]));
@@ -448,12 +469,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                     this.DoSquare(group, path, j, k);
                 }
             }
-            else if (cosA > 0.9998F)
-            {
-                // almost straight - less than 1 degree (#424)
-                this.DoMiter(group, path, j, k, cosA);
-            }
-            else if (cosA > 0.99F || this.joinType == JointStyle.Square)
+            else if (this.joinType == JointStyle.Square)
             {
                 // angle less than 8 degrees or a squared join
                 this.DoSquare(group, path, j, k);
@@ -541,7 +557,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             // avoid 180deg concave
             if (angle > -MathF.PI + .01F)
             {
-                int steps = Math.Max(2, (int)Math.Ceiling(this.stepsPerRad * Math.Abs(angle)));
+                int steps = Math.Max(2, (int)Math.Ceiling(this.stepsPerRad * MathF.Abs(angle)));
 
                 // ie 1 less than steps
                 for (int i = 1; i < steps; i++)
