@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             }
             catch (Exception ex)
             {
-                throw new ClipperException("An error occured while attempting to clip the polygon. See the inner exception for details.", ex);
+                throw new ClipperException("An error occurred while attempting to clip the polygon. See the inner exception for details.", ex);
             }
             finally
             {

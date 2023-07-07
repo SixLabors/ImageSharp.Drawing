@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.White).Draw(Color.Red, 5, path),
                 new { type = exampleImageKey },
-                comparer: ImageComparer.TolerantPercentage(0.002f));
+                comparer: ImageComparer.TolerantPercentage(0.0035F)); // NET 472 x86 requires higher percentage
         }
     }
 }

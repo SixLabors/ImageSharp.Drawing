@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues
 
             string iconText = char.ConvertFromUtf32(int.Parse("e926", NumberStyles.HexNumber));
 
-            FontRectangle rect = TextMeasurer.Measure(iconText, options);
+            FontRectangle rect = TextMeasurer.MeasureSize(iconText, options);
 
             float textX = ((imageSize - rect.Width) * 0.5F) + rect.Left;
             float textY = ((imageSize - rect.Height) * 0.5F) + (rect.Top * 0.25F);
