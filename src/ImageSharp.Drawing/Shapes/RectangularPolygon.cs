@@ -155,7 +155,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="polygon">The polygon to convert.</param>
         public static explicit operator RectangularPolygon(Polygon polygon)
-            => new RectangularPolygon(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
+            => new(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
         /// <inheritdoc/>
         public IPath Transform(Matrix3x2 matrix)
@@ -165,7 +165,7 @@ namespace SixLabors.ImageSharp.Drawing
                 return this;
             }
 
-            // Rectangles may be rotated and skewed which means they will then nedd representing by a polygon
+            // Rectangles may be rotated and skewed which means they will then need representing by a polygon
             return new Polygon(new LinearLineSegment(this.points).Transform(matrix));
         }
 
@@ -198,7 +198,7 @@ namespace SixLabors.ImageSharp.Drawing
             distance -= this.Height;
             if (distance < this.Width)
             {
-                // botom right to left
+                // bottom right to left
                 return new SegmentInfo
                 {
                     Point = new Vector2(this.Right - distance, this.Bottom),

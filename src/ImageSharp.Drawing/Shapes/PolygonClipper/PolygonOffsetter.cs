@@ -145,7 +145,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             {
                 // The lowermost polygon must be an outer polygon. So we can use that as the
                 // designated orientation for outer polygons (needed for tidy-up clipping).
-                GetBoundsAndLowestPolyIdx(group.InPaths, out int lowestIdx, out BoundsF grpBounds);
+                GetBoundsAndLowestPolyIdx(group.InPaths, out int lowestIdx, out _);
                 if (lowestIdx < 0)
                 {
                     return;

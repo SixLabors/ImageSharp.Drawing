@@ -4,7 +4,6 @@
 using System;
 using System.Buffers;
 using SixLabors.ImageSharp.Drawing.Utilities;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -51,8 +50,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             where TPixel : unmanaged, IPixel<TPixel>
         {
             private readonly IMemoryOwner<TPixel> colors;
-            private readonly MemoryAllocator allocator;
-            private readonly int scalineWidth;
             private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
             private bool isDisposed;
 
@@ -72,8 +69,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             {
                 this.colors = configuration.MemoryAllocator.Allocate<TPixel>(source.Width);
                 this.colors.Memory.Span.Fill(color);
-                this.scalineWidth = source.Width;
-                this.allocator = configuration.MemoryAllocator;
 
                 // The threadlocal value is lazily invoked so there is no need to optionally create the type.
                 this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width, true);

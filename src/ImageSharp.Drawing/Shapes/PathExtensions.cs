@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing
             => shape.Rotate(GeometryUtilities.DegreeToRadian(degree));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="position">The translation position.</param>
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing
             => path.Transform(Matrix3x2.CreateTranslation(position));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="x">The amount to translate along the X axis.</param>
@@ -49,7 +49,7 @@ namespace SixLabors.ImageSharp.Drawing
             => path.Translate(new PointF(x, y));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="scaleX">The amount to scale along the X axis.</param>
@@ -59,7 +59,7 @@ namespace SixLabors.ImageSharp.Drawing
             => path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, RectangleF.Center(path.Bounds)));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="scale">The amount to scale along both the x and y axis.</param>
@@ -86,7 +86,7 @@ namespace SixLabors.ImageSharp.Drawing
             => shape.Rotate(GeometryUtilities.DegreeToRadian(degree));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="position">The translation position.</param>
@@ -95,7 +95,7 @@ namespace SixLabors.ImageSharp.Drawing
             => path.Transform(Matrix3x2.CreateTranslation(position));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="x">The amount to translate along the X axis.</param>
@@ -105,7 +105,7 @@ namespace SixLabors.ImageSharp.Drawing
             => path.Translate(new Vector2(x, y));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="scaleX">The amount to scale along the X axis.</param>
@@ -115,7 +115,7 @@ namespace SixLabors.ImageSharp.Drawing
             => path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, RectangleF.Center(path.Bounds)));
 
         /// <summary>
-        /// Creates a path translated by the supplied postion
+        /// Creates a path translated by the supplied position
         /// </summary>
         /// <param name="path">The path to translate.</param>
         /// <param name="scale">The amount to scale along both the x and y axis.</param>

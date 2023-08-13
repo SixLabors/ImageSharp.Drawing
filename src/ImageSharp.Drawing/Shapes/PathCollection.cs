@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing
                 minX = minY = float.MaxValue;
                 maxX = maxY = float.MinValue;
 
-                foreach (var path in this.paths)
+                foreach (IPath path in this.paths)
                 {
                     minX = Math.Min(path.Bounds.Left, minX);
                     minY = Math.Min(path.Bounds.Top, minY);

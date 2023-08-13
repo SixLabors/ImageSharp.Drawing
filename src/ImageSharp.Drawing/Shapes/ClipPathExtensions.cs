@@ -18,7 +18,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="subjectPath">The subject path.</param>
         /// <param name="clipPaths">The clipping paths.</param>
         /// <returns>The clipped <see cref="IPath"/>.</returns>
-        /// <exception cref="ClipperException">Thrown when an error occured while attempting to clip the polygon.</exception>
+        /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
         public static IPath Clip(this IPath subjectPath, params IPath[] clipPaths)
             => subjectPath.Clip((IEnumerable<IPath>)clipPaths);
 
@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="options">The shape options.</param>
         /// <param name="clipPaths">The clipping paths.</param>
         /// <returns>The clipped <see cref="IPath"/>.</returns>
-        /// <exception cref="ClipperException">Thrown when an error occured while attempting to clip the polygon.</exception>
+        /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
         public static IPath Clip(
             this IPath subjectPath,
             ShapeOptions options,
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="subjectPath">The subject path.</param>
         /// <param name="clipPaths">The clipping paths.</param>
         /// <returns>The clipped <see cref="IPath"/>.</returns>
-        /// <exception cref="ClipperException">Thrown when an error occured while attempting to clip the polygon.</exception>
+        /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
         public static IPath Clip(this IPath subjectPath, IEnumerable<IPath> clipPaths)
             => subjectPath.Clip(new(), clipPaths);
 
@@ -53,7 +53,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <param name="options">The shape options.</param>
         /// <param name="clipPaths">The clipping paths.</param>
         /// <returns>The clipped <see cref="IPath"/>.</returns>
-        /// <exception cref="ClipperException">Thrown when an error occured while attempting to clip the polygon.</exception>
+        /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
         public static IPath Clip(
             this IPath subjectPath,
             ShapeOptions options,

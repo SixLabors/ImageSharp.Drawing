@@ -37,7 +37,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
         private Pen currentPen;
         private Color? currentColor;
         private TextDecorationDetails? currentUnderline;
-        private TextDecorationDetails? currentStrikout;
+        private TextDecorationDetails? currentStrikeout;
         private TextDecorationDetails? currentOverline;
         private bool currentDecorationIsVertical;
 
@@ -183,10 +183,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 return;
             }
 
-            ref TextDecorationDetails? targetDecoration = ref this.currentStrikout;
+            ref TextDecorationDetails? targetDecoration = ref this.currentStrikeout;
             if (textDecorations == TextDecorations.Strikeout)
             {
-                targetDecoration = ref this.currentStrikout;
+                targetDecoration = ref this.currentStrikeout;
             }
             else if (textDecorations == TextDecorations.Underline)
             {
@@ -385,7 +385,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
             // Ensure we have captured the last overline/underline/strikeout path
             this.FinalizeDecoration(ref this.currentOverline);
             this.FinalizeDecoration(ref this.currentUnderline);
-            this.FinalizeDecoration(ref this.currentStrikout);
+            this.FinalizeDecoration(ref this.currentStrikeout);
         }
 
         public void Dispose() => this.Dispose(true);
@@ -422,7 +422,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
                 IPath outline = decoration.Value.Pen.GeneratePath(path, decoration.Value.Thickness);
 
                 // Calculate the transform for this path.
-                // We cannot use the pathbuilder transform as this path is rendered independently.
+                // We cannot use the path builder transform as this path is rendered independently.
                 FontRectangle rectangle = new(outline.Bounds.Location, new(outline.Bounds.Width, outline.Bounds.Height));
                 Matrix3x2 pathTransform = this.ComputeTransform(in rectangle);
                 Matrix3x2 defaultTransform = this.drawingOptions.Transform;
@@ -430,7 +430,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
                 if (outline.Bounds.Width != 0 && outline.Bounds.Height != 0)
                 {
-                    // Render the path here. Decorations are uncached.
+                    // Render the path here. Decorations are un-cached.
                     this.DrawingOperations.Add(new DrawingOperation
                     {
                         Brush = decoration.Value.Pen.StrokeFill,
@@ -616,7 +616,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text
 
             public Buffer2D<float> OutlineMap;
 
-            public void Dispose()
+            public readonly void Dispose()
             {
                 this.FillMap?.Dispose();
                 this.OutlineMap?.Dispose();

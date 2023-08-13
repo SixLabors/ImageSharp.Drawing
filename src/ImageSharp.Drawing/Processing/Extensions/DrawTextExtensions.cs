@@ -8,7 +8,7 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Adds extensions that allow the drawing of text on an image.
+    /// Adds extensions that allow the drawing of text.
     /// </summary>
     public static class DrawTextExtensions
     {
