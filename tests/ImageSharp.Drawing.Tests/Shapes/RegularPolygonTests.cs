@@ -17,13 +17,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests
         [InlineData(2, true)]
         [InlineData(3, false)]
         [InlineData(4, false)]
-        public void RequiresAtLeast3Verticies(int points, bool throws)
+        public void RequiresAtLeast3Vertices(int points, bool throws)
         {
             if (throws)
             {
                 ArgumentOutOfRangeException ex = Assert.Throws<ArgumentOutOfRangeException>(() => new RegularPolygon(Vector2.Zero, points, 10f, 0));
 
-                Assert.Equal("verticies", ex.ParamName);
+                Assert.Equal("vertices", ex.ParamName);
             }
             else
             {
