@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// Initializes a new instance of the <see cref="Star" /> class.
         /// </summary>
         /// <param name="location">The location the center of the polygon will be placed.</param>
-        /// <param name="prongs">The number of verticies the <see cref="Star" /> should have.</param>
+        /// <param name="prongs">The number of vertices the <see cref="Star" /> should have.</param>
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
         public Star(PointF location, int prongs, float innerRadii, float outerRadii)
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="x">The x-coordinate of the center of the polygon.</param>
         /// <param name="y">The y-coordinate of the center of the polygon.</param>
-        /// <param name="prongs">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
+        /// <param name="prongs">The number of vertices the <see cref="RegularPolygon" /> should have.</param>
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
@@ -55,7 +55,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="x">The x-coordinate of the center of the polygon.</param>
         /// <param name="y">The y-coordinate of the center of the polygon.</param>
-        /// <param name="prongs">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
+        /// <param name="prongs">The number of vertices the <see cref="RegularPolygon" /> should have.</param>
         /// <param name="innerRadii">The inner radii.</param>
         /// <param name="outerRadii">The outer radii.</param>
         public Star(float x, float y, int prongs, float innerRadii, float outerRadii)
@@ -72,12 +72,12 @@ namespace SixLabors.ImageSharp.Drawing
             var distanceVectorInner = new Vector2(0, innerRadii);
             var distanceVectorOuter = new Vector2(0, outerRadii);
 
-            int verticies = prongs * 2;
-            float anglePerSegemnts = (float)(2 * Math.PI / verticies);
+            int vertices = prongs * 2;
+            float anglePerSegments = (float)(2 * Math.PI / vertices);
             float current = angle;
-            var points = new PointF[verticies];
+            var points = new PointF[vertices];
             Vector2 distance = distanceVectorInner;
-            for (int i = 0; i < verticies; i++)
+            for (int i = 0; i < vertices; i++)
             {
                 if (distance == distanceVectorInner)
                 {
@@ -92,7 +92,7 @@ namespace SixLabors.ImageSharp.Drawing
 
                 points[i] = rotated + location;
 
-                current += anglePerSegemnts;
+                current += anglePerSegments;
             }
 
             return new LinearLineSegment(points);

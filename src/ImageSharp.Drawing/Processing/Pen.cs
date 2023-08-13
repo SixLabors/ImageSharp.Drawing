@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <list type="bullet">
     /// <item>Section 1 will be width long (making a square) and will be filled by the brush.</item>
     /// <item>Section 2 will be width * 2 long and will be empty.</item>
-    /// <item>ection 3 will be width/2 long and will be filled.</item>
+    /// <item>Section 3 will be width/2 long and will be filled.</item>
     /// </list>
     /// The pattern will immediately repeat without gap.
     /// </remarks>

@@ -6,7 +6,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     /// <summary>
     /// A collection of methods for creating generic brushes.
     /// </summary>
-    /// <returns>A New <see cref="PatternBrush"/></returns>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
     public static class Brushes
     {
         /// <summary>
@@ -92,14 +92,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Create as brush that will paint a solid color
         /// </summary>
         /// <param name="color">The color.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static SolidBrush Solid(Color color) => new(color);
 
         /// <summary>
         /// Create as brush that will paint a Percent10 Hatch Pattern with the specified colors
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Percent10(Color foreColor)
             => new(foreColor, Color.Transparent, Percent10Pattern);
 
@@ -108,7 +108,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
         /// <param name="backColor">Color of the background.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Percent10(Color foreColor, Color backColor)
             => new(foreColor, backColor, Percent10Pattern);
 
@@ -117,7 +117,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// transparent background.
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Percent20(Color foreColor)
             => new(foreColor, Color.Transparent, Percent20Pattern);
 
@@ -126,7 +126,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
         /// <param name="backColor">Color of the background.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Percent20(Color foreColor, Color backColor)
             => new(foreColor, backColor, Percent20Pattern);
 
@@ -135,7 +135,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// transparent background.
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Horizontal(Color foreColor)
             => new(foreColor, Color.Transparent, HorizontalPattern);
 
@@ -144,7 +144,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
         /// <param name="backColor">Color of the background.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Horizontal(Color foreColor, Color backColor)
             => new(foreColor, backColor, HorizontalPattern);
 
@@ -153,7 +153,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// transparent background.
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Min(Color foreColor)
             => new(foreColor, Color.Transparent, MinPattern);
 
@@ -162,7 +162,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
         /// <param name="backColor">Color of the background.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Min(Color foreColor, Color backColor)
             => new(foreColor, backColor, MinPattern);
 
@@ -171,7 +171,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// transparent background.
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Vertical(Color foreColor)
             => new(foreColor, Color.Transparent, VerticalPattern);
 
@@ -180,7 +180,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
         /// <param name="backColor">Color of the background.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush Vertical(Color foreColor, Color backColor)
             => new(foreColor, backColor, VerticalPattern);
 
@@ -189,7 +189,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// transparent background.
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush ForwardDiagonal(Color foreColor)
             => new(foreColor, Color.Transparent, ForwardDiagonalPattern);
 
@@ -198,7 +198,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
         /// <param name="backColor">Color of the background.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush ForwardDiagonal(Color foreColor, Color backColor)
             => new(foreColor, backColor, ForwardDiagonalPattern);
 
@@ -207,7 +207,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// transparent background.
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush BackwardDiagonal(Color foreColor)
             => new(foreColor, Color.Transparent, BackwardDiagonalPattern);
 
@@ -216,7 +216,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="foreColor">Color of the foreground.</param>
         /// <param name="backColor">Color of the background.</param>
-        /// <returns>A New <see cref="PatternBrush"/></returns>
+        /// <returns>A new <see cref="PatternBrush"/></returns>
         public static PatternBrush BackwardDiagonal(Color foreColor, Color backColor)
             => new(foreColor, backColor, BackwardDiagonalPattern);
     }

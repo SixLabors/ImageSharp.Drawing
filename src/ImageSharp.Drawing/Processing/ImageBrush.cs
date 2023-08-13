@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="image">The image.</param>
         /// <param name="region">
         /// The region of interest.
-        /// This overrides any region used to intitialize the brush applicator.
+        /// This overrides any region used to initialize the brush applicator.
         /// </param>
         internal ImageBrush(Image image, RectangleF region)
         {

@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing
     /// <summary>
     /// A path that is always empty.
     /// </summary>
-    public class EmptyPath : IPath
+    public sealed class EmptyPath : IPath
     {
         private EmptyPath(PathTypes pathType) => this.PathType = pathType;
 

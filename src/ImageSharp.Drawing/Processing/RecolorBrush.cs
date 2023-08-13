@@ -4,7 +4,6 @@
 using System;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing
@@ -78,8 +77,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             private readonly Vector4 sourceColor;
             private readonly float threshold;
             private readonly TPixel targetColorPixel;
-            private readonly MemoryAllocator allocator;
-            private readonly int scalineWidth;
             private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
             private bool isDisposed;
 
@@ -110,9 +107,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 var minColor = default(TPixel);
                 minColor.FromVector4(new Vector4(float.MinValue));
                 this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
-
-                this.scalineWidth = source.Width;
-                this.allocator = configuration.MemoryAllocator;
                 this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
             }
 

@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public enum GradientRepetitionMode
     {
         /// <summary>
-        /// don't repeat, keep the color of start and end beyond those points stable.
+        /// Don't repeat, keep the color of start and end beyond those points stable.
         /// </summary>
         None,
 
@@ -28,8 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
 
         /// <summary>
         /// With DontFill a gradient does not touch any pixel beyond it's borders.
-        /// For the <see cref="LinearGradientBrush" /> this is beyond the orthogonal through start and end,
-        /// TODO For the cref="PolygonalGradientBrush" it's outside the polygon,
+        /// For the <see cref="LinearGradientBrush"/> this is beyond the orthogonal through start and end,
         /// For <see cref="RadialGradientBrush" /> and <see cref="EllipticGradientBrush" /> it's beyond 1.0.
         /// </summary>
         DontFill

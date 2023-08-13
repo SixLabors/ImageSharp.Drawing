@@ -15,11 +15,11 @@ namespace SixLabors.ImageSharp.Drawing
         /// Initializes a new instance of the <see cref="RegularPolygon" /> class.
         /// </summary>
         /// <param name="location">The location the center of the polygon will be placed.</param>
-        /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
+        /// <param name="vertices">The number of vertices the <see cref="RegularPolygon"/> should have.</param>
+        /// <param name="radius">The radius of the circle that would touch all vertices.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
-        public RegularPolygon(PointF location, int verticies, float radius, float angle)
-            : base(CreateSegment(location, radius, verticies, angle))
+        public RegularPolygon(PointF location, int vertices, float radius, float angle)
+            : base(CreateSegment(location, radius, vertices, angle))
         {
         }
 
@@ -27,10 +27,10 @@ namespace SixLabors.ImageSharp.Drawing
         /// Initializes a new instance of the <see cref="RegularPolygon" /> class.
         /// </summary>
         /// <param name="location">The location the center of the polygon will be placed.</param>
-        /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
-        public RegularPolygon(PointF location, int verticies, float radius)
-            : this(location, verticies, radius, 0)
+        /// <param name="vertices">The number of vertices the <see cref="RegularPolygon"/> should have.</param>
+        /// <param name="radius">The radius of the circle that would touch all vertices.</param>
+        public RegularPolygon(PointF location, int vertices, float radius)
+            : this(location, vertices, radius, 0)
         {
         }
 
@@ -39,11 +39,11 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="x">The x-coordinate of the center of the polygon.</param>
         /// <param name="y">The y-coordinate of the center of the polygon.</param>
-        /// <param name="verticies">The number of verticies the <see cref="RegularPolygon" /> should have.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
+        /// <param name="vertices">The number of vertices the <see cref="RegularPolygon" /> should have.</param>
+        /// <param name="radius">The radius of the circle that would touch all vertices.</param>
         /// <param name="angle">The angle of rotation in Radians</param>
-        public RegularPolygon(float x, float y, int verticies, float radius, float angle)
-            : this(new PointF(x, y), verticies, radius, angle)
+        public RegularPolygon(float x, float y, int vertices, float radius, float angle)
+            : this(new PointF(x, y), vertices, radius, angle)
         {
         }
 
@@ -52,24 +52,24 @@ namespace SixLabors.ImageSharp.Drawing
         /// </summary>
         /// <param name="x">The x-coordinate of the center of the polygon.</param>
         /// <param name="y">The y-coordinate of the center of the polygon.</param>
-        /// <param name="verticies">The number of verticies the <see cref="RegularPolygon"/> should have.</param>
-        /// <param name="radius">The radius of the circle that would touch all verticies.</param>
-        public RegularPolygon(float x, float y, int verticies, float radius)
-            : this(new PointF(x, y), verticies, radius)
+        /// <param name="vertices">The number of vertices the <see cref="RegularPolygon"/> should have.</param>
+        /// <param name="radius">The radius of the circle that would touch all vertices.</param>
+        public RegularPolygon(float x, float y, int vertices, float radius)
+            : this(new PointF(x, y), vertices, radius)
         {
         }
 
-        private static LinearLineSegment CreateSegment(PointF location, float radius, int verticies, float angle)
+        private static LinearLineSegment CreateSegment(PointF location, float radius, int vertices, float angle)
         {
-            Guard.MustBeGreaterThan(verticies, 2, nameof(verticies));
+            Guard.MustBeGreaterThan(vertices, 2, nameof(vertices));
             Guard.MustBeGreaterThan(radius, 0, nameof(radius));
 
             var distanceVector = new PointF(0, radius);
 
-            float anglePerSegments = (float)(2 * Math.PI / verticies);
+            float anglePerSegments = (float)(2 * Math.PI / vertices);
             float current = angle;
-            var points = new PointF[verticies];
-            for (int i = 0; i < verticies; i++)
+            var points = new PointF[vertices];
+            for (int i = 0; i < vertices; i++)
             {
                 var rotated = PointF.Transform(distanceVector, Matrix3x2.CreateRotation(current));
 

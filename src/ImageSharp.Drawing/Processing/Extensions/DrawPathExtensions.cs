@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Adds extensions that allow the drawing of polygon outlines to the <see cref="Image{TPixel}"/> type.
+    /// Adds extensions that allow the drawing of polygon outlines.
     /// </summary>
     public static class DrawPathExtensions
     {

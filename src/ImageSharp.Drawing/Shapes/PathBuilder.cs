@@ -175,7 +175,7 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
-        /// Draws a quadratics bezier from the current point to the <paramref name="point"/>
+        /// Draws a quadratic bezier from the current point to the <paramref name="point"/>
         /// </summary>
         /// <param name="secondControlPoint">The second control point.</param>
         /// <param name="point">The point.</param>
@@ -184,7 +184,7 @@ namespace SixLabors.ImageSharp.Drawing
             => this.AddQuadraticBezier(this.currentPoint, secondControlPoint, point);
 
         /// <summary>
-        /// Draws a quadratics bezier from the current point to the <paramref name="point"/>
+        /// Draws a quadratic bezier from the current point to the <paramref name="point"/>
         /// </summary>
         /// <param name="secondControlPoint">The second control point.</param>
         /// <param name="thirdControlPoint">The third control point.</param>
@@ -431,7 +431,7 @@ namespace SixLabors.ImageSharp.Drawing
         }
 
         /// <summary>
-        /// Resets this instance, clearing any drawn paths and reseting any transforms.
+        /// Resets this instance, clearing any drawn paths and resetting any transforms.
         /// </summary>
         /// <returns>The <see cref="PathBuilder"/>.</returns>
         public PathBuilder Reset()

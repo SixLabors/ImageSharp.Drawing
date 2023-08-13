@@ -6,7 +6,7 @@ using System;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Contains a collection of common Pen styles
+    /// Contains a collection of common pen styles.
     /// </summary>
     public static class Pens
     {
@@ -20,14 +20,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Create a solid pen without any drawing patterns
         /// </summary>
         /// <param name="color">The color.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static SolidPen Solid(Color color) => new(color);
 
         /// <summary>
         /// Create a solid pen without any drawing patterns
         /// </summary>
         /// <param name="brush">The brush.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static SolidPen Solid(Brush brush) => new(brush);
 
         /// <summary>
@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static SolidPen Solid(Color color, float width) => new(color, width);
 
         /// <summary>
@@ -43,7 +43,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static SolidPen Solid(Brush brush, float width) => new(brush, width);
 
         /// <summary>
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen Dash(Color color, float width) => new(color, width, DashedPattern);
 
         /// <summary>
@@ -59,7 +59,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen Dash(Brush brush, float width) => new(brush, width, DashedPattern);
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen Dot(Color color, float width) => new(color, width, DottedPattern);
 
         /// <summary>
@@ -75,7 +75,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen Dot(Brush brush, float width) => new(brush, width, DottedPattern);
 
         /// <summary>
@@ -83,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen DashDot(Color color, float width) => new(color, width, DashDotPattern);
 
         /// <summary>
@@ -91,7 +91,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen DashDot(Brush brush, float width) => new(brush, width, DashDotPattern);
 
         /// <summary>
@@ -99,7 +99,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="color">The color.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen DashDotDot(Color color, float width) => new(color, width, DashDotDotPattern);
 
         /// <summary>
@@ -107,7 +107,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// </summary>
         /// <param name="brush">The brush.</param>
         /// <param name="width">The width.</param>
-        /// <returns>The Pen</returns>
+        /// <returns>The <see cref="Pen"/>.</returns>
         public static PatternPen DashDotDot(Brush brush, float width) => new(brush, width, DashDotDotPattern);
     }
 }

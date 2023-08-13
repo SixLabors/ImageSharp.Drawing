@@ -7,7 +7,7 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Processing
 {
     /// <summary>
-    /// Adds extensions that allow the processing of images to the <see cref="Image{TPixel}"/> type.
+    /// Adds extensions that allow the configuration of <see cref="ShapeOptions"/>.
     /// </summary>
     public static class ShapeGraphicOptionsDefaultsExtensions
     {
@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <returns>The passed in <paramref name="context"/> to allow chaining.</returns>
         public static IImageProcessingContext SetShapeOptions(this IImageProcessingContext context, Action<ShapeOptions> optionsBuilder)
         {
-            var cloned = context.GetShapeOptions().DeepClone();
+            ShapeOptions cloned = context.GetShapeOptions().DeepClone();
             optionsBuilder(cloned);
             context.Properties[typeof(ShapeOptions)] = cloned;
             return context;
@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="optionsBuilder">The default options to use.</param>
         public static void SetShapeOptions(this Configuration configuration, Action<ShapeOptions> optionsBuilder)
         {
-            var cloned = configuration.GetShapeOptions().DeepClone();
+            ShapeOptions cloned = configuration.GetShapeOptions().DeepClone();
             optionsBuilder(cloned);
             configuration.Properties[typeof(ShapeOptions)] = cloned;
         }
@@ -55,26 +55,24 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <param name="configuration">The configuration to store default against.</param>
         /// <param name="options">The default options to use.</param>
         public static void SetShapeOptions(this Configuration configuration, ShapeOptions options)
-        {
-            configuration.Properties[typeof(ShapeOptions)] = options;
-        }
+            => configuration.Properties[typeof(ShapeOptions)] = options;
 
         /// <summary>
         /// Gets the default shape processing options against the image processing context.
         /// </summary>
         /// <param name="context">The image processing context to retrieve defaults from.</param>
-        /// <returns>The globaly configued default options.</returns>
+        /// <returns>The globally configured default options.</returns>
         public static ShapeOptions GetShapeOptions(this IImageProcessingContext context)
         {
-            if (context.Properties.TryGetValue(typeof(ShapeOptions), out var options) && options is ShapeOptions go)
+            if (context.Properties.TryGetValue(typeof(ShapeOptions), out object options) && options is ShapeOptions go)
             {
                 return go;
             }
 
-            var configOptions = context.Configuration.GetShapeOptions();
+            ShapeOptions configOptions = context.Configuration.GetShapeOptions();
 
             // do not cache the fall back to config into the the processing context
-            // in case someone want to change the value on the config and expects it re trflow thru
+            // in case someone want to change the value on the config and expects it reflow thru
             return configOptions;
         }
 
@@ -82,10 +80,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Gets the default shape processing options against the image processing context.
         /// </summary>
         /// <param name="configuration">The configuration to retrieve defaults from.</param>
-        /// <returns>The globaly configued default options.</returns>
+        /// <returns>The globally configured default options.</returns>
         public static ShapeOptions GetShapeOptions(this Configuration configuration)
         {
-            if (configuration.Properties.TryGetValue(typeof(ShapeOptions), out var options) && options is ShapeOptions go)
+            if (configuration.Properties.TryGetValue(typeof(ShapeOptions), out object options) && options is ShapeOptions go)
             {
                 return go;
             }
