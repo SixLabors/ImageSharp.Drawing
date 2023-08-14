@@ -25,7 +25,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Brush brush,
             float thickness,
             params PointF[] points) =>
-            source.Draw(options, new SolidPen(brush, thickness), new Path(new LinearLineSegment(points)));
+            source.Draw(options, new SolidPen(brush, thickness), new Path(points));
 
         /// <summary>
         /// Draws the provided points as an open linear path at the provided thickness with the supplied brush.
@@ -40,7 +40,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             Brush brush,
             float thickness,
             params PointF[] points) =>
-            source.Draw(new SolidPen(brush, thickness), new Path(new LinearLineSegment(points)));
+            source.Draw(new SolidPen(brush, thickness), new Path(points));
 
         /// <summary>
         /// Draws the provided points as an open linear path at the provided thickness with the supplied brush.
@@ -87,7 +87,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions options,
             Pen pen,
             params PointF[] points) =>
-            source.Draw(options, pen, new Path(new LinearLineSegment(points)));
+            source.Draw(options, pen, new Path(points));
 
         /// <summary>
         /// Draws the provided points as an open linear path with the supplied pen.
@@ -100,6 +100,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             Pen pen,
             params PointF[] points) =>
-            source.Draw(pen, new Path(new LinearLineSegment(points)));
+            source.Draw(pen, new Path(points));
     }
 }
