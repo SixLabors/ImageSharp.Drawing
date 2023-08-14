@@ -333,13 +333,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 for (int j = i + 1; j < k; j++)
                 {
                     HorzSegment hs2 = this.horzSegList[j];
-                    if (hs2.LeftOp.Point.X >= hs1.RightOp.Point.X)
-                    {
-                        break;
-                    }
-
-                    if (hs2.LeftToRight == hs1.LeftToRight ||
-                      (hs2.RightOp.Point.X <= hs1.LeftOp.Point.X))
+                    if ((hs2.LeftOp.Point.X >= hs1.RightOp.Point.X) ||
+                        (hs2.LeftToRight == hs1.LeftToRight) ||
+                        (hs2.RightOp.Point.X <= hs1.LeftOp.Point.X))
                     {
                         continue;
                     }
@@ -674,7 +670,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
             if (IsHotEdge(horz))
             {
-                AddOutPt(horz, horz.Top);
+                this.AddToHorzSegList(AddOutPt(horz, horz.Top));
             }
 
             this.UpdateEdgeIntoAEL(horz); // this is the end of an intermediate horiz.
