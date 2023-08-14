@@ -925,158 +925,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             return result;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static BoundsF GetBounds(OutPt op)
-        {
-            BoundsF result = new(op.Point.X, op.Point.Y, op.Point.X, op.Point.Y);
-            OutPt op2 = op.Next;
-            while (op2 != op)
-            {
-                if (op2.Point.X < result.Left)
-                {
-                    result.Left = op2.Point.X;
-                }
-                else if (op2.Point.X > result.Right)
-                {
-                    result.Right = op2.Point.X;
-                }
-
-                if (op2.Point.Y < result.Top)
-                {
-                    result.Top = op2.Point.Y;
-                }
-                else if (op2.Point.Y > result.Bottom)
-                {
-                    result.Bottom = op2.Point.Y;
-                }
-
-                op2 = op2.Next;
-            }
-
-            return result;
-        }
-
-        private static PointInPolygonResult PointInOpPolygon(Vector2 pt, OutPt op)
-        {
-            if (op == op.Next || op.Prev == op.Next)
-            {
-                return PointInPolygonResult.IsOutside;
-            }
-
-            OutPt op2 = op;
-            do
-            {
-                if (op.Point.Y != pt.Y)
-                {
-                    break;
-                }
-
-                op = op.Next;
-            }
-            while (op != op2);
-
-            // not a proper polygon
-            if (op.Point.Y == pt.Y)
-            {
-                return PointInPolygonResult.IsOutside;
-            }
-
-            // must be above or below to get here
-            bool isAbove = op.Point.Y < pt.Y, startingAbove = isAbove;
-            int val = 0;
-
-            op2 = op.Next;
-            while (op2 != op)
-            {
-                if (isAbove)
-                {
-                    while (op2 != op && op2.Point.Y < pt.Y)
-                    {
-                        op2 = op2.Next;
-                    }
-                }
-                else
-                {
-                    while (op2 != op && op2.Point.Y > pt.Y)
-                    {
-                        op2 = op2.Next;
-                    }
-                }
-
-                if (op2 == op)
-                {
-                    break;
-                }
-
-                // must have touched or crossed the pt.Y horizonal
-                // and this must happen an even number of times
-                // touching the horizontal
-                if (op2.Point.Y == pt.Y)
-                {
-                    if (op2.Point.X == pt.X || (op2.Point.Y == op2.Prev.Point.Y
-                        && (pt.X < op2.Prev.Point.X) != (pt.X < op2.Point.X)))
-                    {
-                        return PointInPolygonResult.IsOn;
-                    }
-
-                    op2 = op2.Next;
-                    if (op2 == op)
-                    {
-                        break;
-                    }
-
-                    continue;
-                }
-
-                if (op2.Point.X <= pt.X || op2.Prev.Point.X <= pt.X)
-                {
-                    if (op2.Prev.Point.X < pt.X && op2.Point.X < pt.X)
-                    {
-                        val = 1 - val; // toggle val
-                    }
-                    else
-                    {
-                        float d = ClipperUtils.CrossProduct(op2.Prev.Point, op2.Point, pt);
-                        if (d == 0)
-                        {
-                            return PointInPolygonResult.IsOn;
-                        }
-
-                        if ((d < 0) == isAbove)
-                        {
-                            val = 1 - val;
-                        }
-                    }
-                }
-
-                isAbove = !isAbove;
-                op2 = op2.Next;
-            }
-
-            if (isAbove != startingAbove)
-            {
-                float d = ClipperUtils.CrossProduct(op2.Prev.Point, op2.Point, pt);
-                if (d == 0)
-                {
-                    return PointInPolygonResult.IsOn;
-                }
-
-                if ((d < 0) == isAbove)
-                {
-                    val = 1 - val;
-                }
-            }
-
-            if (val == 0)
-            {
-                return PointInPolygonResult.IsOutside;
-            }
-            else
-            {
-                return PointInPolygonResult.IsInside;
-            }
-        }
-
         private void ProcessHorzJoins()
         {
             foreach (HorzJoin j in this.horzJoinList)
@@ -1091,6 +939,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 op1b.Prev = op2b;
                 op2b.Next = op1b;
 
+                // 'join' is really a split
                 if (or1 == or2)
                 {
                     or2 = new OutRec
@@ -1179,7 +1028,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             OutPt prevOp = splitOp.Prev;
             OutPt nextNextOp = splitOp.Next.Next;
             outrec.Pts = prevOp;
-            OutPt result = prevOp;
 
             ClipperUtils.GetIntersectPoint(
                 prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vector2 ip);
@@ -1193,11 +1041,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 return;
             }
 
-            // nb: area1 is the path's area *before* splitting, whereas area2 is
-            // the area of the triangle containing splitOp & splitOp.next.
-            // So the only way for these areas to have the same sign is if
-            // the split triangle is larger than the path containing prevOp or
-            // if there's more than one self=intersection.
             float area2 = AreaTriangle(ip, splitOp.Point, splitOp.Next.Point);
             float absArea2 = Math.Abs(area2);
 
@@ -1220,6 +1063,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
                 prevOp.Next = newOp2;
             }
 
+            // nb: area1 is the path's area *before* splitting, whereas area2 is
+            // the area of the triangle containing splitOp & splitOp.next.
+            // So the only way for these areas to have the same sign is if
+            // the split triangle is larger than the path containing prevOp or
+            // if there's more than one self=intersection.
             if (absArea2 > 1 && (absArea2 > absArea1 || ((area2 > 0) == (area1 > 0))))
             {
                 OutRec newOutRec = this.NewOutRec();

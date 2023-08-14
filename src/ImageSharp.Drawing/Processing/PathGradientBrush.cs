@@ -349,7 +349,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
                 Vector2 ip = default;
                 Vector2 closestIntersection = default;
                 Edge closestEdge = null;
-                float minDistance = float.MaxValue;
+                const float minDistance = float.MaxValue;
                 foreach (Edge edge in this.edges)
                 {
                     if (!edge.Intersect(start, end, ref ip))
