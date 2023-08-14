@@ -1077,38 +1077,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
             }
         }
 
-        private static bool Path1InsidePath2(OutPt op1, OutPt op2)
-        {
-            // we need to make some accommodation for rounding errors
-            // so we won't jump if the first vertex is found outside
-            int outside_cnt = 0;
-            OutPt op = op1;
-            do
-            {
-                PointInPolygonResult result = PointInOpPolygon(op.Point, op2);
-                if (result == PointInPolygonResult.IsOutside)
-                {
-                    ++outside_cnt;
-                }
-                else if (result == PointInPolygonResult.IsInside)
-                {
-                    --outside_cnt;
-                }
-
-                op = op.Next;
-            }
-            while (op != op1 && Math.Abs(outside_cnt) < 2);
-
-            if (Math.Abs(outside_cnt) > 1)
-            {
-                return outside_cnt < 0;
-            }
-
-            // since path1's location is still equivocal, check its midpoint
-            Vector2 mp = GetBounds(op).MidPoint();
-            return PointInOpPolygon(mp, op2) == PointInPolygonResult.IsInside;
-        }
-
         private void ProcessHorzJoins()
         {
             foreach (HorzJoin j in this.horzJoinList)
@@ -3308,7 +3276,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         private struct LocMinSorter : IComparer<LocalMinima>
         {
-            public int Compare(LocalMinima locMin1, LocalMinima locMin2)
+            public readonly int Compare(LocalMinima locMin1, LocalMinima locMin2)
                 => locMin2.Vertex.Point.Y.CompareTo(locMin1.Vertex.Point.Y);
         }
 
@@ -3359,7 +3327,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         private struct HorzSegSorter : IComparer<HorzSegment>
         {
-            public int Compare(HorzSegment hs1, HorzSegment hs2)
+            public readonly int Compare(HorzSegment hs1, HorzSegment hs2)
             {
                 if (hs1 == null || hs2 == null)
                 {
@@ -3383,7 +3351,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         private struct IntersectListSort : IComparer<IntersectNode>
         {
-            public int Compare(IntersectNode a, IntersectNode b)
+            public readonly int Compare(IntersectNode a, IntersectNode b)
             {
                 if (a.Point.Y == b.Point.Y)
                 {
