@@ -20,7 +20,7 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="Path"/> class.
         /// </summary>
-        /// <param name="points">The collection of points.</param>
+        /// <param name="points">The collection of points; processed as a series of linear line segments.</param>
         public Path(PointF[] points)
             : this(new LinearLineSegment(points))
         {
