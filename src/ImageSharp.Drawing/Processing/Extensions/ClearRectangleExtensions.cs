@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the rectangle of the provided rectangle with the specified color without any blending.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="color">The color.</param>
         /// <param name="rectangle">The rectangle defining the region to fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the rectangle of the provided rectangle with the specified color without any blending.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="color">The color.</param>
         /// <param name="rectangle">The rectangle defining the region to fill.</param>
@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the rectangle of the provided rectangle with the specified brush without any blending.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="rectangle">The rectangle defining the region to fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image at the given rectangle bounds with the specified brush without any blending.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="rectangle">The rectangle defining the region to fill.</param>

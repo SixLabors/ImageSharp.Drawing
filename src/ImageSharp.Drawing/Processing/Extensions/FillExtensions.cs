@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image with the specified color.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="color">The color.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(this IImageProcessingContext source, Color color)
@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image with the specified color.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="color">The color.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -33,7 +33,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image with the specified brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
         public static IImageProcessingContext Fill(this IImageProcessingContext source, Brush brush)
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image with the specified brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="brush">The brush.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>

@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="color">The color.</param>
         /// <param name="path">The logic path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -27,7 +27,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="color">The color.</param>
         /// <param name="path">The logic path.</param>
@@ -42,7 +42,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="path">The logic path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -55,7 +55,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="path">The shape.</param>

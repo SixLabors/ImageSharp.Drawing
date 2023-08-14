@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
     public static class ShapeGraphicOptionsDefaultsExtensions
     {
         /// <summary>
-        /// Sets the default shape processing options against the image processing context.
+        /// Sets the default shape processing options against The source image processing context.
         /// </summary>
         /// <param name="context">The image processing context to store default against.</param>
         /// <param name="optionsBuilder">The action to update instance of the default options used.</param>
@@ -38,7 +38,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Sets the default shape processing options against the image processing context.
+        /// Sets the default shape processing options against The source image processing context.
         /// </summary>
         /// <param name="context">The image processing context to store default against.</param>
         /// <param name="options">The default options to use.</param>
@@ -58,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             => configuration.Properties[typeof(ShapeOptions)] = options;
 
         /// <summary>
-        /// Gets the default shape processing options against the image processing context.
+        /// Gets the default shape processing options against The source image processing context.
         /// </summary>
         /// <param name="context">The image processing context to retrieve defaults from.</param>
         /// <returns>The globally configured default options.</returns>
@@ -77,7 +77,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         }
 
         /// <summary>
-        /// Gets the default shape processing options against the image processing context.
+        /// Gets the default shape processing options against The source image processing context.
         /// </summary>
         /// <param name="configuration">The configuration to retrieve defaults from.</param>
         /// <returns>The globally configured default options.</returns>
