@@ -47,7 +47,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 points.AsSpan().Reverse();
             }
 
-            var polygon = new Polygon(new LinearLineSegment(points));
+            var polygon = new Polygon(points);
 
             using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
             VerifyRing(multipolygon[0], points, reverseOriginal, false);
@@ -65,7 +65,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
                 points.AsSpan().Reverse();
             }
 
-            var polygon = new Polygon(new LinearLineSegment(points));
+            var polygon = new Polygon(points);
 
             using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
 

@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions options,
             Brush brush,
             params PointF[] points) =>
-            source.Fill(options, brush, new Polygon(new LinearLineSegment(points)));
+            source.Fill(options, brush, new Polygon(points));
 
         /// <summary>
         /// Flood fills the image in the shape of a linear polygon described by the points
@@ -36,7 +36,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             Brush brush,
             params PointF[] points) =>
-            source.Fill(brush, new Polygon(new LinearLineSegment(points)));
+            source.Fill(brush, new Polygon(points));
 
         /// <summary>
         /// Flood fills the image in the shape of a linear polygon described by the points
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions options,
             Color color,
             params PointF[] points) =>
-            source.Fill(options, new SolidBrush(color), new Polygon(new LinearLineSegment(points)));
+            source.Fill(options, new SolidBrush(color), new Polygon(points));
 
         /// <summary>
         /// Flood fills the image in the shape of a linear polygon described by the points
@@ -64,6 +64,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             Color color,
             params PointF[] points) =>
-            source.Fill(new SolidBrush(color), new Polygon(new LinearLineSegment(points)));
+            source.Fill(new SolidBrush(color), new Polygon(points));
     }
 }

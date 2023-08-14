@@ -111,7 +111,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                 PointF[] points = pl.Select(p => p.Split('x'))
                             .Select(p => new PointF(float.Parse(p[0]), float.Parse(p[1])))
                             .ToArray();
-                return new Polygon(new LinearLineSegment(points));
+                return new Polygon(points);
             }).ToArray();
 
             var complex = new ComplexPolygon(polys);
@@ -131,7 +131,7 @@ namespace SixLabors.Shapes.DrawShapesWithImageSharp
                             .Select(p => new PointF(float.Parse(p[0]), float.Parse(p[1])))
                             .ToArray();
 
-                return new Polygon(new LinearLineSegment(points));
+                return new Polygon(points);
             }).ToArray();
 
             var complex = new ComplexPolygon(polys);

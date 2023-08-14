@@ -54,7 +54,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 #endif
                 }
 
-                shapes[index++] = new Polygon(new LinearLineSegment(points));
+                shapes[index++] = new Polygon(points);
             }
 
             for (int i = 0; i < openPaths.Count; i++)
@@ -72,7 +72,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 #endif
                 }
 
-                shapes[index++] = new Polygon(new LinearLineSegment(points));
+                shapes[index++] = new Polygon(points);
             }
 
             return shapes;

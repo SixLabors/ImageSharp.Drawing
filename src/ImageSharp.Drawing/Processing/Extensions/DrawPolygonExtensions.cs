@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             this IImageProcessingContext source,
             Pen pen,
             params PointF[] points) =>
-            source.Draw(source.GetDrawingOptions(), pen, new Polygon(new LinearLineSegment(points)));
+            source.Draw(source.GetDrawingOptions(), pen, new Polygon(points));
 
         /// <summary>
         /// Draws the provided points as a closed linear polygon with the provided pen.
@@ -36,7 +36,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
             DrawingOptions options,
             Pen pen,
             params PointF[] points) =>
-            source.Draw(options, pen, new Polygon(new LinearLineSegment(points)));
+            source.Draw(options, pen, new Polygon(points));
 
         /// <summary>
         /// Draws the provided points as a closed linear polygon with the provided brush at the provided thickness.

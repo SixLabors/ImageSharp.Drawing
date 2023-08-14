@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 #endif
                 }
 
-                polygons[i] = new Polygon(new LinearLineSegment(points));
+                polygons[i] = new Polygon(points);
             }
 
             return new ComplexPolygon(polygons);

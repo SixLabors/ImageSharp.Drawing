@@ -14,6 +14,15 @@ namespace SixLabors.ImageSharp.Drawing
         /// <summary>
         /// Initializes a new instance of the <see cref="Polygon"/> class.
         /// </summary>
+        /// <param name="points">The collection of points; processed as a series of linear line segments.</param>
+        public Polygon(PointF[] points)
+            : this(new LinearLineSegment(points))
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Polygon"/> class.
+        /// </summary>
         /// <param name="segments">The segments.</param>
         public Polygon(params ILineSegment[] segments)
             : base((IEnumerable<ILineSegment>)segments)
