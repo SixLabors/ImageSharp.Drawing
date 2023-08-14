@@ -15,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text onto the image filled with the given color.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
         /// <param name="color">The color.</param>
@@ -32,7 +32,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text using the supplied drawing options onto the image filled with the given color.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="drawingOptions">The drawing options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
@@ -51,7 +51,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text  using the supplied text options onto the image filled via the brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="textOptions">The text rendering options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="color">The color.</param>
@@ -66,7 +66,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text onto the image filled via the brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
         /// <param name="brush">The brush used to fill the text.</param>
@@ -83,7 +83,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text onto the image outlined via the pen.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
         /// <param name="pen">The pen used to outline the text.</param>
@@ -100,7 +100,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text onto the image filled via the brush then outlined via the pen.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
         /// <param name="brush">The brush used to fill the text.</param>
@@ -122,7 +122,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text using the given options onto the image filled via the brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="textOptions">The text rendering options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="brush">The brush used to fill the text.</param>
@@ -137,7 +137,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text using the given options onto the image outlined via the pen.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="textOptions">The text rendering options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="pen">The pen used to outline the text.</param>
@@ -152,7 +152,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text using the given options onto the image filled via the brush then outlined via the pen.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="textOptions">The text rendering options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="brush">The brush used to fill the text.</param>
@@ -169,7 +169,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text onto the image outlined via the pen.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="drawingOptions">The drawing options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
@@ -188,7 +188,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text onto the image filled via the brush.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="drawingOptions">The drawing options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
@@ -207,7 +207,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text using the given drawing options onto the image filled via the brush then outlined via the pen.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="drawingOptions">The drawing options.</param>
         /// <param name="text">The text to draw.</param>
         /// <param name="font">The font.</param>
@@ -231,7 +231,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the text using the given options onto the image filled via the brush then outlined via the pen.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="drawingOptions">The drawing options.</param>
         /// <param name="textOptions">The text rendering options.</param>
         /// <param name="text">The text to draw.</param>
