@@ -52,38 +52,38 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
 
         public float Width
         {
-            get => this.Right - this.Left;
+            readonly get => this.Right - this.Left;
             set => this.Right = this.Left + value;
         }
 
         public float Height
         {
-            get => this.Bottom - this.Top;
+            readonly get => this.Bottom - this.Top;
             set => this.Bottom = this.Top + value;
         }
 
-        public bool IsEmpty()
+        public readonly bool IsEmpty()
             => this.Bottom <= this.Top || this.Right <= this.Left;
 
-        public Vector2 MidPoint()
+        public readonly Vector2 MidPoint()
             => new Vector2(this.Left + this.Right, this.Top + this.Bottom) * .5F;
 
-        public bool Contains(Vector2 pt)
+        public readonly bool Contains(Vector2 pt)
             => pt.X > this.Left
             && pt.X < this.Right
             && pt.Y > this.Top && pt.Y < this.Bottom;
 
-        public bool Contains(BoundsF bounds)
+        public readonly bool Contains(BoundsF bounds)
             => bounds.Left >= this.Left
             && bounds.Right <= this.Right
             && bounds.Top >= this.Top
             && bounds.Bottom <= this.Bottom;
 
-        public bool Intersects(BoundsF bounds)
+        public readonly bool Intersects(BoundsF bounds)
             => (Math.Max(this.Left, bounds.Left) < Math.Min(this.Right, bounds.Right))
             && (Math.Max(this.Top, bounds.Top) < Math.Min(this.Bottom, bounds.Bottom));
 
-        public PathF AsPath()
+        public readonly PathF AsPath()
             => new(4)
             {
                 new Vector2(this.Left, this.Top),

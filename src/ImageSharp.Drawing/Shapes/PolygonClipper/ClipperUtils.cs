@@ -184,17 +184,27 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper
         {
             Vector2 dxy1 = ln1b - ln1a;
             Vector2 dxy2 = ln2b - ln2a;
-            float cp = CrossProduct(dxy1, dxy2);
-            if (cp == 0F)
+            float det = CrossProduct(dxy1, dxy2);
+            if (det == 0F)
             {
                 ip = default;
                 return false;
             }
 
-            float q1 = CrossProduct(dxy1, ln1a);
-            float q2 = CrossProduct(dxy2, ln2a);
+            float t = (((ln1a.X - ln2a.X) * dxy2.Y) - ((ln1a.Y - ln2a.Y) * dxy2.X)) / det;
+            if (t <= 0F)
+            {
+                ip = ln1a;
+            }
+            else if (t >= 1F)
+            {
+                ip = ln1b;
+            }
+            else
+            {
+                ip = ln1a + (t * dxy1);
+            }
 
-            ip = ((dxy2 * q1) - (dxy1 * q2)) / cp;
             return true;
         }
 
