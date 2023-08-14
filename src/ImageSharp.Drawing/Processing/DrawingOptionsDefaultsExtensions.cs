@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         private const string DrawingTransformMatrixKey = "DrawingTransformMatrix3x2";
 
         /// <summary>
-        /// Gets the default shape processing options against the image processing context.
+        /// Gets the default shape processing options against The source image processing context.
         /// </summary>
         /// <param name="context">The image processing context to retrieve defaults from.</param>
         /// <returns>The globally configured default options.</returns>

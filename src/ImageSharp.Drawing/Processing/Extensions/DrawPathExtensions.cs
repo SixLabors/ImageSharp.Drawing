@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the outline of the polygon with the provided pen.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The options.</param>
         /// <param name="pen">The pen.</param>
         /// <param name="path">The path.</param>
@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the outline of the polygon with the provided pen.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="pen">The pen.</param>
         /// <param name="path">The path.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -39,7 +39,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
@@ -56,7 +56,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="path">The path.</param>
@@ -71,7 +71,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The options.</param>
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the outline of the polygon with the provided brush at the provided thickness.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="path">The path.</param>

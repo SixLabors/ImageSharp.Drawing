@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified
         /// color without any blending.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="color">The color.</param>
         /// <param name="region">The <see cref="IPath"/> defining the region to fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified color
         /// without any blending.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="color">The color.</param>
         /// <param name="region">The <see cref="IPath"/> defining the region to fill.</param>
@@ -44,7 +44,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified brush
         /// without any blending.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="region">The <see cref="IPath"/> defining the region to fill.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -58,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// Flood fills the image within the provided region defined by an <see cref="IPath"/> using the specified brush
         /// without any blending.
         /// </summary>
-        /// <param name="source">The image processing context.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The drawing options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="region">The <see cref="IPath"/> defining the region to fill.</param>

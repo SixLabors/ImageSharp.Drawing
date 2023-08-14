@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="paths">The shapes.</param>
@@ -35,7 +35,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="paths">The paths.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -48,7 +48,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The options.</param>
         /// <param name="color">The color.</param>
         /// <param name="paths">The paths.</param>
@@ -63,7 +63,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Flood fills the image in the shape of the provided polygon with the specified brush.
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="color">The color.</param>
         /// <param name="paths">The paths.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>

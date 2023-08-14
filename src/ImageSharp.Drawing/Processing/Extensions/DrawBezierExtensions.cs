@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the provided points as an open Bezier path with the supplied pen
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The options.</param>
         /// <param name="pen">The pen.</param>
         /// <param name="points">The points.</param>
@@ -28,7 +28,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the provided points as an open Bezier path with the supplied pen
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="pen">The pen.</param>
         /// <param name="points">The points.</param>
         /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
@@ -41,7 +41,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the provided points as an open Bezier path at the provided thickness with the supplied brush
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The options.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
@@ -58,7 +58,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the provided points as an open Bezier path at the provided thickness with the supplied brush
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="brush">The brush.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="points">The points.</param>
@@ -73,7 +73,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the provided points as an open Bezier path at the provided thickness with the supplied brush
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
         /// <param name="points">The points.</param>
@@ -88,7 +88,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing
         /// <summary>
         /// Draws the provided points as an open Bezier path at the provided thickness with the supplied brush
         /// </summary>
-        /// <param name="source">The image this method extends.</param>
+        /// <param name="source">The source image processing context.</param>
         /// <param name="options">The options.</param>
         /// <param name="color">The color.</param>
         /// <param name="thickness">The thickness.</param>
