@@ -32,11 +32,11 @@
 
 #### **Do you have questions about consuming the library or the source code?**
 
-* Ask any question about how to use SixLabors.ImageSharp in the [Help Discussions Channel](https://github.com/SixLabors/ImageSharp.Drawing/discussions?discussions_q=category%3AHelp).
+* Ask any question about how to use SixLabors.ImageSharp.Drawing in the [Help Discussions Channel](https://github.com/SixLabors/ImageSharp.Drawing/discussions?discussions_q=category%3AHelp).
 
 #### Code of Conduct  
 This project has adopted the code of conduct defined by the [Contributor Covenant](https://contributor-covenant.org/) to clarify expected behavior in our community.
 
-And please remember. SixLabors.ImageSharp is the work of a very, very, small number of developers who struggle balancing time to contribute to the project with family time and work commitments. We encourage you to pitch in and help make our vision of simple accessible image processing available to all. Open Source can only exist with your help.
+And please remember. SixLabors.ImageSharp.Drawing is the work of a very, very, small number of developers who struggle balancing time to contribute to the project with family time and work commitments. We encourage you to pitch in and help make our vision of simple accessible image processing available to all. Open Source can only exist with your help.
 
 Thanks for reading!
