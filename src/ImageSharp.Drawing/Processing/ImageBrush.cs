@@ -1,196 +1,200 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
+#nullable disable
+
 using System.Buffers;
 using SixLabors.ImageSharp.Memory;
-using SixLabors.ImageSharp.PixelFormats;
 
-namespace SixLabors.ImageSharp.Drawing.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing;
+
+/// <summary>
+/// Provides an implementation of an image brush for painting images within areas.
+/// </summary>
+public class ImageBrush : Brush
 {
     /// <summary>
-    /// Provides an implementation of an image brush for painting images within areas.
+    /// The image to paint.
     /// </summary>
-    public class ImageBrush : Brush
+    private readonly Image image;
+
+    /// <summary>
+    /// The region of the source image we will be using to paint.
+    /// </summary>
+    private readonly RectangleF region;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    public ImageBrush(Image image)
+        : this(image, image.Bounds)
     {
-        /// <summary>
-        /// The image to paint.
-        /// </summary>
-        private readonly Image image;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="region">
+    /// The region of interest.
+    /// This overrides any region used to initialize the brush applicator.
+    /// </param>
+    internal ImageBrush(Image image, RectangleF region)
+    {
+        this.image = image;
+        this.region = region;
+    }
+
+    /// <inheritdoc />
+    public override bool Equals(Brush other)
+    {
+        if (other is ImageBrush ib)
+        {
+            return ib.image == this.image && ib.region == this.region;
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc/>
+    public override int GetHashCode() => HashCode.Combine(this.image, this.region);
+
+    /// <inheritdoc />
+    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        Configuration configuration,
+        GraphicsOptions options,
+        ImageFrame<TPixel> source,
+        RectangleF region)
+    {
+        if (this.image is Image<TPixel> specificImage)
+        {
+            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, false);
+        }
+
+        specificImage = this.image.CloneAs<TPixel>();
+        return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, true);
+    }
+
+    /// <summary>
+    /// The image brush applicator.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    private class ImageBrushApplicator<TPixel> : BrushApplicator<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private ImageFrame<TPixel> sourceFrame;
+
+        private Image<TPixel> sourceImage;
+
+        private readonly bool shouldDisposeImage;
 
         /// <summary>
-        /// The region of the source image we will be using to paint.
+        /// The region of the source image we will be using to draw from.
         /// </summary>
-        private readonly RectangleF region;
+        private readonly Rectangle sourceRegion;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ImageBrush"/> class.
+        /// The Y offset.
         /// </summary>
+        private readonly int offsetY;
+
+        /// <summary>
+        /// The X offset.
+        /// </summary>
+        private readonly int offsetX;
+        private bool isDisposed;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ImageBrushApplicator{TPixel}"/> class.
+        /// </summary>
+        /// <param name="configuration">The configuration instance to use when performing operations.</param>
+        /// <param name="options">The graphics options.</param>
+        /// <param name="target">The target image.</param>
         /// <param name="image">The image.</param>
-        public ImageBrush(Image image)
-            : this(image, image.Bounds())
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ImageBrush"/> class.
-        /// </summary>
-        /// <param name="image">The image.</param>
-        /// <param name="region">
-        /// The region of interest.
-        /// This overrides any region used to initialize the brush applicator.
-        /// </param>
-        internal ImageBrush(Image image, RectangleF region)
-        {
-            this.image = image;
-            this.region = region;
-        }
-
-        /// <inheritdoc />
-        public override bool Equals(Brush other)
-        {
-            if (other is ImageBrush sb)
-            {
-                return sb.image == this.image && sb.region == this.region;
-            }
-
-            return false;
-        }
-
-        /// <inheritdoc />
-        public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+        /// <param name="targetRegion">The region of the target image we will be drawing to.</param>
+        /// <param name="sourceRegion">The region of the source image we will be using to source pixels to draw from.</param>
+        /// <param name="shouldDisposeImage">Whether to dispose the image on disposal of the applicator.</param>
+        public ImageBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
-            RectangleF region)
+            ImageFrame<TPixel> target,
+            Image<TPixel> image,
+            RectangleF targetRegion,
+            RectangleF sourceRegion,
+            bool shouldDisposeImage)
+            : base(configuration, options, target)
         {
-            if (this.image is Image<TPixel> specificImage)
-            {
-                return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, false);
-            }
+            this.sourceImage = image;
+            this.sourceFrame = image.Frames.RootFrame;
+            this.shouldDisposeImage = shouldDisposeImage;
 
-            specificImage = this.image.CloneAs<TPixel>();
-            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, true);
+            this.sourceRegion = Rectangle.Intersect(image.Bounds, (Rectangle)sourceRegion);
+
+            this.offsetY = (int)MathF.Max(MathF.Floor(targetRegion.Top), 0);
+            this.offsetX = (int)MathF.Max(MathF.Floor(targetRegion.Left), 0);
         }
 
-        /// <summary>
-        /// The image brush applicator.
-        /// </summary>
-        /// <typeparam name="TPixel">The pixel format.</typeparam>
-        private class ImageBrushApplicator<TPixel> : BrushApplicator<TPixel>
-            where TPixel : unmanaged, IPixel<TPixel>
+        internal TPixel this[int x, int y]
         {
-            private ImageFrame<TPixel> sourceFrame;
-
-            private Image<TPixel> sourceImage;
-
-            private readonly bool shouldDisposeImage;
-
-            /// <summary>
-            /// The region of the source image we will be using to draw from.
-            /// </summary>
-            private readonly Rectangle sourceRegion;
-
-            /// <summary>
-            /// The Y offset.
-            /// </summary>
-            private readonly int offsetY;
-
-            /// <summary>
-            /// The X offset.
-            /// </summary>
-            private readonly int offsetX;
-            private bool isDisposed;
-
-            /// <summary>
-            /// Initializes a new instance of the <see cref="ImageBrushApplicator{TPixel}"/> class.
-            /// </summary>
-            /// <param name="configuration">The configuration instance to use when performing operations.</param>
-            /// <param name="options">The graphics options.</param>
-            /// <param name="target">The target image.</param>
-            /// <param name="image">The image.</param>
-            /// <param name="targetRegion">The region of the target image we will be drawing to.</param>
-            /// <param name="sourceRegion">The region of the source image we will be using to source pixels to draw from.</param>
-            /// <param name="shouldDisposeImage">Whether to dispose the image on disposal of the applicator.</param>
-            public ImageBrushApplicator(
-                Configuration configuration,
-                GraphicsOptions options,
-                ImageFrame<TPixel> target,
-                Image<TPixel> image,
-                RectangleF targetRegion,
-                RectangleF sourceRegion,
-                bool shouldDisposeImage)
-                : base(configuration, options, target)
+            get
             {
-                this.sourceImage = image;
-                this.sourceFrame = image.Frames.RootFrame;
-                this.shouldDisposeImage = shouldDisposeImage;
+                int srcX = ((x - this.offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
+                int srcY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
+                return this.sourceFrame[srcX, srcY];
+            }
+        }
 
-                this.sourceRegion = Rectangle.Intersect(image.Bounds(), (Rectangle)sourceRegion);
-
-                this.offsetY = (int)MathF.Max(MathF.Floor(targetRegion.Top), 0);
-                this.offsetX = (int)MathF.Max(MathF.Floor(targetRegion.Left), 0);
+        /// <inheritdoc />
+        protected override void Dispose(bool disposing)
+        {
+            if (this.isDisposed)
+            {
+                return;
             }
 
-            internal TPixel this[int x, int y]
+            if (disposing && this.shouldDisposeImage)
             {
-                get
-                {
-                    int srcX = ((x - this.offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
-                    int srcY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
-                    return this.sourceFrame[srcX, srcY];
-                }
+                this.sourceImage?.Dispose();
             }
 
-            /// <inheritdoc />
-            protected override void Dispose(bool disposing)
+            this.sourceImage = null;
+            this.sourceFrame = null;
+            this.isDisposed = true;
+
+            base.Dispose(disposing);
+        }
+
+        /// <inheritdoc />
+        public override void Apply(Span<float> scanline, int x, int y)
+        {
+            // Create a span for colors
+            MemoryAllocator allocator = this.Configuration.MemoryAllocator;
+            using IMemoryOwner<float> amountBuffer = allocator.Allocate<float>(scanline.Length);
+            using IMemoryOwner<TPixel> overlay = allocator.Allocate<TPixel>(scanline.Length);
+            Span<float> amountSpan = amountBuffer.Memory.Span;
+            Span<TPixel> overlaySpan = overlay.Memory.Span;
+
+            int offsetX = x - this.offsetX;
+            int sourceY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
+            Span<TPixel> sourceRow = this.sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceY);
+
+            for (int i = 0; i < scanline.Length; i++)
             {
-                if (this.isDisposed)
-                {
-                    return;
-                }
+                amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
 
-                if (disposing && this.shouldDisposeImage)
-                {
-                    this.sourceImage?.Dispose();
-                }
+                int sourceX = ((i + offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
 
-                this.sourceImage = null;
-                this.sourceFrame = null;
-                this.isDisposed = true;
+                overlaySpan[i] = sourceRow[sourceX];
             }
 
-            /// <inheritdoc />
-            public override void Apply(Span<float> scanline, int x, int y)
-            {
-                // Create a span for colors
-                MemoryAllocator allocator = this.Configuration.MemoryAllocator;
-                using IMemoryOwner<float> amountBuffer = allocator.Allocate<float>(scanline.Length);
-                using IMemoryOwner<TPixel> overlay = allocator.Allocate<TPixel>(scanline.Length);
-                Span<float> amountSpan = amountBuffer.Memory.Span;
-                Span<TPixel> overlaySpan = overlay.Memory.Span;
-
-                int offsetX = x - this.offsetX;
-                int sourceY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
-                Span<TPixel> sourceRow = this.sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceY);
-
-                for (int i = 0; i < scanline.Length; i++)
-                {
-                    amountSpan[i] = scanline[i] * this.Options.BlendPercentage;
-
-                    int sourceX = ((i + offsetX) % this.sourceRegion.Width) + this.sourceRegion.X;
-
-                    overlaySpan[i] = sourceRow[sourceX];
-                }
-
-                Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
-                this.Blender.Blend(
-                    this.Configuration,
-                    destinationRow,
-                    destinationRow,
-                    overlaySpan,
-                    amountSpan);
-            }
+            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
+            this.Blender.Blend(
+                this.Configuration,
+                destinationRow,
+                destinationRow,
+                overlaySpan,
+                amountSpan);
         }
     }
 }

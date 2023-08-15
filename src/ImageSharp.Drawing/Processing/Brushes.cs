@@ -1,223 +1,222 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-namespace SixLabors.ImageSharp.Drawing.Processing
+namespace SixLabors.ImageSharp.Drawing.Processing;
+
+/// <summary>
+/// A collection of methods for creating generic brushes.
+/// </summary>
+/// <returns>A new <see cref="PatternBrush"/></returns>
+public static class Brushes
 {
     /// <summary>
-    /// A collection of methods for creating generic brushes.
+    /// Percent10 Hatch Pattern
     /// </summary>
-    /// <returns>A new <see cref="PatternBrush"/></returns>
-    public static class Brushes
+    /// ---> x axis
+    /// ^
+    /// | y - axis
+    /// |
+    /// see PatternBrush for details about how to make new patterns work
+    private static readonly bool[,] Percent10Pattern =
     {
-        /// <summary>
-        /// Percent10 Hatch Pattern
-        /// </summary>
-        /// ---> x axis
-        /// ^
-        /// | y - axis
-        /// |
-        /// see PatternBrush for details about how to make new patterns work
-        private static readonly bool[,] Percent10Pattern =
-        {
-            { true, false, false, false },
-            { false, false, false, false },
-            { false, false, true, false },
-            { false, false, false, false }
-        };
+        { true, false, false, false },
+        { false, false, false, false },
+        { false, false, true, false },
+        { false, false, false, false }
+    };
 
-        /// <summary>
-        /// Percent20 pattern.
-        /// </summary>
-        private static readonly bool[,] Percent20Pattern =
-        {
-            { true,  false, false, false },
-            { false, false, true,  false },
-            { true,  false, false, false },
-            { false, false, true,  false }
-        };
+    /// <summary>
+    /// Percent20 pattern.
+    /// </summary>
+    private static readonly bool[,] Percent20Pattern =
+    {
+        { true,  false, false, false },
+        { false, false, true,  false },
+        { true,  false, false, false },
+        { false, false, true,  false }
+    };
 
-        /// <summary>
-        /// Horizontal Hatch Pattern
-        /// </summary>
-        private static readonly bool[,] HorizontalPattern =
-        {
-            { false },
-            { true },
-            { false },
-            { false }
-        };
+    /// <summary>
+    /// Horizontal Hatch Pattern
+    /// </summary>
+    private static readonly bool[,] HorizontalPattern =
+    {
+        { false },
+        { true },
+        { false },
+        { false }
+    };
 
-        /// <summary>
-        /// Min Pattern
-        /// </summary>
-        private static readonly bool[,] MinPattern =
-        {
-            { false },
-            { false },
-            { false },
-            { true }
-        };
+    /// <summary>
+    /// Min Pattern
+    /// </summary>
+    private static readonly bool[,] MinPattern =
+    {
+        { false },
+        { false },
+        { false },
+        { true }
+    };
 
-        /// <summary>
-        /// Vertical Pattern
-        /// </summary>
-        private static readonly bool[,] VerticalPattern =
-        {
-            { false, true, false, false },
-        };
+    /// <summary>
+    /// Vertical Pattern
+    /// </summary>
+    private static readonly bool[,] VerticalPattern =
+    {
+        { false, true, false, false },
+    };
 
-        /// <summary>
-        /// Forward Diagonal Pattern
-        /// </summary>
-        private static readonly bool[,] ForwardDiagonalPattern =
-        {
-            { false, false, false, true },
-            { false, false, true, false },
-            { false, true, false, false },
-            { true,  false, false, false }
-        };
+    /// <summary>
+    /// Forward Diagonal Pattern
+    /// </summary>
+    private static readonly bool[,] ForwardDiagonalPattern =
+    {
+        { false, false, false, true },
+        { false, false, true, false },
+        { false, true, false, false },
+        { true,  false, false, false }
+    };
 
-        /// <summary>
-        /// Backward Diagonal Pattern
-        /// </summary>
-        private static readonly bool[,] BackwardDiagonalPattern =
-        {
-            { true, false, false, false },
-            { false, true, false, false },
-            { false, false, true, false },
-            { false, false, false, true }
-        };
+    /// <summary>
+    /// Backward Diagonal Pattern
+    /// </summary>
+    private static readonly bool[,] BackwardDiagonalPattern =
+    {
+        { true, false, false, false },
+        { false, true, false, false },
+        { false, false, true, false },
+        { false, false, false, true }
+    };
 
-        /// <summary>
-        /// Create as brush that will paint a solid color
-        /// </summary>
-        /// <param name="color">The color.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static SolidBrush Solid(Color color) => new(color);
+    /// <summary>
+    /// Create as brush that will paint a solid color
+    /// </summary>
+    /// <param name="color">The color.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static SolidBrush Solid(Color color) => new(color);
 
-        /// <summary>
-        /// Create as brush that will paint a Percent10 Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Percent10(Color foreColor)
-            => new(foreColor, Color.Transparent, Percent10Pattern);
+    /// <summary>
+    /// Create as brush that will paint a Percent10 Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Percent10(Color foreColor)
+        => new(foreColor, Color.Transparent, Percent10Pattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Percent10 Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <param name="backColor">Color of the background.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Percent10(Color foreColor, Color backColor)
-            => new(foreColor, backColor, Percent10Pattern);
+    /// <summary>
+    /// Create as brush that will paint a Percent10 Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <param name="backColor">Color of the background.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Percent10(Color foreColor, Color backColor)
+        => new(foreColor, backColor, Percent10Pattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Percent20 Hatch Pattern with the specified foreground color and a
-        /// transparent background.
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Percent20(Color foreColor)
-            => new(foreColor, Color.Transparent, Percent20Pattern);
+    /// <summary>
+    /// Create as brush that will paint a Percent20 Hatch Pattern with the specified foreground color and a
+    /// transparent background.
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Percent20(Color foreColor)
+        => new(foreColor, Color.Transparent, Percent20Pattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Percent20 Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <param name="backColor">Color of the background.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Percent20(Color foreColor, Color backColor)
-            => new(foreColor, backColor, Percent20Pattern);
+    /// <summary>
+    /// Create as brush that will paint a Percent20 Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <param name="backColor">Color of the background.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Percent20(Color foreColor, Color backColor)
+        => new(foreColor, backColor, Percent20Pattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Horizontal Hatch Pattern with the specified foreground color and a
-        /// transparent background.
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Horizontal(Color foreColor)
-            => new(foreColor, Color.Transparent, HorizontalPattern);
+    /// <summary>
+    /// Create as brush that will paint a Horizontal Hatch Pattern with the specified foreground color and a
+    /// transparent background.
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Horizontal(Color foreColor)
+        => new(foreColor, Color.Transparent, HorizontalPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Horizontal Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <param name="backColor">Color of the background.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Horizontal(Color foreColor, Color backColor)
-            => new(foreColor, backColor, HorizontalPattern);
+    /// <summary>
+    /// Create as brush that will paint a Horizontal Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <param name="backColor">Color of the background.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Horizontal(Color foreColor, Color backColor)
+        => new(foreColor, backColor, HorizontalPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Min Hatch Pattern with the specified foreground color and a
-        /// transparent background.
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Min(Color foreColor)
-            => new(foreColor, Color.Transparent, MinPattern);
+    /// <summary>
+    /// Create as brush that will paint a Min Hatch Pattern with the specified foreground color and a
+    /// transparent background.
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Min(Color foreColor)
+        => new(foreColor, Color.Transparent, MinPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Min Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <param name="backColor">Color of the background.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Min(Color foreColor, Color backColor)
-            => new(foreColor, backColor, MinPattern);
+    /// <summary>
+    /// Create as brush that will paint a Min Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <param name="backColor">Color of the background.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Min(Color foreColor, Color backColor)
+        => new(foreColor, backColor, MinPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Vertical Hatch Pattern with the specified foreground color and a
-        /// transparent background.
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Vertical(Color foreColor)
-            => new(foreColor, Color.Transparent, VerticalPattern);
+    /// <summary>
+    /// Create as brush that will paint a Vertical Hatch Pattern with the specified foreground color and a
+    /// transparent background.
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Vertical(Color foreColor)
+        => new(foreColor, Color.Transparent, VerticalPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Vertical Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <param name="backColor">Color of the background.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush Vertical(Color foreColor, Color backColor)
-            => new(foreColor, backColor, VerticalPattern);
+    /// <summary>
+    /// Create as brush that will paint a Vertical Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <param name="backColor">Color of the background.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush Vertical(Color foreColor, Color backColor)
+        => new(foreColor, backColor, VerticalPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Forward Diagonal Hatch Pattern with the specified foreground color and a
-        /// transparent background.
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush ForwardDiagonal(Color foreColor)
-            => new(foreColor, Color.Transparent, ForwardDiagonalPattern);
+    /// <summary>
+    /// Create as brush that will paint a Forward Diagonal Hatch Pattern with the specified foreground color and a
+    /// transparent background.
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush ForwardDiagonal(Color foreColor)
+        => new(foreColor, Color.Transparent, ForwardDiagonalPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Forward Diagonal Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <param name="backColor">Color of the background.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush ForwardDiagonal(Color foreColor, Color backColor)
-            => new(foreColor, backColor, ForwardDiagonalPattern);
+    /// <summary>
+    /// Create as brush that will paint a Forward Diagonal Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <param name="backColor">Color of the background.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush ForwardDiagonal(Color foreColor, Color backColor)
+        => new(foreColor, backColor, ForwardDiagonalPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Backward Diagonal Hatch Pattern with the specified foreground color and a
-        /// transparent background.
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush BackwardDiagonal(Color foreColor)
-            => new(foreColor, Color.Transparent, BackwardDiagonalPattern);
+    /// <summary>
+    /// Create as brush that will paint a Backward Diagonal Hatch Pattern with the specified foreground color and a
+    /// transparent background.
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush BackwardDiagonal(Color foreColor)
+        => new(foreColor, Color.Transparent, BackwardDiagonalPattern);
 
-        /// <summary>
-        /// Create as brush that will paint a Backward Diagonal Hatch Pattern with the specified colors
-        /// </summary>
-        /// <param name="foreColor">Color of the foreground.</param>
-        /// <param name="backColor">Color of the background.</param>
-        /// <returns>A new <see cref="PatternBrush"/></returns>
-        public static PatternBrush BackwardDiagonal(Color foreColor, Color backColor)
-            => new(foreColor, backColor, BackwardDiagonalPattern);
-    }
+    /// <summary>
+    /// Create as brush that will paint a Backward Diagonal Hatch Pattern with the specified colors
+    /// </summary>
+    /// <param name="foreColor">Color of the foreground.</param>
+    /// <param name="backColor">Color of the background.</param>
+    /// <returns>A new <see cref="PatternBrush"/></returns>
+    public static PatternBrush BackwardDiagonal(Color foreColor, Color backColor)
+        => new(foreColor, backColor, BackwardDiagonalPattern);
 }

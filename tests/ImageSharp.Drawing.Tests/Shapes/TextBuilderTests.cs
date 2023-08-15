@@ -1,39 +1,37 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
 using System.Numerics;
 using SixLabors.Fonts;
-using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Shapes
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
+
+public class TextBuilderTests
 {
-    public class TextBuilderTests
+    [Fact]
+    public void TextBuilder_Bounds_AreCorrect()
     {
-        [Fact]
-        public void TextBuilder_Bounds_AreCorrect()
+        Vector2 position = new(5, 5);
+        var options = new TextOptions(TestFontUtilities.GetFont(TestFonts.OpenSans, 16))
         {
-            Vector2 position = new(5, 5);
-            var options = new TextOptions(TestFontUtilities.GetFont(TestFonts.OpenSans, 16))
-            {
-                Origin = position
-            };
+            Origin = position
+        };
 
-            const string text = "The quick brown fox jumps over the lazy fox";
+        const string text = "The quick brown fox jumps over the lazy fox";
 
-            IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, options);
+        IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, options);
 
-            RectangleF builderBounds = glyphs.Bounds;
-            FontRectangle directMeasured = TextMeasurer.MeasureBounds(text, options);
-            var measuredBounds = new FontRectangle(new(0, 0), directMeasured.Size + directMeasured.Location);
+        RectangleF builderBounds = glyphs.Bounds;
+        FontRectangle directMeasured = TextMeasurer.MeasureBounds(text, options);
+        var measuredBounds = new FontRectangle(new(0, 0), directMeasured.Size + directMeasured.Location);
 
-            Assert.Equal(measuredBounds.X, builderBounds.X);
-            Assert.Equal(measuredBounds.Y, builderBounds.Y);
-            Assert.Equal(measuredBounds.Width, builderBounds.Width);
+        Assert.Equal(measuredBounds.X, builderBounds.X);
+        Assert.Equal(measuredBounds.Y, builderBounds.Y);
+        Assert.Equal(measuredBounds.Width, builderBounds.Width);
 
-            // TextMeasurer will measure the full lineheight of the string.
-            // TextBuilder does not include line gaps following the descender since there
-            // is no path to include.
-            Assert.True(measuredBounds.Height >= builderBounds.Height);
-        }
+        // TextMeasurer will measure the full lineheight of the string.
+        // TextBuilder does not include line gaps following the descender since there
+        // is no path to include.
+        Assert.True(measuredBounds.Height >= builderBounds.Height);
     }
 }

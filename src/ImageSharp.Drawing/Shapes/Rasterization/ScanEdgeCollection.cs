@@ -1,47 +1,47 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
+#nullable disable
+
 using System.Buffers;
 using SixLabors.ImageSharp.Memory;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization
+namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
+
+internal partial class ScanEdgeCollection : IDisposable
 {
-    internal partial class ScanEdgeCollection : IDisposable
+    private IMemoryOwner<ScanEdge> buffer;
+
+    private Memory<ScanEdge> memory;
+
+    private ScanEdgeCollection(IMemoryOwner<ScanEdge> buffer, int count)
     {
-        private IMemoryOwner<ScanEdge> buffer;
+        this.buffer = buffer;
+        this.memory = buffer.Memory.Slice(0, count);
+    }
 
-        private Memory<ScanEdge> memory;
+    public Span<ScanEdge> Edges => this.memory.Span;
 
-        private ScanEdgeCollection(IMemoryOwner<ScanEdge> buffer, int count)
+    public int Count => this.Edges.Length;
+
+    public void Dispose()
+    {
+        if (this.buffer == null)
         {
-            this.buffer = buffer;
-            this.memory = buffer.Memory.Slice(0, count);
+            return;
         }
 
-        public Span<ScanEdge> Edges => this.memory.Span;
+        this.buffer.Dispose();
+        this.buffer = null;
+        this.memory = default;
+    }
 
-        public int Count => this.Edges.Length;
-
-        public void Dispose()
-        {
-            if (this.buffer == null)
-            {
-                return;
-            }
-
-            this.buffer.Dispose();
-            this.buffer = null;
-            this.memory = default;
-        }
-
-        public static ScanEdgeCollection Create(
-            IPath polygon,
-            MemoryAllocator allocator,
-            int subsampling)
-        {
-            using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
-            return Create(multipolygon, allocator, subsampling);
-        }
+    public static ScanEdgeCollection Create(
+        IPath polygon,
+        MemoryAllocator allocator,
+        int subsampling)
+    {
+        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
+        return Create(multipolygon, allocator, subsampling);
     }
 }

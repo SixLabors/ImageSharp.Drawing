@@ -1,79 +1,77 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Xunit.Abstractions;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests;
+
+/// <summary>
+/// Utility class to measure the execution of an operation. It can be used either by inheritance or by composition.
+/// </summary>
+public class MeasureFixture
 {
     /// <summary>
-    /// Utility class to measure the execution of an operation. It can be used either by inheritance or by composition.
+    /// Gets or sets a value indicating whether printing is enabled.
     /// </summary>
-    public class MeasureFixture
+    protected bool EnablePrinting { get; set; } = true;
+
+    /// <summary>
+    /// Measures and prints the execution time of an <see cref="Action{T}"/>, executed multiple times.
+    /// </summary>
+    /// <param name="times">A value indicating how many times to run the action</param>
+    /// <param name="action">The <see cref="Action{T}"/> to execute</param>
+    /// <param name="operationName">The name of the operation to print to the output</param>
+    public void Measure(int times, Action action, [CallerMemberName] string operationName = null)
     {
-        /// <summary>
-        /// Gets or sets a value indicating whether printing is enabled.
-        /// </summary>
-        protected bool EnablePrinting { get; set; } = true;
-
-        /// <summary>
-        /// Measures and prints the execution time of an <see cref="Action{T}"/>, executed multiple times.
-        /// </summary>
-        /// <param name="times">A value indicating how many times to run the action</param>
-        /// <param name="action">The <see cref="Action{T}"/> to execute</param>
-        /// <param name="operationName">The name of the operation to print to the output</param>
-        public void Measure(int times, Action action, [CallerMemberName] string operationName = null)
+        if (this.EnablePrinting)
         {
-            if (this.EnablePrinting)
-            {
-                this.Output?.WriteLine($"{operationName} X {times} ...");
-            }
-
-            var sw = Stopwatch.StartNew();
-
-            for (int i = 0; i < times; i++)
-            {
-                action();
-            }
-
-            sw.Stop();
-            if (this.EnablePrinting)
-            {
-                this.Output?.WriteLine($"{operationName} finished in {sw.ElapsedMilliseconds} ms");
-            }
+            this.Output?.WriteLine($"{operationName} X {times} ...");
         }
 
-        /// <summary>
-        /// Initializes a new instance of <see cref="MeasureFixture"/>
-        /// </summary>
-        /// <param name="output">A <see cref="ITestOutputHelper"/> instance to print the results </param>
-        public MeasureFixture(ITestOutputHelper output) => this.Output = output;
+        var sw = Stopwatch.StartNew();
 
-        protected ITestOutputHelper Output { get; }
+        for (int i = 0; i < times; i++)
+        {
+            action();
+        }
+
+        sw.Stop();
+        if (this.EnablePrinting)
+        {
+            this.Output?.WriteLine($"{operationName} finished in {sw.ElapsedMilliseconds} ms");
+        }
     }
 
-    public class MeasureGuard : IDisposable
+    /// <summary>
+    /// Initializes a new instance of <see cref="MeasureFixture"/>
+    /// </summary>
+    /// <param name="output">A <see cref="ITestOutputHelper"/> instance to print the results </param>
+    public MeasureFixture(ITestOutputHelper output) => this.Output = output;
+
+    protected ITestOutputHelper Output { get; }
+}
+
+public class MeasureGuard : IDisposable
+{
+    private readonly string operation;
+
+    private readonly Stopwatch stopwatch = new Stopwatch();
+
+    public MeasureGuard(ITestOutputHelper output, string operation)
     {
-        private readonly string operation;
+        this.operation = operation;
+        this.Output = output;
+        this.Output.WriteLine(operation + " ...");
+        this.stopwatch.Start();
+    }
 
-        private readonly Stopwatch stopwatch = new Stopwatch();
+    private ITestOutputHelper Output { get; }
 
-        public MeasureGuard(ITestOutputHelper output, string operation)
-        {
-            this.operation = operation;
-            this.Output = output;
-            this.Output.WriteLine(operation + " ...");
-            this.stopwatch.Start();
-        }
-
-        private ITestOutputHelper Output { get; }
-
-        public void Dispose()
-        {
-            this.stopwatch.Stop();
-            this.Output.WriteLine($"{this.operation} completed in {this.stopwatch.ElapsedMilliseconds}ms");
-        }
+    public void Dispose()
+    {
+        this.stopwatch.Stop();
+        this.Output.WriteLine($"{this.operation} completed in {this.stopwatch.ElapsedMilliseconds}ms");
     }
 }

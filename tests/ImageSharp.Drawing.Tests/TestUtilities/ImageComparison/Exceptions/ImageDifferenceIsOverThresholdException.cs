@@ -1,37 +1,33 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison
+namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
+
+public class ImageDifferenceIsOverThresholdException : ImagesSimilarityException
 {
-    public class ImageDifferenceIsOverThresholdException : ImagesSimilarityException
+    public ImageSimilarityReport[] Reports { get; }
+
+    public ImageDifferenceIsOverThresholdException(IEnumerable<ImageSimilarityReport> reports)
+        : base("Image difference is over threshold!" + StringifyReports(reports))
+        => this.Reports = reports.ToArray();
+
+    private static string StringifyReports(IEnumerable<ImageSimilarityReport> reports)
     {
-        public ImageSimilarityReport[] Reports { get; }
+        var sb = new StringBuilder();
 
-        public ImageDifferenceIsOverThresholdException(IEnumerable<ImageSimilarityReport> reports)
-            : base("Image difference is over threshold!" + StringifyReports(reports))
-            => this.Reports = reports.ToArray();
+        sb.Append(Environment.NewLine);
 
-        private static string StringifyReports(IEnumerable<ImageSimilarityReport> reports)
+        int i = 0;
+        foreach (ImageSimilarityReport r in reports)
         {
-            var sb = new StringBuilder();
-
+            sb.Append($"Report ImageFrame {i}: ");
+            sb.Append(r);
             sb.Append(Environment.NewLine);
-
-            int i = 0;
-            foreach (ImageSimilarityReport r in reports)
-            {
-                sb.Append($"Report ImageFrame {i}: ");
-                sb.Append(r);
-                sb.Append(Environment.NewLine);
-                i++;
-            }
-
-            return sb.ToString();
+            i++;
         }
+
+        return sb.ToString();
     }
 }

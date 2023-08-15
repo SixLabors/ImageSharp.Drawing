@@ -1,30 +1,52 @@
----
-name: "OSS : Bug Report"
-about: Create a report to help us improve the project.
-labels: needs triage
-
----
-
-### Prerequisites
-
-- [ ] I have written a descriptive issue title
-- [ ] I have verified that I am running the latest version of ImageSharp.Drawing
-- [ ] I have verified if the problem exist in both `DEBUG` and `RELEASE` mode
-- [ ] I have searched [open](https://github.com/SixLabors/ImageSharp.Drawing/issues) and [closed](https://github.com/SixLabors/ImageSharp.Drawing/issues?q=is%3Aissue+is%3Aclosed) issues to ensure it has not already been reported
-
-### Description
-<!-- A description of the bug or feature -->
-
-### Steps to Reproduce
-<!-- List of steps, sample code, failing test or link to a project that reproduces the behavior -->
-
-### System Configuration
-<!-- Tell us about the environment where you are experiencing the bug -->
-
-- ImageSharp.Drawing version:
-- Other ImageSharp packages and versions:
-- Environment (Operating system, version and so on):
-- .NET Framework version:
-- Additional information:
-
-<!-- Thanks for reporting the issue to ImageSharp.Drawing! -->
+name: "Bug Report"
+description: Create a report to help us improve the project. Issues are not guaranteed to be triaged.
+labels: ["needs triage"]
+body:
+- type: checkboxes
+  attributes:
+    label: Prerequisites
+    options:
+      - label: I have written a descriptive issue title
+        required: true
+      - label: I have verified that I am running the latest version of ImageSharp.Drawing
+        required: true
+      - label: I have verified if the problem exist in both `DEBUG` and `RELEASE` mode
+        required: true
+      - label: I have searched [open](https://github.com/SixLabors/ImageSharp.Drawing/issues) and [closed](https://github.com/SixLabors/ImageSharp.Drawing/issues?q=is%3Aissue+is%3Aclosed) issues to ensure it has not already been reported
+        required: true
+- type: input
+  attributes:
+    label: ImageSharp.Drawing version
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: Other ImageSharp packages and versions
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: Environment (Operating system, version and so on)
+  validations:
+    required: true
+- type: input
+  attributes:
+    label: .NET Framework version
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Description
+    description: A description of the bug
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Steps to Reproduce
+    description: List of steps, sample code, failing test or link to a project that reproduces the behavior. Make sure you place a stack trace inside a code (```) block to avoid linking unrelated issues.
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Images
+    description: Please upload images that can be used to reproduce issues in the area below. If the file type is not supported the file can be zipped and then uploaded instead.
