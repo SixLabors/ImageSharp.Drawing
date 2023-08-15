@@ -1,91 +1,87 @@
 ﻿// Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
-using System.Threading;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.PixelFormats;
-using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils
+namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils;
+
+public class ThreadLocalBlenderBuffersTests
 {
-    public class ThreadLocalBlenderBuffersTests
+    private readonly TestMemoryAllocator memoryAllocator = new TestMemoryAllocator();
+
+    [Fact]
+    public void CreatesPerThreadUniqueInstances()
     {
-        private readonly TestMemoryAllocator memoryAllocator = new TestMemoryAllocator();
+        using var buffers = new ThreadLocalBlenderBuffers<Rgb24>(this.memoryAllocator, 100);
 
-        [Fact]
-        public void CreatesPerThreadUniqueInstances()
+        var allSetSemaphore = new SemaphoreSlim(2);
+
+        var thread1 = new Thread(() =>
         {
-            using var buffers = new ThreadLocalBlenderBuffers<Rgb24>(this.memoryAllocator, 100);
+            Span<float> ams = buffers.AmountSpan;
+            Span<Rgb24> overlays = buffers.OverlaySpan;
 
-            var allSetSemaphore = new SemaphoreSlim(2);
+            ams[0] = 10;
+            overlays[0] = new Rgb24(10, 10, 10);
 
-            var thread1 = new Thread(() =>
-            {
-                Span<float> ams = buffers.AmountSpan;
-                Span<Rgb24> overlays = buffers.OverlaySpan;
+            allSetSemaphore.Release(1);
+            allSetSemaphore.Wait();
 
-                ams[0] = 10;
-                overlays[0] = new Rgb24(10, 10, 10);
+            Assert.Equal(10, buffers.AmountSpan[0]);
+            Assert.Equal(10, buffers.OverlaySpan[0].R);
+        });
 
-                allSetSemaphore.Release(1);
-                allSetSemaphore.Wait();
+        var thread2 = new Thread(() =>
+        {
+            Span<float> ams = buffers.AmountSpan;
+            Span<Rgb24> overlays = buffers.OverlaySpan;
 
-                Assert.Equal(10, buffers.AmountSpan[0]);
-                Assert.Equal(10, buffers.OverlaySpan[0].R);
-            });
+            ams[0] = 20;
+            overlays[0] = new Rgb24(20, 20, 20);
 
-            var thread2 = new Thread(() =>
-            {
-                Span<float> ams = buffers.AmountSpan;
-                Span<Rgb24> overlays = buffers.OverlaySpan;
+            allSetSemaphore.Release(1);
+            allSetSemaphore.Wait();
 
-                ams[0] = 20;
-                overlays[0] = new Rgb24(20, 20, 20);
+            Assert.Equal(20, buffers.AmountSpan[0]);
+            Assert.Equal(20, buffers.OverlaySpan[0].R);
+        });
 
-                allSetSemaphore.Release(1);
-                allSetSemaphore.Wait();
+        thread1.Start();
+        thread2.Start();
+        thread1.Join();
+        thread2.Join();
+    }
 
-                Assert.Equal(20, buffers.AmountSpan[0]);
-                Assert.Equal(20, buffers.OverlaySpan[0].R);
-            });
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(false, 3)]
+    [InlineData(true, 1)]
+    [InlineData(true, 3)]
+    public void Dispose_ReturnsAllBuffers(bool amountBufferOnly, int threadCount)
+    {
+        var buffers = new ThreadLocalBlenderBuffers<Rgb24>(this.memoryAllocator, 100, amountBufferOnly);
 
-            thread1.Start();
-            thread2.Start();
-            thread1.Join();
-            thread2.Join();
+        void RunThread()
+        {
+            buffers.AmountSpan[0] = 42;
         }
 
-        [Theory]
-        [InlineData(false, 1)]
-        [InlineData(false, 3)]
-        [InlineData(true, 1)]
-        [InlineData(true, 3)]
-        public void Dispose_ReturnsAllBuffers(bool amountBufferOnly, int threadCount)
+        Thread[] threads = new Thread[threadCount];
+        for (int i = 0; i < threadCount; i++)
         {
-            var buffers = new ThreadLocalBlenderBuffers<Rgb24>(this.memoryAllocator, 100, amountBufferOnly);
-
-            void RunThread()
-            {
-                buffers.AmountSpan[0] = 42;
-            }
-
-            Thread[] threads = new Thread[threadCount];
-            for (int i = 0; i < threadCount; i++)
-            {
-                threads[i] = new Thread(RunThread);
-                threads[i].Start();
-            }
-
-            foreach (Thread thread in threads)
-            {
-                thread.Join();
-            }
-
-            buffers.Dispose();
-
-            int expectedReturnCount = amountBufferOnly ? threadCount : 2 * threadCount;
-            Assert.Equal(expectedReturnCount, this.memoryAllocator.ReturnLog.Count);
+            threads[i] = new Thread(RunThread);
+            threads[i].Start();
         }
+
+        foreach (Thread thread in threads)
+        {
+            thread.Join();
+        }
+
+        buffers.Dispose();
+
+        int expectedReturnCount = amountBufferOnly ? threadCount : 2 * threadCount;
+        Assert.Equal(expectedReturnCount, this.memoryAllocator.ReturnLog.Count);
     }
 }

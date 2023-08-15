@@ -1,21 +1,20 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.PixelFormats;
+namespace SixLabors.ImageSharp.Drawing.Processing;
 
-namespace SixLabors.ImageSharp.Drawing.Processing
+internal static class DrawingHelpers
 {
-    internal static class DrawingHelpers
+    /// <summary>
+    /// Convert a <see cref="DenseMatrix{Color}"/> to a <see cref="DenseMatrix{T}"/> of the given pixel type.
+    /// </summary>
+    /// <typeparam name="TPixel">The type of pixel format.</typeparam>
+    /// <param name="colorMatrix">The color matrix.</param>
+    public static DenseMatrix<TPixel> ToPixelMatrix<TPixel>(this DenseMatrix<Color> colorMatrix)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
-        /// <summary>
-        /// Convert a <see cref="DenseMatrix{Color}"/> to a <see cref="DenseMatrix{T}"/> of the given pixel type.
-        /// </summary>
-        public static DenseMatrix<TPixel> ToPixelMatrix<TPixel>(this DenseMatrix<Color> colorMatrix, Configuration configuration)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-            var result = new DenseMatrix<TPixel>(colorMatrix.Columns, colorMatrix.Rows);
-            Color.ToPixel(configuration, colorMatrix.Span, result.Span);
-            return result;
-        }
+        DenseMatrix<TPixel> result = new(colorMatrix.Columns, colorMatrix.Rows);
+        Color.ToPixel(colorMatrix.Span, result.Span);
+        return result;
     }
 }

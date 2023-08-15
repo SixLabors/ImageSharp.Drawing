@@ -1,29 +1,26 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
+namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities
+public class GraphicsOptionsComparer : IEqualityComparer<GraphicsOptions>
 {
-    public class GraphicsOptionsComparer : IEqualityComparer<GraphicsOptions>
+    public bool SkipClearOptions { get; set; } = false;
+
+    public bool Equals(GraphicsOptions x, GraphicsOptions y)
     {
-        public bool SkipClearOptions { get; set; } = false;
-
-        public bool Equals(GraphicsOptions x, GraphicsOptions y)
+        if (this.SkipClearOptions)
         {
-            if (this.SkipClearOptions)
-            {
-                return x.Antialias == y.Antialias
-                    && x.AntialiasSubpixelDepth == y.AntialiasSubpixelDepth;
-            }
-
-            return x.AlphaCompositionMode == y.AlphaCompositionMode
-                && x.Antialias == y.Antialias
-                && x.AntialiasSubpixelDepth == y.AntialiasSubpixelDepth
-                && x.BlendPercentage == y.BlendPercentage
-                && x.ColorBlendingMode == y.ColorBlendingMode;
+            return x.Antialias == y.Antialias
+                && x.AntialiasSubpixelDepth == y.AntialiasSubpixelDepth;
         }
 
-        public int GetHashCode(GraphicsOptions obj) => obj.GetHashCode();
+        return x.AlphaCompositionMode == y.AlphaCompositionMode
+            && x.Antialias == y.Antialias
+            && x.AntialiasSubpixelDepth == y.AntialiasSubpixelDepth
+            && x.BlendPercentage == y.BlendPercentage
+            && x.ColorBlendingMode == y.ColorBlendingMode;
     }
+
+    public int GetHashCode(GraphicsOptions obj) => obj.GetHashCode();
 }

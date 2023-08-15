@@ -1,56 +1,54 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing.Processors;
 
-namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing
+namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+
+/// <summary>
+/// Defines a processor to fill <see cref="Image"/> pixels withing a given <see cref="IPath"/>
+/// with the given <see cref="Brush"/> and blending defined by the given <see cref="DrawingOptions"/>.
+/// </summary>
+public class DrawPathProcessor : IImageProcessor
 {
     /// <summary>
-    /// Defines a processor to fill <see cref="Image"/> pixels withing a given <see cref="IPath"/>
-    /// with the given <see cref="Brush"/> and blending defined by the given <see cref="DrawingOptions"/>.
+    /// Initializes a new instance of the <see cref="DrawPathProcessor" /> class.
     /// </summary>
-    public class DrawPathProcessor : IImageProcessor
+    /// <param name="options">The graphics options.</param>
+    /// <param name="pen">The details how to outline the region of interest.</param>
+    /// <param name="path">The path to be filled.</param>
+    public DrawPathProcessor(DrawingOptions options, Pen pen, IPath path)
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DrawPathProcessor" /> class.
-        /// </summary>
-        /// <param name="options">The graphics options.</param>
-        /// <param name="pen">The details how to outline the region of interest.</param>
-        /// <param name="path">The path to be filled.</param>
-        public DrawPathProcessor(DrawingOptions options, Pen pen, IPath path)
-        {
-            this.Path = path;
-            this.Pen = pen;
-            this.Options = options;
-        }
+        this.Path = path;
+        this.Pen = pen;
+        this.Options = options;
+    }
 
-        /// <summary>
-        /// Gets the <see cref="Brush"/> used for filling the destination image.
-        /// </summary>
-        public Pen Pen { get; }
+    /// <summary>
+    /// Gets the <see cref="Brush"/> used for filling the destination image.
+    /// </summary>
+    public Pen Pen { get; }
 
-        /// <summary>
-        /// Gets the path that this processor applies to.
-        /// </summary>
-        public IPath Path { get; }
+    /// <summary>
+    /// Gets the path that this processor applies to.
+    /// </summary>
+    public IPath Path { get; }
 
-        /// <summary>
-        /// Gets the <see cref="DrawingOptions"/> defining how to blend the brush pixels over the image pixels.
-        /// </summary>
-        public DrawingOptions Options { get; }
+    /// <summary>
+    /// Gets the <see cref="DrawingOptions"/> defining how to blend the brush pixels over the image pixels.
+    /// </summary>
+    public DrawingOptions Options { get; }
 
-        /// <inheritdoc />
-        public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-            // Offset drawlines to align drawing outlines to pixel centers.
-            // The global transform is applied in the FillPathProcessor.
-            IPath outline = this.Pen.GeneratePath(this.Path.Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
+    /// <inheritdoc />
+    public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // Offset drawlines to align drawing outlines to pixel centers.
+        // The global transform is applied in the FillPathProcessor.
+        IPath outline = this.Pen.GeneratePath(this.Path.Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
 
-            return new FillPathProcessor(this.Options, this.Pen.StrokeFill, outline)
-                .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
-        }
+        return new FillPathProcessor(this.Options, this.Pen.StrokeFill, outline)
+            .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
     }
 }

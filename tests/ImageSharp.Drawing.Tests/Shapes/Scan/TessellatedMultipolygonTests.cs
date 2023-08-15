@@ -1,97 +1,93 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
-using System.Linq;
 using SixLabors.ImageSharp.Drawing.Shapes;
 using SixLabors.ImageSharp.Memory;
-using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan
+namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan;
+
+public class TessellatedMultipolygonTests
 {
-    public class TessellatedMultipolygonTests
+    private static MemoryAllocator MemoryAllocator => Configuration.Default.MemoryAllocator;
+
+    private static void VerifyRing(TessellatedMultipolygon.Ring ring, PointF[] originalPoints, bool originalPositive, bool isHole)
     {
-        private static MemoryAllocator MemoryAllocator => Configuration.Default.MemoryAllocator;
+        ReadOnlySpan<PointF> points = ring.Vertices;
 
-        private static void VerifyRing(TessellatedMultipolygon.Ring ring, PointF[] originalPoints, bool originalPositive, bool isHole)
+        Assert.Equal(originalPoints.Length + 1, points.Length);
+        Assert.Equal(points[0], points[points.Length - 1]);
+        Assert.Equal(originalPoints.Length, ring.VertexCount);
+
+        originalPoints = originalPoints.CloneArray();
+
+        if ((originalPositive && isHole) || (!originalPositive && !isHole))
         {
-            ReadOnlySpan<PointF> points = ring.Vertices;
-
-            Assert.Equal(originalPoints.Length + 1, points.Length);
-            Assert.Equal(points[0], points[points.Length - 1]);
-            Assert.Equal(originalPoints.Length, ring.VertexCount);
-
-            originalPoints = originalPoints.CloneArray();
-
-            if ((originalPositive && isHole) || (!originalPositive && !isHole))
-            {
-                originalPoints.AsSpan().Reverse();
-                points = points.Slice(1);
-            }
-            else
-            {
-                points = points.Slice(0, points.Length - 1);
-            }
-
-            Assert.True(originalPoints.AsSpan().SequenceEqual(points));
+            originalPoints.AsSpan().Reverse();
+            points = points.Slice(1);
+        }
+        else
+        {
+            points = points.Slice(0, points.Length - 1);
         }
 
-        [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void Create_FromPolygon_Case1(bool reverseOriginal)
+        Assert.True(originalPoints.AsSpan().SequenceEqual(points));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Create_FromPolygon_Case1(bool reverseOriginal)
+    {
+        PointF[] points = PolygonFactory.CreatePointArray((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
+        if (reverseOriginal)
         {
-            PointF[] points = PolygonFactory.CreatePointArray((0, 3), (3, 3), (3, 0), (1, 2), (1, 1), (0, 0));
-            if (reverseOriginal)
-            {
-                points.AsSpan().Reverse();
-            }
-
-            var polygon = new Polygon(points);
-
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
-            VerifyRing(multipolygon[0], points, reverseOriginal, false);
-            Assert.Equal(6, multipolygon.TotalVertexCount);
+            points.AsSpan().Reverse();
         }
 
-        [Theory]
-        [InlineData(false)]
-        [InlineData(true)]
-        public void Create_FromPolygon_Case2(bool reverseOriginal)
+        var polygon = new Polygon(points);
+
+        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+        VerifyRing(multipolygon[0], points, reverseOriginal, false);
+        Assert.Equal(6, multipolygon.TotalVertexCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Create_FromPolygon_Case2(bool reverseOriginal)
+    {
+        PointF[] points = PolygonFactory.CreatePointArray((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
+        if (reverseOriginal)
         {
-            PointF[] points = PolygonFactory.CreatePointArray((0, 0), (2, 0), (3, 1), (3, 0), (6, 0), (6, 2), (5, 2), (5, 1), (4, 1), (4, 2), (2, 2), (1, 1), (0, 2));
-            if (reverseOriginal)
-            {
-                points.AsSpan().Reverse();
-            }
-
-            var polygon = new Polygon(points);
-
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
-
-            VerifyRing(multipolygon[0], points, !reverseOriginal, false);
+            points.AsSpan().Reverse();
         }
 
-        [Fact]
-        public void Create_FromRecangle()
-        {
-            var polygon = new RectangularPolygon(10, 20, 100, 50);
+        var polygon = new Polygon(points);
 
-            PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
+        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
 
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
-            VerifyRing(multipolygon[0], points, true, false);
-            Assert.Equal(4, multipolygon.TotalVertexCount);
-        }
+        VerifyRing(multipolygon[0], points, !reverseOriginal, false);
+    }
 
-        [Fact]
-        public void Create_FromStar()
-        {
-            var polygon = new Star(100, 100, 5, 30, 60);
-            PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
+    [Fact]
+    public void Create_FromRecangle()
+    {
+        var polygon = new RectangularPolygon(10, 20, 100, 50);
 
-            using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
-            VerifyRing(multipolygon[0], points, true, false);
-        }
+        PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
+
+        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+        VerifyRing(multipolygon[0], points, true, false);
+        Assert.Equal(4, multipolygon.TotalVertexCount);
+    }
+
+    [Fact]
+    public void Create_FromStar()
+    {
+        var polygon = new Star(100, 100, 5, 30, 60);
+        PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
+
+        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+        VerifyRing(multipolygon[0], points, true, false);
     }
 }

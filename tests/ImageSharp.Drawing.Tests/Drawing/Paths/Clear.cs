@@ -1,94 +1,92 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
+namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths;
+
+public class Clear : BaseImageOperationsExtensionTest
 {
-    public class Clear : BaseImageOperationsExtensionTest
+    private readonly DrawingOptions nonDefaultOptions = new DrawingOptions()
     {
-        private readonly DrawingOptions nonDefaultOptions = new DrawingOptions()
+        GraphicsOptions =
         {
-            GraphicsOptions =
-            {
-                AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Clear,
-                BlendPercentage = 0.5f,
-                ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Darken,
-                AntialiasSubpixelDepth = 99
-            }
-        };
-
-        private readonly Brush brush = new SolidBrush(Color.HotPink);
-
-        [Fact]
-        public void Brush()
-        {
-            this.operations.Clear(this.nonDefaultOptions, this.brush);
-
-            FillProcessor processor = this.Verify<FillProcessor>();
-
-            DrawingOptions expectedOptions = this.nonDefaultOptions;
-            Assert.Equal(expectedOptions.ShapeOptions, processor.Options.ShapeOptions);
-            Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
-            Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
-            Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
-
-            Assert.Equal(this.brush, processor.Brush);
+            AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Clear,
+            BlendPercentage = 0.5f,
+            ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Darken,
+            AntialiasSubpixelDepth = 99
         }
+    };
 
-        [Fact]
-        public void BrushDefaultOptions()
-        {
-            this.operations.Clear(this.brush);
+    private readonly Brush brush = new SolidBrush(Color.HotPink);
 
-            FillProcessor processor = this.Verify<FillProcessor>();
+    [Fact]
+    public void Brush()
+    {
+        this.operations.Clear(this.nonDefaultOptions, this.brush);
 
-            ShapeOptions expectedOptions = this.shapeOptions;
-            Assert.Equal(expectedOptions, processor.Options.ShapeOptions);
-            Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
-            Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
-            Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
+        FillProcessor processor = this.Verify<FillProcessor>();
 
-            Assert.Equal(this.brush, processor.Brush);
-        }
+        DrawingOptions expectedOptions = this.nonDefaultOptions;
+        Assert.Equal(expectedOptions.ShapeOptions, processor.Options.ShapeOptions);
+        Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
+        Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
+        Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-        [Fact]
-        public void ColorSet()
-        {
-            this.operations.Clear(this.nonDefaultOptions, Color.Red);
+        Assert.Equal(this.brush, processor.Brush);
+    }
 
-            FillProcessor processor = this.Verify<FillProcessor>();
+    [Fact]
+    public void BrushDefaultOptions()
+    {
+        this.operations.Clear(this.brush);
 
-            ShapeOptions expectedOptions = this.shapeOptions;
-            Assert.NotEqual(expectedOptions, processor.Options.ShapeOptions);
+        FillProcessor processor = this.Verify<FillProcessor>();
 
-            Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
-            Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
-            Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
-            Assert.NotEqual(this.brush, processor.Brush);
-            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
-            Assert.Equal(Color.Red, brush.Color);
-        }
+        ShapeOptions expectedOptions = this.shapeOptions;
+        Assert.Equal(expectedOptions, processor.Options.ShapeOptions);
+        Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
+        Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
+        Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
 
-        [Fact]
-        public void ColorSetDefaultOptions()
-        {
-            this.operations.Clear(Color.Red);
+        Assert.Equal(this.brush, processor.Brush);
+    }
 
-            FillProcessor processor = this.Verify<FillProcessor>();
+    [Fact]
+    public void ColorSet()
+    {
+        this.operations.Clear(this.nonDefaultOptions, Color.Red);
 
-            ShapeOptions expectedOptions = this.shapeOptions;
-            Assert.Equal(expectedOptions, processor.Options.ShapeOptions);
-            Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
-            Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
-            Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
+        FillProcessor processor = this.Verify<FillProcessor>();
 
-            Assert.NotEqual(this.brush, processor.Brush);
-            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
-            Assert.Equal(Color.Red, brush.Color);
-        }
+        ShapeOptions expectedOptions = this.shapeOptions;
+        Assert.NotEqual(expectedOptions, processor.Options.ShapeOptions);
+
+        Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
+        Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
+        Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
+        Assert.NotEqual(this.brush, processor.Brush);
+        SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
+        Assert.Equal(Color.Red, brush.Color);
+    }
+
+    [Fact]
+    public void ColorSetDefaultOptions()
+    {
+        this.operations.Clear(Color.Red);
+
+        FillProcessor processor = this.Verify<FillProcessor>();
+
+        ShapeOptions expectedOptions = this.shapeOptions;
+        Assert.Equal(expectedOptions, processor.Options.ShapeOptions);
+        Assert.Equal(1, processor.Options.GraphicsOptions.BlendPercentage);
+        Assert.Equal(PixelFormats.PixelAlphaCompositionMode.Src, processor.Options.GraphicsOptions.AlphaCompositionMode);
+        Assert.Equal(PixelFormats.PixelColorBlendingMode.Normal, processor.Options.GraphicsOptions.ColorBlendingMode);
+
+        Assert.NotEqual(this.brush, processor.Brush);
+        SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
+        Assert.Equal(Color.Red, brush.Color);
     }
 }

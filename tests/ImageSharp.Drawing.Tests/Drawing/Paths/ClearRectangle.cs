@@ -1,71 +1,69 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
-using Xunit;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths
+namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths;
+
+public class ClearRectangle : BaseImageOperationsExtensionTest
 {
-    public class ClearRectangle : BaseImageOperationsExtensionTest
+    private readonly Brush brush = Brushes.Solid(Color.HotPink);
+    private RectangleF rectangle = new(10, 10, 20, 20);
+
+    private RectangularPolygon RectanglePolygon => new(this.rectangle);
+
+    [Fact]
+    public void Brush()
     {
-        private readonly Brush brush = Brushes.Solid(Color.HotPink);
-        private RectangleF rectangle = new(10, 10, 20, 20);
+        this.operations.Clear(new DrawingOptions(), this.brush, this.rectangle);
 
-        private RectangularPolygon RectanglePolygon => new(this.rectangle);
+        FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-        [Fact]
-        public void Brush()
-        {
-            this.operations.Clear(new DrawingOptions(), this.brush, this.rectangle);
+        Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
+        Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
+        Assert.Equal(this.brush, processor.Brush);
+    }
 
-            FillPathProcessor processor = this.Verify<FillPathProcessor>();
+    [Fact]
+    public void BrushDefaultOptions()
+    {
+        this.operations.Clear(this.brush, this.rectangle);
 
-            Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
-            Assert.Equal(this.brush, processor.Brush);
-        }
+        FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-        [Fact]
-        public void BrushDefaultOptions()
-        {
-            this.operations.Clear(this.brush, this.rectangle);
+        Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
+        Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
+        Assert.Equal(this.brush, processor.Brush);
+    }
 
-            FillPathProcessor processor = this.Verify<FillPathProcessor>();
+    [Fact]
+    public void ColorSet()
+    {
+        this.operations.Clear(new DrawingOptions(), Color.Red, this.rectangle);
 
-            Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
-            Assert.Equal(this.brush, processor.Brush);
-        }
+        FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-        [Fact]
-        public void ColorSet()
-        {
-            this.operations.Clear(new DrawingOptions(), Color.Red, this.rectangle);
+        Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
+        Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
+        Assert.NotEqual(this.brush, processor.Brush);
+        SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
+        Assert.Equal(Color.Red, brush.Color);
+    }
 
-            FillPathProcessor processor = this.Verify<FillPathProcessor>();
+    [Fact]
+    public void ColorAndThicknessDefaultOptions()
+    {
+        this.operations.Clear(Color.Red, this.rectangle);
 
-            Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
-            Assert.NotEqual(this.brush, processor.Brush);
-            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
-            Assert.Equal(Color.Red, brush.Color);
-        }
+        FillPathProcessor processor = this.Verify<FillPathProcessor>();
 
-        [Fact]
-        public void ColorAndThicknessDefaultOptions()
-        {
-            this.operations.Clear(Color.Red, this.rectangle);
-
-            FillPathProcessor processor = this.Verify<FillPathProcessor>();
-
-            Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-            Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
-            Assert.NotEqual(this.brush, processor.Brush);
-            SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
-            Assert.Equal(Color.Red, brush.Color);
-        }
+        Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
+        Assert.True(RectangularPolygonValueComparer.Equals(this.RectanglePolygon, processor.Region));
+        Assert.NotEqual(this.brush, processor.Brush);
+        SolidBrush brush = Assert.IsType<SolidBrush>(processor.Brush);
+        Assert.Equal(Color.Red, brush.Color);
     }
 }

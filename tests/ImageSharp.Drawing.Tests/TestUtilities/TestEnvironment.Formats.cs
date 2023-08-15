@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-using System;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
@@ -11,69 +10,68 @@ using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Formats.Tga;
 using IOPath = System.IO.Path;
 
-namespace SixLabors.ImageSharp.Drawing.Tests
+namespace SixLabors.ImageSharp.Drawing.Tests;
+
+public static partial class TestEnvironment
 {
-    public static partial class TestEnvironment
+    private static readonly Lazy<Configuration> ConfigurationLazy = new Lazy<Configuration>(CreateDefaultConfiguration);
+
+    internal static Configuration Configuration => ConfigurationLazy.Value;
+
+    internal static IImageDecoder GetReferenceDecoder(string filePath)
     {
-        private static readonly Lazy<Configuration> ConfigurationLazy = new Lazy<Configuration>(CreateDefaultConfiguration);
+        IImageFormat format = GetImageFormat(filePath);
+        return Configuration.ImageFormatsManager.FindDecoder(format);
+    }
 
-        internal static Configuration Configuration => ConfigurationLazy.Value;
+    internal static IImageEncoder GetReferenceEncoder(string filePath)
+    {
+        IImageFormat format = GetImageFormat(filePath);
+        return Configuration.ImageFormatsManager.FindEncoder(format);
+    }
 
-        internal static IImageDecoder GetReferenceDecoder(string filePath)
-        {
-            IImageFormat format = GetImageFormat(filePath);
-            return Configuration.ImageFormatsManager.FindDecoder(format);
-        }
+    internal static IImageFormat GetImageFormat(string filePath)
+    {
+        string extension = IOPath.GetExtension(filePath);
 
-        internal static IImageEncoder GetReferenceEncoder(string filePath)
-        {
-            IImageFormat format = GetImageFormat(filePath);
-            return Configuration.ImageFormatsManager.FindEncoder(format);
-        }
+        return Configuration.ImageFormatsManager.FindFormatByFileExtension(extension);
+    }
 
-        internal static IImageFormat GetImageFormat(string filePath)
-        {
-            string extension = IOPath.GetExtension(filePath);
+    private static void ConfigureCodecs(
+        this Configuration cfg,
+        IImageFormat imageFormat,
+        IImageDecoder decoder,
+        IImageEncoder encoder,
+        IImageFormatDetector detector)
+    {
+        cfg.ImageFormatsManager.SetDecoder(imageFormat, decoder);
+        cfg.ImageFormatsManager.SetEncoder(imageFormat, encoder);
+        cfg.ImageFormatsManager.AddImageFormatDetector(detector);
+    }
 
-            return Configuration.ImageFormatsManager.FindFormatByFileExtension(extension);
-        }
+    private static Configuration CreateDefaultConfiguration()
+    {
+        var cfg = new Configuration(
+            new JpegConfigurationModule(),
+            new GifConfigurationModule(),
+            new TgaConfigurationModule());
 
-        private static void ConfigureCodecs(
-            this Configuration cfg,
-            IImageFormat imageFormat,
-            IImageDecoder decoder,
-            IImageEncoder encoder,
-            IImageFormatDetector detector)
-        {
-            cfg.ImageFormatsManager.SetDecoder(imageFormat, decoder);
-            cfg.ImageFormatsManager.SetEncoder(imageFormat, encoder);
-            cfg.ImageFormatsManager.AddImageFormatDetector(detector);
-        }
+        // Magick codecs should work on all platforms
+        IImageEncoder pngEncoder = IsWindows ? (IImageEncoder)SystemDrawingReferenceEncoder.Png : new PngEncoder();
+        IImageEncoder bmpEncoder = IsWindows ? (IImageEncoder)SystemDrawingReferenceEncoder.Bmp : new BmpEncoder();
 
-        private static Configuration CreateDefaultConfiguration()
-        {
-            var cfg = new Configuration(
-                new JpegConfigurationModule(),
-                new GifConfigurationModule(),
-                new TgaConfigurationModule());
+        cfg.ConfigureCodecs(
+            PngFormat.Instance,
+            MagickReferenceDecoder.Instance,
+            pngEncoder,
+            new PngImageFormatDetector());
 
-            // Magick codecs should work on all platforms
-            IImageEncoder pngEncoder = IsWindows ? (IImageEncoder)SystemDrawingReferenceEncoder.Png : new PngEncoder();
-            IImageEncoder bmpEncoder = IsWindows ? (IImageEncoder)SystemDrawingReferenceEncoder.Bmp : new BmpEncoder();
+        cfg.ConfigureCodecs(
+            BmpFormat.Instance,
+            IsWindows ? (IImageDecoder)SystemDrawingReferenceDecoder.Instance : MagickReferenceDecoder.Instance,
+            bmpEncoder,
+            new BmpImageFormatDetector());
 
-            cfg.ConfigureCodecs(
-                PngFormat.Instance,
-                MagickReferenceDecoder.Instance,
-                pngEncoder,
-                new PngImageFormatDetector());
-
-            cfg.ConfigureCodecs(
-                BmpFormat.Instance,
-                IsWindows ? (IImageDecoder)SystemDrawingReferenceDecoder.Instance : MagickReferenceDecoder.Instance,
-                bmpEncoder,
-                new BmpImageFormatDetector());
-
-            return cfg;
-        }
+        return cfg;
     }
 }

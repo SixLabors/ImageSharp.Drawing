@@ -1,21 +1,20 @@
 // Copyright (c) Six Labors.
-// Licensed under the Apache License, Version 2.0.
+// Licensed under the Six Labors Split License.
 
-namespace SixLabors.ImageSharp.Drawing
+namespace SixLabors.ImageSharp.Drawing;
+
+/// <summary>
+/// Returns metadata about the point along a path.
+/// </summary>
+public readonly struct SegmentInfo
 {
     /// <summary>
-    /// Returns metadata about the point along a path.
+    /// Gets the point on the path
     /// </summary>
-    public struct SegmentInfo
-    {
-        /// <summary>
-        /// The point on the path
-        /// </summary>
-        public PointF Point;
+    public PointF Point { get; init; }
 
-        /// <summary>
-        /// The angle of the segment. Measured in radians.
-        /// </summary>
-        public float Angle;
-    }
+    /// <summary>
+    /// Gets the angle of the segment. Measured in radians.
+    /// </summary>
+    public float Angle { get; init; }
 }
