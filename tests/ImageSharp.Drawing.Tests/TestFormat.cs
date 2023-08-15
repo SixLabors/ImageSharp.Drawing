@@ -1,9 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Metadata;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests;
@@ -11,13 +13,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// <summary>
 /// A test image file.
 /// </summary>
-public class TestFormat : IConfigurationModule, IImageFormat
+public class TestFormat : IImageFormatConfigurationModule, IImageFormat
 {
-    private readonly Dictionary<Type, object> sampleImages = new Dictionary<Type, object>();
+    private readonly Dictionary<Type, object> sampleImages = new();
 
     // We should not change Configuration.Default in individual tests!
     // Create new configuration instances with new Configuration(TestFormat.GlobalTestFormat) instead!
-    public static TestFormat GlobalTestFormat { get; } = new TestFormat();
+    public static TestFormat GlobalTestFormat { get; } = new();
 
     public TestFormat()
     {
@@ -25,11 +27,11 @@ public class TestFormat : IConfigurationModule, IImageFormat
         this.Decoder = new TestDecoder(this);
     }
 
-    public List<DecodeOperation> DecodeCalls { get; } = new List<DecodeOperation>();
+    public List<DecodeOperation> DecodeCalls { get; } = new();
 
-    public IImageEncoder Encoder { get; }
+    public TestEncoder Encoder { get; }
 
-    public IImageDecoder Decoder { get; }
+    public TestDecoder Decoder { get; }
 
     private readonly byte[] header = Guid.NewGuid().ToByteArray();
 
@@ -47,12 +49,20 @@ public class TestFormat : IConfigurationModule, IImageFormat
         return ms;
     }
 
+    public Stream CreateAsyncSemaphoreStream(SemaphoreSlim notifyWaitPositionReachedSemaphore, SemaphoreSlim continueSemaphore, bool seeakable, int size = 1024, int waitAfterPosition = 512)
+    {
+        byte[] buffer = new byte[size];
+        this.header.CopyTo(buffer, 0);
+        var semaphoreStream = new SemaphoreReadMemoryStream(buffer, waitAfterPosition, notifyWaitPositionReachedSemaphore, continueSemaphore);
+        return seeakable ? semaphoreStream : new AsyncStreamWrapper(semaphoreStream, () => false);
+    }
+
     public void VerifySpecificDecodeCall<TPixel>(byte[] marker, Configuration config)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         DecodeOperation[] discovered = this.DecodeCalls.Where(x => x.IsMatch(marker, config, typeof(TPixel))).ToArray();
 
-        Assert.True(discovered.Any(), "No calls to decode on this format with the provided options happened");
+        Assert.True(discovered.Length > 0, "No calls to decode on this format with the provided options happened");
 
         foreach (DecodeOperation d in discovered)
         {
@@ -64,7 +74,7 @@ public class TestFormat : IConfigurationModule, IImageFormat
     {
         DecodeOperation[] discovered = this.DecodeCalls.Where(x => x.IsMatch(marker, config, typeof(TestPixelForAgnosticDecode))).ToArray();
 
-        Assert.True(discovered.Any(), "No calls to decode on this format with the provided options happened");
+        Assert.True(discovered.Length > 0, "No calls to decode on this format with the provided options happened");
 
         foreach (DecodeOperation d in discovered)
         {
@@ -104,16 +114,16 @@ public class TestFormat : IConfigurationModule, IImageFormat
 
     public IEnumerable<string> FileExtensions => this.SupportedExtensions;
 
-    public bool IsSupportedFileFormat(ReadOnlySpan<byte> header)
+    public bool IsSupportedFileFormat(ReadOnlySpan<byte> fileHeader)
     {
-        if (header.Length < this.header.Length)
+        if (fileHeader.Length < this.header.Length)
         {
             return false;
         }
 
         for (int i = 0; i < this.header.Length; i++)
         {
-            if (header[i] != this.header[i])
+            if (fileHeader[i] != this.header[i])
             {
                 return false;
             }
@@ -122,20 +132,19 @@ public class TestFormat : IConfigurationModule, IImageFormat
         return true;
     }
 
-    public void Configure(Configuration host)
+    public void Configure(Configuration configuration)
     {
-        host.ImageFormatsManager.AddImageFormatDetector(new TestHeader(this));
-        host.ImageFormatsManager.SetEncoder(this, new TestEncoder(this));
-        host.ImageFormatsManager.SetDecoder(this, new TestDecoder(this));
+        configuration.ImageFormatsManager.AddImageFormatDetector(new TestHeader(this));
+        configuration.ImageFormatsManager.SetEncoder(this, new TestEncoder(this));
+        configuration.ImageFormatsManager.SetDecoder(this, new TestDecoder(this));
     }
 
     public struct DecodeOperation
     {
-        public byte[] Marker { get; set; }
+        public byte[] Marker;
+        internal Configuration Config;
 
-        internal Configuration Config { get; set; }
-
-        public Type PixelType { get; set; }
+        public Type PixelType;
 
         public bool IsMatch(byte[] testMarker, Configuration config, Type pixelType)
         {
@@ -165,22 +174,19 @@ public class TestFormat : IConfigurationModule, IImageFormat
     {
         private readonly TestFormat testFormat;
 
-        public TestHeader(TestFormat testFormat) => this.testFormat = testFormat;
-
         public int HeaderSize => this.testFormat.HeaderSize;
 
-        public IImageFormat DetectFormat(ReadOnlySpan<byte> header)
+        public bool TryDetectFormat(ReadOnlySpan<byte> header, [NotNullWhen(true)] out IImageFormat? format)
         {
-            if (this.testFormat.IsSupportedFileFormat(header))
-            {
-                return this.testFormat;
-            }
+            format = this.testFormat.IsSupportedFileFormat(header) ? this.testFormat : null;
 
-            return null;
+            return format != null;
         }
+
+        public TestHeader(TestFormat testFormat) => this.testFormat = testFormat;
     }
 
-    public class TestDecoder : IImageDecoder
+    public class TestDecoder : SpecializedImageDecoder<TestDecoderOptions>
     {
         private readonly TestFormat testFormat;
 
@@ -192,16 +198,30 @@ public class TestFormat : IConfigurationModule, IImageFormat
 
         public int HeaderSize => this.testFormat.HeaderSize;
 
-        public Image<TPixel> Decode<TPixel>(Configuration config, Stream stream, CancellationToken cancellationToken)
-            where TPixel : unmanaged, IPixel<TPixel>
+        public bool IsSupportedFileFormat(Span<byte> header) => this.testFormat.IsSupportedFileFormat(header);
+
+        protected override ImageInfo Identify(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
         {
-            var ms = new MemoryStream();
-            stream.CopyTo(ms);
+            Image<TestPixelForAgnosticDecode> image =
+                this.Decode<TestPixelForAgnosticDecode>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
+            ImageFrameCollection<TestPixelForAgnosticDecode> m = image.Frames;
+
+            return new(image.PixelType, image.Size, image.Metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)));
+        }
+
+        protected override TestDecoderOptions CreateDefaultSpecializedOptions(DecoderOptions options)
+            => new() { GeneralOptions = options };
+
+        protected override Image<TPixel> Decode<TPixel>(TestDecoderOptions options, Stream stream, CancellationToken cancellationToken)
+        {
+            Configuration configuration = options.GeneralOptions.Configuration;
+            using MemoryStream ms = new();
+            stream.CopyTo(ms, configuration.StreamProcessingBufferSize);
             byte[] marker = ms.ToArray().Skip(this.testFormat.header.Length).ToArray();
             this.testFormat.DecodeCalls.Add(new DecodeOperation
             {
                 Marker = marker,
-                Config = config,
+                Config = configuration,
                 PixelType = typeof(TPixel)
             });
 
@@ -209,28 +229,26 @@ public class TestFormat : IConfigurationModule, IImageFormat
             return this.testFormat.Sample<TPixel>();
         }
 
-        public bool IsSupportedFileFormat(Span<byte> header) => this.testFormat.IsSupportedFileFormat(header);
+        protected override Image Decode(TestDecoderOptions options, Stream stream, CancellationToken cancellationToken)
+            => this.Decode<TestPixelForAgnosticDecode>(options, stream, cancellationToken);
+    }
 
-        public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<TestPixelForAgnosticDecode>(configuration, stream, cancellationToken);
-
-        public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => throw new NotImplementedException();
-
-        public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            => throw new NotImplementedException();
+    public class TestDecoderOptions : ISpecializedDecoderOptions
+    {
+        public DecoderOptions GeneralOptions { get; init; } = DecoderOptions.Default;
     }
 
     public class TestEncoder : IImageEncoder
     {
         private readonly TestFormat testFormat;
 
-        public TestEncoder(TestFormat testFormat)
-            => this.testFormat = testFormat;
+        public TestEncoder(TestFormat testFormat) => this.testFormat = testFormat;
 
         public IEnumerable<string> MimeTypes => new[] { this.testFormat.MimeType };
 
         public IEnumerable<string> FileExtensions => this.testFormat.SupportedExtensions;
+
+        public bool SkipMetadata { get; init; }
 
         public void Encode<TPixel>(Image<TPixel> image, Stream stream)
             where TPixel : unmanaged, IPixel<TPixel>
@@ -240,10 +258,10 @@ public class TestFormat : IConfigurationModule, IImageFormat
 
         public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream, CancellationToken cancellationToken)
             where TPixel : unmanaged, IPixel<TPixel>
-            => throw new NotImplementedException();
+            => Task.CompletedTask;  // TODO record this happened so we can verify it.
     }
 
-    private struct TestPixelForAgnosticDecode : IPixel<TestPixelForAgnosticDecode>
+    public struct TestPixelForAgnosticDecode : IPixel<TestPixelForAgnosticDecode>
     {
         public PixelOperations<TestPixelForAgnosticDecode> CreatePixelOperations() => new();
 
@@ -272,6 +290,10 @@ public class TestFormat : IConfigurationModule, IImageFormat
         }
 
         public void FromBgra32(Bgra32 source)
+        {
+        }
+
+        public void FromAbgr32(Abgr32 source)
         {
         }
 
@@ -308,10 +330,6 @@ public class TestFormat : IConfigurationModule, IImageFormat
         }
 
         public void FromRgba64(Rgba64 source)
-        {
-        }
-
-        public void FromAbgr32(Abgr32 source)
         {
         }
 

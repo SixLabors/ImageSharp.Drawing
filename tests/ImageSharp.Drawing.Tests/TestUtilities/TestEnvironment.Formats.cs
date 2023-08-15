@@ -14,27 +14,29 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 
 public static partial class TestEnvironment
 {
-    private static readonly Lazy<Configuration> ConfigurationLazy = new Lazy<Configuration>(CreateDefaultConfiguration);
+    private static readonly Lazy<Configuration> ConfigurationLazy = new(CreateDefaultConfiguration);
 
     internal static Configuration Configuration => ConfigurationLazy.Value;
 
     internal static IImageDecoder GetReferenceDecoder(string filePath)
     {
         IImageFormat format = GetImageFormat(filePath);
-        return Configuration.ImageFormatsManager.FindDecoder(format);
+        return Configuration.ImageFormatsManager.GetDecoder(format);
     }
 
     internal static IImageEncoder GetReferenceEncoder(string filePath)
     {
         IImageFormat format = GetImageFormat(filePath);
-        return Configuration.ImageFormatsManager.FindEncoder(format);
+        return Configuration.ImageFormatsManager.GetEncoder(format);
     }
 
     internal static IImageFormat GetImageFormat(string filePath)
     {
         string extension = IOPath.GetExtension(filePath);
 
-        return Configuration.ImageFormatsManager.FindFormatByFileExtension(extension);
+        Configuration.ImageFormatsManager.TryFindFormatByFileExtension(extension, out IImageFormat format);
+
+        return format;
     }
 
     private static void ConfigureCodecs(
@@ -57,8 +59,8 @@ public static partial class TestEnvironment
             new TgaConfigurationModule());
 
         // Magick codecs should work on all platforms
-        IImageEncoder pngEncoder = IsWindows ? (IImageEncoder)SystemDrawingReferenceEncoder.Png : new PngEncoder();
-        IImageEncoder bmpEncoder = IsWindows ? (IImageEncoder)SystemDrawingReferenceEncoder.Bmp : new BmpEncoder();
+        IImageEncoder pngEncoder = IsWindows ? SystemDrawingReferenceEncoder.Png : new PngEncoder();
+        IImageEncoder bmpEncoder = IsWindows ? SystemDrawingReferenceEncoder.Bmp : new BmpEncoder();
 
         cfg.ConfigureCodecs(
             PngFormat.Instance,
@@ -68,7 +70,7 @@ public static partial class TestEnvironment
 
         cfg.ConfigureCodecs(
             BmpFormat.Instance,
-            IsWindows ? (IImageDecoder)SystemDrawingReferenceDecoder.Instance : MagickReferenceDecoder.Instance,
+            IsWindows ? SystemDrawingReferenceDecoder.Instance : MagickReferenceDecoder.Instance,
             bmpEncoder,
             new BmpImageFormatDetector());
 

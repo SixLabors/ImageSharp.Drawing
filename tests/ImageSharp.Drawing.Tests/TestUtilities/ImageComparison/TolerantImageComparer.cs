@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
@@ -53,7 +54,7 @@ public class TolerantImageComparer : ImageComparer
     /// </summary>
     public int PerPixelManhattanThreshold { get; }
 
-    public override ImageSimilarityReport<TPixelA, TPixelB> CompareImagesOrFrames<TPixelA, TPixelB>(ImageFrame<TPixelA> expected, ImageFrame<TPixelB> actual)
+    public override ImageSimilarityReport<TPixelA, TPixelB> CompareImagesOrFrames<TPixelA, TPixelB>(int index, ImageFrame<TPixelA> expected, ImageFrame<TPixelB> actual)
     {
         if (expected.Size() != actual.Size())
         {
@@ -70,11 +71,13 @@ public class TolerantImageComparer : ImageComparer
 
         var differences = new List<PixelDifference>();
         Configuration configuration = expected.GetConfiguration();
+        Buffer2D<TPixelA> expectedBuffer = expected.PixelBuffer;
+        Buffer2D<TPixelB> actualBuffer = actual.PixelBuffer;
 
         for (int y = 0; y < actual.Height; y++)
         {
-            Span<TPixelA> aSpan = expected.PixelBuffer.DangerousGetRowSpan(y);
-            Span<TPixelB> bSpan = actual.PixelBuffer.DangerousGetRowSpan(y);
+            Span<TPixelA> aSpan = expectedBuffer.DangerousGetRowSpan(y);
+            Span<TPixelB> bSpan = actualBuffer.DangerousGetRowSpan(y);
 
             PixelOperations<TPixelA>.Instance.ToRgba64(configuration, aSpan, aBuffer);
             PixelOperations<TPixelB>.Instance.ToRgba64(configuration, bSpan, bBuffer);
@@ -98,7 +101,7 @@ public class TolerantImageComparer : ImageComparer
 
         if (normalizedDifference > this.ImageThreshold)
         {
-            return new ImageSimilarityReport<TPixelA, TPixelB>(expected, actual, differences, normalizedDifference);
+            return new ImageSimilarityReport<TPixelA, TPixelB>(index, expected, actual, differences, normalizedDifference);
         }
         else
         {
@@ -108,7 +111,9 @@ public class TolerantImageComparer : ImageComparer
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int GetManhattanDistanceInRgbaSpace(ref Rgba64 a, ref Rgba64 b)
-        => Diff(a.R, b.R) + Diff(a.G, b.G) + Diff(a.B, b.B) + Diff(a.A, b.A);
+    {
+        return Diff(a.R, b.R) + Diff(a.G, b.G) + Diff(a.B, b.B) + Diff(a.A, b.A);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int Diff(ushort a, ushort b) => Math.Abs(a - b);

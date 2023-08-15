@@ -8,12 +8,12 @@ public class ArcLineSegmentTest
     [Fact]
     public void ContainsStartAndEnd()
     {
-        var segment = new ArcLineSegment(new(10, 10), new(10, 20), 0, 0, 90);
+        ArcLineSegment segment = new(new(10, 10), new(10, 20), 0, 0, 90);
         ReadOnlySpan<PointF> points = segment.Flatten().Span;
-        Assert.Equal(20, points[0].X, 5);
-        Assert.Equal(10, points[0].Y, 5);
-        Assert.Equal(10, segment.EndPoint.X, 5);
-        Assert.Equal(30, segment.EndPoint.Y, 5);
+        Assert.Equal(20, points[0].X, 5F);
+        Assert.Equal(10, points[0].Y, 5F);
+        Assert.Equal(10, segment.EndPoint.X, 5F);
+        Assert.Equal(30, segment.EndPoint.Y, 5F);
     }
 
     [Fact]

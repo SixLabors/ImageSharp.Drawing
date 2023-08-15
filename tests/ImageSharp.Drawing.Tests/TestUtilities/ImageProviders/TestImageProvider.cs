@@ -3,9 +3,11 @@
 
 using System.Reflection;
 using Castle.Core.Internal;
+
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+
 using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests;
@@ -13,8 +15,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// <summary>
 /// Provides <see cref="Image{TPixel}" /> instances for parametric unit tests.
 /// </summary>
-/// <typeparam name="TPixel">The pixel format of the image</typeparam>
-public abstract partial class TestImageProvider<TPixel> : ITestImageProvider
+/// <typeparam name="TPixel">The pixel format of the image.</typeparam>
+public abstract partial class TestImageProvider<TPixel> : ITestImageProvider, IXunitSerializable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     public PixelTypes PixelType { get; private set; } = typeof(TPixel).GetPixelType();
@@ -24,7 +26,7 @@ public abstract partial class TestImageProvider<TPixel> : ITestImageProvider
     public Configuration Configuration { get; set; } = Configuration.CreateDefaultInstance();
 
     /// <summary>
-    /// Gets the utility instance to provide information about the test image & manage input/output
+    /// Gets the utility instance to provide information about the test image & manage input/output.
     /// </summary>
     public ImagingTestCaseUtility Utility { get; private set; }
 
@@ -49,10 +51,10 @@ public abstract partial class TestImageProvider<TPixel> : ITestImageProvider
         => new TestPatternProvider(width, height).Init(testMethod, pixelTypeOverride);
 
     public static TestImageProvider<TPixel> Blank(
-                    int width,
-                    int height,
-                    MethodInfo testMethod = null,
-                    PixelTypes pixelTypeOverride = PixelTypes.Undefined)
+        int width,
+        int height,
+        MethodInfo testMethod = null,
+        PixelTypes pixelTypeOverride = PixelTypes.Undefined)
         => new BlankProvider(width, height).Init(testMethod, pixelTypeOverride);
 
     public static TestImageProvider<TPixel> File(
@@ -62,10 +64,11 @@ public abstract partial class TestImageProvider<TPixel> : ITestImageProvider
         => new FileProvider(filePath).Init(testMethod, pixelTypeOverride);
 
     public static TestImageProvider<TPixel> Lambda(
-            Func<Image<TPixel>> factoryFunc,
+            string declaringTypeName,
+            string methodName,
             MethodInfo testMethod = null,
             PixelTypes pixelTypeOverride = PixelTypes.Undefined)
-        => new LambdaProvider(factoryFunc).Init(testMethod, pixelTypeOverride);
+        => new MemberMethodProvider(declaringTypeName, methodName).Init(testMethod, pixelTypeOverride);
 
     public static TestImageProvider<TPixel> Solid(
         int width,
@@ -81,18 +84,34 @@ public abstract partial class TestImageProvider<TPixel> : ITestImageProvider
     /// <summary>
     /// Returns an <see cref="Image{TPixel}"/> instance to the test case with the necessary traits.
     /// </summary>
-    /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+    /// <returns>A test image.</returns>
     public abstract Image<TPixel> GetImage();
 
-    Image ITestImageProvider.GetImage() => this.GetImage();
+    public Image<TPixel> GetImage(IImageDecoder decoder)
+        => this.GetImage(decoder, new());
 
-    public virtual Image<TPixel> GetImage(IImageDecoder decoder)
+    public Task<Image<TPixel>> GetImageAsync(IImageDecoder decoder)
+         => this.GetImageAsync(decoder, new());
+
+    public virtual Image<TPixel> GetImage(IImageDecoder decoder, DecoderOptions options)
         => throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");
+
+    public virtual Task<Image<TPixel>> GetImageAsync(IImageDecoder decoder, DecoderOptions options)
+        => throw new NotSupportedException($"Decoder specific GetImageAsync() is not supported with {this.GetType().Name}!");
+
+    public virtual Image<TPixel> GetImage<T>(ISpecializedImageDecoder<T> decoder, T options)
+        where T : class, ISpecializedDecoderOptions, new()
+        => throw new NotSupportedException($"Decoder specific GetImage() is not supported with {this.GetType().Name}!");
+
+    public virtual Task<Image<TPixel>> GetImageAsync<T>(ISpecializedImageDecoder<T> decoder, T options)
+        where T : class, ISpecializedDecoderOptions, new()
+        => throw new NotSupportedException($"Decoder specific GetImageAsync() is not supported with {this.GetType().Name}!");
 
     /// <summary>
     /// Returns an <see cref="Image{TPixel}"/> instance to the test case with the necessary traits.
     /// </summary>
-    /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+    /// <param name="operationsToApply">The operation to apply to the image before returning.</param>
+    /// <returns>A test image.</returns>
     public Image<TPixel> GetImage(Action<IImageProcessingContext> operationsToApply)
     {
         Image<TPixel> img = this.GetImage();
@@ -149,33 +168,12 @@ public abstract partial class TestImageProvider<TPixel> : ITestImageProvider
 
     protected TestImageProvider<TPixel> Init(MethodInfo testMethod, PixelTypes pixelTypeOverride)
     {
-        string subfolder = testMethod?.DeclaringType.GetAttribute<GroupOutputAttribute>()?.Subfolder
-                           ?? string.Empty;
+        string subfolder =
+            testMethod?.DeclaringType.GetAttribute<GroupOutputAttribute>()?.Subfolder ?? string.Empty;
+
         return this.Init(testMethod?.DeclaringType.Name, testMethod?.Name, subfolder, pixelTypeOverride);
     }
 
-    public override string ToString() => $"{this.SourceFileOrDescription}[{this.PixelType}]";
-}
-
-public static class TestImageProviderExtensions
-{
-    public static Image GetImage(this ITestImageProvider provider, Action<IImageProcessingContext> operationsToApply)
-    {
-        Image img = provider.GetImage();
-        img.Mutate(operationsToApply);
-        return img;
-    }
-}
-
-public interface ITestImageProvider
-{
-    PixelTypes PixelType { get; }
-
-    ImagingTestCaseUtility Utility { get; }
-
-    string SourceFileOrDescription { get; }
-
-    Configuration Configuration { get; set; }
-
-    Image GetImage();
+    public override string ToString()
+        => $"{this.SourceFileOrDescription}[{this.PixelType}]";
 }

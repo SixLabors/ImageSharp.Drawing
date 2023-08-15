@@ -17,7 +17,7 @@ public abstract class BaseImageOperationsExtensionTest
     protected readonly ShapeOptions shapeOptions;
     private readonly Image<Rgba32> source;
 
-    public Rectangle SourceBounds() => this.source.Bounds();
+    public Rectangle SourceBounds() => this.source.Bounds;
 
     public BaseImageOperationsExtensionTest()
     {

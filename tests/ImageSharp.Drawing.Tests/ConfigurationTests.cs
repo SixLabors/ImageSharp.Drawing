@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using Moq;
+using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.IO;
 
@@ -84,7 +85,7 @@ public class ConfigurationTests
     [Fact]
     public void ConstructorCallConfigureOnFormatProvider()
     {
-        var provider = new Mock<IConfigurationModule>();
+        var provider = new Mock<IImageFormatConfigurationModule>();
         var config = new Configuration(provider.Object);
 
         provider.Verify(x => x.Configure(config));
@@ -93,7 +94,7 @@ public class ConfigurationTests
     [Fact]
     public void AddFormatCallsConfig()
     {
-        var provider = new Mock<IConfigurationModule>();
+        var provider = new Mock<IImageFormatConfigurationModule>();
         var config = new Configuration();
         config.Configure(provider.Object);
 

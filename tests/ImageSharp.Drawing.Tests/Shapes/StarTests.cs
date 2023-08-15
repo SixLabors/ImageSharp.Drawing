@@ -75,14 +75,14 @@ public class StarTests
             }
 
             float actual = Vector2.Distance(points[i], points[j]);
-            Assert.Equal(baseline, actual, 3);
+            Assert.Equal(baseline, actual, 3F);
             if (i % 2 == 1)
             {
-                Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3F);
             }
             else
             {
-                Assert.Equal(Radius2, Vector2.Distance(Vector2.Zero, points[i]), 3);
+                Assert.Equal(Radius2, Vector2.Distance(Vector2.Zero, points[i]), 3F);
             }
         }
     }

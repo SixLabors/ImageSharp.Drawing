@@ -4,16 +4,18 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
+using IOPath = System.IO.Path;
 
 using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests;
 
-public abstract partial class TestImageProvider<TPixel>
+public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private class FileProvider : TestImageProvider<TPixel>, IXunitSerializable
+    internal class FileProvider : TestImageProvider<TPixel>, IXunitSerializable
     {
         // Need PixelTypes in the dictionary key, because result images of TestImageProvider<TPixel>.FileProvider
         // are shared between PixelTypes.Color & PixelTypes.Rgba32
@@ -23,33 +25,71 @@ public abstract partial class TestImageProvider<TPixel>
 
             private readonly Dictionary<string, object> decoderParameters;
 
-            public Key(PixelTypes pixelType, string filePath, IImageDecoder customDecoder)
+            public Key(
+                PixelTypes pixelType,
+                string filePath,
+                IImageDecoder customDecoder,
+                DecoderOptions options,
+                ISpecializedDecoderOptions specialized)
             {
                 Type customType = customDecoder?.GetType();
-                this.commonValues = new Tuple<PixelTypes, string, Type>(pixelType, filePath, customType);
-                this.decoderParameters = GetDecoderParameters(customDecoder);
+                this.commonValues = new Tuple<PixelTypes, string, Type>(
+                    pixelType,
+                    filePath,
+                    customType);
+                this.decoderParameters = GetDecoderParameters(options, specialized);
             }
 
-            private static Dictionary<string, object> GetDecoderParameters(IImageDecoder customDecoder)
+            private static Dictionary<string, object> GetDecoderParameters(
+                DecoderOptions options,
+                ISpecializedDecoderOptions specialized)
             {
-                Type type = customDecoder.GetType();
+                Type type = options.GetType();
 
                 var data = new Dictionary<string, object>();
 
                 while (type != null && type != typeof(object))
                 {
-                    PropertyInfo[] properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-                    foreach (PropertyInfo p in properties)
+                    foreach (PropertyInfo p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
                     {
                         string key = $"{type.FullName}.{p.Name}";
-                        object value = p.GetValue(customDecoder);
-                        data[key] = value;
+                        data[key] = p.GetValue(options);
                     }
 
                     type = type.GetTypeInfo().BaseType;
                 }
 
+                GetSpecializedDecoderParameters(data, specialized);
+
                 return data;
+            }
+
+            private static void GetSpecializedDecoderParameters(
+                Dictionary<string, object> data,
+                ISpecializedDecoderOptions options)
+            {
+                if (options is null)
+                {
+                    return;
+                }
+
+                Type type = options.GetType();
+
+                while (type != null && type != typeof(object))
+                {
+                    foreach (PropertyInfo p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                    {
+                        if (p.PropertyType == typeof(DecoderOptions))
+                        {
+                            continue;
+                        }
+
+                        string key = $"{type.FullName}.{p.Name}";
+                        data[key] = p.GetValue(options);
+                    }
+
+                    type = type.GetTypeInfo().BaseType;
+                }
             }
 
             public bool Equals(Key other)
@@ -81,7 +121,7 @@ public abstract partial class TestImageProvider<TPixel>
                         return false;
                     }
 
-                    if (!object.Equals(kv.Value, otherVal))
+                    if (!Equals(kv.Value, otherVal))
                     {
                         return false;
                     }
@@ -117,7 +157,7 @@ public abstract partial class TestImageProvider<TPixel>
             public static bool operator !=(Key left, Key right) => !Equals(left, right);
         }
 
-        private static readonly ConcurrentDictionary<Key, Image<TPixel>> Cache = new ConcurrentDictionary<Key, Image<TPixel>>();
+        private static readonly ConcurrentDictionary<Key, Image<TPixel>> Cache = new();
 
         // Needed for deserialization!
         // ReSharper disable once UnusedMember.Local
@@ -140,18 +180,66 @@ public abstract partial class TestImageProvider<TPixel>
             return this.GetImage(decoder);
         }
 
-        public override Image<TPixel> GetImage(IImageDecoder decoder)
+        public override Image<TPixel> GetImage(IImageDecoder decoder, DecoderOptions options)
         {
-            if (!TestEnvironment.Is64BitProcess)
+            // Do not cache with 64 bits or if image has been created with non-default MemoryAllocator
+            if (!TestEnvironment.Is64BitProcess || this.Configuration.MemoryAllocator != MemoryAllocator.Default)
             {
-                return this.LoadImage(decoder);
+                return this.DecodeImage(decoder, options);
             }
 
-            var key = new Key(this.PixelType, this.FilePath, decoder);
+            // do not cache so we can track allocation correctly when validating memory
+            if (MemoryAllocatorValidator.MonitoringAllocations)
+            {
+                return this.DecodeImage(decoder, options);
+            }
 
-            Image<TPixel> cachedImage = Cache.GetOrAdd(key, _ => this.LoadImage(decoder));
+            var key = new Key(this.PixelType, this.FilePath, decoder, options, null);
+            Image<TPixel> cachedImage = Cache.GetOrAdd(key, _ => this.DecodeImage(decoder, options));
 
             return cachedImage.Clone(this.Configuration);
+        }
+
+        public override async Task<Image<TPixel>> GetImageAsync(IImageDecoder decoder, DecoderOptions options)
+        {
+            options.SetConfiguration(this.Configuration);
+
+            // Used in small subset of decoder tests, no caching.
+            // TODO: Check Path here. Why combined?
+            string path = IOPath.Combine(TestEnvironment.InputImagesDirectoryFullPath, this.FilePath);
+            using Stream stream = System.IO.File.OpenRead(path);
+            return await decoder.DecodeAsync<TPixel>(options, stream);
+        }
+
+        public override Image<TPixel> GetImage<T>(ISpecializedImageDecoder<T> decoder, T options)
+        {
+            // Do not cache with 64 bits or if image has been created with non-default MemoryAllocator
+            if (!TestEnvironment.Is64BitProcess || this.Configuration.MemoryAllocator != MemoryAllocator.Default)
+            {
+                return this.DecodeImage(decoder, options);
+            }
+
+            // do not cache so we can track allocation correctly when validating memory
+            if (MemoryAllocatorValidator.MonitoringAllocations)
+            {
+                return this.DecodeImage(decoder, options);
+            }
+
+            var key = new Key(this.PixelType, this.FilePath, decoder, options.GeneralOptions, options);
+            Image<TPixel> cachedImage = Cache.GetOrAdd(key, _ => this.DecodeImage(decoder, options));
+
+            return cachedImage.Clone(this.Configuration);
+        }
+
+        public override async Task<Image<TPixel>> GetImageAsync<T>(ISpecializedImageDecoder<T> decoder, T options)
+        {
+            options.GeneralOptions.SetConfiguration(this.Configuration);
+
+            // Used in small subset of decoder tests, no caching.
+            // TODO: Check Path here. Why combined?
+            string path = IOPath.Combine(TestEnvironment.InputImagesDirectoryFullPath, this.FilePath);
+            using Stream stream = System.IO.File.OpenRead(path);
+            return await decoder.DecodeAsync<TPixel>(options, stream);
         }
 
         public override void Deserialize(IXunitSerializationInfo info)
@@ -167,10 +255,23 @@ public abstract partial class TestImageProvider<TPixel>
             info.AddValue("path", this.FilePath);
         }
 
-        private Image<TPixel> LoadImage(IImageDecoder decoder)
+        private Image<TPixel> DecodeImage(IImageDecoder decoder, DecoderOptions options)
         {
+            options.SetConfiguration(this.Configuration);
+
             var testFile = TestFile.Create(this.FilePath);
-            return Image.Load<TPixel>(this.Configuration, testFile.Bytes, decoder);
+            using Stream stream = new MemoryStream(testFile.Bytes);
+            return decoder.Decode<TPixel>(options, stream);
+        }
+
+        private Image<TPixel> DecodeImage<T>(ISpecializedImageDecoder<T> decoder, T options)
+            where T : class, ISpecializedDecoderOptions, new()
+        {
+            options.GeneralOptions.SetConfiguration(this.Configuration);
+
+            var testFile = TestFile.Create(this.FilePath);
+            using Stream stream = new MemoryStream(testFile.Bytes);
+            return decoder.Decode<TPixel>(options, stream);
         }
     }
 

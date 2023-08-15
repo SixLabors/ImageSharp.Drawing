@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Memory;
+using SixLabors.ImageSharp.Metadata;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit.Abstractions;
 
@@ -98,22 +99,34 @@ public class TestImageProviderTests
 
         TestDecoderWithParameters.DoTestThreadSafe(
             () =>
+            {
+                const string testName = nameof(this
+                    .GetImage_WithCustomParametricDecoder_ShouldNotUtilizeCache_WhenParametersAreNotEqual);
+
+                TestDecoderWithParameters decoder1 = new();
+                TestDecoderWithParametersOptions options1 = new()
                 {
-                    string testName = nameof(this
-                        .GetImage_WithCustomParametricDecoder_ShouldNotUtilizeCache_WhenParametersAreNotEqual);
+                    Param1 = "Lol",
+                    Param2 = 42
+                };
 
-                    var decoder1 = new TestDecoderWithParameters { Param1 = "Lol", Param2 = 42 };
-                    decoder1.InitCaller(testName);
+                decoder1.InitCaller(testName);
 
-                    var decoder2 = new TestDecoderWithParameters { Param1 = "LoL", Param2 = 42 };
-                    decoder2.InitCaller(testName);
+                TestDecoderWithParameters decoder2 = new();
+                TestDecoderWithParametersOptions options2 = new()
+                {
+                    Param1 = "LoL",
+                    Param2 = 42
+                };
 
-                    provider.GetImage(decoder1);
-                    Assert.Equal(1, TestDecoderWithParameters.GetInvocationCount(testName));
+                decoder2.InitCaller(testName);
 
-                    provider.GetImage(decoder2);
-                    Assert.Equal(2, TestDecoderWithParameters.GetInvocationCount(testName));
-                });
+                provider.GetImage(decoder1, options1);
+                Assert.Equal(1, TestDecoderWithParameters.GetInvocationCount(testName));
+
+                provider.GetImage(decoder2, options2);
+                Assert.Equal(2, TestDecoderWithParameters.GetInvocationCount(testName));
+            });
     }
 
     [Theory]
@@ -132,22 +145,34 @@ public class TestImageProviderTests
 
         TestDecoderWithParameters.DoTestThreadSafe(
             () =>
+            {
+                const string testName = nameof(this
+                    .GetImage_WithCustomParametricDecoder_ShouldUtilizeCache_WhenParametersAreEqual);
+
+                TestDecoderWithParameters decoder1 = new();
+                TestDecoderWithParametersOptions options1 = new()
                 {
-                    string testName = nameof(this
-                        .GetImage_WithCustomParametricDecoder_ShouldUtilizeCache_WhenParametersAreEqual);
+                    Param1 = "Lol",
+                    Param2 = 666
+                };
 
-                    var decoder1 = new TestDecoderWithParameters { Param1 = "Lol", Param2 = 666 };
-                    decoder1.InitCaller(testName);
+                decoder1.InitCaller(testName);
 
-                    var decoder2 = new TestDecoderWithParameters { Param1 = "Lol", Param2 = 666 };
-                    decoder2.InitCaller(testName);
+                TestDecoderWithParameters decoder2 = new();
+                TestDecoderWithParametersOptions options2 = new()
+                {
+                    Param1 = "Lol",
+                    Param2 = 666
+                };
 
-                    provider.GetImage(decoder1);
-                    Assert.Equal(1, TestDecoderWithParameters.GetInvocationCount(testName));
+                decoder2.InitCaller(testName);
 
-                    provider.GetImage(decoder2);
-                    Assert.Equal(1, TestDecoderWithParameters.GetInvocationCount(testName));
-                });
+                provider.GetImage(decoder1, options1);
+                Assert.Equal(1, TestDecoderWithParameters.GetInvocationCount(testName));
+
+                provider.GetImage(decoder2, options2);
+                Assert.Equal(1, TestDecoderWithParameters.GetInvocationCount(testName));
+            });
     }
 
     [Theory]
@@ -327,13 +352,12 @@ public class TestImageProviderTests
         }
     }
 
-    private class TestDecoder : IImageDecoder
+    private class TestDecoder : SpecializedImageDecoder<TestDecoderOptions>
     {
         // Couldn't make xUnit happy without this hackery:
-        private static readonly ConcurrentDictionary<string, int> InvocationCounts =
-            new ConcurrentDictionary<string, int>();
+        private static readonly ConcurrentDictionary<string, int> InvocationCounts = new();
 
-        private static readonly object Monitor = new object();
+        private static readonly object Monitor = new();
 
         private string callerName;
 
@@ -345,12 +369,23 @@ public class TestImageProviderTests
             }
         }
 
-        public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            where TPixel : unmanaged, IPixel<TPixel>
+        protected override ImageInfo Identify(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
+        {
+            using Image<Rgba32> image = this.Decode<Rgba32>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
+            return new(image.PixelType, image.Size, image.Metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)));
+        }
+
+        protected override Image<TPixel> Decode<TPixel>(TestDecoderOptions options, Stream stream, CancellationToken cancellationToken)
         {
             InvocationCounts[this.callerName]++;
             return new Image<TPixel>(42, 42);
         }
+
+        protected override Image Decode(TestDecoderOptions options, Stream stream, CancellationToken cancellationToken)
+            => this.Decode<Rgba32>(options, stream, cancellationToken);
+
+        protected override TestDecoderOptions CreateDefaultSpecializedOptions(DecoderOptions options)
+            => new() { GeneralOptions = options };
 
         internal static int GetInvocationCount(string callerName) => InvocationCounts[callerName];
 
@@ -359,29 +394,15 @@ public class TestImageProviderTests
             this.callerName = name;
             InvocationCounts[name] = 0;
         }
-
-        public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<Rgba32>(configuration, stream, cancellationToken);
-
-        public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => throw new NotImplementedException();
-
-        public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            => throw new NotImplementedException();
     }
 
-    private class TestDecoderWithParameters : IImageDecoder
+    private class TestDecoderWithParameters : SpecializedImageDecoder<TestDecoderWithParametersOptions>
     {
-        private static readonly ConcurrentDictionary<string, int> InvocationCounts =
-            new ConcurrentDictionary<string, int>();
+        private static readonly ConcurrentDictionary<string, int> InvocationCounts = new();
 
-        private static readonly object Monitor = new object();
+        private static readonly object Monitor = new();
 
         private string callerName;
-
-        public string Param1 { get; set; }
-
-        public int Param2 { get; set; }
 
         public static void DoTestThreadSafe(Action action)
         {
@@ -391,12 +412,23 @@ public class TestImageProviderTests
             }
         }
 
-        public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            where TPixel : unmanaged, IPixel<TPixel>
+        protected override ImageInfo Identify(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
+        {
+            using Image<Rgba32> image = this.Decode<Rgba32>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
+            return new(image.PixelType, image.Size, image.Metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)));
+        }
+
+        protected override Image<TPixel> Decode<TPixel>(TestDecoderWithParametersOptions options, Stream stream, CancellationToken cancellationToken)
         {
             InvocationCounts[this.callerName]++;
             return new Image<TPixel>(42, 42);
         }
+
+        protected override Image Decode(TestDecoderWithParametersOptions options, Stream stream, CancellationToken cancellationToken)
+            => this.Decode<Rgba32>(options, stream, cancellationToken);
+
+        protected override TestDecoderWithParametersOptions CreateDefaultSpecializedOptions(DecoderOptions options)
+            => new() { GeneralOptions = options };
 
         internal static int GetInvocationCount(string callerName) => InvocationCounts[callerName];
 
@@ -405,14 +437,19 @@ public class TestImageProviderTests
             this.callerName = name;
             InvocationCounts[name] = 0;
         }
+    }
 
-        public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<Rgba32>(configuration, stream, cancellationToken);
+    private class TestDecoderOptions : ISpecializedDecoderOptions
+    {
+        public DecoderOptions GeneralOptions { get; init; } = new();
+    }
 
-        public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => throw new NotImplementedException();
+    private class TestDecoderWithParametersOptions : ISpecializedDecoderOptions
+    {
+        public string Param1 { get; init; }
 
-        public Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-            => throw new NotImplementedException();
+        public int Param2 { get; init; }
+
+        public DecoderOptions GeneralOptions { get; init; } = new();
     }
 }

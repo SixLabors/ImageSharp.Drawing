@@ -95,8 +95,8 @@ public class InternalPathTests
     {
         InternalPath shape = Create(new PointF(50, 50), new Size(200, 60));
         SegmentInfo point = shape.PointAlongPath(distance);
-        Assert.Equal(expectedX, point.Point.X, 4);
-        Assert.Equal(expectedY, point.Point.Y, 4);
-        Assert.Equal(expectedAngle, point.Angle, 4);
+        Assert.Equal(expectedX, point.Point.X, 4F);
+        Assert.Equal(expectedY, point.Point.Y, 4F);
+        Assert.Equal(expectedAngle, point.Angle, 4F);
     }
 }

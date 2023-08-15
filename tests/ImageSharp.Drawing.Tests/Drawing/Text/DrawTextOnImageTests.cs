@@ -761,7 +761,7 @@ public class DrawTextOnImageTests
                       };
 
                       FontRectangle bounds = TextMeasurer.MeasureBounds(text, to);
-                      float x = (img.Size().Width - bounds.Width) / 2;
+                      float x = (img.Size.Width - bounds.Width) / 2;
                       PointF[] pathLine = new[]
                       {
                           new PointF(x, 500),

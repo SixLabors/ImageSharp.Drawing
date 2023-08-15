@@ -11,7 +11,7 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ReferenceCodecs;
 
-public class MagickReferenceDecoder : IImageDecoder
+public class MagickReferenceDecoder : ImageDecoder
 {
     private readonly bool validate;
 
@@ -22,70 +22,39 @@ public class MagickReferenceDecoder : IImageDecoder
 
     public MagickReferenceDecoder(bool validate) => this.validate = validate;
 
-    public static MagickReferenceDecoder Instance { get; } = new MagickReferenceDecoder();
+    public static MagickReferenceDecoder Instance { get; } = new();
 
-    private static void FromRgba32Bytes<TPixel>(Configuration configuration, Span<byte> rgbaBytes, IMemoryGroup<TPixel> destinationGroup)
-        where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
+    protected override Image<TPixel> Decode<TPixel>(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
     {
-        foreach (Memory<TPixel> m in destinationGroup)
-        {
-            Span<TPixel> destBuffer = m.Span;
-            PixelOperations<TPixel>.Instance.FromRgba32Bytes(
-                configuration,
-                rgbaBytes,
-                destBuffer,
-                destBuffer.Length);
-            rgbaBytes = rgbaBytes.Slice(destBuffer.Length * 4);
-        }
-    }
-
-    private static void FromRgba64Bytes<TPixel>(Configuration configuration, Span<byte> rgbaBytes, IMemoryGroup<TPixel> destinationGroup)
-        where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
-    {
-        foreach (Memory<TPixel> m in destinationGroup)
-        {
-            Span<TPixel> destBuffer = m.Span;
-            PixelOperations<TPixel>.Instance.FromRgba64Bytes(
-                configuration,
-                rgbaBytes,
-                destBuffer,
-                destBuffer.Length);
-            rgbaBytes = rgbaBytes.Slice(destBuffer.Length * 8);
-        }
-    }
-
-    public Task<Image<TPixel>> DecodeAsync<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-        where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
-        => Task.FromResult(this.Decode<TPixel>(configuration, stream, cancellationToken));
-
-    public Image<TPixel> Decode<TPixel>(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-        where TPixel : unmanaged, PixelFormats.IPixel<TPixel>
-    {
-        var bmpReadDefines = new BmpReadDefines
+        Configuration configuration = options.Configuration;
+        BmpReadDefines bmpReadDefines = new()
         {
             IgnoreFileSize = !this.validate
         };
 
-        var settings = new MagickReadSettings();
+        MagickReadSettings settings = new()
+        {
+            FrameCount = (int)options.MaxFrames
+        };
         settings.SetDefines(bmpReadDefines);
 
-        using var magickImageCollection = new MagickImageCollection(stream, settings);
-        var framesList = new List<ImageFrame<TPixel>>();
+        using MagickImageCollection magickImageCollection = new(stream, settings);
+        List<ImageFrame<TPixel>> framesList = new();
         foreach (IMagickImage<ushort> magicFrame in magickImageCollection)
         {
-            var frame = new ImageFrame<TPixel>(configuration, magicFrame.Width, magicFrame.Height);
+            ImageFrame<TPixel> frame = new(configuration, magicFrame.Width, magicFrame.Height);
             framesList.Add(frame);
 
             MemoryGroup<TPixel> framePixels = frame.PixelBuffer.FastMemoryGroup;
 
             using IUnsafePixelCollection<ushort> pixels = magicFrame.GetPixelsUnsafe();
-            if (magicFrame.Depth is 8 or 1)
+            if (magicFrame.Depth is 12 or 10 or 8 or 6 or 5 or 4 or 3 or 2 or 1)
             {
                 byte[] data = pixels.ToByteArray(PixelMapping.RGBA);
 
                 FromRgba32Bytes(configuration, data, framePixels);
             }
-            else if (magicFrame.Depth == 16)
+            else if (magicFrame.Depth is 16 or 14)
             {
                 ushort[] data = pixels.ToShortArray(PixelMapping.RGBA);
                 Span<byte> bytes = MemoryMarshal.Cast<ushort, byte>(data.AsSpan());
@@ -100,8 +69,42 @@ public class MagickReferenceDecoder : IImageDecoder
         return new Image<TPixel>(configuration, new ImageMetadata(), framesList);
     }
 
-    public Image Decode(Configuration configuration, Stream stream, CancellationToken cancellationToken) => this.Decode<Rgba32>(configuration, stream, cancellationToken);
+    protected override Image Decode(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
+        => this.Decode<Rgba32>(options, stream, cancellationToken);
 
-    public async Task<Image> DecodeAsync(Configuration configuration, Stream stream, CancellationToken cancellationToken)
-        => await this.DecodeAsync<Rgba32>(configuration, stream, cancellationToken);
+    protected override ImageInfo Identify(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
+    {
+        using Image<Rgba32> image = this.Decode<Rgba32>(options, stream, cancellationToken);
+        return new(image.PixelType, image.Size, image.Metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)));
+    }
+
+    private static void FromRgba32Bytes<TPixel>(Configuration configuration, Span<byte> rgbaBytes, IMemoryGroup<TPixel> destinationGroup)
+        where TPixel : unmanaged, ImageSharp.PixelFormats.IPixel<TPixel>
+    {
+        Span<Rgba32> sourcePixels = MemoryMarshal.Cast<byte, Rgba32>(rgbaBytes);
+        foreach (Memory<TPixel> m in destinationGroup)
+        {
+            Span<TPixel> destBuffer = m.Span;
+            PixelOperations<TPixel>.Instance.FromRgba32(
+                configuration,
+                sourcePixels[..destBuffer.Length],
+                destBuffer);
+            sourcePixels = sourcePixels[destBuffer.Length..];
+        }
+    }
+
+    private static void FromRgba64Bytes<TPixel>(Configuration configuration, Span<byte> rgbaBytes, IMemoryGroup<TPixel> destinationGroup)
+        where TPixel : unmanaged, ImageSharp.PixelFormats.IPixel<TPixel>
+    {
+        foreach (Memory<TPixel> m in destinationGroup)
+        {
+            Span<TPixel> destBuffer = m.Span;
+            PixelOperations<TPixel>.Instance.FromRgba64Bytes(
+                configuration,
+                rgbaBytes,
+                destBuffer,
+                destBuffer.Length);
+            rgbaBytes = rgbaBytes[(destBuffer.Length * 8)..];
+        }
+    }
 }

@@ -1,9 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
 using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests;
@@ -12,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// Provides <see cref="Image{TPixel}" /> instances for parametric unit tests.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format of the image</typeparam>
-public abstract partial class TestImageProvider<TPixel>
+public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private class SolidProvider : BlankProvider
@@ -54,7 +53,7 @@ public abstract partial class TestImageProvider<TPixel>
             Image<TPixel> image = base.GetImage();
             Color color = new Rgba32(this.r, this.g, this.b, this.a);
 
-            image.Mutate(x => x.Fill(color));
+            image.GetRootFramePixelBuffer().FastMemoryGroup.Fill(color.ToPixel<TPixel>());
             return image;
         }
 

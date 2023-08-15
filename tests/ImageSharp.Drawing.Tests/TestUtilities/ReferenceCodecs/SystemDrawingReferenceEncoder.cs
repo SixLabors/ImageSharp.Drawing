@@ -19,6 +19,8 @@ public class SystemDrawingReferenceEncoder : IImageEncoder
 
     public static SystemDrawingReferenceEncoder Bmp { get; } = new SystemDrawingReferenceEncoder(ImageFormat.Bmp);
 
+    public bool SkipMetadata { get; init; }
+
     public void Encode<TPixel>(Image<TPixel> image, Stream stream)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -28,5 +30,12 @@ public class SystemDrawingReferenceEncoder : IImageEncoder
 
     public Task EncodeAsync<TPixel>(Image<TPixel> image, Stream stream, CancellationToken cancellationToken)
         where TPixel : unmanaged, IPixel<TPixel>
-        => throw new NotImplementedException();
+    {
+        using (Bitmap sdBitmap = SystemDrawingBridge.To32bppArgbSystemDrawingBitmap(image))
+        {
+            sdBitmap.Save(stream, this.imageFormat);
+        }
+
+        return Task.CompletedTask;
+    }
 }

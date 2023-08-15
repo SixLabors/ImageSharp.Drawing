@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Formats;
@@ -18,6 +17,7 @@ public static class TestImageExtensions
     /// <summary>
     /// TODO: Consider adding this private processor to the library
     /// </summary>
+    /// <param name="ctx">The image processing context.</param>
     public static void MakeOpaque(this IImageProcessingContext ctx) =>
         ctx.ApplyProcessor(new MakeOpaqueProcessor());
 
@@ -28,7 +28,8 @@ public static class TestImageExtensions
         string extension = "png",
         bool appendPixelTypeToFileName = true,
         bool appendSourceFileOrDescription = true,
-        IImageEncoder encoder = null) => image.DebugSave(
+        IImageEncoder encoder = null)
+        => image.DebugSave(
             provider,
             (object)testOutputDetails,
             extension,
@@ -37,16 +38,16 @@ public static class TestImageExtensions
             encoder);
 
     /// <summary>
-    /// Saves the image only when not running in the CI server.
+    /// Saves the image for debugging purpose.
     /// </summary>
-    /// <param name="image">The image</param>
-    /// <param name="provider">The image provider</param>
+    /// <param name="image">The image.</param>
+    /// <param name="provider">The image provider.</param>
     /// <param name="testOutputDetails">Details to be concatenated to the test output file, describing the parameters of the test.</param>
-    /// <param name="extension">The extension</param>
+    /// <param name="extension">The extension.</param>
     /// <param name="appendPixelTypeToFileName">A boolean indicating whether to append the pixel type to the  output file name.</param>
     /// <param name="appendSourceFileOrDescription">A boolean indicating whether to append <see cref="ITestImageProvider.SourceFileOrDescription"/> to the test output file name.</param>
     /// <param name="encoder">Custom encoder to use.</param>
-    /// <returns>The <see cref="Image"/>.</returns>
+    /// <returns>The input image.</returns>
     public static Image DebugSave(
         this Image image,
         ITestImageProvider provider,
@@ -61,14 +62,13 @@ public static class TestImageExtensions
             return image;
         }
 
-        // We are running locally then we want to save it out
         provider.Utility.SaveTestOutputFile(
             image,
             extension,
+            encoder: encoder,
             testOutputDetails: testOutputDetails,
             appendPixelTypeToFileName: appendPixelTypeToFileName,
-            appendSourceFileOrDescription: appendSourceFileOrDescription,
-            encoder: encoder);
+            appendSourceFileOrDescription: appendSourceFileOrDescription);
         return image;
     }
 
@@ -81,7 +81,7 @@ public static class TestImageExtensions
         => image.DebugSave(provider, encoder, (object)testOutputDetails, appendPixelTypeToFileName);
 
     /// <summary>
-    /// Saves the image only when not running in the CI server.
+    /// Saves the image for debugging purpose.
     /// </summary>
     /// <param name="image">The image</param>
     /// <param name="provider">The image provider</param>
@@ -94,26 +94,19 @@ public static class TestImageExtensions
         IImageEncoder encoder,
         object testOutputDetails = null,
         bool appendPixelTypeToFileName = true)
-    {
-        if (TestEnvironment.RunsWithCodeCoverage)
-        {
-            return;
-        }
-
-        // We are running locally then we want to save it out
-        provider.Utility.SaveTestOutputFile(
+        => provider.Utility.SaveTestOutputFile(
             image,
             encoder: encoder,
             testOutputDetails: testOutputDetails,
             appendPixelTypeToFileName: appendPixelTypeToFileName);
-    }
 
     public static Image<TPixel> DebugSaveMultiFrame<TPixel>(
         this Image<TPixel> image,
         ITestImageProvider provider,
         object testOutputDetails = null,
         string extension = "png",
-        bool appendPixelTypeToFileName = true)
+        bool appendPixelTypeToFileName = true,
+        Func<int, int, bool> predicate = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (TestEnvironment.RunsWithCodeCoverage)
@@ -121,12 +114,13 @@ public static class TestImageExtensions
             return image;
         }
 
-        // We are running locally then we want to save it out
         provider.Utility.SaveTestOutputFileMultiFrame(
             image,
             extension,
             testOutputDetails: testOutputDetails,
-            appendPixelTypeToFileName: appendPixelTypeToFileName);
+            appendPixelTypeToFileName: appendPixelTypeToFileName,
+            predicate: predicate);
+
         return image;
     }
 
@@ -135,12 +129,15 @@ public static class TestImageExtensions
         ITestImageProvider provider,
         FormattableString testOutputDetails,
         string extension = "png",
+        bool grayscale = false,
         bool appendPixelTypeToFileName = true,
         bool appendSourceFileOrDescription = true)
-        where TPixel : unmanaged, IPixel<TPixel> => image.CompareToReferenceOutput(
+        where TPixel : unmanaged, IPixel<TPixel>
+        => image.CompareToReferenceOutput(
             provider,
             (object)testOutputDetails,
             extension,
+            grayscale,
             appendPixelTypeToFileName,
             appendSourceFileOrDescription);
 
@@ -148,27 +145,31 @@ public static class TestImageExtensions
     /// Compares the image against the expected Reference output, throws an exception if the images are not similar enough.
     /// The output file should be named identically to the output produced by <see cref="DebugSave{TPixel}(Image{TPixel}, ITestImageProvider, object, string, bool)"/>.
     /// </summary>
-    /// <typeparam name="TPixel">The pixel format</typeparam>
-    /// <param name="image">The image</param>
-    /// <param name="provider">The image provider</param>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="image">The image which should be compared to the reference image.</param>
+    /// <param name="provider">The image provider.</param>
     /// <param name="testOutputDetails">Details to be concatenated to the test output file, describing the parameters of the test.</param>
     /// <param name="extension">The extension</param>
+    /// <param name="grayscale">A boolean indicating whether we should debug save + compare against a grayscale image, smaller in size.</param>
     /// <param name="appendPixelTypeToFileName">A boolean indicating whether to append the pixel type to the  output file name.</param>
     /// <param name="appendSourceFileOrDescription">A boolean indicating whether to append <see cref="ITestImageProvider.SourceFileOrDescription"/> to the test output file name.</param>
-    /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+    /// <returns>The image.</returns>
     public static Image<TPixel> CompareToReferenceOutput<TPixel>(
         this Image<TPixel> image,
         ITestImageProvider provider,
         object testOutputDetails = null,
         string extension = "png",
+        bool grayscale = false,
         bool appendPixelTypeToFileName = true,
         bool appendSourceFileOrDescription = true)
-        where TPixel : unmanaged, IPixel<TPixel> => CompareToReferenceOutput(
+        where TPixel : unmanaged, IPixel<TPixel>
+        => CompareToReferenceOutput(
             image,
             ImageComparer.Tolerant(),
             provider,
             testOutputDetails,
             extension,
+            grayscale,
             appendPixelTypeToFileName,
             appendSourceFileOrDescription);
 
@@ -180,7 +181,8 @@ public static class TestImageExtensions
         string extension = "png",
         bool grayscale = false,
         bool appendPixelTypeToFileName = true)
-        where TPixel : unmanaged, IPixel<TPixel> => image.CompareToReferenceOutput(
+        where TPixel : unmanaged, IPixel<TPixel>
+        => image.CompareToReferenceOutput(
             comparer,
             provider,
             (object)testOutputDetails,
@@ -192,22 +194,24 @@ public static class TestImageExtensions
     /// Compares the image against the expected Reference output, throws an exception if the images are not similar enough.
     /// The output file should be named identically to the output produced by <see cref="DebugSave{TPixel}(Image{TPixel}, ITestImageProvider, object, string, bool)"/>.
     /// </summary>
-    /// <typeparam name="TPixel">The pixel format</typeparam>
-    /// <param name="image">The image</param>
-    /// <param name="comparer">The <see cref="ImageComparer"/> to use</param>
-    /// <param name="provider">The image provider</param>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="image">The image which should be compared to the reference output.</param>
+    /// <param name="comparer">The <see cref="ImageComparer"/> to use.</param>
+    /// <param name="provider">The image provider.</param>
     /// <param name="testOutputDetails">Details to be concatenated to the test output file, describing the parameters of the test.</param>
     /// <param name="extension">The extension</param>
+    /// <param name="grayscale">A boolean indicating whether we should debug save + compare against a grayscale image, smaller in size.</param>
     /// <param name="appendPixelTypeToFileName">A boolean indicating whether to append the pixel type to the  output file name.</param>
     /// <param name="appendSourceFileOrDescription">A boolean indicating whether to append <see cref="ITestImageProvider.SourceFileOrDescription"/> to the test output file name.</param>
     /// <param name="decoder">A custom decoder.</param>
-    /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+    /// <returns>The image.</returns>
     public static Image<TPixel> CompareToReferenceOutput<TPixel>(
         this Image<TPixel> image,
         ImageComparer comparer,
         ITestImageProvider provider,
         object testOutputDetails = null,
         string extension = "png",
+        bool grayscale = false,
         bool appendPixelTypeToFileName = true,
         bool appendSourceFileOrDescription = true,
         IImageDecoder decoder = null)
@@ -235,7 +239,8 @@ public static class TestImageExtensions
         string extension = "png",
         bool appendPixelTypeToFileName = true,
         bool appendSourceFileOrDescription = true)
-        where TPixel : unmanaged, IPixel<TPixel> => image.CompareFirstFrameToReferenceOutput(
+        where TPixel : unmanaged, IPixel<TPixel>
+        => image.CompareFirstFrameToReferenceOutput(
             comparer,
             provider,
             (object)testOutputDetails,
@@ -253,7 +258,7 @@ public static class TestImageExtensions
         bool appendSourceFileOrDescription = true)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using (var firstFrameOnlyImage = new Image<TPixel>(image.Width, image.Height))
+        using (Image<TPixel> firstFrameOnlyImage = new(image.Width, image.Height))
         using (Image<TPixel> referenceImage = GetReferenceOutputImage<TPixel>(
             provider,
             testOutputDetails,
@@ -276,7 +281,8 @@ public static class TestImageExtensions
         ImageComparer comparer,
         object testOutputDetails = null,
         string extension = "png",
-        bool appendPixelTypeToFileName = true)
+        bool appendPixelTypeToFileName = true,
+        Func<int, int, bool> predicate = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using (Image<TPixel> referenceImage = GetReferenceOutputImageMultiFrame<TPixel>(
@@ -284,9 +290,10 @@ public static class TestImageExtensions
             image.Frames.Count,
             testOutputDetails,
             extension,
-            appendPixelTypeToFileName))
+            appendPixelTypeToFileName,
+            predicate: predicate))
         {
-            comparer.VerifySimilarity(referenceImage, image);
+            comparer.VerifySimilarity(referenceImage, image, predicate);
         }
 
         return image;
@@ -314,7 +321,8 @@ public static class TestImageExtensions
 
         decoder ??= TestEnvironment.GetReferenceDecoder(referenceOutputFile);
 
-        return Image.Load<TPixel>(referenceOutputFile, decoder);
+        using FileStream stream = File.OpenRead(referenceOutputFile);
+        return decoder.Decode<TPixel>(DecoderOptions.Default, stream);
     }
 
     public static Image<TPixel> GetReferenceOutputImageMultiFrame<TPixel>(
@@ -322,16 +330,18 @@ public static class TestImageExtensions
         int frameCount,
         object testOutputDetails = null,
         string extension = "png",
-        bool appendPixelTypeToFileName = true)
+        bool appendPixelTypeToFileName = true,
+        Func<int, int, bool> predicate = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         string[] frameFiles = provider.Utility.GetReferenceOutputFileNamesMultiFrame(
             frameCount,
             extension,
             testOutputDetails,
-            appendPixelTypeToFileName);
+            appendPixelTypeToFileName,
+            predicate);
 
-        var temporaryFrameImages = new List<Image<TPixel>>();
+        List<Image<TPixel>> temporaryFrameImages = new();
 
         IImageDecoder decoder = TestEnvironment.GetReferenceDecoder(frameFiles[0]);
 
@@ -339,16 +349,17 @@ public static class TestImageExtensions
         {
             if (!File.Exists(path))
             {
-                throw new Exception("Reference output file missing: " + path);
+                throw new FileNotFoundException("Reference output file missing: " + path);
             }
 
-            var tempImage = Image.Load<TPixel>(path, decoder);
+            using FileStream stream = File.OpenRead(path);
+            Image<TPixel> tempImage = decoder.Decode<TPixel>(DecoderOptions.Default, stream);
             temporaryFrameImages.Add(tempImage);
         }
 
         Image<TPixel> firstTemp = temporaryFrameImages[0];
 
-        var result = new Image<TPixel>(firstTemp.Width, firstTemp.Height);
+        Image<TPixel> result = new(firstTemp.Width, firstTemp.Height);
 
         foreach (Image<TPixel> fi in temporaryFrameImages)
         {
@@ -356,7 +367,7 @@ public static class TestImageExtensions
             fi.Dispose();
         }
 
-        // remove the initial empty frame:
+        // Remove the initial empty frame:
         result.Frames.RemoveFrame(0);
         return result;
     }
@@ -370,13 +381,11 @@ public static class TestImageExtensions
         bool appendPixelTypeToFileName = true)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using (Image<TPixel> referenceImage = provider.GetReferenceOutputImage<TPixel>(
+        using Image<TPixel> referenceImage = provider.GetReferenceOutputImage<TPixel>(
             testOutputDetails,
             extension,
-            appendPixelTypeToFileName))
-        {
-            return comparer.CompareImages(referenceImage, image);
-        }
+            appendPixelTypeToFileName);
+        return comparer.CompareImages(referenceImage, image);
     }
 
     public static Image<TPixel> ComparePixelBufferTo<TPixel>(
@@ -384,13 +393,17 @@ public static class TestImageExtensions
         Span<TPixel> expectedPixels)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        foreach (ImageFrame<TPixel> imageFrame in image.Frames)
-        {
-            imageFrame.ComparePixelBufferTo(expectedPixels);
-        }
+        Assert.True(image.DangerousTryGetSinglePixelMemory(out Memory<TPixel> actualPixels));
+        CompareBuffers(expectedPixels, actualPixels.Span);
 
         return image;
     }
+
+    public static Image<TPixel> ComparePixelBufferTo<TPixel>(
+        this Image<TPixel> image,
+        Memory<TPixel> expectedPixels)
+        where TPixel : unmanaged, IPixel<TPixel> =>
+        ComparePixelBufferTo(image, expectedPixels.Span);
 
     public static void CompareBuffers<T>(Span<T> expected, Span<T> actual)
         where T : struct, IEquatable<T>
@@ -406,10 +419,32 @@ public static class TestImageExtensions
         }
     }
 
+    public static void CompareBuffers<T>(Buffer2D<T> expected, Buffer2D<T> actual)
+        where T : struct, IEquatable<T>
+    {
+        Assert.True(expected.Size() == actual.Size(), "Buffer sizes are not equal!");
+
+        for (int y = 0; y < expected.Height; y++)
+        {
+            Span<T> expectedRow = expected.DangerousGetRowSpan(y);
+            Span<T> actualRow = actual.DangerousGetRowSpan(y);
+            for (int x = 0; x < expectedRow.Length; x++)
+            {
+                T expectedVal = expectedRow[x];
+                T actualVal = actualRow[x];
+
+                Assert.True(
+                    expectedVal.Equals(actualVal),
+                    $"Buffers differ at position ({x},{y})! Expected: {expectedVal} | Actual: {actualVal}");
+            }
+        }
+    }
+
     /// <summary>
     /// All pixels in all frames should be exactly equal to 'expectedPixel'.
     /// </summary>
-    /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+    /// <typeparam name="TPixel">The pixel type of the image.</typeparam>
+    /// <returns>The image.</returns>
     public static Image<TPixel> ComparePixelBufferTo<TPixel>(this Image<TPixel> image, TPixel expectedPixel)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -424,7 +459,8 @@ public static class TestImageExtensions
     /// <summary>
     /// All pixels in all frames should be exactly equal to 'expectedPixelColor.ToPixel()'.
     /// </summary>
-    /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+    /// <typeparam name="TPixel">The pixel type of the image.</typeparam>
+    /// <returns>The image.</returns>
     public static Image<TPixel> ComparePixelBufferTo<TPixel>(this Image<TPixel> image, Color expectedPixelColor)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -439,12 +475,13 @@ public static class TestImageExtensions
     /// <summary>
     /// All pixels in the frame should be exactly equal to 'expectedPixel'.
     /// </summary>
-    /// <returns>The <see cref="Image{TPixel}"/>.</returns>
+    /// <typeparam name="TPixel">The pixel type of the image.</typeparam>
+    /// <returns>The image.</returns>
     public static ImageFrame<TPixel> ComparePixelBufferTo<TPixel>(this ImageFrame<TPixel> imageFrame, TPixel expectedPixel)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        Assert.True(imageFrame.DangerousTryGetSinglePixelMemory(out Memory<TPixel> actual));
-        Span<TPixel> actualPixels = actual.Span;
+        Assert.True(imageFrame.DangerousTryGetSinglePixelMemory(out Memory<TPixel> actualPixelMem));
+        Span<TPixel> actualPixels = actualPixelMem.Span;
 
         for (int i = 0; i < actualPixels.Length; i++)
         {
@@ -459,14 +496,13 @@ public static class TestImageExtensions
                 Span<TPixel> expectedPixels)
                 where TPixel : unmanaged, IPixel<TPixel>
     {
-        Assert.True(image.DangerousTryGetSinglePixelMemory(out Memory<TPixel> actual));
-        Span<TPixel> actualPixels = actual.Span;
-
-        Assert.True(expectedPixels.Length == actualPixels.Length, "Buffer sizes are not equal!");
+        Assert.True(image.DangerousTryGetSinglePixelMemory(out Memory<TPixel> actualMem));
+        Span<TPixel> actual = actualMem.Span;
+        Assert.True(expectedPixels.Length == actual.Length, "Buffer sizes are not equal!");
 
         for (int i = 0; i < expectedPixels.Length; i++)
         {
-            Assert.True(expectedPixels[i].Equals(actualPixels[i]), $"Pixels are different on position {i}!");
+            Assert.True(expectedPixels[i].Equals(actual[i]), $"Pixels are different on position {i}!");
         }
 
         return image;
@@ -476,13 +512,15 @@ public static class TestImageExtensions
         this Image<TPixel> image,
         ITestImageProvider provider,
         IImageDecoder referenceDecoder = null)
-        where TPixel : unmanaged, IPixel<TPixel> => CompareToOriginal(image, provider, ImageComparer.Tolerant(), referenceDecoder);
+        where TPixel : unmanaged, IPixel<TPixel>
+        => CompareToOriginal(image, provider, ImageComparer.Tolerant(), referenceDecoder);
 
     public static Image<TPixel> CompareToOriginal<TPixel>(
         this Image<TPixel> image,
         ITestImageProvider provider,
         ImageComparer comparer,
-        IImageDecoder referenceDecoder = null)
+        IImageDecoder referenceDecoder = null,
+        DecoderOptions referenceDecoderOptions = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         string path = TestImageProvider<TPixel>.GetFilePathOrNull(provider);
@@ -491,11 +529,38 @@ public static class TestImageExtensions
             throw new InvalidOperationException("CompareToOriginal() works only with file providers!");
         }
 
-        var testFile = TestFile.Create(path);
+        TestFile testFile = TestFile.Create(path);
 
         referenceDecoder ??= TestEnvironment.GetReferenceDecoder(path);
 
-        using (var original = Image.Load<TPixel>(testFile.Bytes, referenceDecoder))
+        using MemoryStream stream = new(testFile.Bytes);
+        using (Image<TPixel> original = referenceDecoder.Decode<TPixel>(referenceDecoderOptions ?? DecoderOptions.Default, stream))
+        {
+            comparer.VerifySimilarity(original, image);
+        }
+
+        return image;
+    }
+
+    public static Image<TPixel> CompareToOriginalMultiFrame<TPixel>(
+    this Image<TPixel> image,
+    ITestImageProvider provider,
+    ImageComparer comparer,
+    IImageDecoder referenceDecoder = null)
+    where TPixel : unmanaged, IPixel<TPixel>
+    {
+        string path = TestImageProvider<TPixel>.GetFilePathOrNull(provider);
+        if (path == null)
+        {
+            throw new InvalidOperationException("CompareToOriginal() works only with file providers!");
+        }
+
+        TestFile testFile = TestFile.Create(path);
+
+        referenceDecoder ??= TestEnvironment.GetReferenceDecoder(path);
+
+        using MemoryStream stream = new(testFile.Bytes);
+        using (Image<TPixel> original = referenceDecoder.Decode<TPixel>(DecoderOptions.Default, stream))
         {
             comparer.VerifySimilarity(original, image);
         }
@@ -518,23 +583,21 @@ public static class TestImageExtensions
         bool appendSourceFileOrDescription = true)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using (Image<TPixel> image = provider.GetImage())
-        {
-            operation(image);
+        using Image<TPixel> image = provider.GetImage();
+        operation(image);
 
-            image.DebugSave(
-                provider,
-                testOutputDetails,
-                appendPixelTypeToFileName: appendPixelTypeToFileName,
-                appendSourceFileOrDescription: appendSourceFileOrDescription);
+        image.DebugSave(
+            provider,
+            testOutputDetails,
+            appendPixelTypeToFileName: appendPixelTypeToFileName,
+            appendSourceFileOrDescription: appendSourceFileOrDescription);
 
-            image.CompareToReferenceOutput(
-                comparer,
-                provider,
-                testOutputDetails,
-                appendPixelTypeToFileName: appendPixelTypeToFileName,
-                appendSourceFileOrDescription: appendSourceFileOrDescription);
-        }
+        image.CompareToReferenceOutput(
+            comparer,
+            provider,
+            testOutputDetails,
+            appendPixelTypeToFileName: appendPixelTypeToFileName,
+            appendSourceFileOrDescription: appendSourceFileOrDescription);
     }
 
     /// <summary>
@@ -595,7 +658,8 @@ public static class TestImageExtensions
     /// Loads the expected image with a reference decoder + compares it to <paramref name="image"/>.
     /// Also performs a debug save using <see cref="ImagingTestCaseUtility.SaveTestOutputFile{TPixel}"/>.
     /// </summary>
-    internal static void VerifyEncoder<TPixel>(
+    /// <returns>The path to the encoded output file.</returns>
+    internal static string VerifyEncoder<TPixel>(
         this Image<TPixel> image,
         ITestImageProvider provider,
         string extension,
@@ -603,6 +667,7 @@ public static class TestImageExtensions
         IImageEncoder encoder,
         ImageComparer customComparer = null,
         bool appendPixelTypeToFileName = true,
+        string referenceImageExtension = null,
         IImageDecoder referenceDecoder = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -615,11 +680,31 @@ public static class TestImageExtensions
 
         referenceDecoder ??= TestEnvironment.GetReferenceDecoder(actualOutputFile);
 
-        using (var actualImage = Image.Load<TPixel>(actualOutputFile, referenceDecoder))
+        using FileStream stream = File.OpenRead(actualOutputFile);
+        using Image<TPixel> encodedImage = referenceDecoder.Decode<TPixel>(DecoderOptions.Default, stream);
+
+        ImageComparer comparer = customComparer ?? ImageComparer.Exact;
+        comparer.VerifySimilarity(encodedImage, image);
+
+        return actualOutputFile;
+    }
+
+    internal static Image<Rgba32> ToGrayscaleImage(this Buffer2D<float> buffer, float scale)
+    {
+        var image = new Image<Rgba32>(buffer.Width, buffer.Height);
+
+        Assert.True(image.Frames.RootFrame.DangerousTryGetSinglePixelMemory(out Memory<Rgba32> pixelMem));
+        Span<Rgba32> pixels = pixelMem.Span;
+        Span<float> bufferSpan = buffer.DangerousGetSingleSpan();
+
+        for (int i = 0; i < bufferSpan.Length; i++)
         {
-            ImageComparer comparer = customComparer ?? ImageComparer.Exact;
-            comparer.VerifySimilarity(actualImage, image);
+            float value = bufferSpan[i] * scale;
+            var v = new Vector4(value, value, value, 1f);
+            pixels[i].FromVector4(v);
         }
+
+        return image;
     }
 
     private class MakeOpaqueProcessor : IImageProcessor
@@ -642,29 +727,30 @@ public static class TestImageExtensions
             Rectangle sourceRectangle = this.SourceRectangle;
             Configuration configuration = this.Configuration;
 
-            var operation = new RowIntervalOperation(configuration, sourceRectangle, source.PixelBuffer);
-            ParallelRowIterator.IterateRowIntervals<RowIntervalOperation, Vector4>(
+            var operation = new RowOperation(configuration, sourceRectangle, source.PixelBuffer);
+
+            ParallelRowIterator.IterateRowIntervals<RowOperation, Vector4>(
                 configuration,
                 sourceRectangle,
                 in operation);
         }
 
-        private readonly struct RowIntervalOperation : IRowIntervalOperation<Vector4>
+        private readonly struct RowOperation : IRowIntervalOperation<Vector4>
         {
             private readonly Configuration configuration;
             private readonly Rectangle bounds;
             private readonly Buffer2D<TPixel> source;
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public RowIntervalOperation(Configuration configuration, Rectangle bounds, Buffer2D<TPixel> source)
+            public RowOperation(Configuration configuration, Rectangle bounds, Buffer2D<TPixel> source)
             {
                 this.configuration = configuration;
                 this.bounds = bounds;
                 this.source = source;
             }
 
-            /// <inheritdoc/>
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            public int GetRequiredBufferLength(Rectangle bounds)
+                => bounds.Width;
+
             public void Invoke(in RowInterval rows, Span<Vector4> span)
             {
                 for (int y = rows.Min; y < rows.Max; y++)

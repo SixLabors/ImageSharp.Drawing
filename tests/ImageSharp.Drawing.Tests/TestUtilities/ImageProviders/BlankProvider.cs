@@ -7,7 +7,7 @@ using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests;
 
-public abstract partial class TestImageProvider<TPixel>
+public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private class BlankProvider : TestImageProvider<TPixel>, IXunitSerializable

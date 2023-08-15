@@ -13,20 +13,21 @@ public abstract class ImageComparer
     /// Returns an instance of <see cref="TolerantImageComparer"/>.
     /// Individual manhattan pixel difference is only added to total image difference when the individual difference is over 'perPixelManhattanThreshold'.
     /// </summary>
-    /// <returns>The <see cref="ImageComparer"/>.</returns>
+    /// <returns>A ImageComparer instance.</returns>
     public static ImageComparer Tolerant(
         float imageThreshold = TolerantImageComparer.DefaultImageThreshold,
-        int perPixelManhattanThreshold = 0)
-        => new TolerantImageComparer(imageThreshold, perPixelManhattanThreshold);
+        int perPixelManhattanThreshold = 0) =>
+        new TolerantImageComparer(imageThreshold, perPixelManhattanThreshold);
 
     /// <summary>
     /// Returns Tolerant(imageThresholdInPercents/100)
     /// </summary>
-    /// <returns>The <see cref="ImageComparer"/>.</returns>
+    /// <returns>A ImageComparer instance.</returns>
     public static ImageComparer TolerantPercentage(float imageThresholdInPercents, int perPixelManhattanThreshold = 0)
         => Tolerant(imageThresholdInPercents / 100F, perPixelManhattanThreshold);
 
     public abstract ImageSimilarityReport<TPixelA, TPixelB> CompareImagesOrFrames<TPixelA, TPixelB>(
+        int index,
         ImageFrame<TPixelA> expected,
         ImageFrame<TPixelB> actual)
         where TPixelA : unmanaged, IPixel<TPixelA>
@@ -40,26 +41,44 @@ public static class ImageComparerExtensions
         Image<TPixelA> expected,
         Image<TPixelB> actual)
         where TPixelA : unmanaged, IPixel<TPixelA>
-        where TPixelB : unmanaged, IPixel<TPixelB>
-        => comparer.CompareImagesOrFrames(expected.Frames.RootFrame, actual.Frames.RootFrame);
+        where TPixelB : unmanaged, IPixel<TPixelB> => comparer.CompareImagesOrFrames(0, expected.Frames.RootFrame, actual.Frames.RootFrame);
 
     public static IEnumerable<ImageSimilarityReport<TPixelA, TPixelB>> CompareImages<TPixelA, TPixelB>(
         this ImageComparer comparer,
         Image<TPixelA> expected,
-        Image<TPixelB> actual)
+        Image<TPixelB> actual,
+        Func<int, int, bool> predicate = null)
         where TPixelA : unmanaged, IPixel<TPixelA>
         where TPixelB : unmanaged, IPixel<TPixelB>
     {
-        var result = new List<ImageSimilarityReport<TPixelA, TPixelB>>();
+        List<ImageSimilarityReport<TPixelA, TPixelB>> result = new();
 
-        if (expected.Frames.Count != actual.Frames.Count)
+        int expectedFrameCount = actual.Frames.Count;
+        if (predicate != null)
         {
-            throw new Exception("Frame count does not match!");
+            expectedFrameCount = 0;
+            for (int i = 0; i < actual.Frames.Count; i++)
+            {
+                if (predicate(i, actual.Frames.Count))
+                {
+                    expectedFrameCount++;
+                }
+            }
+        }
+
+        if (expected.Frames.Count != expectedFrameCount)
+        {
+            throw new ImagesSimilarityException("Frame count does not match!");
         }
 
         for (int i = 0; i < expected.Frames.Count; i++)
         {
-            ImageSimilarityReport<TPixelA, TPixelB> report = comparer.CompareImagesOrFrames(expected.Frames[i], actual.Frames[i]);
+            if (predicate != null && !predicate(i, expected.Frames.Count))
+            {
+                continue;
+            }
+
+            ImageSimilarityReport<TPixelA, TPixelB> report = comparer.CompareImagesOrFrames(i, expected.Frames[i], actual.Frames[i]);
             if (!report.IsEmpty)
             {
                 result.Add(report);
@@ -72,21 +91,35 @@ public static class ImageComparerExtensions
     public static void VerifySimilarity<TPixelA, TPixelB>(
         this ImageComparer comparer,
         Image<TPixelA> expected,
-        Image<TPixelB> actual)
+        Image<TPixelB> actual,
+        Func<int, int, bool> predicate = null)
         where TPixelA : unmanaged, IPixel<TPixelA>
         where TPixelB : unmanaged, IPixel<TPixelB>
     {
-        if (expected.Size() != actual.Size())
+        if (expected.Size != actual.Size)
         {
-            throw new ImageDimensionsMismatchException(expected.Size(), actual.Size());
+            throw new ImageDimensionsMismatchException(expected.Size, actual.Size);
         }
 
-        if (expected.Frames.Count != actual.Frames.Count)
+        int expectedFrameCount = actual.Frames.Count;
+        if (predicate != null)
+        {
+            expectedFrameCount = 0;
+            for (int i = 0; i < actual.Frames.Count; i++)
+            {
+                if (predicate(i, actual.Frames.Count))
+                {
+                    expectedFrameCount++;
+                }
+            }
+        }
+
+        if (expected.Frames.Count != expectedFrameCount)
         {
             throw new ImagesSimilarityException("Image frame count does not match!");
         }
 
-        IEnumerable<ImageSimilarityReport> reports = comparer.CompareImages(expected, actual);
+        IEnumerable<ImageSimilarityReport> reports = comparer.CompareImages(expected, actual, predicate);
         if (reports.Any())
         {
             throw new ImageDifferenceIsOverThresholdException(reports);
@@ -101,9 +134,9 @@ public static class ImageComparerExtensions
         where TPixelA : unmanaged, IPixel<TPixelA>
         where TPixelB : unmanaged, IPixel<TPixelB>
     {
-        if (expected.Size() != actual.Size())
+        if (expected.Size != actual.Size)
         {
-            throw new ImageDimensionsMismatchException(expected.Size(), actual.Size());
+            throw new ImageDimensionsMismatchException(expected.Size, actual.Size);
         }
 
         if (expected.Frames.Count != actual.Frames.Count)
@@ -126,7 +159,7 @@ public static class ImageComparerExtensions
 
                 if (outsideChanges.Any())
                 {
-                    cleanedReports.Add(new ImageSimilarityReport<TPixelA, TPixelB>(r.ExpectedImage, r.ActualImage, outsideChanges, null));
+                    cleanedReports.Add(new ImageSimilarityReport<TPixelA, TPixelB>(r.Index, r.ExpectedImage, r.ActualImage, outsideChanges, null));
                 }
             }
 

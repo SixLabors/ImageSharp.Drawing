@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
@@ -11,6 +12,7 @@ public class ExactImageComparer : ImageComparer
     public static ExactImageComparer Instance { get; } = new ExactImageComparer();
 
     public override ImageSimilarityReport<TPixelA, TPixelB> CompareImagesOrFrames<TPixelA, TPixelB>(
+        int index,
         ImageFrame<TPixelA> expected,
         ImageFrame<TPixelB> actual)
     {
@@ -27,11 +29,13 @@ public class ExactImageComparer : ImageComparer
 
         var differences = new List<PixelDifference>();
         Configuration configuration = expected.GetConfiguration();
+        Buffer2D<TPixelA> expectedBuffer = expected.PixelBuffer;
+        Buffer2D<TPixelB> actualBuffer = actual.PixelBuffer;
 
         for (int y = 0; y < actual.Height; y++)
         {
-            Span<TPixelA> aSpan = expected.PixelBuffer.DangerousGetRowSpan(y);
-            Span<TPixelB> bSpan = actual.PixelBuffer.DangerousGetRowSpan(y);
+            Span<TPixelA> aSpan = expectedBuffer.DangerousGetRowSpan(y);
+            Span<TPixelB> bSpan = actualBuffer.DangerousGetRowSpan(y);
 
             PixelOperations<TPixelA>.Instance.ToRgba64(configuration, aSpan, aBuffer);
             PixelOperations<TPixelB>.Instance.ToRgba64(configuration, bSpan, bBuffer);
@@ -49,6 +53,6 @@ public class ExactImageComparer : ImageComparer
             }
         }
 
-        return new ImageSimilarityReport<TPixelA, TPixelB>(expected, actual, differences);
+        return new ImageSimilarityReport<TPixelA, TPixelB>(index, expected, actual, differences);
     }
 }

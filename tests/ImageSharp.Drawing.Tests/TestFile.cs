@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Collections.Concurrent;
-using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.PixelFormats;
 using IOPath = System.IO.Path;
@@ -12,23 +11,18 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// <summary>
 /// A test image file.
 /// </summary>
-public class TestFile
+public sealed class TestFile
 {
     /// <summary>
     /// The test file cache.
     /// </summary>
-    private static readonly ConcurrentDictionary<string, TestFile> Cache = new ConcurrentDictionary<string, TestFile>();
+    private static readonly ConcurrentDictionary<string, TestFile> Cache = new();
 
     /// <summary>
     /// The "Formats" directory, as lazy value
     /// </summary>
     // ReSharper disable once InconsistentNaming
-    private static readonly Lazy<string> LazyInputImagesDirectory = new Lazy<string>(() => TestEnvironment.InputImagesDirectoryFullPath);
-
-    /// <summary>
-    /// The image (lazy initialized value)
-    /// </summary>
-    private Image<Rgba32> image;
+    private static readonly Lazy<string> InputImagesDirectoryValue = new(() => TestEnvironment.InputImagesDirectoryFullPath);
 
     /// <summary>
     /// The image bytes
@@ -39,8 +33,7 @@ public class TestFile
     /// Initializes a new instance of the <see cref="TestFile"/> class.
     /// </summary>
     /// <param name="file">The file.</param>
-    private TestFile(string file)
-        => this.FullPath = file;
+    private TestFile(string file) => this.FullPath = file;
 
     /// <summary>
     /// Gets the image bytes.
@@ -63,19 +56,16 @@ public class TestFile
     public string FileNameWithoutExtension => IOPath.GetFileNameWithoutExtension(this.FullPath);
 
     /// <summary>
-    /// Gets the image with lazy initialization.
-    /// </summary>
-    private Image<Rgba32> Image => this.image ??= ImageSharp.Image.Load<Rgba32>(this.Bytes);
-
-    /// <summary>
     /// Gets the input image directory.
     /// </summary>
-    private static string InputImagesDirectory => LazyInputImagesDirectory.Value;
+    private static string InputImagesDirectory => InputImagesDirectoryValue.Value;
 
     /// <summary>
     /// Gets the full qualified path to the input test file.
     /// </summary>
-    /// <param name="file">The file path.</param>
+    /// <param name="file">
+    /// The file path.
+    /// </param>
     /// <returns>
     /// The <see cref="string"/>.
     /// </returns>
@@ -90,7 +80,7 @@ public class TestFile
     /// The <see cref="TestFile"/>.
     /// </returns>
     public static TestFile Create(string file)
-        => Cache.GetOrAdd(file, (string fileName) => new TestFile(GetInputFileFullPath(file)));
+        => Cache.GetOrAdd(file, (string fileName) => new TestFile(GetInputFileFullPath(fileName)));
 
     /// <summary>
     /// Gets the file name.
@@ -113,19 +103,34 @@ public class TestFile
         => this.FileNameWithoutExtension + "-" + value;
 
     /// <summary>
-    /// Creates a new image.
+    /// Creates a new <see cref="Rgba32"/> image.
     /// </summary>
     /// <returns>
-    /// The <see cref="ImageSharp.Image"/>.
+    /// The <see cref="Image{Rgba32}"/>.
     /// </returns>
-    public Image<Rgba32> CreateRgba32Image() => this.Image.Clone();
+    public Image<Rgba32> CreateRgba32Image() => Image.Load<Rgba32>(this.Bytes);
 
     /// <summary>
-    /// Creates a new image.
+    /// Creates a new <see cref="Rgba32"/> image.
     /// </summary>
+    /// <param name="decoder">The image decoder.</param>
     /// <returns>
-    /// The <see cref="ImageSharp.Image"/>.
+    /// The <see cref="Image{Rgba32}"/>.
     /// </returns>
     public Image<Rgba32> CreateRgba32Image(IImageDecoder decoder)
-        => ImageSharp.Image.Load<Rgba32>(this.Image.GetConfiguration(), this.Bytes, decoder);
+        => this.CreateRgba32Image(decoder, new());
+
+    /// <summary>
+    /// Creates a new <see cref="Rgba32"/> image.
+    /// </summary>
+    /// <param name="decoder">The image decoder.</param>
+    /// <param name="options">The general decoder options.</param>
+    /// <returns>
+    /// The <see cref="Image{Rgba32}"/>.
+    /// </returns>
+    public Image<Rgba32> CreateRgba32Image(IImageDecoder decoder, DecoderOptions options)
+    {
+        using MemoryStream stream = new(this.Bytes);
+        return decoder.Decode<Rgba32>(options, stream);
+    }
 }

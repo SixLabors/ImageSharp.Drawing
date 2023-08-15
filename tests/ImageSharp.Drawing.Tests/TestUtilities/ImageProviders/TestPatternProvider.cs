@@ -3,10 +3,11 @@
 
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
+using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests;
 
-public abstract partial class TestImageProvider<TPixel>
+public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
     where TPixel : unmanaged, IPixel<TPixel>
 {
     /// <summary>
@@ -14,15 +15,15 @@ public abstract partial class TestImageProvider<TPixel>
     /// </summary>
     private class TestPatternProvider : BlankProvider
     {
-        private static readonly Dictionary<string, Image<TPixel>> TestImages = new Dictionary<string, Image<TPixel>>();
+        private static readonly Dictionary<string, Image<TPixel>> TestImages = new();
 
-        private static readonly TPixel[] BlackWhitePixels = new[]
+        private static readonly TPixel[] BlackWhitePixels =
         {
             Color.Black.ToPixel<TPixel>(),
             Color.White.ToPixel<TPixel>()
         };
 
-        private static readonly TPixel[] PinkBluePixels = new[]
+        private static readonly TPixel[] PinkBluePixels =
         {
             Color.HotPink.ToPixel<TPixel>(),
             Color.Blue.ToPixel<TPixel>()
@@ -40,8 +41,7 @@ public abstract partial class TestImageProvider<TPixel>
         {
         }
 
-        public override string SourceFileOrDescription
-            => TestUtils.AsInvariantString($"TestPattern{this.Width}x{this.Height}");
+        public override string SourceFileOrDescription => TestUtils.AsInvariantString($"TestPattern{this.Width}x{this.Height}");
 
         public override Image<TPixel> GetImage()
         {
@@ -61,6 +61,7 @@ public abstract partial class TestImageProvider<TPixel>
         /// <summary>
         /// Draws the test pattern on an image by drawing 4 other patterns in the for quadrants of the image.
         /// </summary>
+        /// <param name="image">The image to draw on.</param>
         private static void DrawTestPattern(Image<TPixel> image)
         {
             // first lets split the image into 4 quadrants
@@ -95,7 +96,7 @@ public abstract partial class TestImageProvider<TPixel>
                     if (x % stride == 0)
                     {
                         p++;
-                        p %= PinkBluePixels.Length;
+                        p = p % PinkBluePixels.Length;
                     }
 
                     pixels[x, y] = PinkBluePixels[p];
@@ -118,19 +119,19 @@ public abstract partial class TestImageProvider<TPixel>
             int p = 0;
             for (int y = top; y < bottom; y++)
             {
-                if (y % stride == 0)
+                if (y % stride is 0)
                 {
                     p++;
-                    p %= BlackWhitePixels.Length;
+                    p = p % BlackWhitePixels.Length;
                 }
 
                 int pstart = p;
                 for (int x = left; x < right; x++)
                 {
-                    if (x % stride == 0)
+                    if (x % stride is 0)
                     {
                         p++;
-                        p %= BlackWhitePixels.Length;
+                        p = p % BlackWhitePixels.Length;
                     }
 
                     pixels[x, y] = BlackWhitePixels[p];
@@ -152,9 +153,9 @@ public abstract partial class TestImageProvider<TPixel>
             int bottom = pixels.Height;
             int height = (int)Math.Ceiling(pixels.Height / 6f);
 
-            var red = Color.Red.ToVector4(); // use real color so we can see har it translates in the test pattern
-            var green = Color.Green.ToVector4(); // use real color so we can see har it translates in the test pattern
-            var blue = Color.Blue.ToVector4(); // use real color so we can see har it translates in the test pattern
+            var red = Color.Red.ToPixel<TPixel>().ToVector4(); // use real color so we can see how it translates in the test pattern
+            var green = Color.Green.ToPixel<TPixel>().ToVector4(); // use real color so we can see how it translates in the test pattern
+            var blue = Color.Blue.ToPixel<TPixel>().ToVector4(); // use real color so we can see how it translates in the test pattern
 
             var c = default(TPixel);
 
@@ -169,14 +170,14 @@ public abstract partial class TestImageProvider<TPixel>
                     pixels[x, y] = c;
                 }
 
-                topBand += height;
+                topBand = topBand + height;
                 c.FromVector4(green);
                 for (int y = topBand; y < topBand + height; y++)
                 {
                     pixels[x, y] = c;
                 }
 
-                topBand += height;
+                topBand = topBand + height;
                 c.FromVector4(blue);
                 for (int y = topBand; y < bottom; y++)
                 {

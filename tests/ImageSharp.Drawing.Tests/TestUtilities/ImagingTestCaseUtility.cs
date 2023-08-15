@@ -27,14 +27,14 @@ public class ImagingTestCaseUtility
 
     /// <summary>
     /// Gets or sets the test group name.
-    /// By default this is the name of the test class, but it's possible to change it
+    /// By default this is the name of the test class, but it's possible to change it.
     /// </summary>
     public string TestGroupName { get; set; } = string.Empty;
 
     public string OutputSubfolderName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the name of the test case (by default)
+    /// Gets or sets the name of the test case (by default).
     /// </summary>
     public string TestName { get; set; } = string.Empty;
 
@@ -87,13 +87,13 @@ public class ImagingTestCaseUtility
             }
         }
 
-        details ??= string.Empty;
+        details = details ?? string.Empty;
         if (details != string.Empty)
         {
             details = '_' + details;
         }
 
-        return TestUtils.AsInvariantString($"{this.GetTestOutputDir()}/{this.TestName}{pixName}{fn}{details}{extension}");
+        return TestUtils.AsInvariantString($"{this.GetTestOutputDir()}{IOPath.DirectorySeparatorChar}{this.TestName}{pixName}{fn}{details}{extension}");
     }
 
     /// <summary>
@@ -149,13 +149,13 @@ public class ImagingTestCaseUtility
     /// <summary>
     /// Encodes image by the format matching the required extension, than saves it to the recommended output file.
     /// </summary>
-    /// <param name="image">The image instance</param>
-    /// <param name="extension">The requested extension</param>
-    /// <param name="encoder">Optional encoder</param>
-    /// <param name="testOutputDetails">Additional information to append to the test output file name</param>
-    /// <param name="appendPixelTypeToFileName">A value indicating whether to append the pixel type to the test output file name</param>
+    /// <param name="image">The image instance.</param>
+    /// <param name="extension">The requested extension.</param>
+    /// <param name="encoder">Optional encoder.</param>
+    /// <param name="testOutputDetails">Additional information to append to the test output file name.</param>
+    /// <param name="appendPixelTypeToFileName">A value indicating whether to append the pixel type to the test output file name.</param>
     /// <param name="appendSourceFileOrDescription">A boolean indicating whether to append <see cref="ITestImageProvider.SourceFileOrDescription"/> to the test output file name.</param>
-    /// <returns>The <see cref="string"/> path.</returns>
+    /// <returns>The path to the saved image file.</returns>
     public string SaveTestOutputFile(
         Image image,
         string extension = null,
@@ -172,7 +172,7 @@ public class ImagingTestCaseUtility
 
         encoder ??= TestEnvironment.GetReferenceEncoder(path);
 
-        using (FileStream stream = File.Open(path, FileMode.Create))
+        using (FileStream stream = File.OpenWrite(path))
         {
             image.Save(stream, encoder);
         }
@@ -185,7 +185,8 @@ public class ImagingTestCaseUtility
         string extension = null,
         object testOutputDetails = null,
         bool appendPixelTypeToFileName = true,
-        bool appendSourceFileOrDescription = true)
+        bool appendSourceFileOrDescription = true,
+        Func<int, int, bool> predicate = null)
     {
         string baseDir = this.GetTestOutputFileName(string.Empty, testOutputDetails, appendPixelTypeToFileName, appendSourceFileOrDescription);
 
@@ -196,8 +197,12 @@ public class ImagingTestCaseUtility
 
         for (int i = 0; i < frameCount; i++)
         {
-            string filePath = $"{baseDir}/{i:D2}.{extension}";
-            yield return filePath;
+            if (predicate != null && !predicate(i, frameCount))
+            {
+                continue;
+            }
+
+            yield return $"{baseDir}/{i:D2}.{extension}";
         }
     }
 
@@ -206,7 +211,8 @@ public class ImagingTestCaseUtility
         string extension = "png",
         IImageEncoder encoder = null,
         object testOutputDetails = null,
-        bool appendPixelTypeToFileName = true)
+        bool appendPixelTypeToFileName = true,
+        Func<int, int, bool> predicate = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         encoder ??= TestEnvironment.GetReferenceEncoder($"foo.{extension}");
@@ -215,18 +221,25 @@ public class ImagingTestCaseUtility
             image.Frames.Count,
             extension,
             testOutputDetails,
-            appendPixelTypeToFileName).ToArray();
+            appendPixelTypeToFileName,
+            predicate: predicate).ToArray();
 
         for (int i = 0; i < image.Frames.Count; i++)
         {
-            using (Image<TPixel> frameImage = image.Frames.CloneFrame(i))
+            if (predicate != null && !predicate(i, image.Frames.Count))
             {
-                string filePath = files[i];
-                using (FileStream stream = File.Open(filePath, FileMode.Create))
-                {
-                    frameImage.Save(stream, encoder);
-                }
+                continue;
             }
+
+            if (i >= files.Length)
+            {
+                break;
+            }
+
+            using Image<TPixel> frameImage = image.Frames.CloneFrame(i);
+            string filePath = files[i];
+            using FileStream stream = File.OpenWrite(filePath);
+            frameImage.Save(stream, encoder);
         }
 
         return files;
@@ -236,22 +249,18 @@ public class ImagingTestCaseUtility
         string extension,
         object testOutputDetails,
         bool appendPixelTypeToFileName,
-        bool appendSourceFileOrDescription) =>
-        TestEnvironment.GetReferenceOutputFileName(
+        bool appendSourceFileOrDescription)
+        => TestEnvironment.GetReferenceOutputFileName(
             this.GetTestOutputFileName(extension, testOutputDetails, appendPixelTypeToFileName, appendSourceFileOrDescription));
 
     public string[] GetReferenceOutputFileNamesMultiFrame(
         int frameCount,
         string extension,
         object testOutputDetails,
-        bool appendPixelTypeToFileName = true)
-        => this.GetTestOutputFileNamesMultiFrame(
-            frameCount,
-            extension,
-            testOutputDetails,
-            appendPixelTypeToFileName: appendPixelTypeToFileName)
-        .Select(TestEnvironment.GetReferenceOutputFileName)
-        .ToArray();
+        bool appendPixelTypeToFileName = true,
+        Func<int, int, bool> predicate = null)
+        => this.GetTestOutputFileNamesMultiFrame(frameCount, extension, testOutputDetails, appendPixelTypeToFileName, predicate: predicate)
+        .Select(TestEnvironment.GetReferenceOutputFileName).ToArray();
 
     internal void Init(string typeName, string methodName, string outputSubfolderName)
     {
@@ -281,7 +290,7 @@ public class ImagingTestCaseUtility
         TPixel pixel = img[x, y];
         Rgba64 rgbaPixel = default;
         rgbaPixel.FromScaledVector4(pixel.ToScaledVector4());
-        ushort change = (ushort)Math.Round(perChannelChange / 255F * 65535F);
+        ushort change = (ushort)Math.Round((perChannelChange / 255F) * 65535F);
 
         if (rgbaPixel.R + perChannelChange <= 255)
         {

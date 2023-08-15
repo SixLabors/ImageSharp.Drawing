@@ -25,21 +25,7 @@ public class WithMemberFactoryAttribute : ImageDataAttributeBase
         : base(null, pixelTypes, additionalParameters) => this.memberMethodName = memberMethodName;
 
     protected override object[] GetFactoryMethodArgs(MethodInfo testMethod, Type factoryType)
-    {
-        MethodInfo m = testMethod.DeclaringType.GetMethod(this.memberMethodName);
-
-        Type[] args = factoryType.GetGenericArguments();
-        Type colorType = args.Single();
-
-        Type imgType = typeof(Image<>).MakeGenericType(colorType);
-
-        Type funcType = typeof(Func<>).MakeGenericType(imgType);
-
-        MethodInfo genericMethod = m.MakeGenericMethod(args);
-
-        Delegate d = genericMethod.CreateDelegate(funcType);
-        return new object[] { d };
-    }
+        => new object[] { testMethod.DeclaringType.FullName, this.memberMethodName };
 
     protected override string GetFactoryMethodName(MethodInfo testMethod) => "Lambda";
 }
