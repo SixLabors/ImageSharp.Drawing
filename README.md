@@ -9,8 +9,8 @@ SixLabors.ImageSharp.Drawing
 <div align="center">
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/SixLabors/ImageSharp.Drawing/build-and-test.yml?branch=main)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/main/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
+[![License: Six Labors Split](https://img.shields.io/badge/license-Six%20Labors%20Split-%23e30183)](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/LICENSE)
 [![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
 
 </div>
@@ -19,18 +19,17 @@ SixLabors.ImageSharp.Drawing
 
 Designed to democratize image processing, ImageSharp.Drawing brings you an incredibly powerful yet beautifully simple API.
 
-Built against .NET Standard 1.3, ImageSharp.Drawing can be used in device, cloud, and embedded/IoT scenarios. 
+Built against [.NET 6](https://docs.microsoft.com/en-us/dotnet/standard/net-standard), ImageSharp.Drawing can be used in device, cloud, and embedded/IoT scenarios. 
   
 ## License
   
-- ImageSharp.Drawing is licensed under the [Apache License, Version 2.0](https://opensource.org/licenses/Apache-2.0)  
-- An alternative Commercial Support License can be purchased **for projects and applications requiring support**.
-Please visit https://sixlabors.com/pricing for details.
+- ImageSharp.Drawing is licensed under the [Six Labors Split License, Version 1.0](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/LICENSE)  
+
 
 ## Support Six Labors
 
 Support the efforts of the development of the Six Labors projects. 
- - [Purchase a Commercial Support License :heart:](https://sixlabors.com/pricing/)
+ - [Purchase a Commercial License :heart:](https://sixlabors.com/pricing/)
  - [Become a sponsor via GitHub Sponsors :heart:]( https://github.com/sponsors/SixLabors)
  - [Become a sponsor via Open Collective :heart:](https://opencollective.com/sixlabors)
 
@@ -50,27 +49,24 @@ For more information, see the [.NET Foundation Code of Conduct](https://dotnetfo
 
 ## Installation
 
-Install stable releases via Nuget; development releases are available via MyGet.
+Install stable releases via NuGet; development releases are available via MyGet.
 
 | Package Name                   | Release (NuGet) | Nightly (MyGet) |
 |--------------------------------|-----------------|-----------------|
-| `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![MyGet](https://img.shields.io/myget/sixlabors/v/SixLabors.ImageSharp.Drawing.svg)](https://www.myget.org/feed/sixlabors/package/nuget/SixLabors.ImageSharp.Drawing) |
+| `SixLabors.ImageSharp.Drawing` | [![NuGet](https://img.shields.io/nuget/v/SixLabors.ImageSharp.Drawing.svg)](https://www.nuget.org/packages/SixLabors.ImageSharp.Drawing/) | [![feedz.io](https://img.shields.io/badge/endpoint.svg?url=https%3A%2F%2Ff.feedz.io%2Fsixlabors%2Fsixlabors%2Fshield%2FSixLabors.ImageSharp.Drawing%2Flatest)](https://f.feedz.io/sixlabors/sixlabors/nuget/index.json) |
 
 ## Manual build
 
 If you prefer, you can compile ImageSharp.Drawing yourself (please do and help!)
 
-- Using [Visual Studio 2019](https://visualstudio.microsoft.com/vs/)
+- Using [Visual Studio 2022](https://visualstudio.microsoft.com/vs/)
   - Make sure you have the latest version installed
-  - Make sure you have [the .NET 5 SDK](https://www.microsoft.com/net/core#windows) installed
+  - Make sure you have [the .NET 7 SDK](https://www.microsoft.com/net/core#windows) installed
 
 Alternatively, you can work from command line and/or with a lightweight editor on **both Linux/Unix and Windows**:
 
 - [Visual Studio Code](https://code.visualstudio.com/) with [C# Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.csharp)
-- [.NET Core](https://www.microsoft.com/net/core#linuxubuntu)
-
-- [Visual Studio Code](https://code.visualstudio.com/) with [C# Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.csharp)
-- [.NET Core](https://www.microsoft.com/net/core#linuxubuntu)
+- [the .NET 7 SDK](https://www.microsoft.com/net/core#linuxubuntu)
 
 To clone ImageSharp.Drawing locally, click the "Clone in [YOUR_OS]" button above or run the following git commands:
 
@@ -96,10 +92,19 @@ git submodule update --init --recursive
 
 Please... Spread the word, contribute algorithms, submit performance improvements, unit tests, no input is too little. Make sure to read our [Contribution Guide](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/.github/CONTRIBUTING.md) before opening a PR.
 
-## The ImageSharp Team
+## The ImageSharp.Drawing Team
 
 - [Scott Williams](https://github.com/tocsoft)
 - [James Jackson-South](https://github.com/jimbobsquarepants)
 - [Dirk Lemstra](https://github.com/dlemstra)
 - [Anton Firsov](https://github.com/antonfirsov)
 - [Brian Popow](https://github.com/brianpopow)
+
+---
+
+<div>
+  <a href="https://www.jetbrains.com/?from=ImageSharp.Drawing" align="right"><img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.svg" alt="JetBrains" class="logo-footer" width="72" align="left"></a>
+  <br/>
+
+  Special thanks to [JetBrains](https://www.jetbrains.com/?from=ImageSharp) for supporting us with open-source licenses for their IDEs.
+</div>
