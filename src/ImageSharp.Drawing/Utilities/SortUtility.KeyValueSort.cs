@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Utilities;
@@ -44,7 +45,7 @@ internal static partial class SortUtility
         {
             if (keys.Length > 1)
             {
-                IntroSort(keys, values, 2 * (NumericUtilities.Log2((uint)keys.Length) + 1));
+                IntroSort(keys, values, 2 * (BitOperations.Log2((uint)keys.Length) + 1));
             }
         }
 
