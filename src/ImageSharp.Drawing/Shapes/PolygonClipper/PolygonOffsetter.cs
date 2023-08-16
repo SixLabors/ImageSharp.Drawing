@@ -77,7 +77,7 @@ internal sealed class PolygonOffsetter
         this.ExecuteInternal(delta);
         if (this.groupList.Count == 0)
         {
-            goto Error;
+            return;
         }
 
         // Clean up self-intersections.
@@ -98,8 +98,6 @@ internal sealed class PolygonOffsetter
         {
             clipper.Execute(ClippingOperation.Union, FillRule.Positive, solution);
         }
-
-        Error:
 
         // PolygonClipper will throw for unhandled exceptions but we need to explicitly capture an empty result.
         if (solution.Count == 0)

@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp.Drawing.Utilities;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
@@ -36,7 +35,7 @@ internal ref struct ActiveEdgeList
         this.Buffer = buffer;
     }
 
-    private Span<int> ActiveEdges => this.Buffer.Slice(0, this.count);
+    private readonly Span<int> ActiveEdges => this.Buffer.Slice(0, this.count);
 
     public void EnterEdge(int edgeIdx) => this.Buffer[this.count++] = edgeIdx | EnteringEdgeFlag;
 
@@ -120,7 +119,8 @@ internal ref struct ActiveEdgeList
         this.count -= offset;
 
         intersections = intersections.Slice(0, intersectionCounter);
-        SortUtility.Sort(intersections);
+        intersections.Sort();
+
         return intersections;
     }
 
@@ -180,7 +180,7 @@ internal ref struct ActiveEdgeList
 
         intersections = intersections.Slice(0, intersectionCounter);
         intersectionTypes = intersectionTypes.Slice(0, intersectionCounter);
-        SortUtility.Sort(intersections, intersectionTypes);
+        intersections.Sort(intersectionTypes);
 
         return ApplyNonzeroRule(intersections, intersectionTypes);
     }

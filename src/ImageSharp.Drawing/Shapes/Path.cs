@@ -419,16 +419,6 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         return data.Slice(idx);
     }
 
-#if !NETCOREAPP2_1_OR_GREATER
-    private static unsafe float ParseFloat(ReadOnlySpan<char> str)
-    {
-        fixed (char* p = str)
-        {
-            return float.Parse(new string(p, 0, str.Length));
-        }
-    }
-#else
     private static float ParseFloat(ReadOnlySpan<char> str)
         => float.Parse(str, provider: CultureInfo.InvariantCulture);
-#endif
 }
