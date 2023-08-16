@@ -3,7 +3,6 @@
 
 using System.Buffers;
 using System.Runtime.InteropServices;
-using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
@@ -120,8 +119,8 @@ internal ref struct PolygonScanner
             this.sorted1[i] = i;
         }
 
-        SortUtility.Sort(keys0, this.sorted0);
-        SortUtility.Sort(keys1, this.sorted1);
+        keys0.Sort(this.sorted0);
+        keys1.Sort(this.sorted1);
 
         this.SkipEdgesBeforeMinY();
     }
@@ -195,7 +194,7 @@ internal ref struct PolygonScanner
         ? this.activeEdges.ScanOddEven(this.SubPixelY, this.edges, this.intersections)
         : this.activeEdges.ScanNonZero(this.SubPixelY, this.edges, this.intersections, this.intersectionTypes);
 
-    public void Dispose()
+    public readonly void Dispose()
     {
         this.edgeCollection.Dispose();
         this.dataBuffer.Dispose();
