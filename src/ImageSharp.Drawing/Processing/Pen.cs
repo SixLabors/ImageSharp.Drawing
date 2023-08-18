@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -104,15 +102,16 @@ public abstract class Pen : IEquatable<Pen>
     public abstract IPath GeneratePath(IPath path, float strokeWidth);
 
     /// <inheritdoc/>
-    public virtual bool Equals(Pen other)
-        => this.StrokeWidth == other.StrokeWidth
+    public virtual bool Equals(Pen? other)
+        => other != null
+        && this.StrokeWidth == other.StrokeWidth
         && this.JointStyle == other.JointStyle
         && this.EndCapStyle == other.EndCapStyle
         && this.StrokeFill.Equals(other.StrokeFill)
         && this.StrokePattern.SequenceEqual(other.StrokePattern);
 
     /// <inheritdoc/>
-    public override bool Equals(object obj) => this.Equals(obj as Pen);
+    public override bool Equals(object? obj) => this.Equals(obj as Pen);
 
     /// <inheritdoc/>
     public override int GetHashCode()
