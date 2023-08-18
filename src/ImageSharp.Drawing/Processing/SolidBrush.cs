@@ -30,7 +30,7 @@ public sealed class SolidBrush : Brush
         RectangleF region) => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
 
     /// <inheritdoc/>
-    public override bool Equals(Brush other)
+    public override bool Equals(Brush? other)
     {
         if (other is SolidBrush sb)
         {

@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </remarks>
 public abstract class Pen : IEquatable<Pen>
 {
-    private readonly float[] pattern;
+    private readonly float[]? pattern;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Pen"/> class.

@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Memory;
@@ -17,7 +15,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private RichTextGlyphRenderer textRenderer;
+    private RichTextGlyphRenderer? textRenderer;
     private readonly DrawTextProcessor definition;
 
     public DrawTextProcessor(Configuration configuration, DrawTextProcessor definition, Image<TPixel> source, Rectangle sourceRectangle)
@@ -101,7 +99,7 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
                 for (int row = firstRow; row < end; row++)
                 {
                     int y = startY + row;
-                    Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan);
+                    Span<float> span = buffer.DangerousGetRowSpan(row)[offsetSpan..];
                     app.Apply(span, startX, y);
                 }
             }

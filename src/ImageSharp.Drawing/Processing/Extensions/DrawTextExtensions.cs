@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 
@@ -163,8 +161,8 @@ public static class DrawTextExtensions
         this IImageProcessingContext source,
         RichTextOptions textOptions,
         string text,
-        Brush brush,
-        Pen pen) =>
+        Brush? brush,
+        Pen? pen) =>
         source.DrawText(source.GetDrawingOptions(), textOptions, text, brush, pen);
 
     /// <summary>
@@ -221,8 +219,8 @@ public static class DrawTextExtensions
         DrawingOptions drawingOptions,
         string text,
         Font font,
-        Brush brush,
-        Pen pen,
+        Brush? brush,
+        Pen? pen,
         PointF location)
     {
         RichTextOptions textOptions = new(font) { Origin = location };
@@ -244,7 +242,7 @@ public static class DrawTextExtensions
         DrawingOptions drawingOptions,
         RichTextOptions textOptions,
         string text,
-        Brush brush,
-        Pen pen)
+        Brush? brush,
+        Pen? pen)
         => source.ApplyProcessor(new DrawTextProcessor(drawingOptions, textOptions, text, brush, pen));
 }

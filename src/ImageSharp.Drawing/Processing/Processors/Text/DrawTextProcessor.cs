@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using SixLabors.ImageSharp.Processing.Processors;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
@@ -20,7 +18,7 @@ public class DrawTextProcessor : IImageProcessor
     /// <param name="text">The text we want to render</param>
     /// <param name="brush">The brush to source pixel colors from.</param>
     /// <param name="pen">The pen to outline text with.</param>
-    public DrawTextProcessor(DrawingOptions drawingOptions, RichTextOptions textOptions, string text, Brush brush, Pen pen)
+    public DrawTextProcessor(DrawingOptions drawingOptions, RichTextOptions textOptions, string text, Brush? brush, Pen? pen)
     {
         Guard.NotNull(text, nameof(text));
         if (brush is null && pen is null)
@@ -38,7 +36,7 @@ public class DrawTextProcessor : IImageProcessor
     /// <summary>
     /// Gets the brush used to fill the glyphs.
     /// </summary>
-    public Brush Brush { get; }
+    public Brush? Brush { get; }
 
     /// <summary>
     /// Gets the <see cref="Processing.DrawingOptions"/> defining blending modes and shape drawing settings.
@@ -58,7 +56,7 @@ public class DrawTextProcessor : IImageProcessor
     /// <summary>
     /// Gets the pen used for outlining the text, if Null then we will not outline
     /// </summary>
-    public Pen Pen { get; }
+    public Pen? Pen { get; }
 
     /// <summary>
     /// Gets the location to draw the text at.
