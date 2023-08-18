@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
 
@@ -76,7 +74,7 @@ public sealed class PathGradientBrush : Brush
     }
 
     /// <inheritdoc />
-    public override bool Equals(Brush other)
+    public override bool Equals(Brush? other)
     {
         if (other is PathGradientBrush brush)
         {
@@ -123,7 +121,7 @@ public sealed class PathGradientBrush : Brush
         return new Color(colors.Select(c => (Vector4)c).Aggregate((p1, p2) => p1 + p2) / colors.Length);
     }
 
-    private static float DistanceBetween(PointF p1, PointF p2) => ((Vector2)(p2 - p1)).Length();
+    private static float DistanceBetween(Vector2 p1, Vector2 p2) => (p2 - p1).Length();
 
     private readonly struct Intersection
     {
@@ -178,13 +176,14 @@ public sealed class PathGradientBrush : Brush
 
         public Vector4 ColorAt(PointF point) => this.ColorAt(DistanceBetween(point, this.Start));
 
-        public bool Equals(Edge other)
-            => other.Start == this.Start &&
-                other.End == this.End &&
-                other.StartColor.Equals(this.StartColor) &&
-                other.EndColor.Equals(this.EndColor);
+        public bool Equals(Edge? other)
+            => other != null &&
+               other.Start == this.Start &&
+               other.End == this.End &&
+               other.StartColor.Equals(this.StartColor) &&
+               other.EndColor.Equals(this.EndColor);
 
-        public override bool Equals(object obj) => this.Equals(obj as Edge);
+        public override bool Equals(object? obj) => this.Equals(obj as Edge);
 
         public override int GetHashCode()
             => HashCode.Combine(this.Start, this.End, this.StartColor, this.EndColor);
@@ -249,7 +248,7 @@ public sealed class PathGradientBrush : Brush
         {
             get
             {
-                var point = new Vector2(x, y);
+                Vector2 point = new(x, y);
 
                 if (point == this.center)
                 {
@@ -278,7 +277,7 @@ public sealed class PathGradientBrush : Brush
                     return px;
                 }
 
-                var direction = Vector2.Normalize(point - this.center);
+                Vector2 direction = Vector2.Normalize(point - this.center);
                 Vector2 end = point + (direction * this.maxDistance);
 
                 (Edge Edge, Vector2 Point)? isc = this.FindIntersection(point, end);
@@ -294,7 +293,7 @@ public sealed class PathGradientBrush : Brush
                 float length = DistanceBetween(intersection, this.center);
                 float ratio = length > 0 ? DistanceBetween(intersection, point) / length : 0;
 
-                var color = Vector4.Lerp(edgeColor, this.centerColor, ratio);
+                Vector4 color = Vector4.Lerp(edgeColor, this.centerColor, ratio);
 
                 TPixel pixel = default;
                 pixel.FromScaledVector4(color);
@@ -305,8 +304,8 @@ public sealed class PathGradientBrush : Brush
         /// <inheritdoc />
         public override void Apply(Span<float> scanline, int x, int y)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
+            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
+            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
             float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
@@ -355,7 +354,7 @@ public sealed class PathGradientBrush : Brush
         {
             Vector2 ip = default;
             Vector2 closestIntersection = default;
-            Edge closestEdge = null;
+            Edge? closestEdge = null;
             const float minDistance = float.MaxValue;
             foreach (Edge edge in this.edges)
             {
@@ -385,9 +384,9 @@ public sealed class PathGradientBrush : Brush
             Vector2 pv2 = point - v2;
             Vector2 pv3 = point - v3;
 
-            var d1 = Vector3.Cross(new Vector3(e1.X, e1.Y, 0), new Vector3(pv1.X, pv1.Y, 0));
-            var d2 = Vector3.Cross(new Vector3(e2.X, e2.Y, 0), new Vector3(pv2.X, pv2.Y, 0));
-            var d3 = Vector3.Cross(new Vector3(e3.X, e3.Y, 0), new Vector3(pv3.X, pv3.Y, 0));
+            Vector3 d1 = Vector3.Cross(new Vector3(e1.X, e1.Y, 0), new Vector3(pv1.X, pv1.Y, 0));
+            Vector3 d2 = Vector3.Cross(new Vector3(e2.X, e2.Y, 0), new Vector3(pv2.X, pv2.Y, 0));
+            Vector3 d3 = Vector3.Cross(new Vector3(e3.X, e3.Y, 0), new Vector3(pv3.X, pv3.Y, 0));
 
             if (Math.Sign(Vector3.Dot(d1, d2)) * Math.Sign(Vector3.Dot(d1, d3)) == -1 || Math.Sign(Vector3.Dot(d1, d2)) * Math.Sign(Vector3.Dot(d2, d3)) == -1)
             {
