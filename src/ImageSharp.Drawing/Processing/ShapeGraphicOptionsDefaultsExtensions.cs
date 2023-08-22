@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -63,16 +61,14 @@ public static class ShapeGraphicOptionsDefaultsExtensions
     /// <returns>The globally configured default options.</returns>
     public static ShapeOptions GetShapeOptions(this IImageProcessingContext context)
     {
-        if (context.Properties.TryGetValue(typeof(ShapeOptions), out object options) && options is ShapeOptions go)
+        if (context.Properties.TryGetValue(typeof(ShapeOptions), out object? options) && options is ShapeOptions go)
         {
             return go;
         }
 
-        ShapeOptions configOptions = context.Configuration.GetShapeOptions();
-
         // do not cache the fall back to config into the the processing context
         // in case someone want to change the value on the config and expects it reflow thru
-        return configOptions;
+        return context.Configuration.GetShapeOptions();
     }
 
     /// <summary>
@@ -82,12 +78,12 @@ public static class ShapeGraphicOptionsDefaultsExtensions
     /// <returns>The globally configured default options.</returns>
     public static ShapeOptions GetShapeOptions(this Configuration configuration)
     {
-        if (configuration.Properties.TryGetValue(typeof(ShapeOptions), out object options) && options is ShapeOptions go)
+        if (configuration.Properties.TryGetValue(typeof(ShapeOptions), out object? options) && options is ShapeOptions go)
         {
             return go;
         }
 
-        var configOptions = new ShapeOptions();
+        ShapeOptions configOptions = new();
 
         // capture the fallback so the same instance will always be returned in case its mutated
         configuration.Properties[typeof(ShapeOptions)] = configOptions;

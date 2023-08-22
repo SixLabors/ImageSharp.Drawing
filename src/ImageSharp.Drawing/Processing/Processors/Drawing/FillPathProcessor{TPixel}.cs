@@ -1,9 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -47,11 +46,17 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         ShapeOptions shapeOptions = this.definition.Options.ShapeOptions;
         GraphicsOptions graphicsOptions = this.definition.Options.GraphicsOptions;
         Brush brush = this.definition.Brush;
-        bool isSolidBrushWithoutBlending = IsSolidBrushWithoutBlending(graphicsOptions, brush, out SolidBrush solidBrush);
-        TPixel solidBrushColor = isSolidBrushWithoutBlending ? solidBrush.Color.ToPixel<TPixel>() : default;
+
+        TPixel solidBrushColor = default;
+        bool isSolidBrushWithoutBlending = false;
+        if (IsSolidBrushWithoutBlending(graphicsOptions, brush, out SolidBrush? solidBrush))
+        {
+            isSolidBrushWithoutBlending = true;
+            solidBrushColor = solidBrush.Color.ToPixel<TPixel>();
+        }
 
         // Align start/end positions.
-        var interest = Rectangle.Intersect(this.bounds, source.Bounds());
+        Rectangle interest = Rectangle.Intersect(this.bounds, source.Bounds());
         if (interest.Equals(Rectangle.Empty))
         {
             return; // No effect inside image;
@@ -74,7 +79,7 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         MemoryAllocator allocator = this.Configuration.MemoryAllocator;
         bool scanlineDirty = true;
 
-        var scanner = PolygonScanner.Create(
+        PolygonScanner scanner = PolygonScanner.Create(
             this.path,
             interest.Top,
             interest.Bottom,
@@ -138,7 +143,7 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         }
     }
 
-    private static bool IsSolidBrushWithoutBlending(GraphicsOptions options, Brush inputBrush, out SolidBrush solidBrush)
+    private static bool IsSolidBrushWithoutBlending(GraphicsOptions options, Brush inputBrush, [NotNullWhen(true)] out SolidBrush? solidBrush)
     {
         solidBrush = inputBrush as SolidBrush;
 

@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using SixLabors.Fonts;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -46,5 +44,5 @@ public class RichTextOptions : TextOptions
     /// When this property is not <see langword="null"/> the <see cref="TextOptions.Origin"/>
     /// property is automatically applied as a translation to a copy of the path for processing.
     /// </remarks>
-    public IPath Path { get; set; }
+    public IPath? Path { get; set; }
 }

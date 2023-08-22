@@ -1,9 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Memory;
@@ -27,7 +26,7 @@ internal class FillProcessor<TPixel> : ImageProcessor<TPixel>
     /// <inheritdoc/>
     protected override void OnFrameApply(ImageFrame<TPixel> source)
     {
-        var interest = Rectangle.Intersect(this.SourceRectangle, source.Bounds());
+        Rectangle interest = Rectangle.Intersect(this.SourceRectangle, source.Bounds());
         if (interest.Width == 0 || interest.Height == 0)
         {
             return;
@@ -38,14 +37,14 @@ internal class FillProcessor<TPixel> : ImageProcessor<TPixel>
         GraphicsOptions options = this.definition.Options.GraphicsOptions;
 
         // If there's no reason for blending, then avoid it.
-        if (this.IsSolidBrushWithoutBlending(out SolidBrush solidBrush))
+        if (this.IsSolidBrushWithoutBlending(out SolidBrush? solidBrush))
         {
             ParallelExecutionSettings parallelSettings = ParallelExecutionSettings.FromConfiguration(configuration)
                 .MultiplyMinimumPixelsPerTask(4);
 
             TPixel colorPixel = solidBrush.Color.ToPixel<TPixel>();
 
-            var solidOperation = new SolidBrushRowIntervalOperation(interest, source, colorPixel);
+            FillProcessor<TPixel>.SolidBrushRowIntervalOperation solidOperation = new(interest, source, colorPixel);
             ParallelRowIterator.IterateRowIntervals(
                 interest,
                 parallelSettings,
@@ -63,14 +62,14 @@ internal class FillProcessor<TPixel> : ImageProcessor<TPixel>
 
         amount.Memory.Span.Fill(1F);
 
-        var operation = new RowIntervalOperation(interest, applicator, amount.Memory);
+        FillProcessor<TPixel>.RowIntervalOperation operation = new(interest, applicator, amount.Memory);
         ParallelRowIterator.IterateRowIntervals(
             configuration,
             interest,
             in operation);
     }
 
-    private bool IsSolidBrushWithoutBlending(out SolidBrush solidBrush)
+    private bool IsSolidBrushWithoutBlending([NotNullWhen(true)] out SolidBrush? solidBrush)
     {
         solidBrush = this.definition.Brush as SolidBrush;
 

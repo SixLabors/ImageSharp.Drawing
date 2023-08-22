@@ -62,7 +62,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         this.defaultBrush = brush;
         this.DrawingOperations = new List<DrawingOperation>();
 
-        IPath path = textOptions.Path;
+        IPath? path = textOptions.Path;
         if (path is not null)
         {
             // Turn of caching. The chances of a hit are near-zero.

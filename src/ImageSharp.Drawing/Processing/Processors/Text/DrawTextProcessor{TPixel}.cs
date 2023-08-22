@@ -105,7 +105,8 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
             }
         }
 
-        if (this.textRenderer.DrawingOperations.Count > 0)
+        // Not null, initialized in earlier event.
+        if (this.textRenderer!.DrawingOperations.Count > 0)
         {
             Draw(this.textRenderer.DrawingOperations.OrderBy(x => x.RenderPass));
         }

@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Buffers;
 using System.Collections;
 using SixLabors.ImageSharp.Drawing.Shapes.Helpers;
@@ -19,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes;
 /// </summary>
 internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<TessellatedMultipolygon.Ring>
 {
-    private Ring[] rings;
+    private readonly Ring[] rings;
 
     private TessellatedMultipolygon(Ring[] rings)
     {
@@ -44,15 +42,15 @@ internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<Tesse
             // we enforce the orientation for best output quality.
             bool enforcePositiveOrientationOnFirstRing = internalPaths.Count == 1;
 
-            var rings = new Ring[internalPaths.Count];
+            Ring[] rings = new Ring[internalPaths.Count];
             IMemoryOwner<PointF> pointBuffer = internalPaths[0].ExtractVertices(memoryAllocator);
-            RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, enforcePositiveOrientationOnFirstRing);
+            RepeatFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, enforcePositiveOrientationOnFirstRing);
             rings[0] = new Ring(pointBuffer);
 
             for (int i = 1; i < internalPaths.Count; i++)
             {
                 pointBuffer = internalPaths[i].ExtractVertices(memoryAllocator);
-                RepeateFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, false);
+                RepeatFirstVertexAndEnsureOrientation(pointBuffer.Memory.Span, false);
                 rings[i] = new Ring(pointBuffer);
             }
 
@@ -67,7 +65,7 @@ internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<Tesse
             // we enforce the orientation for best output quality.
             bool enforcePositiveOrientationOnFirstRing = points.Length == 1;
 
-            var rings = new Ring[points.Length];
+            Ring[] rings = new Ring[points.Length];
             rings[0] = MakeRing(points[0], enforcePositiveOrientationOnFirstRing, memoryAllocator);
             for (int i = 1; i < points.Length; i++)
             {
@@ -82,14 +80,14 @@ internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<Tesse
             IMemoryOwner<PointF> buffer = allocator.Allocate<PointF>(points.Length + 1);
             Span<PointF> span = buffer.Memory.Span;
             points.Span.CopyTo(span);
-            RepeateFirstVertexAndEnsureOrientation(span, enforcePositiveOrientation);
+            RepeatFirstVertexAndEnsureOrientation(span, enforcePositiveOrientation);
             return new Ring(buffer);
         }
 
-        static void RepeateFirstVertexAndEnsureOrientation(Span<PointF> span, bool enforcePositiveOrientation)
+        static void RepeatFirstVertexAndEnsureOrientation(Span<PointF> span, bool enforcePositiveOrientation)
         {
             // Repeat first vertex for perf:
-            span[span.Length - 1] = span[0];
+            span[^1] = span[0];
 
             if (enforcePositiveOrientation)
             {
@@ -100,26 +98,19 @@ internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<Tesse
 
     public void Dispose()
     {
-        if (this.rings == null)
-        {
-            return;
-        }
-
         foreach (Ring ring in this.rings)
         {
             ring.Dispose();
         }
-
-        this.rings = null;
     }
 
     public IEnumerator<Ring> GetEnumerator() => this.rings.AsEnumerable().GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
-    internal class Ring : IDisposable
+    internal sealed class Ring : IDisposable
     {
-        private IMemoryOwner<PointF> buffer;
+        private readonly IMemoryOwner<PointF> buffer;
         private Memory<PointF> memory;
 
         internal Ring(IMemoryOwner<PointF> buffer)
@@ -134,8 +125,7 @@ internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<Tesse
 
         public void Dispose()
         {
-            this.buffer?.Dispose();
-            this.buffer = null;
+            this.buffer.Dispose();
             this.memory = default;
         }
     }
