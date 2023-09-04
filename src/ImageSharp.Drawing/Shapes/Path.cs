@@ -50,7 +50,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     public Path(params ILineSegment[] segments)
     {
         ArgumentNullException.ThrowIfNull(segments);
-        this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
+        this.lineSegments = segments;
     }
 
     /// <summary>
