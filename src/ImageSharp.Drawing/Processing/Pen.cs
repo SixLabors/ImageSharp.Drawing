@@ -21,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </remarks>
 public abstract class Pen : IEquatable<Pen>
 {
-    private readonly float[]? pattern;
+    private readonly float[] pattern;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Pen"/> class.
@@ -50,7 +50,9 @@ public abstract class Pen : IEquatable<Pen>
     /// <param name="strokePattern">The stroke pattern.</param>
     protected Pen(Brush strokeFill, float strokeWidth, float[] strokePattern)
     {
+        Guard.NotNull(strokeFill, nameof(strokeFill));
         Guard.MustBeGreaterThan(strokeWidth, 0, nameof(strokeWidth));
+        Guard.NotNull(strokePattern, nameof(strokePattern));
 
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
@@ -115,7 +117,5 @@ public abstract class Pen : IEquatable<Pen>
 
     /// <inheritdoc/>
     public override int GetHashCode()
-
-        // TODO: StrokePattern should be part of the hash-code.
-        => HashCode.Combine(this.StrokeWidth, this.JointStyle, this.EndCapStyle, this.StrokeFill);
+        => HashCode.Combine(this.StrokeWidth, this.JointStyle, this.EndCapStyle, this.StrokeFill, this.pattern);
 }

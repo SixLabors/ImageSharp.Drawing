@@ -50,7 +50,7 @@ public struct PenOptions
 
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
-        this.StrokePattern = strokePattern;
+        this.StrokePattern = strokePattern ?? Pens.EmptyPattern;
         this.JointStyle = JointStyle.Square;
         this.EndCapStyle = EndCapStyle.Butt;
     }
@@ -68,7 +68,7 @@ public struct PenOptions
     /// <summary>
     /// Gets the stroke pattern.
     /// </summary>
-    public float[]? StrokePattern { get; }
+    public float[] StrokePattern { get; }
 
     /// <summary>
     /// Gets or sets the joint style.
