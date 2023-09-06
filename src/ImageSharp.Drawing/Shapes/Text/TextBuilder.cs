@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -52,7 +50,7 @@ public static class TextBuilder
     {
         // When a path is specified we should explicitly follow that path
         // and not adjust the origin. Any translation should be applied to the path.
-        if (path is not null && options.Origin != Vector2.Zero)
+        if (options.Origin != Vector2.Zero)
         {
             TextOptions clone = new(options)
             {

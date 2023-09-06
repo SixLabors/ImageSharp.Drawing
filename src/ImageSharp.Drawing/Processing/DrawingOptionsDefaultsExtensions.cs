@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -49,7 +47,7 @@ public static class DrawingOptionsDefaultsExtensions
     /// <returns>The matrix.</returns>
     public static Matrix3x2 GetDrawingTransform(this IImageProcessingContext context)
     {
-        if (context.Properties.TryGetValue(DrawingTransformMatrixKey, out object options) && options is Matrix3x2 go)
+        if (context.Properties.TryGetValue(DrawingTransformMatrixKey, out object? options) && options is Matrix3x2 go)
         {
             return go;
         }
@@ -66,7 +64,7 @@ public static class DrawingOptionsDefaultsExtensions
     /// <returns>The globally configured default matrix.</returns>
     public static Matrix3x2 GetDrawingTransform(this Configuration configuration)
     {
-        if (configuration.Properties.TryGetValue(DrawingTransformMatrixKey, out object options) && options is Matrix3x2 go)
+        if (configuration.Properties.TryGetValue(DrawingTransformMatrixKey, out object? options) && options is Matrix3x2 go)
         {
             return go;
         }

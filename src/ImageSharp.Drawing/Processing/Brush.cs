@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -37,10 +35,10 @@ public abstract class Brush : IEquatable<Brush>
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <inheritdoc/>
-    public abstract bool Equals(Brush other);
+    public abstract bool Equals(Brush? other);
 
     /// <inheritdoc/>
-    public override bool Equals(object obj) => this.Equals(obj as Brush);
+    public override bool Equals(object? obj) => this.Equals(obj as Brush);
 
     /// <inheritdoc/>
     public abstract override int GetHashCode();

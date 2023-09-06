@@ -1,8 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -446,6 +445,7 @@ public class PathBuilder
     /// <summary>
     /// Clears all drawn paths, Leaving any applied transforms.
     /// </summary>
+    [MemberNotNull(nameof(this.currentFigure))]
     public void Clear()
     {
         this.currentFigure = new Figure();

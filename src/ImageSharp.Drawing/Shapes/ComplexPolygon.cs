@@ -1,10 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -35,7 +32,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// </summary>
     /// <param name="paths">The paths.</param>
     public ComplexPolygon(IEnumerable<IPath> paths)
-        : this(paths?.ToArray())
+        : this(paths.ToArray())
     {
     }
 
@@ -82,7 +79,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
                 foreach (ISimplePath s in p.Flatten())
                 {
-                    var ip = new InternalPath(s.Points, s.IsClosed);
+                    InternalPath ip = new(s.Points, s.IsClosed);
                     length += ip.Length;
                     this.internalPaths.Add(ip);
                 }
@@ -120,7 +117,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
             return this;
         }
 
-        var shapes = new IPath[this.paths.Length];
+        IPath[] shapes = new IPath[this.paths.Length];
         int i = 0;
         foreach (IPath s in this.Paths)
         {
@@ -133,7 +130,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// <inheritdoc />
     public IEnumerable<ISimplePath> Flatten()
     {
-        var paths = new List<ISimplePath>();
+        List<ISimplePath> paths = new();
         foreach (IPath path in this.Paths)
         {
             paths.AddRange(path.Flatten());
@@ -150,7 +147,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
             return this;
         }
 
-        var paths = new IPath[this.paths.Length];
+        IPath[] paths = new IPath[this.paths.Length];
         for (int i = 0; i < this.paths.Length; i++)
         {
             paths[i] = this.paths[i].AsClosedPath();
@@ -182,6 +179,5 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
         => this.internalPaths;
 
-    [DoesNotReturn]
     private static InvalidOperationException ThrowOutOfRange() => new("Should not be possible to reach this line");
 }

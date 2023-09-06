@@ -53,7 +53,7 @@ public sealed class RecolorBrush : Brush
             this.Threshold);
 
     /// <inheritdoc />
-    public override bool Equals(Brush other)
+    public override bool Equals(Brush? other)
     {
         if (other is RecolorBrush brush)
         {

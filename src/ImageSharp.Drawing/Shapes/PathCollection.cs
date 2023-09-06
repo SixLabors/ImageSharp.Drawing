@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Collections;
 using System.Numerics;
 
@@ -21,7 +19,7 @@ public class PathCollection : IPathCollection
     /// </summary>
     /// <param name="paths">The collection of paths</param>
     public PathCollection(IEnumerable<IPath> paths)
-        : this(paths?.ToArray())
+        : this(paths.ToArray())
     {
     }
 
@@ -64,7 +62,7 @@ public class PathCollection : IPathCollection
     /// <inheritdoc />
     public IPathCollection Transform(Matrix3x2 matrix)
     {
-        var result = new IPath[this.paths.Length];
+        IPath[] result = new IPath[this.paths.Length];
 
         for (int i = 0; i < this.paths.Length && i < result.Length; i++)
         {

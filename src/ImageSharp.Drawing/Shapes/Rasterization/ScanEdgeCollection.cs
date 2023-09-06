@@ -1,23 +1,20 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Buffers;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
-internal partial class ScanEdgeCollection : IDisposable
+internal sealed partial class ScanEdgeCollection : IDisposable
 {
-    private IMemoryOwner<ScanEdge> buffer;
-
+    private readonly IMemoryOwner<ScanEdge> buffer;
     private Memory<ScanEdge> memory;
 
     private ScanEdgeCollection(IMemoryOwner<ScanEdge> buffer, int count)
     {
         this.buffer = buffer;
-        this.memory = buffer.Memory.Slice(0, count);
+        this.memory = buffer.Memory[..count];
     }
 
     public Span<ScanEdge> Edges => this.memory.Span;
@@ -32,7 +29,6 @@ internal partial class ScanEdgeCollection : IDisposable
         }
 
         this.buffer.Dispose();
-        this.buffer = null;
         this.memory = default;
     }
 
@@ -41,7 +37,7 @@ internal partial class ScanEdgeCollection : IDisposable
         MemoryAllocator allocator,
         int subsampling)
     {
-        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
-        return Create(multipolygon, allocator, subsampling);
+        using TessellatedMultipolygon multiPolygon = TessellatedMultipolygon.Create(polygon, allocator);
+        return Create(multiPolygon, allocator, subsampling);
     }
 }

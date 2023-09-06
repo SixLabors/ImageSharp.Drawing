@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
@@ -24,15 +22,15 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
     private readonly DrawingOptions drawingOptions;
     private readonly MemoryAllocator memoryAllocator;
-    private readonly Pen defaultPen;
-    private readonly Brush defaultBrush;
-    private readonly IPathInternals path;
+    private readonly Pen? defaultPen;
+    private readonly Brush? defaultBrush;
+    private readonly IPathInternals? path;
     private bool isDisposed;
 
     private readonly Dictionary<Color, Brush> brushLookup = new();
-    private TextRun currentTextRun;
-    private Brush currentBrush;
-    private Pen currentPen;
+    private TextRun? currentTextRun;
+    private Brush? currentBrush;
+    private Pen? currentPen;
     private Color? currentColor;
     private TextDecorationDetails? currentUnderline;
     private TextDecorationDetails? currentStrikeout;
@@ -54,8 +52,8 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         RichTextOptions textOptions,
         DrawingOptions drawingOptions,
         MemoryAllocator memoryAllocator,
-        Pen pen,
-        Brush brush)
+        Pen? pen,
+        Brush? brush)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
@@ -64,7 +62,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         this.defaultBrush = brush;
         this.DrawingOperations = new List<DrawingOperation>();
 
-        IPath path = textOptions.Path;
+        IPath? path = textOptions.Path;
         if (path is not null)
         {
             // Turn of caching. The chances of a hit are near-zero.
@@ -116,7 +114,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             // Create a cache entry for the glyph.
             // We need to apply the default transform to the bounds to get the correct size
             // for comparison with future glyphs. We can use this cached glyph anywhere in the text block.
-            var currentBounds = RectangleF.Transform(
+            RectangleF currentBounds = RectangleF.Transform(
                    new RectangleF(bounds.Location, new(bounds.Width, bounds.Height)),
                    this.drawingOptions.Transform);
 
@@ -150,8 +148,8 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
     public override TextDecorations EnabledDecorations()
     {
-        TextRun run = this.currentTextRun;
-        TextDecorations decorations = run.TextDecorations;
+        TextRun? run = this.currentTextRun;
+        TextDecorations decorations = run?.TextDecorations ?? TextDecorations.None;
 
         if (this.currentTextRun is RichTextRun drawingRun)
         {
@@ -199,7 +197,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             return;
         }
 
-        Pen pen = null;
+        Pen? pen = null;
         if (this.currentTextRun is RichTextRun drawingRun)
         {
             if (textDecorations == TextDecorations.Strikeout)
@@ -224,8 +222,9 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         else
         {
             // Clamp the thickness to whole pixels.
+            // Brush cannot be null if pen is null.
             thickness = MathF.Max(1F, MathF.Round(thickness));
-            pen = new SolidPen(this.currentBrush ?? this.defaultBrush, thickness);
+            pen = new SolidPen((this.currentBrush ?? this.defaultBrush)!, thickness);
         }
 
         // Drawing is always centered around the point so we need to offset by half.
@@ -275,7 +274,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             renderFill = true;
             if (this.currentColor.HasValue)
             {
-                if (this.brushLookup.TryGetValue(this.currentColor.Value, out Brush brush))
+                if (this.brushLookup.TryGetValue(this.currentColor.Value, out Brush? brush))
                 {
                     this.currentBrush = brush;
                 }
@@ -309,7 +308,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
             if (renderOutline)
             {
-                path = this.currentPen.GeneratePath(path);
+                path = this.currentPen!.GeneratePath(path);
                 renderData.OutlineMap = this.Render(path);
             }
 
@@ -361,7 +360,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             {
                 RenderLocation = renderLocation,
                 Map = renderData.FillMap,
-                Brush = this.currentBrush,
+                Brush = this.currentBrush!,
                 RenderPass = RenderOrderFill
             });
         }
@@ -372,7 +371,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             {
                 RenderLocation = renderLocation,
                 Map = renderData.OutlineMap,
-                Brush = this.currentPen?.StrokeFill ?? this.currentBrush,
+                Brush = this.currentPen?.StrokeFill ?? this.currentBrush!,
                 RenderPass = RenderOrderOutline
             });
         }
@@ -538,7 +537,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
         Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
 
-        var scanner = PolygonScanner.Create(
+        PolygonScanner scanner = PolygonScanner.Create(
             offsetPath,
             0,
             size.Height,

@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using System.Buffers;
 using SixLabors.ImageSharp.Memory;
 
@@ -47,7 +45,7 @@ public class ImageBrush : Brush
     }
 
     /// <inheritdoc />
-    public override bool Equals(Brush other)
+    public override bool Equals(Brush? other)
     {
         if (other is ImageBrush ib)
         {
@@ -83,10 +81,8 @@ public class ImageBrush : Brush
     private class ImageBrushApplicator<TPixel> : BrushApplicator<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        private ImageFrame<TPixel> sourceFrame;
-
-        private Image<TPixel> sourceImage;
-
+        private readonly ImageFrame<TPixel> sourceFrame;
+        private readonly Image<TPixel> sourceImage;
         private readonly bool shouldDisposeImage;
 
         /// <summary>
@@ -158,10 +154,7 @@ public class ImageBrush : Brush
                 this.sourceImage?.Dispose();
             }
 
-            this.sourceImage = null;
-            this.sourceFrame = null;
             this.isDisposed = true;
-
             base.Dispose(disposing);
         }
 

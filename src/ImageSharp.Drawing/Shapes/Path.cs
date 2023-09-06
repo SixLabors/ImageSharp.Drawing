@@ -1,8 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 
@@ -15,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing;
 public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 {
     private readonly ILineSegment[] lineSegments;
-    private InternalPath innerPath;
+    private InternalPath? innerPath;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Path"/> class.
@@ -31,7 +30,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// </summary>
     /// <param name="segments">The segments.</param>
     public Path(IEnumerable<ILineSegment> segments)
-        : this(segments?.ToArray())
+        : this(segments.ToArray())
     {
     }
 
@@ -49,7 +48,10 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// </summary>
     /// <param name="segments">The segments.</param>
     public Path(params ILineSegment[] segments)
-        => this.lineSegments = segments ?? throw new ArgumentNullException(nameof(segments));
+    {
+        ArgumentNullException.ThrowIfNull(segments);
+        this.lineSegments = segments;
+    }
 
     /// <summary>
     /// Gets the default empty path.
@@ -97,7 +99,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             return this;
         }
 
-        var segments = new ILineSegment[this.lineSegments.Length];
+        ILineSegment[] segments = new ILineSegment[this.lineSegments.Length];
 
         for (int i = 0; i < this.LineSegments.Count; i++)
         {
@@ -140,7 +142,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// This parameter is passed uninitialized.
     /// </param>
     /// <returns><see langword="true"/> if the input value can be parsed and converted; otherwise, <see langword="false"/>.</returns>
-    public static bool TryParseSvgPath(string svgPath, out IPath value)
+    public static bool TryParseSvgPath(string svgPath, [NotNullWhen(true)] out IPath? value)
         => TryParseSvgPath(svgPath.AsSpan(), out value);
 
     /// <summary>
@@ -152,11 +154,11 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// This parameter is passed uninitialized.
     /// </param>
     /// <returns><see langword="true"/> if the input value can be parsed and converted; otherwise, <see langword="false"/>.</returns>
-    public static bool TryParseSvgPath(ReadOnlySpan<char> svgPath, out IPath value)
+    public static bool TryParseSvgPath(ReadOnlySpan<char> svgPath, [NotNullWhen(true)] out IPath? value)
     {
         value = null;
 
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         PointF first = PointF.Empty;
         PointF c = PointF.Empty;
@@ -199,7 +201,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                     relative = true;
                 }
 
-                svgPath = TrimSeparator(svgPath.Slice(1));
+                svgPath = TrimSeparator(svgPath[1..]);
             }
 
             switch (op)
@@ -302,8 +304,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
                 case '~':
                     svgPath = FindPoint(svgPath, relative, c, out point1);
                     svgPath = FindPoint(svgPath, relative, c, out point2);
-                    builder.MoveTo(point1);
-                    builder.LineTo(point2);
+                    builder.MoveTo(point1).LineTo(point2);
                     break;
                 default:
                     return false;
@@ -324,7 +325,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     private static bool TryTrimSeparator(ref ReadOnlySpan<char> str)
     {
         ReadOnlySpan<char> result = TrimSeparator(str);
-        if (str.Slice(str.Length - result.Length).StartsWith(result))
+        if (str[^result.Length..].StartsWith(result))
         {
             str = result;
             return true;
@@ -336,7 +337,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     private static bool TryFindScaler(ref ReadOnlySpan<char> str, out float value)
     {
         ReadOnlySpan<char> result = FindScaler(str, out float valueInner);
-        if (str.Slice(str.Length - result.Length).StartsWith(result))
+        if (str[^result.Length..].StartsWith(result))
         {
             value = valueInner;
             str = result;
@@ -350,7 +351,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     private static bool TryFindPoint(ref ReadOnlySpan<char> str, bool relative, PointF current, out PointF value)
     {
         ReadOnlySpan<char> result = FindPoint(str, relative, current, out PointF valueInner);
-        if (str.Slice(str.Length - result.Length).StartsWith(result))
+        if (str[^result.Length..].StartsWith(result))
         {
             value = valueInner;
             str = result;
@@ -384,8 +385,8 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         {
             if (IsSeparator(str[i]) || i == str.Length)
             {
-                scaler = ParseFloat(str.Slice(0, i));
-                return str.Slice(i);
+                scaler = ParseFloat(str[..i]);
+                return str[i..];
             }
         }
 
@@ -416,7 +417,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             }
         }
 
-        return data.Slice(idx);
+        return data[idx..];
     }
 
     private static float ParseFloat(ReadOnlySpan<char> str)

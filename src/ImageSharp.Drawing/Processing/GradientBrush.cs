@@ -32,7 +32,7 @@ public abstract class GradientBrush : Brush
     protected ColorStop[] ColorStops { get; }
 
     /// <inheritdoc />
-    public override bool Equals(Brush other)
+    public override bool Equals(Brush? other)
     {
         if (other is GradientBrush brush)
         {

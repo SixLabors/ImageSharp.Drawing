@@ -56,7 +56,7 @@ public class SolidPen : Pen
     }
 
     /// <inheritdoc/>
-    public override bool Equals(Pen other)
+    public override bool Equals(Pen? other)
     {
         if (other is SolidPen)
         {

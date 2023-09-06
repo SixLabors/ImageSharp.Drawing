@@ -32,7 +32,7 @@ public sealed class LinearGradientBrush : GradientBrush
     }
 
     /// <inheritdoc/>
-    public override bool Equals(Brush other)
+    public override bool Equals(Brush? other)
     {
         if (other is LinearGradientBrush brush)
         {

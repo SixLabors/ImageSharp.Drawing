@@ -84,7 +84,7 @@ public sealed class PatternBrush : Brush
     }
 
     /// <inheritdoc />
-    public override bool Equals(Brush other)
+    public override bool Equals(Brush? other)
     {
         if (other is PatternBrush sb)
         {

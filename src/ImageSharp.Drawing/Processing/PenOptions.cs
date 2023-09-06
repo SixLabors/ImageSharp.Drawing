@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -35,7 +33,7 @@ public struct PenOptions
     /// <param name="color">The color.</param>
     /// <param name="strokeWidth">The stroke width in px units.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
-    public PenOptions(Color color, float strokeWidth, float[] strokePattern)
+    public PenOptions(Color color, float strokeWidth, float[]? strokePattern)
         : this(new SolidBrush(color), strokeWidth, strokePattern)
     {
     }
@@ -46,13 +44,13 @@ public struct PenOptions
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
     /// <param name="strokeWidth">The stroke width in px units.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
-    public PenOptions(Brush strokeFill, float strokeWidth, float[] strokePattern)
+    public PenOptions(Brush strokeFill, float strokeWidth, float[]? strokePattern)
     {
         Guard.MustBeGreaterThan(strokeWidth, 0, nameof(strokeWidth));
 
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
-        this.StrokePattern = strokePattern;
+        this.StrokePattern = strokePattern ?? Pens.EmptyPattern;
         this.JointStyle = JointStyle.Square;
         this.EndCapStyle = EndCapStyle.Butt;
     }

@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -52,7 +50,9 @@ public abstract class Pen : IEquatable<Pen>
     /// <param name="strokePattern">The stroke pattern.</param>
     protected Pen(Brush strokeFill, float strokeWidth, float[] strokePattern)
     {
+        Guard.NotNull(strokeFill, nameof(strokeFill));
         Guard.MustBeGreaterThan(strokeWidth, 0, nameof(strokeWidth));
+        Guard.NotNull(strokePattern, nameof(strokePattern));
 
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
@@ -104,19 +104,18 @@ public abstract class Pen : IEquatable<Pen>
     public abstract IPath GeneratePath(IPath path, float strokeWidth);
 
     /// <inheritdoc/>
-    public virtual bool Equals(Pen other)
-        => this.StrokeWidth == other.StrokeWidth
+    public virtual bool Equals(Pen? other)
+        => other != null
+        && this.StrokeWidth == other.StrokeWidth
         && this.JointStyle == other.JointStyle
         && this.EndCapStyle == other.EndCapStyle
         && this.StrokeFill.Equals(other.StrokeFill)
         && this.StrokePattern.SequenceEqual(other.StrokePattern);
 
     /// <inheritdoc/>
-    public override bool Equals(object obj) => this.Equals(obj as Pen);
+    public override bool Equals(object? obj) => this.Equals(obj as Pen);
 
     /// <inheritdoc/>
     public override int GetHashCode()
-
-        // TODO: StrokePattern should be part of the hash-code.
-        => HashCode.Combine(this.StrokeWidth, this.JointStyle, this.EndCapStyle, this.StrokeFill);
+        => HashCode.Combine(this.StrokeWidth, this.JointStyle, this.EndCapStyle, this.StrokeFill, this.pattern);
 }
