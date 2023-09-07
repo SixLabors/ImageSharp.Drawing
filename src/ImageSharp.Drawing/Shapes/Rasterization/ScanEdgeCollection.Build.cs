@@ -45,17 +45,17 @@ internal partial class ScanEdgeCollection
         RightRight,
     }
 
-    internal static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, int subsampling)
+    internal static ScanEdgeCollection Create(TessellatedMultipolygon multiPolygon, MemoryAllocator allocator, int subsampling)
     {
         // We allocate more than we need, since we don't know how many horizontal edges do we have:
-        IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multipolygon.TotalVertexCount);
+        IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multiPolygon.TotalVertexCount);
 
-        RingWalker walker = new RingWalker(buffer.Memory.Span);
+        RingWalker walker = new(buffer.Memory.Span);
 
-        using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multipolygon.Max(r => r.Vertices.Length));
+        using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multiPolygon.Max(r => r.Vertices.Length));
         Span<float> roundedY = roundedYBuffer.Memory.Span;
 
-        foreach (TessellatedMultipolygon.Ring ring in multipolygon)
+        foreach (TessellatedMultipolygon.Ring ring in multiPolygon)
         {
             if (ring.VertexCount < 3)
             {
@@ -123,6 +123,43 @@ internal partial class ScanEdgeCollection
                     }
                 }
             }
+            else if (Sse41.IsSupported)
+            {
+                // If the length of the input buffer as a float array is a multiple of 8, we can use Sse instructions:
+                int verticesLengthInFloats = vertices.Length * 2;
+                int vector128FloatCount_x2 = Vector128<float>.Count * 2;
+                int remainder = verticesLengthInFloats % vector128FloatCount_x2;
+                int verticesLength = verticesLengthInFloats - remainder;
+
+                if (verticesLength > 0)
+                {
+                    ri = vertices.Length - (remainder / 2);
+                    float maxIterations = verticesLength / (Vector128<float>.Count * 2);
+                    ref Vector128<float> sourceBase = ref Unsafe.As<PointF, Vector128<float>>(ref MemoryMarshal.GetReference(vertices));
+                    ref Vector128<float> destinationBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(destination));
+
+                    Vector128<float> ssRatio = Vector128.Create(subsamplingRatio);
+                    Vector128<float> inverseSsRatio = Vector128.Create(1F / subsamplingRatio);
+
+                    // For every 1 vector we add to the destination we read 2 from the vertices.
+                    for (nint i = 0, j = 0; i < maxIterations; i++, j += 2)
+                    {
+                        // Load 4 PointF
+                        Vector128<float> points1 = Unsafe.Add(ref sourceBase, j);
+                        Vector128<float> points2 = Unsafe.Add(ref sourceBase, j + 1);
+
+                        // Shuffle the points to group the Y properties
+                        Vector128<float> points1Y = Sse.Shuffle(points1, points1, 0b11_01_11_01);
+                        Vector128<float> points2Y = Sse.Shuffle(points2, points2, 0b11_01_11_01);
+                        Vector128<float> pointsY = Vector128.Create(points1Y.GetLower(), points2Y.GetLower());
+
+                        // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
+                        // https://www.ocf.berkeley.edu/~horie/rounding.html
+                        Vector128<float> rounded = Sse41.RoundToPositiveInfinity(Sse.Multiply(pointsY, ssRatio));
+                        Unsafe.Add(ref destinationBase, i) = Sse.Multiply(rounded, inverseSsRatio);
+                    }
+                }
+            }
 
             for (; ri < vertices.Length; ri++)
             {
@@ -136,7 +173,7 @@ internal partial class ScanEdgeCollection
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static VertexCategory CreateVertexCategory(EdgeCategory previousCategory, EdgeCategory currentCategory)
     {
-        var value = (VertexCategory)(((int)previousCategory << 2) | (int)currentCategory);
+        VertexCategory value = (VertexCategory)(((int)previousCategory << 2) | (int)currentCategory);
         VerifyVertexCategory(value);
         return value;
     }
@@ -145,7 +182,7 @@ internal partial class ScanEdgeCollection
     private static void VerifyVertexCategory(VertexCategory vertexCategory)
     {
         int value = (int)vertexCategory;
-        if (value < 0 || value >= 16)
+        if (value is < 0 or >= 16)
         {
             throw new ArgumentOutOfRangeException(nameof(vertexCategory), "EdgeCategoryPair value shall be: 0 <= value < 16");
         }
@@ -190,7 +227,7 @@ internal partial class ScanEdgeCollection
 
         public void EmitScanEdge(Span<ScanEdge> edges, ref int edgeCounter)
         {
-            if (this.EdgeCategory == EdgeCategory.Left || this.EdgeCategory == EdgeCategory.Right)
+            if (this.EdgeCategory is EdgeCategory.Left or EdgeCategory.Right)
             {
                 return;
             }
