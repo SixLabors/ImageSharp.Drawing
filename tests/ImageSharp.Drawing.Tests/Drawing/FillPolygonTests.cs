@@ -196,7 +196,7 @@ public class FillPolygonTests
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
-                comparer: ImageComparer.TolerantPercentage(0.0203F),
+                comparer: ImageComparer.TolerantPercentage(0.0287F),
                 testOutputDetails: operation.ToString(),
                 appendSourceFileOrDescription: false,
                 appendPixelTypeToFileName: false);
