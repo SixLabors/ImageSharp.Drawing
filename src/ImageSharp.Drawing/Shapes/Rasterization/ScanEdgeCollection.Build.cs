@@ -190,7 +190,7 @@ internal partial class ScanEdgeCollection
                         Vector128<float> pointsY = AdvSimdShuffle(points1, points2, 0b11_01_11_01);
 
                         // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
-                        Vector128<float> rounded = AdvSimd.RoundAwayFromZero(Sse.Multiply(pointsY, ssRatio));
+                        Vector128<float> rounded = AdvSimd.RoundAwayFromZero(AdvSimd.Multiply(pointsY, ssRatio));
                         Unsafe.Add(ref destinationBase, i) = AdvSimd.Multiply(rounded, inverseSsRatio);
                     }
                 }
