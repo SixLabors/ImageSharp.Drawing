@@ -103,6 +103,7 @@ internal partial class ScanEdgeCollection
 
                     Vector256<float> ssRatio = Vector256.Create(subsamplingRatio);
                     Vector256<float> inverseSsRatio = Vector256.Create(1F / subsamplingRatio);
+                    Vector256<float> half = Vector256.Create(.5F);
 
                     // For every 1 vector we add to the destination we read 2 from the vertices.
                     for (nint i = 0, j = 0; i < maxIterations; i++, j += 2)
@@ -118,7 +119,7 @@ internal partial class ScanEdgeCollection
 
                         // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
                         // https://www.ocf.berkeley.edu/~horie/rounding.html
-                        Vector256<float> rounded = Avx.RoundToPositiveInfinity(Avx.Multiply(pointsY, ssRatio));
+                        Vector256<float> rounded = Avx.RoundToPositiveInfinity(Avx.Subtract(Avx.Multiply(pointsY, ssRatio), half));
                         Unsafe.Add(ref destinationBase, i) = Avx.Multiply(rounded, inverseSsRatio);
                     }
                 }
@@ -140,6 +141,7 @@ internal partial class ScanEdgeCollection
 
                     Vector128<float> ssRatio = Vector128.Create(subsamplingRatio);
                     Vector128<float> inverseSsRatio = Vector128.Create(1F / subsamplingRatio);
+                    Vector128<float> half = Vector128.Create(.5F);
 
                     // For every 1 vector we add to the destination we read 2 from the vertices.
                     for (nint i = 0, j = 0; i < maxIterations; i++, j += 2)
@@ -149,18 +151,17 @@ internal partial class ScanEdgeCollection
                         Vector128<float> points2 = Unsafe.Add(ref sourceBase, j + 1);
 
                         // Shuffle the points to group the Y properties
-                        Vector128<float> points1Y = Sse.Shuffle(points1, points1, 0b11_01_11_01);
-                        Vector128<float> points2Y = Sse.Shuffle(points2, points2, 0b11_01_11_01);
-                        Vector128<float> pointsY = Vector128.Create(points1Y.GetLower(), points2Y.GetLower());
+                        Vector128<float> pointsY = Sse.Shuffle(points1, points2, 0b11_01_11_01);
 
                         // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
                         // https://www.ocf.berkeley.edu/~horie/rounding.html
-                        Vector128<float> rounded = Sse41.RoundToPositiveInfinity(Sse.Multiply(pointsY, ssRatio));
+                        Vector128<float> rounded = Sse41.RoundToPositiveInfinity(Sse.Subtract(Sse.Multiply(pointsY, ssRatio), half));
                         Unsafe.Add(ref destinationBase, i) = Sse.Multiply(rounded, inverseSsRatio);
                     }
                 }
             }
 
+            // TODO: Arm64
             for (; ri < vertices.Length; ri++)
             {
                 destination[ri] = MathF.Round(vertices[ri].Y * subsamplingRatio, MidpointRounding.AwayFromZero) / subsamplingRatio;
