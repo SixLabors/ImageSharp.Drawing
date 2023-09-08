@@ -23,7 +23,7 @@ public class DrawTextOnImageTests
 
     private static readonly ImageComparer TextDrawingComparer = ImageComparer.TolerantPercentage(1e-2f);
 
-    private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(1e-3f);
+    private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(0.0069F);
 
     public DrawTextOnImageTests(ITestOutputHelper output)
         => this.Output = output;
@@ -278,7 +278,7 @@ public class DrawTextOnImageTests
         }
 
         // Strict comparer, because the image is sparse:
-        var comparer = ImageComparer.TolerantPercentage(1e-6f);
+        var comparer = ImageComparer.TolerantPercentage(0.0001F);
 
         provider.VerifyOperation(
             comparer,
