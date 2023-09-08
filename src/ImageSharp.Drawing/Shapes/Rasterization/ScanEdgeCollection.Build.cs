@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
 using SixLabors.ImageSharp.Memory;
 
@@ -160,8 +161,41 @@ internal partial class ScanEdgeCollection
                     }
                 }
             }
+            else if (AdvSimd.IsSupported)
+            {
+                // If the length of the input buffer as a float array is a multiple of 8, we can use AdvSimd instructions:
+                int verticesLengthInFloats = vertices.Length * 2;
+                int vector128FloatCount_x2 = Vector128<float>.Count * 2;
+                int remainder = verticesLengthInFloats % vector128FloatCount_x2;
+                int verticesLength = verticesLengthInFloats - remainder;
 
-            // TODO: Arm64
+                if (verticesLength > 0)
+                {
+                    ri = vertices.Length - (remainder / 2);
+                    float maxIterations = verticesLength / (Vector128<float>.Count * 2);
+                    ref Vector128<float> sourceBase = ref Unsafe.As<PointF, Vector128<float>>(ref MemoryMarshal.GetReference(vertices));
+                    ref Vector128<float> destinationBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(destination));
+
+                    Vector128<float> ssRatio = Vector128.Create(subsamplingRatio);
+                    Vector128<float> inverseSsRatio = Vector128.Create(1F / subsamplingRatio);
+
+                    // For every 1 vector we add to the destination we read 2 from the vertices.
+                    for (nint i = 0, j = 0; i < maxIterations; i++, j += 2)
+                    {
+                        // Load 4 PointF
+                        Vector128<float> points1 = Unsafe.Add(ref sourceBase, j);
+                        Vector128<float> points2 = Unsafe.Add(ref sourceBase, j + 1);
+
+                        // Shuffle the points to group the Y properties
+                        Vector128<float> pointsY = AdvSimdShuffle(points1, points2, 0b11_01_11_01);
+
+                        // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
+                        Vector128<float> rounded = AdvSimd.RoundAwayFromZero(Sse.Multiply(pointsY, ssRatio));
+                        Unsafe.Add(ref destinationBase, i) = AdvSimd.Multiply(rounded, inverseSsRatio);
+                    }
+                }
+            }
+
             for (; ri < vertices.Length; ri++)
             {
                 destination[ri] = MathF.Round(vertices[ri].Y * subsamplingRatio, MidpointRounding.AwayFromZero) / subsamplingRatio;
@@ -169,6 +203,17 @@ internal partial class ScanEdgeCollection
         }
 
         return new ScanEdgeCollection(buffer, walker.EdgeCounter);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector128<float> AdvSimdShuffle(Vector128<float> a, Vector128<float> b, byte control)
+    {
+        Vector128<float> result = Vector128.Create(AdvSimd.Extract(a, (byte)(control & 0x3)));
+        result = AdvSimd.Insert(result, 1, AdvSimd.Extract(a, (byte)((control >> 2) & 0x3)));
+        result = AdvSimd.Insert(result, 2, AdvSimd.Extract(b, (byte)((control >> 4) & 0x3)));
+        result = AdvSimd.Insert(result, 3, AdvSimd.Extract(b, (byte)((control >> 6) & 0x3)));
+
+        return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

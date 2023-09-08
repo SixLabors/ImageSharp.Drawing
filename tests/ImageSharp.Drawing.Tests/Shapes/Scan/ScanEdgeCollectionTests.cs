@@ -104,7 +104,7 @@ public class ScanEdgeCollectionTests
             VerifyEdge(edges, 2f, 3f, (1f, 1.5f), 1, 1, true);
         }
 
-        FeatureTestRunner.RunWithHwIntrinsicsFeature(RunTest, HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX | HwIntrinsics.DisableSSE41);
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(RunTest, HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX | HwIntrinsics.DisableSSE41 | HwIntrinsics.DisableArm64AdvSimd);
     }
 
     [Fact]
