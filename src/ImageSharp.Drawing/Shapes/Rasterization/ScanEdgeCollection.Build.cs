@@ -4,6 +4,10 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.Arm;
+using System.Runtime.Intrinsics.X86;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
@@ -42,17 +46,17 @@ internal partial class ScanEdgeCollection
         RightRight,
     }
 
-    internal static ScanEdgeCollection Create(TessellatedMultipolygon multipolygon, MemoryAllocator allocator, int subsampling)
+    internal static ScanEdgeCollection Create(TessellatedMultipolygon multiPolygon, MemoryAllocator allocator, int subsampling)
     {
         // We allocate more than we need, since we don't know how many horizontal edges do we have:
-        IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multipolygon.TotalVertexCount);
+        IMemoryOwner<ScanEdge> buffer = allocator.Allocate<ScanEdge>(multiPolygon.TotalVertexCount);
 
-        RingWalker walker = new RingWalker(buffer.Memory.Span);
+        RingWalker walker = new(buffer.Memory.Span);
 
-        using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multipolygon.Max(r => r.Vertices.Length));
+        using IMemoryOwner<float> roundedYBuffer = allocator.Allocate<float>(multiPolygon.Max(r => r.Vertices.Length));
         Span<float> roundedY = roundedYBuffer.Memory.Span;
 
-        foreach (TessellatedMultipolygon.Ring ring in multipolygon)
+        foreach (TessellatedMultipolygon.Ring ring in multiPolygon)
         {
             if (ring.VertexCount < 3)
             {
@@ -82,12 +86,119 @@ internal partial class ScanEdgeCollection
 
         static void RoundY(ReadOnlySpan<PointF> vertices, Span<float> destination, float subsamplingRatio)
         {
-            for (int i = 0; i < vertices.Length; i++)
+            int ri = 0;
+            if (Avx.IsSupported)
             {
-                // for future SIMD impl:
-                // https://www.ocf.berkeley.edu/~horie/rounding.html
-                // Avx.RoundToPositiveInfinity()
-                destination[i] = MathF.Round(vertices[i].Y * subsamplingRatio, MidpointRounding.AwayFromZero) / subsamplingRatio;
+                // If the length of the input buffer as a float array is a multiple of 16, we can use AVX instructions:
+                int verticesLengthInFloats = vertices.Length * 2;
+                int vector256FloatCount_x2 = Vector256<float>.Count * 2;
+                int remainder = verticesLengthInFloats % vector256FloatCount_x2;
+                int verticesLength = verticesLengthInFloats - remainder;
+
+                if (verticesLength > 0)
+                {
+                    ri = vertices.Length - (remainder / 2);
+                    float maxIterations = verticesLength / (Vector256<float>.Count * 2);
+                    ref Vector256<float> sourceBase = ref Unsafe.As<PointF, Vector256<float>>(ref MemoryMarshal.GetReference(vertices));
+                    ref Vector256<float> destinationBase = ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetReference(destination));
+
+                    Vector256<float> ssRatio = Vector256.Create(subsamplingRatio);
+                    Vector256<float> inverseSsRatio = Vector256.Create(1F / subsamplingRatio);
+                    Vector256<float> half = Vector256.Create(.5F);
+
+                    // For every 1 vector we add to the destination we read 2 from the vertices.
+                    for (nint i = 0, j = 0; i < maxIterations; i++, j += 2)
+                    {
+                        // Load 8 PointF
+                        Vector256<float> points1 = Unsafe.Add(ref sourceBase, j);
+                        Vector256<float> points2 = Unsafe.Add(ref sourceBase, j + 1);
+
+                        // Shuffle the points to group the Y properties
+                        Vector128<float> points1Y = Sse.Shuffle(points1.GetLower(), points1.GetUpper(), 0b11_01_11_01);
+                        Vector128<float> points2Y = Sse.Shuffle(points2.GetLower(), points2.GetUpper(), 0b11_01_11_01);
+                        Vector256<float> pointsY = Vector256.Create(points1Y, points2Y);
+
+                        // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
+                        // https://www.ocf.berkeley.edu/~horie/rounding.html
+                        Vector256<float> rounded = Avx.RoundToPositiveInfinity(Avx.Subtract(Avx.Multiply(pointsY, ssRatio), half));
+                        Unsafe.Add(ref destinationBase, i) = Avx.Multiply(rounded, inverseSsRatio);
+                    }
+                }
+            }
+            else if (Sse41.IsSupported)
+            {
+                // If the length of the input buffer as a float array is a multiple of 8, we can use Sse instructions:
+                int verticesLengthInFloats = vertices.Length * 2;
+                int vector128FloatCount_x2 = Vector128<float>.Count * 2;
+                int remainder = verticesLengthInFloats % vector128FloatCount_x2;
+                int verticesLength = verticesLengthInFloats - remainder;
+
+                if (verticesLength > 0)
+                {
+                    ri = vertices.Length - (remainder / 2);
+                    float maxIterations = verticesLength / (Vector128<float>.Count * 2);
+                    ref Vector128<float> sourceBase = ref Unsafe.As<PointF, Vector128<float>>(ref MemoryMarshal.GetReference(vertices));
+                    ref Vector128<float> destinationBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(destination));
+
+                    Vector128<float> ssRatio = Vector128.Create(subsamplingRatio);
+                    Vector128<float> inverseSsRatio = Vector128.Create(1F / subsamplingRatio);
+                    Vector128<float> half = Vector128.Create(.5F);
+
+                    // For every 1 vector we add to the destination we read 2 from the vertices.
+                    for (nint i = 0, j = 0; i < maxIterations; i++, j += 2)
+                    {
+                        // Load 4 PointF
+                        Vector128<float> points1 = Unsafe.Add(ref sourceBase, j);
+                        Vector128<float> points2 = Unsafe.Add(ref sourceBase, j + 1);
+
+                        // Shuffle the points to group the Y properties
+                        Vector128<float> pointsY = Sse.Shuffle(points1, points2, 0b11_01_11_01);
+
+                        // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
+                        // https://www.ocf.berkeley.edu/~horie/rounding.html
+                        Vector128<float> rounded = Sse41.RoundToPositiveInfinity(Sse.Subtract(Sse.Multiply(pointsY, ssRatio), half));
+                        Unsafe.Add(ref destinationBase, i) = Sse.Multiply(rounded, inverseSsRatio);
+                    }
+                }
+            }
+            else if (AdvSimd.IsSupported)
+            {
+                // If the length of the input buffer as a float array is a multiple of 8, we can use AdvSimd instructions:
+                int verticesLengthInFloats = vertices.Length * 2;
+                int vector128FloatCount_x2 = Vector128<float>.Count * 2;
+                int remainder = verticesLengthInFloats % vector128FloatCount_x2;
+                int verticesLength = verticesLengthInFloats - remainder;
+
+                if (verticesLength > 0)
+                {
+                    ri = vertices.Length - (remainder / 2);
+                    float maxIterations = verticesLength / (Vector128<float>.Count * 2);
+                    ref Vector128<float> sourceBase = ref Unsafe.As<PointF, Vector128<float>>(ref MemoryMarshal.GetReference(vertices));
+                    ref Vector128<float> destinationBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(destination));
+
+                    Vector128<float> ssRatio = Vector128.Create(subsamplingRatio);
+                    Vector128<float> inverseSsRatio = Vector128.Create(1F / subsamplingRatio);
+
+                    // For every 1 vector we add to the destination we read 2 from the vertices.
+                    for (nint i = 0, j = 0; i < maxIterations; i++, j += 2)
+                    {
+                        // Load 4 PointF
+                        Vector128<float> points1 = Unsafe.Add(ref sourceBase, j);
+                        Vector128<float> points2 = Unsafe.Add(ref sourceBase, j + 1);
+
+                        // Shuffle the points to group the Y properties
+                        Vector128<float> pointsY = AdvSimdShuffle(points1, points2, 0b11_01_11_01);
+
+                        // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
+                        Vector128<float> rounded = AdvSimd.RoundAwayFromZero(AdvSimd.Multiply(pointsY, ssRatio));
+                        Unsafe.Add(ref destinationBase, i) = AdvSimd.Multiply(rounded, inverseSsRatio);
+                    }
+                }
+            }
+
+            for (; ri < vertices.Length; ri++)
+            {
+                destination[ri] = MathF.Round(vertices[ri].Y * subsamplingRatio, MidpointRounding.AwayFromZero) / subsamplingRatio;
             }
         }
 
@@ -95,9 +206,20 @@ internal partial class ScanEdgeCollection
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector128<float> AdvSimdShuffle(Vector128<float> a, Vector128<float> b, byte control)
+    {
+        Vector128<float> result = Vector128.Create(AdvSimd.Extract(a, (byte)(control & 0x3)));
+        result = AdvSimd.Insert(result, 1, AdvSimd.Extract(a, (byte)((control >> 2) & 0x3)));
+        result = AdvSimd.Insert(result, 2, AdvSimd.Extract(b, (byte)((control >> 4) & 0x3)));
+        result = AdvSimd.Insert(result, 3, AdvSimd.Extract(b, (byte)((control >> 6) & 0x3)));
+
+        return result;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static VertexCategory CreateVertexCategory(EdgeCategory previousCategory, EdgeCategory currentCategory)
     {
-        var value = (VertexCategory)(((int)previousCategory << 2) | (int)currentCategory);
+        VertexCategory value = (VertexCategory)(((int)previousCategory << 2) | (int)currentCategory);
         VerifyVertexCategory(value);
         return value;
     }
@@ -106,7 +228,7 @@ internal partial class ScanEdgeCollection
     private static void VerifyVertexCategory(VertexCategory vertexCategory)
     {
         int value = (int)vertexCategory;
-        if (value < 0 || value >= 16)
+        if (value is < 0 or >= 16)
         {
             throw new ArgumentOutOfRangeException(nameof(vertexCategory), "EdgeCategoryPair value shall be: 0 <= value < 16");
         }
@@ -151,7 +273,7 @@ internal partial class ScanEdgeCollection
 
         public void EmitScanEdge(Span<ScanEdge> edges, ref int edgeCounter)
         {
-            if (this.EdgeCategory == EdgeCategory.Left || this.EdgeCategory == EdgeCategory.Right)
+            if (this.EdgeCategory is EdgeCategory.Left or EdgeCategory.Right)
             {
                 return;
             }

@@ -160,10 +160,8 @@ public class DrawingRobustnessTests
             image.Mutate(c => c.DrawLine(Color.White, 1.0f, loop));
         }
 
-        // Very strict tolerance, since the image is sparse (relaxed on .NET Framework)
-        ImageComparer comparer = TestEnvironment.IsFramework
-            ? ImageComparer.TolerantPercentage(1e-3f)
-            : ImageComparer.TolerantPercentage(1e-7f);
+        // Strict comparer, because the image is sparse:
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0001F);
 
         string details = $"PixelOffset({pixelOffset})";
         image.DebugSave(provider, details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);

@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
-
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 /// <summary>
@@ -10,8 +8,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 /// </summary>
 internal class ClipperOffset
 {
-    // To make the floating point polygons compatible with clipper we have to scale them.
-    private const float ScalingFactor = 1000F;
     private readonly PolygonOffsetter polygonClipperOffset;
 
     /// <summary>
@@ -30,16 +26,16 @@ internal class ClipperOffset
     public ComplexPolygon Execute(float width)
     {
         PathsF solution = new();
-        this.polygonClipperOffset.Execute(width * ScalingFactor, solution);
+        this.polygonClipperOffset.Execute(width, solution);
 
-        var polygons = new Polygon[solution.Count];
+        Polygon[] polygons = new Polygon[solution.Count];
         for (int i = 0; i < solution.Count; i++)
         {
             PathF pt = solution[i];
-            var points = new PointF[pt.Count];
+            PointF[] points = new PointF[pt.Count];
             for (int j = 0; j < pt.Count; j++)
             {
-                points[j] = pt[j] / ScalingFactor;
+                points[j] = pt[j];
             }
 
             polygons[i] = new Polygon(points);
@@ -59,7 +55,7 @@ internal class ClipperOffset
         PathF points = new(pathPoints.Length);
         for (int i = 0; i < pathPoints.Length; i++)
         {
-            points.Add((Vector2)pathPoints[i] * ScalingFactor);
+            points.Add(pathPoints[i]);
         }
 
         this.polygonClipperOffset.AddPath(points, jointStyle, endCapStyle);
