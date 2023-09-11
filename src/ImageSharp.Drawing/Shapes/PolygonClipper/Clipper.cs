@@ -8,7 +8,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 /// </summary>
 internal class Clipper
 {
-    // To make the floating point polygons compatible with clipper we have to scale them.
     private readonly PolygonClipper polygonClipper;
 
     /// <summary>
