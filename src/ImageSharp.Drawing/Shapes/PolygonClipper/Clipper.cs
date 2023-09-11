@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
-
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 /// <summary>
@@ -10,8 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 /// </summary>
 internal class Clipper
 {
-    // To make the floating point polygons compatable with clipper we have to scale them.
-    private const float ScalingFactor = 1000F;
+    // To make the floating point polygons compatible with clipper we have to scale them.
     private readonly PolygonClipper polygonClipper;
 
     /// <summary>
@@ -34,17 +31,17 @@ internal class Clipper
         FillRule fillRule = rule == IntersectionRule.EvenOdd ? FillRule.EvenOdd : FillRule.NonZero;
         this.polygonClipper.Execute(operation, fillRule, closedPaths, openPaths);
 
-        var shapes = new IPath[closedPaths.Count + openPaths.Count];
+        IPath[] shapes = new IPath[closedPaths.Count + openPaths.Count];
 
         int index = 0;
         for (int i = 0; i < closedPaths.Count; i++)
         {
             PathF path = closedPaths[i];
-            var points = new PointF[path.Count];
+            PointF[] points = new PointF[path.Count];
 
             for (int j = 0; j < path.Count; j++)
             {
-                points[j] = path[j] / ScalingFactor;
+                points[j] = path[j];
             }
 
             shapes[index++] = new Polygon(points);
@@ -53,11 +50,11 @@ internal class Clipper
         for (int i = 0; i < openPaths.Count; i++)
         {
             PathF path = openPaths[i];
-            var points = new PointF[path.Count];
+            PointF[] points = new PointF[path.Count];
 
             for (int j = 0; j < path.Count; j++)
             {
-                points[j] = path[j] / ScalingFactor;
+                points[j] = path[j];
             }
 
             shapes[index++] = new Polygon(points);
@@ -107,7 +104,7 @@ internal class Clipper
         PathF points = new(vectors.Length);
         for (int i = 0; i < vectors.Length; i++)
         {
-            points.Add((Vector2)vectors[i] * ScalingFactor);
+            points.Add(vectors[i]);
         }
 
         this.polygonClipper.AddPath(points, clippingType, !path.IsClosed);
