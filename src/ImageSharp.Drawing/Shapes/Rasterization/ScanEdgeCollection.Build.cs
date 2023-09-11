@@ -98,7 +98,7 @@ internal partial class ScanEdgeCollection
                 if (verticesLength > 0)
                 {
                     ri = vertices.Length - (remainder / 2);
-                    float maxIterations = verticesLength / (Vector256<float>.Count * 2);
+                    nint maxIterations = verticesLength / (Vector256<float>.Count * 2);
                     ref Vector256<float> sourceBase = ref Unsafe.As<PointF, Vector256<float>>(ref MemoryMarshal.GetReference(vertices));
                     ref Vector256<float> destinationBase = ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetReference(destination));
 
@@ -136,7 +136,7 @@ internal partial class ScanEdgeCollection
                 if (verticesLength > 0)
                 {
                     ri = vertices.Length - (remainder / 2);
-                    float maxIterations = verticesLength / (Vector128<float>.Count * 2);
+                    nint maxIterations = verticesLength / (Vector128<float>.Count * 2);
                     ref Vector128<float> sourceBase = ref Unsafe.As<PointF, Vector128<float>>(ref MemoryMarshal.GetReference(vertices));
                     ref Vector128<float> destinationBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(destination));
 
@@ -172,7 +172,7 @@ internal partial class ScanEdgeCollection
                 if (verticesLength > 0)
                 {
                     ri = vertices.Length - (remainder / 2);
-                    float maxIterations = verticesLength / (Vector128<float>.Count * 2);
+                    nint maxIterations = verticesLength / (Vector128<float>.Count * 2);
                     ref Vector128<float> sourceBase = ref Unsafe.As<PointF, Vector128<float>>(ref MemoryMarshal.GetReference(vertices));
                     ref Vector128<float> destinationBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(destination));
 
@@ -186,7 +186,7 @@ internal partial class ScanEdgeCollection
                         Vector128<float> points1 = Unsafe.Add(ref sourceBase, j);
                         Vector128<float> points2 = Unsafe.Add(ref sourceBase, j + 1);
 
-                        // Shuffle the points to group the Y properties
+                        // Shuffle the points to group the Y
                         Vector128<float> pointsY = AdvSimdShuffle(points1, points2, 0b11_01_11_01);
 
                         // Multiply by the subsampling ratio, round, then multiply by the inverted subsampling ratio and assign.
