@@ -130,13 +130,4 @@ public class ClipperTests
 
         Assert.Equal(8, points.Count);
     }
-
-    [Fact]
-    public void ClipperOffsetThrowsPublicException()
-    {
-        PointF naan = new(float.NaN, float.NaN);
-        Polygon path = new(new LinearLineSegment(new[] { naan, naan, naan, naan }));
-
-        Assert.Throws<ClipperException>(() => path.GenerateOutline(10));
-    }
 }

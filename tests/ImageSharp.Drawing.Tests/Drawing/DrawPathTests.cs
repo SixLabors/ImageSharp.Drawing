@@ -26,20 +26,20 @@ public class DrawPathTests
     public void DrawPath<TPixel>(TestImageProvider<TPixel> provider, string colorName, byte alpha, float thickness)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var linearSegment = new LinearLineSegment(
+        LinearLineSegment linearSegment = new(
             new Vector2(10, 10),
             new Vector2(200, 150),
             new Vector2(50, 300));
-        var bezierSegment = new CubicBezierLineSegment(
+        CubicBezierLineSegment bezierSegment = new(
             new Vector2(50, 300),
             new Vector2(500, 500),
             new Vector2(60, 10),
             new Vector2(10, 400));
 
-        var ellipticArcSegment1 = new ArcLineSegment(new Vector2(10, 400), new Vector2(150, 450), new SizeF((float)Math.Sqrt(5525), 40), GeometryUtilities.RadianToDegree((float)Math.Atan2(25, 70)), true, true);
-        var ellipticArcSegment2 = new ArcLineSegment(new(150, 450), new(149F, 450), new SizeF(140, 70), 0, true, true);
+        ArcLineSegment ellipticArcSegment1 = new(new Vector2(10, 400), new Vector2(150, 450), new SizeF((float)Math.Sqrt(5525), 40), GeometryUtilities.RadianToDegree((float)Math.Atan2(25, 70)), true, true);
+        ArcLineSegment ellipticArcSegment2 = new(new(150, 450), new(149F, 450), new SizeF(140, 70), 0, true, true);
 
-        var path = new Path(linearSegment, bezierSegment, ellipticArcSegment1, ellipticArcSegment2);
+        Path path = new(linearSegment, bezierSegment, ellipticArcSegment1, ellipticArcSegment2);
 
         Rgba32 rgba = TestUtils.GetColorByName(colorName);
         rgba.A = alpha;
@@ -67,7 +67,7 @@ public class DrawPathTests
                 {
                     for (int i = 0; i < 300; i += 20)
                     {
-                        var points = new PointF[] { new Vector2(100, 2), new Vector2(-10, i) };
+                        PointF[] points = new PointF[] { new Vector2(100, 2), new Vector2(-10, i) };
                         x.DrawLine(pen, points);
                     }
                 },
@@ -91,7 +91,38 @@ public class DrawPathTests
 
         provider.VerifyOperation(
             image => image.Mutate(x => x.Draw(Color.Black, 1, path)),
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 360)]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 359)]
+    public void DrawCircleUsingAddArc<TPixel>(TestImageProvider<TPixel> provider, float sweep)
+    where TPixel : unmanaged, IPixel<TPixel>
+    {
+        IPath path = new PathBuilder().AddArc(new Point(150, 150), 50, 50, 0, 40, sweep).Build();
+
+        provider.VerifyOperation(
+            image => image.Mutate(x => x.Draw(Color.Black, 1, path)),
+            testOutputDetails: $"{sweep}",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, true)]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, false)]
+    public void DrawCircleUsingArcTo<TPixel>(TestImageProvider<TPixel> provider, bool sweep)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Point origin = new(150, 150);
+        IPath path = new PathBuilder().MoveTo(origin).ArcTo(50, 50, 0, true, sweep, origin).Build();
+
+        provider.VerifyOperation(
+            image => image.Mutate(x => x.Draw(Color.Black, 1, path)),
+            testOutputDetails: $"{sweep}",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 }

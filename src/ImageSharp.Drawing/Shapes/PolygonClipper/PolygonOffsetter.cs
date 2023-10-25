@@ -99,10 +99,14 @@ internal sealed class PolygonOffsetter
             clipper.Execute(ClippingOperation.Union, FillRule.Positive, solution);
         }
 
-        // PolygonClipper will throw for unhandled exceptions but we need to explicitly capture an empty result.
+        // PolygonClipper will throw for unhandled exceptions but if a result is empty
+        // we should just return the original path.
         if (solution.Count == 0)
         {
-            throw new ClipperException("An error occurred while attempting to clip the polygon. Check input for invalid entries.");
+            foreach (PathF path in this.solution)
+            {
+                solution.Add(path);
+            }
         }
     }
 
@@ -213,9 +217,9 @@ internal sealed class PolygonOffsetter
                 }
                 else
                 {
-                    Vector2 d = new(MathF.Ceiling(this.groupDelta));
-                    Vector2 xy = path[0] - d;
-                    BoundsF r = new(xy.X, xy.Y, xy.X, xy.Y);
+                    float d = this.groupDelta;
+                    Vector2 xy = path[0];
+                    BoundsF r = new(xy.X - d, xy.Y - d, xy.X + d, xy.Y + d);
                     group.OutPath = r.AsPath();
                 }
 
