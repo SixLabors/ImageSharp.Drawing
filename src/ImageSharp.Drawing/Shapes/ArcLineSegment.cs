@@ -32,9 +32,20 @@ public class ArcLineSegment : ILineSegment
     public ArcLineSegment(PointF from, PointF to, SizeF radius, float rotation, bool largeArc, bool sweep)
     {
         rotation = GeometryUtilities.DegreeToRadian(rotation);
-        bool circle = largeArc && ((Vector2)to - (Vector2)from).LengthSquared() < ZeroTolerance && radius.Width > 0 && radius.Height > 0;
-        this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep, circle);
-        this.EndPoint = this.linePoints[this.linePoints.Length - 1];
+        bool ellipse = largeArc && ((Vector2)to - (Vector2)from).LengthSquared() < ZeroTolerance && radius.Width > 0 && radius.Height > 0;
+        if (ellipse)
+        {
+            // The circle always has a start angle of 0 which is positioned at 3 o'clock.
+            // This means the centre point is to the left of the start position.
+            Vector2 center = (Vector2)from - new Vector2(radius.Width, 0);
+            this.linePoints = EllipticArcToBezierCurve(from, center, radius, rotation, 0, sweep ? 2 * MathF.PI : -2 * MathF.PI);
+        }
+        else
+        {
+            this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
+        }
+
+        this.EndPoint = this.linePoints[^1];
     }
 
     /// <summary>
@@ -59,16 +70,24 @@ public class ArcLineSegment : ILineSegment
 
         bool largeArc = Math.Abs(sweepAngle) > MathF.PI;
         bool sweep = sweepAngle > 0;
-        bool circle = largeArc && (to - from).LengthSquared() < ZeroTolerance && radius.Width > 0 && radius.Height > 0;
+        bool ellipse = largeArc && (to - from).LengthSquared() < ZeroTolerance && radius.Width > 0 && radius.Height > 0;
 
-        this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep, circle);
-        this.EndPoint = this.linePoints[this.linePoints.Length - 1];
+        if (ellipse)
+        {
+            this.linePoints = EllipticArcToBezierCurve(from, center, radius, rotation, startAngle, sweepAngle);
+        }
+        else
+        {
+            this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
+        }
+
+        this.EndPoint = this.linePoints[^1];
     }
 
     private ArcLineSegment(PointF[] linePoints)
     {
         this.linePoints = linePoints;
-        this.EndPoint = this.linePoints[this.linePoints.Length - 1];
+        this.EndPoint = this.linePoints[^1];
     }
 
     /// <inheritdoc/>
@@ -89,7 +108,7 @@ public class ArcLineSegment : ILineSegment
             return this;
         }
 
-        var transformedPoints = new PointF[this.linePoints.Length];
+        PointF[] transformedPoints = new PointF[this.linePoints.Length];
         for (int i = 0; i < this.linePoints.Length; i++)
         {
             transformedPoints[i] = PointF.Transform(this.linePoints[i], matrix);
@@ -101,32 +120,23 @@ public class ArcLineSegment : ILineSegment
     /// <inheritdoc/>
     ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
 
-    private static PointF[] EllipticArcFromEndParams(PointF from, PointF to, SizeF radius, float rotation, bool largeArc, bool sweep, bool circle)
+    private static PointF[] EllipticArcFromEndParams(
+        PointF from,
+        PointF to,
+        SizeF radius,
+        float rotation,
+        bool largeArc,
+        bool sweep)
     {
+        Vector2 absRadius = Vector2.Abs(radius);
+
+        if (EllipticArcOutOfRange(from, to, radius))
         {
-            var absRadius = Vector2.Abs(radius);
-
-            if (circle)
-            {
-                // It's a circle. SVG arcs cannot handle this so let's hack together our own angles.
-                // This appears to match the behavior of Web CanvasRenderingContext2D.arc().
-                // https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/arc
-                Vector2 center = (Vector2)from - new Vector2(absRadius.X, 0);
-                return EllipticArcToBezierCurve(from, center, absRadius, rotation, 0, 2 * MathF.PI);
-            }
-            else
-            {
-                if (EllipticArcOutOfRange(from, to, radius))
-                {
-                    return new[] { from, to };
-                }
-
-                float xRotation = rotation;
-                EndpointToCenterArcParams(from, to, ref absRadius, xRotation, largeArc, sweep, out Vector2 center, out Vector2 angles);
-
-                return EllipticArcToBezierCurve(from, center, absRadius, xRotation, angles.X, angles.Y);
-            }
+            return new[] { from, to };
         }
+
+        EndpointToCenterArcParams(from, to, ref absRadius, rotation, largeArc, sweep, out Vector2 center, out Vector2 angles);
+        return EllipticArcToBezierCurve(from, center, absRadius, rotation, angles.X, angles.Y);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -296,8 +306,8 @@ public class ArcLineSegment : ILineSegment
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float SvgAngle(double ux, double uy, double vx, double vy)
     {
-        var u = new Vector2((float)ux, (float)uy);
-        var v = new Vector2((float)vx, (float)vy);
+        Vector2 u = new((float)ux, (float)uy);
+        Vector2 v = new((float)vx, (float)vy);
 
         // (F.6.5.4)
         float dot = Vector2.Dot(u, v);

@@ -14,9 +14,6 @@ internal struct BoundsF
 
     public BoundsF(float l, float t, float r, float b)
     {
-        Guard.MustBeGreaterThanOrEqualTo(r, l, nameof(r));
-        Guard.MustBeGreaterThanOrEqualTo(b, t, nameof(r));
-
         this.Left = l;
         this.Top = t;
         this.Right = r;

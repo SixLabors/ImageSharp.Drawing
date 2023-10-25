@@ -19,9 +19,34 @@ public class DrawLinesTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        var pen = new SolidPen(color, thickness);
+        SolidPen pen = new(color, thickness);
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 1f, true)]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 5f, true)]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 1f, false)]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 5f, false)]
+    public void DrawLinesInvalidPoints<TPixel>(TestImageProvider<TPixel> provider, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        SolidPen pen = new(Color.Black, thickness);
+        PointF[] path = { new Vector2(15f, 15f), new Vector2(15f, 15f) };
+
+        GraphicsOptions options = new()
+        {
+            Antialias = antialias
+        };
+
+        string aa = antialias ? string.Empty : "_NoAntialias";
+        FormattableString outputDetails = $"T({thickness}){aa}";
+
+        provider.RunValidatingProcessorTest(
+            c => c.SetGraphicsOptions(options).DrawLine(pen, path),
+            outputDetails,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
@@ -74,7 +99,7 @@ public class DrawLinesTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new PatternPen(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Round });
+        PatternPen pen = new(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Round });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -85,7 +110,7 @@ public class DrawLinesTests
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new PatternPen(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Butt });
+        PatternPen pen = new(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Butt });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -96,7 +121,7 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new PatternPen(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Square });
+        PatternPen pen = new(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Square });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -107,7 +132,7 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        var pen = new SolidPen(new PenOptions(color, thickness) { JointStyle = JointStyle.Round });
+        SolidPen pen = new(new PenOptions(color, thickness) { JointStyle = JointStyle.Round });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -118,7 +143,7 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        var pen = new SolidPen(new PenOptions(color, thickness) { JointStyle = JointStyle.Square });
+        SolidPen pen = new(new PenOptions(color, thickness) { JointStyle = JointStyle.Square });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -129,7 +154,7 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        var pen = new SolidPen(new PenOptions(color, thickness) { JointStyle = JointStyle.Miter });
+        SolidPen pen = new(new PenOptions(color, thickness) { JointStyle = JointStyle.Miter });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -145,7 +170,8 @@ where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath = { new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300) };
 
-        var options = new GraphicsOptions { Antialias = antialias };
+        GraphicsOptions options = new()
+        { Antialias = antialias };
 
         string aa = antialias ? string.Empty : "_NoAntialias";
         FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
