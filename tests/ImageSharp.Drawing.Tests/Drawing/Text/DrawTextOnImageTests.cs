@@ -887,12 +887,48 @@ public class DrawTextOnImageTests
             comparer: ImageComparer.TolerantPercentage(0.002f));
     }
 
+    [Theory]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32)]
+    public void CanRenderTextOutOfBoundsIssue301<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => provider.VerifyOperation(
+            ImageComparer.TolerantPercentage(0.01f),
+            img =>
+            {
+                Font font = CreateFont(TestFonts.OpenSans, 70);
+
+                const string txt = "V";
+                FontRectangle size = TextMeasurer.MeasureBounds(txt, new TextOptions(font));
+
+                img.Mutate(x => x.Resize((int)size.Width, (int)size.Height));
+
+                RichTextOptions options = new(font)
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Origin = new Vector2(size.Width / 2, size.Height / 2)
+                };
+
+                LinearGradientBrush brush = new(
+                    new PointF(0, 0),
+                    new PointF(20, 20),
+                    GradientRepetitionMode.Repeat,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(0.5f, Color.Green),
+                    new ColorStop(0.5f, Color.Yellow),
+                    new ColorStop(1f, Color.Blue));
+
+                img.Mutate(m => m.DrawText(options, txt, brush));
+            },
+            false,
+            false);
+
     private static string Repeat(string str, int times) => string.Concat(Enumerable.Repeat(str, times));
 
     private static string ToTestOutputDisplayText(string text)
     {
         string fnDisplayText = text.Replace("\n", string.Empty);
-        return fnDisplayText.Substring(0, Math.Min(fnDisplayText.Length, 4));
+        return fnDisplayText[..Math.Min(fnDisplayText.Length, 4)];
     }
 
     private static Font CreateFont(string fontName, float size)

@@ -99,7 +99,7 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
                 for (int row = firstRow; row < end; row++)
                 {
                     int y = startY + row;
-                    Span<float> span = buffer.DangerousGetRowSpan(row)[offsetSpan..];
+                    Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan, Math.Min(buffer.Width - offsetSpan, source.Width));
                     app.Apply(span, startX, y);
                 }
             }
