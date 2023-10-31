@@ -62,7 +62,7 @@ public abstract class GradientBrush : Brush
 
         private readonly MemoryAllocator allocator;
 
-        private readonly int scalineWidth;
+        private readonly int scanlineWidth;
 
         private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
 
@@ -84,13 +84,14 @@ public abstract class GradientBrush : Brush
             GradientRepetitionMode repetitionMode)
             : base(configuration, options, target)
         {
-            // TODO: requires colorStops to be sorted by position.
-            // Use Array.Sort with a custom comparer.
             this.colorStops = colorStops;
+
+            // Ensure the color-stop order is correct.
+            InsertionSort(this.colorStops, (x, y) => x.Ratio.CompareTo(y.Ratio));
             this.repetitionMode = repetitionMode;
-            this.scalineWidth = target.Width;
+            this.scanlineWidth = target.Width;
             this.allocator = configuration.MemoryAllocator;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(this.allocator, this.scalineWidth);
+            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(this.allocator, this.scanlineWidth);
         }
 
         internal TPixel this[int x, int y]
@@ -135,6 +136,7 @@ public abstract class GradientBrush : Brush
 
                 float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
 
+                // TODO: This should use premultiplied vectors to avoid bad blends e.g. red -> brown <- green.
                 return new Color(Vector4.Lerp((Vector4)from.Color, (Vector4)to.Color, onLocalGradient)).ToPixel<TPixel>();
             }
         }
@@ -142,8 +144,8 @@ public abstract class GradientBrush : Brush
         /// <inheritdoc />
         public override void Apply(Span<float> scanline, int x, int y)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
+            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
+            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
             float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
@@ -220,6 +222,30 @@ public abstract class GradientBrush : Brush
             }
 
             return (localGradientFrom, localGradientTo);
+        }
+
+        /// <summary>
+        /// Provides a stable sorting algorithm for the given array.
+        /// <see cref="Array.Sort(Array, System.Collections.IComparer?)"/> is not stable.
+        /// </summary>
+        /// <typeparam name="T">The type of element to sort.</typeparam>
+        /// <param name="collection">The array to sort.</param>
+        /// <param name="comparison">The comparison delegate.</param>
+        private static void InsertionSort<T>(T[] collection, Comparison<T> comparison)
+        {
+            int count = collection.Length;
+            for (int j = 1; j < count; j++)
+            {
+                T key = collection[j];
+
+                int i = j - 1;
+                for (; i >= 0 && comparison(collection[i], key) > 0; i--)
+                {
+                    collection[i + 1] = collection[i];
+                }
+
+                collection[i + 1] = key;
+            }
         }
     }
 }
