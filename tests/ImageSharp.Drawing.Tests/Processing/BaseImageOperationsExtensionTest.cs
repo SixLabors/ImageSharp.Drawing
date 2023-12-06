@@ -33,7 +33,7 @@ public abstract class BaseImageOperationsExtensionTest
         this.shapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero };
         this.source = new Image<Rgba32>(91 + 324, 123 + 56);
         this.rect = new Rectangle(91, 123, 324, 56); // make this random?
-        this.internalOperations = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(this.source.GetConfiguration(), this.source, false);
+        this.internalOperations = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(this.source.Configuration, this.source, false);
         this.internalOperations.SetShapeOptions(this.shapeOptions);
         this.internalOperations.SetGraphicsOptions(this.graphicsOptions);
         this.operations = this.internalOperations;

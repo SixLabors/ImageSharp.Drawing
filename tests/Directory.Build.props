@@ -16,4 +16,8 @@
   <!-- Import the solution .props file. -->
   <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.props" />
 
+  <PropertyGroup>
+    <UseImageSharp>true</UseImageSharp>
+  </PropertyGroup>
+
 </Project>

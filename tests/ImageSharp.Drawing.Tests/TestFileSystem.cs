@@ -8,9 +8,9 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// </summary>
 public class TestFileSystem : IO.IFileSystem
 {
-    private readonly Dictionary<string, Stream> fileSystem = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Func<Stream>> fileSystem = new(StringComparer.OrdinalIgnoreCase);
 
-    public void AddFile(string path, Stream data)
+    public void AddFile(string path, Func<Stream> data)
     {
         lock (this.fileSystem)
         {
@@ -18,35 +18,39 @@ public class TestFileSystem : IO.IFileSystem
         }
     }
 
-    public Stream Create(string path)
+    public Stream Create(string path) => this.GetStream(path) ?? File.Create(path);
+
+    public Stream CreateAsynchronous(string path) => this.GetStream(path) ?? File.Open(path, new FileStreamOptions
+    {
+        Mode = FileMode.Create,
+        Access = FileAccess.ReadWrite,
+        Share = FileShare.None,
+        Options = FileOptions.Asynchronous,
+    });
+
+    public Stream OpenRead(string path) => this.GetStream(path) ?? File.OpenRead(path);
+
+    public Stream OpenReadAsynchronous(string path) => this.GetStream(path) ?? File.Open(path, new FileStreamOptions
+    {
+        Mode = FileMode.Open,
+        Access = FileAccess.Read,
+        Share = FileShare.Read,
+        Options = FileOptions.Asynchronous,
+    });
+
+    private Stream? GetStream(string path)
     {
         // if we have injected a fake file use it instead
         lock (this.fileSystem)
         {
-            if (this.fileSystem.ContainsKey(path))
+            if (this.fileSystem.TryGetValue(path, out Func<Stream>? streamFactory))
             {
-                Stream stream = this.fileSystem[path];
+                Stream stream = streamFactory();
                 stream.Position = 0;
                 return stream;
             }
         }
 
-        return File.Create(path);
-    }
-
-    public Stream OpenRead(string path)
-    {
-        // if we have injected a fake file use it instead
-        lock (this.fileSystem)
-        {
-            if (this.fileSystem.ContainsKey(path))
-            {
-                Stream stream = this.fileSystem[path];
-                stream.Position = 0;
-                return stream;
-            }
-        }
-
-        return File.OpenRead(path);
+        return null;
     }
 }
