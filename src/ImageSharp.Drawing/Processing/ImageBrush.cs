@@ -24,7 +24,7 @@ public class ImageBrush : Brush
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageBrush"/> class.
     /// </summary>
-    /// <param name="image">The image.</param>
+    /// <param name="image">The source image to draw.</param>
     public ImageBrush(Image image)
         : this(image, image.Bounds)
     {
@@ -33,15 +33,12 @@ public class ImageBrush : Brush
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageBrush"/> class.
     /// </summary>
-    /// <param name="image">The image.</param>
-    /// <param name="region">
-    /// The region of interest.
-    /// This overrides any region used to initialize the brush applicator.
-    /// </param>
-    internal ImageBrush(Image image, RectangleF region)
+    /// <param name="image">The source image.</param>
+    /// <param name="region">The region of interest within the source image to draw.</param>
+    public ImageBrush(Image image, RectangleF region)
     {
         this.image = image;
-        this.region = region;
+        this.region = RectangleF.Intersect(image.Bounds, region);
     }
 
     /// <inheritdoc />
