@@ -20,6 +20,10 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <UseImageSharp>true</UseImageSharp>
+  </PropertyGroup>
   
   <ItemGroup>
     <!-- DynamicProxyGenAssembly2 is needed so Moq can use our internals -->

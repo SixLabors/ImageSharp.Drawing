@@ -33,7 +33,7 @@ public class FillPathProcessorTests
         var options = new GraphicsOptions { Antialias = true };
         var processor = new FillPathProcessor(new DrawingOptions() { GraphicsOptions = options }, brush.Object, path);
         var img = new Image<Rgba32>(10, 10);
-        processor.Execute(img.GetConfiguration(), img, bounds);
+        processor.Execute(img.Configuration, img, bounds);
     }
 
     [Fact]
