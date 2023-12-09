@@ -58,7 +58,7 @@ internal class FillProcessor<TPixel> : ImageProcessor<TPixel>
             configuration,
             options,
             source,
-            interest);
+            this.SourceRectangle);
 
         amount.Memory.Span.Fill(1F);
 

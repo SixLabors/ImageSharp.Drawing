@@ -74,7 +74,7 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
             subpixelCount = Math.Max(subpixelCount, graphicsOptions.AntialiasSubpixelDepth);
         }
 
-        using BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, graphicsOptions, source, interest);
+        using BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, graphicsOptions, source, this.bounds);
         int scanlineWidth = interest.Width;
         MemoryAllocator allocator = this.Configuration.MemoryAllocator;
         bool scanlineDirty = true;
