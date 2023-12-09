@@ -22,9 +22,9 @@ public class ImageBrush : Brush
     private readonly RectangleF region;
 
     /// <summary>
-    /// The an offet to apply to the source image while applying the imagebrush
+    /// The offet to apply to the source image while applying the imagebrush
     /// </summary>
-    private readonly Point offet;
+    private readonly Point offset;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageBrush"/> class.
@@ -68,14 +68,14 @@ public class ImageBrush : Brush
     /// The region of interest.
     /// This overrides any region used to initialize the brush applicator.
     /// </param>
-    /// <param name="offet">
+    /// <param name="offset">
     /// An offset to apply the to image image while drawing apply the texture.
     /// </param>
-    internal ImageBrush(Image image, RectangleF region, Point offet)
+    internal ImageBrush(Image image, RectangleF region, Point offset)
     {
         this.image = image;
         this.region = RectangleF.Intersect(image.Bounds, region);
-        this.offet = offet;
+        this.offset = offset;
     }
 
     /// <inheritdoc />
@@ -101,11 +101,11 @@ public class ImageBrush : Brush
     {
         if (this.image is Image<TPixel> specificImage)
         {
-            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offet, false);
+            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offset, false);
         }
 
         specificImage = this.image.CloneAs<TPixel>();
-        return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offet, true);
+        return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offset, true);
     }
 
     /// <summary>
