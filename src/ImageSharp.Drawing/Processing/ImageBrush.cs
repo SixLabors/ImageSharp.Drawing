@@ -55,7 +55,7 @@ public class ImageBrush : Brush
     /// The region of interest.
     /// This overrides any region used to initialize the brush applicator.
     /// </param>
-    internal ImageBrush(Image image, RectangleF region)
+    public ImageBrush(Image image, RectangleF region)
         : this(image, region, Point.Empty)
     {
     }
@@ -71,7 +71,7 @@ public class ImageBrush : Brush
     /// <param name="offset">
     /// An offset to apply the to image image while drawing apply the texture.
     /// </param>
-    internal ImageBrush(Image image, RectangleF region, Point offset)
+    public ImageBrush(Image image, RectangleF region, Point offset)
     {
         this.image = image;
         this.region = RectangleF.Intersect(image.Bounds, region);
