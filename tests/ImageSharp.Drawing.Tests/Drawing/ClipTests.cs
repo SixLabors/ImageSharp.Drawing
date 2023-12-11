@@ -14,6 +14,7 @@ public class ClipTests
     [Theory]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 0, 0, 0.5)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, -20, -20, 0.5)]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, -20, -100, 0.5)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 20, 20, 0.5)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, 40, 60, 0.2)]
     public void Clip<TPixel>(TestImageProvider<TPixel> provider, float dx, float dy, float sizeMult)
