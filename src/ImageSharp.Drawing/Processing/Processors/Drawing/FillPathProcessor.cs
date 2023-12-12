@@ -56,11 +56,9 @@ public class FillPathProcessor : IImageProcessor
             var rect = (Rectangle)rectF;
             if (!this.Options.GraphicsOptions.Antialias || rectF == rect)
             {
-                var interest = Rectangle.Intersect(sourceRectangle, rect);
-
                 // Cast as in and back are the same or we are using anti-aliasing
                 return new FillProcessor(this.Options, this.Brush)
-                    .CreatePixelSpecificProcessor(configuration, source, interest);
+                    .CreatePixelSpecificProcessor(configuration, source, rect);
             }
         }
 

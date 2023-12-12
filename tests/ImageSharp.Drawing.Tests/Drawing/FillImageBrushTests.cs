@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Drawing;
+using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -72,11 +74,81 @@ public class FillImageBrushTests
 
         overlay.Mutate(c => c.Crop(new Rectangle(0, 0, 90, 125)));
 
-        ImageBrush brush = new(overlay);
+        var brush = new ImageBrush(overlay);
         background.Mutate(c => c.Fill(brush));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithTestPatternImage(400, 400, PixelTypes.Rgba32)]
+    public void CanOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
+        using Image<TPixel> background = provider.GetImage();
+        using Image overlay = Image.Load<Rgba32>(data);
+
+        var brush = new ImageBrush(overlay);
+        background.Mutate(c => c.Fill(brush, new RectangularPolygon(0, 0, 400, 200)));
+        background.Mutate(c => c.Fill(brush, new RectangularPolygon(-100, 200, 500, 200)));
+
+        background.DebugSave(provider, appendSourceFileOrDescription: false);
+        background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithTestPatternImage(400, 400, PixelTypes.Rgba32)]
+    public void CanOffsetViaBrushImage<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
+        using Image<TPixel> background = provider.GetImage();
+        using Image overlay = Image.Load<Rgba32>(data);
+
+        var brush = new ImageBrush(overlay);
+        var brushOffset = new ImageBrush(overlay, new Point(100, 0));
+        background.Mutate(c => c.Fill(brush, new RectangularPolygon(0, 0, 400, 200)));
+        background.Mutate(c => c.Fill(brushOffset, new RectangularPolygon(0, 200, 400, 200)));
+
+        background.DebugSave(provider, appendSourceFileOrDescription: false);
+        background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(1000, 1000, "White", PixelTypes.Rgba32)]
+    public void CanDrawOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
+    where TPixel : unmanaged, IPixel<TPixel>
+    {
+        byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
+        using Image<TPixel> background = provider.GetImage();
+
+        using Image templateImage = Image.Load<Rgba32>(data);
+        using Image finalTexture = BuildMultiRowTexture(templateImage);
+
+        finalTexture.Mutate(c => c.Resize(100, 200));
+
+        ImageBrush brush = new(finalTexture);
+        background.Mutate(c => c.Fill(brush));
+
+        background.DebugSave(provider, appendSourceFileOrDescription: false);
+        background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+
+        Image BuildMultiRowTexture(Image sourceTexture)
+        {
+            int halfWidth = sourceTexture.Width / 2;
+
+            Image final = sourceTexture.Clone(x => x.Resize(new ResizeOptions
+            {
+                Size = new Size(templateImage.Width, templateImage.Height * 2),
+                Position = AnchorPositionMode.TopLeft,
+                Mode = ResizeMode.Pad,
+            })
+            .DrawImage(templateImage, new Point(halfWidth, sourceTexture.Height), new Rectangle(0, 0, halfWidth, sourceTexture.Height), 1)
+            .DrawImage(templateImage, new Point(0, templateImage.Height), new Rectangle(halfWidth, 0, halfWidth, sourceTexture.Height), 1));
+            return final;
+        }
     }
 
     [Theory]
