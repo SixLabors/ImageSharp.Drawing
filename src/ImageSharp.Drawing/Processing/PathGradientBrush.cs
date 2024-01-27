@@ -22,29 +22,11 @@ public sealed class PathGradientBrush : Brush
     /// <param name="colors">Array of colors that correspond to each point in the polygon.</param>
     public PathGradientBrush(PointF[] points, Color[] colors)
     {
-        if (points == null)
-        {
-            throw new ArgumentNullException(nameof(points));
-        }
+        Guard.NotNull(points, nameof(points));
+        Guard.MustBeGreaterThanOrEqualTo(points.Length, 3, nameof(points));
 
-        if (points.Length < 3)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(points),
-                "There must be at least 3 lines to construct a path gradient brush.");
-        }
-
-        if (colors == null)
-        {
-            throw new ArgumentNullException(nameof(colors));
-        }
-
-        if (colors.Length == 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(colors),
-                "One or more color is needed to construct a path gradient brush.");
-        }
+        Guard.NotNull(colors, nameof(colors));
+        Guard.MustBeGreaterThan(colors.Length, 0, nameof(colors));
 
         int size = points.Length;
 
@@ -105,21 +87,7 @@ public sealed class PathGradientBrush : Brush
             this.hasSpecialCenterColor);
 
     private static Color CalculateCenterColor(Color[] colors)
-    {
-        if (colors == null)
-        {
-            throw new ArgumentNullException(nameof(colors));
-        }
-
-        if (colors.Length == 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(colors),
-                "One or more color is needed to construct a path gradient brush.");
-        }
-
-        return new Color(colors.Select(c => (Vector4)c).Aggregate((p1, p2) => p1 + p2) / colors.Length);
-    }
+        => new(colors.Select(c => (Vector4)c).Aggregate((p1, p2) => p1 + p2) / colors.Length);
 
     private static float DistanceBetween(Vector2 p1, Vector2 p2) => (p2 - p1).Length();
 

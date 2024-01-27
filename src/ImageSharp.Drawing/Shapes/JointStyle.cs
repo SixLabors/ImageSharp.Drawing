@@ -23,3 +23,20 @@ public enum JointStyle
     /// </summary>
     Miter = 2
 }
+
+internal enum LineJoin
+{
+    MiterJoin = 0,
+    MiterJoinRevert = 1,
+    RoundJoin = 2,
+    BevelJoin = 3,
+    MiterJoinRound = 4
+}
+
+internal enum InnerJoin
+{
+    InnerBevel,
+    InnerMiter,
+    InnerJag,
+    InnerRound
+}

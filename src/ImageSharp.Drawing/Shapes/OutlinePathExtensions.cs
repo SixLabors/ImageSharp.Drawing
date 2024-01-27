@@ -34,17 +34,31 @@ public static class OutlinePathExtensions
     /// <param name="endCapStyle">The style to apply to the end caps.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
+#pragma warning disable RCS1163 // Unused parameter
+#pragma warning disable IDE0060 // Remove unused parameter
     public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
+#pragma warning restore IDE0060 // Remove unused parameter
+#pragma warning restore RCS1163 // Unused parameter
     {
         if (width <= 0)
         {
             return Path.Empty;
         }
 
-        ClipperOffset offset = new(MiterOffsetDelta);
-        offset.AddPath(path, jointStyle, endCapStyle);
+        List<Polygon> polygons = [];
+        foreach (ISimplePath simplePath in path.Flatten())
+        {
+            PolygonStroker stroker = new();
+            Polygon polygon = stroker.ProcessPath(simplePath.Points.Span);
+            polygons.Add(polygon);
+        }
 
-        return offset.Execute(width);
+        return new ComplexPolygon(polygons);
+
+        // ClipperOffset offset = new(MiterOffsetDelta);
+        // offset.AddPath(path, jointStyle, endCapStyle);
+
+        // return offset.Execute(width);
     }
 
     /// <summary>
