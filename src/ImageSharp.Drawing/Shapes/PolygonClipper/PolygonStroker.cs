@@ -62,12 +62,13 @@ internal sealed class PolygonStroker
 
     public Polygon ProcessPath(ReadOnlySpan<PointF> pathPoints)
     {
-        for (int i = 0; i < pathPoints.Length - 2; i++)
+        for (int i = 0; i < pathPoints.Length - 1; i++)
         {
             PointF point = pathPoints[i];
             this.AddVertex(point.X, point.Y, PathCommand.LineTo);
         }
 
+        // This doesn't actually add the point. It triggers a close.
         this.AddVertex(pathPoints[^1].X, pathPoints[^1].Y, PathCommand.EndPoly);
 
         double x = 0;
