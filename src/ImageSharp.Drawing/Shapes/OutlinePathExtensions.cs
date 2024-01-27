@@ -48,7 +48,7 @@ public static class OutlinePathExtensions
         List<Polygon> polygons = [];
         foreach (ISimplePath simplePath in path.Flatten())
         {
-            PolygonStroker stroker = new();
+            PolygonStroker stroker = new() { Width = width };
             Polygon polygon = stroker.ProcessPath(simplePath.Points.Span);
             polygons.Add(polygon);
         }
