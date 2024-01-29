@@ -60,7 +60,7 @@ internal sealed class PolygonStroker
 
     public double MiterLimit { get; set; } = 4;
 
-    public Polygon ProcessPath(ReadOnlySpan<PointF> pathPoints)
+    public Polygon ProcessPath(ReadOnlySpan<PointF> pathPoints, bool isClosed)
     {
         for (int i = 0; i < pathPoints.Length; i++)
         {
@@ -68,16 +68,37 @@ internal sealed class PolygonStroker
             this.AddVertex(point.X, point.Y, PathCommand.LineTo);
         }
 
-        this.AddVertex(pathPoints[^1].X, pathPoints[^1].Y, PathCommand.LineTo);
-        this.closed = 1;
-        this.Rewind();
+        if (isClosed)
+        {
+            this.AddVertex(0, 0, PathCommand.EndPoly | (PathCommand)PathFlags.Close);
+        }
 
         double x = 0;
         double y = 0;
-        List<PointF> results = new(pathPoints.Length);
-        while (!(_ = this.Vertex(ref x, ref y)).Stop())
+        List<PointF> results = new(pathPoints.Length * 3);
+
+        int startIndex = 0;
+        PointF? lastPoint = null;
+        PathCommand command;
+        while (!(command = this.Vertex(ref x, ref y)).Stop())
         {
-            results.Add(new PointF((float)x, (float)y));
+            PointF currentPoint;
+            if (command.EndPoly() && results.Count > 0)
+            {
+                PointF initial = results[startIndex];
+                currentPoint = new(initial.X, initial.Y);
+                results.Add(currentPoint);
+                startIndex = results.Count;
+            }
+            else
+            {
+                currentPoint = new((float)x, (float)y);
+                if (currentPoint != lastPoint)
+                {
+                    results.Add(currentPoint);
+                    lastPoint = currentPoint;
+                }
+            }
         }
 
         return new Polygon(results.ToArray());
