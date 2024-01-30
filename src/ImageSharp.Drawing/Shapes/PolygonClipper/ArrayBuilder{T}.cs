@@ -26,10 +26,10 @@ internal struct ArrayBuilder<T>
     public ArrayBuilder(int capacity)
         : this()
     {
-        Guard.MustBeGreaterThanOrEqualTo(capacity, 0, nameof(capacity));
-
-        this.data = new T[capacity];
-        this.size = capacity;
+        if (capacity > 0)
+        {
+            this.data = new T[capacity];
+        }
     }
 
     /// <summary>

@@ -200,7 +200,7 @@ internal class InternalPath
     private static int WrapArrayIndex(int i, int arrayLength) => i < arrayLength ? i : i - arrayLength;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PointOrientation CalulateOrientation(Vector2 p, Vector2 q, Vector2 r)
+    private static PointOrientation CalculateOrientation(Vector2 p, Vector2 q, Vector2 r)
     {
         // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
         // for details of below formula.
@@ -217,7 +217,7 @@ internal class InternalPath
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PointOrientation CalulateOrientation(Vector2 qp, Vector2 rq)
+    private static PointOrientation CalculateOrientation(Vector2 qp, Vector2 rq)
     {
         // See http://www.geeksforgeeks.org/orientation-3-ordered-points/
         // for details of below formula.
@@ -242,7 +242,7 @@ internal class InternalPath
     /// </returns>
     private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed, bool removeCloseAndCollinear)
     {
-        var simplified = new List<PointF>();
+        List<PointF> simplified = new(segments.Count);
 
         foreach (ILineSegment seg in segments)
         {
@@ -260,10 +260,10 @@ internal class InternalPath
         int polyCorners = points.Length;
         if (polyCorners == 0)
         {
-            return Array.Empty<PointData>();
+            return [];
         }
 
-        var results = new List<PointData>();
+        List<PointData> results = new(polyCorners);
         Vector2 lastPoint = points[0];
 
         if (!isClosed)
@@ -292,7 +292,7 @@ internal class InternalPath
                             Length = 0,
                         });
 
-                    return results.ToArray();
+                    return [.. results];
                 }
             }
             while (removeCloseAndCollinear && points[0].Equivalent(points[prev], Epsilon2)); // skip points too close together
@@ -304,31 +304,28 @@ internal class InternalPath
                 new PointData
                 {
                     Point = points[0],
-                    Orientation = CalulateOrientation(lastPoint, points[0], points[1]),
+                    Orientation = CalculateOrientation(lastPoint, points[0], points[1]),
                     Length = Vector2.Distance(lastPoint, points[0]),
                 });
 
             lastPoint = points[0];
         }
 
-        float totalDist = 0;
         for (int i = 1; i < polyCorners; i++)
         {
             int next = WrapArrayIndex(i + 1, polyCorners);
-            PointOrientation or = CalulateOrientation(lastPoint, points[i], points[next]);
+            PointOrientation or = CalculateOrientation(lastPoint, points[i], points[next]);
             if (or == PointOrientation.Collinear && next != 0)
             {
                 continue;
             }
 
-            float dist = Vector2.Distance(lastPoint, points[i]);
-            totalDist += dist;
             results.Add(
                 new PointData
                 {
                     Point = points[i],
                     Orientation = or,
-                    Length = dist,
+                    Length = Vector2.Distance(lastPoint, points[i]),
                 });
             lastPoint = points[i];
         }
@@ -342,7 +339,7 @@ internal class InternalPath
             }
         }
 
-        return results.ToArray();
+        return [.. results];
     }
 
     private struct PointData

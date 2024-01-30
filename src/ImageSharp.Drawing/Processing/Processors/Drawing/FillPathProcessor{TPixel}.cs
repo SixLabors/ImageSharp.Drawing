@@ -67,7 +67,7 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
 
         // We need to offset the pixel grid to account for when we outline a path.
         // basically if the line is [1,2] => [3,2] then when outlining at 1 we end up with a region of [0.5,1.5],[1.5, 1.5],[3.5,2.5],[2.5,2.5]
-        // and this can cause missed fills when not using antialiasing.so we offset the pixel grid by 0.5 in the x & y direction thus causing the#
+        // and this can cause missed fills when not using antialiasing.so we offset the pixel grid by 0.5 in the x & y direction thus causing the
         // region to align with the pixel grid.
         if (graphicsOptions.Antialias)
         {

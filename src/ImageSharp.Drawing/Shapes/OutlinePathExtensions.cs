@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -11,7 +12,6 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public static class OutlinePathExtensions
 {
-    private const float MiterOffsetDelta = 20;
     private const JointStyle DefaultJointStyle = JointStyle.Square;
     private const EndCapStyle DefaultEndCapStyle = EndCapStyle.Butt;
 
@@ -45,20 +45,16 @@ public static class OutlinePathExtensions
             return Path.Empty;
         }
 
-        List<Polygon> polygons = [];
+        List<Polygon> stroked = [];
+
+        // TODO: Wire up options
+        PolygonStroker stroker = new() { Width = width, LineJoin = LineJoin.BevelJoin, LineCap = LineCap.Butt };
         foreach (ISimplePath simplePath in path.Flatten())
         {
-            PolygonStroker stroker = new() { Width = width };
-            Polygon polygon = stroker.ProcessPath(simplePath.Points.Span, simplePath.IsClosed);
-            polygons.Add(polygon);
+            stroked.Add(new Polygon(stroker.ProcessPath(simplePath.Points.Span, simplePath.IsClosed).ToArray()));
         }
 
-        return new ComplexPolygon(polygons);
-
-        // ClipperOffset offset = new(MiterOffsetDelta);
-        // offset.AddPath(path, jointStyle, endCapStyle);
-
-        // return offset.Execute(width);
+        return new ComplexPolygon(stroked);
     }
 
     /// <summary>
@@ -78,11 +74,11 @@ public static class OutlinePathExtensions
     /// <param name="path">The path to outline</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
-    /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
+    /// <param name="invert">Whether the first item in the pattern is off.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
-    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
-        => GenerateOutline(path, width, pattern, startOff, DefaultJointStyle, DefaultEndCapStyle);
+    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool invert)
+        => GenerateOutline(path, width, pattern, invert, DefaultJointStyle, DefaultEndCapStyle);
 
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
@@ -103,12 +99,12 @@ public static class OutlinePathExtensions
     /// <param name="path">The path to outline</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
-    /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
+    /// <param name="invert">Whether the first item in the pattern is off.</param>
     /// <param name="jointStyle">The style to apply to the joints.</param>
     /// <param name="endCapStyle">The style to apply to the end caps.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
-    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle, EndCapStyle endCapStyle)
+    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool invert, JointStyle jointStyle, EndCapStyle endCapStyle)
     {
         if (width <= 0)
         {
@@ -122,18 +118,21 @@ public static class OutlinePathExtensions
 
         IEnumerable<ISimplePath> paths = path.Flatten();
 
-        ClipperOffset offset = new(MiterOffsetDelta);
-        List<PointF> buffer = new();
-        foreach (ISimplePath p in paths)
+        // TODO: Wire up options
+        PolygonStroker stroker = new() { Width = width, LineJoin = LineJoin.BevelJoin, LineCap = LineCap.Butt };
+
+        PathsF stroked = [];
+        List<PointF> buffer = [];
+        foreach (ISimplePath simplePath in paths)
         {
-            bool online = !startOff;
+            bool online = !invert;
             float targetLength = pattern[0] * width;
             int patternPos = 0;
-            ReadOnlySpan<PointF> points = p.Points.Span;
+            ReadOnlySpan<PointF> points = simplePath.Points.Span;
 
             // Create a new list of points representing the new outline
             int pCount = points.Length;
-            if (!p.IsClosed)
+            if (!simplePath.IsClosed)
             {
                 pCount--;
             }
@@ -145,20 +144,20 @@ public static class OutlinePathExtensions
             {
                 int next = (i + 1) % points.Length;
                 Vector2 targetPoint = points[next];
-                float distToNext = Vector2.Distance(currentPoint, targetPoint);
-                if (distToNext > targetLength)
+                float distanceToNext = Vector2.Distance(currentPoint, targetPoint);
+                if (distanceToNext > targetLength)
                 {
-                    // find a point between the 2
-                    float t = targetLength / distToNext;
+                    // Find a point between the 2
+                    float t = targetLength / distanceToNext;
 
                     Vector2 point = (currentPoint * (1 - t)) + (targetPoint * t);
                     buffer.Add(currentPoint);
                     buffer.Add(point);
 
-                    // we now inset a line joining
+                    // We now insert a line
                     if (online)
                     {
-                        offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, endCapStyle);
+                        stroked.Add(stroker.ProcessPath(CollectionsMarshal.AsSpan(buffer), false));
                     }
 
                     online = !online;
@@ -167,39 +166,64 @@ public static class OutlinePathExtensions
 
                     currentPoint = point;
 
-                    // next length
+                    // Next length
                     patternPos = (patternPos + 1) % pattern.Length;
                     targetLength = pattern[patternPos] * width;
                 }
-                else if (distToNext <= targetLength)
+                else if (distanceToNext <= targetLength)
                 {
                     buffer.Add(currentPoint);
                     currentPoint = targetPoint;
                     i++;
-                    targetLength -= distToNext;
+                    targetLength -= distanceToNext;
                 }
             }
 
             if (buffer.Count > 0)
             {
-                if (p.IsClosed)
+                if (simplePath.IsClosed)
                 {
                     buffer.Add(points[0]);
                 }
                 else
                 {
-                    buffer.Add(points[points.Length - 1]);
+                    buffer.Add(points[^1]);
                 }
 
                 if (online)
                 {
-                    offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, endCapStyle);
+                    stroked.Add(stroker.ProcessPath(CollectionsMarshal.AsSpan(buffer), false));
                 }
 
                 buffer.Clear();
             }
         }
 
-        return offset.Execute(width);
+        // Clean up self intersections.
+        PolygonClipper clipper = new() { PreserveCollinear = true };
+        clipper.AddSubject(stroked);
+        PathsF clipped = [];
+        clipper.Execute(ClippingOperation.Union, FillRule.Positive, clipped);
+
+        if (clipped.Count == 0)
+        {
+            // Cannot clip. Return the stroked path.
+            Polygon[] polygons = new Polygon[stroked.Count];
+            for (int i = 0; i < stroked.Count; i++)
+            {
+                polygons[i] = new Polygon(stroked[i].ToArray());
+            }
+
+            return new ComplexPolygon(polygons);
+        }
+
+        // Convert the clipped paths back to polygons.
+        Polygon[] result = new Polygon[clipped.Count];
+        for (int i = 0; i < clipped.Count; i++)
+        {
+            result[i] = new Polygon(clipped[i].ToArray());
+        }
+
+        return new ComplexPolygon(result);
     }
 }

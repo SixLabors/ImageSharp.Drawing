@@ -29,7 +29,7 @@ internal struct VertexDistance
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Measure(in VertexDistance vd)
+    public bool Measure(VertexDistance vd)
     {
         bool ret = (this.Distance = UtilityMethods.CalcDistance(this.X, this.Y, vd.X, vd.Y)) > Constants.Misc.VertexDistanceEpsilon;
         if (!ret)

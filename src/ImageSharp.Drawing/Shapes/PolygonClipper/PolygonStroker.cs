@@ -8,8 +8,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 #pragma warning disable SA1201 // Elements should appear in the correct order
 internal sealed class PolygonStroker
 {
-    private ArrayBuilder<PointF> outVertices = new(0);
-    private ArrayBuilder<VertexDistance> srcVertices = new(0);
+    private ArrayBuilder<PointF> outVertices = new(1);
+    private ArrayBuilder<VertexDistance> srcVertices = new(16);
     private int closed;
     private int outVertex;
     private Status prevStatus;
@@ -20,7 +20,7 @@ internal sealed class PolygonStroker
     private double widthEps = 0.5 / 1024.0;
     private int widthSign = 1;
 
-    public double Shorten { get; set; }
+    public double MiterLimit { get; set; } = 4;
 
     public double InnerMiterLimit { get; set; } = 1.01;
 
@@ -53,15 +53,9 @@ internal sealed class PolygonStroker
         }
     }
 
-    public double MiterLimitTheta
+    public PathF ProcessPath(ReadOnlySpan<PointF> pathPoints, bool isClosed)
     {
-        set => this.MiterLimit = 1.0 / Math.Sin(value * 0.5);
-    }
-
-    public double MiterLimit { get; set; } = 4;
-
-    public Polygon ProcessPath(ReadOnlySpan<PointF> pathPoints, bool isClosed)
-    {
+        this.Reset();
         for (int i = 0; i < pathPoints.Length; i++)
         {
             PointF point = pathPoints[i];
@@ -75,12 +69,12 @@ internal sealed class PolygonStroker
 
         double x = 0;
         double y = 0;
-        List<PointF> results = new(pathPoints.Length * 3);
-
         int startIndex = 0;
         PointF? lastPoint = null;
         PathCommand command;
-        while (!(command = this.Vertex(ref x, ref y)).Stop())
+
+        PathF results = new(pathPoints.Length * 3);
+        while (!(command = this.Accumulate(ref x, ref y)).Stop())
         {
             PointF currentPoint;
             if (command.EndPoly() && results.Count > 0)
@@ -101,19 +95,22 @@ internal sealed class PolygonStroker
             }
         }
 
-        return new Polygon(results.ToArray());
+        return results;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void RemoveAll()
+    private void Reset()
     {
         this.srcVertices.Clear();
+        this.outVertices.Clear();
+        this.srcVertex = 0;
+        this.outVertex = 0;
         this.closed = 0;
         this.status = Status.Initial;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddVertex(double x, double y, PathCommand cmd)
+    private void AddVertex(double x, double y, PathCommand cmd)
     {
         this.status = Status.Initial;
         if (cmd.MoveTo())
@@ -135,71 +132,7 @@ internal sealed class PolygonStroker
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Rewind()
-    {
-        if (this.status == Status.Initial)
-        {
-            this.CloseVertexPath(this.closed != 0);
-            if (this.Shorten > 0.0 && this.srcVertices.Length > 1)
-            {
-                double d;
-                int n = this.srcVertices.Length - 2;
-                while (n != 0)
-                {
-                    d = this.srcVertices[n].Distance;
-
-                    if (d > this.Shorten)
-                    {
-                        break;
-                    }
-
-                    if (this.srcVertices.Length != 0)
-                    {
-                        this.srcVertices.RemoveLast();
-                    }
-
-                    this.Shorten -= d;
-                    --n;
-                }
-
-                if (this.srcVertices.Length < 2)
-                {
-                    this.srcVertices.RemoveLast();
-                }
-                else
-                {
-                    n = this.srcVertices.Length - 1;
-                    ref VertexDistance prev = ref this.srcVertices[n - 1];
-                    ref VertexDistance last = ref this.srcVertices[n];
-                    d = (prev.Distance - this.Shorten) / prev.Distance;
-                    double x = prev.X + ((last.X - prev.X) * d);
-                    double y = prev.Y + ((last.Y - prev.Y) * d);
-                    last.X = x;
-                    last.Y = y;
-                    this.srcVertices[n] = last;
-                    this.srcVertices[n - 1] = prev;
-                    if (!prev.Measure(last) && this.srcVertices.Length != 0)
-                    {
-                        this.srcVertices.RemoveLast();
-                    }
-
-                    this.CloseVertexPath(this.closed != 0);
-                }
-            }
-
-            if (this.srcVertices.Length < 3)
-            {
-                this.closed = 0;
-            }
-        }
-
-        this.status = Status.Ready;
-        this.srcVertex = 0;
-        this.outVertex = 0;
-    }
-
-    public PathCommand Vertex(ref double x, ref double y)
+    private PathCommand Accumulate(ref double x, ref double y)
     {
         PathCommand cmd = PathCommand.LineTo;
         while (!cmd.Stop())
@@ -207,7 +140,13 @@ internal sealed class PolygonStroker
             switch (this.status)
             {
                 case Status.Initial:
-                    this.Rewind();
+                    this.CloseVertexPath(this.closed != 0);
+
+                    if (this.srcVertices.Length < 3)
+                    {
+                        this.closed = 0;
+                    }
+
                     this.status = Status.Ready;
 
                     break;
@@ -262,8 +201,15 @@ internal sealed class PolygonStroker
                         break;
                     }
 
-                    this.CalcJoin(ref this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length], ref this.srcVertices[this.srcVertex], ref this.srcVertices[(this.srcVertex + 1) % this.srcVertices.Length], this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length].Distance, this.srcVertices[this.srcVertex].Distance);
+                    this.CalcJoin(
+                        ref this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length],
+                        ref this.srcVertices[this.srcVertex],
+                        ref this.srcVertices[(this.srcVertex + 1) % this.srcVertices.Length],
+                        this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length].Distance,
+                        this.srcVertices[this.srcVertex].Distance);
+
                     ++this.srcVertex;
+
                     this.prevStatus = this.status;
                     this.status = Status.OutVertices;
                     this.outVertex = 0;
@@ -287,7 +233,13 @@ internal sealed class PolygonStroker
                     }
 
                     --this.srcVertex;
-                    this.CalcJoin(ref this.srcVertices[(this.srcVertex + 1) % this.srcVertices.Length], ref this.srcVertices[this.srcVertex], ref this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length], this.srcVertices[this.srcVertex].Distance, this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length].Distance);
+
+                    this.CalcJoin(
+                        ref this.srcVertices[(this.srcVertex + 1) % this.srcVertices.Length],
+                        ref this.srcVertices[this.srcVertex],
+                        ref this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length],
+                        this.srcVertices[this.srcVertex].Distance,
+                        this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length].Distance);
 
                     this.prevStatus = this.status;
                     this.status = Status.OutVertices;
@@ -332,7 +284,7 @@ internal sealed class PolygonStroker
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AddVertex(double x, double y, double dist = 0)
+    private void AddVertex(double x, double y, double distance = 0)
     {
         if (this.srcVertices.Length > 1)
         {
@@ -345,7 +297,7 @@ internal sealed class PolygonStroker
             }
         }
 
-        this.srcVertices.Add(new VertexDistance(x, y, dist));
+        this.srcVertices.Add(new VertexDistance(x, y, distance));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -444,7 +396,17 @@ internal sealed class PolygonStroker
         this.AddPoint(x + dx2, y + dy2);
     }
 
-    private void CalcMiter(ref VertexDistance v0, ref VertexDistance v1, ref VertexDistance v2, double dx1, double dy1, double dx2, double dy2, LineJoin lj, double mlimit, double dbevel)
+    private void CalcMiter(
+        ref VertexDistance v0,
+        ref VertexDistance v1,
+        ref VertexDistance v2,
+        double dx1,
+        double dy1,
+        double dx2,
+        double dy2,
+        LineJoin lj,
+        double mlimit,
+        double dbevel)
     {
         double xi = v1.X;
         double yi = v1.Y;

@@ -39,7 +39,7 @@ internal ref struct ActiveEdgeList
 
     public void EnterEdge(int edgeIdx) => this.Buffer[this.count++] = edgeIdx | EnteringEdgeFlag;
 
-    public void LeaveEdge(int edgeIdx)
+    public readonly void LeaveEdge(int edgeIdx)
     {
         Span<int> active = this.ActiveEdges;
         for (int i = 0; i < active.Length; i++)
@@ -50,8 +50,6 @@ internal ref struct ActiveEdgeList
                 return;
             }
         }
-
-        throw new ArgumentOutOfRangeException(nameof(edgeIdx));
     }
 
     public void RemoveLeavingEdges()

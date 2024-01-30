@@ -301,7 +301,7 @@ internal sealed class PolygonOffsetter
     {
         int cnt = path.Count;
         this.normals.Clear();
-        this.normals.Capacity = cnt;
+        this.normals.EnsureCapacity(cnt);
 
         for (int i = 0; i < cnt - 1; i++)
         {
@@ -682,13 +682,13 @@ internal class PathsF : List<PathF>
     }
 }
 
-internal class PathF : List<Vector2>
+internal class PathF : List<PointF>
 {
     public PathF()
     {
     }
 
-    public PathF(IEnumerable<Vector2> items)
+    public PathF(IEnumerable<PointF> items)
         : base(items)
     {
     }

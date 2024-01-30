@@ -398,8 +398,8 @@ internal sealed class PolygonClipper
     {
         solutionClosed.Clear();
         solutionOpen.Clear();
-        solutionClosed.Capacity = this.outrecList.Count;
-        solutionOpen.Capacity = this.outrecList.Count;
+        solutionClosed.EnsureCapacity(this.outrecList.Count);
+        solutionOpen.EnsureCapacity(this.outrecList.Count);
 
         int i = 0;
 
@@ -1122,7 +1122,7 @@ internal sealed class PolygonClipper
             this.isSortedMinimaList = true;
         }
 
-        this.scanlineList.Capacity = this.minimaList.Count;
+        this.scanlineList.EnsureCapacity(this.minimaList.Count);
         for (int i = this.minimaList.Count - 1; i >= 0; i--)
         {
             this.scanlineList.Add(this.minimaList[i].Vertex.Point.Y);
@@ -1924,7 +1924,7 @@ internal sealed class PolygonClipper
             totalVertCnt += path.Count;
         }
 
-        this.vertexList.Capacity = this.vertexList.Count + totalVertCnt;
+        this.vertexList.EnsureCapacity(this.vertexList.Count + totalVertCnt);
 
         foreach (PathF path in paths)
         {
