@@ -19,7 +19,7 @@ public enum JointStyle
     Round = 1,
 
     /// <summary>
-    /// Joints will generate to a long point unless the end of the point will exceed 20 times the width then we generate the joint using <see cref="Square"/>.
+    /// Joints will generate to a long point unless the end of the point will exceed 4 times the width then we generate the joint using <see cref="Square"/>.
     /// </summary>
     Miter = 2
 }

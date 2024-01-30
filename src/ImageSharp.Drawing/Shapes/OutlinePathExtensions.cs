@@ -34,11 +34,7 @@ public static class OutlinePathExtensions
     /// <param name="endCapStyle">The style to apply to the end caps.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
-#pragma warning disable RCS1163 // Unused parameter
-#pragma warning disable IDE0060 // Remove unused parameter
     public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
-#pragma warning restore IDE0060 // Remove unused parameter
-#pragma warning restore RCS1163 // Unused parameter
     {
         if (width <= 0)
         {
@@ -47,11 +43,10 @@ public static class OutlinePathExtensions
 
         List<Polygon> stroked = [];
 
-        // TODO: Wire up options
-        PolygonStroker stroker = new() { Width = width, LineJoin = LineJoin.BevelJoin, LineCap = LineCap.Butt };
+        PolygonStroker stroker = new() { Width = width, LineJoin = GetLineJoin(jointStyle), LineCap = GetLineCap(endCapStyle) };
         foreach (ISimplePath simplePath in path.Flatten())
         {
-            stroked.Add(new Polygon(stroker.ProcessPath(simplePath.Points.Span, simplePath.IsClosed).ToArray()));
+            stroked.Add(new Polygon(stroker.ProcessPath(simplePath.Points.Span, simplePath.IsClosed || endCapStyle is EndCapStyle.Polygon or EndCapStyle.Joined).ToArray()));
         }
 
         return new ComplexPolygon(stroked);
@@ -116,14 +111,11 @@ public static class OutlinePathExtensions
             return path.GenerateOutline(width, jointStyle, endCapStyle);
         }
 
-        IEnumerable<ISimplePath> paths = path.Flatten();
-
-        // TODO: Wire up options
-        PolygonStroker stroker = new() { Width = width, LineJoin = LineJoin.BevelJoin, LineCap = LineCap.Butt };
-
+        PolygonStroker stroker = new() { Width = width, LineJoin = GetLineJoin(jointStyle), LineCap = GetLineCap(endCapStyle) };
         PathsF stroked = [];
         List<PointF> buffer = [];
-        foreach (ISimplePath simplePath in paths)
+
+        foreach (ISimplePath simplePath in path.Flatten())
         {
             bool online = !invert;
             float targetLength = pattern[0] * width;
@@ -226,4 +218,20 @@ public static class OutlinePathExtensions
 
         return new ComplexPolygon(result);
     }
+
+    private static LineJoin GetLineJoin(JointStyle value)
+        => value switch
+        {
+            JointStyle.Square => LineJoin.BevelJoin,
+            JointStyle.Round => LineJoin.RoundJoin,
+            _ => LineJoin.MiterJoin,
+        };
+
+    private static LineCap GetLineCap(EndCapStyle value)
+        => value switch
+        {
+            EndCapStyle.Round => LineCap.Round,
+            EndCapStyle.Square => LineCap.Square,
+            _ => LineCap.Butt,
+        };
 }
