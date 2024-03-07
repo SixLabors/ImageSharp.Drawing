@@ -51,11 +51,12 @@ public abstract class Pen : IEquatable<Pen>
     protected Pen(Brush strokeFill, float strokeWidth, float[] strokePattern)
     {
         Guard.NotNull(strokeFill, nameof(strokeFill));
-        Guard.MustBeGreaterThan(strokeWidth, 0, nameof(strokeWidth));
+
+        // Guard.MustBeGreaterThan(strokeWidth, 0, nameof(strokeWidth));
         Guard.NotNull(strokePattern, nameof(strokePattern));
 
         this.StrokeFill = strokeFill;
-        this.StrokeWidth = strokeWidth;
+        this.StrokeWidth = strokeWidth > 0 ? strokeWidth : 1;
         this.pattern = strokePattern;
     }
 

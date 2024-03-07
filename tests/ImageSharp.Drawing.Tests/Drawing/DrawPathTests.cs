@@ -41,9 +41,7 @@ public class DrawPathTests
 
         Path path = new(linearSegment, bezierSegment, ellipticArcSegment1, ellipticArcSegment2);
 
-        Rgba32 rgba = TestUtils.GetColorByName(colorName);
-        rgba.A = alpha;
-        Color color = rgba;
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha / 255f);
 
         FormattableString testDetails = $"{colorName}_A{alpha}_T{thickness}";
 

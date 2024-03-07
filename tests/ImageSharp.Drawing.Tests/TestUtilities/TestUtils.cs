@@ -55,9 +55,6 @@ public static class TestUtils
             return false;
         }
 
-        var rgb1 = default(Rgb24);
-        var rgb2 = default(Rgb24);
-
         Buffer2D<TPixel> pixA = a.GetRootFramePixelBuffer();
         Buffer2D<TPixel> pixB = b.GetRootFramePixelBuffer();
         for (int y = 0; y < a.Height; y++)
@@ -76,12 +73,10 @@ public static class TestUtils
                 }
                 else
                 {
-                    Rgba32 rgba = default;
-                    ca.ToRgba32(ref rgba);
-                    rgb1 = rgba.Rgb;
-                    cb.ToRgba32(ref rgba);
-                    rgb2 = rgba.Rgb;
-
+                    Rgba32 rgba = ca.ToRgba32();
+                    Rgb24 rgb1 = rgba.Rgb;
+                    rgba = cb.ToRgba32();
+                    Rgb24 rgb2 = rgba.Rgb;
                     if (!rgb1.Equals(rgb2))
                     {
                         return false;
@@ -111,7 +106,7 @@ public static class TestUtils
             return PixelTypes2ClrTypes;
         }
 
-        var result = new Dictionary<PixelTypes, Type>();
+        Dictionary<PixelTypes, Type> result = new Dictionary<PixelTypes, Type>();
         foreach (PixelTypes pt in AllConcretePixelTypes)
         {
             if (pixelTypes.HasAll(pt))
@@ -134,7 +129,7 @@ public static class TestUtils
 
     internal static Color GetColorByName(string colorName)
     {
-        var f = (FieldInfo)typeof(Color).GetMember(colorName)[0];
+        FieldInfo f = (FieldInfo)typeof(Color).GetMember(colorName)[0];
         return (Color)f.GetValue(null);
     }
 
@@ -247,9 +242,9 @@ public static class TestUtils
         {
             Assert.True(image0.DangerousTryGetSinglePixelMemory(out Memory<TPixel> imageMem));
             Span<TPixel> imageSpan = imageMem.Span;
-            var mmg = TestMemoryManager<TPixel>.CreateAsCopyOf(imageSpan);
+            TestMemoryManager<TPixel> mmg = TestMemoryManager<TPixel>.CreateAsCopyOf(imageSpan);
 
-            using (var image1 = Image.WrapMemory(mmg.Memory, image0.Width, image0.Height))
+            using (Image<TPixel> image1 = Image.WrapMemory(mmg.Memory, image0.Width, image0.Height))
             {
                 image1.Mutate(process);
                 image1.DebugSave(
@@ -298,7 +293,7 @@ public static class TestUtils
 
         using (Image<TPixel> image = provider.GetImage())
         {
-            var bounds = new Rectangle(image.Width / 4, image.Width / 4, image.Width / 2, image.Height / 2);
+            Rectangle bounds = new Rectangle(image.Width / 4, image.Width / 4, image.Width / 2, image.Height / 2);
             image.Mutate(x => process(x, bounds));
             image.DebugSave(provider, testOutputDetails);
             image.CompareToReferenceOutput(comparer, provider, testOutputDetails);

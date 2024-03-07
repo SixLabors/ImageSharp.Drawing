@@ -45,8 +45,8 @@
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="2.0.1" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.7" />
+    <PackageReference Include="SixLabors.Fonts" Version="2.0.2" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.4" />
   </ItemGroup>
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 </Project>

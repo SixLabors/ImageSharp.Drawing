@@ -26,7 +26,7 @@ public class Issue_241
         };
         const string content = "TEST";
 
-        using Image image = new Image<Rgba32>(512, 256, Color.Black);
+        using Image image = new Image<Rgba32>(512, 256, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x.DrawText(opt, content, Brushes.Horizontal(Color.Orange)));
     }
 }

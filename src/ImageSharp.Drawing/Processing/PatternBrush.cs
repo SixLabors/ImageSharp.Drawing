@@ -54,8 +54,8 @@ public sealed class PatternBrush : Brush
     /// <param name="pattern">The pattern.</param>
     internal PatternBrush(Color foreColor, Color backColor, in DenseMatrix<bool> pattern)
     {
-        var foreColorVector = (Vector4)foreColor;
-        var backColorVector = (Vector4)backColor;
+        Vector4 foreColorVector = foreColor.ToScaledVector4();
+        Vector4 backColorVector = backColor.ToScaledVector4();
         this.pattern = new DenseMatrix<Color>(pattern.Columns, pattern.Rows);
         this.patternVector = new DenseMatrix<Vector4>(pattern.Columns, pattern.Rows);
         for (int i = 0; i < pattern.Data.Length; i++)
@@ -156,8 +156,8 @@ public sealed class PatternBrush : Brush
         public override void Apply(Span<float> scanline, int x, int y)
         {
             int patternY = y % this.pattern.Rows;
-            Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
+            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
+            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
 
             for (int i = 0; i < scanline.Length; i++)
             {

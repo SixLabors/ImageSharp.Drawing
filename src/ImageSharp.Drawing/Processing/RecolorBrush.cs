@@ -100,15 +100,14 @@ public sealed class RecolorBrush : Brush
             float threshold)
             : base(configuration, options, source)
         {
-            this.sourceColor = sourceColor.ToVector4();
+            this.sourceColor = sourceColor.ToScaledVector4();
             this.targetColorPixel = targetColor;
 
+            // TODO: Review this. We can skip the conversion from/to Vector4.
             // Lets hack a min max extremes for a color space by letting the IPackedPixel clamp our values to something in the correct spaces :)
-            var maxColor = default(TPixel);
-            maxColor.FromVector4(new Vector4(float.MaxValue));
-            var minColor = default(TPixel);
-            minColor.FromVector4(new Vector4(float.MinValue));
-            this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
+            TPixel maxColor = TPixel.FromScaledVector4(Vector4.One);
+            TPixel minColor = TPixel.FromVector4(Vector4.Zero);
+            this.threshold = Vector4.DistanceSquared(maxColor.ToScaledVector4(), minColor.ToScaledVector4()) * threshold;
             this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
         }
 
@@ -118,7 +117,7 @@ public sealed class RecolorBrush : Brush
             {
                 // Offset the requested pixel by the value in the rectangle (the shapes position)
                 TPixel result = this.Target[x, y];
-                var background = result.ToVector4();
+                Vector4 background = result.ToScaledVector4();
                 float distance = Vector4.DistanceSquared(background, this.sourceColor);
                 if (distance <= this.threshold)
                 {
@@ -136,8 +135,8 @@ public sealed class RecolorBrush : Brush
         /// <inheritdoc />
         public override void Apply(Span<float> scanline, int x, int y)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
+            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
+            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
 
             for (int i = 0; i < scanline.Length; i++)
             {

@@ -49,10 +49,8 @@ public class SolidBezierTests
             new Vector2(300, 400)
         };
 
-        Rgba32 color = Color.HotPink;
-        color.A = 150;
-
-        using (var image = provider.GetImage() as Image<Rgba32>)
+        Color color = Color.HotPink.WithAlpha(150/255f);
+        using (Image<Rgba32> image = provider.GetImage() as Image<Rgba32>)
         {
             image.Mutate(x => x.BackgroundColor(Color.Blue));
             image.Mutate(x => x.Fill(color, new Polygon(new CubicBezierLineSegment(simplePath))));

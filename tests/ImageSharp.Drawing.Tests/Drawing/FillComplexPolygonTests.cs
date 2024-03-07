@@ -29,10 +29,10 @@ public class FillComplexPolygonTests
 
         IPath clipped = simplePath.Clip(hole1);
 
-        Rgba32 colorRgba = Color.HotPink;
+        Color colorRgba = Color.HotPink;
         if (transparent)
         {
-            colorRgba.A = 150;
+            colorRgba = colorRgba.WithAlpha(150 / 255f);
         }
 
         Color color = colorRgba;

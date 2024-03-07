@@ -25,7 +25,7 @@ public class FillLinearGradientBrushTests
         {
             Color red = Color.Red;
 
-            var unicolorLinearGradientBrush = new LinearGradientBrush(
+            LinearGradientBrush unicolorLinearGradientBrush = new(
                 new Point(0, 0),
                 new Point(10, 0),
                 GradientRepetitionMode.None,
@@ -51,7 +51,7 @@ public class FillLinearGradientBrushTests
             TolerantComparer,
             image =>
                 {
-                    var unicolorLinearGradientBrush = new LinearGradientBrush(
+                    LinearGradientBrush unicolorLinearGradientBrush = new(
                         new Point(0, 0),
                         new Point(image.Width, 0),
                         GradientRepetitionMode.None,
@@ -73,7 +73,7 @@ public class FillLinearGradientBrushTests
                     Color red = Color.Red;
                     Color yellow = Color.Yellow;
 
-                    var unicolorLinearGradientBrush = new LinearGradientBrush(
+                    LinearGradientBrush unicolorLinearGradientBrush = new(
                         new Point(0, 0),
                         new Point(image.Width, 0),
                         GradientRepetitionMode.None,
@@ -101,7 +101,7 @@ public class FillLinearGradientBrushTests
                     Color red = Color.Red;
                     Color yellow = Color.Yellow;
 
-                    var unicolorLinearGradientBrush = new LinearGradientBrush(
+                    LinearGradientBrush unicolorLinearGradientBrush = new(
                         new Point(0, 0),
                         new Point(image.Width / 10, 0),
                         repetitionMode,
@@ -147,8 +147,8 @@ public class FillLinearGradientBrushTests
 
         using (Image<TPixel> image = provider.GetImage())
         {
-            var unicolorLinearGradientBrush =
-                new LinearGradientBrush(
+            LinearGradientBrush unicolorLinearGradientBrush =
+                new(
                     new Point(0, 0),
                     new Point(image.Width, 0),
                     GradientRepetitionMode.None,
@@ -189,7 +189,7 @@ public class FillLinearGradientBrushTests
                     Color red = Color.Red;
                     Color yellow = Color.Yellow;
 
-                    var unicolorLinearGradientBrush = new LinearGradientBrush(
+                    LinearGradientBrush unicolorLinearGradientBrush = new(
                         new Point(0, 0),
                         new Point(0, image.Height),
                         GradientRepetitionMode.None,
@@ -247,8 +247,8 @@ public class FillLinearGradientBrushTests
             Color red = Color.Red;
             Color yellow = Color.Yellow;
 
-            var unicolorLinearGradientBrush =
-                new LinearGradientBrush(
+            LinearGradientBrush unicolorLinearGradientBrush =
+                new(
                     new Point(startX, startY),
                     new Point(endX, endY),
                     GradientRepetitionMode.None,
@@ -308,16 +308,15 @@ public class FillLinearGradientBrushTests
             Color.Red
         };
 
-        var coloringVariant = new StringBuilder();
-        var colorStops = new ColorStop[stopPositions.Length];
+        StringBuilder coloringVariant = new();
+        ColorStop[] colorStops = new ColorStop[stopPositions.Length];
 
         for (int i = 0; i < stopPositions.Length; i++)
         {
             Color color = colors[stopColorCodes[i % colors.Length]];
             float position = stopPositions[i];
             colorStops[i] = new ColorStop(position, color);
-            Rgba32 rgba = color;
-            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", rgba.ToHex(), position);
+            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToHex(), position);
         }
 
         FormattableString variant = $"({startX},{startY})_TO_({endX},{endY})__[{coloringVariant}]";
@@ -325,7 +324,7 @@ public class FillLinearGradientBrushTests
         provider.VerifyOperation(
             image =>
             {
-                var unicolorLinearGradientBrush = new LinearGradientBrush(
+                LinearGradientBrush unicolorLinearGradientBrush = new(
                     new Point(startX, startY),
                     new Point(endX, endY),
                     GradientRepetitionMode.None,
@@ -356,16 +355,15 @@ public class FillLinearGradientBrushTests
             Color.White, Color.Lime
         };
 
-        var coloringVariant = new StringBuilder();
-        var colorStops = new ColorStop[stopPositions.Length];
+        StringBuilder coloringVariant = new();
+        ColorStop[] colorStops = new ColorStop[stopPositions.Length];
 
         for (int i = 0; i < stopPositions.Length; i++)
         {
             Color color = colors[stopColorCodes[i % colors.Length]];
             float position = stopPositions[i];
             colorStops[i] = new ColorStop(position, color);
-            Rgba32 rgba = color;
-            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", rgba.ToHex(), position);
+            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToHex(), position);
         }
 
         FormattableString variant = $"({startX},{startY})_TO_({endX},{endY})__[{coloringVariant}]";
@@ -373,7 +371,7 @@ public class FillLinearGradientBrushTests
         provider.VerifyOperation(
             image =>
             {
-                var unicolorLinearGradientBrush = new LinearGradientBrush(
+                LinearGradientBrush unicolorLinearGradientBrush = new(
                     new Point(startX, startY),
                     new Point(endX, endY),
                     GradientRepetitionMode.None,
@@ -402,19 +400,19 @@ public class FillLinearGradientBrushTests
         {
             Size size = ctx.GetCurrentSize();
             IPathCollection glossPath = BuildGloss(size.Width, size.Height);
-            var graphicsOptions = new GraphicsOptions
+            GraphicsOptions graphicsOptions = new()
             {
                 Antialias = true,
                 ColorBlendingMode = PixelColorBlendingMode.Normal,
                 AlphaCompositionMode = PixelAlphaCompositionMode.SrcAtop
             };
-            var linearGradientBrush = new LinearGradientBrush(new Point(0, 0), new Point(0, size.Height / 2), GradientRepetitionMode.Repeat, new ColorStop(0, Color.White.WithAlpha(0.5f)), new ColorStop(1, Color.White.WithAlpha(0.25f)));
+            LinearGradientBrush linearGradientBrush = new(new Point(0, 0), new Point(0, size.Height / 2), GradientRepetitionMode.Repeat, new ColorStop(0, Color.White.WithAlpha(0.5f)), new ColorStop(1, Color.White.WithAlpha(0.25f)));
             ctx.SetGraphicsOptions(graphicsOptions).Fill(linearGradientBrush, glossPath);
         }
 
         IPathCollection BuildGloss(int imageWidth, int imageHeight)
         {
-            var pathBuilder = new PathBuilder();
+            PathBuilder pathBuilder = new();
             pathBuilder.AddLine(new PointF(0, 0), new PointF(imageWidth, 0));
             pathBuilder.AddLine(new PointF(imageWidth, 0), new PointF(imageWidth, imageHeight * 0.4f));
             pathBuilder.AddQuadraticBezier(new PointF(imageWidth, imageHeight * 0.4f), new PointF(imageWidth / 2, imageHeight * 0.6f), new PointF(0, imageHeight * 0.4f));
@@ -431,7 +429,7 @@ public class FillLinearGradientBrushTests
             TolerantComparer,
             img =>
             {
-                var brush = new PathGradientBrush(
+                PathGradientBrush brush = new(
                     new[] { new PointF(0, 0), new PointF(200, 0), new PointF(200, 200), new PointF(0, 200), new PointF(0, 0) },
                     new[] { Color.Red, Color.Yellow, Color.Green, Color.DarkCyan, Color.Red });
 

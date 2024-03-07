@@ -4,7 +4,6 @@
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.ImageSharp.Memory;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -138,7 +137,7 @@ public abstract class GradientBrush : Brush
                 float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
 
                 // TODO: This should use premultiplied vectors to avoid bad blends e.g. red -> brown <- green.
-                return new Color(Vector4.Lerp((Vector4)from.Color, (Vector4)to.Color, onLocalGradient)).ToPixel<TPixel>();
+                return Color.FromScaledVector(Vector4.Lerp(from.Color.ToScaledVector4(), to.Color.ToScaledVector4(), onLocalGradient)).ToPixel<TPixel>();
             }
         }
 

@@ -57,14 +57,7 @@ public class FillPathGradientBrushTests
             {
                 PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
 
-                var c1 = default(Rgba32);
-                var c2 = default(Rgba32);
-                var c3 = default(Rgba32);
-                new HalfSingle(-1).ToRgba32(ref c1);
-                new HalfSingle(0).ToRgba32(ref c2);
-                new HalfSingle(1).ToRgba32(ref c3);
-
-                Color[] colors = { new Color(c1), new Color(c2), new Color(c3) };
+                Color[] colors = { Color.FromPixel(new HalfSingle(-1)), Color.FromPixel(new HalfSingle(0)), Color.FromPixel(new HalfSingle(1)) };
 
                 var brush = new PathGradientBrush(points, colors);
 

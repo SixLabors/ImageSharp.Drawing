@@ -129,7 +129,7 @@ public class DrawTextOnImageTests
     {
         Font font = CreateFont(TestFonts.OpenSans, 39);
         string text = new('a', 10000);
-        Rgba32 color = Color.Black;
+        Color color = Color.Black;
         var point = new PointF(100, 100);
 
         using Image<TPixel> img = provider.GetImage();

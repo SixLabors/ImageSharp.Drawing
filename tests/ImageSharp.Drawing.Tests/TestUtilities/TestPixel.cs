@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.PixelFormats;
 using Xunit.Abstractions;
 
@@ -31,12 +32,7 @@ public class TestPixel<TPixel> : IXunitSerializable
 
     public static implicit operator TPixel(TestPixel<TPixel> d) => d?.AsPixel() ?? default;
 
-    public TPixel AsPixel()
-    {
-        TPixel pix = default;
-        pix.FromVector4(new System.Numerics.Vector4(this.Red, this.Green, this.Blue, this.Alpha));
-        return pix;
-    }
+    public TPixel AsPixel() => TPixel.FromVector4(new Vector4(this.Red, this.Green, this.Blue, this.Alpha));
 
     internal Span<TPixel> AsSpan() => new Span<TPixel>(new[] { this.AsPixel() });
 
