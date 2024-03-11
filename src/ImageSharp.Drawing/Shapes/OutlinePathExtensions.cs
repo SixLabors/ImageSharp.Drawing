@@ -16,6 +16,31 @@ public static class OutlinePathExtensions
     private const EndCapStyle DefaultEndCapStyle = EndCapStyle.Butt;
 
     /// <summary>
+    /// Calculates the scaling matrixes tha tmust be applied to the inout and output paths of for successful clipping.
+    /// </summary>
+    /// <param name="width">the requested width</param>
+    /// <param name="scaleUpMartrix">The matrix to apply to the input path</param>
+    /// <param name="scaleDownMartrix">The matrix to apply to the output path</param>
+    /// <returns>The final width to use internally to outlining</returns>
+    private static float CalculateScalingMatrix(float width, out Matrix3x2 scaleUpMartrix, out Matrix3x2 scaleDownMartrix)
+    {
+        // when the thickness is below a 0.5 threshold we need to scale
+        // the source path (up) and result path (down) by a factor to ensure
+        // the offest is greater than 0.5 to ensure offsetting isn't skipped.
+        scaleUpMartrix = Matrix3x2.Identity;
+        scaleDownMartrix = Matrix3x2.Identity;
+        if (width < 0.5)
+        {
+            float scale = 1 / width;
+            scaleUpMartrix = Matrix3x2.CreateScale(scale);
+            scaleDownMartrix = Matrix3x2.CreateScale(width);
+            width = 1;
+        }
+
+        return width;
+    }
+
+    /// <summary>
     /// Generates an outline of the path.
     /// </summary>
     /// <param name="path">The path to outline</param>
@@ -41,10 +66,14 @@ public static class OutlinePathExtensions
             return Path.Empty;
         }
 
-        ClipperOffset offset = new(MiterOffsetDelta);
-        offset.AddPath(path, jointStyle, endCapStyle);
+        width = CalculateScalingMatrix(width, out Matrix3x2 scaleUpMartrix, out Matrix3x2 scaleDownMartrix);
 
-        return offset.Execute(width);
+        ClipperOffset offset = new(MiterOffsetDelta);
+
+        // transform is noop for Matrix3x2.Identity
+        offset.AddPath(path.Transform(scaleUpMartrix), jointStyle, endCapStyle);
+
+        return offset.Execute(width).Transform(scaleDownMartrix);
     }
 
     /// <summary>
@@ -106,7 +135,9 @@ public static class OutlinePathExtensions
             return path.GenerateOutline(width, jointStyle, endCapStyle);
         }
 
-        IEnumerable<ISimplePath> paths = path.Flatten();
+        width = CalculateScalingMatrix(width, out Matrix3x2 scaleUpMartrix, out Matrix3x2 scaleDownMartrix);
+
+        IEnumerable<ISimplePath> paths = path.Transform(scaleUpMartrix).Flatten();
 
         ClipperOffset offset = new(MiterOffsetDelta);
         List<PointF> buffer = new();
@@ -186,6 +217,6 @@ public static class OutlinePathExtensions
             }
         }
 
-        return offset.Execute(width);
+        return offset.Execute(width).Transform(scaleDownMartrix);
     }
 }
