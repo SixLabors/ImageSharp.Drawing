@@ -4,14 +4,18 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
+using SharpBlaze;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
+using BlazeMatrix = SharpBlaze.Matrix;
 using SDPointF = System.Drawing.PointF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
@@ -21,13 +25,20 @@ public abstract class DrawPolygon
     private PointF[][] points;
 
     private Image<Rgba32> image;
+    private bool isImageSharp;
 
     private SDPointF[][] sdPoints;
     private Bitmap sdBitmap;
     private Graphics sdGraphics;
+    private bool isSystem;
 
     private SKPath skPath;
     private SKSurface skSurface;
+    private bool isSkia;
+
+    private Executor executor;
+    private DestinationImage<TileDescriptor_8x16> vecDst;
+    private bool isBlaze;
 
     protected abstract int Width { get; }
 
@@ -49,9 +60,11 @@ public abstract class DrawPolygon
         this.sdPoints = this.points.Select(pts => pts.Select(p => new SDPointF(p.X, p.Y)).ToArray()).ToArray();
 
         this.skPath = new SKPath();
+
         foreach (PointF[] ptArr in this.points.Where(pts => pts.Length > 2))
         {
             this.skPath.MoveTo(ptArr[0].X, ptArr[1].Y);
+
             for (int i = 1; i < ptArr.Length; i++)
             {
                 this.skPath.LineTo(ptArr[i].X, ptArr[i].Y);
@@ -59,6 +72,11 @@ public abstract class DrawPolygon
 
             this.skPath.LineTo(ptArr[0].X, ptArr[1].Y);
         }
+
+        this.executor = new SerialExecutor();
+        this.vecDst = new DestinationImage<TileDescriptor_8x16>();
+        this.vecDst.UpdateSize(new IntSize(this.Width, this.Height));
+        this.vecDst.ClearImage();
 
         this.image = new Image<Rgba32>(this.Width, this.Height);
         this.sdBitmap = new Bitmap(this.Width, this.Height);
@@ -69,8 +87,44 @@ public abstract class DrawPolygon
     }
 
     [GlobalCleanup]
-    public void Cleanup()
+    public unsafe void Cleanup()
     {
+        string dir = "Images/DrawPolygon";
+        Directory.CreateDirectory(dir);
+
+        if (this.isImageSharp)
+        {
+            this.image.SaveAsPng(System.IO.Path.Combine(dir, "ImageSharp.png"));
+            this.isImageSharp = false;
+        }
+
+        if (this.isBlaze)
+        {
+            using var blazeImage = Image.WrapMemory<Rgba32>(
+            this.vecDst.GetImageData(),
+            this.vecDst.GetBytesPerRow() * this.vecDst.GetImageHeight(),
+            this.vecDst.GetImageWidth(),
+            this.vecDst.GetImageHeight());
+
+            blazeImage.SaveAsPng(System.IO.Path.Combine(dir, "Blaze.png"));
+            this.isBlaze = false;
+        }
+
+        if (this.isSystem)
+        {
+            this.sdBitmap.Save(System.IO.Path.Combine(dir, "SystemDrawing.png"));
+            this.isSystem = false;
+        }
+
+        if (this.isSkia)
+        {
+            using var skSnapshot = this.skSurface.Snapshot();
+            using var skEncoded = skSnapshot.Encode();
+            using var skFile = new FileStream(System.IO.Path.Combine(dir, "SkiaSharp.png"), FileMode.Create);
+            skEncoded.SaveTo(skFile);
+            this.isSkia = false;
+        }
+
         this.image.Dispose();
         this.sdGraphics.Dispose();
         this.sdBitmap.Dispose();
@@ -87,11 +141,14 @@ public abstract class DrawPolygon
         {
             this.sdGraphics.DrawPolygon(pen, loop);
         }
+
+        this.isSystem = true;
     }
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(
+    {
+        this.image.Mutate(
             c =>
             {
                 foreach (PointF[] loop in this.points)
@@ -99,6 +156,8 @@ public abstract class DrawPolygon
                     c.DrawPolygon(Color.White, this.Thickness, loop);
                 }
             });
+        this.isImageSharp = true;
+    }
 
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
@@ -112,6 +171,84 @@ public abstract class DrawPolygon
         };
 
         this.skSurface.Canvas.DrawPath(this.skPath, paint);
+        this.isSkia = true;
+    }
+
+    [Benchmark]
+    public void Blaze()
+    {
+        VectorImageBuilder builder = new();
+
+        foreach (PointF[] loop in this.points)
+        {
+            var loopPolygon = new Polygon(loop);
+            var brush = new Processing.SolidBrush(Color.White);
+            var pen = new SolidPen(brush, this.Thickness);
+            List<List<PointF>> outline = GenerateOutlineList(loopPolygon, pen.StrokeWidth, pen.JointStyle, pen.EndCapStyle);
+
+            foreach (List<PointF> line in outline)
+            {
+                Span<PointF> ptArr = CollectionsMarshal.AsSpan(line);
+
+                builder.MoveTo(new FloatPoint(ptArr[0].X, ptArr[1].Y));
+                for (int i = 1; i < ptArr.Length; i++)
+                {
+                    builder.LineTo(new FloatPoint(ptArr[i].X, ptArr[i].Y));
+                }
+
+                builder.LineTo(new FloatPoint(ptArr[0].X, ptArr[1].Y));
+
+                builder.Close();
+            }
+        }
+
+        VectorImage image = builder.ToVectorImage(Color.White.ToPixel<Rgba32>().PackedValue);
+
+        this.vecDst.DrawImage(image, BlazeMatrix.Identity, this.executor);
+
+        this.isBlaze = true;
+    }
+
+    private static List<List<PointF>> GenerateOutlineList(IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
+    {
+        if (width <= 0)
+        {
+            return [];
+        }
+
+        List<List<PointF>> stroked = [];
+
+        PolygonStroker stroker = new() { Width = width, LineJoin = GetLineJoin(jointStyle), LineCap = GetLineCap(endCapStyle) };
+        foreach (ISimplePath simplePath in path.Flatten())
+        {
+            bool isClosed = simplePath.IsClosed || endCapStyle is EndCapStyle.Polygon or EndCapStyle.Joined;
+            if (simplePath is Path concretePath)
+            {
+                if (concretePath.LineSegments.Count == 1 && concretePath.LineSegments[0] is LinearLineSegment lineSegment)
+                {
+                    stroked.Add(stroker.ProcessPath(lineSegment.Flatten().Span, isClosed));
+                    continue;
+                }
+            }
+
+            stroked.Add(stroker.ProcessPath(simplePath.Points.Span, isClosed));
+        }
+
+        return stroked;
+
+        static LineJoin GetLineJoin(JointStyle value) => value switch
+        {
+            JointStyle.Square => LineJoin.BevelJoin,
+            JointStyle.Round => LineJoin.RoundJoin,
+            _ => LineJoin.MiterJoin,
+        };
+
+        static LineCap GetLineCap(EndCapStyle value) => value switch
+        {
+            EndCapStyle.Round => LineCap.Round,
+            EndCapStyle.Square => LineCap.Square,
+            _ => LineCap.Butt,
+        };
     }
 }
 

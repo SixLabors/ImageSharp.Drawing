@@ -337,6 +337,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 		.github\workflows\build-and-test.yml = .github\workflows\build-and-test.yml
 	EndProjectSection
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SharpBlaze", "..\SharpBlaze\SharpBlaze\SharpBlaze.csproj", "{FCEDD229-22BC-4B82-87DE-786BBFC52EDE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -359,6 +361,10 @@ Global
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FCEDD229-22BC-4B82-87DE-786BBFC52EDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FCEDD229-22BC-4B82-87DE-786BBFC52EDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FCEDD229-22BC-4B82-87DE-786BBFC52EDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FCEDD229-22BC-4B82-87DE-786BBFC52EDE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
