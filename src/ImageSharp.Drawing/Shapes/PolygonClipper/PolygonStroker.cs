@@ -67,26 +67,22 @@ internal sealed class PolygonStroker
             this.AddVertex(0, 0, PathCommand.EndPoly | (PathCommand)PathFlags.Close);
         }
 
-        double x = 0;
-        double y = 0;
+        PointF currentPoint = new(0, 0);
         int startIndex = 0;
         PointF? lastPoint = null;
         PathCommand command;
 
         PathF results = new(pathPoints.Length * 3);
-        while (!(command = this.Accumulate(ref x, ref y)).Stop())
+        while (!(command = this.Accumulate(ref currentPoint)).Stop())
         {
-            PointF currentPoint;
             if (command.EndPoly() && results.Count > 0)
             {
                 PointF initial = results[startIndex];
-                currentPoint = new(initial.X, initial.Y);
-                results.Add(currentPoint);
+                results.Add(initial);
                 startIndex = results.Count;
             }
             else
             {
-                currentPoint = new((float)x, (float)y);
                 if (currentPoint != lastPoint)
                 {
                     results.Add(currentPoint);
@@ -132,7 +128,7 @@ internal sealed class PolygonStroker
         }
     }
 
-    private PathCommand Accumulate(ref double x, ref double y)
+    private PathCommand Accumulate(ref PointF point)
     {
         PathCommand cmd = PathCommand.LineTo;
         while (!cmd.Stop())
@@ -255,8 +251,7 @@ internal sealed class PolygonStroker
                     else
                     {
                         PointF c = this.outVertices[this.outVertex++];
-                        x = c.X;
-                        y = c.Y;
+                        point = c;
 
                         return cmd;
                     }
@@ -300,7 +295,6 @@ internal sealed class PolygonStroker
         this.srcVertices.Add(new VertexDistance(x, y, distance));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CloseVertexPath(bool closed)
     {
         while (this.srcVertices.Length > 1)
