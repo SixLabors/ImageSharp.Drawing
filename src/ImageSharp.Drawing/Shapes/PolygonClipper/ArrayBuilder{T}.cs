@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
@@ -13,7 +14,6 @@ internal struct ArrayBuilder<T>
     where T : struct
 {
     private const int DefaultCapacity = 4;
-    private const int MaxCoreClrArrayLength = 0x7FeFFFFF;
 
     // Starts out null, initialized on first Add.
     private T[]? data;
@@ -41,17 +41,14 @@ internal struct ArrayBuilder<T>
 
         set
         {
-            if (value != this.size)
+            if (value > 0)
             {
-                if (value > 0)
-                {
-                    this.EnsureCapacity(value);
-                    this.size = value;
-                }
-                else
-                {
-                    this.size = 0;
-                }
+                this.EnsureCapacity(value);
+                this.size = value;
+            }
+            else
+            {
+                this.size = 0;
             }
         }
     }
@@ -81,10 +78,27 @@ internal struct ArrayBuilder<T>
     public void Add(T item)
     {
         int position = this.size;
+        T[]? array = this.data;
 
-        // Expand the array.
-        this.Length++;
-        this.data![position] = item;
+        if (array != null && (uint)position < (uint)array.Length)
+        {
+            this.size = position + 1;
+            array[position] = item;
+        }
+        else
+        {
+            this.AddWithResize(item);
+        }
+    }
+
+    // Non-inline from Add to improve its code quality as uncommon path
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void AddWithResize(T item)
+    {
+        int size = this.size;
+        this.Grow(size + 1);
+        this.size = size + 1;
+        this.data[size] = item;
     }
 
     /// <summary>
@@ -110,26 +124,33 @@ internal struct ArrayBuilder<T>
         int length = this.data?.Length ?? 0;
         if (length < min)
         {
-            // Same expansion algorithm as List<T>.
-            uint newCapacity = length == 0 ? DefaultCapacity : (uint)length * 2u;
-            if (newCapacity > MaxCoreClrArrayLength)
-            {
-                newCapacity = MaxCoreClrArrayLength;
-            }
-
-            if (newCapacity < min)
-            {
-                newCapacity = (uint)min;
-            }
-
-            T[] array = new T[newCapacity];
-
-            if (this.size > 0)
-            {
-                Array.Copy(this.data!, array, this.size);
-            }
-
-            this.data = array;
+            this.Grow(min);
         }
+    }
+
+    [MemberNotNull(nameof(this.data))]
+    private void Grow(int capacity)
+    {
+        // Same expansion algorithm as List<T>.
+        int length = this.data?.Length ?? 0;
+        int newCapacity = length == 0 ? DefaultCapacity : length * 2;
+        if ((uint)newCapacity > Array.MaxLength)
+        {
+            newCapacity = Array.MaxLength;
+        }
+
+        if (newCapacity < capacity)
+        {
+            newCapacity = capacity;
+        }
+
+        T[] array = new T[newCapacity];
+
+        if (this.size > 0)
+        {
+            Array.Copy(this.data!, array, this.size);
+        }
+
+        this.data = array;
     }
 }
