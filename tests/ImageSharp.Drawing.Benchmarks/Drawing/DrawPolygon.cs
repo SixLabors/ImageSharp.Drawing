@@ -211,30 +211,52 @@ public abstract class DrawPolygon
 
     private static List<List<PointF>> GenerateOutlineList(IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
     {
+        List<List<PointF>> strokedLines = [];
+
         if (width <= 0)
         {
-            return [];
+            return strokedLines;
         }
 
-        List<List<PointF>> stroked = [];
-
-        PolygonStroker stroker = new() { Width = width, LineJoin = GetLineJoin(jointStyle), LineCap = GetLineCap(endCapStyle) };
+        PolygonStroker stroker = new()
+        {
+            Width = width,
+            LineJoin = GetLineJoin(jointStyle),
+            LineCap = GetLineCap(endCapStyle)
+        };
         foreach (ISimplePath simplePath in path.Flatten())
         {
-            bool isClosed = simplePath.IsClosed || endCapStyle is EndCapStyle.Polygon or EndCapStyle.Joined;
+            stroker.Reset();
+
+            int pointCount = 0;
             if (simplePath is Path concretePath)
             {
-                if (concretePath.LineSegments.Count == 1 && concretePath.LineSegments[0] is LinearLineSegment lineSegment)
+                foreach (ILineSegment line in concretePath.LineSegments)
                 {
-                    stroked.Add(stroker.ProcessPath(lineSegment.Flatten().Span, isClosed));
-                    continue;
+                    ReadOnlySpan<PointF> points = line.Flatten().Span;
+                    stroker.AddLinePath(points);
+                    pointCount += points.Length;
                 }
             }
+            else
+            {
+                ReadOnlySpan<PointF> points = simplePath.Points.Span;
+                stroker.AddLinePath(points);
+                pointCount = points.Length;
+            }
 
-            stroked.Add(stroker.ProcessPath(simplePath.Points.Span, isClosed));
+            bool isClosed = simplePath.IsClosed || endCapStyle is EndCapStyle.Polygon or EndCapStyle.Joined;
+            if (isClosed)
+            {
+                stroker.ClosePath();
+            }
+
+            List<PointF> lineBuilder = new(pointCount * 4);
+            stroker.FinishPath(lineBuilder);
+            strokedLines.Add(lineBuilder);
         }
 
-        return stroked;
+        return strokedLines;
 
         static LineJoin GetLineJoin(JointStyle value) => value switch
         {

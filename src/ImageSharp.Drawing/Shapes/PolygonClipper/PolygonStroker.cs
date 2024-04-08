@@ -53,26 +53,42 @@ internal sealed class PolygonStroker
         }
     }
 
-    public PathF ProcessPath(ReadOnlySpan<PointF> pathPoints, bool isClosed)
+    public PathF ProcessPath(ReadOnlySpan<PointF> linePoints, bool isClosed)
     {
         this.Reset();
-        for (int i = 0; i < pathPoints.Length; i++)
-        {
-            PointF point = pathPoints[i];
-            this.AddVertex(point.X, point.Y, PathCommand.LineTo);
-        }
+        this.AddLinePath(linePoints);
 
         if (isClosed)
         {
-            this.AddVertex(0, 0, PathCommand.EndPoly | (PathCommand)PathFlags.Close);
+            this.ClosePath();
         }
 
+        PathF results = new(linePoints.Length * 3);
+        this.FinishPath(results);
+        return results;
+    }
+
+    public void AddLinePath(ReadOnlySpan<PointF> linePoints)
+    {
+        for (int i = 0; i < linePoints.Length; i++)
+        {
+            PointF point = linePoints[i];
+            this.AddVertex(point.X, point.Y, PathCommand.LineTo);
+        }
+    }
+
+    public void ClosePath()
+    {
+        this.AddVertex(0, 0, PathCommand.EndPoly | (PathCommand)PathFlags.Close);
+    }
+
+    public void FinishPath(List<PointF> results)
+    {
         PointF currentPoint = new(0, 0);
         int startIndex = 0;
         PointF? lastPoint = null;
         PathCommand command;
 
-        PathF results = new(pathPoints.Length * 3);
         while (!(command = this.Accumulate(ref currentPoint)).Stop())
         {
             if (command.EndPoly() && results.Count > 0)
@@ -90,12 +106,9 @@ internal sealed class PolygonStroker
                 }
             }
         }
-
-        return results;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void Reset()
+    public void Reset()
     {
         this.srcVertices.Clear();
         this.outVertices.Clear();
