@@ -4,6 +4,7 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -61,7 +62,7 @@ internal class InternalPath
     /// <param name="points">The points.</param>
     /// <param name="isClosedPath">if set to <c>true</c> [is closed path].</param>
     internal InternalPath(ReadOnlyMemory<PointF> points, bool isClosedPath)
-        : this(Simplify(points, isClosedPath, true), isClosedPath)
+        : this(Simplify(points.Span, isClosedPath, true), isClosedPath)
     {
     }
 
@@ -247,16 +248,14 @@ internal class InternalPath
         foreach (ILineSegment seg in segments)
         {
             ReadOnlyMemory<PointF> points = seg.Flatten();
-            simplified.AddRange(points.ToArray());
+            simplified.AddRange(points.Span);
         }
 
-        return Simplify(simplified.ToArray(), isClosed, removeCloseAndCollinear);
+        return Simplify(CollectionsMarshal.AsSpan(simplified), isClosed, removeCloseAndCollinear);
     }
 
-    private static PointData[] Simplify(ReadOnlyMemory<PointF> vectors, bool isClosed, bool removeCloseAndCollinear)
+    private static PointData[] Simplify(ReadOnlySpan<PointF> points, bool isClosed, bool removeCloseAndCollinear)
     {
-        ReadOnlySpan<PointF> points = vectors.Span;
-
         int polyCorners = points.Length;
         if (polyCorners == 0)
         {
