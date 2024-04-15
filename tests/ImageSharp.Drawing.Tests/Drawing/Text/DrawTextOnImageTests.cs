@@ -451,8 +451,8 @@ public class DrawTextOnImageTests
         AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
         RichTextOptions textOptions = new(font);
-        FontRectangle bounds = TextMeasurer.MeasureSize(text, textOptions);
-        Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
+        FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
+        Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(advance.X, advance.Y, advance.Width, advance.Height)));
 
         provider.RunValidatingProcessorTest(
             x => x.SetDrawingTransform(transform).DrawText(textOptions, text, Color.Black),
@@ -478,8 +478,8 @@ public class DrawTextOnImageTests
         AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
         RichTextOptions textOptions = new(font);
-        FontRectangle bounds = TextMeasurer.MeasureSize(text, textOptions);
-        Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height)));
+        FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
+        Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(advance.X, advance.Y, advance.Width, advance.Height)));
 
         provider.RunValidatingProcessorTest(
             x => x.SetDrawingTransform(transform)
