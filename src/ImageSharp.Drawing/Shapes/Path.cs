@@ -88,7 +88,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// </summary>
     internal bool RemoveCloseAndCollinearPoints { get; set; } = true;
 
-    private InternalPath InnerPath =>
+    private protected InternalPath InnerPath =>
         this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
     /// <inheritdoc />
