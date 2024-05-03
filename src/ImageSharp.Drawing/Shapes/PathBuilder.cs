@@ -465,7 +465,7 @@ public class PathBuilder
 
         public IPath Build()
             => this.IsClosed
-            ? new Polygon(this.segments.ToArray())
+            ? new Polygon(this.segments.ToArray(), true)
             : new Path(this.segments.ToArray());
     }
 }

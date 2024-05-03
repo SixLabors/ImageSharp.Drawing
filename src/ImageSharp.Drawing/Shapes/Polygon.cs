@@ -24,7 +24,7 @@ public class Polygon : Path
     /// </summary>
     /// <param name="segments">The segments.</param>
     public Polygon(params ILineSegment[] segments)
-        : base((IEnumerable<ILineSegment>)segments)
+        : base(segments.ToArray())
     {
     }
 
@@ -55,6 +55,11 @@ public class Polygon : Path
     {
     }
 
+    internal Polygon(ILineSegment[] segments, bool owned)
+        : base(owned ? segments : segments.ToArray())
+    {
+    }
+
     /// <inheritdoc />
     public override bool IsClosed => true;
 
@@ -66,13 +71,13 @@ public class Polygon : Path
             return this;
         }
 
-        var segments = new ILineSegment[this.LineSegments.Count];
-        int i = 0;
-        foreach (ILineSegment s in this.LineSegments)
+        ILineSegment[] segments = new ILineSegment[this.LineSegments.Count];
+
+        for (int i = 0; i < segments.Length; i++)
         {
-            segments[i++] = s.Transform(matrix);
+            segments[i] = this.LineSegments[i].Transform(matrix);
         }
 
-        return new Polygon(segments);
+        return new Polygon(segments, true);
     }
 }

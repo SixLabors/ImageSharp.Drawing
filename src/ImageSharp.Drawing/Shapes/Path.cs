@@ -101,7 +101,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 
         ILineSegment[] segments = new ILineSegment[this.lineSegments.Length];
 
-        for (int i = 0; i < this.LineSegments.Count; i++)
+        for (int i = 0; i < segments.Length; i++)
         {
             segments[i] = this.lineSegments[i].Transform(matrix);
         }
