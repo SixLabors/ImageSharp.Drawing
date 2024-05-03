@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using BenchmarkDotNet.Attributes;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
@@ -22,23 +23,25 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 
 public abstract class DrawPolygon
 {
+    private string artifactDir;
+
     private PointF[][] points;
 
     private Image<Rgba32> image;
-    private bool isImageSharp;
+    private bool savedImageSharp;
 
     private SDPointF[][] sdPoints;
     private Bitmap sdBitmap;
     private Graphics sdGraphics;
-    private bool isSystem;
+    private bool savedSd;
 
     private SKPath skPath;
     private SKSurface skSurface;
-    private bool isSkia;
+    private bool savedSkia;
 
     private Executor executor;
     private DestinationImage<TileDescriptor_8x16> vecDst;
-    private bool isBlaze;
+    private bool savedBlaze;
 
     protected abstract int Width { get; }
 
@@ -46,12 +49,19 @@ public abstract class DrawPolygon
 
     protected abstract float Thickness { get; }
 
+    protected abstract string BenchName { get; }
+
     protected virtual PointF[][] GetPoints(FeatureCollection features) =>
         features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60))).ToArray();
+
+    private string GetArtifactPath(string name) => System.IO.Path.Combine(this.artifactDir, name);
 
     [GlobalSetup]
     public void Setup()
     {
+        this.artifactDir = TestEnvironment.GetFullPath($"artifacts\\{BenchName}");
+        Directory.CreateDirectory(this.artifactDir);
+
         string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
 
         FeatureCollection featureCollection = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
@@ -87,44 +97,8 @@ public abstract class DrawPolygon
     }
 
     [GlobalCleanup]
-    public unsafe void Cleanup()
+    public void Cleanup()
     {
-        string dir = "Images/DrawPolygon";
-        Directory.CreateDirectory(dir);
-
-        if (this.isImageSharp)
-        {
-            this.image.SaveAsPng(System.IO.Path.Combine(dir, "ImageSharp.png"));
-            this.isImageSharp = false;
-        }
-
-        if (this.isBlaze)
-        {
-            using var blazeImage = Image.WrapMemory<Rgba32>(
-            this.vecDst.GetImageData(),
-            this.vecDst.GetBytesPerRow() * this.vecDst.GetImageHeight(),
-            this.vecDst.GetImageWidth(),
-            this.vecDst.GetImageHeight());
-
-            blazeImage.SaveAsPng(System.IO.Path.Combine(dir, "Blaze.png"));
-            this.isBlaze = false;
-        }
-
-        if (this.isSystem)
-        {
-            this.sdBitmap.Save(System.IO.Path.Combine(dir, "SystemDrawing.png"));
-            this.isSystem = false;
-        }
-
-        if (this.isSkia)
-        {
-            using var skSnapshot = this.skSurface.Snapshot();
-            using var skEncoded = skSnapshot.Encode();
-            using var skFile = new FileStream(System.IO.Path.Combine(dir, "SkiaSharp.png"), FileMode.Create);
-            skEncoded.SaveTo(skFile);
-            this.isSkia = false;
-        }
-
         this.image.Dispose();
         this.sdGraphics.Dispose();
         this.sdBitmap.Dispose();
@@ -132,6 +106,7 @@ public abstract class DrawPolygon
         this.skPath.Dispose();
     }
 
+    [SupportedOSPlatform("windows")]
     [Benchmark]
     public void SystemDrawing()
     {
@@ -142,7 +117,11 @@ public abstract class DrawPolygon
             this.sdGraphics.DrawPolygon(pen, loop);
         }
 
-        this.isSystem = true;
+        if (!this.savedSd)
+        {
+            this.sdBitmap.Save(this.GetArtifactPath("SystemDrawing.png"));
+            this.savedSd = true;
+        }
     }
 
     [Benchmark]
@@ -156,7 +135,12 @@ public abstract class DrawPolygon
                     c.DrawPolygon(Color.White, this.Thickness, loop);
                 }
             });
-        this.isImageSharp = true;
+
+        if (!this.savedImageSharp)
+        {
+            this.image.SaveAsPng(this.GetArtifactPath("ImageSharp.png"));
+            this.savedImageSharp = true;
+        }
     }
 
     [Benchmark(Baseline = true)]
@@ -171,11 +155,19 @@ public abstract class DrawPolygon
         };
 
         this.skSurface.Canvas.DrawPath(this.skPath, paint);
-        this.isSkia = true;
+
+        if (!this.savedSkia)
+        {
+            using var skSnapshot = this.skSurface.Snapshot();
+            using var skEncoded = skSnapshot.Encode();
+            using var skFile = new FileStream(this.GetArtifactPath("SkiaSharp.png"), FileMode.Create);
+            skEncoded.SaveTo(skFile);
+            this.savedSkia = true;
+        }
     }
 
     [Benchmark]
-    public void Blaze()
+    public unsafe void Blaze()
     {
         VectorImageBuilder builder = new();
 
@@ -206,10 +198,20 @@ public abstract class DrawPolygon
 
         this.vecDst.DrawImage(image, BlazeMatrix.Identity, this.executor);
 
-        this.isBlaze = true;
+        if (!this.savedBlaze)
+        {
+            using var blazeImage = Image.WrapMemory<Rgba32>(
+                this.vecDst.GetImageData(),
+                this.vecDst.GetBytesPerRow() * this.vecDst.GetImageHeight(),
+                this.vecDst.GetImageWidth(),
+                this.vecDst.GetImageHeight());
+
+            blazeImage.SaveAsPng(this.GetArtifactPath("Blaze.png"));
+            this.savedBlaze = true;
+        }
     }
 
-    private static List<List<PointF>> GenerateOutlineList(IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
+    public static List<List<PointF>> GenerateOutlineList(IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
     {
         List<List<PointF>> strokedLines = [];
 
@@ -233,9 +235,19 @@ public abstract class DrawPolygon
             {
                 foreach (ILineSegment line in concretePath.LineSegments)
                 {
-                    ReadOnlySpan<PointF> points = line.Flatten().Span;
-                    stroker.AddLinePath(points);
-                    pointCount += points.Length;
+                    if (line is CubicBezierLineSegment bezier)
+                    {
+                        // TODO: add bezier control points
+                        ReadOnlySpan<PointF> points = line.Flatten().Span;
+                        stroker.AddLinePath(points);
+                        pointCount += points.Length;
+                    }
+                    else
+                    {
+                        ReadOnlySpan<PointF> points = line.Flatten().Span;
+                        stroker.AddLinePath(points);
+                        pointCount += points.Length;
+                    }
                 }
             }
             else
@@ -281,6 +293,8 @@ public class DrawPolygonAll : DrawPolygon
     protected override int Height => 4800;
 
     protected override float Thickness => 2f;
+
+    protected override string BenchName => nameof(DrawPolygonAll);
 }
 
 public class DrawPolygonMediumThin : DrawPolygon
@@ -290,6 +304,8 @@ public class DrawPolygonMediumThin : DrawPolygon
     protected override int Height => 1000;
 
     protected override float Thickness => 1f;
+
+    protected override string BenchName => nameof(DrawPolygonMediumThin);
 
     protected override PointF[][] GetPoints(FeatureCollection features)
     {
@@ -304,4 +320,6 @@ public class DrawPolygonMediumThin : DrawPolygon
 public class DrawPolygonMediumThick : DrawPolygonMediumThin
 {
     protected override float Thickness => 10f;
+
+    protected override string BenchName => nameof(DrawPolygonMediumThick);
 }
