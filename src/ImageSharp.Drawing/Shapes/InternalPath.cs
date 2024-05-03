@@ -332,7 +332,7 @@ internal class InternalPath
         if (isClosed && removeCloseAndCollinear)
         {
             // walk back removing collinear points
-            while (results.Count > 2 && results.Last().Orientation == PointOrientation.Collinear)
+            while (results.Count > 2 && results[^1].Orientation == PointOrientation.Collinear)
             {
                 results.RemoveAt(results.Count - 1);
             }

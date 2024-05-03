@@ -292,7 +292,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         }
 
         // Path has already been added to the collection via the base class.
-        IPath path = this.Paths.Last();
+        IPath path = this.PathList[^1];
         Point renderLocation = ClampToPixel(path.Bounds.Location);
         if (this.noCache || this.rasterizationRequired)
         {
