@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Globalization;
 using System.Reflection;
 using SixLabors.Fonts;
 using IOPath = System.IO.Path;
@@ -19,7 +20,15 @@ public static class TestFontUtilities
     /// <param name="size">The font size.</param>
     /// <returns>The <see cref="Font"/></returns>
     public static Font GetFont(string name, float size)
-        => GetFont(new FontCollection(), name, size);
+        => GetFontFamily(name).CreateFont(size);
+
+    /// <summary>
+    /// Gets a font family with the given name.
+    /// </summary>
+    /// <param name="name">The name of the font.</param>
+    /// <returns>The <see cref="Font"/></returns>
+    public static FontFamily GetFontFamily(string name)
+        => GetFontFamily(new FontCollection(), name);
 
     /// <summary>
     /// Gets a font with the given name and size.
@@ -29,7 +38,16 @@ public static class TestFontUtilities
     /// <param name="size">The font size.</param>
     /// <returns>The <see cref="Font"/></returns>
     public static Font GetFont(FontCollection collection, string name, float size)
-        => collection.Add(GetPath(name)).CreateFont(size);
+        => GetFontFamily(collection, name).CreateFont(size);
+
+    /// <summary>
+    /// Gets a font family with the given name
+    /// </summary>
+    /// <param name="collection">The collection to add the font to</param>
+    /// <param name="name">The name of the font.</param>
+    /// <returns>The <see cref="Font"/></returns>
+    public static FontFamily GetFontFamily(FontCollection collection, string name)
+        => collection.Add(GetPath(name), CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The formats directory.
