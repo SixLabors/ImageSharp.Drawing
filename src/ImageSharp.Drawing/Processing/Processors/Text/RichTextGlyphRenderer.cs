@@ -367,9 +367,10 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
         if (renderData.OutlineMap != null)
         {
+            int offset = (int)((this.currentPen?.StrokeWidth ?? 0) / 2);
             this.DrawingOperations.Add(new DrawingOperation
             {
-                RenderLocation = renderLocation,
+                RenderLocation = renderLocation - new Size(offset, offset),
                 Map = renderData.OutlineMap,
                 Brush = this.currentPen?.StrokeFill ?? this.currentBrush!,
                 RenderPass = RenderOrderOutline
