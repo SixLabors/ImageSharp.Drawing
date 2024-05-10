@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues;
 public class Issue_330
 {
     [Theory]
-    [WithSolidFilledImages(2084, 2084, nameof(Color.BlueViolet), PixelTypes.Rgba32)]
+    [WithSolidFilledImages(2084, 2084, "BlueViolet", PixelTypes.Rgba32)]
     public void OffsetTextOutlines<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
