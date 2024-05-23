@@ -643,7 +643,7 @@ internal sealed class PolygonOffsetter
     {
         public Group(PathsF paths, JointStyle joinType, EndCapStyle endType = EndCapStyle.Polygon)
         {
-            this.InPaths = new PathsF(paths);
+            this.InPaths = paths;
             this.JoinType = joinType;
             this.EndType = endType;
             this.OutPath = new PathF();
