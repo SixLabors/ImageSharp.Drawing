@@ -12,8 +12,34 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public static class OutlinePathExtensions
 {
+    private const float MiterOffsetDelta = 20;
     private const JointStyle DefaultJointStyle = JointStyle.Square;
     private const EndCapStyle DefaultEndCapStyle = EndCapStyle.Butt;
+
+    /// <summary>
+    /// Calculates the scaling matrixes tha tmust be applied to the inout and output paths of for successful clipping.
+    /// </summary>
+    /// <param name="width">the requested width</param>
+    /// <param name="scaleUpMartrix">The matrix to apply to the input path</param>
+    /// <param name="scaleDownMartrix">The matrix to apply to the output path</param>
+    /// <returns>The final width to use internally to outlining</returns>
+    private static float CalculateScalingMatrix(float width, out Matrix3x2 scaleUpMartrix, out Matrix3x2 scaleDownMartrix)
+    {
+        // when the thickness is below a 0.5 threshold we need to scale
+        // the source path (up) and result path (down) by a factor to ensure
+        // the offest is greater than 0.5 to ensure offsetting isn't skipped.
+        scaleUpMartrix = Matrix3x2.Identity;
+        scaleDownMartrix = Matrix3x2.Identity;
+        if (width < 0.5)
+        {
+            float scale = 1 / width;
+            scaleUpMartrix = Matrix3x2.CreateScale(scale);
+            scaleDownMartrix = Matrix3x2.CreateScale(width);
+            width = 1;
+        }
+
+        return width;
+    }
 
     /// <summary>
     /// Generates an outline of the path.
@@ -41,15 +67,14 @@ public static class OutlinePathExtensions
             return Path.Empty;
         }
 
-        List<Polygon> stroked = [];
+        width = CalculateScalingMatrix(width, out Matrix3x2 scaleUpMartrix, out Matrix3x2 scaleDownMartrix);
 
-        PolygonStroker stroker = new() { Width = width, LineJoin = GetLineJoin(jointStyle), LineCap = GetLineCap(endCapStyle) };
-        foreach (ISimplePath simplePath in path.Flatten())
-        {
-            stroked.Add(new Polygon(stroker.ProcessPath(simplePath.Points.Span, simplePath.IsClosed || endCapStyle is EndCapStyle.Polygon or EndCapStyle.Joined).ToArray()));
-        }
+        ClipperOffset offset = new(MiterOffsetDelta);
 
-        return new ComplexPolygon(stroked);
+        // transform is noop for Matrix3x2.Identity
+        offset.AddPath(path.Transform(scaleUpMartrix), jointStyle, endCapStyle);
+
+        return offset.Execute(width).Transform(scaleDownMartrix);
     }
 
     /// <summary>
@@ -69,11 +94,11 @@ public static class OutlinePathExtensions
     /// <param name="path">The path to outline</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
-    /// <param name="invert">Whether the first item in the pattern is off.</param>
+    /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
-    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool invert)
-        => GenerateOutline(path, width, pattern, invert, DefaultJointStyle, DefaultEndCapStyle);
+    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
+        => GenerateOutline(path, width, pattern, startOff, DefaultJointStyle, DefaultEndCapStyle);
 
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
@@ -94,12 +119,12 @@ public static class OutlinePathExtensions
     /// <param name="path">The path to outline</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
-    /// <param name="invert">Whether the first item in the pattern is off.</param>
+    /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
     /// <param name="jointStyle">The style to apply to the joints.</param>
     /// <param name="endCapStyle">The style to apply to the end caps.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     /// <exception cref="ClipperException">Thrown when an offset cannot be calculated.</exception>
-    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool invert, JointStyle jointStyle, EndCapStyle endCapStyle)
+    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle, EndCapStyle endCapStyle)
     {
         if (width <= 0)
         {
@@ -111,20 +136,22 @@ public static class OutlinePathExtensions
             return path.GenerateOutline(width, jointStyle, endCapStyle);
         }
 
-        PolygonStroker stroker = new() { Width = width, LineJoin = GetLineJoin(jointStyle), LineCap = GetLineCap(endCapStyle) };
-        PathsF stroked = [];
-        List<PointF> buffer = [];
+        width = CalculateScalingMatrix(width, out Matrix3x2 scaleUpMartrix, out Matrix3x2 scaleDownMartrix);
 
-        foreach (ISimplePath simplePath in path.Flatten())
+        IEnumerable<ISimplePath> paths = path.Transform(scaleUpMartrix).Flatten();
+
+        ClipperOffset offset = new(MiterOffsetDelta);
+        List<PointF> buffer = new();
+        foreach (ISimplePath p in paths)
         {
-            bool online = !invert;
+            bool online = !startOff;
             float targetLength = pattern[0] * width;
             int patternPos = 0;
-            ReadOnlySpan<PointF> points = simplePath.Points.Span;
+            ReadOnlySpan<PointF> points = p.Points.Span;
 
             // Create a new list of points representing the new outline
             int pCount = points.Length;
-            if (!simplePath.IsClosed)
+            if (!p.IsClosed)
             {
                 pCount--;
             }
@@ -136,20 +163,20 @@ public static class OutlinePathExtensions
             {
                 int next = (i + 1) % points.Length;
                 Vector2 targetPoint = points[next];
-                float distanceToNext = Vector2.Distance(currentPoint, targetPoint);
-                if (distanceToNext > targetLength)
+                float distToNext = Vector2.Distance(currentPoint, targetPoint);
+                if (distToNext > targetLength)
                 {
-                    // Find a point between the 2
-                    float t = targetLength / distanceToNext;
+                    // find a point between the 2
+                    float t = targetLength / distToNext;
 
                     Vector2 point = (currentPoint * (1 - t)) + (targetPoint * t);
                     buffer.Add(currentPoint);
                     buffer.Add(point);
 
-                    // We now insert a line
+                    // we now inset a line joining
                     if (online)
                     {
-                        stroked.Add(stroker.ProcessPath(CollectionsMarshal.AsSpan(buffer), false));
+                        offset.AddPath(CollectionsMarshal.AsSpan(buffer), jointStyle, endCapStyle);
                     }
 
                     online = !online;
@@ -158,22 +185,22 @@ public static class OutlinePathExtensions
 
                     currentPoint = point;
 
-                    // Next length
+                    // next length
                     patternPos = (patternPos + 1) % pattern.Length;
                     targetLength = pattern[patternPos] * width;
                 }
-                else if (distanceToNext <= targetLength)
+                else if (distToNext <= targetLength)
                 {
                     buffer.Add(currentPoint);
                     currentPoint = targetPoint;
                     i++;
-                    targetLength -= distanceToNext;
+                    targetLength -= distToNext;
                 }
             }
 
             if (buffer.Count > 0)
             {
-                if (simplePath.IsClosed)
+                if (p.IsClosed)
                 {
                     buffer.Add(points[0]);
                 }
@@ -184,54 +211,13 @@ public static class OutlinePathExtensions
 
                 if (online)
                 {
-                    stroked.Add(stroker.ProcessPath(CollectionsMarshal.AsSpan(buffer), false));
+                    offset.AddPath(CollectionsMarshal.AsSpan(buffer), jointStyle, endCapStyle);
                 }
 
                 buffer.Clear();
             }
         }
 
-        // Clean up self intersections.
-        PolygonClipper clipper = new() { PreserveCollinear = true };
-        clipper.AddSubject(stroked);
-        PathsF clipped = [];
-        clipper.Execute(ClippingOperation.Union, FillRule.Positive, clipped);
-
-        if (clipped.Count == 0)
-        {
-            // Cannot clip. Return the stroked path.
-            Polygon[] polygons = new Polygon[stroked.Count];
-            for (int i = 0; i < stroked.Count; i++)
-            {
-                polygons[i] = new Polygon(stroked[i].ToArray());
-            }
-
-            return new ComplexPolygon(polygons);
-        }
-
-        // Convert the clipped paths back to polygons.
-        Polygon[] result = new Polygon[clipped.Count];
-        for (int i = 0; i < clipped.Count; i++)
-        {
-            result[i] = new Polygon(clipped[i].ToArray());
-        }
-
-        return new ComplexPolygon(result);
+        return offset.Execute(width).Transform(scaleDownMartrix);
     }
-
-    private static LineJoin GetLineJoin(JointStyle value)
-        => value switch
-        {
-            JointStyle.Square => LineJoin.BevelJoin,
-            JointStyle.Round => LineJoin.RoundJoin,
-            _ => LineJoin.MiterJoin,
-        };
-
-    private static LineCap GetLineCap(EndCapStyle value)
-        => value switch
-        {
-            EndCapStyle.Round => LineCap.Round,
-            EndCapStyle.Square => LineCap.Square,
-            _ => LineCap.Butt,
-        };
 }
