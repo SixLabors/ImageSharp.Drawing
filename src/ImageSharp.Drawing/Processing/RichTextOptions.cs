@@ -33,7 +33,7 @@ public class RichTextOptions : TextOptions
     /// </summary>
     public new IReadOnlyList<RichTextRun> TextRuns
     {
-        get => (IReadOnlyList<RichTextRun>)base.TextRuns;
+        get => base.TextRuns.Cast<RichTextRun>().ToList();
         set => base.TextRuns = value;
     }
 
