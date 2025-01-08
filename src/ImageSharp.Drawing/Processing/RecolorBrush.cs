@@ -136,9 +136,17 @@ public sealed class RecolorBrush : Brush
         /// <inheritdoc />
         public override void Apply(Span<float> scanline, int x, int y)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
+            if (x < 0 || y < 0 || x >= this.Target.Width || y >= this.Target.Height)
+            {
+                return;
+            }
 
+            // Limit the scanline to the bounds of the image relative to x.
+            scanline = scanline[..Math.Min(this.Target.Width - x, scanline.Length)];
+            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
+            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+
+            int width = this.Target.Width;
             for (int i = 0; i < scanline.Length; i++)
             {
                 amounts[i] = scanline[i] * this.Options.BlendPercentage;
