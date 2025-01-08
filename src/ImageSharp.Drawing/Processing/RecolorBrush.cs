@@ -146,7 +146,6 @@ public sealed class RecolorBrush : Brush
             Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
             Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
 
-            int width = this.Target.Width;
             for (int i = 0; i < scanline.Length; i++)
             {
                 amounts[i] = scanline[i] * this.Options.BlendPercentage;
