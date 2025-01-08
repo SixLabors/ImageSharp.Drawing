@@ -269,7 +269,7 @@ public class DrawTextOnImageTests
         string str = Repeat(" ", 78) + "THISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDS";
         sb.Append(str);
 
-        string newLines = Repeat(Environment.NewLine, 61);
+        string newLines = Repeat(Environment.NewLine, 31);
         sb.Append(newLines);
 
         for (int i = 0; i < 10; i++)
