@@ -129,7 +129,7 @@ public class DrawTextOnImageTests
     {
         Font font = CreateFont(TestFonts.OpenSans, 39);
         string text = new('a', 10000);
-        Rgba32 color = Color.Black;
+        Color color = Color.Black;
         var point = new PointF(100, 100);
 
         using Image<TPixel> img = provider.GetImage();
@@ -857,12 +857,35 @@ public class DrawTextOnImageTests
             FallbackFontFamilies = new[] { fallback.Family },
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalLeftRight,
+            LineSpacing = 1.4F,
             TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
         };
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
             comparer: ImageComparer.TolerantPercentage(0.002f));
+    }
+
+    [Theory]
+    [WithBlankImage(48, 935, PixelTypes.Rgba32)]
+    public void CanDrawTextVertical2<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (SystemFonts.TryGet("Yu Gothic", out FontFamily fontFamily))
+        {
+            Font font = fontFamily.CreateFont(30F);
+            const string text = "あいうえお、「こんにちはー」。もしもし。ABCDEFG 日本語";
+            RichTextOptions textOptions = new(font)
+            {
+                LayoutMode = LayoutMode.VerticalLeftRight,
+                LineSpacing = 1.4F,
+               // TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
     }
 
     [Theory]
@@ -879,12 +902,35 @@ public class DrawTextOnImageTests
             FallbackFontFamilies = new[] { fallback.Family },
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalMixedLeftRight,
+            LineSpacing = 1.4F,
             TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
         };
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
             comparer: ImageComparer.TolerantPercentage(0.002f));
+    }
+
+    [Theory]
+    [WithBlankImage(48, 839, PixelTypes.Rgba32)]
+    public void CanDrawTextVerticalMixed2<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (SystemFonts.TryGet("Yu Gothic", out FontFamily fontFamily))
+        {
+            Font font = fontFamily.CreateFont(30F);
+            const string text = "あいうえお、「こんにちはー」。もしもし。ABCDEFGg 日本語";
+            RichTextOptions textOptions = new(font)
+            {
+                LayoutMode = LayoutMode.VerticalMixedLeftRight,
+                LineSpacing = 1.4F,
+                TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
     }
 
     [Theory]

@@ -33,9 +33,7 @@ public class DrawBezierTests
             new Vector2(300, 400)
         };
 
-        Rgba32 rgba = TestUtils.GetColorByName(colorName);
-        rgba.A = alpha;
-        Color color = rgba;
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha / 255F);
 
         FormattableString testDetails = $"{colorName}_A{alpha}_T{thickness}";
 

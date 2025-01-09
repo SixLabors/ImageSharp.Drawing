@@ -130,7 +130,7 @@ public class DrawingRobustnessTests
         {
             rnd.NextBytes(rgb);
 
-            var color = Color.FromRgb(rgb[0], rgb[1], rgb[2]);
+            var color = Color.FromPixel<Rgb24>(new(rgb[0], rgb[1], rgb[2]));
             image.Mutate(c => c.FillPolygon(options, color, loop));
         }
 

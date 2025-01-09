@@ -144,7 +144,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
     /// <inheritdoc/>
     public void SetColor(GlyphColor color)
-        => this.currentColor = new Color(new Rgba32(color.Red, color.Green, color.Blue, color.Alpha));
+        => this.currentColor = Color.FromPixel(new Rgba32(color.Red, color.Green, color.Blue, color.Alpha));
 
     public override TextDecorations EnabledDecorations()
     {

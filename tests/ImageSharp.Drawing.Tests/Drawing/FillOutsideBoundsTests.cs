@@ -20,7 +20,7 @@ public class FillOutsideBoundsTests
         int width = 100;
         int height = 100;
 
-        using (var image = new Image<Rgba32>(width, height, Color.Red))
+        using (var image = new Image<Rgba32>(width, height, Color.Red.ToPixel<Rgba32>()))
         {
             var rectangle = new Rectangle(xpos, 0, width, height);
 

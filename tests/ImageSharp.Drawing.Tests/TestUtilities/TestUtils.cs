@@ -76,10 +76,9 @@ public static class TestUtils
                 }
                 else
                 {
-                    Rgba32 rgba = default;
-                    ca.ToRgba32(ref rgba);
+                    Rgba32 rgba = ca.ToRgba32();
                     rgb1 = rgba.Rgb;
-                    cb.ToRgba32(ref rgba);
+                    rgba = cb.ToRgba32();
                     rgb2 = rgba.Rgb;
 
                     if (!rgb1.Equals(rgb2))

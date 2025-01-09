@@ -78,10 +78,6 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
         }
 
         private static TPixel GetBottomRightColor()
-        {
-            TPixel bottomRightColor = default;
-            bottomRightColor.FromVector4(new Vector4(1f, 0f, 1f, 0.5f));
-            return bottomRightColor;
-        }
+            => TPixel.FromVector4(new Vector4(1f, 0f, 1f, 0.5f));
     }
 }
