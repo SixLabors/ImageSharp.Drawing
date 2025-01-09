@@ -879,7 +879,7 @@ public class DrawTextOnImageTests
             {
                 LayoutMode = LayoutMode.VerticalLeftRight,
                 LineSpacing = 1.4F,
-               // TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+                TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }]
             };
 
             provider.RunValidatingProcessorTest(
@@ -903,7 +903,7 @@ public class DrawTextOnImageTests
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalMixedLeftRight,
             LineSpacing = 1.4F,
-            TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }]
         };
 
         provider.RunValidatingProcessorTest(
@@ -919,7 +919,7 @@ public class DrawTextOnImageTests
         if (SystemFonts.TryGet("Yu Gothic", out FontFamily fontFamily))
         {
             Font font = fontFamily.CreateFont(30F);
-            const string text = "あいうえお、「こんにちはー」。もしもし。ABCDEFGg 日本語";
+            const string text = "あいうえお、「こんにちはー」。もしもし。ABCDEFG 日本語";
             RichTextOptions textOptions = new(font)
             {
                 LayoutMode = LayoutMode.VerticalMixedLeftRight,
