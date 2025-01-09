@@ -47,6 +47,8 @@
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" Version="2.0.7" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.18" />
+    <PackageReference Include="SixLabors.Fonts" Version="2.0.8" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.6" />
   </ItemGroup>
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 </Project>
