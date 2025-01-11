@@ -49,8 +49,7 @@ public class SolidBezierTests
             new Vector2(300, 400)
         };
 
-        Rgba32 color = Color.HotPink;
-        color.A = 150;
+        Color color = Color.HotPink.WithAlpha(150 / 255F);
 
         using (var image = provider.GetImage() as Image<Rgba32>)
         {

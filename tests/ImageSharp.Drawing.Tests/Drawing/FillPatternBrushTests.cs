@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
 
 public class FillPatternBrushTests
 {
-    private void Test(string name, Rgba32 background, Brush brush, Rgba32[,] expectedPattern)
+    private void Test(string name, Color background, Brush brush, Color[,] expectedPattern)
     {
         string path = TestEnvironment.CreateOutputDirectory("Drawing", "FillPatternBrushTests");
         using (var image = new Image<Rgba32>(20, 20))
@@ -23,7 +23,7 @@ public class FillPatternBrushTests
 
             // lets pick random spots to start checking
             var r = new Random();
-            var expectedPatternFast = new DenseMatrix<Rgba32>(expectedPattern);
+            var expectedPatternFast = new DenseMatrix<Color>(expectedPattern);
             int xStride = expectedPatternFast.Columns;
             int yStride = expectedPatternFast.Rows;
             int offsetX = r.Next(image.Width / xStride) * xStride;
@@ -34,7 +34,7 @@ public class FillPatternBrushTests
                 {
                     int actualX = x + offsetX;
                     int actualY = y + offsetY;
-                    Rgba32 expected = expectedPatternFast[y, x]; // inverted pattern
+                    Rgba32 expected = expectedPatternFast[y, x].ToPixel<Rgba32>(); // inverted pattern
                     Rgba32 actual = sourcePixels[actualX, actualY];
                     if (expected != actual)
                     {
@@ -51,7 +51,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithPercent10()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
@@ -69,7 +69,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithPercent10Transparent()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
             { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
@@ -87,7 +87,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithPercent20()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
             { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
@@ -105,7 +105,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithPercent20_transparent()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
             { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
@@ -123,7 +123,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithHorizontal()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
             { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
@@ -141,7 +141,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithHorizontal_transparent()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
             { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
@@ -159,7 +159,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithMin()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
@@ -177,7 +177,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithMin_transparent()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
             { Color.Blue, Color.Blue, Color.Blue, Color.Blue },
@@ -195,7 +195,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithVertical()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
             { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
@@ -213,7 +213,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithVertical_transparent()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
             { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },
@@ -231,7 +231,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithForwardDiagonal()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink },
             { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen },
@@ -249,7 +249,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithForwardDiagonal_transparent()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.Blue, Color.Blue, Color.Blue, Color.HotPink },
             { Color.Blue, Color.Blue, Color.HotPink, Color.Blue },
@@ -267,7 +267,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithBackwardDiagonal()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen },
             { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen },
@@ -285,7 +285,7 @@ public class FillPatternBrushTests
     [Fact]
     public void ImageShouldBeFloodFilledWithBackwardDiagonal_transparent()
     {
-        var expectedPattern = new Rgba32[,]
+        var expectedPattern = new Color[,]
         {
             { Color.HotPink, Color.Blue, Color.Blue, Color.Blue },
             { Color.Blue, Color.HotPink, Color.Blue, Color.Blue },

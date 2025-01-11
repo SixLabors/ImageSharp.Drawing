@@ -701,7 +701,7 @@ public static class TestImageExtensions
         {
             float value = bufferSpan[i] * scale;
             var v = new Vector4(value, value, value, 1f);
-            pixels[i].FromVector4(v);
+            pixels[i] = Rgba32.FromVector4(v);
         }
 
         return image;

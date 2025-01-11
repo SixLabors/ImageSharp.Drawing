@@ -26,13 +26,9 @@ public class TestUtilityExtensionsTests
         {
             for (int j = 0; j < 10; j++)
             {
-                var v = new Vector4(i, j, 0, 1);
+                Vector4 v = new(i, j, 0, 1);
                 v /= 10;
-
-                var color = default(TPixel);
-                color.FromVector4(v);
-
-                pixels[i, j] = color;
+                pixels[i, j] = TPixel.FromVector4(v);
             }
         }
 

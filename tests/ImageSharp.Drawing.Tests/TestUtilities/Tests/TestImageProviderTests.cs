@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Collections.Concurrent;
-using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Metadata;
@@ -309,7 +308,7 @@ public class TestImageProviderTests
         {
             for (int x = 0; x < pixels.Width; x++)
             {
-                pixels[x, y].ToRgba32(ref rgba);
+                rgba = pixels[x, y].ToRgba32();
 
                 Assert.Equal(255, rgba.R);
                 Assert.Equal(100, rgba.G);
@@ -372,7 +371,11 @@ public class TestImageProviderTests
         protected override ImageInfo Identify(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
         {
             using Image<Rgba32> image = this.Decode<Rgba32>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
-            return new(image.PixelType, image.Size, image.Metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)));
+            ImageMetadata metadata = image.Metadata;
+            return new(image.Size, metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)))
+            {
+                PixelType = metadata.GetDecodedPixelTypeInfo()
+            };
         }
 
         protected override Image<TPixel> Decode<TPixel>(TestDecoderOptions options, Stream stream, CancellationToken cancellationToken)
@@ -415,7 +418,11 @@ public class TestImageProviderTests
         protected override ImageInfo Identify(DecoderOptions options, Stream stream, CancellationToken cancellationToken)
         {
             using Image<Rgba32> image = this.Decode<Rgba32>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
-            return new(image.PixelType, image.Size, image.Metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)));
+            ImageMetadata metadata = image.Metadata;
+            return new(image.Size, metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)))
+            {
+                PixelType = metadata.GetDecodedPixelTypeInfo()
+            };
         }
 
         protected override Image<TPixel> Decode<TPixel>(TestDecoderWithParametersOptions options, Stream stream, CancellationToken cancellationToken)

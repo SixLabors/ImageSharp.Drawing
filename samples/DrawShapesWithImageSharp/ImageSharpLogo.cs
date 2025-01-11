@@ -62,7 +62,7 @@ public static class ImageSharpLogo
                 img.Mutate(i => i.Fill(colors[s], segments[s].Transform(scaler)));
             }
 
-            img.Mutate(i => i.Fill(new Rgba32(0, 0, 0, 170), new ComplexPolygon(new EllipsePolygon(center, 161f), new EllipsePolygon(center, 61f)).Transform(scaler)));
+            img.Mutate(i => i.Fill(Color.FromPixel(new Rgba32(0, 0, 0, 170)), new ComplexPolygon(new EllipsePolygon(center, 161f), new EllipsePolygon(center, 61f)).Transform(scaler)));
 
             string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine("Output", path));
 

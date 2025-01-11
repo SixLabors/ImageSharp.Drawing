@@ -29,8 +29,8 @@ public class Issue_270
         Font font = SystemFonts.CreateFont("Arial", minimumCrashingFontSize);
         Pen pen = Pens.Solid(Color.Black, 1);
 
-        using Image<Rgba32> targetImage = new(targetImageWidth, targetImageHeight, Color.Wheat);
-        using Image<Rgba32> imageBrushImage = new(sourceImageWidth, sourceImageHeight, Color.Black);
+        using Image<Rgba32> targetImage = new(targetImageWidth, targetImageHeight, Color.Wheat.ToPixel<Rgba32>());
+        using Image<Rgba32> imageBrushImage = new(sourceImageWidth, sourceImageHeight, Color.Black.ToPixel<Rgba32>());
         ImageBrush imageBrush = new(imageBrushImage);
 
         targetImage.Mutate(x => x.DrawText(CreateTextOptions(font, targetImageWidth), text, imageBrush, pen));

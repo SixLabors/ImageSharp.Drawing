@@ -24,7 +24,7 @@ public class Issues_55_59
         };
 
         using var image = new Image<Rgba32>(100, 100);
-        image.Mutate(imageContext => imageContext.DrawLine(new Rgba32(255, 0, 0), 1, line));
+        image.Mutate(imageContext => imageContext.DrawLine(Color.FromPixel(new Rgba32(255, 0, 0)), 1, line));
     }
 
     [Fact]
@@ -37,6 +37,6 @@ public class Issues_55_59
             new LinearLineSegment(new PointF(592.916f, 1155.754f), new PointF(592.0153f, 1156.238f)));
 
         using var image = new Image<Rgba32>(2000, 2000);
-        image.Mutate(imageContext => imageContext.Draw(new Rgba32(255, 0, 0), 1, path));
+        image.Mutate(imageContext => imageContext.Draw(Color.FromPixel(new Rgba32(255, 0, 0)), 1, path));
     }
 }

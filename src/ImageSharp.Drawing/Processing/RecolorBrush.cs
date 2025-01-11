@@ -104,10 +104,8 @@ public sealed class RecolorBrush : Brush
             this.targetColorPixel = targetColor;
 
             // Lets hack a min max extremes for a color space by letting the IPackedPixel clamp our values to something in the correct spaces :)
-            var maxColor = default(TPixel);
-            maxColor.FromVector4(new Vector4(float.MaxValue));
-            var minColor = default(TPixel);
-            minColor.FromVector4(new Vector4(float.MinValue));
+            TPixel maxColor = TPixel.FromVector4(new Vector4(float.MaxValue));
+            TPixel minColor = TPixel.FromVector4(new Vector4(float.MinValue));
             this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
             this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
         }

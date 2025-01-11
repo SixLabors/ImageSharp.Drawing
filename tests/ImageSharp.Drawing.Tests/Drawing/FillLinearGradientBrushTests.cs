@@ -316,8 +316,7 @@ public class FillLinearGradientBrushTests
             Color color = colors[stopColorCodes[i % colors.Length]];
             float position = stopPositions[i];
             colorStops[i] = new ColorStop(position, color);
-            Rgba32 rgba = color;
-            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", rgba.ToHex(), position);
+            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToPixel<Rgba32>().ToHex(), position);
         }
 
         FormattableString variant = $"({startX},{startY})_TO_({endX},{endY})__[{coloringVariant}]";
@@ -364,8 +363,7 @@ public class FillLinearGradientBrushTests
             Color color = colors[stopColorCodes[i % colors.Length]];
             float position = stopPositions[i];
             colorStops[i] = new ColorStop(position, color);
-            Rgba32 rgba = color;
-            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", rgba.ToHex(), position);
+            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToPixel<Rgba32>().ToHex(), position);
         }
 
         FormattableString variant = $"({startX},{startY})_TO_({endX},{endY})__[{coloringVariant}]";

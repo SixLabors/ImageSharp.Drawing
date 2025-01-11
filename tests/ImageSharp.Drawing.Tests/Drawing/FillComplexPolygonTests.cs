@@ -29,13 +29,11 @@ public class FillComplexPolygonTests
 
         IPath clipped = simplePath.Clip(hole1);
 
-        Rgba32 colorRgba = Color.HotPink;
+        Color color = Color.HotPink;
         if (transparent)
         {
-            colorRgba.A = 150;
+            color = color.WithAlpha(150 / 255F);
         }
-
-        Color color = colorRgba;
 
         string testDetails = string.Empty;
         if (overlap)

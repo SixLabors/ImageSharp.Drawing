@@ -41,7 +41,7 @@ internal static class GraphicsOptionsExtensions
             return false;
         }
 
-        if (((Vector4)color).W != Opaque)
+        if (color.ToScaledVector4().W != Opaque)
         {
             return false;
         }
