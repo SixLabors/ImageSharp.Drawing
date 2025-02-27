@@ -157,13 +157,11 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
             var green = Color.Green.ToPixel<TPixel>().ToVector4(); // use real color so we can see how it translates in the test pattern
             var blue = Color.Blue.ToPixel<TPixel>().ToVector4(); // use real color so we can see how it translates in the test pattern
 
-            var c = default(TPixel);
-
             for (int x = left; x < right; x++)
             {
                 blue.W = red.W = green.W = (float)x / (float)right;
 
-                c.FromVector4(red);
+                TPixel c = TPixel.FromVector4(red);
                 int topBand = top;
                 for (int y = topBand; y < top + height; y++)
                 {
@@ -171,14 +169,14 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                 }
 
                 topBand = topBand + height;
-                c.FromVector4(green);
+                c = TPixel.FromVector4(green);
                 for (int y = topBand; y < topBand + height; y++)
                 {
                     pixels[x, y] = c;
                 }
 
                 topBand = topBand + height;
-                c.FromVector4(blue);
+                c = TPixel.FromVector4(blue);
                 for (int y = topBand; y < bottom; y++)
                 {
                     pixels[x, y] = c;
@@ -199,7 +197,6 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
 
             int pixelCount = left * top;
             uint stepsPerPixel = (uint)(uint.MaxValue / pixelCount);
-            TPixel c = default;
             var t = new Rgba32(0);
 
             for (int x = left; x < right; x++)
@@ -210,8 +207,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                     var v = t.ToVector4();
 
                     // v.W = (x - left) / (float)left;
-                    c.FromVector4(v);
-                    pixels[x, y] = c;
+                    pixels[x, y] = TPixel.FromVector4(v);
                 }
             }
         }

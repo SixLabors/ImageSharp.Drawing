@@ -54,8 +54,8 @@ public sealed class PatternBrush : Brush
     /// <param name="pattern">The pattern.</param>
     internal PatternBrush(Color foreColor, Color backColor, in DenseMatrix<bool> pattern)
     {
-        var foreColorVector = (Vector4)foreColor;
-        var backColorVector = (Vector4)backColor;
+        var foreColorVector = foreColor.ToScaledVector4();
+        var backColorVector = backColor.ToScaledVector4();
         this.pattern = new DenseMatrix<Color>(pattern.Columns, pattern.Rows);
         this.patternVector = new DenseMatrix<Vector4>(pattern.Columns, pattern.Rows);
         for (int i = 0; i < pattern.Data.Length; i++)

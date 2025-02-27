@@ -22,10 +22,7 @@ public sealed class PathGradientBrush : Brush
     /// <param name="colors">Array of colors that correspond to each point in the polygon.</param>
     public PathGradientBrush(PointF[] points, Color[] colors)
     {
-        if (points == null)
-        {
-            throw new ArgumentNullException(nameof(points));
-        }
+        ArgumentNullException.ThrowIfNull(points);
 
         if (points.Length < 3)
         {
@@ -34,10 +31,7 @@ public sealed class PathGradientBrush : Brush
                 "There must be at least 3 lines to construct a path gradient brush.");
         }
 
-        if (colors == null)
-        {
-            throw new ArgumentNullException(nameof(colors));
-        }
+        ArgumentNullException.ThrowIfNull(colors);
 
         if (colors.Length == 0)
         {
@@ -106,10 +100,7 @@ public sealed class PathGradientBrush : Brush
 
     private static Color CalculateCenterColor(Color[] colors)
     {
-        if (colors == null)
-        {
-            throw new ArgumentNullException(nameof(colors));
-        }
+        ArgumentNullException.ThrowIfNull(colors);
 
         if (colors.Length == 0)
         {
@@ -118,7 +109,7 @@ public sealed class PathGradientBrush : Brush
                 "One or more color is needed to construct a path gradient brush.");
         }
 
-        return new Color(colors.Select(c => (Vector4)c).Aggregate((p1, p2) => p1 + p2) / colors.Length);
+        return Color.FromScaledVector(colors.Select(c => c.ToScaledVector4()).Aggregate((p1, p2) => p1 + p2) / colors.Length);
     }
 
     private static float DistanceBetween(Vector2 p1, Vector2 p2) => (p2 - p1).Length();
@@ -147,8 +138,8 @@ public sealed class PathGradientBrush : Brush
         {
             this.Start = start;
             this.End = end;
-            this.StartColor = (Vector4)startColor;
-            this.EndColor = (Vector4)endColor;
+            this.StartColor = startColor.ToScaledVector4();
+            this.EndColor = endColor.ToScaledVector4();
 
             this.length = DistanceBetween(this.End, this.Start);
         }
@@ -236,7 +227,7 @@ public sealed class PathGradientBrush : Brush
             Vector2[] points = edges.Select(s => s.Start).ToArray();
 
             this.center = points.Aggregate((p1, p2) => p1 + p2) / edges.Count;
-            this.centerColor = (Vector4)centerColor;
+            this.centerColor = centerColor.ToScaledVector4();
             this.hasSpecialCenterColor = hasSpecialCenterColor;
             this.centerPixel = centerColor.ToPixel<TPixel>();
             this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
@@ -272,9 +263,7 @@ public sealed class PathGradientBrush : Brush
                         + (u * this.edges[0].EndColor)
                         + (v * this.edges[2].StartColor);
 
-                    TPixel px = default;
-                    px.FromScaledVector4(pointColor);
-                    return px;
+                    return TPixel.FromScaledVector4(pointColor);
                 }
 
                 Vector2 direction = Vector2.Normalize(point - this.center);
@@ -295,9 +284,7 @@ public sealed class PathGradientBrush : Brush
 
                 Vector4 color = Vector4.Lerp(edgeColor, this.centerColor, ratio);
 
-                TPixel pixel = default;
-                pixel.FromScaledVector4(color);
-                return pixel;
+                return TPixel.FromScaledVector4(color);
             }
         }
 

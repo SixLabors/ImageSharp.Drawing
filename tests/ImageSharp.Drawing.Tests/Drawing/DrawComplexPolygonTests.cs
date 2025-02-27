@@ -30,13 +30,11 @@ public class DrawComplexPolygonTests
 
         IPath clipped = simplePath.Clip(hole1);
 
-        Rgba32 colorRgba = Color.White;
+        Color color = Color.White;
         if (transparent)
         {
-            colorRgba.A = 150;
+            color = color.WithAlpha(150 / 255F);
         }
-
-        Color color = colorRgba;
 
         string testDetails = string.Empty;
         if (overlap)

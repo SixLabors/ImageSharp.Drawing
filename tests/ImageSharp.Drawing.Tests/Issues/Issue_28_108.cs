@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues;
 
 public class Issue_28_108
 {
-    private Rgba32 red = Color.Red.ToRgba32();
+    private Rgba32 red = Color.Red.ToPixel<Rgba32>();
 
     [Theory]
     [InlineData(1F)]
@@ -18,11 +18,11 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtTopShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
+        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(
-                    this.red,
+                    Color.Red,
                     stroke,
                     new PointF(0, 0),
                     new PointF(100, 0)));
@@ -38,11 +38,11 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtBottomShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
+        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(
-                    this.red,
+                    Color.Red,
                     stroke,
                     new PointF(0, 99),
                     new PointF(100, 99)));
@@ -58,11 +58,11 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtLeftShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
+        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(
-                    this.red,
+                    Color.Red,
                     stroke,
                     new PointF(0, 0),
                     new PointF(0, 99)));
@@ -78,11 +78,11 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtRightShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black);
+        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(
-                    this.red,
+                    Color.Red,
                     stroke,
                     new PointF(99, 0),
                     new PointF(99, 99)));
