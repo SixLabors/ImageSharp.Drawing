@@ -56,7 +56,7 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         }
 
         // Align start/end positions.
-        Rectangle interest = Rectangle.Intersect(this.bounds, source.Bounds());
+        Rectangle interest = Rectangle.Intersect(this.bounds, source.Bounds);
         if (interest.Equals(Rectangle.Empty))
         {
             return; // No effect inside image;
