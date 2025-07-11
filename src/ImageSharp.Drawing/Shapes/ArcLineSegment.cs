@@ -132,7 +132,7 @@ public class ArcLineSegment : ILineSegment
 
         if (EllipticArcOutOfRange(from, to, radius))
         {
-            return new[] { from, to };
+            return [from, to];
         }
 
         EndpointToCenterArcParams(from, to, ref absRadius, rotation, largeArc, sweep, out Vector2 center, out Vector2 angles);
@@ -172,7 +172,7 @@ public class ArcLineSegment : ILineSegment
 
     private static PointF[] EllipticArcToBezierCurve(Vector2 from, Vector2 center, Vector2 radius, float xAngle, float startAngle, float sweepAngle)
     {
-        List<PointF> points = new();
+        List<PointF> points = [];
 
         float s = startAngle;
         float e = s + sweepAngle;

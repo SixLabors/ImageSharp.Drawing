@@ -102,13 +102,13 @@ public static class TestImages
         }
 
         public static readonly string[] All =
-        {
+        [
             P1, Pd, Blur, Splash, Cross,
             Powerpoint, SplashInterlaced, Interlaced,
             Filter0, Filter1, Filter2, Filter3, Filter4,
             FilterVar, VimImage1, VimImage2, VersioningImage1,
             VersioningImage2, Ratio4x1, Ratio1x4
-        };
+        ];
     }
 
     public static class Jpeg
@@ -125,7 +125,7 @@ public static class TestImages
                 public const string ExifUndefType = "Jpg/progressive/ExifUndefType.jpg";
             }
 
-            public static readonly string[] All = { Fb, Progress, Festzug };
+            public static readonly string[] All = [Fb, Progress, Festzug];
         }
 
         public static class Baseline
@@ -158,12 +158,12 @@ public static class TestImages
             public const string YcckSubsample1222 = "Jpg/baseline/ycck-subsample-1222.jpg";
 
             public static readonly string[] All =
-            {
+            [
                 Cmyk, Ycck, Exif, Floorplan,
                 Calliphora, Turtle, GammaDalaiLamaGray,
                 Hiyamugi, Jpeg400, Jpeg420Exif, Jpeg444,
                 Ratio1x1, Testorig12bit, YcckSubsample1222
-            };
+            ];
         }
 
         public static class Issues
@@ -310,24 +310,24 @@ public static class TestImages
         public const string RgbaAlphaBitfields = "Bmp/rgba32abf.bmp";
 
         public static readonly string[] BitFields =
-        {
+        [
             Rgb32bfdef,
             Rgb32bf,
             Rgb16565,
             Rgb16bfdef,
             Rgb16565pal,
-            Issue735,
-        };
+            Issue735
+        ];
 
         public static readonly string[] Miscellaneous =
-        {
+        [
             Car,
             F,
             NegHeight
-        };
+        ];
 
         public static readonly string[] Benchmark =
-        {
+        [
             Car,
             F,
             NegHeight,
@@ -344,7 +344,7 @@ public static class TestImages
             Bit16,
             Bit16Inverted,
             Bit32Rgb
-        };
+        ];
     }
 
     public static class Gif
@@ -366,7 +366,7 @@ public static class TestImages
             public const string BadDescriptorWidth = "Gif/issues/issue403_baddescriptorwidth.gif";
         }
 
-        public static readonly string[] All = { Rings, Giphy, Cheers, Trans, Kumin, Leo, Ratio4x1, Ratio1x4 };
+        public static readonly string[] All = [Rings, Giphy, Cheers, Trans, Kumin, Leo, Ratio4x1, Ratio1x4];
     }
 
     public static class Tga

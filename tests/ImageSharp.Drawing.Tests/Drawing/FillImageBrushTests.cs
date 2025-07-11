@@ -74,7 +74,7 @@ public class FillImageBrushTests
 
         overlay.Mutate(c => c.Crop(new Rectangle(0, 0, 90, 125)));
 
-        var brush = new ImageBrush(overlay);
+        ImageBrush brush = new(overlay);
         background.Mutate(c => c.Fill(brush));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
@@ -90,7 +90,7 @@ public class FillImageBrushTests
         using Image<TPixel> background = provider.GetImage();
         using Image overlay = Image.Load<Rgba32>(data);
 
-        var brush = new ImageBrush(overlay);
+        ImageBrush brush = new(overlay);
         background.Mutate(c => c.Fill(brush, new RectangularPolygon(0, 0, 400, 200)));
         background.Mutate(c => c.Fill(brush, new RectangularPolygon(-100, 200, 500, 200)));
 
@@ -107,8 +107,8 @@ public class FillImageBrushTests
         using Image<TPixel> background = provider.GetImage();
         using Image overlay = Image.Load<Rgba32>(data);
 
-        var brush = new ImageBrush(overlay);
-        var brushOffset = new ImageBrush(overlay, new Point(100, 0));
+        ImageBrush brush = new(overlay);
+        ImageBrush brushOffset = new(overlay, new Point(100, 0));
         background.Mutate(c => c.Fill(brush, new RectangularPolygon(0, 0, 400, 200)));
         background.Mutate(c => c.Fill(brushOffset, new RectangularPolygon(0, 200, 400, 200)));
 

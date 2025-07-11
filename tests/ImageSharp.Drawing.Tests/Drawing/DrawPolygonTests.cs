@@ -19,12 +19,12 @@ public class DrawPolygonTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-            {
-                new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
-            };
+        [
+            new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
+        ];
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
 
-        var options = new GraphicsOptions { Antialias = antialias };
+        GraphicsOptions options = new() { Antialias = antialias };
 
         string aa = antialias ? string.Empty : "_NoAntialias";
         FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
@@ -41,9 +41,9 @@ public class DrawPolygonTests
        where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-            {
-                new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
-            };
+        [
+            new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
+        ];
 
         provider.RunValidatingProcessorTest(
             c => c.SetDrawingTransform(Matrix3x2.CreateSkew(GeometryUtilities.DegreeToRadian(-15), 0, new Vector2(200, 200)))
@@ -55,7 +55,7 @@ public class DrawPolygonTests
     public void DrawRectangularPolygon_Transformed<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var polygon = new RectangularPolygon(25, 25, 50, 50);
+        RectangularPolygon polygon = new(25, 25, 50, 50);
 
         provider.RunValidatingProcessorTest(
             c => c.SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))

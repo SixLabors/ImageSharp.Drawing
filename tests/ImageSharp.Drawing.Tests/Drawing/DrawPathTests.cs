@@ -37,7 +37,7 @@ public class DrawPathTests
             new Vector2(10, 400));
 
         ArcLineSegment ellipticArcSegment1 = new(new Vector2(10, 400), new Vector2(150, 450), new SizeF((float)Math.Sqrt(5525), 40), GeometryUtilities.RadianToDegree((float)Math.Atan2(25, 70)), true, true);
-        ArcLineSegment ellipticArcSegment2 = new(new(150, 450), new(149F, 450), new SizeF(140, 70), 0, true, true);
+        ArcLineSegment ellipticArcSegment2 = new(new PointF(150, 450), new PointF(149F, 450), new SizeF(140, 70), 0, true, true);
 
         Path path = new(linearSegment, bezierSegment, ellipticArcSegment1, ellipticArcSegment2);
 
@@ -65,7 +65,7 @@ public class DrawPathTests
                 {
                     for (int i = 0; i < 300; i += 20)
                     {
-                        PointF[] points = new PointF[] { new Vector2(100, 2), new Vector2(-10, i) };
+                        PointF[] points = [new Vector2(100, 2), new Vector2(-10, i)];
                         x.DrawLine(pen, points);
                     }
                 },
@@ -79,11 +79,11 @@ public class DrawPathTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] points =
-        {
-            new PointF(10f, -10f),
-            new PointF(20f, 20f),
-            new PointF(30f, -30f)
-        };
+        [
+            new(10f, -10f),
+            new(20f, 20f),
+            new(30f, -30f)
+        ];
 
         IPath path = new PathBuilder().AddLines(points).Build();
 

@@ -21,10 +21,10 @@ public class FillPathGradientBrushTests
             TolerantComparer,
             image =>
             {
-                PointF[] points = { new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10) };
-                Color[] colors = { Color.Black, Color.Red, Color.Yellow, Color.Green };
+                PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
+                Color[] colors = [Color.Black, Color.Red, Color.Yellow, Color.Green];
 
-                var brush = new PathGradientBrush(points, colors);
+                PathGradientBrush brush = new(points, colors);
 
                 image.Mutate(x => x.Fill(brush));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -38,10 +38,10 @@ public class FillPathGradientBrushTests
             TolerantComparer,
             image =>
             {
-                PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
-                Color[] colors = { Color.Red, Color.Green, Color.Blue };
+                PointF[] points = [new(10, 0), new(20, 20), new(0, 20)];
+                Color[] colors = [Color.Red, Color.Green, Color.Blue];
 
-                var brush = new PathGradientBrush(points, colors);
+                PathGradientBrush brush = new(points, colors);
 
                 image.Mutate(x => x.Fill(brush));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -55,15 +55,15 @@ public class FillPathGradientBrushTests
             ImageComparer.TolerantPercentage(0.02f),
             image =>
             {
-                PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
+                PointF[] points = [new(10, 0), new(20, 20), new(0, 20)];
 
                 Color c1 = Color.FromPixel(new HalfSingle(-1));
                 Color c2 = Color.FromPixel(new HalfSingle(0));
                 Color c3 = Color.FromPixel(new HalfSingle(1));
 
-                Color[] colors = { c1, c2, c3 };
+                Color[] colors = [c1, c2, c3];
 
-                var brush = new PathGradientBrush(points, colors);
+                PathGradientBrush brush = new(points, colors);
 
                 image.Mutate(x => x.Fill(brush));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -77,10 +77,10 @@ public class FillPathGradientBrushTests
             TolerantComparer,
             image =>
             {
-                PointF[] points = { new PointF(10, 0), new PointF(20, 20), new PointF(0, 20) };
-                Color[] colors = { Color.Red, Color.Green, Color.Blue };
+                PointF[] points = [new(10, 0), new(20, 20), new(0, 20)];
+                Color[] colors = [Color.Red, Color.Green, Color.Blue];
 
-                var brush = new PathGradientBrush(points, colors, Color.White);
+                PathGradientBrush brush = new(points, colors, Color.White);
 
                 image.Mutate(x => x.Fill(brush));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -93,10 +93,10 @@ public class FillPathGradientBrushTests
     {
         using (Image<TPixel> image = provider.GetImage())
         {
-            PointF[] points = { new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10) };
-            Color[] colors = { Color.Red };
+            PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
+            Color[] colors = [Color.Red];
 
-            var brush = new PathGradientBrush(points, colors);
+            PathGradientBrush brush = new(points, colors);
 
             image.Mutate(x => x.Fill(brush));
 
@@ -112,10 +112,10 @@ public class FillPathGradientBrushTests
             TolerantComparer,
             image =>
             {
-                PointF[] points = { new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10) };
-                Color[] colors = { Color.Red, Color.Yellow };
+                PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
+                Color[] colors = [Color.Red, Color.Yellow];
 
-                var brush = new PathGradientBrush(points, colors);
+                PathGradientBrush brush = new(points, colors);
 
                 image.Mutate(x => x.Fill(brush));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -129,10 +129,10 @@ public class FillPathGradientBrushTests
             TolerantComparer,
             image =>
             {
-                PointF[] points = { new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10) };
-                Color[] colors = { Color.Black, Color.Red, Color.Yellow, Color.Green };
+                PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
+                Color[] colors = [Color.Black, Color.Red, Color.Yellow, Color.Green];
 
-                var brush = new PathGradientBrush(points, colors, Color.White);
+                PathGradientBrush brush = new(points, colors, Color.White);
 
                 image.Mutate(x => x.Fill(brush));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -141,9 +141,9 @@ public class FillPathGradientBrushTests
     [Fact]
     public void ShouldThrowArgumentNullExceptionWhenLinesAreNull()
     {
-        Color[] colors = { Color.Black, Color.Red, Color.Yellow, Color.Green };
+        Color[] colors = [Color.Black, Color.Red, Color.Yellow, Color.Green];
 
-        PathGradientBrush Create() => new PathGradientBrush(null, colors, Color.White);
+        PathGradientBrush Create() => new(null, colors, Color.White);
 
         Assert.Throws<ArgumentNullException>(Create);
     }
@@ -151,10 +151,10 @@ public class FillPathGradientBrushTests
     [Fact]
     public void ShouldThrowArgumentOutOfRangeExceptionWhenLessThan3PointsAreGiven()
     {
-        PointF[] points = { new PointF(0, 0), new PointF(10, 0) };
-        Color[] colors = { Color.Black, Color.Red, Color.Yellow, Color.Green };
+        PointF[] points = [new(0, 0), new(10, 0)];
+        Color[] colors = [Color.Black, Color.Red, Color.Yellow, Color.Green];
 
-        PathGradientBrush Create() => new PathGradientBrush(points, colors, Color.White);
+        PathGradientBrush Create() => new(points, colors, Color.White);
 
         Assert.Throws<ArgumentOutOfRangeException>(Create);
     }
@@ -162,9 +162,9 @@ public class FillPathGradientBrushTests
     [Fact]
     public void ShouldThrowArgumentNullExceptionWhenColorsAreNull()
     {
-        PointF[] points = { new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10) };
+        PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
 
-        PathGradientBrush Create() => new PathGradientBrush(points, null, Color.White);
+        PathGradientBrush Create() => new(points, null, Color.White);
 
         Assert.Throws<ArgumentNullException>(Create);
     }
@@ -172,11 +172,11 @@ public class FillPathGradientBrushTests
     [Fact]
     public void ShouldThrowArgumentOutOfRangeExceptionWhenEmptyColorArrayIsGiven()
     {
-        PointF[] points = { new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10) };
+        PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
 
-        var colors = new Color[0];
+        Color[] colors = [];
 
-        PathGradientBrush Create() => new PathGradientBrush(points, colors, Color.White);
+        PathGradientBrush Create() => new(points, colors, Color.White);
 
         Assert.Throws<ArgumentOutOfRangeException>(Create);
     }
@@ -189,15 +189,15 @@ public class FillPathGradientBrushTests
             new TolerantImageComparer(0.2f),
             image =>
             {
-                var star = new Star(50, 50, 5, 20, 45);
+                Star star = new(50, 50, 5, 20, 45);
                 PointF[] points = star.Points.ToArray();
                 Color[] colors =
-                {
+                [
                     Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple,
                     Color.Red, Color.Yellow, Color.Green, Color.Blue, Color.Purple
-                };
+                ];
 
-                var brush = new PathGradientBrush(points, colors, Color.White);
+                PathGradientBrush brush = new(points, colors, Color.White);
 
                 image.Mutate(x => x.Fill(brush));
             },

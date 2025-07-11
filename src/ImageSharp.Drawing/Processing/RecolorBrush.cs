@@ -116,7 +116,7 @@ public sealed class RecolorBrush : Brush
             {
                 // Offset the requested pixel by the value in the rectangle (the shapes position)
                 TPixel result = this.Target[x, y];
-                var background = result.ToVector4();
+                Vector4 background = result.ToVector4();
                 float distance = Vector4.DistanceSquared(background, this.sourceColor);
                 if (distance <= this.threshold)
                 {

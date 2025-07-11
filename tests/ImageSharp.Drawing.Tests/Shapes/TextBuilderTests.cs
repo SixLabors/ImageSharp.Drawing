@@ -12,7 +12,7 @@ public class TextBuilderTests
     public void TextBuilder_Bounds_AreCorrect()
     {
         Vector2 position = new(5, 5);
-        var options = new TextOptions(TestFontUtilities.GetFont(TestFonts.OpenSans, 16))
+        TextOptions options = new(TestFontUtilities.GetFont(TestFonts.OpenSans, 16))
         {
             Origin = position
         };
@@ -23,7 +23,7 @@ public class TextBuilderTests
 
         RectangleF builderBounds = glyphs.Bounds;
         FontRectangle directMeasured = TextMeasurer.MeasureBounds(text, options);
-        var measuredBounds = new FontRectangle(new(0, 0), directMeasured.Size + directMeasured.Location);
+        FontRectangle measuredBounds = new(new Vector2(0, 0), directMeasured.Size + directMeasured.Location);
 
         Assert.Equal(measuredBounds.X, builderBounds.X);
         Assert.Equal(measuredBounds.Y, builderBounds.Y);

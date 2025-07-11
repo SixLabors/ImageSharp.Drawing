@@ -17,12 +17,12 @@ public class SolidBezierTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-        {
+        [
             new Vector2(10, 400),
             new Vector2(30, 10),
             new Vector2(240, 30),
             new Vector2(300, 400)
-        };
+        ];
 
         Color blue = Color.Blue;
         Color hotPink = Color.HotPink;
@@ -42,16 +42,16 @@ public class SolidBezierTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-        {
+        [
             new Vector2(10, 400),
             new Vector2(30, 10),
             new Vector2(240, 30),
             new Vector2(300, 400)
-        };
+        ];
 
         Color color = Color.HotPink.WithAlpha(150 / 255F);
 
-        using (var image = provider.GetImage() as Image<Rgba32>)
+        using (Image<Rgba32> image = provider.GetImage() as Image<Rgba32>)
         {
             image.Mutate(x => x.BackgroundColor(Color.Blue));
             image.Mutate(x => x.Fill(color, new Polygon(new CubicBezierLineSegment(simplePath))));

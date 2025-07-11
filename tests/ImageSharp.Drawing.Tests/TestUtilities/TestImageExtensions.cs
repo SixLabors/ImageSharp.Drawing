@@ -341,7 +341,7 @@ public static class TestImageExtensions
             appendPixelTypeToFileName,
             predicate);
 
-        List<Image<TPixel>> temporaryFrameImages = new();
+        List<Image<TPixel>> temporaryFrameImages = [];
 
         IImageDecoder decoder = TestEnvironment.GetReferenceDecoder(frameFiles[0]);
 
@@ -691,7 +691,7 @@ public static class TestImageExtensions
 
     internal static Image<Rgba32> ToGrayscaleImage(this Buffer2D<float> buffer, float scale)
     {
-        var image = new Image<Rgba32>(buffer.Width, buffer.Height);
+        Image<Rgba32> image = new(buffer.Width, buffer.Height);
 
         Assert.True(image.Frames.RootFrame.DangerousTryGetSinglePixelMemory(out Memory<Rgba32> pixelMem));
         Span<Rgba32> pixels = pixelMem.Span;
@@ -700,7 +700,7 @@ public static class TestImageExtensions
         for (int i = 0; i < bufferSpan.Length; i++)
         {
             float value = bufferSpan[i] * scale;
-            var v = new Vector4(value, value, value, 1f);
+            Vector4 v = new(value, value, value, 1f);
             pixels[i] = Rgba32.FromVector4(v);
         }
 
@@ -727,7 +727,7 @@ public static class TestImageExtensions
             Rectangle sourceRectangle = this.SourceRectangle;
             Configuration configuration = this.Configuration;
 
-            var operation = new RowOperation(configuration, sourceRectangle, source.PixelBuffer);
+            RowOperation operation = new(configuration, sourceRectangle, source.PixelBuffer);
 
             ParallelRowIterator.IterateRowIntervals<RowOperation, Vector4>(
                 configuration,

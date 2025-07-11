@@ -11,10 +11,10 @@ public class InternalPathTests
     [Fact]
     public void MultipleLineSegmentsSimplePathsAreMerged()
     {
-        var seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(2, 2));
-        var seg2 = new LinearLineSegment(new PointF(4, 4), new PointF(5, 5));
+        LinearLineSegment seg1 = new(new PointF(0, 0), new PointF(2, 2));
+        LinearLineSegment seg2 = new(new PointF(4, 4), new PointF(5, 5));
 
-        var path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
+        InternalPath path = new([seg1, seg2], true);
 
         Assert.Contains(new PointF(0, 0), path.Points().ToArray());
         Assert.DoesNotContain(new PointF(2, 2), path.Points().ToArray());
@@ -25,9 +25,9 @@ public class InternalPathTests
     [Fact]
     public void Length_Closed()
     {
-        var seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(0, 2));
+        LinearLineSegment seg1 = new(new PointF(0, 0), new PointF(0, 2));
 
-        var path = new InternalPath(seg1, true);
+        InternalPath path = new(seg1, true);
 
         Assert.Equal(4, path.Length);
     }
@@ -35,9 +35,9 @@ public class InternalPathTests
     [Fact]
     public void Length_Open()
     {
-        var seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(0, 2));
+        LinearLineSegment seg1 = new(new PointF(0, 0), new PointF(0, 2));
 
-        var path = new InternalPath(seg1, false);
+        InternalPath path = new(seg1, false);
 
         Assert.Equal(2, path.Length);
     }
@@ -45,10 +45,10 @@ public class InternalPathTests
     [Fact]
     public void Bounds()
     {
-        var seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(2, 2));
-        var seg2 = new LinearLineSegment(new PointF(4, 4), new PointF(5, 5));
+        LinearLineSegment seg1 = new(new PointF(0, 0), new PointF(2, 2));
+        LinearLineSegment seg2 = new(new PointF(4, 4), new PointF(5, 5));
 
-        var path = new InternalPath(new ILineSegment[] { seg1, seg2 }, true);
+        InternalPath path = new([seg1, seg2], true);
 
         Assert.Equal(0, path.Bounds.Left);
         Assert.Equal(5, path.Bounds.Right);
@@ -58,14 +58,14 @@ public class InternalPathTests
 
     private static InternalPath Create(PointF location, SizeF size, bool closed = true)
     {
-        var seg1 = new LinearLineSegment(location, location + new PointF(size.Width, 0));
-        var seg2 = new LinearLineSegment(location + new PointF(size.Width, size.Height), location + new PointF(0, size.Height));
+        LinearLineSegment seg1 = new(location, location + new PointF(size.Width, 0));
+        LinearLineSegment seg2 = new(location + new PointF(size.Width, size.Height), location + new PointF(0, size.Height));
 
-        return new InternalPath(new ILineSegment[] { seg1, seg2 }, closed);
+        return new InternalPath([seg1, seg2], closed);
     }
 
     public static TheoryData<TestPoint, TestSize, TestPoint, bool> PointInPolygonTheoryData { get; }
-        = new TheoryData<TestPoint, TestSize, TestPoint, bool>
+        = new()
         {
             {
                 new PointF(10, 10), // loc

@@ -14,9 +14,9 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 internal sealed class PolygonOffsetter
 {
     private const float Tolerance = 1.0E-6F;
-    private readonly List<Group> groupList = new();
-    private readonly PathF normals = new();
-    private readonly PathsF solution = new();
+    private readonly List<Group> groupList = [];
+    private readonly PathF normals = [];
+    private readonly PathsF solution = [];
     private float groupDelta; // *0.5 for open paths; *-1.0 for negative areas
     private float delta;
     private float absGroupDelta;
@@ -207,7 +207,7 @@ internal sealed class PolygonOffsetter
 
             if (cnt == 1)
             {
-                group.OutPath = new PathF();
+                group.OutPath = [];
 
                 // Single vertex so build a circle or square.
                 if (group.EndType == EndCapStyle.Round)
@@ -324,7 +324,7 @@ internal sealed class PolygonOffsetter
 
     private void OffsetOpenPath(Group group, PathF path)
     {
-        group.OutPath = new(path.Count);
+        group.OutPath = new PathF(path.Count);
         int highI = path.Count - 1;
 
         // Further reduced extraneous vertices in solutions (#499)
@@ -400,14 +400,14 @@ internal sealed class PolygonOffsetter
         }
 
         dxy *= 1F / MathF.Sqrt(ClipperUtils.DotProduct(dxy, dxy));
-        return new(dxy.Y, -dxy.X);
+        return new Vector2(dxy.Y, -dxy.X);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void OffsetPolygon(Group group, PathF path)
     {
         // Dereference the current outpath.
-        group.OutPath = new(path.Count);
+        group.OutPath = new PathF(path.Count);
         int cnt = path.Count, prev = cnt - 1;
         for (int i = 0; i < cnt; i++)
         {
@@ -562,7 +562,7 @@ internal sealed class PolygonOffsetter
             // ie 1 less than steps
             for (int i = 1; i < steps; i++)
             {
-                offsetVec = new((offsetVec.X * this.stepCos) - (this.stepSin * offsetVec.Y), (offsetVec.X * this.stepSin) + (offsetVec.Y * this.stepCos));
+                offsetVec = new Vector2((offsetVec.X * this.stepCos) - (this.stepSin * offsetVec.Y), (offsetVec.X * this.stepSin) + (offsetVec.Y * this.stepCos));
 
                 group.OutPath.Add(pt + offsetVec);
             }
@@ -646,8 +646,8 @@ internal sealed class PolygonOffsetter
             this.InPaths = new PathsF(paths);
             this.JoinType = joinType;
             this.EndType = endType;
-            this.OutPath = new PathF();
-            this.OutPaths = new PathsF();
+            this.OutPath = [];
+            this.OutPaths = [];
             this.PathsReversed = false;
         }
 

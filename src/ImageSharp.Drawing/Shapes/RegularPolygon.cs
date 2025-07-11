@@ -63,14 +63,14 @@ public class RegularPolygon : Polygon
         Guard.MustBeGreaterThan(vertices, 2, nameof(vertices));
         Guard.MustBeGreaterThan(radius, 0, nameof(radius));
 
-        var distanceVector = new PointF(0, radius);
+        PointF distanceVector = new(0, radius);
 
         float anglePerSegments = (float)(2 * Math.PI / vertices);
         float current = angle;
-        var points = new PointF[vertices];
+        PointF[] points = new PointF[vertices];
         for (int i = 0; i < vertices; i++)
         {
-            var rotated = PointF.Transform(distanceVector, Matrix3x2.CreateRotation(current));
+            PointF rotated = PointF.Transform(distanceVector, Matrix3x2.CreateRotation(current));
 
             points[i] = rotated + location;
 

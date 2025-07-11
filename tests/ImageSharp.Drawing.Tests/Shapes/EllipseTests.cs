@@ -20,7 +20,7 @@ public class EllipseTests
         }
         else
         {
-            var p = new EllipsePolygon(0, 0, width, 99);
+            EllipsePolygon p = new(0, 0, width, 99);
             Assert.NotNull(p);
         }
     }
@@ -40,7 +40,7 @@ public class EllipseTests
         }
         else
         {
-            var p = new EllipsePolygon(0, 0, 99, height);
+            EllipsePolygon p = new(0, 0, 99, height);
             Assert.NotNull(p);
         }
     }
