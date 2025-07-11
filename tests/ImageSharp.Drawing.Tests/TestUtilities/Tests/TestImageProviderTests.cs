@@ -13,13 +13,13 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 
 public class TestImageProviderTests
 {
-    public static readonly TheoryData<object> BasicData = new TheoryData<object>
+    public static readonly TheoryData<object> BasicData = new()
     {
         TestImageProvider<Rgba32>.Blank(10, 20),
         TestImageProvider<HalfVector4>.Blank(10, 20),
     };
 
-    public static readonly TheoryData<object> FileData = new TheoryData<object>
+    public static readonly TheoryData<object> FileData = new()
     {
         TestImageProvider<Rgba32>.File(TestImages.Bmp.Car),
         TestImageProvider<HalfVector4>.File(TestImages.Bmp.F)
@@ -27,13 +27,11 @@ public class TestImageProviderTests
 
     public TestImageProviderTests(ITestOutputHelper output) => this.Output = output;
 
-    public static string[] AllBmpFiles { get; } = { TestImages.Bmp.F, TestImages.Bmp.Bit8 };
+    public static string[] AllBmpFiles { get; } = [TestImages.Bmp.F, TestImages.Bmp.Bit8];
 
     private ITestOutputHelper Output { get; }
 
-    public static Image<TPixel> CreateTestImage<TPixel>()
-        where TPixel : unmanaged, IPixel<TPixel> =>
-        new Image<TPixel>(3, 3);
+    public static Image<TPixel> CreateTestImage<TPixel>() where TPixel : unmanaged, IPixel<TPixel> => new(3, 3);
 
     [Theory]
     [MemberData(nameof(BasicData))]
@@ -77,7 +75,7 @@ public class TestImageProviderTests
                 {
                     string testName = nameof(this.GetImage_WithCustomParameterlessDecoder_ShouldUtilizeCache);
 
-                    var decoder = new TestDecoder();
+                    TestDecoder decoder = new();
                     decoder.InitCaller(testName);
 
                     provider.GetImage(decoder);
@@ -339,7 +337,7 @@ public class TestImageProviderTests
     {
         using (provider.GetImage())
         {
-            var customConfiguration = Configuration.CreateDefaultInstance();
+            Configuration customConfiguration = Configuration.CreateDefaultInstance();
             provider.Configuration = customConfiguration;
 
             using (Image<TPixel> image2 = provider.GetImage())
@@ -372,7 +370,7 @@ public class TestImageProviderTests
         {
             using Image<Rgba32> image = this.Decode<Rgba32>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
             ImageMetadata metadata = image.Metadata;
-            return new(image.Size, metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)))
+            return new ImageInfo(image.Size, metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)))
             {
                 PixelType = metadata.GetDecodedPixelTypeInfo()
             };
@@ -419,7 +417,7 @@ public class TestImageProviderTests
         {
             using Image<Rgba32> image = this.Decode<Rgba32>(this.CreateDefaultSpecializedOptions(options), stream, cancellationToken);
             ImageMetadata metadata = image.Metadata;
-            return new(image.Size, metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)))
+            return new ImageInfo(image.Size, metadata, new List<ImageFrameMetadata>(image.Frames.Select(x => x.Metadata)))
             {
                 PixelType = metadata.GetDecodedPixelTypeInfo()
             };

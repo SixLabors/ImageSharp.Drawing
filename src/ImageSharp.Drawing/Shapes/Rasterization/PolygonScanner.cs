@@ -96,9 +96,9 @@ internal ref struct PolygonScanner
         IntersectionRule intersectionRule,
         MemoryAllocator allocator)
     {
-        using var multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
-        var edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
-        var scanner = new PolygonScanner(edges, multipolygon.TotalVertexCount * 2, minY, maxY, subsampling, intersectionRule, allocator);
+        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, allocator);
+        ScanEdgeCollection edges = ScanEdgeCollection.Create(multipolygon, allocator, subsampling);
+        PolygonScanner scanner = new(edges, multipolygon.TotalVertexCount * 2, minY, maxY, subsampling, intersectionRule, allocator);
         scanner.Init();
         return scanner;
     }

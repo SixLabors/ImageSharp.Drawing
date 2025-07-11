@@ -17,12 +17,12 @@ public class FillComplexPolygonTests
     public void ComplexPolygon_SolidFill<TPixel>(TestImageProvider<TPixel> provider, bool overlap, bool transparent)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var simplePath = new Polygon(new LinearLineSegment(
+        Polygon simplePath = new(new LinearLineSegment(
             new Vector2(10, 10),
             new Vector2(200, 150),
             new Vector2(50, 300)));
 
-        var hole1 = new Polygon(new LinearLineSegment(
+        Polygon hole1 = new(new LinearLineSegment(
             new Vector2(37, 85),
             overlap ? new Vector2(130, 40) : new Vector2(93, 85),
             new Vector2(65, 137)));

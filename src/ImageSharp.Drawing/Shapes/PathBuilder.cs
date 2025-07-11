@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public class PathBuilder
 {
-    private readonly List<Figure> figures = new();
+    private readonly List<Figure> figures = [];
     private readonly Matrix3x2 defaultTransform;
     private Figure currentFigure;
     private Matrix3x2 currentTransform;
@@ -277,7 +277,7 @@ public class PathBuilder
     /// <param name="endPoint">The end point of the arc.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddArc(PointF startPoint, float radiusX, float radiusY, float rotation, bool largeArc, bool sweep, PointF endPoint)
-        => this.AddSegment(new ArcLineSegment(startPoint, endPoint, new(radiusX, radiusY), rotation, largeArc, sweep));
+        => this.AddSegment(new ArcLineSegment(startPoint, endPoint, new SizeF(radiusX, radiusY), rotation, largeArc, sweep));
 
     /// <summary>
     /// Adds an elliptical arc to the current figure.
@@ -349,7 +349,7 @@ public class PathBuilder
     /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddArc(int x, int y, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
-        => this.AddSegment(new ArcLineSegment(new(x, y), new(radiusX, radiusY), rotation, startAngle, sweepAngle));
+        => this.AddSegment(new ArcLineSegment(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle));
 
     /// <summary>
     /// Adds an elliptical arc to the current figure.
@@ -365,7 +365,7 @@ public class PathBuilder
     /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddArc(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
-        => this.AddSegment(new ArcLineSegment(new(x, y), new(radiusX, radiusY), rotation, startAngle, sweepAngle));
+        => this.AddSegment(new ArcLineSegment(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle));
 
     /// <summary>
     /// Starts a new figure but leaves the previous one open.
@@ -455,7 +455,7 @@ public class PathBuilder
 
     private class Figure
     {
-        private readonly List<ILineSegment> segments = new();
+        private readonly List<ILineSegment> segments = [];
 
         public bool IsClosed { get; set; }
 

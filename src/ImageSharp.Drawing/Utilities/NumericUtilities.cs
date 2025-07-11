@@ -20,7 +20,7 @@ internal static class NumericUtilities
             ref Vector<float> currentVec = ref Unsafe.As<float, Vector<float>>(ref current);
             ref Vector<float> maxVec = ref Unsafe.Add(ref currentVec, n);
 
-            var vecVal = new Vector<float>(value);
+            Vector<float> vecVal = new(value);
             while (Unsafe.IsAddressLessThan(ref currentVec, ref maxVec))
             {
                 currentVec += vecVal;

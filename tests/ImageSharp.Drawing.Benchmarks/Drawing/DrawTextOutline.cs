@@ -9,6 +9,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Brush = SixLabors.ImageSharp.Drawing.Processing.Brush;
+using Font = System.Drawing.Font;
 using Pen = SixLabors.ImageSharp.Drawing.Processing.Pen;
 using SDRectangleF = System.Drawing.RectangleF;
 
@@ -27,14 +28,14 @@ public class DrawTextOutline
     [Benchmark(Baseline = true, Description = "System.Drawing Draw Text Outline")]
     public void DrawTextSystemDrawing()
     {
-        using var destination = new Bitmap(800, 800);
-        using var graphics = Graphics.FromImage(destination);
+        using Bitmap destination = new(800, 800);
+        using Graphics graphics = Graphics.FromImage(destination);
         graphics.InterpolationMode = InterpolationMode.Default;
         graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
-        using var pen = new System.Drawing.Pen(System.Drawing.Color.HotPink, 10);
-        using var font = new System.Drawing.Font("Arial", 12, GraphicsUnit.Point);
-        using var gp = new GraphicsPath();
+        using System.Drawing.Pen pen = new(System.Drawing.Color.HotPink, 10);
+        using Font font = new("Arial", 12, GraphicsUnit.Point);
+        using GraphicsPath gp = new();
 
         gp.AddString(
             this.TextToRender,
@@ -50,7 +51,7 @@ public class DrawTextOutline
     [Benchmark(Description = "ImageSharp Draw Text Outline - Cached Glyphs")]
     public void DrawTextCore()
     {
-        using var image = new Image<Rgba32>(800, 800);
+        using Image<Rgba32> image = new(800, 800);
         Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
         RichTextOptions textOptions = new(font)
         {
@@ -67,7 +68,7 @@ public class DrawTextOutline
     [Benchmark(Description = "ImageSharp Draw Text Outline - Naive")]
     public void DrawTextCoreOld()
     {
-        using (var image = new Image<Rgba32>(800, 800))
+        using (Image<Rgba32> image = new(800, 800))
         {
             Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 12);
             TextOptions textOptions = new(font)
@@ -96,7 +97,7 @@ public class DrawTextOutline
         {
             IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
-            var pathOptions = new DrawingOptions() { GraphicsOptions = options.GraphicsOptions };
+            DrawingOptions pathOptions = new() { GraphicsOptions = options.GraphicsOptions };
             if (brush != null)
             {
                 source.Fill(pathOptions, brush, glyphs);

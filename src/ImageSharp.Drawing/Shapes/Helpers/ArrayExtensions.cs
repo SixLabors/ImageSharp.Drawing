@@ -22,7 +22,7 @@ internal static class ArrayExtensions
             return source1;
         }
 
-        var target = new T[source1.Length + source2.Length];
+        T[] target = new T[source1.Length + source2.Length];
 
         for (int i = 0; i < source1.Length; i++)
         {

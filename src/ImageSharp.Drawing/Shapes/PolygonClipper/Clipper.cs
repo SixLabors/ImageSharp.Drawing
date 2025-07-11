@@ -24,8 +24,8 @@ internal class Clipper
     /// <returns>The <see cref="T:IPath[]"/>.</returns>
     public IPath[] GenerateClippedShapes(ClippingOperation operation, IntersectionRule rule)
     {
-        PathsF closedPaths = new();
-        PathsF openPaths = new();
+        PathsF closedPaths = [];
+        PathsF openPaths = [];
 
         FillRule fillRule = rule == IntersectionRule.EvenOdd ? FillRule.EvenOdd : FillRule.NonZero;
         this.polygonClipper.Execute(operation, fillRule, closedPaths, openPaths);

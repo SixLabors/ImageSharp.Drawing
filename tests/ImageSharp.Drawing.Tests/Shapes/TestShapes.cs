@@ -9,8 +9,8 @@ public static class TestShapes
 {
     public static IPath IrisSegment(int rotationPos)
     {
-        var center = new Vector2(603);
-        var segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
+        Vector2 center = new(603);
+        Vector2 segmentRotationCenter = new(301.16968f, 301.16974f);
         IPath segment = new Polygon(
             new LinearLineSegment(new Vector2(230.54f, 361.0261f), new Vector2(5.8641942f, 361.46031f)),
             new CubicBezierLineSegment(
@@ -27,8 +27,8 @@ public static class TestShapes
     {
         float scalingFactor = size / 1206;
 
-        var center = new Vector2(603);
-        var segmentRotationCenter = new Vector2(301.16968f, 301.16974f);
+        Vector2 center = new(603);
+        Vector2 segmentRotationCenter = new(301.16968f, 301.16974f);
         IPath segment = new Polygon(
             new LinearLineSegment(new Vector2(230.54f, 361.0261f), new Vector2(5.8641942f, 361.46031f)),
             new CubicBezierLineSegment(
@@ -41,7 +41,7 @@ public static class TestShapes
 
         IPath rotated = segment.Transform(Matrix3x2.CreateRotation(angle, center));
 
-        var scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
+        Matrix3x2 scaler = Matrix3x2.CreateScale(scalingFactor, Vector2.Zero);
         IPath scaled = rotated.Transform(scaler);
 
         return scaled;
@@ -50,7 +50,7 @@ public static class TestShapes
     public static IPath HourGlass()
     {
         // center the shape outerRadii + 10 px away from edges
-        var sb = new PathBuilder();
+        PathBuilder sb = new();
 
         // overlay rectangle
         sb.AddLine(new Vector2(15, 0), new Vector2(25, 0));

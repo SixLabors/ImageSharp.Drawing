@@ -22,7 +22,7 @@ public sealed class LinearLineSegment : ILineSegment
     /// <param name="start">The start.</param>
     /// <param name="end">The end.</param>
     public LinearLineSegment(PointF start, PointF end)
-        : this(new[] { start, end })
+        : this([start, end])
     {
     }
 
@@ -81,7 +81,7 @@ public sealed class LinearLineSegment : ILineSegment
             return this;
         }
 
-        var transformedPoints = new PointF[this.points.Length];
+        PointF[] transformedPoints = new PointF[this.points.Length];
 
         for (int i = 0; i < this.points.Length; i++)
         {

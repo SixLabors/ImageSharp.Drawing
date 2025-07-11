@@ -23,7 +23,7 @@ public class StarTests
         }
         else
         {
-            var p = new Star(Vector2.Zero, points, 10f, 20f, 0);
+            Star p = new(Vector2.Zero, points, 10f, 20f, 0);
             Assert.NotNull(p);
         }
     }
@@ -45,7 +45,7 @@ public class StarTests
         }
         else
         {
-            var p = new Star(Vector2.Zero, 3, radius, radius, 0);
+            Star p = new(Vector2.Zero, 3, radius, radius, 0);
             Assert.NotNull(p);
         }
     }
@@ -57,7 +57,7 @@ public class StarTests
         const float Radius2 = 30;
         int pointsCount = new Random().Next(3, 20);
 
-        var poly = new Star(Vector2.Zero, pointsCount, Radius, Radius2, 0);
+        Star poly = new(Vector2.Zero, pointsCount, Radius, Radius2, 0);
 
         PointF[] points = poly.Flatten().ToArray()[0].Points.ToArray();
 
@@ -95,7 +95,7 @@ public class StarTests
         const float Radius2 = 20;
         double anAngle = new Random().NextDouble() * TwoPI;
 
-        var poly = new Star(Vector2.Zero, 3, Radius, Radius2, (float)anAngle);
+        Star poly = new(Vector2.Zero, 3, Radius, Radius2, (float)anAngle);
         ISimplePath[] points = poly.Flatten().ToArray();
 
         IEnumerable<double> allAngles = points[0].Points.ToArray().Select(b => Math.Atan2(b.Y, b.X))

@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths;
 
 public class ClearPath : BaseImageOperationsExtensionTest
 {
-    private readonly DrawingOptions nonDefaultOptions = new DrawingOptions()
+    private readonly DrawingOptions nonDefaultOptions = new()
     {
         GraphicsOptions =
         {

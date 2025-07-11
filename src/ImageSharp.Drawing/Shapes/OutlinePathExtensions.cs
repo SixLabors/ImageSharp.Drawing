@@ -140,7 +140,7 @@ public static class OutlinePathExtensions
         IEnumerable<ISimplePath> paths = path.Transform(scaleUpMartrix).Flatten();
 
         ClipperOffset offset = new(MiterOffsetDelta);
-        List<PointF> buffer = new();
+        List<PointF> buffer = [];
         foreach (ISimplePath p in paths)
         {
             bool online = !startOff;

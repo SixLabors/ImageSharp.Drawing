@@ -36,7 +36,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
 
         public override Image<TPixel> GetImage()
         {
-            var result = new Image<TPixel>(this.Configuration, this.Width, this.Height);
+            Image<TPixel> result = new(this.Configuration, this.Width, this.Height);
             result.ProcessPixelRows(accessor =>
             {
                 int midY = this.Height / 2;

@@ -19,7 +19,7 @@ public class TestUtilityExtensionsTests
     public static Image<TPixel> CreateTestImage<TPixel>()
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var image = new Image<TPixel>(10, 10);
+        Image<TPixel> image = new(10, 10);
 
         Buffer2D<TPixel> pixels = image.GetRootFramePixelBuffer();
         for (int i = 0; i < 10; i++)

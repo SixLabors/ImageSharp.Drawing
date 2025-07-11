@@ -12,6 +12,7 @@ using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
+using Pen = System.Drawing.Pen;
 using SDPointF = System.Drawing.PointF;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
@@ -81,7 +82,7 @@ public abstract class DrawPolygon
     [Benchmark]
     public void SystemDrawing()
     {
-        using var pen = new System.Drawing.Pen(System.Drawing.Color.White, this.Thickness);
+        using Pen pen = new(System.Drawing.Color.White, this.Thickness);
 
         foreach (SDPointF[] loop in this.sdPoints)
         {
@@ -103,7 +104,7 @@ public abstract class DrawPolygon
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
     {
-        using var paint = new SKPaint
+        using SKPaint paint = new()
         {
             Style = SKPaintStyle.Stroke,
             Color = SKColors.White,

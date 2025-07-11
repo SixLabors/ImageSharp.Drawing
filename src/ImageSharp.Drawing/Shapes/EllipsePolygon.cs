@@ -95,7 +95,7 @@ public sealed class EllipsePolygon : IPath, ISimplePath, IPathInternals, IIntern
 
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
-        => new[] { this.innerPath };
+        => [this.innerPath];
 
     private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
     {
@@ -116,7 +116,7 @@ public sealed class EllipsePolygon : IPath, ISimplePath, IPathInternals, IIntern
         Vector2 pointMplusO = pointM + pointO;
 
         PointF[] points =
-        {
+        [
             new Vector2(rootLocation.X, pointM.Y),
 
             new Vector2(rootLocation.X, pointMminusO.Y),
@@ -133,8 +133,8 @@ public sealed class EllipsePolygon : IPath, ISimplePath, IPathInternals, IIntern
 
             new Vector2(pointMminusO.X, pointE.Y),
             new Vector2(rootLocation.X, pointMplusO.Y),
-            new Vector2(rootLocation.X, pointM.Y),
-        };
+            new Vector2(rootLocation.X, pointM.Y)
+        ];
 
         return new CubicBezierLineSegment(points);
     }

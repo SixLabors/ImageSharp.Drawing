@@ -18,7 +18,7 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtTopShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(
@@ -38,7 +38,7 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtBottomShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(
@@ -58,7 +58,7 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtLeftShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(
@@ -78,7 +78,7 @@ public class Issue_28_108
     [InlineData(3F)]
     public void DrawingLineAtRightShouldDisplay(float stroke)
     {
-        using var image = new Image<Rgba32>(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
+        using Image<Rgba32> image = new(Configuration.Default, 100, 100, Color.Black.ToPixel<Rgba32>());
         image.Mutate(x => x
                 .SetGraphicsOptions(g => g.Antialias = false)
                 .DrawLine(

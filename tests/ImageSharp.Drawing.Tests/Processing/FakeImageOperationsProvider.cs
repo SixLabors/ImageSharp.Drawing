@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
 internal class FakeImageOperationsProvider : IImageProcessingContextFactory
 {
-    private readonly List<object> imageOperators = new List<object>();
+    private readonly List<object> imageOperators = [];
 
     public bool HasCreated<TPixel>(Image<TPixel> source)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -27,7 +27,7 @@ internal class FakeImageOperationsProvider : IImageProcessingContextFactory
     public IInternalImageProcessingContext<TPixel> CreateImageProcessingContext<TPixel>(Configuration configuration, Image<TPixel> source, bool mutate)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var op = new FakeImageOperations<TPixel>(configuration, source, mutate);
+        FakeImageOperations<TPixel> op = new(configuration, source, mutate);
         this.imageOperators.Add(op);
         return op;
     }
@@ -43,7 +43,7 @@ internal class FakeImageOperationsProvider : IImageProcessingContextFactory
 
         public Image<TPixel> Source { get; }
 
-        public List<AppliedOperation> Applied { get; } = new List<AppliedOperation>();
+        public List<AppliedOperation> Applied { get; } = [];
 
         public Configuration Configuration { get; }
 

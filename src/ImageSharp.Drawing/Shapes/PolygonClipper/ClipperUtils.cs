@@ -69,7 +69,7 @@ internal static class ClipperUtils
     {
         if (radiusX <= 0)
         {
-            return new();
+            return [];
         }
 
         if (radiusY <= 0)

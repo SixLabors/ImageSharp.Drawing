@@ -16,14 +16,14 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// </summary>
 public static class TestUtils
 {
-    private static readonly Dictionary<Type, PixelTypes> ClrTypes2PixelTypes = new Dictionary<Type, PixelTypes>();
+    private static readonly Dictionary<Type, PixelTypes> ClrTypes2PixelTypes = new();
 
     private static readonly Assembly ImageSharpAssembly = typeof(Rgba32).GetTypeInfo().Assembly;
 
-    private static readonly Dictionary<PixelTypes, Type> PixelTypes2ClrTypes = new Dictionary<PixelTypes, Type>();
+    private static readonly Dictionary<PixelTypes, Type> PixelTypes2ClrTypes = new();
 
     private static readonly PixelTypes[] AllConcretePixelTypes = GetAllPixelTypes()
-        .Except(new[] { PixelTypes.Undefined, PixelTypes.All })
+        .Except([PixelTypes.Undefined, PixelTypes.All])
         .ToArray();
 
     static TestUtils()
@@ -55,8 +55,8 @@ public static class TestUtils
             return false;
         }
 
-        var rgb1 = default(Rgb24);
-        var rgb2 = default(Rgb24);
+        Rgb24 rgb1 = default(Rgb24);
+        Rgb24 rgb2 = default(Rgb24);
 
         Buffer2D<TPixel> pixA = a.GetRootFramePixelBuffer();
         Buffer2D<TPixel> pixB = b.GetRootFramePixelBuffer();
@@ -102,7 +102,7 @@ public static class TestUtils
     {
         if (pixelTypes == PixelTypes.Undefined)
         {
-            return Enumerable.Empty<KeyValuePair<PixelTypes, Type>>();
+            return [];
         }
         else if (pixelTypes == PixelTypes.All)
         {
@@ -110,7 +110,7 @@ public static class TestUtils
             return PixelTypes2ClrTypes;
         }
 
-        var result = new Dictionary<PixelTypes, Type>();
+        Dictionary<PixelTypes, Type> result = new();
         foreach (PixelTypes pt in AllConcretePixelTypes)
         {
             if (pixelTypes.HasAll(pt))
@@ -133,7 +133,7 @@ public static class TestUtils
 
     internal static Color GetColorByName(string colorName)
     {
-        var f = (FieldInfo)typeof(Color).GetMember(colorName)[0];
+        FieldInfo f = (FieldInfo)typeof(Color).GetMember(colorName)[0];
         return (Color)f.GetValue(null);
     }
 
@@ -246,9 +246,9 @@ public static class TestUtils
         {
             Assert.True(image0.DangerousTryGetSinglePixelMemory(out Memory<TPixel> imageMem));
             Span<TPixel> imageSpan = imageMem.Span;
-            var mmg = TestMemoryManager<TPixel>.CreateAsCopyOf(imageSpan);
+            TestMemoryManager<TPixel> mmg = TestMemoryManager<TPixel>.CreateAsCopyOf(imageSpan);
 
-            using (var image1 = Image.WrapMemory(mmg.Memory, image0.Width, image0.Height))
+            using (Image<TPixel> image1 = Image.WrapMemory(mmg.Memory, image0.Width, image0.Height))
             {
                 image1.Mutate(process);
                 image1.DebugSave(
@@ -297,7 +297,7 @@ public static class TestUtils
 
         using (Image<TPixel> image = provider.GetImage())
         {
-            var bounds = new Rectangle(image.Width / 4, image.Width / 4, image.Width / 2, image.Height / 2);
+            Rectangle bounds = new(image.Width / 4, image.Width / 4, image.Width / 2, image.Height / 2);
             image.Mutate(x => process(x, bounds));
             image.DebugSave(provider, testOutputDetails);
             image.CompareToReferenceOutput(comparer, provider, testOutputDetails);

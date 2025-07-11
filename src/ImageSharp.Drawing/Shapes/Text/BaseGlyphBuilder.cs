@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Text;
 /// </summary>
 internal class BaseGlyphBuilder : IGlyphRenderer
 {
-    private readonly List<IPath> paths = new();
+    private readonly List<IPath> paths = [];
     private Vector2 currentPoint;
     private GlyphRendererParameters parameters;
 
@@ -146,11 +146,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         }
 
         thickness = MathF.Max(1F, (float)Math.Round(thickness));
-        var renderer = (IGlyphRenderer)this;
+        IGlyphRenderer renderer = (IGlyphRenderer)this;
 
         // Expand the points to create a rectangle centered around the line.
         bool rotated = this.parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
-        Vector2 pad = rotated ? new(thickness * .5F, 0) : new(0, thickness * .5F);
+        Vector2 pad = rotated ? new Vector2(thickness * .5F, 0) : new Vector2(0, thickness * .5F);
 
         // Clamp the line to the pixel grid.
         start = ClampToPixel(start, (int)thickness, rotated);
@@ -167,12 +167,12 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         if (textDecorations == TextDecorations.Overline)
         {
             // CSS overline is drawn above the position, so we need to move it up.
-            offset = rotated ? new(thickness * .5F, 0) : new(0, -(thickness * .5F));
+            offset = rotated ? new Vector2(thickness * .5F, 0) : new Vector2(0, -(thickness * .5F));
         }
         else if (textDecorations == TextDecorations.Underline)
         {
             // CSS underline is drawn below the position, so we need to move it down.
-            offset = rotated ? new(-(thickness * .5F), 0) : new(0, thickness * .5F);
+            offset = rotated ? new Vector2(-(thickness * .5F), 0) : new Vector2(0, thickness * .5F);
         }
 
         renderer.BeginFigure();

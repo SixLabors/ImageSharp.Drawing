@@ -66,7 +66,7 @@ public class Polygon : Path
             return this;
         }
 
-        var segments = new ILineSegment[this.LineSegments.Count];
+        ILineSegment[] segments = new ILineSegment[this.LineSegments.Count];
         int i = 0;
         foreach (ILineSegment s in this.LineSegments)
         {
