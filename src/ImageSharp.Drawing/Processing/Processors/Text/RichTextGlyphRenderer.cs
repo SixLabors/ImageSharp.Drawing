@@ -4,6 +4,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -14,8 +15,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 /// <summary>
 /// Allows the rendering of rich text configured via <see cref="RichTextOptions"/>.
 /// </summary>
-internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRenderer, IDisposable
+internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, ILayeredGlyphRenderer, IColorGlyphRenderer, IDisposable
 {
+    private Random random = new();
+
     private const byte RenderOrderFill = 0;
     private const byte RenderOrderOutline = 1;
     private const byte RenderOrderDecoration = 2;
@@ -27,7 +30,9 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
     private readonly IPathInternals? path;
     private bool isDisposed;
 
-    private readonly Dictionary<Color, Brush> brushLookup = new();
+    private readonly Dictionary<Color, Brush> brushLookup = [];
+    private FontRectangle currentBounds;
+    private GlyphRendererParameters currentParameters;
     private TextRun? currentTextRun;
     private Brush? currentBrush;
     private Pen? currentPen;
@@ -36,6 +41,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
     private TextDecorationDetails? currentStrikeout;
     private TextDecorationDetails? currentOverline;
     private bool currentDecorationIsVertical;
+    private bool hasLayer;
 
     // Just enough accuracy to allow for 1/8 px differences which later are accumulated while rendering,
     // but do not grow into full px offsets.
@@ -43,7 +49,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
     // - Provide a good accuracy (smaller than 0.2% image difference compared to the non-caching variant)
     // - Cache hit ratio above 60%
     private const float AccuracyMultiple = 8;
-    private readonly Dictionary<(GlyphRendererParameters Glyph, RectangleF Bounds), GlyphRenderData> glyphData = new();
+    private readonly Dictionary<(GlyphRendererParameters Glyph, RectangleF Bounds), List<GlyphRenderData>> glyphData = [];
     private bool rasterizationRequired;
     private readonly bool noCache;
     private (GlyphRendererParameters Glyph, RectangleF Bounds) currentCacheKey;
@@ -65,7 +71,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         IPath? path = textOptions.Path;
         if (path is not null)
         {
-            // Turn of caching. The chances of a hit are near-zero.
+            // Turn off caching. The chances of a hit are near-zero.
             this.rasterizationRequired = true;
             this.noCache = true;
             if (path is IPathInternals internals)
@@ -77,6 +83,9 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
                 this.path = new ComplexPolygon(path);
             }
         }
+
+        // TODO: Turn caching back on.
+        this.noCache = true;
     }
 
     public List<DrawingOperation> DrawingOperations { get; }
@@ -95,6 +104,8 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
     /// <inheritdoc/>
     protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
     {
+        this.currentBounds = bounds;
+        this.currentParameters = parameters;
         this.currentColor = null;
         this.currentDecorationIsVertical = parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
         this.currentTextRun = parameters.TextRun;
@@ -140,6 +151,146 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         // The default transform will automatically be applied.
         this.TransformGlyph(in bounds);
         this.rasterizationRequired = true;
+    }
+
+    public void BeginLayer(Paint? paint, FillRule fillRule)
+    {
+        // TODO: We may have to set a new transform here.
+        this.hasLayer = true;
+        if (TryCreateBrush(paint, out Brush? brush))
+        {
+            this.currentBrush = brush;
+        }
+    }
+
+    public void EndLayer()
+    {
+        IPath path = this.Builder.Build();
+        this.Builder.Clear();
+        this.CurrentPaths.Add(path);
+        GlyphRenderData renderData = default;
+
+        // Fix up the text runs colors.
+        // Only if both brush and pen is null do we fallback to the default value.
+        if (this.currentBrush == null && this.currentPen == null)
+        {
+            this.currentBrush = this.defaultBrush;
+            this.currentPen = this.defaultPen;
+        }
+
+        bool renderFill = false;
+        bool renderOutline = false;
+
+        // If we are using the fonts color layers we ignore the request to draw an outline only
+        // because that won't really work. Instead we force drawing using fill with the requested color.
+        // If color fonts are disabled then this.currentColor will always be null.
+        if (this.currentBrush != null || this.currentColor != null)
+        {
+            renderFill = true;
+            if (this.currentColor.HasValue)
+            {
+                if (this.brushLookup.TryGetValue(this.currentColor.Value, out Brush? brush))
+                {
+                    this.currentBrush = brush;
+                }
+                else
+                {
+                    this.currentBrush = new SolidBrush(this.currentColor.Value);
+                    this.brushLookup[this.currentColor.Value] = this.currentBrush;
+                }
+            }
+        }
+
+        if (this.currentPen != null && this.currentColor == null)
+        {
+            renderOutline = true;
+        }
+
+        // Path has already been added to the collection via the base class.
+        // IPath path = this.Paths.Last();
+        Point renderLocation = ClampToPixel(path.Bounds.Location);
+        if (this.noCache || this.rasterizationRequired)
+        {
+            if (path.Bounds.Equals(RectangleF.Empty))
+            {
+                return;
+            }
+
+            if (renderFill)
+            {
+                renderData.FillMap = this.Render(path);
+            }
+
+            if (renderOutline)
+            {
+                path = this.currentPen!.GeneratePath(path);
+                renderData.OutlineMap = this.Render(path);
+            }
+
+            // Capture the delta between the location and the truncated render location.
+            // We can use this to offset the render location on the next instance of this glyph.
+            renderData.LocationDelta = (Vector2)(path.Bounds.Location - renderLocation);
+
+            if (!this.noCache)
+            {
+                this.UpdateCache(renderData);
+            }
+        }
+        else
+        {
+            renderData = this.glyphData[this.currentCacheKey].Last();
+
+            // Offset the render location by the delta from the cached glyph and this one.
+            Vector2 previousDelta = renderData.LocationDelta;
+            Vector2 currentLocation = path.Bounds.Location;
+            Vector2 currentDelta = path.Bounds.Location - ClampToPixel(path.Bounds.Location);
+
+            if (previousDelta.Y > currentDelta.Y)
+            {
+                // Move the location down to match the previous location offset.
+                currentLocation += new Vector2(0, previousDelta.Y - currentDelta.Y);
+            }
+            else if (previousDelta.Y < currentDelta.Y)
+            {
+                // Move the location up to match the previous location offset.
+                currentLocation -= new Vector2(0, currentDelta.Y - previousDelta.Y);
+            }
+            else if (previousDelta.X > currentDelta.X)
+            {
+                // Move the location right to match the previous location offset.
+                currentLocation += new Vector2(previousDelta.X - currentDelta.X, 0);
+            }
+            else if (previousDelta.X < currentDelta.X)
+            {
+                // Move the location left to match the previous location offset.
+                currentLocation -= new Vector2(currentDelta.X - previousDelta.X, 0);
+            }
+
+            renderLocation = ClampToPixel(currentLocation);
+        }
+
+        if (renderData.FillMap != null)
+        {
+            this.DrawingOperations.Add(new DrawingOperation
+            {
+                RenderLocation = renderLocation,
+                Map = renderData.FillMap,
+                Brush = this.currentBrush!,
+                RenderPass = RenderOrderFill
+            });
+        }
+
+        // if (renderData.OutlineMap != null)
+        // {
+        //    int offset = (int)((this.currentPen?.StrokeWidth ?? 0) / 2);
+        //    this.DrawingOperations.Add(new DrawingOperation
+        //    {
+        //        RenderLocation = renderLocation - new Size(offset, offset),
+        //        Map = renderData.OutlineMap,
+        //        Brush = this.currentPen?.StrokeFill ?? this.currentBrush!,
+        //        RenderPass = RenderOrderOutline
+        //    });
+        // }
     }
 
     /// <inheritdoc/>
@@ -253,6 +404,13 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
     protected override void EndGlyph()
     {
+        if (this.hasLayer)
+        {
+            // The layer has already been rendered.
+            this.hasLayer = false;
+            return;
+        }
+
         GlyphRenderData renderData = default;
 
         // Fix up the text runs colors.
@@ -318,12 +476,12 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
             if (!this.noCache)
             {
-                this.glyphData[this.currentCacheKey] = renderData;
+                this.UpdateCache(renderData);
             }
         }
         else
         {
-            renderData = this.glyphData[this.currentCacheKey];
+            renderData = this.glyphData[this.currentCacheKey].Last();
 
             // Offset the render location by the delta from the cached glyph and this one.
             Vector2 previousDelta = renderData.LocationDelta;
@@ -378,6 +536,16 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         }
     }
 
+    private void UpdateCache(GlyphRenderData renderData)
+    {
+        if (!this.glyphData.TryGetValue(this.currentCacheKey, out List<GlyphRenderData>? _))
+        {
+            this.glyphData[this.currentCacheKey] = [];
+        }
+
+        this.glyphData[this.currentCacheKey].Add(renderData);
+    }
+
     protected override void EndText()
     {
         // Ensure we have captured the last overline/underline/strikeout path
@@ -409,7 +577,6 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         return Point.Truncate(point) + new Vector2(0, .5F);
     }
 
-    // Point.Truncate(point);
     private void FinalizeDecoration(ref TextDecorationDetails? decoration)
     {
         if (decoration != null)
@@ -584,9 +751,12 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         {
             if (disposing)
             {
-                foreach (KeyValuePair<(GlyphRendererParameters Glyph, RectangleF Bounds), GlyphRenderData> kv in this.glyphData)
+                foreach (KeyValuePair<(GlyphRendererParameters Glyph, RectangleF Bounds), List<GlyphRenderData>> kv in this.glyphData)
                 {
-                    kv.Value.Dispose();
+                    foreach (GlyphRenderData data in kv.Value)
+                    {
+                        data.Dispose();
+                    }
                 }
 
                 this.glyphData.Clear();

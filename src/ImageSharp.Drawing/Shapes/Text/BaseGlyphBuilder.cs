@@ -12,7 +12,6 @@ namespace SixLabors.ImageSharp.Drawing.Text;
 /// </summary>
 internal class BaseGlyphBuilder : IGlyphRenderer
 {
-    private readonly List<IPath> paths = [];
     private Vector2 currentPoint;
     private GlyphRendererParameters parameters;
 
@@ -30,12 +29,17 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// <summary>
     /// Gets the paths that have been rendered by the current instance.
     /// </summary>
-    public IPathCollection Paths => new PathCollection(this.paths);
+    public IPathCollection Paths => new PathCollection(this.CurrentPaths);
 
     /// <summary>
     /// Gets the path builder for the current instance.
     /// </summary>
     protected PathBuilder Builder { get; }
+
+    /// <summary>
+    /// Gets the paths currently being built.
+    /// </summary>
+    protected List<IPath> CurrentPaths { get; } = [];
 
     /// <inheritdoc/>
     void IGlyphRenderer.EndText() => this.EndText();
@@ -74,7 +78,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// </summary>
     void IGlyphRenderer.EndGlyph()
     {
-        this.paths.Add(this.Builder.Build());
+        this.CurrentPaths.Add(this.Builder.Build());
         this.EndGlyph();
     }
 
@@ -100,6 +104,12 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     void IGlyphRenderer.MoveTo(Vector2 point)
     {
         this.Builder.StartFigure();
+        this.currentPoint = point;
+    }
+
+    void IGlyphRenderer.ArcTo(float radiusX, float radiusY, float rotation, bool largeArc, bool sweep, Vector2 point)
+    {
+        this.Builder.AddArc(this.currentPoint, radiusX, radiusY, rotation, largeArc, sweep, point);
         this.currentPoint = point;
     }
 
@@ -146,7 +156,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         }
 
         thickness = MathF.Max(1F, (float)Math.Round(thickness));
-        IGlyphRenderer renderer = (IGlyphRenderer)this;
+        IGlyphRenderer renderer = this;
 
         // Expand the points to create a rectangle centered around the line.
         bool rotated = this.parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
@@ -175,6 +185,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             offset = rotated ? new Vector2(-(thickness * .5F), 0) : new Vector2(0, thickness * .5F);
         }
 
+        // TODO: Investigate why overlapping regions are not filled correctly.
         renderer.BeginFigure();
 
         // Now draw the rectangle clamped to the pixel grid.
