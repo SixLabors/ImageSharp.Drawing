@@ -80,34 +80,34 @@ internal sealed class PolygonOffsetter
             return;
         }
 
-        // Clean up self-intersections.
-        PolygonClipper clipper = new()
-        {
-            PreserveCollinear = this.PreserveCollinear,
-
-            // The solution should retain the orientation of the input
-            ReverseSolution = this.ReverseSolution != this.groupList[0].PathsReversed
-        };
-
-        clipper.AddSubject(this.solution);
-        if (this.groupList[0].PathsReversed)
-        {
-            clipper.Execute(ClippingOperation.Union, FillRule.Negative, solution);
-        }
-        else
-        {
-            clipper.Execute(ClippingOperation.Union, FillRule.Positive, solution);
-        }
-
-        // PolygonClipper will throw for unhandled exceptions but if a result is empty
-        // we should just return the original path.
-        if (solution.Count == 0)
-        {
-            foreach (PathF path in this.solution)
-            {
-                solution.Add(path);
-            }
-        }
+        // // Clean up self-intersections.
+        // PolygonClipper clipper = new()
+        // {
+        //     PreserveCollinear = this.PreserveCollinear,
+        //
+        //     // The solution should retain the orientation of the input
+        //     ReverseSolution = this.ReverseSolution != this.groupList[0].PathsReversed
+        // };
+        //
+        // clipper.AddSubject(this.solution);
+        // if (this.groupList[0].PathsReversed)
+        // {
+        //     clipper.Execute(ClippingOperation.Union, FillRule.Negative, solution);
+        // }
+        // else
+        // {
+        //     clipper.Execute(ClippingOperation.Union, FillRule.Positive, solution);
+        // }
+        //
+        // // PolygonClipper will throw for unhandled exceptions but if a result is empty
+        // // we should just return the original path.
+        // if (solution.Count == 0)
+        // {
+        //     foreach (PathF path in this.solution)
+        //     {
+        //         solution.Add(path);
+        //     }
+        // }
     }
 
     private void ExecuteInternal(float delta)

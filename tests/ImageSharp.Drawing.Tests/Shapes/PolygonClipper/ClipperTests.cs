@@ -4,6 +4,7 @@
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
+using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper;
 
@@ -38,7 +39,7 @@ public class ClipperTests
             }
         }
 
-        return clipper.GenerateClippedShapes(ClippingOperation.Difference, IntersectionRule.EvenOdd);
+        return clipper.GenerateClippedShapes(BooleanOperation.Difference);
     }
 
     [Fact]

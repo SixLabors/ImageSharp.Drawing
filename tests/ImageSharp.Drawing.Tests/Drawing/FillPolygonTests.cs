@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
 
@@ -189,7 +190,7 @@ public class FillPolygonTests
         Star star = new(64, 64, 5, 24, 64);
 
         // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
-        foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
+        foreach (BooleanOperation operation in (BooleanOperation[])Enum.GetValues(typeof(BooleanOperation)))
         {
             ShapeOptions options = new() { ClippingOperation = operation };
             IPath shape = star.Clip(options, circle);

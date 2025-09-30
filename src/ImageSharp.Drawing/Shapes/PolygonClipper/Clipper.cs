@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.PolygonClipper;
+
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 /// <summary>
@@ -8,13 +10,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 /// </summary>
 internal class Clipper
 {
-    private readonly PolygonClipper polygonClipper;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Clipper"/> class.
-    /// </summary>
-    public Clipper()
-        => this.polygonClipper = new PolygonClipper();
+    private SixLabors.PolygonClipper.Polygon? subject;
+    private SixLabors.PolygonClipper.Polygon? clip;
 
     /// <summary>
     /// Generates the clipped shapes from the previously provided paths.
@@ -22,38 +19,28 @@ internal class Clipper
     /// <param name="operation">The clipping operation.</param>
     /// <param name="rule">The intersection rule.</param>
     /// <returns>The <see cref="T:IPath[]"/>.</returns>
-    public IPath[] GenerateClippedShapes(ClippingOperation operation, IntersectionRule rule)
+    public IPath[] GenerateClippedShapes(BooleanOperation operation)
     {
-        PathsF closedPaths = [];
-        PathsF openPaths = [];
+        ArgumentNullException.ThrowIfNull(this.subject);
+        ArgumentNullException.ThrowIfNull(this.clip);
 
-        FillRule fillRule = rule == IntersectionRule.EvenOdd ? FillRule.EvenOdd : FillRule.NonZero;
-        this.polygonClipper.Execute(operation, fillRule, closedPaths, openPaths);
+        SixLabors.PolygonClipper.PolygonClipper polygonClipper = new(this.subject, this.clip, operation);
 
-        IPath[] shapes = new IPath[closedPaths.Count + openPaths.Count];
+        SixLabors.PolygonClipper.Polygon result = polygonClipper.Run();
+
+
+        IPath[] shapes = new IPath[result.Count];
 
         int index = 0;
-        for (int i = 0; i < closedPaths.Count; i++)
+        for (int i = 0; i < result.Count; i++)
         {
-            PathF path = closedPaths[i];
-            PointF[] points = new PointF[path.Count];
+            Contour contour = result[i];
+            PointF[] points = new PointF[contour.Count];
 
-            for (int j = 0; j < path.Count; j++)
+            for (int j = 0; j < contour.Count; j++)
             {
-                points[j] = path[j];
-            }
-
-            shapes[index++] = new Polygon(points);
-        }
-
-        for (int i = 0; i < openPaths.Count; i++)
-        {
-            PathF path = openPaths[i];
-            PointF[] points = new PointF[path.Count];
-
-            for (int j = 0; j < path.Count; j++)
-            {
-                points[j] = path[j];
+                Vertex vertex = contour[j];
+                points[j] = new PointF((float)vertex.X, (float)vertex.Y);
             }
 
             shapes[index++] = new Polygon(points);
@@ -100,12 +87,25 @@ internal class Clipper
     internal void AddPath(ISimplePath path, ClippingType clippingType)
     {
         ReadOnlySpan<PointF> vectors = path.Points.Span;
-        PathF points = new(vectors.Length);
-        for (int i = 0; i < vectors.Length; i++)
+        SixLabors.PolygonClipper.Polygon polygon = [];
+        Contour contour = new();
+        polygon.Add(contour);
+
+        foreach (PointF point in vectors)
         {
-            points.Add(vectors[i]);
+            contour.AddVertex(new Vertex(point.X, point.Y));
         }
 
-        this.polygonClipper.AddPath(points, clippingType, !path.IsClosed);
+        switch (clippingType)
+        {
+            case ClippingType.Clip:
+                this.clip = polygon;
+                break;
+            case ClippingType.Subject:
+                this.subject = polygon;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(clippingType), clippingType, null);
+        }
     }
 }
