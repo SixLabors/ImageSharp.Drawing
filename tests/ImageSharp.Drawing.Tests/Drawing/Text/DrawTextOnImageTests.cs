@@ -686,28 +686,23 @@ public class DrawTextOnImageTests
         bool parsed = Path.TryParseSvgPath(svgPath, out IPath path);
         Assert.True(parsed);
 
+        const string text = "Quick brown fox jumps over the lazy dog.";
+
         Font font = CreateFont(TestFonts.OpenSans, 13);
         RichTextOptions textOptions = new(font)
         {
             WrappingLength = path.ComputeLength(),
             VerticalAlignment = VerticalAlignment.Bottom,
             HorizontalAlignment = HorizontalAlignment.Left,
+            TextRuns = [new RichTextRun { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Strikeout }],
         };
 
-        const string text = "Quick brown fox jumps over the lazy dog.";
         IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
 
-#if NET472
-        provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
-            new { type = exampleImageKey },
-            comparer: ImageComparer.TolerantPercentage(0.017f));
-#else
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
             new { type = exampleImageKey },
             comparer: ImageComparer.TolerantPercentage(0.0025f));
-#endif
     }
 
     [Theory]
@@ -809,11 +804,8 @@ public class DrawTextOnImageTests
 
         IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
-        // TODO: This still leaves some holes when overlaying the text (CFF NotoSansKRRegular only). We need to fix this.
-        DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
-
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
+            c => c.Fill(Color.White).Fill(Color.Black, glyphs),
             comparer: ImageComparer.TolerantPercentage(0.002f));
     }
 
@@ -837,7 +829,6 @@ public class DrawTextOnImageTests
 
         IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
-        // TODO: This still leaves some holes when overlaying the text (CFF NotoSansKRRegular only). We need to fix this.
         DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
 
         provider.RunValidatingProcessorTest(

@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 
@@ -16,9 +17,10 @@ internal sealed partial class RichTextGlyphRenderer
     /// Attempts to create an ImageSharp.Drawing <see cref="Brush"/> from a <see cref="Paint"/>.
     /// </summary>
     /// <param name="paint">The paint definition coming from the interpreter.</param>
+    /// <param name="transform">A transform to apply to the brush coordinates.</param>
     /// <param name="brush">The resulting brush, or <see langword="null"/> if the paint is unsupported.</param>
     /// <returns><see langword="true"/> if a brush could be created; otherwise, <see langword="false"/>.</returns>
-    public static bool TryCreateBrush(Paint? paint, [NotNullWhen(true)] out Brush? brush)
+    public static bool TryCreateBrush(Paint? paint, Matrix3x2 transform, [NotNullWhen(true)] out Brush? brush)
     {
         brush = null;
 
@@ -27,7 +29,6 @@ internal sealed partial class RichTextGlyphRenderer
             return false;
         }
 
-        // TODO: Do we need to apply the transform assigned to th underlying builder here?
         switch (paint)
         {
             case SolidPaint sp:
@@ -35,11 +36,11 @@ internal sealed partial class RichTextGlyphRenderer
                 return true;
 
             case LinearGradientPaint lg:
-                return TryCreateLinearGradientBrush(lg, out brush);
+                return TryCreateLinearGradientBrush(lg, transform, out brush);
             case RadialGradientPaint rg:
-                return TryCreateRadialGradientBrush(rg, out brush);
+                return TryCreateRadialGradientBrush(rg, transform, out brush);
             case SweepGradientPaint sg:
-                return TryCreateSweepGradientBrush(sg, out brush);
+                return TryCreateSweepGradientBrush(sg, transform, out brush);
             default:
                 return false;
         }
@@ -48,27 +49,26 @@ internal sealed partial class RichTextGlyphRenderer
     /// <summary>
     /// Creates a <see cref="LinearGradientBrush"/> from a <see cref="LinearGradientPaint"/>.
     /// </summary>
-    /// <param name="lg">The linear gradient paint.</param>
+    /// <param name="paint">The linear gradient paint.</param>
+    /// <param name="transform">The transform to apply to the gradient points.</param>
     /// <param name="brush">The resulting brush.</param>
     /// <returns><see langword="true"/> if created; otherwise, <see langword="false"/>.</returns>
-    private static bool TryCreateLinearGradientBrush(LinearGradientPaint lg, out Brush? brush)
+    private static bool TryCreateLinearGradientBrush(LinearGradientPaint paint, Matrix3x2 transform, out Brush? brush)
     {
-        // Map gradient stops (apply paint opacity multiplier to each stop’s alpha).
-        ColorStop[] stops = ToColorStops(lg.Stops, lg.Opacity);
+        // Map gradient stops (apply paint opacity multiplier to each stop's alpha).
+        ColorStop[] stops = ToColorStops(paint.Stops, paint.Opacity);
 
         // Map spread method.
-        GradientRepetitionMode mode = MapSpread(lg.Spread);
+        GradientRepetitionMode mode = MapSpread(paint.Spread);
 
-        PointF p0 = lg.P0;
-        PointF p1 = lg.P1;
+        PointF p0 = paint.P0;
+        PointF p1 = paint.P1;
 
-        // Degenerate gradient, fall back to solid using last stop.
-        if (ApproximatelyEqual(p0, p1))
+        // Apply any transform defined on the paint.
+        if (!transform.IsIdentity)
         {
-            // TODO: Consider using this.currentColor instead?
-            Color fallback = stops.Length > 0 ? stops[^1].Color : Color.Black;
-            brush = new SolidBrush(fallback);
-            return true;
+            p0 = Vector2.Transform(p0, transform);
+            p1 = Vector2.Transform(p1, transform);
         }
 
         brush = new LinearGradientBrush(p0, p1, mode, stops);
@@ -78,36 +78,51 @@ internal sealed partial class RichTextGlyphRenderer
     /// <summary>
     /// Creates a <see cref="RadialGradientBrush"/> from a <see cref="RadialGradientPaint"/>.
     /// </summary>
-    /// <param name="rg">The radial gradient paint.</param>
+    /// <param name="paint">The radial gradient paint.</param>
+    /// <param name="transform">The transform to apply to the gradient center point.</param>
     /// <param name="brush">The resulting brush.</param>
     /// <returns><see langword="true"/> if created; otherwise, <see langword="false"/>.</returns>
-    private static bool TryCreateRadialGradientBrush(RadialGradientPaint rg, out Brush? brush)
+    private static bool TryCreateRadialGradientBrush(RadialGradientPaint paint, Matrix3x2 transform, out Brush? brush)
     {
-        // Map gradient stops (apply paint opacity multiplier to each stop’s alpha).
-        ColorStop[] stops = ToColorStops(rg.Stops, rg.Opacity);
+        // Map gradient stops (apply paint opacity multiplier to each stop's alpha).
+        ColorStop[] stops = ToColorStops(paint.Stops, paint.Opacity);
 
         // Map spread method.
-        GradientRepetitionMode mode = MapSpread(rg.Spread);
+        GradientRepetitionMode mode = MapSpread(paint.Spread);
 
-        brush = new RadialGradientBrush(rg.Center, rg.Radius, mode, stops);
+        // Apply any transform defined on the paint.
+        PointF center = paint.Center;
+        if (!transform.IsIdentity)
+        {
+            center = Vector2.Transform(center, transform);
+        }
+
+        brush = new RadialGradientBrush(center, paint.Radius, mode, stops);
         return true;
     }
 
     /// <summary>
     /// Creates a <see cref="SweepGradientBrush"/> from a <see cref="SweepGradientPaint"/>.
     /// </summary>
-    /// <param name="sg">The sweep gradient paint.</param>
+    /// <param name="paint">The sweep gradient paint.</param>
     /// <param name="brush">The resulting brush.</param>
     /// <returns><see langword="true"/> if created; otherwise, <see langword="false"/>.</returns>
-    private static bool TryCreateSweepGradientBrush(SweepGradientPaint sg, out Brush? brush)
+    private static bool TryCreateSweepGradientBrush(SweepGradientPaint paint, Matrix3x2 transform, out Brush? brush)
     {
-        // Map gradient stops (apply paint opacity multiplier to each stop’s alpha).
-        ColorStop[] stops = ToColorStops(sg.Stops, sg.Opacity);
+        // Map gradient stops (apply paint opacity multiplier to each stop's alpha).
+        ColorStop[] stops = ToColorStops(paint.Stops, paint.Opacity);
 
         // Map spread method.
-        GradientRepetitionMode mode = MapSpread(sg.Spread);
+        GradientRepetitionMode mode = MapSpread(paint.Spread);
 
-        brush = new SweepGradientBrush(sg.Center, sg.StartAngle, sg.EndAngle, mode, stops);
+        // Apply any transform defined on the paint.
+        PointF center = paint.Center;
+        if (!transform.IsIdentity)
+        {
+            center = Vector2.Transform(center, transform);
+        }
+
+        brush = new SweepGradientBrush(center, paint.StartAngle, paint.EndAngle, mode, stops);
         return true;
     }
 
@@ -163,14 +178,4 @@ internal sealed partial class RichTextGlyphRenderer
         byte aa = (byte)MathF.Round(a * 255f);
         return Color.FromPixel(new Rgba32(c.Red, c.Green, c.Blue, aa));
     }
-
-    /// <summary>
-    /// Compares two points for near-equality.
-    /// </summary>
-    /// <param name="a">The first point.</param>
-    /// <param name="b">The second point.</param>
-    /// <param name="eps">Tolerance.</param>
-    /// <returns><see langword="true"/> if near-equal; otherwise <see langword="false"/>.</returns>
-    private static bool ApproximatelyEqual(in PointF a, in PointF b, float eps = 1e-4f)
-        => MathF.Abs(a.X - b.X) <= eps && MathF.Abs(a.Y - b.Y) <= eps;
 }

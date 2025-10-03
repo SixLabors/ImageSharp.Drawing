@@ -54,10 +54,22 @@ public static class ClearExtensions
     internal static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
     {
         GraphicsOptions options = drawingOptions.GraphicsOptions.DeepClone();
-        options.ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Normal;
-        options.AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Src;
+        options.ColorBlendingMode = PixelColorBlendingMode.Normal;
+        options.AlphaCompositionMode = PixelAlphaCompositionMode.Src;
         options.BlendPercentage = 1F;
 
         return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.Transform);
+    }
+
+    internal static DrawingOptions CloneOrReturnForIntersectionRule(this DrawingOptions drawingOptions, IntersectionRule intersectionRule)
+    {
+        if (drawingOptions.ShapeOptions.IntersectionRule == intersectionRule)
+        {
+            return drawingOptions;
+        }
+
+        ShapeOptions shapeOptions = drawingOptions.ShapeOptions.DeepClone();
+        shapeOptions.IntersectionRule = intersectionRule;
+        return new DrawingOptions(drawingOptions.GraphicsOptions.DeepClone(), shapeOptions, drawingOptions.Transform);
     }
 }

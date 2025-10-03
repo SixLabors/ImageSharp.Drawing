@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Shapes.Text;
 using SixLabors.ImageSharp.Drawing.Text;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -26,6 +27,22 @@ public static class TextBuilder
         renderer.RenderText(text, textOptions);
 
         return glyphBuilder.Paths;
+    }
+
+    /// <summary>
+    /// Generates the shapes corresponding the glyphs described by the text options.
+    /// </summary>
+    /// <param name="text">The text to generate glyphs for.</param>
+    /// <param name="textOptions">The text rendering options.</param>
+    /// <returns>The <see cref="IPathCollection"/></returns>
+    public static IReadOnlyList<GlyphPathCollection> GenerateGlyphs2(string text, TextOptions textOptions)
+    {
+        GlyphBuilder glyphBuilder = new();
+        TextRenderer renderer = new(glyphBuilder);
+
+        renderer.RenderText(text, textOptions);
+
+        return glyphBuilder.Glyphs;
     }
 
     /// <summary>
