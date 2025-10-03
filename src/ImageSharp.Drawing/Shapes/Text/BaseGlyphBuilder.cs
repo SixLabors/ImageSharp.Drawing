@@ -230,71 +230,9 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.EndLayer();
     }
 
-    //void IGlyphRenderer.SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
-    //{
-    //    throw new NotImplementedException();
-    //}
-
-    /// <inheritdoc cref="IGlyphRenderer.BeginText(in FontRectangle)"/>
-    protected virtual void BeginText(in FontRectangle bounds)
+    /// <inheritdoc/>
+    void IGlyphRenderer.SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
     {
-    }
-
-    /// <inheritdoc cref="IGlyphRenderer.BeginGlyph(in FontRectangle, in GlyphRendererParameters)"/>
-    protected virtual void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
-    {
-    }
-
-    /// <inheritdoc cref="IGlyphRenderer.EndGlyph"/>
-    protected virtual void EndGlyph()
-    {
-    }
-
-    /// <inheritdoc cref="IGlyphRenderer.EndText"/>
-    protected virtual void EndText()
-    {
-    }
-
-    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule)"/>
-    protected virtual void BeginLayer(Paint? paint, FillRule fillRule)
-    {
-    }
-
-    /// <inheritdoc cref="IGlyphRenderer.EndLayer"/>
-    protected virtual void EndLayer()
-    {
-    }
-
-    public virtual TextDecorations EnabledDecorations()
-        => this.parameters.TextRun.TextDecorations;
-
-    public virtual void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
-    {
-        // If we were already inside a glyph, finalize it first so that the decoration is separate:
-        // This ensures that no attempt to union/merge the decoration with the glyph geometry is made.
-        // Layers are always finalized immediately when ended so any path is a standard glyph.
-        IPath prev = this.Builder.Build();
-        if (!prev.Bounds.IsEmpty)
-        {
-            this.CurrentPaths.Add(prev);
-
-            if (this.graphemeBuilder is not null)
-            {
-                this.graphemeBuilder.AddPath(prev);
-                this.graphemeBuilder.AddLayer(
-                    startIndex: this.layerStartIndex,
-                    count: 1,
-                    paint: this.activeLayerPaint,
-                    fillRule: this.activeLayerFillRule,
-                    bounds: prev.Bounds,
-                    kind: GlyphLayerKind.Glyph);
-
-                this.graphemePathCount++;
-            }
-
-            this.Builder.Clear();
-        }
-
         if (thickness == 0)
         {
             return;
@@ -358,6 +296,45 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         }
 
         this.Builder.Clear();
+        this.SetDecoration(textDecorations, start, end, thickness);
+    }
+
+    /// <inheritdoc cref="IGlyphRenderer.BeginText(in FontRectangle)"/>
+    protected virtual void BeginText(in FontRectangle bounds)
+    {
+    }
+
+    /// <inheritdoc cref="IGlyphRenderer.BeginGlyph(in FontRectangle, in GlyphRendererParameters)"/>
+    protected virtual void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
+    {
+    }
+
+    /// <inheritdoc cref="IGlyphRenderer.EndGlyph"/>
+    protected virtual void EndGlyph()
+    {
+    }
+
+    /// <inheritdoc cref="IGlyphRenderer.EndText"/>
+    protected virtual void EndText()
+    {
+    }
+
+    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule)"/>
+    protected virtual void BeginLayer(Paint? paint, FillRule fillRule)
+    {
+    }
+
+    /// <inheritdoc cref="IGlyphRenderer.EndLayer"/>
+    protected virtual void EndLayer()
+    {
+    }
+
+    public virtual TextDecorations EnabledDecorations()
+        => this.parameters.TextRun.TextDecorations;
+
+    /// <inheritdoc cref="IGlyphRenderer.SetDecoration(TextDecorations, Vector2, Vector2, float)"/>
+    public virtual void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
+    {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

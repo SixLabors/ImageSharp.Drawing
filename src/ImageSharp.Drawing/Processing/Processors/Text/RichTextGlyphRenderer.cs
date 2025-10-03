@@ -31,9 +31,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private TextRun? currentTextRun;
     private Brush? currentBrush;
     private Pen? currentPen;
-    private TextDecorationDetails? currentUnderline;
-    private TextDecorationDetails? currentStrikeout;
-    private TextDecorationDetails? currentOverline;
     private bool currentDecorationIsVertical;
     private bool hasLayer;
 
@@ -166,20 +163,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.currentPen = this.defaultPen;
         }
 
-        bool renderFill = false;
-        bool renderOutline = false;
-
-        // If we are using the fonts color layers we ignore the request to draw an outline only
-        // because that won't really work. Instead we force drawing using fill with the requested color.
-        if (this.currentBrush != null)
-        {
-            renderFill = true;
-        }
-
-        if (this.currentPen != null)
-        {
-            // renderOutline = true;
-        }
+        // When rendering layers we only fill them.
+        // Any drawing of outlines is ignored as that doesn't really make sense.
+        bool renderFill = this.currentBrush != null;
 
         // Path has already been added to the collection via the base class.
         IPath path = this.CurrentPaths.Last();
@@ -199,12 +185,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             // Capture the delta between the location and the truncated render location.
             // We can use this to offset the render location on the next instance of this glyph.
             renderData.LocationDelta = (Vector2)(path.Bounds.Location - renderLocation);
-
-            if (renderOutline)
-            {
-                path = this.currentPen!.GeneratePath(path);
-                renderData.OutlineMap = this.Render(path);
-            }
 
             if (!this.noCache)
             {
@@ -254,18 +234,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 RenderPass = RenderOrderFill
             });
         }
-
-        if (renderData.OutlineMap != null)
-        {
-            int offset = (int)((this.currentPen?.StrokeWidth ?? 0) / 2);
-            this.DrawingOperations.Add(new DrawingOperation
-            {
-                RenderLocation = renderLocation - new Size(offset, offset),
-                Map = renderData.OutlineMap,
-                Brush = this.currentPen?.StrokeFill ?? this.currentBrush!,
-                RenderPass = RenderOrderOutline
-            });
-        }
     }
 
     public override TextDecorations EnabledDecorations()
@@ -301,24 +269,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             return;
         }
 
-        ref TextDecorationDetails? targetDecoration = ref this.currentStrikeout;
-        if (textDecorations == TextDecorations.Strikeout)
-        {
-            targetDecoration = ref this.currentStrikeout;
-        }
-        else if (textDecorations == TextDecorations.Underline)
-        {
-            targetDecoration = ref this.currentUnderline;
-        }
-        else if (textDecorations == TextDecorations.Overline)
-        {
-            targetDecoration = ref this.currentOverline;
-        }
-        else
-        {
-            return;
-        }
-
         Pen? pen = null;
         if (this.currentTextRun is RichTextRun drawingRun)
         {
@@ -339,40 +289,66 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
 
         // Always respect the pen stroke width if explicitly set.
+        float originalThickness = thickness;
         if (pen is not null)
         {
-            thickness = pen.StrokeWidth;
+            // Clamp the thickness to whole pixels.
+            thickness = MathF.Max(1F, (float)Math.Round(pen.StrokeWidth));
         }
         else
         {
-            // Clamp the thickness to whole pixels.
             // Brush cannot be null if pen is null.
-            thickness = MathF.Max(1F, MathF.Round(thickness));
+            // The thickness of the line has already been clamped in the base class.
             pen = new SolidPen((this.currentBrush ?? this.defaultBrush)!, thickness);
         }
 
-        // Drawing is always centered around the point so we need to offset by half.
-        Vector2 offset = Vector2.Zero;
-        bool rotated = this.currentDecorationIsVertical;
-        if (textDecorations == TextDecorations.Overline)
+        // Path has already been added to the collection via the base class.
+        IPath path = this.CurrentPaths.Last();
+        IPath outline = path;
+
+        if (originalThickness != thickness)
         {
-            // CSS overline is drawn above the position, so we need to move it up.
-            offset = rotated ? new Vector2(thickness * .5F, 0) : new Vector2(0, -(thickness * .5F));
-        }
-        else if (textDecorations == TextDecorations.Underline)
-        {
-            // CSS underline is drawn below the position, so we need to move it down.
-            offset = rotated ? new Vector2(-(thickness * .5F), 0) : new Vector2(0, thickness * .5F);
+            // Respect edge anchoring per decoration type:
+            // - Overline: keep the base edge fixed (bottom in horizontal; left in vertical)
+            // - Underline: keep the top edge fixed (top in horizontal; right in vertical)
+            // - Strikeout: keep the center fixed (default behavior)
+            float ratio = thickness / originalThickness;
+            if (ratio != 1f)
+            {
+                Vector2 scale = this.currentDecorationIsVertical
+                    ? new Vector2(ratio, 1f)
+                    : new Vector2(1f, ratio);
+
+                RectangleF b = path.Bounds;
+                Vector2 center = new(b.Left + (b.Width * 0.5f), b.Top + (b.Height * 0.5f));
+                Vector2 anchor = center;
+
+                if (textDecorations == TextDecorations.Overline)
+                {
+                    anchor = this.currentDecorationIsVertical
+                        ? new Vector2(b.Left, center.Y) // vertical: anchor left edge
+                        : new Vector2(center.X, b.Bottom); // horizontal: anchor bottom edge
+                }
+                else if (textDecorations == TextDecorations.Underline)
+                {
+                    anchor = this.currentDecorationIsVertical
+                        ? new Vector2(b.Right, center.Y) // vertical: anchor right edge
+                        : new Vector2(center.X, b.Top);  // horizontal: anchor top edge
+                }
+
+                // Scale about the chosen anchor so the fixed edge stays in place.
+                outline = path.Transform(Matrix3x2.CreateScale(scale, anchor));
+            }
         }
 
-        // We clamp the start and end points to the pixel grid to avoid anti-aliasing.
-        this.AppendDecoration(
-            ref targetDecoration,
-            ClampToPixel(start + offset, (int)thickness, rotated),
-            ClampToPixel(end + offset, (int)thickness, rotated),
-            pen,
-            thickness,
-            rotated);
+        // Render the path here. Decorations are un-cached.
+        this.DrawingOperations.Add(new DrawingOperation
+        {
+            Brush = pen.StrokeFill,
+            RenderLocation = ClampToPixel(outline.Bounds.Location),
+            Map = this.Render(outline),
+            RenderPass = RenderOrderDecoration
+        });
     }
 
     protected override void EndGlyph()
@@ -506,121 +482,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         this.glyphCache[this.currentCacheKey].Add(renderData);
     }
 
-    protected override void EndText()
-    {
-        // Ensure we have captured the last overline/underline/strikeout path
-        this.FinalizeDecoration(ref this.currentOverline);
-        this.FinalizeDecoration(ref this.currentUnderline);
-        this.FinalizeDecoration(ref this.currentStrikeout);
-    }
-
     public void Dispose() => this.Dispose(true);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Point ClampToPixel(PointF point) => Point.Truncate(point);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
-    {
-        // Even. Clamp to whole pixels.
-        if ((thickness & 1) == 0)
-        {
-            return Point.Truncate(point);
-        }
-
-        // Odd. Clamp to half pixels.
-        if (rotated)
-        {
-            return Point.Truncate(point) + new Vector2(.5F, 0);
-        }
-
-        return Point.Truncate(point) + new Vector2(0, .5F);
-    }
-
-    private void FinalizeDecoration(ref TextDecorationDetails? decoration)
-    {
-        // TODO: Shouldn't we be using the path from the builder here?
-        if (decoration != null)
-        {
-            // TODO: If the path is curved a line segment does not work well.
-            // What would be great would be if we could take a slice of a path given start and end positions.
-            IPath path = new Path(new LinearLineSegment(decoration.Value.Start, decoration.Value.End));
-            IPath outline = decoration.Value.Pen.GeneratePath(path, decoration.Value.Thickness);
-
-            // Calculate the transform for this path.
-            // We cannot use the path builder transform as this path is rendered independently.
-            FontRectangle rectangle = new(outline.Bounds.Location, new Vector2(outline.Bounds.Width, outline.Bounds.Height));
-            Matrix3x2 pathTransform = this.ComputeTransform(in rectangle);
-            Matrix3x2 defaultTransform = this.drawingOptions.Transform;
-            outline = outline.Transform(pathTransform * defaultTransform);
-
-            if (outline.Bounds.Width != 0 && outline.Bounds.Height != 0)
-            {
-                // Render the path here. Decorations are un-cached.
-                this.DrawingOperations.Add(new DrawingOperation
-                {
-                    Brush = decoration.Value.Pen.StrokeFill,
-                    RenderLocation = ClampToPixel(outline.Bounds.Location),
-                    Map = this.Render(outline),
-                    RenderPass = RenderOrderDecoration
-                });
-            }
-
-            decoration = null;
-        }
-    }
-
-    private void AppendDecoration(
-        ref TextDecorationDetails? decoration,
-        Vector2 start,
-        Vector2 end,
-        Pen pen,
-        float thickness,
-        bool rotated)
-    {
-        if (decoration != null)
-        {
-            // TODO: This only works well if we are not trying to follow a path.
-            if (this.path is null)
-            {
-                // Let's try and expand it first.
-                if (rotated)
-                {
-                    if (thickness == decoration.Value.Thickness
-                    && decoration.Value.End.Y + 1 >= start.Y
-                    && decoration.Value.End.X == start.X
-                    && decoration.Value.Pen.Equals(pen))
-                    {
-                        // Expand the line
-                        start = decoration.Value.Start;
-
-                        // If this is null finalize does nothing.
-                        decoration = null;
-                    }
-                }
-                else if (thickness == decoration.Value.Thickness
-                     && decoration.Value.End.Y == start.Y
-                     && decoration.Value.End.X + 1 >= start.X
-                     && decoration.Value.Pen.Equals(pen))
-                {
-                    // Expand the line
-                    start = decoration.Value.Start;
-
-                    // If this is null finalize does nothing.
-                    decoration = null;
-                }
-            }
-        }
-
-        this.FinalizeDecoration(ref decoration);
-        decoration = new TextDecorationDetails
-        {
-            Start = start,
-            End = end,
-            Pen = pen,
-            Thickness = thickness
-        };
-    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void TransformGlyph(in FontRectangle bounds)
