@@ -28,6 +28,9 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private int graphemePathCount;
     private int currentGraphemeIndex = -1;
     private readonly List<GlyphPathCollection> currentGlyphs = [];
+    private TextDecorationDetails? previousUnderlineTextDecoration;
+    private TextDecorationDetails? previousOverlineTextDecoration;
+    private TextDecorationDetails? previousStrikeoutTextDecoration;
 
     // Per-layer (within current grapheme) bookkeeping:
     private int layerStartIndex;
@@ -67,6 +70,9 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.graphemeBuilder = null;
         this.graphemePathCount = 0;
         this.currentGraphemeIndex = -1;
+        this.previousUnderlineTextDecoration = null;
+        this.previousOverlineTextDecoration = null;
+        this.previousStrikeoutTextDecoration = null;
 
         this.EndText();
     }
@@ -248,6 +254,56 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         start = ClampToPixel(start, (int)thickness, rotated);
         end = ClampToPixel(end, (int)thickness, rotated);
 
+        // Sometimes the start and end points do not align properly leaving pixel sized gaps
+        // so we need to adjust them. Use any previous decoration to try and continue the line.
+        TextDecorationDetails? previous = textDecorations switch
+        {
+            TextDecorations.Underline => this.previousUnderlineTextDecoration,
+            TextDecorations.Overline => this.previousOverlineTextDecoration,
+            TextDecorations.Strikeout => this.previousStrikeoutTextDecoration,
+            _ => null
+        };
+
+        if (previous != null)
+        {
+            // Align the new line with the previous one if they are close enough.
+            if (rotated)
+            {
+                if (thickness == previous.Value.Thickness
+                && previous.Value.End.Y + 1 >= start.Y
+                && previous.Value.End.X == start.X)
+                {
+                    start = previous.Value.End;
+                }
+            }
+            else if (thickness == previous.Value.Thickness
+                 && previous.Value.End.Y == start.Y
+                 && previous.Value.End.X + 1 >= start.X)
+            {
+                start = previous.Value.End;
+            }
+        }
+
+        TextDecorationDetails current = new()
+        {
+            Start = start,
+            End = end,
+            Thickness = thickness
+        };
+
+        switch (textDecorations)
+        {
+            case TextDecorations.Underline:
+                this.previousUnderlineTextDecoration = current;
+                break;
+            case TextDecorations.Strikeout:
+                this.previousStrikeoutTextDecoration = current;
+                break;
+            case TextDecorations.Overline:
+                this.previousOverlineTextDecoration = current;
+                break;
+        }
+
         Vector2 a = start - pad;
         Vector2 b = start + pad;
         Vector2 c = end + pad;
@@ -343,16 +399,27 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
     {
+        // Even. Clamp to whole pixels.
         if ((thickness & 1) == 0)
         {
             return Point.Truncate(point);
         }
 
+        // Odd. Clamp to half pixels.
         if (rotated)
         {
             return Point.Truncate(point) + new Vector2(.5F, 0);
         }
 
         return Point.Truncate(point) + new Vector2(0, .5F);
+    }
+
+    private struct TextDecorationDetails
+    {
+        public Vector2 Start { get; set; }
+
+        public Vector2 End { get; set; }
+
+        public float Thickness { get; internal set; }
     }
 }

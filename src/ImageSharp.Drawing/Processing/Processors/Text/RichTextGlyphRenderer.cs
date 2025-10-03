@@ -613,15 +613,4 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.OutlineMap?.Dispose();
         }
     }
-
-    private struct TextDecorationDetails
-    {
-        public Vector2 Start { get; set; }
-
-        public Vector2 End { get; set; }
-
-        public Pen Pen { get; set; }
-
-        public float Thickness { get; internal set; }
-    }
 }
