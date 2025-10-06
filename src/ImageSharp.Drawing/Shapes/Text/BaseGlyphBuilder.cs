@@ -130,23 +130,21 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         if (!this.usedLayers)
         {
             IPath path = this.Builder.Build();
-            if (!path.Bounds.IsEmpty)
+
+            this.CurrentPaths.Add(path);
+
+            if (this.graphemeBuilder is not null)
             {
-                this.CurrentPaths.Add(path);
+                this.graphemeBuilder.AddPath(path);
+                this.graphemeBuilder.AddLayer(
+                    startIndex: this.graphemePathCount,
+                    count: 1,
+                    paint: null,
+                    fillRule: FillRule.NonZero,
+                    bounds: path.Bounds,
+                    kind: GlyphLayerKind.Glyph);
 
-                if (this.graphemeBuilder is not null)
-                {
-                    this.graphemeBuilder.AddPath(path);
-                    this.graphemeBuilder.AddLayer(
-                        startIndex: this.graphemePathCount,
-                        count: 1,
-                        paint: null,
-                        fillRule: FillRule.NonZero,
-                        bounds: path.Bounds,
-                        kind: GlyphLayerKind.Glyph);
-
-                    this.graphemePathCount++;
-                }
+                this.graphemePathCount++;
             }
         }
 
@@ -212,23 +210,20 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         }
 
         IPath path = this.Builder.Build();
-        if (!path.Bounds.IsEmpty)
+        this.CurrentPaths.Add(path);
+
+        if (this.graphemeBuilder is not null)
         {
-            this.CurrentPaths.Add(path);
+            this.graphemeBuilder.AddPath(path);
+            this.graphemeBuilder.AddLayer(
+                startIndex: this.layerStartIndex,
+                count: 1,
+                paint: this.activeLayerPaint,
+                fillRule: this.activeLayerFillRule,
+                bounds: path.Bounds,
+                kind: GlyphLayerKind.Painted);
 
-            if (this.graphemeBuilder is not null)
-            {
-                this.graphemeBuilder.AddPath(path);
-                this.graphemeBuilder.AddLayer(
-                    startIndex: this.layerStartIndex,
-                    count: 1,
-                    paint: this.activeLayerPaint,
-                    fillRule: this.activeLayerFillRule,
-                    bounds: path.Bounds,
-                    kind: GlyphLayerKind.Painted);
-
-                this.graphemePathCount++;
-            }
+            this.graphemePathCount++;
         }
 
         this.Builder.Clear();
@@ -266,21 +261,32 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         if (previous != null)
         {
+            float prevThickness = previous.Value.Thickness;
+            Vector2 prevStart = previous.Value.Start;
+            Vector2 prevEnd = previous.Value.End;
+
+            // If the previous line is identical to the new one ignore it.
+            // This can happen when multiple glyph layers are used.
+            if (prevStart == start && prevEnd == end)
+            {
+                return;
+            }
+
             // Align the new line with the previous one if they are close enough.
             if (rotated)
             {
-                if (thickness == previous.Value.Thickness
-                && previous.Value.End.Y + 1 >= start.Y
-                && previous.Value.End.X == start.X)
+                if (thickness == prevThickness
+                && prevEnd.Y + 1 >= start.Y
+                && prevEnd.X == start.X)
                 {
-                    start = previous.Value.End;
+                    start = prevEnd;
                 }
             }
-            else if (thickness == previous.Value.Thickness
-                 && previous.Value.End.Y == start.Y
-                 && previous.Value.End.X + 1 >= start.X)
+            else if (thickness == prevThickness
+                 && prevEnd.Y == start.Y
+                 && prevEnd.X + 1 >= start.X)
             {
-                start = previous.Value.End;
+                start = prevEnd;
             }
         }
 
@@ -332,23 +338,28 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         renderer.EndFigure();
 
         IPath path = this.Builder.Build();
-        if (!path.Bounds.IsEmpty)
+
+        // If the path is degenerate (e.g. zero width line) we just skip it
+        // and return. This might happen when clamping moves the points.
+        if (path.Bounds.IsEmpty)
         {
-            this.CurrentPaths.Add(path);
+            this.Builder.Clear();
+            return;
+        }
 
-            if (this.graphemeBuilder is not null)
-            {
-                this.graphemeBuilder.AddPath(path);
-                this.graphemeBuilder.AddLayer(
-                    startIndex: this.layerStartIndex,
-                    count: 1,
-                    paint: this.activeLayerPaint,
-                    fillRule: FillRule.NonZero,
-                    bounds: path.Bounds,
-                    kind: GlyphLayerKind.Decoration);
+        this.CurrentPaths.Add(path);
+        if (this.graphemeBuilder is not null)
+        {
+            this.graphemeBuilder.AddPath(path);
+            this.graphemeBuilder.AddLayer(
+                startIndex: this.layerStartIndex,
+                count: 1,
+                paint: this.activeLayerPaint,
+                fillRule: FillRule.NonZero,
+                bounds: path.Bounds,
+                kind: GlyphLayerKind.Decoration);
 
-                this.graphemePathCount++;
-            }
+            this.graphemePathCount++;
         }
 
         this.Builder.Clear();

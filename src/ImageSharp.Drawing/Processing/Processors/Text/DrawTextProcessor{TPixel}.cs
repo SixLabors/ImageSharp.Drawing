@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.Fonts;
+using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;
 

@@ -269,10 +269,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             return;
         }
 
+        Brush? brush = null;
         Pen? pen = null;
         if (this.currentTextRun is RichTextRun drawingRun)
         {
-            this.currentBrush = drawingRun.Brush;
+            brush = drawingRun.Brush;
 
             if (textDecorations == TextDecorations.Strikeout)
             {
@@ -297,9 +298,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
         else
         {
-            // Brush cannot be null if pen is null.
             // The thickness of the line has already been clamped in the base class.
-            pen = new SolidPen((this.currentBrush ?? this.defaultBrush)!, thickness);
+            pen = new SolidPen((brush ?? this.defaultBrush)!, thickness);
         }
 
         // Path has already been added to the collection via the base class.
@@ -337,7 +337,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 }
 
                 // Scale about the chosen anchor so the fixed edge stays in place.
-                outline = path.Transform(Matrix3x2.CreateScale(scale, anchor));
+                outline = outline.Transform(Matrix3x2.CreateScale(scale, anchor));
             }
         }
 
@@ -536,7 +536,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             0,
             size.Height,
             subpixelCount,
-            IntersectionRule.NonZero,
+            IntersectionRule.NonZero, // TODO: Should be from layer.
             this.memoryAllocator);
 
         try
