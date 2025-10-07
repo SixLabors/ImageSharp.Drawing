@@ -19,7 +19,7 @@ internal class Clipper
     /// <param name="operation">The clipping operation.</param>
     /// <param name="rule">The intersection rule.</param>
     /// <returns>The <see cref="T:IPath[]"/>.</returns>
-    public IPath[] GenerateClippedShapes(BooleanOperation operation)
+    public IPath[] GenerateClippedShapes(BooleanOperation operation, IntersectionRule rule)
     {
         ArgumentNullException.ThrowIfNull(this.subject);
         ArgumentNullException.ThrowIfNull(this.clip);
@@ -27,7 +27,6 @@ internal class Clipper
         SixLabors.PolygonClipper.PolygonClipper polygonClipper = new(this.subject, this.clip, operation);
 
         SixLabors.PolygonClipper.Polygon result = polygonClipper.Run();
-
 
         IPath[] shapes = new IPath[result.Count];
 
@@ -86,15 +85,7 @@ internal class Clipper
     /// <param name="clippingType">Type of the poly.</param>
     internal void AddPath(ISimplePath path, ClippingType clippingType)
     {
-        ReadOnlySpan<PointF> vectors = path.Points.Span;
-        SixLabors.PolygonClipper.Polygon polygon = [];
-        Contour contour = new();
-        polygon.Add(contour);
-
-        foreach (PointF point in vectors)
-        {
-            contour.AddVertex(new Vertex(point.X, point.Y));
-        }
+        SixLabors.PolygonClipper.Polygon polygon = path.ToPolygon();
 
         switch (clippingType)
         {

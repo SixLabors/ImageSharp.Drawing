@@ -39,7 +39,7 @@ public class ClipperTests
             }
         }
 
-        return clipper.GenerateClippedShapes(BooleanOperation.Difference);
+        return clipper.GenerateClippedShapes(BooleanOperation.Difference, IntersectionRule.EvenOdd);
     }
 
     [Fact]

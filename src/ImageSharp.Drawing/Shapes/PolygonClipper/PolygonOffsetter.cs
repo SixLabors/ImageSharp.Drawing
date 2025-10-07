@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
@@ -101,13 +102,25 @@ internal sealed class PolygonOffsetter
         //
         // // PolygonClipper will throw for unhandled exceptions but if a result is empty
         // // we should just return the original path.
-        // if (solution.Count == 0)
-        // {
-        //     foreach (PathF path in this.solution)
-        //     {
-        //         solution.Add(path);
-        //     }
-        // }
+        SixLabors.PolygonClipper.Polygon result = SixLabors.PolygonClipper.PolygonClipper.Union(this.solution.ToPolygon(), solution.ToPolygon());
+
+        if (result.Count == 0)
+        {
+            foreach (PathF path in this.solution)
+            {
+                solution.Add(path);
+            }
+        }
+
+        foreach (Contour contour in result)
+        {
+            PathF path = new(contour.Count);
+            solution.Add(path);
+            foreach (Vertex vertex in contour)
+            {
+                path.Add(new Vector2((float)vertex.X, (float)vertex.Y));
+            }
+        }
     }
 
     private void ExecuteInternal(float delta)
@@ -679,6 +692,24 @@ internal class PathsF : List<PathF>
     public PathsF(int capacity)
         : base(capacity)
     {
+    }
+
+    internal SixLabors.PolygonClipper.Polygon ToPolygon()
+    {
+        SixLabors.PolygonClipper.Polygon polygon = [];
+
+        foreach (PathF pathF in this)
+        {
+            Contour contour = new();
+            polygon.Add(contour);
+
+            foreach (Vector2 point in pathF)
+            {
+                contour.AddVertex(new Vertex(point.X, point.Y));
+            }
+        }
+
+        return polygon;
     }
 }
 

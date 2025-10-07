@@ -63,7 +63,7 @@ public static class ClipPathExtensions
         clipper.AddPath(subjectPath, ClippingType.Subject);
         clipper.AddPaths(clipPaths, ClippingType.Clip);
 
-        IPath[] result = clipper.GenerateClippedShapes(options.ClippingOperation);
+        IPath[] result = clipper.GenerateClippedShapes(options.ClippingOperation, options.IntersectionRule);
 
         return new ComplexPolygon(result);
     }
