@@ -27,17 +27,15 @@ public interface ISimplePath
     /// Converts to <see cref="SixLabors.PolygonClipper.Polygon"/>
     /// </summary>
     /// <returns>The converted polygon.</returns>
-    internal SixLabors.PolygonClipper.Polygon ToPolygon()
+    internal SixLabors.PolygonClipper.Contour ToContour()
     {
-        SixLabors.PolygonClipper.Polygon polygon = [];
         Contour contour = new();
-        polygon.Add(contour);
 
         foreach (PointF point in this.Points.Span)
         {
             contour.AddVertex(new Vertex(point.X, point.Y));
         }
 
-        return polygon;
+        return contour;
     }
 }

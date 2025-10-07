@@ -10,8 +10,8 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 /// </summary>
 internal class Clipper
 {
-    private SixLabors.PolygonClipper.Polygon? subject;
-    private SixLabors.PolygonClipper.Polygon? clip;
+    private SixLabors.PolygonClipper.Polygon subject = [];
+    private SixLabors.PolygonClipper.Polygon clip = [];
 
     /// <summary>
     /// Generates the clipped shapes from the previously provided paths.
@@ -85,15 +85,15 @@ internal class Clipper
     /// <param name="clippingType">Type of the poly.</param>
     internal void AddPath(ISimplePath path, ClippingType clippingType)
     {
-        SixLabors.PolygonClipper.Polygon polygon = path.ToPolygon();
+        Contour contour = path.ToContour();
 
         switch (clippingType)
         {
             case ClippingType.Clip:
-                this.clip = polygon;
+                this.clip.Add(contour);
                 break;
             case ClippingType.Subject:
-                this.subject = polygon;
+                this.subject.Add(contour);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(clippingType), clippingType, null);
