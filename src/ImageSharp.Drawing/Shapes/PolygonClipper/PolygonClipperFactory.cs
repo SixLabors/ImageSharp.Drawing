@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.CompilerServices;
 using SixLabors.PolygonClipper;
 using ClipperPolygon = SixLabors.PolygonClipper.Polygon;
 
@@ -100,6 +101,7 @@ internal static class PolygonClipperFactory
         }
 
         // Parent assignment: pick the smallest-area ring that contains the bottom-left vertex.
+        // TODO: We can use pooling here if we care about large numbers of rings.
         int[] parent = new int[m];
         Array.Fill(parent, -1);
 
@@ -131,6 +133,7 @@ internal static class PolygonClipperFactory
         }
 
         // Depth = number of ancestors by following Parent links.
+        // TODO: We can pool this if we care about large numbers of rings.
         int[] depth = new int[m];
         for (int i = 0; i < m; i++)
         {
@@ -350,9 +353,6 @@ internal static class PolygonClipperFactory
     /// </code>
     /// Left if cross &gt; 0, right if cross &lt; 0, collinear if cross == 0.
     /// </remarks>
-    private static bool IsLeft(Vertex a, Vertex b, Vertex p)
-    {
-        double cross = ((b.X - a.X) * (p.Y - a.Y)) - ((b.Y - a.Y) * (p.X - a.X));
-        return cross > 0d;
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsLeft(Vertex a, Vertex b, Vertex p) => Vertex.Cross(b - a, p - a) > 0d;
 }
