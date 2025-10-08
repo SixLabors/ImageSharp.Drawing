@@ -2,31 +2,39 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.PolygonClipper;
+using ClipperPolygon = SixLabors.PolygonClipper.Polygon;
+using PolygonClipperAction = SixLabors.PolygonClipper.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 /// <summary>
-/// Library to clip polygons.
+/// Performs polygon clipping operations.
 /// </summary>
-internal class Clipper
+internal sealed class Clipper
 {
-    private SixLabors.PolygonClipper.Polygon? subject;
-    private SixLabors.PolygonClipper.Polygon? clip;
+    private ClipperPolygon? subject;
+    private ClipperPolygon? clip;
+    private readonly IntersectionRule rule;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Clipper"/> class.
+    /// </summary>
+    /// <param name="rule">The intersection rule.</param>
+    public Clipper(IntersectionRule rule) => this.rule = rule;
 
     /// <summary>
     /// Generates the clipped shapes from the previously provided paths.
     /// </summary>
     /// <param name="operation">The clipping operation.</param>
-    /// <param name="rule">The intersection rule.</param>
     /// <returns>The <see cref="T:IPath[]"/>.</returns>
-    public IPath[] GenerateClippedShapes(BooleanOperation operation, IntersectionRule rule)
+    public IPath[] GenerateClippedShapes(BooleanOperation operation)
     {
         ArgumentNullException.ThrowIfNull(this.subject);
         ArgumentNullException.ThrowIfNull(this.clip);
 
-        SixLabors.PolygonClipper.PolygonClipper polygonClipper = new(this.subject, this.clip, operation);
+        PolygonClipperAction polygonClipper = new(this.subject, this.clip, operation);
 
-        SixLabors.PolygonClipper.Polygon result = polygonClipper.Run();
+        ClipperPolygon result = polygonClipper.Run();
 
         IPath[] shapes = new IPath[result.Count];
 
@@ -49,7 +57,7 @@ internal class Clipper
     }
 
     /// <summary>
-    /// Adds the shapes.
+    /// Adds the collection of paths.
     /// </summary>
     /// <param name="paths">The paths.</param>
     /// <param name="clippingType">The clipping type.</param>
@@ -57,9 +65,21 @@ internal class Clipper
     {
         Guard.NotNull(paths, nameof(paths));
 
-        foreach (IPath p in paths)
+        // Accumulate all paths of the complex shape into a single polygon.
+        ClipperPolygon polygon = [];
+
+        foreach (IPath path in paths)
         {
-            this.AddPath(p, clippingType);
+            polygon = PolygonClipperFactory.FromSimplePaths(path.Flatten(), this.rule, polygon);
+        }
+
+        if (clippingType == ClippingType.Clip)
+        {
+            this.clip = polygon;
+        }
+        else
+        {
+            this.subject = polygon;
         }
     }
 
@@ -72,31 +92,14 @@ internal class Clipper
     {
         Guard.NotNull(path, nameof(path));
 
-        foreach (ISimplePath p in path.Flatten())
+        ClipperPolygon polygon = PolygonClipperFactory.FromSimplePaths(path.Flatten(), this.rule);
+        if (clippingType == ClippingType.Clip)
         {
-            this.AddPath(p, clippingType);
+            this.clip = polygon;
         }
-    }
-
-    /// <summary>
-    /// Adds the path.
-    /// </summary>
-    /// <param name="path">The path.</param>
-    /// <param name="clippingType">Type of the poly.</param>
-    internal void AddPath(ISimplePath path, ClippingType clippingType)
-    {
-        SixLabors.PolygonClipper.Polygon polygon = path.ToPolygon();
-
-        switch (clippingType)
+        else
         {
-            case ClippingType.Clip:
-                this.clip = polygon;
-                break;
-            case ClippingType.Subject:
-                this.subject = polygon;
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(nameof(clippingType), clippingType, null);
+            this.subject = polygon;
         }
     }
 }

@@ -28,18 +28,15 @@ public class ClipperTests
 
     private IEnumerable<IPath> Clip(IPath shape, params IPath[] hole)
     {
-        Clipper clipper = new();
+        Clipper clipper = new(IntersectionRule.EvenOdd);
 
         clipper.AddPath(shape, ClippingType.Subject);
         if (hole != null)
         {
-            foreach (IPath s in hole)
-            {
-                clipper.AddPath(s, ClippingType.Clip);
-            }
+            clipper.AddPaths(hole, ClippingType.Clip);
         }
 
-        return clipper.GenerateClippedShapes(BooleanOperation.Difference, IntersectionRule.EvenOdd);
+        return clipper.GenerateClippedShapes(BooleanOperation.Difference);
     }
 
     [Fact]
