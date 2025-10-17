@@ -31,6 +31,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private TextRun? currentTextRun;
     private Brush? currentBrush;
     private Pen? currentPen;
+    private FillRule? currentFillRule;
     private bool currentDecorationIsVertical;
     private bool hasLayer;
 
@@ -234,6 +235,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 RenderPass = RenderOrderFill
             });
         }
+
+        this.currentFillRule = null;
     }
 
     public override TextDecorations EnabledDecorations()
@@ -531,12 +534,18 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
         Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
 
+        IntersectionRule rule = IntersectionRule.NonZero;
+        if (this.currentFillRule.HasValue && this.currentFillRule.Value == FillRule.EvenOdd)
+        {
+            rule = IntersectionRule.EvenOdd;
+        }
+
         PolygonScanner scanner = PolygonScanner.Create(
             offsetPath,
             0,
             size.Height,
             subpixelCount,
-            IntersectionRule.NonZero, // TODO: Should be from layer.
+            rule,
             this.memoryAllocator);
 
         try

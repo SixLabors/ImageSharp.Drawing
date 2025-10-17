@@ -63,12 +63,24 @@ internal sealed partial class RichTextGlyphRenderer
 
         PointF p0 = paint.P0;
         PointF p1 = paint.P1;
+        PointF? p2 = paint.P2;
 
         // Apply any transform defined on the paint.
         if (!transform.IsIdentity)
         {
             p0 = Vector2.Transform(p0, transform);
             p1 = Vector2.Transform(p1, transform);
+
+            if (p2.HasValue)
+            {
+                p2 = Vector2.Transform(p2.Value, transform);
+            }
+        }
+
+        if (p2.HasValue)
+        {
+            brush = new LinearGradientBrush(p0, p1, p2.Value, mode, stops);
+            return true;
         }
 
         brush = new LinearGradientBrush(p0, p1, mode, stops);
@@ -91,13 +103,15 @@ internal sealed partial class RichTextGlyphRenderer
         GradientRepetitionMode mode = MapSpread(paint.Spread);
 
         // Apply any transform defined on the paint.
-        PointF center = paint.Center;
+        PointF center0 = paint.Center0;
+        PointF center1 = paint.Center1;
         if (!transform.IsIdentity)
         {
-            center = Vector2.Transform(center, transform);
+            center0 = Vector2.Transform(center0, transform);
+            center1 = Vector2.Transform(center1, transform);
         }
 
-        brush = new RadialGradientBrush(center, paint.Radius, mode, stops);
+        brush = new RadialGradientBrush(center0, paint.Radius0, center1, paint.Radius1, mode, stops);
         return true;
     }
 
@@ -105,6 +119,7 @@ internal sealed partial class RichTextGlyphRenderer
     /// Creates a <see cref="SweepGradientBrush"/> from a <see cref="SweepGradientPaint"/>.
     /// </summary>
     /// <param name="paint">The sweep gradient paint.</param>
+    /// <param name="transform">The transform to apply to the gradient center point.</param>
     /// <param name="brush">The resulting brush.</param>
     /// <returns><see langword="true"/> if created; otherwise, <see langword="false"/>.</returns>
     private static bool TryCreateSweepGradientBrush(SweepGradientPaint paint, Matrix3x2 transform, out Brush? brush)
