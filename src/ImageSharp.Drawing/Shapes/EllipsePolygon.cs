@@ -79,11 +79,7 @@ public sealed class EllipsePolygon : Polygon, IPathInternals
     /// <inheritdoc />
     // TODO switch this out to a calculated algorithm
     SegmentInfo IPathInternals.PointAlongPath(float distance)
-        => this.innerPath.PointAlongPath(distance);
-
-    /// <inheritdoc/>
-    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
-        => [this.innerPath];
+        => this.InnerPath.PointAlongPath(distance);
 
     private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
     {

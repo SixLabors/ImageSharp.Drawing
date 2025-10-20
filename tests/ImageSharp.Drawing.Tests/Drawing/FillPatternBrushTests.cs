@@ -30,11 +30,7 @@ public class FillPatternBrushTests
             int offsetY = r.Next(image.Height / yStride) * yStride;
             for (int x = 0; x < xStride; x++)
             {
-                int actualX = x + offsetX;
-                int actualY = y + offsetY;
-                Rgba32 expected = expectedPatternFast[y, x].ToPixel<Rgba32>(); // inverted pattern
-                Rgba32 actual = sourcePixels[actualX, actualY];
-                if (expected != actual)
+                for (int y = 0; y < yStride; y++)
                 {
                     int actualX = x + offsetX;
                     int actualY = y + offsetY;
@@ -46,10 +42,10 @@ public class FillPatternBrushTests
                     }
                 }
             }
-        }
 
-        image.Mutate(x => x.Resize(80, 80, KnownResamplers.NearestNeighbor));
-        image.Save($"{path}/{name}x4.png");
+            image.Mutate(x => x.Resize(80, 80, KnownResamplers.NearestNeighbor));
+            image.Save($"{path}/{name}x4.png");
+        }
     }
 
     [Fact]

@@ -56,7 +56,7 @@ public class Polygon : Path
     }
 
     internal Polygon(ILineSegment[] segments, bool owned)
-        : base(owned ? segments : segments.ToArray())
+        : base(owned ? segments : [.. segments])
     {
     }
 
