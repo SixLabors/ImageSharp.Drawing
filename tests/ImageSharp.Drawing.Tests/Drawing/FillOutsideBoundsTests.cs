@@ -20,15 +20,15 @@ public class FillOutsideBoundsTests
         int width = 100;
         int height = 100;
 
-        using (var image = new Image<Rgba32>(width, height, Color.Red.ToPixel<Rgba32>()))
+        using (Image<Rgba32> image = new(width, height, Color.Red.ToPixel<Rgba32>()))
         {
-            var rectangle = new Rectangle(xpos, 0, width, height);
+            Rectangle rectangle = new(xpos, 0, width, height);
 
             image.Mutate(x => x.Fill(Color.Black, rectangle));
         }
     }
 
-    public static TheoryData<int, int> CircleCoordinates { get; } = new TheoryData<int, int>()
+    public static TheoryData<int, int> CircleCoordinates { get; } = new()
     {
         { -110, -60 }, { 0, -60 }, { 110, -60 },
         { -110, -50 }, { 0, -50 }, { 110, -50 },
@@ -46,7 +46,7 @@ public class FillOutsideBoundsTests
         int height = 100;
 
         using Image<Rgba32> image = provider.GetImage();
-        var circle = new EllipsePolygon(xpos, ypos, width, height);
+        EllipsePolygon circle = new(xpos, ypos, width, height);
 
         provider.RunValidatingProcessorTest(
             x => x.Fill(Color.Black, circle),

@@ -10,27 +10,25 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
 
 public class FillPatternBrushTests
 {
-    private static void Test(string name, Color background, Brush brush, Color[,] expectedPattern)
+    private void Test(string name, Color background, Brush brush, Color[,] expectedPattern)
     {
         string path = TestEnvironment.CreateOutputDirectory("Drawing", "FillPatternBrushTests");
-
-        using Image<Rgba32> image = new(20, 20);
-        image.Mutate(x => x.Fill(background).Fill(brush));
-
-        image.Save($"{path}/{name}.png");
-
-        Buffer2D<Rgba32> sourcePixels = image.GetRootFramePixelBuffer();
-
-        // lets pick random spots to start checking
-        Random r = new();
-        DenseMatrix<Color> expectedPatternFast = new(expectedPattern);
-        int xStride = expectedPatternFast.Columns;
-        int yStride = expectedPatternFast.Rows;
-        int offsetX = r.Next(image.Width / xStride) * xStride;
-        int offsetY = r.Next(image.Height / yStride) * yStride;
-        for (int x = 0; x < xStride; x++)
+        using (Image<Rgba32> image = new(20, 20))
         {
-            for (int y = 0; y < yStride; y++)
+            image.Mutate(x => x.Fill(background).Fill(brush));
+
+            image.Save($"{path}/{name}.png");
+
+            Buffer2D<Rgba32> sourcePixels = image.GetRootFramePixelBuffer();
+
+            // lets pick random spots to start checking
+            Random r = new();
+            DenseMatrix<Color> expectedPatternFast = new(expectedPattern);
+            int xStride = expectedPatternFast.Columns;
+            int yStride = expectedPatternFast.Rows;
+            int offsetX = r.Next(image.Width / xStride) * xStride;
+            int offsetY = r.Next(image.Height / yStride) * yStride;
+            for (int x = 0; x < xStride; x++)
             {
                 int actualX = x + offsetX;
                 int actualY = y + offsetY;
@@ -38,7 +36,14 @@ public class FillPatternBrushTests
                 Rgba32 actual = sourcePixels[actualX, actualY];
                 if (expected != actual)
                 {
-                    Assert.Fail($"Expected {expected} but found {actual} at ({actualX},{actualY})");
+                    int actualX = x + offsetX;
+                    int actualY = y + offsetY;
+                    Rgba32 expected = expectedPatternFast[y, x].ToPixel<Rgba32>(); // inverted pattern
+                    Rgba32 actual = sourcePixels[actualX, actualY];
+                    if (expected != actual)
+                    {
+                        Assert.True(false, $"Expected {expected} but found {actual} at ({actualX},{actualY})");
+                    }
                 }
             }
         }

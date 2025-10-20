@@ -25,7 +25,7 @@ public class WithMemberFactoryAttribute : ImageDataAttributeBase
         : base(null, pixelTypes, additionalParameters) => this.memberMethodName = memberMethodName;
 
     protected override object[] GetFactoryMethodArgs(MethodInfo testMethod, Type factoryType)
-        => new object[] { testMethod.DeclaringType.FullName, this.memberMethodName };
+        => [testMethod.DeclaringType.FullName, this.memberMethodName];
 
     protected override string GetFactoryMethodName(MethodInfo testMethod) => "Lambda";
 }

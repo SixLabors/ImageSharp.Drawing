@@ -34,13 +34,13 @@ internal sealed class PolygonClipper
 
     public PolygonClipper()
     {
-        this.minimaList = new List<LocalMinima>();
-        this.intersectList = new List<IntersectNode>();
-        this.vertexList = new List<Vertex>();
-        this.outrecList = new List<OutRec>();
-        this.scanlineList = new List<float>();
-        this.horzSegList = new List<HorzSegment>();
-        this.horzJoinList = new List<HorzJoin>();
+        this.minimaList = [];
+        this.intersectList = [];
+        this.vertexList = [];
+        this.outrecList = [];
+        this.scanlineList = [];
+        this.horzSegList = [];
+        this.horzJoinList = [];
         this.PreserveCollinear = true;
     }
 
@@ -72,7 +72,7 @@ internal sealed class PolygonClipper
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Execute(ClippingOperation clipType, FillRule fillRule, PathsF solutionClosed)
-        => this.Execute(clipType, fillRule, solutionClosed, new PathsF());
+        => this.Execute(clipType, fillRule, solutionClosed, []);
 
     public void Execute(ClippingOperation clipType, FillRule fillRule, PathsF solutionClosed, PathsF solutionOpen)
     {
@@ -413,7 +413,7 @@ internal sealed class PolygonClipper
                 continue;
             }
 
-            PathF path = new();
+            PathF path = [];
             if (outrec.IsOpen)
             {
                 if (BuildPath(outrec.Pts, this.ReverseSolution, true, path))
@@ -3284,7 +3284,7 @@ internal sealed class PolygonClipper
 
         public BoundsF Bounds { get; set; }
 
-        public PathF Path { get; set; } = new PathF();
+        public PathF Path { get; set; } = [];
 
         public bool IsOpen { get; set; }
 
@@ -3358,7 +3358,7 @@ internal sealed class PolygonClipper
 internal class PolyPathF : IEnumerable<PolyPathF>
 {
     private readonly PolyPathF parent;
-    private readonly List<PolyPathF> items = new();
+    private readonly List<PolyPathF> items = [];
 
     public PolyPathF(PolyPathF parent = null)
         => this.parent = parent;

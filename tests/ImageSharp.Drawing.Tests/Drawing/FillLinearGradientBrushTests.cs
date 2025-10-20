@@ -303,10 +303,10 @@ public class FillLinearGradientBrushTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color[] colors =
-        {
+        [
             Color.Navy, Color.LightGreen, Color.Yellow,
             Color.Red
-        };
+        ];
 
         StringBuilder coloringVariant = new();
         ColorStop[] colorStops = new ColorStop[stopPositions.Length];
@@ -316,7 +316,7 @@ public class FillLinearGradientBrushTests
             Color color = colors[stopColorCodes[i % colors.Length]];
             float position = stopPositions[i];
             colorStops[i] = new ColorStop(position, color);
-            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToHex(), position);
+            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToPixel<Rgba32>().ToHex(), position);
         }
 
         FormattableString variant = $"({startX},{startY})_TO_({endX},{endY})__[{coloringVariant}]";
@@ -350,10 +350,10 @@ public class FillLinearGradientBrushTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color[] colors =
-        {
+        [
             Color.Black, Color.Blue, Color.Red,
             Color.White, Color.Lime
-        };
+        ];
 
         StringBuilder coloringVariant = new();
         ColorStop[] colorStops = new ColorStop[stopPositions.Length];
@@ -363,7 +363,7 @@ public class FillLinearGradientBrushTests
             Color color = colors[stopColorCodes[i % colors.Length]];
             float position = stopPositions[i];
             colorStops[i] = new ColorStop(position, color);
-            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToHex(), position);
+            coloringVariant.AppendFormat(CultureInfo.InvariantCulture, "{0}@{1};", color.ToPixel<Rgba32>().ToHex(), position);
         }
 
         FormattableString variant = $"({startX},{startY})_TO_({endX},{endY})__[{coloringVariant}]";
@@ -430,8 +430,8 @@ public class FillLinearGradientBrushTests
             img =>
             {
                 PathGradientBrush brush = new(
-                    new[] { new PointF(0, 0), new PointF(200, 0), new PointF(200, 200), new PointF(0, 200), new PointF(0, 0) },
-                    new[] { Color.Red, Color.Yellow, Color.Green, Color.DarkCyan, Color.Red });
+                    [new PointF(0, 0), new PointF(200, 0), new PointF(200, 200), new PointF(0, 200), new PointF(0, 0)],
+                    [Color.Red, Color.Yellow, Color.Green, Color.DarkCyan, Color.Red]);
 
                 img.Mutate(m => m.Fill(brush));
             },

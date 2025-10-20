@@ -89,7 +89,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// <inheritdoc />
     public IEnumerable<ISimplePath> Flatten()
     {
-        List<ISimplePath> paths = new();
+        List<ISimplePath> paths = [];
         foreach (IPath path in this.Paths)
         {
             paths.AddRange(path.Flatten());

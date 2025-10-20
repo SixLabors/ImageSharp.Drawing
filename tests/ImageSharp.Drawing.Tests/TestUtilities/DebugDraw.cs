@@ -39,19 +39,19 @@ internal class DebugDraw
         img.SaveAsPng(outFile);
     }
 
-    private static PointF P(float x, float y) => new PointF(x, y);
+    private static PointF P(float x, float y) => new(x, y);
 
     private static void DrawGrid(IImageProcessingContext ctx, RectangleF rect, float gridSize)
     {
         for (float x = rect.Left; x <= rect.Right; x += gridSize)
         {
-            PointF[] line = { P(x, rect.Top), P(x, rect.Bottom) };
+            PointF[] line = [P(x, rect.Top), P(x, rect.Bottom)];
             ctx.DrawLine(GridPen, line);
         }
 
         for (float y = rect.Top; y <= rect.Bottom; y += gridSize)
         {
-            PointF[] line = { P(rect.Left, y), P(rect.Right, y) };
+            PointF[] line = [P(rect.Left, y), P(rect.Right, y)];
             ctx.DrawLine(GridPen, line);
         }
     }

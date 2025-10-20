@@ -17,17 +17,17 @@ public class FillWithPattern
     [Benchmark(Baseline = true, Description = "System.Drawing Fill with Pattern")]
     public void DrawPatternPolygonSystemDrawing()
     {
-        using (var destination = new Bitmap(800, 800))
-        using (var graphics = Graphics.FromImage(destination))
+        using (Bitmap destination = new(800, 800))
+        using (Graphics graphics = Graphics.FromImage(destination))
         {
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
-            using (var brush = new HatchBrush(HatchStyle.BackwardDiagonal, System.Drawing.Color.HotPink))
+            using (HatchBrush brush = new(HatchStyle.BackwardDiagonal, System.Drawing.Color.HotPink))
             {
                 graphics.FillRectangle(brush, new SDRectangle(0, 0, 800, 800)); // can't find a way to flood fill with a brush
             }
 
-            using (var stream = new MemoryStream())
+            using (MemoryStream stream = new())
             {
                 destination.Save(stream, System.Drawing.Imaging.ImageFormat.Bmp);
             }
@@ -37,11 +37,11 @@ public class FillWithPattern
     [Benchmark(Description = "ImageSharp Fill with Pattern")]
     public void DrawPatternPolygon3Core()
     {
-        using (var image = new Image<Rgba32>(800, 800))
+        using (Image<Rgba32> image = new(800, 800))
         {
             image.Mutate(x => x.Fill(CoreBrushes.BackwardDiagonal(Color.HotPink)));
 
-            using (var stream = new MemoryStream())
+            using (MemoryStream stream = new())
             {
                 image.SaveAsBmp(stream);
             }

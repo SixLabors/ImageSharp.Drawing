@@ -60,7 +60,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         this.memoryAllocator = memoryAllocator;
         this.defaultPen = pen;
         this.defaultBrush = brush;
-        this.DrawingOperations = new List<DrawingOperation>();
+        this.DrawingOperations = [];
 
         IPath? path = textOptions.Path;
         if (path is not null)
@@ -115,7 +115,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             // We need to apply the default transform to the bounds to get the correct size
             // for comparison with future glyphs. We can use this cached glyph anywhere in the text block.
             RectangleF currentBounds = RectangleF.Transform(
-                   new RectangleF(bounds.Location, new(bounds.Width, bounds.Height)),
+                   new RectangleF(bounds.Location, new SizeF(bounds.Width, bounds.Height)),
                    this.drawingOptions.Transform);
 
             PointF currentBoundsDelta = currentBounds.Location - ClampToPixel(currentBounds.Location);
@@ -233,12 +233,12 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         if (textDecorations == TextDecorations.Overline)
         {
             // CSS overline is drawn above the position, so we need to move it up.
-            offset = rotated ? new(thickness * .5F, 0) : new(0, -(thickness * .5F));
+            offset = rotated ? new Vector2(thickness * .5F, 0) : new Vector2(0, -(thickness * .5F));
         }
         else if (textDecorations == TextDecorations.Underline)
         {
             // CSS underline is drawn below the position, so we need to move it down.
-            offset = rotated ? new(-(thickness * .5F), 0) : new(0, thickness * .5F);
+            offset = rotated ? new Vector2(-(thickness * .5F), 0) : new Vector2(0, thickness * .5F);
         }
 
         // We clamp the start and end points to the pixel grid to avoid anti-aliasing.
@@ -421,7 +421,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
 
             // Calculate the transform for this path.
             // We cannot use the path builder transform as this path is rendered independently.
-            FontRectangle rectangle = new(outline.Bounds.Location, new(outline.Bounds.Width, outline.Bounds.Height));
+            FontRectangle rectangle = new(outline.Bounds.Location, new Vector2(outline.Bounds.Width, outline.Bounds.Height));
             Matrix3x2 pathTransform = this.ComputeTransform(in rectangle);
             Matrix3x2 defaultTransform = this.drawingOptions.Transform;
             outline = outline.Transform(pathTransform * defaultTransform);

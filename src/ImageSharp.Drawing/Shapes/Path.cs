@@ -131,7 +131,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
        => this.InnerPath.PointAlongPath(distance);
 
     /// <inheritdoc/>
-    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };
+    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => [this.InnerPath];
 
     /// <summary>
     /// Converts an SVG path string into an <see cref="IPath"/>.

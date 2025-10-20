@@ -13,22 +13,20 @@ public class FillPathCollection : BaseImageOperationsExtensionTest
     private readonly Color color = Color.HotPink;
     private readonly SolidBrush brush = Brushes.Solid(Color.HotPink);
     private readonly IPath path1 = new Path(new LinearLineSegment(
-        new PointF[]
-        {
-            new Vector2(10, 10),
+    [
+        new Vector2(10, 10),
             new Vector2(20, 10),
             new Vector2(20, 10),
-            new Vector2(30, 10),
-        }));
+            new Vector2(30, 10)
+    ]));
 
     private readonly IPath path2 = new Path(new LinearLineSegment(
-        new PointF[]
-        {
-            new Vector2(10, 10),
+    [
+        new Vector2(10, 10),
             new Vector2(20, 10),
             new Vector2(20, 10),
-            new Vector2(30, 10),
-        }));
+            new Vector2(30, 10)
+    ]));
 
     private readonly IPathCollection pathCollection;
 

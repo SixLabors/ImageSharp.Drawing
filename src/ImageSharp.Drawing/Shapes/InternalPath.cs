@@ -23,7 +23,7 @@ internal class InternalPath
     /// <summary>
     /// The maximum vector
     /// </summary>
-    private static readonly Vector2 MaxVector = new Vector2(float.MaxValue);
+    private static readonly Vector2 MaxVector = new(float.MaxValue);
 
     /// <summary>
     /// The points.
@@ -83,7 +83,7 @@ internal class InternalPath
             minX = minY = float.MaxValue;
             maxX = maxY = float.MinValue;
 
-            foreach (var point in this.points)
+            foreach (PointData point in this.points)
             {
                 length += point.Length;
                 minX = Math.Min(point.Point.X, minX);
@@ -153,7 +153,7 @@ internal class InternalPath
             if (distanceAlongPath < this.points[next].Length)
             {
                 float t = distanceAlongPath / this.points[next].Length;
-                var point = Vector2.Lerp(this.points[i].Point, this.points[next].Point, t);
+                Vector2 point = Vector2.Lerp(this.points[i].Point, this.points[next].Point, t);
                 Vector2 diff = this.points[i].Point - this.points[next].Point;
 
                 return new SegmentInfo

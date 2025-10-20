@@ -16,7 +16,7 @@ internal class ClipperOffset
     /// <param name="meterLimit">meter limit</param>
     /// <param name="arcTolerance">arc tolerance</param>
     public ClipperOffset(float meterLimit = 2F, float arcTolerance = .25F)
-        => this.polygonClipperOffset = new(meterLimit, arcTolerance);
+        => this.polygonClipperOffset = new PolygonOffsetter(meterLimit, arcTolerance);
 
     /// <summary>
     /// Calculates an offset polygon based on the given path and width.
@@ -25,7 +25,7 @@ internal class ClipperOffset
     /// <returns>path offset</returns>
     public ComplexPolygon Execute(float width)
     {
-        PathsF solution = new();
+        PathsF solution = [];
         this.polygonClipperOffset.Execute(width, solution);
 
         Polygon[] polygons = new Polygon[solution.Count];

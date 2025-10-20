@@ -118,7 +118,7 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
         // and not adjust the origin. Any translation should be applied to the path.
         if (options.Path is not null && options.Origin != Vector2.Zero)
         {
-            return new(options)
+            return new RichTextOptions(options)
             {
                 Origin = Vector2.Zero,
                 Path = options.Path.Translate(options.Origin)

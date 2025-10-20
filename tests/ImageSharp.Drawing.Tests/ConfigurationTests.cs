@@ -18,7 +18,7 @@ public class ConfigurationTests
 
     public Configuration DefaultConfiguration { get; }
 
-    private readonly int expectedDefaultConfigurationCount = 9;
+    private readonly int expectedDefaultConfigurationCount = 11;
 
     public ConfigurationTests()
     {
@@ -56,7 +56,7 @@ public class ConfigurationTests
     {
         Assert.True(this.DefaultConfiguration.MaxDegreeOfParallelism == Environment.ProcessorCount);
 
-        var cfg = new Configuration();
+        Configuration cfg = new();
         Assert.True(cfg.MaxDegreeOfParallelism == Environment.ProcessorCount);
     }
 
@@ -69,7 +69,7 @@ public class ConfigurationTests
     [InlineData(5, false)]
     public void MaxDegreeOfParallelism_CompatibleWith_ParallelOptions(int maxDegreeOfParallelism, bool throws)
     {
-        var cfg = new Configuration();
+        Configuration cfg = new();
         if (throws)
         {
             Assert.Throws<ArgumentOutOfRangeException>(
@@ -85,8 +85,8 @@ public class ConfigurationTests
     [Fact]
     public void ConstructorCallConfigureOnFormatProvider()
     {
-        var provider = new Mock<IImageFormatConfigurationModule>();
-        var config = new Configuration(provider.Object);
+        Mock<IImageFormatConfigurationModule> provider = new();
+        Configuration config = new(provider.Object);
 
         provider.Verify(x => x.Configure(config));
     }
@@ -94,8 +94,8 @@ public class ConfigurationTests
     [Fact]
     public void AddFormatCallsConfig()
     {
-        var provider = new Mock<IImageFormatConfigurationModule>();
-        var config = new Configuration();
+        Mock<IImageFormatConfigurationModule> provider = new();
+        Configuration config = new();
         config.Configure(provider.Object);
 
         provider.Verify(x => x.Configure(config));
@@ -116,7 +116,7 @@ public class ConfigurationTests
     [Fact]
     public void DefaultConfigurationHasCorrectFormatCount()
     {
-        var config = Configuration.CreateDefaultInstance();
+        Configuration config = Configuration.CreateDefaultInstance();
 
         Assert.Equal(this.expectedDefaultConfigurationCount, config.ImageFormats.Count());
     }

@@ -17,12 +17,12 @@ public class Issue_37
             return;
         }
 
-        using (var image = new Image<Rgba32>(300, 200))
+        using (Image<Rgba32> image = new(300, 200))
         {
             string text = "TEST text foiw|\\";
 
             Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 40, Fonts.FontStyle.Regular);
-            var graphicsOptions = new GraphicsOptions { Antialias = false };
+            GraphicsOptions graphicsOptions = new() { Antialias = false };
             image.Mutate(
                 x => x.BackgroundColor(Color.White)
                 .DrawLine(

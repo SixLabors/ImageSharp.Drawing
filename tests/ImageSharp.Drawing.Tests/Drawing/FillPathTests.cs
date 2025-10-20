@@ -18,7 +18,7 @@ public class FillPathTests
     public void FillPathSVGArcs<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var pb = new PathBuilder();
+        PathBuilder pb = new();
 
         pb.MoveTo(new Vector2(80, 80))
           .ArcTo(45, 45, 0, false, false, new Vector2(125, 125))
@@ -114,7 +114,7 @@ public class FillPathTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         // Test alternate syntax. Both should overlap creating an orange arc.
-        var pb = new PathBuilder();
+        PathBuilder pb = new();
 
         pb.MoveTo(new Vector2(50, 50));
         pb.ArcTo(20, 50, -72, false, true, new Vector2(200, 200));

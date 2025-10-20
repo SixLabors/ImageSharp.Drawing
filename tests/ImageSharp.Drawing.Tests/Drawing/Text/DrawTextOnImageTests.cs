@@ -51,7 +51,7 @@ public class DrawTextOnImageTests
                   HorizontalAlignment = HorizontalAlignment.Center,
                   VerticalAlignment = VerticalAlignment.Center,
                   TextAlignment = TextAlignment.Center,
-                  FallbackFontFamilies = new[] { emojiFontFamily },
+                  FallbackFontFamilies = [emojiFontFamily],
                   ColorFontSupport = colorFontSupport,
                   Origin = new PointF(img.Width / 2, img.Height / 2)
               };
@@ -67,7 +67,7 @@ public class DrawTextOnImageTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         // https://github.com/SixLabors/Fonts/issues/171
-        var collection = new FontCollection();
+        FontCollection collection = new();
         Font whitney = CreateFont(TestFonts.WhitneyBook, 25);
         FontFamily malgun = CreateFont(TestFonts.Malgun, 25).Family;
 
@@ -83,7 +83,7 @@ public class DrawTextOnImageTests
                   HorizontalAlignment = HorizontalAlignment.Center,
                   VerticalAlignment = VerticalAlignment.Center,
                   TextAlignment = TextAlignment.Center,
-                  FallbackFontFamilies = new[] { malgun },
+                  FallbackFontFamilies = [malgun],
                   KerningMode = KerningMode.Standard,
                   Origin = new PointF(img.Width / 2, img.Height / 2)
               };
@@ -110,7 +110,7 @@ public class DrawTextOnImageTests
         float scalingFactor = Math.Min(img.Width / size.Width, img.Height / size.Height);
 
         // Create a new font
-        var scaledFont = new Font(font, scalingFactor * font.Size);
+        Font scaledFont = new(font, scalingFactor * font.Size);
         RichTextOptions textOptions = new(scaledFont)
         {
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -130,7 +130,7 @@ public class DrawTextOnImageTests
         Font font = CreateFont(TestFonts.OpenSans, 39);
         string text = new('a', 10000);
         Color color = Color.Black;
-        var point = new PointF(100, 100);
+        PointF point = new(100, 100);
 
         using Image<TPixel> img = provider.GetImage();
         img.Mutate(ctx => ctx.DrawText(text, font, color, point));
@@ -265,11 +265,11 @@ public class DrawTextOnImageTests
     {
         Font font = CreateFont(TestFonts.OpenSans, 36);
 
-        var sb = new StringBuilder();
+        StringBuilder sb = new();
         string str = Repeat(" ", 78) + "THISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDSTHISISTESTWORDS";
         sb.Append(str);
 
-        string newLines = Repeat(Environment.NewLine, 61);
+        string newLines = Repeat("\r\n", 61);
         sb.Append(newLines);
 
         for (int i = 0; i < 10; i++)
@@ -278,7 +278,7 @@ public class DrawTextOnImageTests
         }
 
         // Strict comparer, because the image is sparse:
-        var comparer = ImageComparer.TolerantPercentage(0.0001F);
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0001F);
 
         provider.VerifyOperation(
             comparer,
@@ -303,7 +303,7 @@ public class DrawTextOnImageTests
     {
         Font font = CreateFont(TestFonts.OpenSans, 16);
 
-        var sb = new StringBuilder();
+        StringBuilder sb = new();
         string str = "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Maecenas porttitor congue massa. Fusce posuere, magna sed pulvinar ultricies, purus lectus malesuada libero, sit amet commodo magna eros quis urna.";
 
         for (int i = 0; i < lineCount; i++)
@@ -328,7 +328,7 @@ public class DrawTextOnImageTests
         Color color = Color.Black;
 
         // NET472 is 0.0045 different.
-        var comparer = ImageComparer.TolerantPercentage(0.0046F);
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0046F);
 
         provider.VerifyOperation(
             comparer,
@@ -407,7 +407,7 @@ public class DrawTextOnImageTests
 
         // Based on the reported 0.1755% difference with AccuracyMultiple = 8
         // We should avoid quality regressions leading to higher difference!
-        var comparer = ImageComparer.TolerantPercentage(0.2f);
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.2f);
 
         provider.RunValidatingProcessorTest(
             x => x.DrawText(textOptions, text, Color.Black),
@@ -428,7 +428,7 @@ public class DrawTextOnImageTests
 
         Assert.NotEqual(FontRectangle.Empty, textSize);
 
-        using var image = new Image<Rgba32>(Configuration.Default, (int)textSize.Width + 20, (int)textSize.Height + 20);
+        using Image<Rgba32> image = new(Configuration.Default, (int)textSize.Width + 20, (int)textSize.Height + 20);
         image.Mutate(x => x.DrawText(
             text,
             font,
@@ -506,8 +506,8 @@ public class DrawTextOnImageTests
         {
             Origin = new Vector2(15),
             WrappingLength = 400,
-            TextRuns = new[]
-            {
+            TextRuns =
+            [
                 new RichTextRun
                 {
                     Start = 0,
@@ -552,7 +552,7 @@ public class DrawTextOnImageTests
                     TextDecorations = TextDecorations.Underline,
                     UnderlinePen = Pens.Solid(Color.White),
                 }
-            }
+            ]
         };
         provider.RunValidatingProcessorTest(
             x => x.DrawText(textOptions, text, Color.White),
@@ -577,10 +577,10 @@ public class DrawTextOnImageTests
         {
             Origin = new Vector2(15),
             WrappingLength = 400,
-            TextRuns = new[]
-            {
+            TextRuns =
+            [
                 new RichTextRun { Start = 0, End = CodePoint.GetCodePointCount(text.AsSpan()), TextDecorations = TextDecorations.Underline }
-            }
+            ]
         };
         provider.RunValidatingProcessorTest(
             x => x.DrawText(textOptions, text, Color.White),
@@ -601,8 +601,8 @@ public class DrawTextOnImageTests
         Font font = CreateFont(TestFonts.OpenSans, fontSize);
         const string text = "The quick brown fox jumps over the lazy dog";
 
-        SolidPen[] colors = new[]
-        {
+        SolidPen[] colors =
+        [
             new SolidPen(Color.Red),
             new SolidPen(Color.Orange),
             new SolidPen(Color.Yellow),
@@ -610,9 +610,9 @@ public class DrawTextOnImageTests
             new SolidPen(Color.Blue),
             new SolidPen(Color.Indigo),
             new SolidPen(Color.Violet)
-        };
+        ];
 
-        var runs = new List<RichTextRun>();
+        List<RichTextRun> runs = [];
         for (int i = 0; i < text.Length; i++)
         {
             SolidPen pen = colors[i % colors.Length];
@@ -665,7 +665,7 @@ public class DrawTextOnImageTests
             VerticalAlignment = VerticalAlignment.Bottom,
             HorizontalAlignment = HorizontalAlignment.Left,
             Path = path,
-            TextRuns = new[] { run }
+            TextRuns = [run]
         };
 
         provider.RunValidatingProcessorTest(
@@ -762,11 +762,11 @@ public class DrawTextOnImageTests
 
                       FontRectangle bounds = TextMeasurer.MeasureBounds(text, to);
                       float x = (img.Size.Width - bounds.Width) / 2;
-                      PointF[] pathLine = new[]
-                      {
+                      PointF[] pathLine =
+                      [
                           new PointF(x, 500),
                           new PointF(x + bounds.Width, 500)
-                      };
+                      ];
 
                       IPath path = new PathBuilder().AddLine(pathLine[0], pathLine[1]).Build();
 
@@ -799,17 +799,18 @@ public class DrawTextOnImageTests
         const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
         RichTextOptions textOptions = new(font)
         {
-            Origin = new(0, 0),
-            FallbackFontFamilies = new[] { fallback.Family },
+            Origin = new Vector2(0, 0),
+            FallbackFontFamilies = [fallback.Family],
             WrappingLength = 300,
             LayoutMode = LayoutMode.VerticalLeftRight,
-            TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            ]
         };
 
         IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
         // TODO: This still leaves some holes when overlaying the text (CFF NotoSansKRRegular only). We need to fix this.
-        DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.NonZero } };
+        DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
@@ -827,16 +828,17 @@ public class DrawTextOnImageTests
         const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
         RichTextOptions textOptions = new(font)
         {
-            FallbackFontFamilies = new[] { fallback.Family },
+            FallbackFontFamilies = [fallback.Family],
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalMixedLeftRight,
-            TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            ]
         };
 
         IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
         // TODO: This still leaves some holes when overlaying the text (CFF NotoSansKRRegular only). We need to fix this.
-        DrawingOptions options = new() { ShapeOptions = new() { IntersectionRule = IntersectionRule.NonZero } };
+        DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
@@ -854,15 +856,39 @@ public class DrawTextOnImageTests
         const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
         RichTextOptions textOptions = new(font)
         {
-            FallbackFontFamilies = new[] { fallback.Family },
+            FallbackFontFamilies = [fallback.Family],
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalLeftRight,
-            TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            LineSpacing = 1.4F,
+            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            ]
         };
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
             comparer: ImageComparer.TolerantPercentage(0.002f));
+    }
+
+    [Theory]
+    [WithBlankImage(48, 935, PixelTypes.Rgba32)]
+    public void CanDrawTextVertical2<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (SystemFonts.TryGet("Yu Gothic", out FontFamily fontFamily))
+        {
+            Font font = fontFamily.CreateFont(30F);
+            const string text = "あいうえお、「こんにちはー」。もしもし。ABCDEFG 日本語";
+            RichTextOptions textOptions = new(font)
+            {
+                LayoutMode = LayoutMode.VerticalLeftRight,
+                LineSpacing = 1.4F,
+                TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }]
+            };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
     }
 
     [Theory]
@@ -876,15 +902,39 @@ public class DrawTextOnImageTests
         const string text = "한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo 한국어 hangugeo";
         RichTextOptions textOptions = new(font)
         {
-            FallbackFontFamilies = new[] { fallback.Family },
+            FallbackFontFamilies = [fallback.Family],
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalMixedLeftRight,
-            TextRuns = new[] { new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline } }
+            LineSpacing = 1.4F,
+            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }]
         };
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
             comparer: ImageComparer.TolerantPercentage(0.002f));
+    }
+
+    [Theory]
+    [WithBlankImage(48, 839, PixelTypes.Rgba32)]
+    public void CanDrawTextVerticalMixed2<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (SystemFonts.TryGet("Yu Gothic", out FontFamily fontFamily))
+        {
+            Font font = fontFamily.CreateFont(30F);
+            const string text = "あいうえお、「こんにちはー」。もしもし。ABCDEFG 日本語";
+            RichTextOptions textOptions = new(font)
+            {
+                LayoutMode = LayoutMode.VerticalMixedLeftRight,
+                LineSpacing = 1.4F,
+                TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+                ]
+            };
+
+            provider.RunValidatingProcessorTest(
+                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                comparer: ImageComparer.TolerantPercentage(0.002f));
+        }
     }
 
     [Theory]

@@ -12,6 +12,12 @@
     <PackageTags>Image Draw Shape Path Font</PackageTags>
     <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
     <Configurations>Debug;Release</Configurations>
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--Bump to V3 prior to tagged release.-->
+    <MinVerMinimumMajorMinor>3.0</MinVerMinimumMajorMinor>
   </PropertyGroup>
 
   <!--  This enables the nullable analysis and treats all nullable warnings as error-->
@@ -30,6 +36,7 @@
       <PropertyGroup>
         <TargetFrameworks>net8.0</TargetFrameworks>
         <IsTrimmable>true</IsTrimmable>
+        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
       </PropertyGroup>
     </When>
     <Otherwise>
@@ -47,6 +54,8 @@
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" Version="2.0.3" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.4" />
+    <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.1" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.44" />
   </ItemGroup>
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 </Project>

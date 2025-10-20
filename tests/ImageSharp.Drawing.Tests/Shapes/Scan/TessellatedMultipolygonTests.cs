@@ -44,9 +44,9 @@ public class TessellatedMultipolygonTests
             points.AsSpan().Reverse();
         }
 
-        var polygon = new Polygon(points);
+        Polygon polygon = new(points);
 
-        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
         VerifyRing(multipolygon[0], points, reverseOriginal, false);
         Assert.Equal(6, multipolygon.TotalVertexCount);
     }
@@ -62,9 +62,9 @@ public class TessellatedMultipolygonTests
             points.AsSpan().Reverse();
         }
 
-        var polygon = new Polygon(points);
+        Polygon polygon = new(points);
 
-        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
 
         VerifyRing(multipolygon[0], points, !reverseOriginal, false);
     }
@@ -72,11 +72,11 @@ public class TessellatedMultipolygonTests
     [Fact]
     public void Create_FromRecangle()
     {
-        var polygon = new RectangularPolygon(10, 20, 100, 50);
+        RectangularPolygon polygon = new(10, 20, 100, 50);
 
         PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
 
-        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
         VerifyRing(multipolygon[0], points, true, false);
         Assert.Equal(4, multipolygon.TotalVertexCount);
     }
@@ -84,10 +84,10 @@ public class TessellatedMultipolygonTests
     [Fact]
     public void Create_FromStar()
     {
-        var polygon = new Star(100, 100, 5, 30, 60);
+        Star polygon = new(100, 100, 5, 30, 60);
         PointF[] points = polygon.Flatten().Single().Points.Span.ToArray();
 
-        using var multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
+        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(polygon, MemoryAllocator);
         VerifyRing(multipolygon[0], points, true, false);
     }
 }

@@ -27,7 +27,7 @@ public class ClipperTests
 
     private IEnumerable<IPath> Clip(IPath shape, params IPath[] hole)
     {
-        var clipper = new Clipper();
+        Clipper clipper = new();
 
         clipper.AddPath(shape, ClippingType.Subject);
         if (hole != null)
@@ -44,12 +44,12 @@ public class ClipperTests
     [Fact]
     public void OverlappingTriangleCutRightSide()
     {
-        var triangle = new Polygon(new LinearLineSegment(
+        Polygon triangle = new(new LinearLineSegment(
             new Vector2(0, 50),
             new Vector2(70, 0),
             new Vector2(50, 100)));
 
-        var cutout = new Polygon(new LinearLineSegment(
+        Polygon cutout = new(new LinearLineSegment(
             new Vector2(20, 0),
             new Vector2(70, 0),
             new Vector2(70, 100),

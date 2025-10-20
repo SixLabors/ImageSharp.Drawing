@@ -137,7 +137,11 @@ public abstract class GradientBrush : Brush
                 float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
 
                 // TODO: This should use premultiplied vectors to avoid bad blends e.g. red -> brown <- green.
-                return Color.FromScaledVector(Vector4.Lerp(from.Color.ToScaledVector4(), to.Color.ToScaledVector4(), onLocalGradient)).ToPixel<TPixel>();
+                return Color.FromScaledVector(
+                    Vector4.Lerp(
+                        from.Color.ToScaledVector4(),
+                        to.Color.ToScaledVector4(),
+                        onLocalGradient)).ToPixel<TPixel>();
             }
         }
 

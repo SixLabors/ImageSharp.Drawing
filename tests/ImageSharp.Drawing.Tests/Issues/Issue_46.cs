@@ -23,7 +23,7 @@ public class Issue_46
 
         const int imageSize = 300;
 
-        using var image = new Image<Rgba32>(imageSize, imageSize);
+        using Image<Rgba32> image = new(imageSize, imageSize);
 
         string iconText = char.ConvertFromUtf32(int.Parse("e926", NumberStyles.HexNumber));
 
@@ -38,7 +38,7 @@ public class Issue_46
 
     private static Font CreateFont(string fontName, int size)
     {
-        var fontCollection = new FontCollection();
+        FontCollection fontCollection = new();
         string fontPath = TestFontUtilities.GetPath(fontName);
         return fontCollection.Add(fontPath).CreateFont(size);
     }

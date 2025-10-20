@@ -16,6 +16,7 @@ using SkiaSharp;
 using BlazeMatrix = SharpBlaze.Matrix;
 using SDBitmap = System.Drawing.Bitmap;
 using SDPointF = System.Drawing.PointF;
+using SolidBrush = System.Drawing.SolidBrush;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 
@@ -63,13 +64,13 @@ public abstract class FillPolygon
 
         this.sdPoints = this.points.Select(pts => pts.Select(p => new SDPointF(p.X, p.Y)).ToArray()).ToArray();
 
-        this.skPaths = new List<SKPath>();
+        this.skPaths = [];
 
         VectorImageBuilder vecImageBuilder = new();
 
         foreach (PointF[] ptArr in this.points.Where(pts => pts.Length > 2))
         {
-            var skPath = new SKPath();
+            SKPath skPath = new();
             skPath.MoveTo(ptArr[0].X, ptArr[1].Y);
             vecImageBuilder.MoveTo(new FloatPoint(ptArr[0].X, ptArr[1].Y));
 
@@ -152,7 +153,7 @@ public abstract class FillPolygon
     [Benchmark]
     public void SystemDrawing()
     {
-        using var brush = new System.Drawing.SolidBrush(System.Drawing.Color.White);
+        using SolidBrush brush = new(System.Drawing.Color.White);
 
         foreach (SDPointF[] loop in this.sdPoints)
         {
@@ -182,7 +183,7 @@ public abstract class FillPolygon
         foreach (SKPath path in this.skPaths)
         {
             // Emulate using different color for each polygon:
-            using var paint = new SKPaint
+            using SKPaint paint = new()
             {
                 Style = SKPaintStyle.Fill,
                 Color = SKColors.White,

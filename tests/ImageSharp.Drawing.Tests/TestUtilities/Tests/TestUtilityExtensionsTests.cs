@@ -28,8 +28,7 @@ public class TestUtilityExtensionsTests
             {
                 Vector4 v = new(i, j, 0, 1);
                 v /= 10;
-
-                pixels[i, j] = TPixel.FromScaledVector4(v);
+                pixels[i, j] = TPixel.FromVector4(v);
             }
         }
 

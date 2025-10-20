@@ -33,7 +33,7 @@ public class DrawComplexPolygonTests
         Color color = Color.White;
         if (transparent)
         {
-            color = color.WithAlpha(150 / 255f);
+            color = color.WithAlpha(150 / 255F);
         }
 
         string testDetails = string.Empty;

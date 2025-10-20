@@ -16,8 +16,7 @@ public class RichTextOptions : TextOptions
     /// <param name="font">The font.</param>
     public RichTextOptions(Font font)
         : base(font)
-    {
-    }
+        => this.TextRuns = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RichTextOptions" /> class from properties

@@ -67,7 +67,7 @@ public static class FillPathBuilderExtensions
         Brush brush,
         Action<PathBuilder> region)
     {
-        var pb = new PathBuilder();
+        PathBuilder pb = new();
         region(pb);
 
         return source.Fill(options, brush, pb.Build());

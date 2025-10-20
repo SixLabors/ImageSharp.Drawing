@@ -19,9 +19,9 @@ public static partial class TestEnvironment
 
     private const string ToolsDirectoryRelativePath = @"tests\Images\External\tools";
 
-    private static readonly Lazy<string> SolutionDirectoryFullPathLazy = new Lazy<string>(GetSolutionDirectoryFullPathImpl);
+    private static readonly Lazy<string> SolutionDirectoryFullPathLazy = new(GetSolutionDirectoryFullPathImpl);
 
-    private static readonly Lazy<string> NetCoreVersionLazy = new Lazy<string>(GetNetCoreVersion);
+    private static readonly Lazy<string> NetCoreVersionLazy = new(GetNetCoreVersion);
 
     internal static bool IsFramework => RuntimeInformation.FrameworkDescription.StartsWith(".NET Framework");
 
@@ -54,7 +54,7 @@ public static partial class TestEnvironment
     {
         string assemblyLocation = typeof(TestEnvironment).GetTypeInfo().Assembly.Location;
 
-        var assemblyFile = new FileInfo(assemblyLocation);
+        FileInfo assemblyFile = new(assemblyLocation);
 
         DirectoryInfo directory = assemblyFile.Directory;
 
@@ -144,7 +144,7 @@ public static partial class TestEnvironment
     private static string GetNetCoreVersion()
     {
         Assembly assembly = typeof(System.Runtime.GCSettings).GetTypeInfo().Assembly;
-        string[] assemblyPath = assembly.Location.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        string[] assemblyPath = assembly.Location.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
         int netCoreAppIndex = Array.IndexOf(assemblyPath, "Microsoft.NETCore.App");
         if (netCoreAppIndex > 0 && netCoreAppIndex < assemblyPath.Length - 2)
         {

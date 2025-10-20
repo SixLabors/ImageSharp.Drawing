@@ -9,6 +9,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Issues;
 
 public class Issue_28_108
 {
+    private Rgba32 red = Color.Red.ToPixel<Rgba32>();
+
     [Theory]
     [InlineData(1F)]
     [InlineData(1.5F)]

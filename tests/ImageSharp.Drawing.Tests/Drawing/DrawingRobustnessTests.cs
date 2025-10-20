@@ -20,7 +20,7 @@ public class DrawingRobustnessTests
     [WithSolidFilledImages(32, 32, "Black", PixelTypes.Rgba32)]
     public void CompareToSkiaResults_SmallCircle(TestImageProvider<Rgba32> provider)
     {
-        var circle = new EllipsePolygon(16, 16, 10);
+        EllipsePolygon circle = new(16, 16, 10);
 
         CompareToSkiaResultsImpl(provider, circle);
     }
@@ -29,8 +29,8 @@ public class DrawingRobustnessTests
     [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
     public void CompareToSkiaResults_StarCircle(TestImageProvider<Rgba32> provider)
     {
-        var circle = new EllipsePolygon(32, 32, 30);
-        var star = new Star(32, 32, 7, 10, 27);
+        EllipsePolygon circle = new(32, 32, 30);
+        Star star = new(32, 32, 7, 10, 27);
         IPath shape = circle.Clip(star);
 
         CompareToSkiaResultsImpl(provider, shape);
@@ -42,9 +42,9 @@ public class DrawingRobustnessTests
         image.Mutate(c => c.Fill(Color.White, shape));
         image.DebugSave(provider, "ImageSharp", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
 
-        using var bitmap = new SKBitmap(new SKImageInfo(image.Width, image.Height));
+        using SKBitmap bitmap = new(new SKImageInfo(image.Width, image.Height));
 
-        using var skPath = new SKPath();
+        using SKPath skPath = new();
 
         foreach (ISimplePath loop in shape.Flatten())
         {
@@ -52,18 +52,18 @@ public class DrawingRobustnessTests
             skPath.AddPoly(points.ToArray());
         }
 
-        using var paint = new SKPaint
+        using SKPaint paint = new()
         {
             Style = SKPaintStyle.Fill,
             Color = SKColors.White,
             IsAntialias = true,
         };
 
-        using var canvas = new SKCanvas(bitmap);
+        using SKCanvas canvas = new(bitmap);
         canvas.Clear(new SKColor(0, 0, 0));
         canvas.DrawPath(skPath, paint);
 
-        using var skResultImage =
+        using Image<Rgba32> skResultImage =
             Image.LoadPixelData<Rgba32>(bitmap.GetPixelSpan(), image.Width, image.Height);
         skResultImage.DebugSave(
             provider,
@@ -84,7 +84,7 @@ public class DrawingRobustnessTests
         PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(sx, sy));
 
         using Image<Rgba32> image = provider.GetImage();
-        var options = new DrawingOptions()
+        DrawingOptions options = new()
         {
             GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
         };
@@ -107,7 +107,7 @@ public class DrawingRobustnessTests
     public void LargeGeoJson_States_Fill(TestImageProvider<Rgba32> provider)
     {
         using Image<Rgba32> image = this.FillGeoJsonPolygons(provider, TestImages.GeoJson.States, 16, new Vector2(60), new Vector2(0, -1000));
-        var comparer = ImageComparer.TolerantPercentage(0.001f);
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.001f);
 
         image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         image.CompareToReferenceOutput(comparer, provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -120,17 +120,17 @@ public class DrawingRobustnessTests
         PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(pixelOffset));
 
         Image<Rgba32> image = provider.GetImage();
-        var options = new DrawingOptions()
+        DrawingOptions options = new()
         {
             GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
         };
-        var rnd = new Random(42);
+        Random rnd = new(42);
         byte[] rgb = new byte[3];
         foreach (PointF[] loop in points)
         {
             rnd.NextBytes(rgb);
 
-            var color = Color.FromPixel(new Rgba32(rgb[0], rgb[1], rgb[2]));
+            Color color = Color.FromPixel<Rgb24>(new Rgb24(rgb[0], rgb[1], rgb[2]));
             image.Mutate(c => c.FillPolygon(options, color, loop));
         }
 
@@ -217,7 +217,7 @@ public class DrawingRobustnessTests
                         * Matrix3x2.CreateTranslation(offset, offset);
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
-        var path = new SKPath();
+        SKPath path = new();
 
         foreach (PointF[] pts in points.Where(p => p.Length > 2))
         {
@@ -231,10 +231,9 @@ public class DrawingRobustnessTests
             path.LineTo(pts[0].X, pts[0].Y);
         }
 
-        int sze = offset == 0 ? 400 : 10000;
-        var imageInfo = new SKImageInfo(sze, sze);
+        SKImageInfo imageInfo = new(10000, 10000);
 
-        using var paint = new SKPaint
+        using SKPaint paint = new()
         {
             Style = SKPaintStyle.Stroke,
             Color = SKColors.White,
@@ -242,7 +241,7 @@ public class DrawingRobustnessTests
             IsAntialias = true,
         };
 
-        using var surface = SKSurface.Create(imageInfo);
+        using SKSurface surface = SKSurface.Create(imageInfo);
         SKCanvas canvas = surface.Canvas;
         canvas.Clear(new SKColor(0, 0, 0));
         canvas.DrawPath(path, paint);

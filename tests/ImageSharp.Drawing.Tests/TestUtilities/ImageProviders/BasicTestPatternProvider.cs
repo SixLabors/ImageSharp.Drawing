@@ -33,7 +33,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
 
         public override Image<TPixel> GetImage()
         {
-            var result = new Image<TPixel>(this.Configuration, this.Width, this.Height);
+            Image<TPixel> result = new(this.Configuration, this.Width, this.Height);
             result.ProcessPixelRows(accessor =>
             {
                 int midY = this.Height / 2;
@@ -72,6 +72,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
             return x < midX ? BottomLeftColor : BottomRightColor;
         }
 
-        private static TPixel GetBottomRightColor() => TPixel.FromVector4(new Vector4(1f, 0f, 1f, 0.5f));
+        private static TPixel GetBottomRightColor()
+            => TPixel.FromVector4(new Vector4(1f, 0f, 1f, 0.5f));
     }
 }

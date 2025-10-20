@@ -40,7 +40,7 @@ public class Issue_323
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = Color.RebeccaPurple;
-        var pen = Pens.DashDot(color, scale);
+        PatternPen pen = Pens.DashDot(color, scale);
         provider.RunValidatingProcessorTest(
                     x => x.DrawPolygon(
                       pen,

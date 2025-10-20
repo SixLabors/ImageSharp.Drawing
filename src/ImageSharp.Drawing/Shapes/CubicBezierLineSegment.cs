@@ -88,7 +88,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
             return this;
         }
 
-        var transformedPoints = new PointF[this.controlPoints.Length];
+        PointF[] transformedPoints = new PointF[this.controlPoints.Length];
 
         for (int i = 0; i < this.controlPoints.Length; i++)
         {
@@ -103,7 +103,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
     private static PointF[] GetDrawingPoints(PointF[] controlPoints)
     {
-        var drawingPoints = new List<PointF>();
+        List<PointF> drawingPoints = [];
         int curveCount = (controlPoints.Length - 1) / 3;
 
         for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
@@ -124,7 +124,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
     private static List<PointF> FindDrawingPoints(int curveIndex, PointF[] controlPoints)
     {
-        var pointList = new List<PointF>();
+        List<PointF> pointList = [];
 
         Vector2 left = CalculateBezierPoint(curveIndex, 0, controlPoints);
         Vector2 right = CalculateBezierPoint(curveIndex, 1, controlPoints);
@@ -163,8 +163,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
         float midT = (t0 + t1) / 2;
         Vector2 mid = CalculateBezierPoint(curveIndex, midT, controlPoints);
 
-        var leftDirection = Vector2.Normalize(left - mid);
-        var rightDirection = Vector2.Normalize(right - mid);
+        Vector2 leftDirection = Vector2.Normalize(left - mid);
+        Vector2 rightDirection = Vector2.Normalize(right - mid);
 
         if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
         {
