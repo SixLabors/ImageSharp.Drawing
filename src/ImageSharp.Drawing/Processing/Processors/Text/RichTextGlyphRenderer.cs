@@ -143,8 +143,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         this.rasterizationRequired = true;
     }
 
-    protected override void BeginLayer(Paint? paint, FillRule fillRule)
+    protected override void BeginLayer(Paint? paint, FillRule fillRule, in FontRectangle? clipBounds)
     {
+        // TODO: We may have do some sort of translation based on the delta
+        // between the bounds and clipbounds.
         this.hasLayer = true;
         if (TryCreateBrush(paint, this.Builder.Transform, out Brush? brush))
         {

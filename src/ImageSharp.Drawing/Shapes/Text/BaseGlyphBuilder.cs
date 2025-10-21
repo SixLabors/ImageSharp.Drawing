@@ -36,6 +36,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private int layerStartIndex;
     private Paint? activeLayerPaint;
     private FillRule activeLayerFillRule;
+    private FontRectangle? activeClipBounds;
 
     public BaseGlyphBuilder() => this.Builder = new PathBuilder();
 
@@ -108,7 +109,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.layerStartIndex = this.graphemePathCount;
         this.activeLayerPaint = null;
         this.activeLayerFillRule = FillRule.NonZero;
-
+        this.activeClipBounds = null;
         this.BeginGlyph(in bounds, in parameters);
         return true;
     }
@@ -153,8 +154,6 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.inLayer = false;
         this.usedLayers = false;
         this.layerStartIndex = this.graphemePathCount;
-        this.activeLayerPaint = null;
-        this.activeLayerFillRule = FillRule.NonZero;
     }
 
     /// <inheritdoc/>
@@ -189,16 +188,17 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <inheritdoc/>
-    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule)
+    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule, in FontRectangle? clipBounds)
     {
         this.usedLayers = true;
         this.inLayer = true;
         this.layerStartIndex = this.graphemePathCount;
         this.activeLayerPaint = paint;
         this.activeLayerFillRule = fillRule;
+        this.activeClipBounds = clipBounds;
 
         this.Builder.Clear();
-        this.BeginLayer(paint, fillRule);
+        this.BeginLayer(paint, fillRule, clipBounds);
     }
 
     /// <inheritdoc/>
@@ -210,6 +210,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         }
 
         IPath path = this.Builder.Build();
+
+        // TODO: We need to clip the path by activeClipBounds if set.
         this.CurrentPaths.Add(path);
 
         if (this.graphemeBuilder is not null)
@@ -228,6 +230,9 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         this.Builder.Clear();
         this.inLayer = false;
+        this.activeLayerPaint = null;
+        this.activeLayerFillRule = FillRule.NonZero;
+        this.activeClipBounds = null;
         this.EndLayer();
     }
 
@@ -386,8 +391,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     {
     }
 
-    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule)"/>
-    protected virtual void BeginLayer(Paint? paint, FillRule fillRule)
+    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule, in FontRectangle?)"/>
+    protected virtual void BeginLayer(Paint? paint, FillRule fillRule, in FontRectangle? clipBounds)
     {
     }
 
