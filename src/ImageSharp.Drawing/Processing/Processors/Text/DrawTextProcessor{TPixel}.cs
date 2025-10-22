@@ -93,13 +93,14 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
                     firstRow = -startY;
                 }
 
+                int maxWidth = source.Width - startX;
                 int maxHeight = source.Height - startY;
                 int end = Math.Min(operation.Map.Height, maxHeight);
 
                 for (int row = firstRow; row < end; row++)
                 {
                     int y = startY + row;
-                    Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan, Math.Min(buffer.Width - offsetSpan, source.Width));
+                    Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan, Math.Min(buffer.Width - offsetSpan, maxWidth));
                     app.Apply(span, startX, y);
                 }
             }

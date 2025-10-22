@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -41,12 +42,12 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     // - Provide a good accuracy (smaller than 0.2% image difference compared to the non-caching variant)
     // - Cache hit ratio above 60%
     private const float AccuracyMultiple = 8;
-    private readonly Dictionary<(GlyphRendererParameters Glyph, RectangleF Bounds), List<GlyphRenderData>> glyphCache = [];
+    private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache = [];
     private int cacheReadIndex;
 
     private bool rasterizationRequired;
     private readonly bool noCache;
-    private (GlyphRendererParameters Glyph, RectangleF Bounds) currentCacheKey;
+    private CacheKey currentCacheKey;
 
     public RichTextGlyphRenderer(
         RichTextOptions textOptions,
@@ -128,7 +129,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 MathF.Round(currentBounds.Width * AccuracyMultiple) / AccuracyMultiple,
                 MathF.Round(currentBounds.Height * AccuracyMultiple) / AccuracyMultiple);
 
-            this.currentCacheKey = (parameters, new RectangleF(subPixelLocation, subPixelSize));
+            this.currentCacheKey = CacheKey.FromParameters(parameters, new RectangleF(subPixelLocation, subPixelSize));
             if (this.glyphCache.ContainsKey(this.currentCacheKey))
             {
                 // We have already drawn the glyph vectors.
@@ -588,7 +589,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         {
             if (disposing)
             {
-                foreach (KeyValuePair<(GlyphRendererParameters Glyph, RectangleF Bounds), List<GlyphRenderData>> kv in this.glyphCache)
+                foreach (KeyValuePair<CacheKey, List<GlyphRenderData>> kv in this.glyphCache)
                 {
                     foreach (GlyphRenderData data in kv.Value)
                     {
@@ -623,5 +624,50 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.FillMap?.Dispose();
             this.OutlineMap?.Dispose();
         }
+    }
+
+    private readonly struct CacheKey
+    {
+        public string Font { get; init; }
+
+        public GlyphColor GlyphColor { get; init; }
+
+        public GlyphType GlyphType { get; init; }
+
+        public FontStyle FontStyle { get; init; }
+
+        public ushort GlyphId { get; init; }
+
+        public ushort CompositeGlyphId { get; init; }
+
+        public CodePoint CodePoint { get; init; }
+
+        public float PointSize { get; init; }
+
+        public float Dpi { get; init; }
+
+        public GlyphLayoutMode LayoutMode { get; init; }
+
+        public TextRun TextRun { get; init; }
+
+        public RectangleF Bounds { get; init; }
+
+        public static CacheKey FromParameters(in GlyphRendererParameters parameters, RectangleF bounds)
+            => new()
+            {
+                // Our caching does not need the grapheme index as that is only relevant to the text layout.
+                Font = parameters.Font,
+                GlyphColor = parameters.GlyphColor,
+                GlyphType = parameters.GlyphType,
+                FontStyle = parameters.FontStyle,
+                GlyphId = parameters.GlyphId,
+                CompositeGlyphId = parameters.CompositeGlyphId,
+                CodePoint = parameters.CodePoint,
+                PointSize = parameters.PointSize,
+                Dpi = parameters.Dpi,
+                LayoutMode = parameters.LayoutMode,
+                TextRun = parameters.TextRun,
+                Bounds = bounds
+            };
     }
 }
