@@ -278,10 +278,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             }
 
             // Align the new line with the previous one if they are close enough.
+            // Use a 2 pixel threshold to account for anti-aliasing gaps.
             if (rotated)
             {
                 if (thickness == prevThickness
-                && prevEnd.Y + 1 >= start.Y
+                && prevEnd.Y + 2 >= start.Y
                 && prevEnd.X == start.X)
                 {
                     start = prevEnd;
@@ -289,7 +290,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             }
             else if (thickness == prevThickness
                  && prevEnd.Y == start.Y
-                 && prevEnd.X + 1 >= start.X)
+                 && prevEnd.X + 2 >= start.X)
             {
                 start = prevEnd;
             }

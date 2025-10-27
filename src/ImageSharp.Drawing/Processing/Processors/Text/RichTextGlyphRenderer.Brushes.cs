@@ -189,8 +189,8 @@ internal sealed partial class RichTextGlyphRenderer
     /// <returns>The ImageSharp color.</returns>
     private static Color ToColor(in GlyphColor c, float opacity)
     {
-        float a = Math.Clamp(c.Alpha / 255f * Math.Clamp(opacity, 0f, 1f), 0f, 1f);
+        float a = Math.Clamp(c.A / 255f * Math.Clamp(opacity, 0f, 1f), 0f, 1f);
         byte aa = (byte)MathF.Round(a * 255f);
-        return Color.FromPixel(new Rgba32(c.Red, c.Green, c.Blue, aa));
+        return Color.FromPixel(new Rgba32(c.R, c.G, c.B, aa));
     }
 }
