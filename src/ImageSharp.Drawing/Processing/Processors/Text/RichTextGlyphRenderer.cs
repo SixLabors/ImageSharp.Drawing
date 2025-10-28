@@ -144,10 +144,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         this.rasterizationRequired = true;
     }
 
-    protected override void BeginLayer(Paint? paint, FillRule fillRule, in FontRectangle? clipBounds)
+    protected override void BeginLayer(Paint? paint, FillRule fillRule, in ClipQuad? clipBounds)
     {
-        // TODO: We may have do some sort of translation based on the delta
-        // between the bounds and clipbounds.
         this.hasLayer = true;
         if (TryCreateBrush(paint, this.Builder.Transform, out Brush? brush))
         {
@@ -657,7 +655,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             {
                 // Our caching does not need the grapheme index as that is only relevant to the text layout.
                 Font = parameters.Font,
-                GlyphColor = parameters.GlyphColor,
                 GlyphType = parameters.GlyphType,
                 FontStyle = parameters.FontStyle,
                 GlyphId = parameters.GlyphId,

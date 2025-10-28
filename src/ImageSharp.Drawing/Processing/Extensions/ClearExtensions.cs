@@ -60,16 +60,4 @@ public static class ClearExtensions
 
         return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.Transform);
     }
-
-    internal static DrawingOptions CloneOrReturnForIntersectionRule(this DrawingOptions drawingOptions, IntersectionRule intersectionRule)
-    {
-        if (drawingOptions.ShapeOptions.IntersectionRule == intersectionRule)
-        {
-            return drawingOptions;
-        }
-
-        ShapeOptions shapeOptions = drawingOptions.ShapeOptions.DeepClone();
-        shapeOptions.IntersectionRule = intersectionRule;
-        return new DrawingOptions(drawingOptions.GraphicsOptions.DeepClone(), shapeOptions, drawingOptions.Transform);
-    }
 }

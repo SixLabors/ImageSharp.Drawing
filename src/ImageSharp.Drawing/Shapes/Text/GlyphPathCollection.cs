@@ -66,30 +66,23 @@ public sealed class GlyphPathCollection
     /// <summary>
     /// Transforms the glyph using the specified matrix.
     /// </summary>
-    /// <param name="transform">The matrix.</param>
+    /// <param name="matrix">The transform matrix.</param>
     /// <returns>
     /// A new <see cref="GlyphPathCollection"/> with the matrix applied to it.
     /// </returns>
-    public GlyphPathCollection Translate(Matrix3x2 transform)
+    public GlyphPathCollection Transform(Matrix3x2 matrix)
     {
         List<IPath> transformed = new(this.paths.Count);
 
         for (int i = 0; i < this.paths.Count; i++)
         {
-            transformed.Add(this.paths[i].Transform(transform));
+            transformed.Add(this.paths[i].Transform(matrix));
         }
 
         List<GlyphLayerInfo> transformedLayers = new(this.layers.Count);
         for (int i = 0; i < this.layers.Count; i++)
         {
-            GlyphLayerInfo li = this.layers[i];
-            RectangleF bounds = li.Bounds;
-            if (bounds != RectangleF.Empty)
-            {
-                bounds = RectangleF.Transform(bounds, transform);
-            }
-
-            transformedLayers.Add(new GlyphLayerInfo(li.StartIndex, li.Count, li.Paint, li.FillRule, bounds, li.Kind));
+            transformedLayers.Add(GlyphLayerInfo.Transform(this.layers[i], matrix));
         }
 
         return new GlyphPathCollection(transformed, transformedLayers);
@@ -101,7 +94,7 @@ public sealed class GlyphPathCollection
     /// </summary>
     /// <param name="predicate">A filter deciding whether to keep a layer.</param>
     /// <returns>A new <see cref="PathCollection"/> with the selected paths.</returns>
-    public PathCollection ToPathCollection(Func<GlyphLayerInfo, bool>? predicate)
+    public PathCollection ToPathCollection(Func<GlyphLayerInfo, bool>? predicate = null)
     {
         List<IPath> kept = [];
         for (int i = 0; i < this.layers.Count; i++)
@@ -165,7 +158,13 @@ public sealed class GlyphPathCollection
         /// <param name="fillRule">The fill rule for this layer.</param>
         /// <param name="bounds">Optional cached bounds for this layer.</param>
         /// <param name="kind">Optional semantic kind (eg. Decoration).</param>
-        public void AddLayer(int startIndex, int count, Paint? paint, FillRule fillRule, RectangleF bounds, GlyphLayerKind kind = GlyphLayerKind.Glyph)
+        public void AddLayer(
+            int startIndex,
+            int count,
+            Paint? paint,
+            FillRule fillRule,
+            RectangleF bounds,
+            GlyphLayerKind kind = GlyphLayerKind.Glyph)
         {
             if (startIndex < 0 || count < 0 || startIndex + count > this.paths.Count)
             {

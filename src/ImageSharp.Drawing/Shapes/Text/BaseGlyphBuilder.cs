@@ -36,7 +36,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private int layerStartIndex;
     private Paint? activeLayerPaint;
     private FillRule activeLayerFillRule;
-    private FontRectangle? activeClipBounds;
+    private ClipQuad? activeClipBounds;
 
     public BaseGlyphBuilder() => this.Builder = new PathBuilder();
 
@@ -188,7 +188,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <inheritdoc/>
-    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule, in FontRectangle? clipBounds)
+    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule, in ClipQuad? clipBounds)
     {
         this.usedLayers = true;
         this.inLayer = true;
@@ -211,7 +211,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         IPath path = this.Builder.Build();
 
-        // TODO: We need to clip the path by activeClipBounds if set.
+        if (this.activeClipBounds is not null)
+        {
+            // TODO:Clipping not yet implemented.
+        }
+
         this.CurrentPaths.Add(path);
 
         if (this.graphemeBuilder is not null)
@@ -392,8 +396,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     {
     }
 
-    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule, in FontRectangle?)"/>
-    protected virtual void BeginLayer(Paint? paint, FillRule fillRule, in FontRectangle? clipBounds)
+    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule, in ClipQuad?)"/>
+    protected virtual void BeginLayer(Paint? paint, FillRule fillRule, in ClipQuad? clipBounds)
     {
     }
 

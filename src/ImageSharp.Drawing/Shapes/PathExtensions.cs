@@ -149,10 +149,70 @@ public static partial class PathExtensions
 
             if (s.IsClosed)
             {
-                dist += Vector2.Distance(points[0], points[points.Length - 1]);
+                dist += Vector2.Distance(points[0], points[^1]);
             }
         }
 
         return dist;
+    }
+
+    /// <summary>
+    /// Calculates the total area of all paths in the specified collection.
+    /// </summary>
+    /// <param name="paths">A collection of paths for which to compute the combined area. Cannot be null.</param>
+    /// <returns>
+    /// The total area, in square units, enclosed by all paths in the collection.
+    /// </returns>
+    public static float ComputeArea(this IPathCollection paths)
+    {
+        float area = 0;
+        foreach (IPath path in paths)
+        {
+            area += path.ComputeArea();
+        }
+
+        return area;
+    }
+
+    /// <summary>
+    /// Calculates the total area enclosed by the specified path.
+    /// </summary>
+    /// <remarks>
+    /// This method sums the areas of all subpaths within the path. Subpaths with fewer than three
+    /// points are ignored, as they do not form a closed region. The result is always non-negative, regardless of the
+    /// winding direction of the subpaths.
+    /// </remarks>
+    /// <param name="path">
+    /// The path for which to compute the enclosed area. Must contain at least one subpath with three or more points to
+    /// contribute to the area calculation.
+    /// </param>
+    /// <returns>
+    /// The total area, in square units, enclosed by all subpaths of the path. Returns 0 if the path does not contain
+    /// any subpaths with at least three points.
+    /// </returns>
+    public static float ComputeArea(this IPath path)
+    {
+        float area = 0;
+        foreach (ISimplePath s in path.Flatten())
+        {
+            ReadOnlySpan<PointF> points = s.Points.Span;
+            if (points.Length < 3)
+            {
+                // Not enough points to form an area
+                continue;
+            }
+
+            float subArea = 0;
+            for (int i = 0; i < points.Length; i++)
+            {
+                PointF p1 = points[i];
+                PointF p2 = points[(i + 1) % points.Length];
+                subArea += (p1.X * p2.Y) - (p2.X * p1.Y);
+            }
+
+            area += MathF.Abs(subArea) * .5F;
+        }
+
+        return area;
     }
 }

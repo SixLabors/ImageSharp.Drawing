@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Shapes.Text;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -49,7 +48,7 @@ public static class FillPathCollectionExtensions
         Brush brush,
         Pen pen,
         IReadOnlyList<GlyphPathCollection> paths)
-        => source.Fill(options, brush, pen, paths, static (gp, layer) =>
+        => source.Fill(options, brush, pen, paths, static (gp, layer, path) =>
         {
             if (layer.Kind == GlyphLayerKind.Decoration)
             {
@@ -64,22 +63,19 @@ public static class FillPathCollectionExtensions
             }
 
             // Default heuristic: stroke "background-like" layers (large coverage), fill others.
-            // TODO: We should be using the area, not the bounds. Thin layers with large width/height
-            // will be misclassified. e.g. shadows.
-            RectangleF glyphBounds = gp.Bounds;
-            RectangleF layerBounds = layer.Bounds;
+            // Use the bounding box area as an approximation of the glyph area as it is cheaper to compute.
+            float glyphArea = gp.Bounds.Width * gp.Bounds.Height;
+            float layerArea = path.ComputeArea();
 
-            if (glyphBounds.Width <= 0 || glyphBounds.Height <= 0)
+            if (layerArea <= 0 || glyphArea <= 0)
             {
-                return true; // degenerate glyph, just fill
+                return false; // degenerate glyph, don't fill
             }
 
-            // Use each dimension independently to avoid misclassifying thin layers.
-            float rx = layerBounds.Width / glyphBounds.Width;
-            float ry = layerBounds.Height / glyphBounds.Height;
+            float coverage = layerArea / glyphArea;
 
-            // ≥50% coverage, stroke (don't fill). Otherwise, fill.
-            return rx < 0.5F || ry < 0.5F;
+            // <50% coverage, fill. Otherwise, stroke.
+            return coverage < 0.50F;
         });
 
     /// <summary>
@@ -91,7 +87,9 @@ public static class FillPathCollectionExtensions
     /// <param name="brush">The brush.</param>
     /// <param name="pen">The pen.</param>
     /// <param name="paths">The collection of glyph paths.</param>
-    /// <param name="shouldFillLayer">A function that decides whether to fill or stroke a given layer.</param>
+    /// <param name="shouldFillLayer">
+    /// A function that decides whether to fill or stroke a given layer within a multi-layer (painted) glyph.
+    /// </param>
     /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
     public static IImageProcessingContext Fill(
         this IImageProcessingContext source,
@@ -99,7 +97,7 @@ public static class FillPathCollectionExtensions
         Brush brush,
         Pen pen,
         IReadOnlyList<GlyphPathCollection> paths,
-        Func<GlyphPathCollection, GlyphLayerInfo, bool> shouldFillLayer)
+        Func<GlyphPathCollection, GlyphLayerInfo, IPath, bool> shouldFillLayer)
     {
         foreach (GlyphPathCollection gp in paths)
         {
@@ -121,14 +119,15 @@ public static class FillPathCollectionExtensions
                 GlyphLayerInfo layer = gp.Layers[i];
                 IPath path = gp.PathList[i];
 
-                if (shouldFillLayer(gp, layer))
+                if (shouldFillLayer(gp, layer, path))
                 {
-                    IntersectionRule fillRule = layer.FillRule == FillRule.EvenOdd
-                        ? IntersectionRule.EvenOdd
-                        : IntersectionRule.NonZero;
-
                     // Respect the layer's fill rule if different to the drawing options.
-                    source.Fill(options.CloneOrReturnForIntersectionRule(fillRule), brush, path);
+                    DrawingOptions o = options.CloneOrReturnForRules(
+                        layer.IntersectionRule,
+                        layer.PixelAlphaCompositionMode,
+                        layer.PixelColorBlendingMode);
+
+                    source.Fill(o, brush, path);
                 }
                 else
                 {
