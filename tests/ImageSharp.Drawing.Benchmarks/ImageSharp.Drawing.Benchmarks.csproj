@@ -13,7 +13,7 @@
     <!--Mark members as static-->
     <NoWarn>CA1822</NoWarn>
   </PropertyGroup>
-  
+
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
       <PropertyGroup>
