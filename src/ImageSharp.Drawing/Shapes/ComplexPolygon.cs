@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -14,8 +15,9 @@ namespace SixLabors.ImageSharp.Drawing;
 public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 {
     private readonly IPath[] paths;
-    private readonly List<InternalPath> internalPaths;
-    private readonly float length;
+    private List<InternalPath>? internalPaths;
+    private float length;
+    private RectangleF? bounds;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
@@ -45,53 +47,10 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
         Guard.NotNull(paths, nameof(paths));
 
         this.paths = paths;
-        this.internalPaths = new List<InternalPath>(this.paths.Length);
 
-        if (paths.Length > 0)
+        if (paths.Length == 0)
         {
-            float minX = float.MaxValue;
-            float maxX = float.MinValue;
-            float minY = float.MaxValue;
-            float maxY = float.MinValue;
-            float length = 0;
-
-            foreach (IPath p in this.paths)
-            {
-                if (p.Bounds.Left < minX)
-                {
-                    minX = p.Bounds.Left;
-                }
-
-                if (p.Bounds.Right > maxX)
-                {
-                    maxX = p.Bounds.Right;
-                }
-
-                if (p.Bounds.Top < minY)
-                {
-                    minY = p.Bounds.Top;
-                }
-
-                if (p.Bounds.Bottom > maxY)
-                {
-                    maxY = p.Bounds.Bottom;
-                }
-
-                foreach (ISimplePath s in p.Flatten())
-                {
-                    InternalPath ip = new(s.Points, s.IsClosed);
-                    length += ip.Length;
-                    this.internalPaths.Add(ip);
-                }
-            }
-
-            this.length = length;
-            this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
-        }
-        else
-        {
-            this.length = 0;
-            this.Bounds = RectangleF.Empty;
+            this.bounds = RectangleF.Empty;
         }
 
         this.PathType = PathTypes.Mixed;
@@ -106,7 +65,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     public IEnumerable<IPath> Paths => this.paths;
 
     /// <inheritdoc/>
-    public RectangleF Bounds { get; }
+    public RectangleF Bounds => this.bounds ??= this.CalcBounds();
 
     /// <inheritdoc/>
     public IPath Transform(Matrix3x2 matrix)
@@ -118,10 +77,10 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
         }
 
         IPath[] shapes = new IPath[this.paths.Length];
-        int i = 0;
-        foreach (IPath s in this.Paths)
+
+        for (int i = 0; i < shapes.Length; i++)
         {
-            shapes[i++] = s.Transform(matrix);
+            shapes[i] = this.paths[i].Transform(matrix);
         }
 
         return new ComplexPolygon(shapes);
@@ -159,6 +118,11 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// <inheritdoc/>
     SegmentInfo IPathInternals.PointAlongPath(float distance)
     {
+        if (this.internalPaths == null)
+        {
+            this.InitInternalPaths();
+        }
+
         distance %= this.length;
         foreach (InternalPath p in this.internalPaths)
         {
@@ -177,7 +141,49 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
 
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
-        => this.internalPaths;
+    {
+        this.InitInternalPaths();
+        return this.internalPaths;
+    }
+
+    /// <summary>
+    /// Initializes <see cref="internalPaths"/> and <see cref="length"/>.
+    /// </summary>
+    [MemberNotNull(nameof(internalPaths))]
+    private void InitInternalPaths()
+    {
+        this.internalPaths = new List<InternalPath>(this.paths.Length);
+
+        foreach (IPath p in this.paths)
+        {
+            foreach (ISimplePath s in p.Flatten())
+            {
+                InternalPath ip = new(s.Points, s.IsClosed);
+                this.length += ip.Length;
+                this.internalPaths.Add(ip);
+            }
+        }
+    }
+
+    private RectangleF CalcBounds()
+    {
+        float minX = float.MaxValue;
+        float maxX = float.MinValue;
+        float minY = float.MaxValue;
+        float maxY = float.MinValue;
+
+        foreach (IPath p in this.paths)
+        {
+            RectangleF pBounds = p.Bounds;
+
+            minX = MathF.Min(minX, pBounds.Left);
+            maxX = MathF.Max(maxX, pBounds.Right);
+            minY = MathF.Min(minY, pBounds.Top);
+            maxY = MathF.Max(maxY, pBounds.Bottom);
+        }
+
+        return new RectangleF(minX, minY, maxX - minX, maxY - minY);
+    }
 
     private static InvalidOperationException ThrowOutOfRange() => new("Should not be possible to reach this line");
 }

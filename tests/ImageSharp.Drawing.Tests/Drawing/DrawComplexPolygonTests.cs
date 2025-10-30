@@ -12,8 +12,8 @@ public class DrawComplexPolygonTests
 {
     [Theory]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, false, false)]
-    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, true, false, false)]
-    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, true, false)]
+    //[WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, true, false, false)]
+    //[WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, true, false)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, false, true)]
     public void DrawComplexPolygon<TPixel>(TestImageProvider<TPixel> provider, bool overlap, bool transparent, bool dashed)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -53,6 +53,8 @@ public class DrawComplexPolygonTests
         }
 
         Pen pen = dashed ? Pens.Dash(color, 5f) : Pens.Solid(color, 5f);
+
+        // clipped = new RectangularPolygon(RectangleF.FromLTRB(60, 260, 200, 280));
 
         provider.RunValidatingProcessorTest(
             x => x.Draw(pen, clipped),

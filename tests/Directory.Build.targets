@@ -31,6 +31,7 @@
     <PackageReference Update="System.Drawing.Common" Version="6.0.0" />
     <PackageReference Update="GeoJSON.Net" Version="1.2.19" />
     <PackageReference Update="SkiaSharp" Version="2.88.9" />
+    <PackageReference Update="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" Condition="'$(IsLinux)'=='true'"/>
   </ItemGroup>
 
 </Project>

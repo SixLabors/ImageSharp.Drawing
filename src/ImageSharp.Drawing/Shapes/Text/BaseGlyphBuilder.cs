@@ -27,10 +27,12 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// <param name="transform">The default transform.</param>
     public BaseGlyphBuilder(Matrix3x2 transform) => this.Builder = new PathBuilder(transform);
 
+    protected List<IPath> PathList { get; } = new();
+
     /// <summary>
     /// Gets the paths that have been rendered by the current instance.
     /// </summary>
-    public IPathCollection Paths => new PathCollection(this.paths);
+    public IPathCollection Paths => new PathCollection(this.PathList.ToArray());
 
     /// <summary>
     /// Gets the path builder for the current instance.
@@ -74,7 +76,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// </summary>
     void IGlyphRenderer.EndGlyph()
     {
-        this.paths.Add(this.Builder.Build());
+        this.PathList.Add(this.Builder.Build());
         this.EndGlyph();
     }
 

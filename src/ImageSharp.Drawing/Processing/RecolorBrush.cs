@@ -100,9 +100,10 @@ public sealed class RecolorBrush : Brush
             float threshold)
             : base(configuration, options, source)
         {
-            this.sourceColor = sourceColor.ToVector4();
+            this.sourceColor = sourceColor.ToScaledVector4();
             this.targetColorPixel = targetColor;
 
+            // TODO: Review this. We can skip the conversion from/to Vector4.
             // Lets hack a min max extremes for a color space by letting the IPackedPixel clamp our values to something in the correct spaces :)
             TPixel maxColor = TPixel.FromVector4(new Vector4(float.MaxValue));
             TPixel minColor = TPixel.FromVector4(new Vector4(float.MinValue));

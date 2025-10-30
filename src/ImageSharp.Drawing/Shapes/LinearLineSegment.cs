@@ -46,8 +46,6 @@ public sealed class LinearLineSegment : ILineSegment
         this.points = points ?? throw new ArgumentNullException(nameof(points));
 
         Guard.MustBeGreaterThanOrEqualTo(this.points.Length, 2, nameof(points));
-
-        this.EndPoint = this.points[this.points.Length - 1];
     }
 
     /// <summary>
@@ -56,7 +54,7 @@ public sealed class LinearLineSegment : ILineSegment
     /// <value>
     /// The end point.
     /// </value>
-    public PointF EndPoint { get; }
+    public PointF EndPoint => this.points[^1];
 
     /// <summary>
     /// Converts the <see cref="ILineSegment" /> into a simple linear path..
