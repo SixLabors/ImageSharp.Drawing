@@ -32,11 +32,7 @@ internal class ClipperOffset
         for (int i = 0; i < solution.Count; i++)
         {
             PathF pt = solution[i];
-            PointF[] points = new PointF[pt.Count];
-            for (int j = 0; j < pt.Count; j++)
-            {
-                points[j] = pt[j];
-            }
+            PointF[] points = pt.ToArray();
 
             polygons[i] = new Polygon(points);
         }
@@ -53,10 +49,7 @@ internal class ClipperOffset
     public void AddPath(ReadOnlySpan<PointF> pathPoints, JointStyle jointStyle, EndCapStyle endCapStyle)
     {
         PathF points = new(pathPoints.Length);
-        for (int i = 0; i < pathPoints.Length; i++)
-        {
-            points.Add(pathPoints[i]);
-        }
+        points.AddRange(pathPoints);
 
         this.polygonClipperOffset.AddPath(points, jointStyle, endCapStyle);
     }

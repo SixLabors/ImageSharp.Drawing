@@ -75,7 +75,7 @@ public class DrawingRobustnessTests
         throw new Exception(result.DifferencePercentageString);
     }
 
-    [Theory(Skip = "For local testing")]
+    [Theory]//(Skip = "For local testing")]
     [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
     public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
     {
@@ -154,7 +154,6 @@ public class DrawingRobustnessTests
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
-
         foreach (PointF[] loop in points)
         {
             image.Mutate(c => c.DrawLine(Color.White, 1.0f, loop));
@@ -168,7 +167,40 @@ public class DrawingRobustnessTests
         image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }
 
-    [Theory(Skip = "For local experiments only")]
+    [Theory]
+    [WithSolidFilledImages(400 * 3, 400 * 3, "Black", PixelTypes.Rgba32, 3)]
+    [WithSolidFilledImages(400 * 5, 400 * 5, "Black", PixelTypes.Rgba32, 5)]
+    [WithSolidFilledImages(400 * 10, 400 * 10, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_Mississippi_LinesScaled(TestImageProvider<Rgba32> provider, int scale)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
+                        * Matrix3x2.CreateScale(60, 60);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        using Image<Rgba32> image = provider.GetImage();
+        var pen = new SolidPen(new SolidBrush(Color.White), 1.0f);
+        foreach (PointF[] loop in points)
+        {
+            IPath outline = pen.GeneratePath(new Path(loop).Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
+            outline = outline.Transform(Matrix3x2.CreateScale(scale, scale));
+            image.Mutate(c => c.Fill(pen.StrokeFill, outline));
+        }
+
+        // Strict comparer, because the image is sparse:
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0001F);
+
+        string details = $"Scale({scale})";
+        image.DebugSave(provider, details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+        image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]//(Skip = "For local experiments only")]
     [InlineData(0)]
     [InlineData(5000)]
     [InlineData(9000)]

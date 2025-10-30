@@ -8,10 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 
 public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
 {
-    public virtual TPixel GetExpectedBasicTestPatternPixelAt(int x, int y)
-    {
-        throw new NotSupportedException("GetExpectedBasicTestPatternPixelAt(x,y) only works with BasicTestPattern");
-    }
+    public virtual TPixel GetExpectedBasicTestPatternPixelAt(int x, int y) => throw new NotSupportedException("GetExpectedBasicTestPatternPixelAt(x,y) only works with BasicTestPattern");
 
     private class BasicTestPatternProvider : BlankProvider
     {
@@ -46,16 +43,16 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                 {
                     Span<TPixel> row = accessor.GetRowSpan(y);
 
-                    row.Slice(0, midX).Fill(TopLeftColor);
-                    row.Slice(midX, this.Width - midX).Fill(TopRightColor);
+                    row[..midX].Fill(TopLeftColor);
+                    row[midX..this.Width].Fill(TopRightColor);
                 }
 
                 for (int y = midY; y < this.Height; y++)
                 {
                     Span<TPixel> row = accessor.GetRowSpan(y);
 
-                    row.Slice(0, midX).Fill(BottomLeftColor);
-                    row.Slice(midX, this.Width - midX).Fill(BottomRightColor);
+                    row[..midX].Fill(BottomLeftColor);
+                    row[midX..this.Width].Fill(BottomRightColor);
                 }
             });
 
@@ -71,10 +68,8 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
             {
                 return x < midX ? TopLeftColor : TopRightColor;
             }
-            else
-            {
-                return x < midX ? BottomLeftColor : BottomRightColor;
-            }
+
+            return x < midX ? BottomLeftColor : BottomRightColor;
         }
 
         private static TPixel GetBottomRightColor()

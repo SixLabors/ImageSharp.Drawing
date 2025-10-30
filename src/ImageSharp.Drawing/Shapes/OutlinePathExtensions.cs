@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -175,7 +176,7 @@ public static class OutlinePathExtensions
                     // we now inset a line joining
                     if (online)
                     {
-                        offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, endCapStyle);
+                        offset.AddPath(CollectionsMarshal.AsSpan(buffer), jointStyle, endCapStyle);
                     }
 
                     online = !online;
@@ -205,12 +206,12 @@ public static class OutlinePathExtensions
                 }
                 else
                 {
-                    buffer.Add(points[points.Length - 1]);
+                    buffer.Add(points[^1]);
                 }
 
                 if (online)
                 {
-                    offset.AddPath(new ReadOnlySpan<PointF>(buffer.ToArray()), jointStyle, endCapStyle);
+                    offset.AddPath(CollectionsMarshal.AsSpan(buffer), jointStyle, endCapStyle);
                 }
 
                 buffer.Clear();

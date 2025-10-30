@@ -46,7 +46,7 @@ internal static class ClipperUtils
             return result;
         }
 
-        Vector2 lastPt = path[0];
+        PointF lastPt = path[0];
         result.Add(lastPt);
         for (int i = 1; i < cnt; i++)
         {
@@ -152,11 +152,9 @@ internal static class ClipperUtils
             // ensure NOT collinear
             return res1 != 0 || res2 != 0 || res3 != 0 || res4 != 0;
         }
-        else
-        {
-            return (CrossProduct(seg1a, seg2a, seg2b) * CrossProduct(seg1b, seg2a, seg2b) < 0)
-                && (CrossProduct(seg2a, seg1a, seg1b) * CrossProduct(seg2b, seg1a, seg1b) < 0);
-        }
+
+        return (CrossProduct(seg1a, seg2a, seg2b) * CrossProduct(seg1b, seg2a, seg2b) < 0)
+            && (CrossProduct(seg2a, seg1a, seg1b) * CrossProduct(seg2b, seg1a, seg1b) < 0);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

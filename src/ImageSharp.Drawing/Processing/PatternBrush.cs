@@ -156,8 +156,8 @@ public sealed class PatternBrush : Brush
         public override void Apply(Span<float> scanline, int x, int y)
         {
             int patternY = y % this.pattern.Rows;
-            Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan.Slice(0, scanline.Length);
+            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
+            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
 
             for (int i = 0; i < scanline.Length; i++)
             {

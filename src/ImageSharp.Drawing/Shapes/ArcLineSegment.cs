@@ -44,8 +44,6 @@ public class ArcLineSegment : ILineSegment
         {
             this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
         }
-
-        this.EndPoint = this.linePoints[^1];
     }
 
     /// <summary>
@@ -80,18 +78,15 @@ public class ArcLineSegment : ILineSegment
         {
             this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
         }
-
-        this.EndPoint = this.linePoints[^1];
     }
 
     private ArcLineSegment(PointF[] linePoints)
     {
         this.linePoints = linePoints;
-        this.EndPoint = this.linePoints[^1];
     }
 
     /// <inheritdoc/>
-    public PointF EndPoint { get; }
+    public PointF EndPoint => this.linePoints[^1];
 
     /// <inheritdoc/>
     public ReadOnlyMemory<PointF> Flatten() => this.linePoints;
