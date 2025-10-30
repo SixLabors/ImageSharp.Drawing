@@ -13,11 +13,6 @@
     <!--Mark members as static-->
     <NoWarn>CA1822</NoWarn>
   </PropertyGroup>
-
-  <Choose>
-    <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
-      <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
   
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
@@ -33,9 +28,7 @@
   </Choose>
   
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.13.10" />
-    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.13.10" Condition="'$(IsWindows)'=='true'" />
-    <PackageReference Include="runtime.osx.10.10-x64.CoreCompat.System.Drawing" Condition="'$(IsOSX)'=='true'" />
+    <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="GeoJSON.Net" />
     <PackageReference Include="SkiaSharp" />
