@@ -25,24 +25,16 @@
     <Nullable>enable</Nullable>
     <WarningsAsErrors>Nullable</WarningsAsErrors>
   </PropertyGroup>
-
-  <PropertyGroup>
-    <!--Bump to V3 prior to tagged release.-->
-    <MinVerMinimumMajorMinor>3.0</MinVerMinimumMajorMinor>
-  </PropertyGroup>
   
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
       <PropertyGroup>
-        <TargetFrameworks>net8.0</TargetFrameworks>
-        <IsTrimmable>true</IsTrimmable>
         <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
       </PropertyGroup>
     </When>
     <Otherwise>
       <PropertyGroup>
         <TargetFrameworks>net8.0</TargetFrameworks>
-        <IsTrimmable>true</IsTrimmable>
       </PropertyGroup>
     </Otherwise>
   </Choose>
