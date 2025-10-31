@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 using SixLabors.PolygonClipper;
 using ClipperPolygon = SixLabors.PolygonClipper.Polygon;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 /// <summary>
 /// Builders for <see cref="ClipperPolygon"/> from ImageSharp paths.

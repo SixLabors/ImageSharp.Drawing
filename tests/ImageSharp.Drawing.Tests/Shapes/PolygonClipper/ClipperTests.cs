@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using SixLabors.PolygonClipper;
 

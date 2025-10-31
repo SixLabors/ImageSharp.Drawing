@@ -3,7 +3,7 @@
 
 using System.Runtime.CompilerServices;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 // TODO: We can improve the performance of some of the operations here by using unsafe casting to Vector128<double>
 // Like we do in PolygonClipper.

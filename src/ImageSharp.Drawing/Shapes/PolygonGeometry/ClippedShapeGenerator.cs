@@ -5,7 +5,7 @@ using SixLabors.PolygonClipper;
 using ClipperPolygon = SixLabors.PolygonClipper.Polygon;
 using PolygonClipperAction = SixLabors.PolygonClipper.PolygonClipper;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 /// <summary>
 /// Generates clipped shapes from one or more input paths using polygon boolean operations.

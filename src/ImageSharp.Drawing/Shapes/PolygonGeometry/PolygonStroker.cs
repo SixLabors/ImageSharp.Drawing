@@ -2,9 +2,10 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using SixLabors.ImageSharp.Drawing.Shapes.Helpers;
 
 #pragma warning disable SA1201 // Elements should appear in the correct order
-namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 /// <summary>
 /// Generates polygonal stroke outlines for vector paths using analytic joins and caps.
@@ -47,7 +48,7 @@ internal sealed class PolygonStroker
 
     public double ApproximationScale { get; set; } = 1.0;
 
-    public LineJoin LineJoin { get; set; } = LineJoin.MiterJoin;
+    public LineJoin LineJoin { get; set; } = LineJoin.BevelJoin;
 
     public LineCap LineCap { get; set; } = LineCap.Butt;
 

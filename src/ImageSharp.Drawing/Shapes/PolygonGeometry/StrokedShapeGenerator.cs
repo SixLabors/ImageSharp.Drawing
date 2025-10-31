@@ -3,7 +3,7 @@
 
 using SixLabors.PolygonClipper;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 /// <summary>
 /// Generates stroked and merged shapes using polygon stroking and boolean clipping.

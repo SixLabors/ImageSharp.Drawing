@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 namespace SixLabors.ImageSharp.Drawing;
 
