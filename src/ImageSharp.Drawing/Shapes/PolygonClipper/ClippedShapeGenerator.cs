@@ -8,25 +8,36 @@ using PolygonClipperAction = SixLabors.PolygonClipper.PolygonClipper;
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
 /// <summary>
-/// Performs polygon clipping operations.
+/// Generates clipped shapes from one or more input paths using polygon boolean operations.
 /// </summary>
-internal sealed class Clipper
+/// <remarks>
+/// This class provides a high-level wrapper around the low-level <see cref="PolygonClipperAction"/>.
+/// It accumulates subject and clip polygons, applies the specified <see cref="BooleanOperation"/>,
+/// and converts the resulting polygon contours back into <see cref="IPath"/> instances suitable
+/// for rendering or further processing.
+/// </remarks>
+internal sealed class ClippedShapeGenerator
 {
     private ClipperPolygon? subject;
     private ClipperPolygon? clip;
     private readonly IntersectionRule rule;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Clipper"/> class.
+    /// Initializes a new instance of the <see cref="ClippedShapeGenerator"/> class.
     /// </summary>
     /// <param name="rule">The intersection rule.</param>
-    public Clipper(IntersectionRule rule) => this.rule = rule;
+    public ClippedShapeGenerator(IntersectionRule rule) => this.rule = rule;
 
     /// <summary>
-    /// Generates the clipped shapes from the previously provided paths.
+    /// Generates the final clipped shapes from the previously provided subject and clip paths.
     /// </summary>
-    /// <param name="operation">The clipping operation.</param>
-    /// <returns>The <see cref="T:IPath[]"/>.</returns>
+    /// <param name="operation">
+    /// The boolean operation to perform, such as <see cref="BooleanOperation.Union"/>,
+    /// <see cref="BooleanOperation.Intersection"/>, or <see cref="BooleanOperation.Difference"/>.
+    /// </param>
+    /// <returns>
+    /// An array of <see cref="IPath"/> instances representing the result of the boolean operation.
+    /// </returns>
     public IPath[] GenerateClippedShapes(BooleanOperation operation)
     {
         ArgumentNullException.ThrowIfNull(this.subject);
@@ -57,21 +68,20 @@ internal sealed class Clipper
     }
 
     /// <summary>
-    /// Adds the collection of paths.
+    /// Adds a collection of paths to the current clipping operation.
     /// </summary>
-    /// <param name="paths">The paths.</param>
-    /// <param name="clippingType">The clipping type.</param>
+    /// <param name="paths">
+    /// The paths to add. Each path may represent a simple or complex polygon.
+    /// </param>
+    /// <param name="clippingType">
+    /// Determines whether the paths are assigned to the subject or clip polygon.
+    /// </param>
     public void AddPaths(IEnumerable<IPath> paths, ClippingType clippingType)
     {
         Guard.NotNull(paths, nameof(paths));
 
         // Accumulate all paths of the complex shape into a single polygon.
-        ClipperPolygon polygon = [];
-
-        foreach (IPath path in paths)
-        {
-            polygon = PolygonClipperFactory.FromSimplePaths(path.Flatten(), this.rule, polygon);
-        }
+        ClipperPolygon polygon = PolygonClipperFactory.FromPaths(paths, this.rule);
 
         if (clippingType == ClippingType.Clip)
         {
@@ -84,10 +94,12 @@ internal sealed class Clipper
     }
 
     /// <summary>
-    /// Adds the path.
+    /// Adds a single path to the current clipping operation.
     /// </summary>
-    /// <param name="path">The path.</param>
-    /// <param name="clippingType">The clipping type.</param>
+    /// <param name="path">The path to add.</param>
+    /// <param name="clippingType">
+    /// Determines whether the path is assigned to the subject or clip polygon.
+    /// </param>
     public void AddPath(IPath path, ClippingType clippingType)
     {
         Guard.NotNull(path, nameof(path));

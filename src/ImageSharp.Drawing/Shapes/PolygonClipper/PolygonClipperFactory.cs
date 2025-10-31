@@ -15,6 +15,32 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 internal static class PolygonClipperFactory
 {
     /// <summary>
+    /// Creates a new polygon by combining multiple paths using the specified intersection rule.
+    /// </summary>
+    /// <remarks>Use this method to construct complex polygons from multiple input paths, such as when
+    /// importing shapes from vector graphics or combining user-drawn segments. The resulting polygon's structure
+    /// depends on the order and geometry of the input paths as well as the chosen intersection rule.
+    /// </remarks>
+    /// <param name="paths">
+    /// A collection of paths that define the shapes to be combined into a single polygon. Each path is expected to
+    /// represent a simple or complex shape.
+    /// </param>
+    /// <param name="rule">Containment rule for nesting, <see cref="IntersectionRule.EvenOdd"/> or <see cref="IntersectionRule.NonZero"/>.</param>
+    /// <returns>A <see cref="ClipperPolygon"/> representing the union of all input paths, combined according to the specified intersection rule.</returns>
+    public static ClipperPolygon FromPaths(IEnumerable<IPath> paths, IntersectionRule rule)
+    {
+        // Accumulate all paths of the complex shape into a single polygon.
+        ClipperPolygon polygon = [];
+
+        foreach (IPath path in paths)
+        {
+            polygon = FromSimplePaths(path.Flatten(), rule, polygon);
+        }
+
+        return polygon;
+    }
+
+    /// <summary>
     /// Builds a <see cref="Polygon"/> from closed <see cref="ISimplePath"/> rings.
     /// </summary>
     /// <remarks>

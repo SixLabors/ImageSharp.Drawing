@@ -55,6 +55,20 @@ public class Polygon : Path
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Polygon"/> class using the specified line segments.
+    /// </summary>
+    /// <remarks>
+    /// If owned is set to <see langword="true"/>, modifications to the segments array after construction may affect
+    /// the Polygon instance. If owned is <see langword="false"/>, the segments are copied to ensure the Polygon is not affected by
+    /// external changes.
+    /// </remarks>
+    /// <param name="segments">An array of line segments that define the edges of the polygon. The order of segments determines the shape of
+    /// the polygon.</param>
+    /// <param name="owned">
+    /// <see langword="true"/> to indicate that the Polygon instance takes ownership of the segments array;
+    /// <see langword="false"/> to create a copy of the array.
+    /// </param>
     internal Polygon(ILineSegment[] segments, bool owned)
         : base(owned ? segments : [.. segments])
     {

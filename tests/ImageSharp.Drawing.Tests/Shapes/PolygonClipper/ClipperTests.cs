@@ -28,7 +28,7 @@ public class ClipperTests
 
     private IEnumerable<IPath> Clip(IPath shape, params IPath[] hole)
     {
-        Clipper clipper = new(IntersectionRule.EvenOdd);
+        ClippedShapeGenerator clipper = new(IntersectionRule.EvenOdd);
 
         clipper.AddPath(shape, ClippingType.Subject);
         if (hole != null)

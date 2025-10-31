@@ -3,10 +3,31 @@
 
 using System.Runtime.CompilerServices;
 
+#pragma warning disable SA1201 // Elements should appear in the correct order
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
 
-#pragma warning disable SA1201 // Elements should appear in the correct order
+/// <summary>
+/// Generates polygonal stroke outlines for vector paths using analytic joins and caps.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This class performs geometric stroking of input paths, producing an explicit polygonal
+/// outline suitable for filling or clipping. It replicates the behavior of analytic stroking
+/// as implemented in vector renderers (e.g., AGG, Skia), without relying on rasterization.
+/// </para>
+/// <para>
+/// The stroker supports multiple join and cap styles, adjustable miter limits, and an
+/// approximation scale for arc and round joins. It operates entirely in double precision
+/// for numerical stability, emitting <see cref="PointF"/> coordinates for downstream use
+/// in polygon merging or clipping operations.
+/// </para>
+/// <para>
+/// Used by higher-level utility<see cref="StrokedShapeGenerator"/> to produce consistent,
+/// merged outlines for stroked paths and dashed spans.
+/// </para>
+/// </remarks>
 internal sealed class PolygonStroker
+
 {
     private ArrayBuilder<PointF> outVertices = new(1);
     private ArrayBuilder<VertexDistance> srcVertices = new(16);
@@ -53,8 +74,13 @@ internal sealed class PolygonStroker
         }
     }
 
-    public PathF ProcessPath(ReadOnlySpan<PointF> linePoints, bool isClosed)
+    public PointF[] ProcessPath(ReadOnlySpan<PointF> linePoints, bool isClosed)
     {
+        if (linePoints.Length < 2)
+        {
+            return [];
+        }
+
         this.Reset();
         this.AddLinePath(linePoints);
 
@@ -63,9 +89,9 @@ internal sealed class PolygonStroker
             this.ClosePath();
         }
 
-        PathF results = new(linePoints.Length * 3);
+        List<PointF> results = new(linePoints.Length * 3);
         this.FinishPath(results);
-        return results;
+        return [.. results];
     }
 
     public void AddLinePath(ReadOnlySpan<PointF> linePoints)
@@ -79,7 +105,9 @@ internal sealed class PolygonStroker
 
     public void ClosePath()
     {
-        this.AddVertex(0, 0, PathCommand.EndPoly | (PathCommand)PathFlags.Close);
+        // Mark the current src path as closed; no geometry is pushed here.
+        this.closed = (int)PathFlags.Close;
+        this.status = Status.Initial;
     }
 
     public void FinishPath(List<PointF> results)
@@ -327,6 +355,8 @@ internal sealed class PolygonStroker
                 this.srcVertices.RemoveLast();
             }
 
+            // Remove the tail pair (vd2 and its predecessor vd1) and re-add the tail 't'.
+            // Re-adding forces a fresh Measure() against the new predecessor, collapsing zero-length edges.
             if (this.srcVertices.Length != 0)
             {
                 this.srcVertices.RemoveLast();
@@ -340,6 +370,7 @@ internal sealed class PolygonStroker
             return;
         }
 
+        // TODO: Why check again? Doesn't the while loop above already ensure this?
         while (this.srcVertices.Length > 1)
         {
             ref VertexDistance vd1 = ref this.srcVertices[^1];
@@ -489,6 +520,15 @@ internal sealed class PolygonStroker
     {
         this.outVertices.Clear();
 
+        if (len < Constants.Misc.VertexDistanceEpsilon)
+        {
+            // Degenerate cap: emit a symmetric butt cap of zero span.
+            // This avoids div-by-zero in direction computation.
+            this.AddPoint(v0.X, v0.Y);
+            this.AddPoint(v1.X, v1.Y);
+            return;
+        }
+
         double dx1 = (v1.Y - v0.Y) / len;
         double dy1 = (v1.X - v0.X) / len;
         double dx2 = 0;
@@ -544,6 +584,26 @@ internal sealed class PolygonStroker
 
     private void CalcJoin(ref VertexDistance v0, ref VertexDistance v1, ref VertexDistance v2, double len1, double len2)
     {
+        const double eps = Constants.Misc.VertexDistanceEpsilon;
+        if (len1 < eps || len2 < eps)
+        {
+            // Degenerate join: reuse the non-degenerate edge length for both offsets
+            // to emit a simple bevel and avoid unstable direction math.
+            this.outVertices.Clear();
+
+            double l1 = len1 >= eps ? len1 : len2;
+            double l2 = len2 >= eps ? len2 : len1;
+
+            double offX1 = this.strokeWidth * (v1.Y - v0.Y) / l1;
+            double offY1 = this.strokeWidth * (v1.X - v0.X) / l1;
+            double offX2 = this.strokeWidth * (v2.Y - v1.Y) / l2;
+            double offY2 = this.strokeWidth * (v2.X - v1.X) / l2;
+
+            this.AddPoint(v1.X + offX1, v1.Y - offY1);
+            this.AddPoint(v1.X + offX2, v1.Y - offY2);
+            return;
+        }
+
         double dx1 = this.strokeWidth * (v1.Y - v0.Y) / len1;
         double dy1 = this.strokeWidth * (v1.X - v0.X) / len1;
         double dx2 = this.strokeWidth * (v2.Y - v1.Y) / len2;

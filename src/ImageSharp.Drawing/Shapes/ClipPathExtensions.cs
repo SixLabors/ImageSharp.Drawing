@@ -17,7 +17,6 @@ public static class ClipPathExtensions
     /// <param name="subjectPath">The subject path.</param>
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
-    /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
     public static IPath Clip(this IPath subjectPath, params IPath[] clipPaths)
         => subjectPath.Clip((IEnumerable<IPath>)clipPaths);
 
@@ -28,7 +27,6 @@ public static class ClipPathExtensions
     /// <param name="options">The shape options.</param>
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
-    /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
     public static IPath Clip(
         this IPath subjectPath,
         ShapeOptions options,
@@ -41,7 +39,6 @@ public static class ClipPathExtensions
     /// <param name="subjectPath">The subject path.</param>
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
-    /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
     public static IPath Clip(this IPath subjectPath, IEnumerable<IPath> clipPaths)
         => subjectPath.Clip(new ShapeOptions(), clipPaths);
 
@@ -52,13 +49,12 @@ public static class ClipPathExtensions
     /// <param name="options">The shape options.</param>
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
-    /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
     public static IPath Clip(
         this IPath subjectPath,
         ShapeOptions options,
         IEnumerable<IPath> clipPaths)
     {
-        Clipper clipper = new(options.IntersectionRule);
+        ClippedShapeGenerator clipper = new(options.IntersectionRule);
 
         clipper.AddPath(subjectPath, ClippingType.Subject);
         clipper.AddPaths(clipPaths, ClippingType.Clip);
