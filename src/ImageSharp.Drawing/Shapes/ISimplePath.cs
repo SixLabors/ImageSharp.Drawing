@@ -11,10 +11,10 @@ public interface ISimplePath
     /// <summary>
     /// Gets a value indicating whether this instance is a closed path.
     /// </summary>
-    bool IsClosed { get; }
+    public bool IsClosed { get; }
 
     /// <summary>
     /// Gets the points that make this up as a simple linear path.
     /// </summary>
-    ReadOnlyMemory<PointF> Points { get; }
+    public ReadOnlyMemory<PointF> Points { get; }
 }

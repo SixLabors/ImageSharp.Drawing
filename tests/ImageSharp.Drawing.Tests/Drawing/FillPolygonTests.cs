@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
 
@@ -27,9 +28,9 @@ public class FillPolygonTests
             c => c.SetGraphicsOptions(options)
                 .FillPolygon(Color.White, polygon1)
                 .FillPolygon(Color.White, polygon2),
+            testOutputDetails: $"aa{antialias}",
             appendPixelTypeToFileName: false,
-            appendSourceFileOrDescription: false,
-            testOutputDetails: $"aa{antialias}");
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
@@ -177,8 +178,8 @@ public class FillPolygonTests
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White, shape),
             comparer: ImageComparer.TolerantPercentage(0.01f),
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
@@ -189,17 +190,17 @@ public class FillPolygonTests
         Star star = new(64, 64, 5, 24, 64);
 
         // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
-        foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
+        foreach (BooleanOperation operation in (BooleanOperation[])Enum.GetValues(typeof(BooleanOperation)))
         {
             ShapeOptions options = new() { ClippingOperation = operation };
             IPath shape = star.Clip(options, circle);
 
             provider.RunValidatingProcessorTest(
                 c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
-                comparer: ImageComparer.TolerantPercentage(0.01F),
                 testOutputDetails: operation.ToString(),
-                appendSourceFileOrDescription: false,
-                appendPixelTypeToFileName: false);
+                comparer: ImageComparer.TolerantPercentage(0.01F),
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
         }
     }
 
@@ -300,8 +301,8 @@ public class FillPolygonTests
         provider.RunValidatingProcessorTest(
             c => c.Fill(color, polygon),
             testOutput,
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
@@ -336,8 +337,8 @@ public class FillPolygonTests
                 c.Fill(color, polygon);
             },
             testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]

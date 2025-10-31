@@ -2,8 +2,9 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
+using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper;
 
@@ -27,18 +28,15 @@ public class ClipperTests
 
     private IEnumerable<IPath> Clip(IPath shape, params IPath[] hole)
     {
-        Clipper clipper = new();
+        ClippedShapeGenerator clipper = new(IntersectionRule.EvenOdd);
 
         clipper.AddPath(shape, ClippingType.Subject);
         if (hole != null)
         {
-            foreach (IPath s in hole)
-            {
-                clipper.AddPath(s, ClippingType.Clip);
-            }
+            clipper.AddPaths(hole, ClippingType.Clip);
         }
 
-        return clipper.GenerateClippedShapes(ClippingOperation.Difference, IntersectionRule.EvenOdd);
+        return clipper.GenerateClippedShapes(BooleanOperation.Difference);
     }
 
     [Fact]
