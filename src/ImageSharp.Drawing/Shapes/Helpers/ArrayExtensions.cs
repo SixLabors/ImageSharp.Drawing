@@ -17,7 +17,7 @@ internal static class ArrayExtensions
     /// <returns>the Merged arrays</returns>
     public static T[] Merge<T>(this T[] source1, T[] source2)
     {
-        if (source2 is null)
+        if (source2 is null || source2.Length == 0)
         {
             return source1;
         }

@@ -59,7 +59,7 @@ public class FillPatternBrushTests
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
         };
 
-        this.Test(
+        Test(
             "Percent10",
             Color.Blue,
             Brushes.Percent10(Color.HotPink, Color.LimeGreen),
@@ -77,7 +77,7 @@ public class FillPatternBrushTests
             { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
         };
 
-        this.Test(
+        Test(
             "Percent10_Transparent",
             Color.Blue,
             Brushes.Percent10(Color.HotPink),
@@ -95,7 +95,7 @@ public class FillPatternBrushTests
             { Color.LimeGreen, Color.LimeGreen, Color.HotPink, Color.LimeGreen }
         };
 
-        this.Test(
+        Test(
             "Percent20",
             Color.Blue,
             Brushes.Percent20(Color.HotPink, Color.LimeGreen),
@@ -113,7 +113,7 @@ public class FillPatternBrushTests
             { Color.Blue, Color.Blue, Color.HotPink, Color.Blue }
         };
 
-        this.Test(
+        Test(
             "Percent20_Transparent",
             Color.Blue,
             Brushes.Percent20(Color.HotPink),
@@ -131,7 +131,7 @@ public class FillPatternBrushTests
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
         };
 
-        this.Test(
+        Test(
             "Horizontal",
             Color.Blue,
             Brushes.Horizontal(Color.HotPink, Color.LimeGreen),
@@ -149,7 +149,7 @@ public class FillPatternBrushTests
             { Color.Blue, Color.Blue, Color.Blue, Color.Blue }
         };
 
-        this.Test(
+        Test(
             "Horizontal_Transparent",
             Color.Blue,
             Brushes.Horizontal(Color.HotPink),
@@ -167,7 +167,7 @@ public class FillPatternBrushTests
             { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink }
         };
 
-        this.Test(
+        Test(
             "Min",
             Color.Blue,
             Brushes.Min(Color.HotPink, Color.LimeGreen),
@@ -185,7 +185,7 @@ public class FillPatternBrushTests
             { Color.HotPink, Color.HotPink, Color.HotPink, Color.HotPink },
         };
 
-        this.Test(
+        Test(
             "Min_Transparent",
             Color.Blue,
             Brushes.Min(Color.HotPink),
@@ -203,7 +203,7 @@ public class FillPatternBrushTests
             { Color.LimeGreen, Color.HotPink, Color.LimeGreen, Color.LimeGreen }
         };
 
-        this.Test(
+        Test(
             "Vertical",
             Color.Blue,
             Brushes.Vertical(Color.HotPink, Color.LimeGreen),
@@ -221,7 +221,7 @@ public class FillPatternBrushTests
             { Color.Blue, Color.HotPink, Color.Blue, Color.Blue }
         };
 
-        this.Test(
+        Test(
             "Vertical_Transparent",
             Color.Blue,
             Brushes.Vertical(Color.HotPink),
@@ -239,7 +239,7 @@ public class FillPatternBrushTests
             { Color.HotPink, Color.LimeGreen, Color.LimeGreen, Color.LimeGreen }
         };
 
-        this.Test(
+        Test(
             "ForwardDiagonal",
             Color.Blue,
             Brushes.ForwardDiagonal(Color.HotPink, Color.LimeGreen),
@@ -257,7 +257,7 @@ public class FillPatternBrushTests
             { Color.HotPink, Color.Blue, Color.Blue, Color.Blue }
         };
 
-        this.Test(
+        Test(
             "ForwardDiagonal_Transparent",
             Color.Blue,
             Brushes.ForwardDiagonal(Color.HotPink),
@@ -275,7 +275,7 @@ public class FillPatternBrushTests
             { Color.LimeGreen, Color.LimeGreen, Color.LimeGreen, Color.HotPink }
         };
 
-        this.Test(
+        Test(
              "BackwardDiagonal",
              Color.Blue,
              Brushes.BackwardDiagonal(Color.HotPink, Color.LimeGreen),
@@ -293,7 +293,7 @@ public class FillPatternBrushTests
             { Color.Blue, Color.Blue, Color.Blue, Color.HotPink }
         };
 
-        this.Test(
+        Test(
             "BackwardDiagonal_Transparent",
             Color.Blue,
             Brushes.BackwardDiagonal(Color.HotPink),

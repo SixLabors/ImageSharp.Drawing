@@ -42,6 +42,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
     public BaseGlyphBuilder(Matrix3x2 transform) => this.Builder = new PathBuilder(transform);
 
+    protected List<IPath> PathList { get; } = new();
+
     /// <summary>
     /// Gets the flattened paths captured for all glyphs/graphemes.
     /// </summary>

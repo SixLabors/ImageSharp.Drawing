@@ -8,18 +8,15 @@ namespace SixLabors.ImageSharp.Drawing;
 /// <summary>
 /// An elliptical shape made up of a single path made up of one of more <see cref="ILineSegment"/>s.
 /// </summary>
-public sealed class EllipsePolygon : IPath, ISimplePath, IPathInternals, IInternalPathOwner
+public sealed class EllipsePolygon : Polygon, IPathInternals
 {
-    private readonly InternalPath innerPath;
-    private readonly CubicBezierLineSegment segment;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
     /// </summary>
     /// <param name="location">The location the center of the ellipse will be placed.</param>
     /// <param name="size">The width/height of the final ellipse.</param>
     public EllipsePolygon(PointF location, SizeF size)
-        : this(CreateSegment(location, size))
+        : base(CreateSegment(location, size))
     {
     }
 
@@ -45,6 +42,11 @@ public sealed class EllipsePolygon : IPath, ISimplePath, IPathInternals, IIntern
     {
     }
 
+    private EllipsePolygon(ILineSegment[] segments)
+        : base(segments, true)
+    {
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="EllipsePolygon" /> class.
     /// </summary>
@@ -56,46 +58,28 @@ public sealed class EllipsePolygon : IPath, ISimplePath, IPathInternals, IIntern
     {
     }
 
-    private EllipsePolygon(CubicBezierLineSegment segment)
+    /// <inheritdoc/>
+    public override IPath Transform(Matrix3x2 matrix)
     {
-        this.segment = segment;
-        this.innerPath = new InternalPath(segment, true);
-    }
+        if (matrix.IsIdentity)
+        {
+            return this;
+        }
 
-    /// <inheritdoc/>
-    public bool IsClosed => true;
+        ILineSegment[] segments = new ILineSegment[this.LineSegments.Count];
 
-    /// <inheritdoc/>
-    public ReadOnlyMemory<PointF> Points => this.innerPath.Points();
+        for (int i = 0; i < segments.Length; i++)
+        {
+            segments[i] = this.LineSegments[i].Transform(matrix);
+        }
 
-    /// <inheritdoc />
-    public RectangleF Bounds => this.innerPath.Bounds;
-
-    /// <inheritdoc/>
-    public PathTypes PathType => PathTypes.Closed;
-
-    /// <inheritdoc/>
-    public IPath Transform(Matrix3x2 matrix) => matrix.IsIdentity
-              ? this
-              : new EllipsePolygon(this.segment.Transform(matrix));
-
-    /// <inheritdoc/>
-    public IPath AsClosedPath() => this;
-
-    /// <inheritdoc />
-    public IEnumerable<ISimplePath> Flatten()
-    {
-        yield return this;
+        return new EllipsePolygon(segments);
     }
 
     /// <inheritdoc />
     // TODO switch this out to a calculated algorithm
     SegmentInfo IPathInternals.PointAlongPath(float distance)
-        => this.innerPath.PointAlongPath(distance);
-
-    /// <inheritdoc/>
-    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
-        => [this.innerPath];
+        => this.InnerPath.PointAlongPath(distance);
 
     private static CubicBezierLineSegment CreateSegment(Vector2 location, SizeF size)
     {

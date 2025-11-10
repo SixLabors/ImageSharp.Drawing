@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
-
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <summary>
@@ -28,20 +26,19 @@ internal static class GraphicsOptionsExtensions
             return false;
         }
 
-        if (options.AlphaCompositionMode != PixelAlphaCompositionMode.SrcOver
-            && options.AlphaCompositionMode != PixelAlphaCompositionMode.Src)
+        if (options.AlphaCompositionMode is not PixelAlphaCompositionMode.SrcOver and not PixelAlphaCompositionMode.Src)
         {
             return false;
         }
 
-        const float Opaque = 1F;
+        const float opaque = 1f;
 
-        if (options.BlendPercentage != Opaque)
+        if (options.BlendPercentage != opaque)
         {
             return false;
         }
 
-        if (color.ToScaledVector4().W != Opaque)
+        if (color.ToScaledVector4().W != opaque)
         {
             return false;
         }

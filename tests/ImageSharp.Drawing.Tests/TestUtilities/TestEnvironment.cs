@@ -80,7 +80,7 @@ public static partial class TestEnvironment
         return directory.FullName;
     }
 
-    private static string GetFullPath(string relativePath) =>
+    public static string GetFullPath(string relativePath) =>
         IOPath.Combine(SolutionDirectoryFullPath, relativePath)
         .Replace('\\', IOPath.DirectorySeparatorChar);
 

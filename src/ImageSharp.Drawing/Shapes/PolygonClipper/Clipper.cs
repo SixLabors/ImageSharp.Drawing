@@ -14,7 +14,7 @@ internal class Clipper
     /// Initializes a new instance of the <see cref="Clipper"/> class.
     /// </summary>
     public Clipper()
-        => this.polygonClipper = new PolygonClipper();
+        => this.polygonClipper = new PolygonClipper() { PreserveCollinear = true };
 
     /// <summary>
     /// Generates the clipped shapes from the previously provided paths.

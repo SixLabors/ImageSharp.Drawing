@@ -301,12 +301,12 @@ public class TestImageProviderTests
         Assert.Equal(20, img.Height);
 
         Buffer2D<TPixel> pixels = img.GetRootFramePixelBuffer();
-        Rgba32 rgba = default;
+
         for (int y = 0; y < pixels.Height; y++)
         {
             for (int x = 0; x < pixels.Width; x++)
             {
-                rgba = pixels[x, y].ToRgba32();
+                Rgba32 rgba = pixels[x, y].ToRgba32();
 
                 Assert.Equal(255, rgba.R);
                 Assert.Equal(100, rgba.G);

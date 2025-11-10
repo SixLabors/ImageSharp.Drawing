@@ -81,7 +81,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
             // topLeft
             int left = pixels.Width / 2;
             int right = pixels.Width;
-            int top = 0;
+            const int top = 0;
             int bottom = pixels.Height / 2;
             int stride = pixels.Width / 12;
             if (stride < 1)
@@ -97,7 +97,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                     if (x % stride == 0)
                     {
                         p++;
-                        p = p % PinkBluePixels.Length;
+                        p %= PinkBluePixels.Length;
                     }
 
                     pixels[x, y] = PinkBluePixels[p];
@@ -111,9 +111,9 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
         private static void BlackWhiteChecker(Buffer2D<TPixel> pixels)
         {
             // topLeft
-            int left = 0;
+            const int left = 0;
             int right = pixels.Width / 2;
-            int top = 0;
+            const int top = 0;
             int bottom = pixels.Height / 2;
             int stride = pixels.Width / 6;
 
@@ -123,7 +123,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                 if (y % stride is 0)
                 {
                     p++;
-                    p = p % BlackWhitePixels.Length;
+                    p %= BlackWhitePixels.Length;
                 }
 
                 int pstart = p;
@@ -132,7 +132,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                     if (x % stride is 0)
                     {
                         p++;
-                        p = p % BlackWhitePixels.Length;
+                        p %= BlackWhitePixels.Length;
                     }
 
                     pixels[x, y] = BlackWhitePixels[p];
@@ -148,7 +148,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
         private static void TransparentGradients(Buffer2D<TPixel> pixels)
         {
             // topLeft
-            int left = 0;
+            const int left = 0;
             int right = pixels.Width / 2;
             int top = pixels.Height / 2;
             int bottom = pixels.Height;
@@ -160,7 +160,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
 
             for (int x = left; x < right; x++)
             {
-                blue.W = red.W = green.W = (float)x / (float)right;
+                blue.W = red.W = green.W = x / (float)right;
 
                 TPixel c = TPixel.FromVector4(red);
                 int topBand = top;
@@ -169,14 +169,14 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                     pixels[x, y] = c;
                 }
 
-                topBand = topBand + height;
+                topBand += height;
                 c = TPixel.FromVector4(green);
                 for (int y = topBand; y < topBand + height; y++)
                 {
                     pixels[x, y] = c;
                 }
 
-                topBand = topBand + height;
+                topBand += height;
                 c = TPixel.FromVector4(blue);
                 for (int y = topBand; y < bottom; y++)
                 {

@@ -13,6 +13,7 @@ namespace SixLabors.ImageSharp.Drawing;
 public class PathCollection : IPathCollection
 {
     private readonly IPath[] paths;
+    private RectangleF? bounds;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PathCollection"/> class.
@@ -33,28 +34,30 @@ public class PathCollection : IPathCollection
 
         if (this.paths.Length == 0)
         {
-            this.Bounds = new RectangleF(0, 0, 0, 0);
-        }
-        else
-        {
-            float minX, minY, maxX, maxY;
-            minX = minY = float.MaxValue;
-            maxX = maxY = float.MinValue;
-
-            foreach (IPath path in this.paths)
-            {
-                minX = Math.Min(path.Bounds.Left, minX);
-                minY = Math.Min(path.Bounds.Top, minY);
-                maxX = Math.Max(path.Bounds.Right, maxX);
-                maxY = Math.Max(path.Bounds.Bottom, maxY);
-            }
-
-            this.Bounds = new RectangleF(minX, minY, maxX - minX, maxY - minY);
+            this.bounds = new RectangleF(0, 0, 0, 0);
         }
     }
 
     /// <inheritdoc />
-    public RectangleF Bounds { get; }
+    public RectangleF Bounds => this.bounds ??= this.CalcBounds();
+
+    private RectangleF CalcBounds()
+    {
+        float minX, minY, maxX, maxY;
+        minX = minY = float.MaxValue;
+        maxX = maxY = float.MinValue;
+
+        foreach (IPath path in this.paths)
+        {
+            RectangleF bounds = path.Bounds;
+            minX = Math.Min(bounds.Left, minX);
+            minY = Math.Min(bounds.Top, minY);
+            maxX = Math.Max(bounds.Right, maxX);
+            maxY = Math.Max(bounds.Bottom, maxY);
+        }
+
+        return new RectangleF(minX, minY, maxX - minX, maxY - minY);
+    }
 
     /// <inheritdoc />
     public IEnumerator<IPath> GetEnumerator() => ((IEnumerable<IPath>)this.paths).GetEnumerator();

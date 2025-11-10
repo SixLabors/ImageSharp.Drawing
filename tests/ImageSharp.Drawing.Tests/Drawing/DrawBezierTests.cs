@@ -40,7 +40,7 @@ public class DrawBezierTests
         provider.RunValidatingProcessorTest(
             x => x.DrawBeziers(color, 5f, points),
             testDetails,
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 }

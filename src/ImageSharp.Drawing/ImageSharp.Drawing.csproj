@@ -35,7 +35,6 @@
     <Otherwise>
       <PropertyGroup>
         <TargetFrameworks>net8.0</TargetFrameworks>
-        <IsTrimmable>true</IsTrimmable>
       </PropertyGroup>
     </Otherwise>
   </Choose>

@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - main
+      - release/*
     tags:
       - "v*"
   pull_request:
     branches:
       - main
+      - release/*
     types: [ labeled, opened, synchronize, reopened ]
+
 jobs:
   # Prime a single LFS cache and expose the exact key for the matrix
   WarmLFS:
@@ -112,14 +115,14 @@ jobs:
             options:
               os: buildjet-4vcpu-ubuntu-2204-arm
 
-    runs-on: ${{matrix.options.os}}
+    runs-on: ${{ matrix.options.os }}
 
     steps:
       - name: Install libgdi+, which is required for tests running on ubuntu
         if: ${{ contains(matrix.options.os, 'ubuntu') }}
         run: |
-            sudo apt-get update
-            sudo apt-get -y install libgdiplus libgif-dev libglib2.0-dev libcairo2-dev libtiff-dev libexif-dev
+          sudo apt-get update
+          sudo apt-get -y install libgdiplus libgif-dev libglib2.0-dev libcairo2-dev libtiff-dev libexif-dev
 
       - name: Git Config
         shell: bash
@@ -141,6 +144,7 @@ jobs:
           key: ${{ needs.WarmLFS.outputs.lfs_key }}
 
       - name: Git Pull LFS
+        shell: bash
         run: git lfs pull
 
       - name: NuGet Install
@@ -211,14 +215,10 @@ jobs:
         with:
           flags: unittests
 
-
   Publish:
     needs: [Build]
-
     runs-on: ubuntu-latest
-
     if: (github.event_name == 'push')
-
     steps:
       - name: Git Config
         shell: bash
@@ -259,4 +259,3 @@ jobs:
         run: |
           dotnet nuget push .\artifacts\*.nupkg -k ${{secrets.NUGET_TOKEN}} -s https://api.nuget.org/v3/index.json --skip-duplicate
           dotnet nuget push .\artifacts\*.snupkg -k ${{secrets.NUGET_TOKEN}} -s https://api.nuget.org/v3/index.json --skip-duplicate
-
