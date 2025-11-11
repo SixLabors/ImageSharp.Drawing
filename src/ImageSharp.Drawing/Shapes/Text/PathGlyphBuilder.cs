@@ -4,6 +4,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Rendering;
 
 namespace SixLabors.ImageSharp.Drawing.Text;
 

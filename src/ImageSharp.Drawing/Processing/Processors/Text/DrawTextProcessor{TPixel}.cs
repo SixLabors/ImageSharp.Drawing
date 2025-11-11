@@ -2,7 +2,8 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.Fonts;
+using SixLabors.Fonts.Rendering;
+using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;
 
@@ -55,9 +56,14 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
         {
             foreach (DrawingOperation operation in operations)
             {
+                GraphicsOptions graphicsOptions =
+                    this.definition.DrawingOptions.GraphicsOptions.CloneOrReturnForRules(
+                        operation.PixelAlphaCompositionMode,
+                        operation.PixelColorBlendingMode);
+
                 using BrushApplicator<TPixel> app = operation.Brush.CreateApplicator(
                          this.Configuration,
-                         this.definition.DrawingOptions.GraphicsOptions,
+                         graphicsOptions,
                          source,
                          this.SourceRectangle);
 
@@ -93,13 +99,14 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
                     firstRow = -startY;
                 }
 
+                int maxWidth = source.Width - startX;
                 int maxHeight = source.Height - startY;
                 int end = Math.Min(operation.Map.Height, maxHeight);
 
                 for (int row = firstRow; row < end; row++)
                 {
                     int y = startY + row;
-                    Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan, Math.Min(buffer.Width - offsetSpan, source.Width));
+                    Span<float> span = buffer.DangerousGetRowSpan(row).Slice(offsetSpan, Math.Min(buffer.Width - offsetSpan, maxWidth));
                     app.Apply(span, startX, y);
                 }
             }

@@ -38,6 +38,17 @@ public class PathBuilder
     }
 
     /// <summary>
+    /// Gets the current transformation matrix.
+    /// </summary>
+    /// <remarks>
+    /// Returns a copy of the matrix. Because <see cref="Matrix3x2"/> is a value type,
+    /// modifications to the returned value do not affect the internal state. To change the transform,
+    /// call <see cref="SetTransform(Matrix3x2)"/>.
+    /// </remarks>
+    /// <value>The current transformation matrix.</value>
+    public Matrix3x2 Transform => this.currentTransform;
+
+    /// <summary>
     /// Sets the translation to be applied to all items to follow being applied to the <see cref="PathBuilder"/>.
     /// </summary>
     /// <param name="transform">The transform.</param>
@@ -144,7 +155,7 @@ public class PathBuilder
     public PathBuilder AddLines(IEnumerable<PointF> points)
     {
         Guard.NotNull(points, nameof(points));
-        return this.AddLines(points.ToArray());
+        return this.AddLines([.. points]);
     }
 
     /// <summary>
@@ -420,7 +431,7 @@ public class PathBuilder
     /// <returns>The current set of operations as a complex polygon</returns>
     public IPath Build()
     {
-        IPath[] paths = this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray();
+        IPath[] paths = [.. this.figures.Where(x => !x.IsEmpty).Select(x => x.Build())];
         if (paths.Length == 1)
         {
             return paths[0];
