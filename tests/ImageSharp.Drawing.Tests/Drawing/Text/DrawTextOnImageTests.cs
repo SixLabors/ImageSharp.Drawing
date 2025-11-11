@@ -7,6 +7,7 @@ using SixLabors.Fonts;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
+using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Xunit.Abstractions;
@@ -31,7 +32,7 @@ public class DrawTextOnImageTests
     private ITestOutputHelper Output { get; }
 
     [Theory]
-    [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, ColorFontSupport.MicrosoftColrFormat)]
+    [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, ColorFontSupport.ColrV0)]
     [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, ColorFontSupport.None)]
     public void EmojiFontRendering<TPixel>(TestImageProvider<TPixel> provider, ColorFontSupport colorFontSupport)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -58,7 +59,7 @@ public class DrawTextOnImageTests
 
               img.Mutate(i => i.DrawText(textOptions, text, color));
           },
-          $"ColorFontsEnabled-{colorFontSupport == ColorFontSupport.MicrosoftColrFormat}");
+          $"ColorFontsEnabled-{colorFontSupport == ColorFontSupport.ColrV0}");
     }
 
     [Theory]
@@ -697,7 +698,7 @@ public class DrawTextOnImageTests
             TextRuns = [new RichTextRun { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Strikeout }],
         };
 
-        IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
+        IPathCollection glyphs = TextBuilder.GeneratePaths(text, path, textOptions);
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
@@ -724,7 +725,7 @@ public class DrawTextOnImageTests
         };
 
         const string text = "Quick brown fox jumps over the lazy dog.";
-        IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
+        IPathCollection glyphs = TextBuilder.GeneratePaths(text, path, textOptions);
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
@@ -772,7 +773,7 @@ public class DrawTextOnImageTests
                           VerticalAlignment = va,
                       };
 
-                      IPathCollection tb = TextBuilder.GenerateGlyphs(text, path, to);
+                      IPathCollection tb = TextBuilder.GeneratePaths(text, path, to);
 
                       img.Mutate(
                           i => i.DrawLine(new SolidPen(Color.Red, 30), pathLine)
@@ -802,7 +803,7 @@ public class DrawTextOnImageTests
             ]
         };
 
-        IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
+        IReadOnlyList<GlyphPathCollection> glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White).Fill(Color.Black, glyphs),
@@ -827,7 +828,7 @@ public class DrawTextOnImageTests
             ]
         };
 
-        IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
+        IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
 
         DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
 
@@ -851,7 +852,8 @@ public class DrawTextOnImageTests
             WrappingLength = 400,
             LayoutMode = LayoutMode.VerticalLeftRight,
             LineSpacing = 1.4F,
-            TextRuns = [new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
+            TextRuns = [
+                new RichTextRun() { Start = 0, End = text.GetGraphemeCount(), TextDecorations = TextDecorations.Underline | TextDecorations.Strikeout | TextDecorations.Overline }
             ]
         };
 

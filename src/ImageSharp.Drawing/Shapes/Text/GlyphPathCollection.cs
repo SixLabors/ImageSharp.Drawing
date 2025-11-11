@@ -5,12 +5,10 @@ using System.Collections.ObjectModel;
 using System.Numerics;
 using SixLabors.Fonts.Rendering;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Text;
+namespace SixLabors.ImageSharp.Drawing.Text;
 
 /// <summary>
 /// A geometry + paint container for a single glyph, preserving painted layer boundaries.
-/// Use this when you need to render colored (layered) glyphs or to make informed
-/// decisions when projecting to monochrome geometry.
 /// </summary>
 public sealed class GlyphPathCollection
 {
@@ -158,6 +156,9 @@ public sealed class GlyphPathCollection
         /// <param name="fillRule">The fill rule for this layer.</param>
         /// <param name="bounds">Optional cached bounds for this layer.</param>
         /// <param name="kind">Optional semantic kind (eg. Decoration).</param>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// Thrown if the specified span is out of range of the current path list.
+        /// </exception>
         public void AddLayer(
             int startIndex,
             int count,

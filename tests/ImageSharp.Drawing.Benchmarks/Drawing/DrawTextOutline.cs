@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using BenchmarkDotNet.Attributes;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using Brush = SixLabors.ImageSharp.Drawing.Processing.Brush;
@@ -95,7 +96,7 @@ public class DrawTextOutline
             Brush brush,
             Pen pen)
         {
-            IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
+            IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
 
             DrawingOptions pathOptions = new() { GraphicsOptions = options.GraphicsOptions };
             if (brush != null)

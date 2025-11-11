@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Text;
+namespace SixLabors.ImageSharp.Drawing.Text;
 
 /// <summary>
 /// Optional semantic classification for layers to aid monochrome projection or decoration handling.

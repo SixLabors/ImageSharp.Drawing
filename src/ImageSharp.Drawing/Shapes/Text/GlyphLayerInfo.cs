@@ -4,7 +4,7 @@
 using System.Numerics;
 using SixLabors.Fonts.Rendering;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Text;
+namespace SixLabors.ImageSharp.Drawing.Text;
 
 /// <summary>
 /// Describes a single painted layer as a span within the glyph's path list.

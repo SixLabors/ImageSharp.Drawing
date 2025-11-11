@@ -32,7 +32,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private TextRun? currentTextRun;
     private Brush? currentBrush;
     private Pen? currentPen;
-    private FillRule? currentFillRule;
+    private FillRule currentFillRule;
+    private PixelAlphaCompositionMode currentCompositionMode;
+    private PixelColorBlendingMode currentBlendingMode;
     private bool currentDecorationIsVertical;
     private bool hasLayer;
 
@@ -62,6 +64,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         this.defaultPen = pen;
         this.defaultBrush = brush;
         this.DrawingOperations = [];
+        this.currentCompositionMode = drawingOptions.GraphicsOptions.AlphaCompositionMode;
+        this.currentBlendingMode = drawingOptions.GraphicsOptions.ColorBlendingMode;
 
         IPath? path = textOptions.Path;
         if (path is not null)
@@ -144,12 +148,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         this.rasterizationRequired = true;
     }
 
-    protected override void BeginLayer(Paint? paint, FillRule fillRule, in ClipQuad? clipBounds)
+    protected override void BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
     {
         this.hasLayer = true;
         if (TryCreateBrush(paint, this.Builder.Transform, out Brush? brush))
         {
             this.currentBrush = brush;
+            this.currentCompositionMode = TextUtilities.MapCompositionMode(paint.CompositeMode);
+            this.currentBlendingMode = TextUtilities.MapBlendingMode(paint.CompositeMode);
         }
     }
 
@@ -170,7 +176,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         bool renderFill = this.currentBrush != null;
 
         // Path has already been added to the collection via the base class.
-        IPath path = this.CurrentPaths.Last();
+        IPath path = this.CurrentPaths[^1];
         Point renderLocation = ClampToPixel(path.Bounds.Location);
         if (this.noCache || this.rasterizationRequired)
         {
@@ -233,11 +239,15 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 RenderLocation = renderLocation,
                 Map = renderData.FillMap,
                 Brush = this.currentBrush!,
-                RenderPass = RenderOrderFill
+                RenderPass = RenderOrderFill,
+                PixelAlphaCompositionMode = this.currentCompositionMode,
+                PixelColorBlendingMode = this.currentBlendingMode
             });
         }
 
-        this.currentFillRule = null;
+        this.currentFillRule = FillRule.NonZero;
+        this.currentCompositionMode = this.drawingOptions.GraphicsOptions.AlphaCompositionMode;
+        this.currentBlendingMode = this.drawingOptions.GraphicsOptions.ColorBlendingMode;
     }
 
     public override TextDecorations EnabledDecorations()
@@ -307,7 +317,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
 
         // Path has already been added to the collection via the base class.
-        IPath path = this.CurrentPaths.Last();
+        IPath path = this.CurrentPaths[^1];
         IPath outline = path;
 
         if (originalThickness != thickness)
@@ -390,7 +400,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
 
         // Path has already been added to the collection via the base class.
-        IPath path = this.CurrentPaths.Last();
+        IPath path = this.CurrentPaths[^1];
         Point renderLocation = ClampToPixel(path.Bounds.Location);
         if (this.noCache || this.rasterizationRequired)
         {
@@ -459,7 +469,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 RenderLocation = renderLocation,
                 Map = renderData.FillMap,
                 Brush = this.currentBrush!,
-                RenderPass = RenderOrderFill
+                RenderPass = RenderOrderFill,
+                PixelAlphaCompositionMode = this.currentCompositionMode,
+                PixelColorBlendingMode = this.currentBlendingMode
             });
         }
 
@@ -471,7 +483,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 RenderLocation = renderLocation - new Size(offset, offset),
                 Map = renderData.OutlineMap,
                 Brush = this.currentPen?.StrokeFill ?? this.currentBrush!,
-                RenderPass = RenderOrderOutline
+                RenderPass = RenderOrderOutline,
+                PixelAlphaCompositionMode = this.currentCompositionMode,
+                PixelColorBlendingMode = this.currentBlendingMode
             });
         }
     }
@@ -535,18 +549,12 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
         Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
 
-        IntersectionRule rule = IntersectionRule.NonZero;
-        if (this.currentFillRule.HasValue && this.currentFillRule.Value == FillRule.EvenOdd)
-        {
-            rule = IntersectionRule.EvenOdd;
-        }
-
         PolygonScanner scanner = PolygonScanner.Create(
             offsetPath,
             0,
             size.Height,
             subpixelCount,
-            rule,
+            TextUtilities.MapFillRule(this.currentFillRule),
             this.memoryAllocator);
 
         try
@@ -624,7 +632,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
     }
 
-    private readonly struct CacheKey
+    private readonly struct CacheKey : IEquatable<CacheKey>
     {
         public string Font { get; init; }
 
@@ -646,14 +654,21 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         public GlyphLayoutMode LayoutMode { get; init; }
 
-        public TextRun TextRun { get; init; }
+        public TextAttributes TextAttributes { get; init; }
+
+        public TextDecorations TextDecorations { get; init; }
 
         public RectangleF Bounds { get; init; }
+
+        public static bool operator ==(CacheKey left, CacheKey right) => left.Equals(right);
+
+        public static bool operator !=(CacheKey left, CacheKey right) => !(left == right);
 
         public static CacheKey FromParameters(in GlyphRendererParameters parameters, RectangleF bounds)
             => new()
             {
-                // Our caching does not need the grapheme index as that is only relevant to the text layout.
+                // Do not include the grapheme index as that will
+                // always vary per glyph instance.
                 Font = parameters.Font,
                 GlyphType = parameters.GlyphType,
                 FontStyle = parameters.FontStyle,
@@ -663,8 +678,46 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 PointSize = parameters.PointSize,
                 Dpi = parameters.Dpi,
                 LayoutMode = parameters.LayoutMode,
-                TextRun = parameters.TextRun,
+                TextAttributes = parameters.TextRun.TextAttributes,
+                TextDecorations = parameters.TextRun.TextDecorations,
                 Bounds = bounds
             };
+
+        public override bool Equals(object? obj)
+            => obj is CacheKey key && this.Equals(key);
+
+        public bool Equals(CacheKey other)
+            => this.Font == other.Font &&
+            this.GlyphColor.Equals(other.GlyphColor) &&
+            this.GlyphType == other.GlyphType &&
+            this.FontStyle == other.FontStyle &&
+            this.GlyphId == other.GlyphId &&
+            this.CompositeGlyphId == other.CompositeGlyphId &&
+            this.CodePoint.Equals(other.CodePoint) &&
+            this.PointSize == other.PointSize &&
+            this.Dpi == other.Dpi &&
+            this.LayoutMode == other.LayoutMode &&
+            this.TextAttributes == other.TextAttributes &&
+            this.TextDecorations == other.TextDecorations &&
+            this.Bounds.Equals(other.Bounds);
+
+        public override int GetHashCode()
+        {
+            HashCode hash = default;
+            hash.Add(this.Font);
+            hash.Add(this.GlyphColor);
+            hash.Add(this.GlyphType);
+            hash.Add(this.FontStyle);
+            hash.Add(this.GlyphId);
+            hash.Add(this.CompositeGlyphId);
+            hash.Add(this.CodePoint);
+            hash.Add(this.PointSize);
+            hash.Add(this.Dpi);
+            hash.Add(this.LayoutMode);
+            hash.Add(this.TextAttributes);
+            hash.Add(this.TextDecorations);
+            hash.Add(this.Bounds);
+            return hash.ToHashCode();
+        }
     }
 }

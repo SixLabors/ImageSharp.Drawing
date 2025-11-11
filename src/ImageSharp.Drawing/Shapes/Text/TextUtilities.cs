@@ -4,7 +4,7 @@
 using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Processing;
 
-namespace SixLabors.ImageSharp.Drawing.Shapes.Text;
+namespace SixLabors.ImageSharp.Drawing.Text;
 
 internal static class TextUtilities
 {
@@ -73,5 +73,22 @@ internal static class TextUtilities
         graphicsOptions.ColorBlendingMode = colorBlendingMode;
 
         return new DrawingOptions(graphicsOptions, shapeOptions, drawingOptions.Transform);
+    }
+
+    public static GraphicsOptions CloneOrReturnForRules(
+        this GraphicsOptions graphicsOptions,
+        PixelAlphaCompositionMode compositionMode,
+        PixelColorBlendingMode colorBlendingMode)
+    {
+        if (graphicsOptions.AlphaCompositionMode == compositionMode &&
+            graphicsOptions.ColorBlendingMode == colorBlendingMode)
+        {
+            return graphicsOptions;
+        }
+
+        GraphicsOptions clone = graphicsOptions.DeepClone();
+        clone.AlphaCompositionMode = compositionMode;
+        clone.ColorBlendingMode = colorBlendingMode;
+        return clone;
     }
 }

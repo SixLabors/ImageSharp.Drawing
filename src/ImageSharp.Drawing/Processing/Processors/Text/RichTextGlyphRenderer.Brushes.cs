@@ -20,7 +20,7 @@ internal sealed partial class RichTextGlyphRenderer
     /// <param name="transform">A transform to apply to the brush coordinates.</param>
     /// <param name="brush">The resulting brush, or <see langword="null"/> if the paint is unsupported.</param>
     /// <returns><see langword="true"/> if a brush could be created; otherwise, <see langword="false"/>.</returns>
-    public static bool TryCreateBrush(Paint? paint, Matrix3x2 transform, [NotNullWhen(true)] out Brush? brush)
+    public static bool TryCreateBrush([NotNullWhen(true)] Paint? paint, Matrix3x2 transform, [NotNullWhen(true)] out Brush? brush)
     {
         brush = null;
 

@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
-using SixLabors.ImageSharp.Drawing.Shapes.Text;
+using SixLabors.ImageSharp.Drawing.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Text;
 
@@ -34,15 +34,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
     // Per-layer (within current grapheme) bookkeeping:
     private int layerStartIndex;
-    private Paint? activeLayerPaint;
-    private FillRule activeLayerFillRule;
-    private ClipQuad? activeClipBounds;
+    private Paint? currentLayerPaint;
+    private FillRule currentLayerFillRule;
+    private ClipQuad? currentClipBounds;
 
     public BaseGlyphBuilder() => this.Builder = new PathBuilder();
 
     public BaseGlyphBuilder(Matrix3x2 transform) => this.Builder = new PathBuilder(transform);
-
-    protected List<IPath> PathList { get; } = new();
 
     /// <summary>
     /// Gets the flattened paths captured for all glyphs/graphemes.
@@ -109,9 +107,9 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.inLayer = false;
 
         this.layerStartIndex = this.graphemePathCount;
-        this.activeLayerPaint = null;
-        this.activeLayerFillRule = FillRule.NonZero;
-        this.activeClipBounds = null;
+        this.currentLayerPaint = null;
+        this.currentLayerFillRule = FillRule.NonZero;
+        this.currentClipBounds = null;
         this.BeginGlyph(in bounds, in parameters);
         return true;
     }
@@ -190,14 +188,14 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     }
 
     /// <inheritdoc/>
-    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule, in ClipQuad? clipBounds)
+    void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
     {
         this.usedLayers = true;
         this.inLayer = true;
         this.layerStartIndex = this.graphemePathCount;
-        this.activeLayerPaint = paint;
-        this.activeLayerFillRule = fillRule;
-        this.activeClipBounds = clipBounds;
+        this.currentLayerPaint = paint;
+        this.currentLayerFillRule = fillRule;
+        this.currentClipBounds = clipBounds;
 
         this.Builder.Clear();
         this.BeginLayer(paint, fillRule, clipBounds);
@@ -213,9 +211,20 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         IPath path = this.Builder.Build();
 
-        if (this.activeClipBounds is not null)
+        if (this.currentClipBounds is not null)
         {
-            // TODO:Clipping not yet implemented.
+            ClipQuad clip = this.currentClipBounds.Value;
+            PointF[] points = [clip.TopLeft, clip.TopRight, clip.BottomRight, clip.BottomLeft];
+            LinearLineSegment segment = new(points);
+            Polygon polygon = new(segment);
+
+            ShapeOptions options = new()
+            {
+                ClippingOperation = ClippingOperation.Intersection,
+                IntersectionRule = TextUtilities.MapFillRule(this.currentLayerFillRule)
+            };
+
+            path = path.Clip(options, polygon);
         }
 
         this.CurrentPaths.Add(path);
@@ -226,8 +235,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             this.graphemeBuilder.AddLayer(
                 startIndex: this.layerStartIndex,
                 count: 1,
-                paint: this.activeLayerPaint,
-                fillRule: this.activeLayerFillRule,
+                paint: this.currentLayerPaint,
+                fillRule: this.currentLayerFillRule,
                 bounds: path.Bounds,
                 kind: GlyphLayerKind.Painted);
 
@@ -236,9 +245,9 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         this.Builder.Clear();
         this.inLayer = false;
-        this.activeLayerPaint = null;
-        this.activeLayerFillRule = FillRule.NonZero;
-        this.activeClipBounds = null;
+        this.currentLayerPaint = null;
+        this.currentLayerFillRule = FillRule.NonZero;
+        this.currentClipBounds = null;
         this.EndLayer();
     }
 
@@ -366,7 +375,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
             this.graphemeBuilder.AddLayer(
                 startIndex: this.layerStartIndex,
                 count: 1,
-                paint: this.activeLayerPaint,
+                paint: this.currentLayerPaint,
                 fillRule: FillRule.NonZero,
                 bounds: path.Bounds,
                 kind: GlyphLayerKind.Decoration);
@@ -398,8 +407,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     {
     }
 
-    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule, in ClipQuad?)"/>
-    protected virtual void BeginLayer(Paint? paint, FillRule fillRule, in ClipQuad? clipBounds)
+    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule, ClipQuad?)"/>
+    protected virtual void BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
     {
     }
 
