@@ -4,31 +4,57 @@
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Provides an implementation of a brush for painting linear gradients within areas.
-/// Supported right now:
-/// - a set of colors in relative distances to each other.
+/// Provides a brush that paints linear gradients within an area.
+/// Supports both classic two-point gradients and three-point (rotated) gradients.
 /// </summary>
 public sealed class LinearGradientBrush : GradientBrush
 {
-    private readonly PointF p1;
-    private readonly PointF p2;
+    private readonly PointF startPoint;
+    private readonly PointF endPoint;
+    private readonly PointF? rotationPoint;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="LinearGradientBrush"/> class.
+    /// Initializes a new instance of the <see cref="LinearGradientBrush"/> class using
+    /// a start and end point.
     /// </summary>
-    /// <param name="p1">Start point</param>
-    /// <param name="p2">End point</param>
-    /// <param name="repetitionMode">defines how colors are repeated.</param>
-    /// <param name="colorStops"><inheritdoc /></param>
+    /// <param name="p0">The start point of the gradient.</param>
+    /// <param name="p1">The end point of the gradient.</param>
+    /// <param name="repetitionMode">Defines how the colors are repeated.</param>
+    /// <param name="colorStops">The ordered color stops of the gradient.</param>
     public LinearGradientBrush(
+        PointF p0,
         PointF p1,
-        PointF p2,
         GradientRepetitionMode repetitionMode,
         params ColorStop[] colorStops)
         : base(repetitionMode, colorStops)
     {
-        this.p1 = p1;
-        this.p2 = p2;
+        this.startPoint = p0;
+        this.endPoint = p1;
+        this.rotationPoint = null;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinearGradientBrush"/> class using
+    /// three points to define a rotated gradient axis.
+    /// </summary>
+    /// <param name="p0">The first point (start of the gradient).</param>
+    /// <param name="p1">The second point (gradient vector endpoint).</param>
+    /// <param name="rotationPoint">
+    /// The rotation reference point. This defines the rotation of the gradient axis.
+    /// </param>
+    /// <param name="repetitionMode">Defines how the colors are repeated.</param>
+    /// <param name="colorStops">The ordered color stops of the gradient.</param>
+    public LinearGradientBrush(
+        PointF p0,
+        PointF p1,
+        PointF rotationPoint,
+        GradientRepetitionMode repetitionMode,
+        params ColorStop[] colorStops)
+        : base(repetitionMode, colorStops)
+    {
+        this.startPoint = p0;
+        this.endPoint = p1;
+        this.rotationPoint = rotationPoint;
     }
 
     /// <inheritdoc/>
@@ -37,135 +63,165 @@ public sealed class LinearGradientBrush : GradientBrush
         if (other is LinearGradientBrush brush)
         {
             return base.Equals(other)
-                && this.p1.Equals(brush.p1)
-                && this.p2.Equals(brush.p2);
+                && this.startPoint.Equals(brush.startPoint)
+                && this.endPoint.Equals(brush.endPoint)
+                && Nullable.Equals(this.rotationPoint, brush.rotationPoint);
         }
 
         return false;
     }
 
-    /// <inheritdoc />
+    /// <inheritdoc/>
+    public override int GetHashCode()
+        => HashCode.Combine(base.GetHashCode(), this.startPoint, this.endPoint, this.rotationPoint);
+
+    /// <inheritdoc/>
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
         ImageFrame<TPixel> source,
-        RectangleF region) =>
-        new LinearGradientBrushApplicator<TPixel>(
+        RectangleF region)
+        => new LinearGradientBrushApplicator<TPixel>(
             configuration,
             options,
             source,
-            this.p1,
-            this.p2,
+            this.startPoint,
+            this.endPoint,
+            this.rotationPoint,
             this.ColorStops,
             this.RepetitionMode);
 
-    /// <inheritdoc/>
-    public override int GetHashCode()
-        => HashCode.Combine(base.GetHashCode(), this.p1, this.p2);
-
     /// <summary>
-    /// The linear gradient brush applicator.
+    /// Implements the gradient application logic for <see cref="LinearGradientBrush"/>.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     private sealed class LinearGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly PointF start;
-
         private readonly PointF end;
-
-        /// <summary>
-        /// the vector along the gradient, x component
-        /// </summary>
         private readonly float alongX;
-
-        /// <summary>
-        /// the vector along the gradient, y component
-        /// </summary>
         private readonly float alongY;
-
-        /// <summary>
-        /// the vector perpendicular to the gradient, y component
-        /// </summary>
-        private readonly float acrossY;
-
-        /// <summary>
-        /// the vector perpendicular to the gradient, x component
-        /// </summary>
         private readonly float acrossX;
-
-        /// <summary>
-        /// the result of <see cref="alongX"/>^2 + <see cref="alongY"/>^2
-        /// </summary>
+        private readonly float acrossY;
         private readonly float alongsSquared;
-
-        /// <summary>
-        /// the length of the defined gradient (between source and end)
-        /// </summary>
         private readonly float length;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="LinearGradientBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="LinearGradientBrushApplicator{TPixel}"/> class.
         /// </summary>
-        /// <param name="configuration">The configuration instance to use when performing operations.</param>
+        /// <param name="configuration">The ImageSharp configuration.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The source image.</param>
-        /// <param name="start">The start point of the gradient.</param>
-        /// <param name="end">The end point of the gradient.</param>
-        /// <param name="colorStops">A tuple list of colors and their respective position between 0 and 1 on the line.</param>
-        /// <param name="repetitionMode">Defines how the gradient colors are repeated.</param>
+        /// <param name="source">The target image frame.</param>
+        /// <param name="p0">The gradient start point.</param>
+        /// <param name="p1">The gradient end point.</param>
+        /// <param name="p2">The optional rotation point.</param>
+        /// <param name="colorStops">The gradient color stops.</param>
+        /// <param name="repetitionMode">Defines how the gradient repeats.</param>
         public LinearGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
             ImageFrame<TPixel> source,
-            PointF start,
-            PointF end,
+            PointF p0,
+            PointF p1,
+            PointF? p2,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
             : base(configuration, options, source, colorStops, repetitionMode)
         {
-            this.start = start;
-            this.end = end;
+            // Determine whether this is a simple linear gradient (2 points)
+            // or a rotated one (3 points).
+            if (p2 is null)
+            {
+                // Classic SVG-style gradient from start -> end.
+                this.start = p0;
+                this.end = p1;
+            }
+            else
+            {
+                // Compute the rotated gradient axis per COLRv1 rules.
+                // p0 = start, p1 = gradient vector, p2 = rotation reference.
+                float vx = p1.X - p0.X;
+                float vy = p1.Y - p0.Y;
+                float rx = p2.Value.X - p0.X;
+                float ry = p2.Value.Y - p0.Y;
 
-            // the along vector:
+                // n = perpendicular to rotation vector
+                float nx = ry;
+                float ny = -rx;
+
+                // Avoid divide-by-zero if p0 == p2.
+                float ndotn = (nx * nx) + (ny * ny);
+                if (ndotn == 0f)
+                {
+                    this.start = p0;
+                    this.end = p1;
+                }
+                else
+                {
+                    // Project p1 - p0 onto perpendicular direction.
+                    float vdotn = (vx * nx) + (vy * ny);
+                    float scale = vdotn / ndotn;
+
+                    // The derived endpoint after rotation.
+                    this.start = p0;
+                    this.end = new PointF(p0.X + (scale * nx), p0.Y + (scale * ny));
+                }
+            }
+
+            // Calculate axis vectors.
             this.alongX = this.end.X - this.start.X;
             this.alongY = this.end.Y - this.start.Y;
 
-            // the cross vector:
+            // Perpendicular axis vector.
             this.acrossX = this.alongY;
             this.acrossY = -this.alongX;
 
-            // some helpers:
+            // Precompute squared length and actual length for later use.
             this.alongsSquared = (this.alongX * this.alongX) + (this.alongY * this.alongY);
             this.length = MathF.Sqrt(this.alongsSquared);
         }
 
+        /// <inheritdoc/>
         protected override float PositionOnGradient(float x, float y)
         {
-            if (this.acrossX == 0)
+            // Degenerate case: gradient length == 0, use final stop color.
+            if (this.alongsSquared == 0f)
             {
-                return (x - this.start.X) / (this.end.X - this.start.X);
+                return 1f;
             }
-            else if (this.acrossY == 0)
+
+            // Fast path for horizontal gradients.
+            if (this.acrossX == 0f)
             {
-                return (y - this.start.Y) / (this.end.Y - this.start.Y);
+                float denom = this.end.X - this.start.X;
+                return denom != 0f ? (x - this.start.X) / denom : 1f;
             }
-            else
+
+            // Fast path for vertical gradients.
+            if (this.acrossY == 0f)
             {
-                float deltaX = x - this.start.X;
-                float deltaY = y - this.start.Y;
-                float k = ((this.alongY * deltaX) - (this.alongX * deltaY)) / this.alongsSquared;
-
-                // point on the line:
-                float x4 = x - (k * this.alongY);
-                float y4 = y + (k * this.alongX);
-
-                // get distance from (x4,y4) to start
-                float distance = MathF.Sqrt(MathF.Pow(x4 - this.start.X, 2) + MathF.Pow(y4 - this.start.Y, 2));
-
-                // get and return ratio
-                return distance / this.length;
+                float denom = this.end.Y - this.start.Y;
+                return denom != 0f ? (y - this.start.Y) / denom : 1f;
             }
+
+            // General case: project sample point onto the gradient axis.
+            float deltaX = x - this.start.X;
+            float deltaY = y - this.start.Y;
+
+            // Compute perpendicular projection scalar.
+            float k = ((this.alongY * deltaX) - (this.alongX * deltaY)) / this.alongsSquared;
+
+            // Determine projected point on the gradient line.
+            float projX = x - (k * this.alongY);
+            float projY = y + (k * this.alongX);
+
+            // Compute distance from gradient start to projected point.
+            float dx = projX - this.start.X;
+            float dy = projY - this.start.Y;
+
+            // Normalize to [0,1] range along the gradient length.
+            return this.length > 0f ? MathF.Sqrt((dx * dx) + (dy * dy)) / this.length : 1f;
         }
     }
 }

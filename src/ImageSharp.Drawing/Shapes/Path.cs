@@ -395,7 +395,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             scaler = ParseFloat(str);
         }
 
-        return ReadOnlySpan<char>.Empty;
+        return [];
     }
 
     private static bool IsSeparator(char ch)

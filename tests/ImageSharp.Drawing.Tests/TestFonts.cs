@@ -26,4 +26,6 @@ public static class TestFonts
     public const string NotoSansKRRegular = "NotoSansKR-Regular.otf";
 
     public const string NotoSerifKRRegular = "NotoSerifKR-Regular.otf";
+
+    public static string NotoColorEmojiRegular => "NotoColorEmoji-Regular.ttf";
 }

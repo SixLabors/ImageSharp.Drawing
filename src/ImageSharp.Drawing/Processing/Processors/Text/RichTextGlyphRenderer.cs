@@ -4,6 +4,8 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Rendering;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -14,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 /// <summary>
 /// Allows the rendering of rich text configured via <see cref="RichTextOptions"/>.
 /// </summary>
-internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRenderer, IDisposable
+internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposable
 {
     private const byte RenderOrderFill = 0;
     private const byte RenderOrderOutline = 1;
@@ -27,15 +29,14 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
     private readonly IPathInternals? path;
     private bool isDisposed;
 
-    private readonly Dictionary<Color, Brush> brushLookup = new();
     private TextRun? currentTextRun;
     private Brush? currentBrush;
     private Pen? currentPen;
-    private Color? currentColor;
-    private TextDecorationDetails? currentUnderline;
-    private TextDecorationDetails? currentStrikeout;
-    private TextDecorationDetails? currentOverline;
+    private FillRule currentFillRule;
+    private PixelAlphaCompositionMode currentCompositionMode;
+    private PixelColorBlendingMode currentBlendingMode;
     private bool currentDecorationIsVertical;
+    private bool hasLayer;
 
     // Just enough accuracy to allow for 1/8 px differences which later are accumulated while rendering,
     // but do not grow into full px offsets.
@@ -43,10 +44,12 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
     // - Provide a good accuracy (smaller than 0.2% image difference compared to the non-caching variant)
     // - Cache hit ratio above 60%
     private const float AccuracyMultiple = 8;
-    private readonly Dictionary<(GlyphRendererParameters Glyph, RectangleF Bounds), GlyphRenderData> glyphData = new();
+    private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache = [];
+    private int cacheReadIndex;
+
     private bool rasterizationRequired;
     private readonly bool noCache;
-    private (GlyphRendererParameters Glyph, RectangleF Bounds) currentCacheKey;
+    private CacheKey currentCacheKey;
 
     public RichTextGlyphRenderer(
         RichTextOptions textOptions,
@@ -61,11 +64,13 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         this.defaultPen = pen;
         this.defaultBrush = brush;
         this.DrawingOperations = [];
+        this.currentCompositionMode = drawingOptions.GraphicsOptions.AlphaCompositionMode;
+        this.currentBlendingMode = drawingOptions.GraphicsOptions.ColorBlendingMode;
 
         IPath? path = textOptions.Path;
         if (path is not null)
         {
-            // Turn of caching. The chances of a hit are near-zero.
+            // Turn off caching. The chances of a hit are near-zero.
             this.rasterizationRequired = true;
             this.noCache = true;
             if (path is IPathInternals internals)
@@ -95,7 +100,8 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
     /// <inheritdoc/>
     protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
     {
-        this.currentColor = null;
+        // Reset state.
+        this.cacheReadIndex = 0;
         this.currentDecorationIsVertical = parameters.LayoutMode is GlyphLayoutMode.Vertical or GlyphLayoutMode.VerticalRotated;
         this.currentTextRun = parameters.TextRun;
         if (parameters.TextRun is RichTextRun drawingRun)
@@ -127,8 +133,8 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
                 MathF.Round(currentBounds.Width * AccuracyMultiple) / AccuracyMultiple,
                 MathF.Round(currentBounds.Height * AccuracyMultiple) / AccuracyMultiple);
 
-            this.currentCacheKey = (parameters, new RectangleF(subPixelLocation, subPixelSize));
-            if (this.glyphData.ContainsKey(this.currentCacheKey))
+            this.currentCacheKey = CacheKey.FromParameters(parameters, new RectangleF(subPixelLocation, subPixelSize));
+            if (this.glyphCache.ContainsKey(this.currentCacheKey))
             {
                 // We have already drawn the glyph vectors.
                 this.rasterizationRequired = false;
@@ -142,116 +148,18 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         this.rasterizationRequired = true;
     }
 
-    /// <inheritdoc/>
-    public void SetColor(GlyphColor color)
-        => this.currentColor = Color.FromPixel(new Rgba32(color.Red, color.Green, color.Blue, color.Alpha));
-
-    public override TextDecorations EnabledDecorations()
+    protected override void BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
     {
-        TextRun? run = this.currentTextRun;
-        TextDecorations decorations = run?.TextDecorations ?? TextDecorations.None;
-
-        if (this.currentTextRun is RichTextRun drawingRun)
+        this.hasLayer = true;
+        if (TryCreateBrush(paint, this.Builder.Transform, out Brush? brush))
         {
-            if (drawingRun.UnderlinePen != null)
-            {
-                decorations |= TextDecorations.Underline;
-            }
-
-            if (drawingRun.StrikeoutPen != null)
-            {
-                decorations |= TextDecorations.Strikeout;
-            }
-
-            if (drawingRun.OverlinePen != null)
-            {
-                decorations |= TextDecorations.Overline;
-            }
+            this.currentBrush = brush;
+            this.currentCompositionMode = TextUtilities.MapCompositionMode(paint.CompositeMode);
+            this.currentBlendingMode = TextUtilities.MapBlendingMode(paint.CompositeMode);
         }
-
-        return decorations;
     }
 
-    public override void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
-    {
-        if (thickness == 0)
-        {
-            return;
-        }
-
-        ref TextDecorationDetails? targetDecoration = ref this.currentStrikeout;
-        if (textDecorations == TextDecorations.Strikeout)
-        {
-            targetDecoration = ref this.currentStrikeout;
-        }
-        else if (textDecorations == TextDecorations.Underline)
-        {
-            targetDecoration = ref this.currentUnderline;
-        }
-        else if (textDecorations == TextDecorations.Overline)
-        {
-            targetDecoration = ref this.currentOverline;
-        }
-        else
-        {
-            return;
-        }
-
-        Pen? pen = null;
-        if (this.currentTextRun is RichTextRun drawingRun)
-        {
-            if (textDecorations == TextDecorations.Strikeout)
-            {
-                pen = drawingRun.StrikeoutPen ?? pen;
-            }
-            else if (textDecorations == TextDecorations.Underline)
-            {
-                pen = drawingRun.UnderlinePen ?? pen;
-            }
-            else if (textDecorations == TextDecorations.Overline)
-            {
-                pen = drawingRun.OverlinePen;
-            }
-        }
-
-        // Always respect the pen stroke width if explicitly set.
-        if (pen is not null)
-        {
-            thickness = pen.StrokeWidth;
-        }
-        else
-        {
-            // Clamp the thickness to whole pixels.
-            // Brush cannot be null if pen is null.
-            thickness = MathF.Max(1F, MathF.Round(thickness));
-            pen = new SolidPen((this.currentBrush ?? this.defaultBrush)!, thickness);
-        }
-
-        // Drawing is always centered around the point so we need to offset by half.
-        Vector2 offset = Vector2.Zero;
-        bool rotated = this.currentDecorationIsVertical;
-        if (textDecorations == TextDecorations.Overline)
-        {
-            // CSS overline is drawn above the position, so we need to move it up.
-            offset = rotated ? new Vector2(thickness * .5F, 0) : new Vector2(0, -(thickness * .5F));
-        }
-        else if (textDecorations == TextDecorations.Underline)
-        {
-            // CSS underline is drawn below the position, so we need to move it down.
-            offset = rotated ? new Vector2(-(thickness * .5F), 0) : new Vector2(0, thickness * .5F);
-        }
-
-        // We clamp the start and end points to the pixel grid to avoid anti-aliasing.
-        this.AppendDecoration(
-            ref targetDecoration,
-            ClampToPixel(start + offset, (int)thickness, rotated),
-            ClampToPixel(end + offset, (int)thickness, rotated),
-            pen,
-            thickness,
-            rotated);
-    }
-
-    protected override void EndGlyph()
+    protected override void EndLayer()
     {
         GlyphRenderData renderData = default;
 
@@ -263,36 +171,12 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             this.currentPen = this.defaultPen;
         }
 
-        bool renderFill = false;
-        bool renderOutline = false;
-
-        // If we are using the fonts color layers we ignore the request to draw an outline only
-        // because that won't really work. Instead we force drawing using fill with the requested color.
-        // If color fonts are disabled then this.currentColor will always be null.
-        if (this.currentBrush != null || this.currentColor != null)
-        {
-            renderFill = true;
-            if (this.currentColor.HasValue)
-            {
-                if (this.brushLookup.TryGetValue(this.currentColor.Value, out Brush? brush))
-                {
-                    this.currentBrush = brush;
-                }
-                else
-                {
-                    this.currentBrush = new SolidBrush(this.currentColor.Value);
-                    this.brushLookup[this.currentColor.Value] = this.currentBrush;
-                }
-            }
-        }
-
-        if (this.currentPen != null && this.currentColor == null)
-        {
-            renderOutline = true;
-        }
+        // When rendering layers we only fill them.
+        // Any drawing of outlines is ignored as that doesn't really make sense.
+        bool renderFill = this.currentBrush != null;
 
         // Path has already been added to the collection via the base class.
-        IPath path = this.PathList[^1];
+        IPath path = this.CurrentPaths[^1];
         Point renderLocation = ClampToPixel(path.Bounds.Location);
         if (this.noCache || this.rasterizationRequired)
         {
@@ -306,24 +190,18 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
                 renderData.FillMap = this.Render(path);
             }
 
-            if (renderOutline)
-            {
-                path = this.currentPen!.GeneratePath(path);
-                renderData.OutlineMap = this.Render(path);
-            }
-
             // Capture the delta between the location and the truncated render location.
             // We can use this to offset the render location on the next instance of this glyph.
             renderData.LocationDelta = (Vector2)(path.Bounds.Location - renderLocation);
 
             if (!this.noCache)
             {
-                this.glyphData[this.currentCacheKey] = renderData;
+                this.UpdateCache(renderData);
             }
         }
         else
         {
-            renderData = this.glyphData[this.currentCacheKey];
+            renderData = this.glyphCache[this.currentCacheKey][this.cacheReadIndex++];
 
             // Offset the render location by the delta from the cached glyph and this one.
             Vector2 previousDelta = renderData.LocationDelta;
@@ -361,7 +239,239 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
                 RenderLocation = renderLocation,
                 Map = renderData.FillMap,
                 Brush = this.currentBrush!,
-                RenderPass = RenderOrderFill
+                RenderPass = RenderOrderFill,
+                PixelAlphaCompositionMode = this.currentCompositionMode,
+                PixelColorBlendingMode = this.currentBlendingMode
+            });
+        }
+
+        this.currentFillRule = FillRule.NonZero;
+        this.currentCompositionMode = this.drawingOptions.GraphicsOptions.AlphaCompositionMode;
+        this.currentBlendingMode = this.drawingOptions.GraphicsOptions.ColorBlendingMode;
+    }
+
+    public override TextDecorations EnabledDecorations()
+    {
+        TextRun? run = this.currentTextRun;
+        TextDecorations decorations = run?.TextDecorations ?? TextDecorations.None;
+
+        if (this.currentTextRun is RichTextRun drawingRun)
+        {
+            if (drawingRun.UnderlinePen != null)
+            {
+                decorations |= TextDecorations.Underline;
+            }
+
+            if (drawingRun.StrikeoutPen != null)
+            {
+                decorations |= TextDecorations.Strikeout;
+            }
+
+            if (drawingRun.OverlinePen != null)
+            {
+                decorations |= TextDecorations.Overline;
+            }
+        }
+
+        return decorations;
+    }
+
+    public override void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
+    {
+        if (thickness == 0)
+        {
+            return;
+        }
+
+        Brush? brush = null;
+        Pen? pen = null;
+        if (this.currentTextRun is RichTextRun drawingRun)
+        {
+            brush = drawingRun.Brush;
+
+            if (textDecorations == TextDecorations.Strikeout)
+            {
+                pen = drawingRun.StrikeoutPen ?? pen;
+            }
+            else if (textDecorations == TextDecorations.Underline)
+            {
+                pen = drawingRun.UnderlinePen ?? pen;
+            }
+            else if (textDecorations == TextDecorations.Overline)
+            {
+                pen = drawingRun.OverlinePen;
+            }
+        }
+
+        // Always respect the pen stroke width if explicitly set.
+        float originalThickness = thickness;
+        if (pen is not null)
+        {
+            // Clamp the thickness to whole pixels.
+            thickness = MathF.Max(1F, (float)Math.Round(pen.StrokeWidth));
+        }
+        else
+        {
+            // The thickness of the line has already been clamped in the base class.
+            pen = new SolidPen((brush ?? this.defaultBrush)!, thickness);
+        }
+
+        // Path has already been added to the collection via the base class.
+        IPath path = this.CurrentPaths[^1];
+        IPath outline = path;
+
+        if (originalThickness != thickness)
+        {
+            // Respect edge anchoring per decoration type:
+            // - Overline: keep the base edge fixed (bottom in horizontal; left in vertical)
+            // - Underline: keep the top edge fixed (top in horizontal; right in vertical)
+            // - Strikeout: keep the center fixed (default behavior)
+            float ratio = thickness / originalThickness;
+            if (ratio != 1f)
+            {
+                Vector2 scale = this.currentDecorationIsVertical
+                    ? new Vector2(ratio, 1f)
+                    : new Vector2(1f, ratio);
+
+                RectangleF b = path.Bounds;
+                Vector2 center = new(b.Left + (b.Width * 0.5f), b.Top + (b.Height * 0.5f));
+                Vector2 anchor = center;
+
+                if (textDecorations == TextDecorations.Overline)
+                {
+                    anchor = this.currentDecorationIsVertical
+                        ? new Vector2(b.Left, center.Y) // vertical: anchor left edge
+                        : new Vector2(center.X, b.Bottom); // horizontal: anchor bottom edge
+                }
+                else if (textDecorations == TextDecorations.Underline)
+                {
+                    anchor = this.currentDecorationIsVertical
+                        ? new Vector2(b.Right, center.Y) // vertical: anchor right edge
+                        : new Vector2(center.X, b.Top);  // horizontal: anchor top edge
+                }
+
+                // Scale about the chosen anchor so the fixed edge stays in place.
+                outline = outline.Transform(Matrix3x2.CreateScale(scale, anchor));
+            }
+        }
+
+        // Render the path here. Decorations are un-cached.
+        this.DrawingOperations.Add(new DrawingOperation
+        {
+            Brush = pen.StrokeFill,
+            RenderLocation = ClampToPixel(outline.Bounds.Location),
+            Map = this.Render(outline),
+            RenderPass = RenderOrderDecoration
+        });
+    }
+
+    protected override void EndGlyph()
+    {
+        if (this.hasLayer)
+        {
+            // The layer has already been rendered.
+            this.hasLayer = false;
+            return;
+        }
+
+        GlyphRenderData renderData = default;
+
+        // Fix up the text runs colors.
+        // Only if both brush and pen is null do we fallback to the default value.
+        if (this.currentBrush == null && this.currentPen == null)
+        {
+            this.currentBrush = this.defaultBrush;
+            this.currentPen = this.defaultPen;
+        }
+
+        bool renderFill = false;
+        bool renderOutline = false;
+
+        // If we are using the fonts color layers we ignore the request to draw an outline only
+        // because that won't really work. Instead we force drawing using fill with the requested color.
+        if (this.currentBrush != null)
+        {
+            renderFill = true;
+        }
+
+        if (this.currentPen != null)
+        {
+            renderOutline = true;
+        }
+
+        // Path has already been added to the collection via the base class.
+        IPath path = this.CurrentPaths[^1];
+        Point renderLocation = ClampToPixel(path.Bounds.Location);
+        if (this.noCache || this.rasterizationRequired)
+        {
+            if (path.Bounds.Equals(RectangleF.Empty))
+            {
+                return;
+            }
+
+            if (renderFill)
+            {
+                renderData.FillMap = this.Render(path);
+            }
+
+            // Capture the delta between the location and the truncated render location.
+            // We can use this to offset the render location on the next instance of this glyph.
+            renderData.LocationDelta = (Vector2)(path.Bounds.Location - renderLocation);
+
+            if (renderOutline)
+            {
+                path = this.currentPen!.GeneratePath(path);
+                renderData.OutlineMap = this.Render(path);
+            }
+
+            if (!this.noCache)
+            {
+                this.UpdateCache(renderData);
+            }
+        }
+        else
+        {
+            renderData = this.glyphCache[this.currentCacheKey][this.cacheReadIndex++];
+
+            // Offset the render location by the delta from the cached glyph and this one.
+            Vector2 previousDelta = renderData.LocationDelta;
+            Vector2 currentLocation = path.Bounds.Location;
+            Vector2 currentDelta = path.Bounds.Location - ClampToPixel(path.Bounds.Location);
+
+            if (previousDelta.Y > currentDelta.Y)
+            {
+                // Move the location down to match the previous location offset.
+                currentLocation += new Vector2(0, previousDelta.Y - currentDelta.Y);
+            }
+            else if (previousDelta.Y < currentDelta.Y)
+            {
+                // Move the location up to match the previous location offset.
+                currentLocation -= new Vector2(0, currentDelta.Y - previousDelta.Y);
+            }
+            else if (previousDelta.X > currentDelta.X)
+            {
+                // Move the location right to match the previous location offset.
+                currentLocation += new Vector2(previousDelta.X - currentDelta.X, 0);
+            }
+            else if (previousDelta.X < currentDelta.X)
+            {
+                // Move the location left to match the previous location offset.
+                currentLocation -= new Vector2(currentDelta.X - previousDelta.X, 0);
+            }
+
+            renderLocation = ClampToPixel(currentLocation);
+        }
+
+        if (renderData.FillMap != null)
+        {
+            this.DrawingOperations.Add(new DrawingOperation
+            {
+                RenderLocation = renderLocation,
+                Map = renderData.FillMap,
+                Brush = this.currentBrush!,
+                RenderPass = RenderOrderFill,
+                PixelAlphaCompositionMode = this.currentCompositionMode,
+                PixelColorBlendingMode = this.currentBlendingMode
             });
         }
 
@@ -373,126 +483,27 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
                 RenderLocation = renderLocation - new Size(offset, offset),
                 Map = renderData.OutlineMap,
                 Brush = this.currentPen?.StrokeFill ?? this.currentBrush!,
-                RenderPass = RenderOrderOutline
+                RenderPass = RenderOrderOutline,
+                PixelAlphaCompositionMode = this.currentCompositionMode,
+                PixelColorBlendingMode = this.currentBlendingMode
             });
         }
     }
 
-    protected override void EndText()
+    private void UpdateCache(GlyphRenderData renderData)
     {
-        // Ensure we have captured the last overline/underline/strikeout path
-        this.FinalizeDecoration(ref this.currentOverline);
-        this.FinalizeDecoration(ref this.currentUnderline);
-        this.FinalizeDecoration(ref this.currentStrikeout);
+        if (!this.glyphCache.TryGetValue(this.currentCacheKey, out List<GlyphRenderData>? _))
+        {
+            this.glyphCache[this.currentCacheKey] = [];
+        }
+
+        this.glyphCache[this.currentCacheKey].Add(renderData);
     }
 
     public void Dispose() => this.Dispose(true);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Point ClampToPixel(PointF point) => Point.Truncate(point);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
-    {
-        // Even. Clamp to whole pixels.
-        if ((thickness & 1) == 0)
-        {
-            return Point.Truncate(point);
-        }
-
-        // Odd. Clamp to half pixels.
-        if (rotated)
-        {
-            return Point.Truncate(point) + new Vector2(.5F, 0);
-        }
-
-        return Point.Truncate(point) + new Vector2(0, .5F);
-    }
-
-    // Point.Truncate(point);
-    private void FinalizeDecoration(ref TextDecorationDetails? decoration)
-    {
-        if (decoration != null)
-        {
-            // TODO: If the path is curved a line segment does not work well.
-            // What would be great would be if we could take a slice of a path given start and end positions.
-            IPath path = new Path(new LinearLineSegment(decoration.Value.Start, decoration.Value.End));
-            IPath outline = decoration.Value.Pen.GeneratePath(path, decoration.Value.Thickness);
-
-            // Calculate the transform for this path.
-            // We cannot use the path builder transform as this path is rendered independently.
-            FontRectangle rectangle = new(outline.Bounds.Location, new Vector2(outline.Bounds.Width, outline.Bounds.Height));
-            Matrix3x2 pathTransform = this.ComputeTransform(in rectangle);
-            Matrix3x2 defaultTransform = this.drawingOptions.Transform;
-            outline = outline.Transform(pathTransform * defaultTransform);
-
-            if (outline.Bounds.Width != 0 && outline.Bounds.Height != 0)
-            {
-                // Render the path here. Decorations are un-cached.
-                this.DrawingOperations.Add(new DrawingOperation
-                {
-                    Brush = decoration.Value.Pen.StrokeFill,
-                    RenderLocation = ClampToPixel(outline.Bounds.Location),
-                    Map = this.Render(outline),
-                    RenderPass = RenderOrderDecoration
-                });
-            }
-
-            decoration = null;
-        }
-    }
-
-    private void AppendDecoration(
-        ref TextDecorationDetails? decoration,
-        Vector2 start,
-        Vector2 end,
-        Pen pen,
-        float thickness,
-        bool rotated)
-    {
-        if (decoration != null)
-        {
-            // TODO: This only works well if we are not trying to follow a path.
-            if (this.path is null)
-            {
-                // Let's try and expand it first.
-                if (rotated)
-                {
-                    if (thickness == decoration.Value.Thickness
-                    && decoration.Value.End.Y + 1 >= start.Y
-                    && decoration.Value.End.X == start.X
-                    && decoration.Value.Pen.Equals(pen))
-                    {
-                        // Expand the line
-                        start = decoration.Value.Start;
-
-                        // If this is null finalize does nothing.
-                        decoration = null;
-                    }
-                }
-                else if (thickness == decoration.Value.Thickness
-                     && decoration.Value.End.Y == start.Y
-                     && decoration.Value.End.X + 1 >= start.X
-                     && decoration.Value.Pen.Equals(pen))
-                {
-                    // Expand the line
-                    start = decoration.Value.Start;
-
-                    // If this is null finalize does nothing.
-                    decoration = null;
-                }
-            }
-        }
-
-        this.FinalizeDecoration(ref decoration);
-        decoration = new TextDecorationDetails
-        {
-            Start = start,
-            End = end,
-            Pen = pen,
-            Thickness = thickness
-        };
-    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void TransformGlyph(in FontRectangle bounds)
@@ -543,7 +554,7 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
             0,
             size.Height,
             subpixelCount,
-            IntersectionRule.NonZero,
+            TextUtilities.MapFillRule(this.currentFillRule),
             this.memoryAllocator);
 
         try
@@ -584,12 +595,15 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         {
             if (disposing)
             {
-                foreach (KeyValuePair<(GlyphRendererParameters Glyph, RectangleF Bounds), GlyphRenderData> kv in this.glyphData)
+                foreach (KeyValuePair<CacheKey, List<GlyphRenderData>> kv in this.glyphCache)
                 {
-                    kv.Value.Dispose();
+                    foreach (GlyphRenderData data in kv.Value)
+                    {
+                        data.Dispose();
+                    }
                 }
 
-                this.glyphData.Clear();
+                this.glyphCache.Clear();
 
                 foreach (DrawingOperation operation in this.DrawingOperations)
                 {
@@ -618,14 +632,92 @@ internal sealed class RichTextGlyphRenderer : BaseGlyphBuilder, IColorGlyphRende
         }
     }
 
-    private struct TextDecorationDetails
+    private readonly struct CacheKey : IEquatable<CacheKey>
     {
-        public Vector2 Start { get; set; }
+        public string Font { get; init; }
 
-        public Vector2 End { get; set; }
+        public GlyphColor GlyphColor { get; init; }
 
-        public Pen Pen { get; set; }
+        public GlyphType GlyphType { get; init; }
 
-        public float Thickness { get; internal set; }
+        public FontStyle FontStyle { get; init; }
+
+        public ushort GlyphId { get; init; }
+
+        public ushort CompositeGlyphId { get; init; }
+
+        public CodePoint CodePoint { get; init; }
+
+        public float PointSize { get; init; }
+
+        public float Dpi { get; init; }
+
+        public GlyphLayoutMode LayoutMode { get; init; }
+
+        public TextAttributes TextAttributes { get; init; }
+
+        public TextDecorations TextDecorations { get; init; }
+
+        public RectangleF Bounds { get; init; }
+
+        public static bool operator ==(CacheKey left, CacheKey right) => left.Equals(right);
+
+        public static bool operator !=(CacheKey left, CacheKey right) => !(left == right);
+
+        public static CacheKey FromParameters(in GlyphRendererParameters parameters, RectangleF bounds)
+            => new()
+            {
+                // Do not include the grapheme index as that will
+                // always vary per glyph instance.
+                Font = parameters.Font,
+                GlyphType = parameters.GlyphType,
+                FontStyle = parameters.FontStyle,
+                GlyphId = parameters.GlyphId,
+                CompositeGlyphId = parameters.CompositeGlyphId,
+                CodePoint = parameters.CodePoint,
+                PointSize = parameters.PointSize,
+                Dpi = parameters.Dpi,
+                LayoutMode = parameters.LayoutMode,
+                TextAttributes = parameters.TextRun.TextAttributes,
+                TextDecorations = parameters.TextRun.TextDecorations,
+                Bounds = bounds
+            };
+
+        public override bool Equals(object? obj)
+            => obj is CacheKey key && this.Equals(key);
+
+        public bool Equals(CacheKey other)
+            => this.Font == other.Font &&
+            this.GlyphColor.Equals(other.GlyphColor) &&
+            this.GlyphType == other.GlyphType &&
+            this.FontStyle == other.FontStyle &&
+            this.GlyphId == other.GlyphId &&
+            this.CompositeGlyphId == other.CompositeGlyphId &&
+            this.CodePoint.Equals(other.CodePoint) &&
+            this.PointSize == other.PointSize &&
+            this.Dpi == other.Dpi &&
+            this.LayoutMode == other.LayoutMode &&
+            this.TextAttributes == other.TextAttributes &&
+            this.TextDecorations == other.TextDecorations &&
+            this.Bounds.Equals(other.Bounds);
+
+        public override int GetHashCode()
+        {
+            HashCode hash = default;
+            hash.Add(this.Font);
+            hash.Add(this.GlyphColor);
+            hash.Add(this.GlyphType);
+            hash.Add(this.FontStyle);
+            hash.Add(this.GlyphId);
+            hash.Add(this.CompositeGlyphId);
+            hash.Add(this.CodePoint);
+            hash.Add(this.PointSize);
+            hash.Add(this.Dpi);
+            hash.Add(this.LayoutMode);
+            hash.Add(this.TextAttributes);
+            hash.Add(this.TextDecorations);
+            hash.Add(this.Bounds);
+            return hash.ToHashCode();
+        }
     }
 }

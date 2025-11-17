@@ -6,6 +6,7 @@ using SixLabors.Fonts;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using IODirectory = System.IO.Directory;
@@ -61,7 +62,7 @@ public static class Program
         FontFamily fam = SystemFonts.Get("Arial");
         Font font = new(fam, 30);
         TextOptions textOptions = new(font);
-        IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
+        IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
 
         glyphs.SaveImage("Text", text + ".png");
     }
@@ -80,7 +81,7 @@ public static class Program
             // LayoutMode = LayoutMode.VerticalLeftRight
         };
 
-        IPathCollection glyphs = TextBuilder.GenerateGlyphs(text, path, textOptions);
+        IPathCollection glyphs = TextBuilder.GeneratePaths(text, path, textOptions);
 
         glyphs.SaveImageWithPath(path, "Text-Path", text + ".png");
     }

@@ -54,8 +54,8 @@ public static class ClearExtensions
     internal static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
     {
         GraphicsOptions options = drawingOptions.GraphicsOptions.DeepClone();
-        options.ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Normal;
-        options.AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Src;
+        options.ColorBlendingMode = PixelColorBlendingMode.Normal;
+        options.AlphaCompositionMode = PixelAlphaCompositionMode.Src;
         options.BlendPercentage = 1F;
 
         return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.Transform);
