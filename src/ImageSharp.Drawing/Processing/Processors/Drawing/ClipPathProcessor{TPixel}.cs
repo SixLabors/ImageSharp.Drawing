@@ -6,8 +6,8 @@ using SixLabors.ImageSharp.Processing.Processors;
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 
 /// <summary>
-/// The main workhorse class. This has access to the pixel buffer but
-/// in an abstract/generic way.
+/// Applies a processing operation to a clipped path region by constraining the operation's input domain
+/// to the bounds of the path, then using the processed result as an image brush to fill the path.
 /// </summary>
 /// <typeparam name="TPixel">The type of pixel.</typeparam>
 internal class ClipPathProcessor<TPixel> : IImageProcessor<TPixel>
@@ -32,34 +32,41 @@ internal class ClipPathProcessor<TPixel> : IImageProcessor<TPixel>
 
     public void Execute()
     {
-        // Clone out our source image so we can apply various effects to it without mutating
-        // the original yet.
-        using Image<TPixel> clone = this.source.Clone(this.definition.Operation);
+        // Bounds in drawing are floating point. We must conservatively cover the entire shape bounds.
+        RectangleF boundsF = this.definition.Region.Bounds;
 
-        // Use an image brush to apply cloned image as the source for filling the shape.
-        // We pass explicit bounds to avoid the need to crop the clone;
-        RectangleF bounds = this.definition.Region.Bounds;
+        int left = (int)MathF.Floor(boundsF.Left);
+        int top = (int)MathF.Floor(boundsF.Top);
+        int right = (int)MathF.Ceiling(boundsF.Right);
+        int bottom = (int)MathF.Ceiling(boundsF.Bottom);
 
-        // add some clamping offsets to the brush to account for the target drawing location due to the cloned image not fill the image as expected
-        int offsetX = 0;
-        int offsetY = 0;
-        if (bounds.X < 0)
+        Rectangle crop = Rectangle.FromLTRB(left, top, right, bottom);
+
+        // Constrain the operation to the intersection of the requested bounds and source region.
+        Rectangle clipped = Rectangle.Intersect(this.sourceRectangle, crop);
+
+        if (clipped.Width <= 0 || clipped.Height <= 0)
         {
-            offsetX = -(int)MathF.Floor(bounds.X);
+            return;
         }
 
-        if (bounds.Y < 0)
-        {
-            offsetY = -(int)MathF.Floor(bounds.Y);
-        }
+        Action<IImageProcessingContext> operation = this.definition.Operation;
 
-        ImageBrush brush = new(clone, bounds, new Point(offsetX, offsetY));
+        // Run the operation on the clipped context so only pixels inside the clip are affected,
+        // matching the expected semantics of clipping in other graphics APIs.
+        using Image<TPixel> clone = this.source.Clone(ctx => operation(ctx.Crop(clipped)));
 
-        // Grab hold of an image processor that can fill paths with a brush to allow it to do the hard pixel pushing for us
+        // Use the clone as a brush source so only the clipped result contributes to the fill,
+        // keeping the effect confined to the clipped region.
+        Point offsetP = new(
+            clipped.X - (int)MathF.Floor(boundsF.Left),
+            clipped.Y - (int)MathF.Floor(boundsF.Top));
+
+        ImageBrush brush = new(clone, clone.Bounds, offsetP);
+
+        // Fill the shape using the image brush.
         FillPathProcessor processor = new(this.definition.Options, brush, this.definition.Region);
-        using IImageProcessor<TPixel> p = processor.CreatePixelSpecificProcessor(this.configuration, this.source, this.sourceRectangle);
-
-        // Fill the shape using the image brush
-        p.Execute();
+        using IImageProcessor<TPixel> pixelProcessor = processor.CreatePixelSpecificProcessor(this.configuration, this.source, this.sourceRectangle);
+        pixelProcessor.Execute();
     }
 }
