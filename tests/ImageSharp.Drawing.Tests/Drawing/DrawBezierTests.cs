@@ -11,8 +11,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
 public class DrawBezierTests
 {
     public static readonly TheoryData<string, byte, float> DrawPathData
-        = new TheoryData<string, byte, float>
-    {
+        = new()
+        {
         { "White", 255, 1.5f },
         { "Red", 255, 3 },
         { "HotPink", 255, 5 },
@@ -25,24 +25,22 @@ public class DrawBezierTests
     public void DrawBeziers<TPixel>(TestImageProvider<TPixel> provider, string colorName, byte alpha, float thickness)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var points = new PointF[]
-        {
+        PointF[] points =
+        [
             new Vector2(10, 400),
             new Vector2(30, 10),
             new Vector2(240, 30),
             new Vector2(300, 400)
-        };
+        ];
 
-        Rgba32 rgba = TestUtils.GetColorByName(colorName);
-        rgba.A = alpha;
-        Color color = rgba;
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha / 255F);
 
         FormattableString testDetails = $"{colorName}_A{alpha}_T{thickness}";
 
         provider.RunValidatingProcessorTest(
             x => x.DrawBeziers(color, 5f, points),
             testDetails,
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 }

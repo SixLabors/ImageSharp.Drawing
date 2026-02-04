@@ -88,7 +88,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// </summary>
     internal bool RemoveCloseAndCollinearPoints { get; set; } = true;
 
-    private InternalPath InnerPath =>
+    private protected InternalPath InnerPath =>
         this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
     /// <inheritdoc />
@@ -101,7 +101,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 
         ILineSegment[] segments = new ILineSegment[this.lineSegments.Length];
 
-        for (int i = 0; i < this.LineSegments.Count; i++)
+        for (int i = 0; i < segments.Length; i++)
         {
             segments[i] = this.lineSegments[i].Transform(matrix);
         }
@@ -131,7 +131,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
        => this.InnerPath.PointAlongPath(distance);
 
     /// <inheritdoc/>
-    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => new[] { this.InnerPath };
+    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => [this.InnerPath];
 
     /// <summary>
     /// Converts an SVG path string into an <see cref="IPath"/>.
@@ -395,7 +395,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             scaler = ParseFloat(str);
         }
 
-        return ReadOnlySpan<char>.Empty;
+        return [];
     }
 
     private static bool IsSeparator(char ch)

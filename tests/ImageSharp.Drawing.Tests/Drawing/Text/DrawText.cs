@@ -24,7 +24,7 @@ public class DrawText : BaseImageOperationsExtensionTest
     {
         this.fontCollection = new FontCollection();
         this.font = this.fontCollection.Add(TestFontUtilities.GetPath("SixLaborsSampleAB.woff")).CreateFont(12);
-        this.textOptions = new(this.font) { WrappingLength = 99 };
+        this.textOptions = new RichTextOptions(this.font) { WrappingLength = 99 };
     }
 
     [Fact]
@@ -146,7 +146,7 @@ public class DrawText : BaseImageOperationsExtensionTest
         Assert.Equal(this.font, processor.TextOptions.Font);
         SolidBrush penBrush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
         Assert.Equal(Color.Red, penBrush.Color);
-        var processorPen = Assert.IsType<PatternPen>(processor.Pen);
+        PatternPen processorPen = Assert.IsType<PatternPen>(processor.Pen);
         Assert.Equal(1, processorPen.StrokeWidth);
         Assert.Equal(PointF.Empty, processor.Location);
         Assert.Equal(this.textOptions, processor.TextOptions);
@@ -173,7 +173,7 @@ public class DrawText : BaseImageOperationsExtensionTest
         Assert.Equal(PointF.Empty, processor.Location);
         SolidBrush penBrush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
         Assert.Equal(Color.Red, penBrush.Color);
-        var processorPen = Assert.IsType<PatternPen>(processor.Pen);
+        PatternPen processorPen = Assert.IsType<PatternPen>(processor.Pen);
         Assert.Equal(1, processorPen.StrokeWidth);
         Assert.NotEqual(this.textOptions, processor.TextOptions);
         Assert.NotEqual(this.graphicsOptions, processor.DrawingOptions.GraphicsOptions);

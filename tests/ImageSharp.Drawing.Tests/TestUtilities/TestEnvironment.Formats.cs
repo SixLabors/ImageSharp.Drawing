@@ -53,7 +53,7 @@ public static partial class TestEnvironment
 
     private static Configuration CreateDefaultConfiguration()
     {
-        var cfg = new Configuration(
+        Configuration cfg = new(
             new JpegConfigurationModule(),
             new GifConfigurationModule(),
             new TgaConfigurationModule());
@@ -64,13 +64,13 @@ public static partial class TestEnvironment
 
         cfg.ConfigureCodecs(
             PngFormat.Instance,
-            MagickReferenceDecoder.Instance,
+            MagickReferenceDecoder.Png,
             pngEncoder,
             new PngImageFormatDetector());
 
         cfg.ConfigureCodecs(
             BmpFormat.Instance,
-            IsWindows ? SystemDrawingReferenceDecoder.Instance : MagickReferenceDecoder.Instance,
+            IsWindows ? SystemDrawingReferenceDecoder.Bmp : MagickReferenceDecoder.Bmp,
             bmpEncoder,
             new BmpImageFormatDetector());
 

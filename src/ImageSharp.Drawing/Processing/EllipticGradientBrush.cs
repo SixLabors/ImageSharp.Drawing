@@ -109,11 +109,11 @@ public sealed class EllipticGradientBrush : GradientBrush
             this.center = center;
             this.referenceAxisEnd = referenceAxisEnd;
             this.axisRatio = axisRatio;
-            this.rotation = RadialGradientBrushApplicator<TPixel>.AngleBetween(
+            this.rotation = AngleBetween(
                 this.center,
                 new PointF(this.center.X + 1, this.center.Y),
                 this.referenceAxisEnd);
-            this.referenceRadius = RadialGradientBrushApplicator<TPixel>.DistanceBetween(this.center, this.referenceAxisEnd);
+            this.referenceRadius = DistanceBetween(this.center, this.referenceAxisEnd);
             this.secondRadius = this.referenceRadius * this.axisRatio;
 
             this.referenceRadiusSquared = this.referenceRadius * this.referenceRadius;

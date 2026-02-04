@@ -23,8 +23,8 @@ public class FillEllipticGradientBrushTests
 
         using (Image<TPixel> image = provider.GetImage())
         {
-            var unicolorLinearGradientBrush =
-                new EllipticGradientBrush(
+            EllipticGradientBrush unicolorLinearGradientBrush =
+                new(
                     new Point(0, 0),
                     new Point(10, 0),
                     1.0f,
@@ -62,7 +62,7 @@ public class FillEllipticGradientBrushTests
             TolerantComparer,
             image =>
                 {
-                    var unicolorLinearGradientBrush = new EllipticGradientBrush(
+                    EllipticGradientBrush unicolorLinearGradientBrush = new(
                         new Point(image.Width / 2, image.Height / 2),
                         new Point(image.Width / 2, image.Width * 2 / 3),
                         ratio,
@@ -114,7 +114,7 @@ public class FillEllipticGradientBrushTests
                     Color red = Color.Red;
                     Color black = Color.Black;
 
-                    var center = new Point(image.Width / 2, image.Height / 2);
+                    Point center = new(image.Width / 2, image.Height / 2);
 
                     double rotation = Math.PI * rotationInDegree / 180.0;
                     double cos = Math.Cos(rotation);
@@ -124,7 +124,7 @@ public class FillEllipticGradientBrushTests
                     int axisX = center.X + (int)-(offsetY * sin);
                     int axisY = center.Y + (int)(offsetY * cos);
 
-                    var unicolorLinearGradientBrush = new EllipticGradientBrush(
+                    EllipticGradientBrush unicolorLinearGradientBrush = new(
                         center,
                         new Point(axisX, axisY),
                         ratio,

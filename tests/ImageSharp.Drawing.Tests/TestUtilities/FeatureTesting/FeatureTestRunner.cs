@@ -13,7 +13,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 /// </summary>
 public static class FeatureTestRunner
 {
-    private static readonly char[] SplitChars = { ',', ' ' };
+    private static readonly char[] SplitChars = [',', ' '];
 
     /// <summary>
     /// Allows the deserialization of parameters passed to the feature test.

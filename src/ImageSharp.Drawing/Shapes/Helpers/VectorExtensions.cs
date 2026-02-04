@@ -21,7 +21,7 @@ internal static class VectorExtensions
     /// </returns>
     public static bool Equivalent(this PointF source1, PointF source2, float threshold)
     {
-        var abs = Vector2.Abs(source1 - source2);
+        Vector2 abs = Vector2.Abs(source1 - source2);
 
         return abs.X < threshold && abs.Y < threshold;
     }
@@ -37,7 +37,7 @@ internal static class VectorExtensions
     /// </returns>
     public static bool Equivalent(this Vector2 source1, Vector2 source2, float threshold)
     {
-        var abs = Vector2.Abs(source1 - source2);
+        Vector2 abs = Vector2.Abs(source1 - source2);
 
         return abs.X < threshold && abs.Y < threshold;
     }

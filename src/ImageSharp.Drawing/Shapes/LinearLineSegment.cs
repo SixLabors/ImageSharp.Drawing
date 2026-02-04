@@ -22,7 +22,7 @@ public sealed class LinearLineSegment : ILineSegment
     /// <param name="start">The start.</param>
     /// <param name="end">The end.</param>
     public LinearLineSegment(PointF start, PointF end)
-        : this(new[] { start, end })
+        : this([start, end])
     {
     }
 
@@ -46,8 +46,6 @@ public sealed class LinearLineSegment : ILineSegment
         this.points = points ?? throw new ArgumentNullException(nameof(points));
 
         Guard.MustBeGreaterThanOrEqualTo(this.points.Length, 2, nameof(points));
-
-        this.EndPoint = this.points[this.points.Length - 1];
     }
 
     /// <summary>
@@ -56,7 +54,7 @@ public sealed class LinearLineSegment : ILineSegment
     /// <value>
     /// The end point.
     /// </value>
-    public PointF EndPoint { get; }
+    public PointF EndPoint => this.points[^1];
 
     /// <summary>
     /// Converts the <see cref="ILineSegment" /> into a simple linear path..
@@ -81,7 +79,7 @@ public sealed class LinearLineSegment : ILineSegment
             return this;
         }
 
-        var transformedPoints = new PointF[this.points.Length];
+        PointF[] transformedPoints = new PointF[this.points.Length];
 
         for (int i = 0; i < this.points.Length; i++)
         {

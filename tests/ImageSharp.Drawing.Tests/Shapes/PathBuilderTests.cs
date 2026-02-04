@@ -10,7 +10,7 @@ public class PathBuilderTests
     [Fact]
     public void DrawLinesClosedFigure()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddLine(10, 10, 10, 90);
         builder.AddLine(10, 90, 50, 50);
@@ -22,7 +22,7 @@ public class PathBuilderTests
     [Fact]
     public void AddBezier()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddCubicBezier(new Vector2(10, 10), new Vector2(20, 20), new Vector2(20, 30), new Vector2(10, 40));
 
@@ -32,7 +32,7 @@ public class PathBuilderTests
     [Fact]
     public void AddEllipticArc()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddArc(new PointF(10, 10), 10, 10, 0, 0, 360);
 
@@ -42,7 +42,7 @@ public class PathBuilderTests
     [Fact]
     public void DrawLinesOpenFigure()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddLine(10, 10, 10, 90);
         builder.AddLine(10, 90, 50, 50);
@@ -52,7 +52,7 @@ public class PathBuilderTests
     [Fact]
     public void DrawLines2OpenFigures()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddLine(10, 10, 10, 90);
         builder.AddLine(10, 90, 50, 50);
@@ -70,7 +70,7 @@ public class PathBuilderTests
     [Fact]
     public void DrawLinesOpenThenClosedFigures()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddLine(10, 10, 10, 90);
         builder.AddLine(10, 90, 50, 50);
@@ -89,7 +89,7 @@ public class PathBuilderTests
     [Fact]
     public void DrawLinesClosedThenOpenFigures()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddLine(10, 10, 10, 90);
         builder.AddLine(10, 90, 50, 50);
@@ -107,7 +107,7 @@ public class PathBuilderTests
     [Fact]
     public void DrawLinesCloseAllFigures()
     {
-        var builder = new PathBuilder();
+        PathBuilder builder = new();
 
         builder.AddLine(10, 10, 10, 90);
         builder.AddLine(10, 90, 50, 50);
@@ -133,10 +133,10 @@ public class PathBuilderTests
     [Fact]
     public void EnumerableAddLines()
     {
-        var point1 = new Vector2(10, 10);
-        var point2 = new Vector2(10, 90);
-        var point3 = new Vector2(50, 50);
-        var builder = new PathBuilder();
+        Vector2 point1 = new(10, 10);
+        Vector2 point2 = new(10, 90);
+        Vector2 point3 = new(50, 50);
+        PathBuilder builder = new();
 
         builder.AddLines(new List<PointF> { point1, point2, point3 });
         Path shape = Assert.IsType<Path>(builder.Build());
@@ -146,10 +146,10 @@ public class PathBuilderTests
     [Fact]
     public void MultipleStartFiguresDoesntCreateEmptyPaths()
     {
-        var point1 = new Vector2(10, 10);
-        var point2 = new Vector2(10, 90);
-        var point3 = new Vector2(50, 50);
-        var builder = new PathBuilder();
+        Vector2 point1 = new(10, 10);
+        Vector2 point2 = new(10, 90);
+        Vector2 point3 = new(50, 50);
+        PathBuilder builder = new();
         builder.StartFigure();
         builder.StartFigure();
         builder.StartFigure();
@@ -161,11 +161,11 @@ public class PathBuilderTests
     [Fact]
     public void DefaultTransform()
     {
-        var point1 = new Vector2(10, 10);
-        var point2 = new Vector2(10, 90);
-        var point3 = new Vector2(50, 50);
-        var matrix = Matrix3x2.CreateTranslation(new Vector2(5, 5));
-        var builder = new PathBuilder(matrix);
+        Vector2 point1 = new(10, 10);
+        Vector2 point2 = new(10, 90);
+        Vector2 point3 = new(50, 50);
+        Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(5, 5));
+        PathBuilder builder = new(matrix);
 
         builder.AddLines(point1, point2, point3);
         IPath shape = builder.Build();
@@ -175,11 +175,11 @@ public class PathBuilderTests
     [Fact]
     public void SetTransform()
     {
-        var point1 = new Vector2(10, 10);
-        var point2 = new Vector2(10, 90);
-        var point3 = new Vector2(50, 50);
-        var matrix = Matrix3x2.CreateTranslation(new Vector2(100, 100));
-        var builder = new PathBuilder();
+        Vector2 point1 = new(10, 10);
+        Vector2 point2 = new(10, 90);
+        Vector2 point3 = new(50, 50);
+        Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(100, 100));
+        PathBuilder builder = new();
 
         builder.AddLines(point1, point2, point3);
         builder.SetTransform(matrix);
@@ -198,11 +198,11 @@ public class PathBuilderTests
     [Fact]
     public void SetOriginLeaveMatrix()
     {
-        var point1 = new Vector2(10, 10);
-        var point2 = new Vector2(10, 90);
-        var point3 = new Vector2(50, 50);
-        var origin = new Vector2(-50, -100);
-        var builder = new PathBuilder(Matrix3x2.CreateScale(10));
+        Vector2 point1 = new(10, 10);
+        Vector2 point2 = new(10, 90);
+        Vector2 point3 = new(50, 50);
+        Vector2 origin = new(-50, -100);
+        PathBuilder builder = new(Matrix3x2.CreateScale(10));
 
         builder.AddLines(point1, point2, point3);
 

@@ -52,8 +52,8 @@ public class FillPathProcessor : IImageProcessor
 
         if (shape is RectangularPolygon rectPoly)
         {
-            var rectF = new RectangleF(rectPoly.Location, rectPoly.Size);
-            var rect = (Rectangle)rectF;
+            RectangleF rectF = new(rectPoly.Location, rectPoly.Size);
+            Rectangle rect = (Rectangle)rectF;
             if (!this.Options.GraphicsOptions.Antialias || rectF == rect)
             {
                 // Cast as in and back are the same or we are using anti-aliasing
@@ -63,7 +63,7 @@ public class FillPathProcessor : IImageProcessor
         }
 
         // Clone the definition so we can pass the transformed path.
-        var definition = new FillPathProcessor(this.Options, this.Brush, shape);
+        FillPathProcessor definition = new(this.Options, this.Brush, shape);
         return new FillPathProcessor<TPixel>(configuration, definition, source, sourceRectangle);
     }
 }

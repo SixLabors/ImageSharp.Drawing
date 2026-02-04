@@ -41,8 +41,8 @@ internal class ClipPathProcessor<TPixel> : IImageProcessor<TPixel>
         RectangleF bounds = this.definition.Region.Bounds;
 
         // add some clamping offsets to the brush to account for the target drawing location due to the cloned image not fill the image as expected
-        var offsetX = 0;
-        var offsetY = 0;
+        int offsetX = 0;
+        int offsetY = 0;
         if (bounds.X < 0)
         {
             offsetX = -(int)MathF.Floor(bounds.X);
@@ -53,10 +53,10 @@ internal class ClipPathProcessor<TPixel> : IImageProcessor<TPixel>
             offsetY = -(int)MathF.Floor(bounds.Y);
         }
 
-        var brush = new ImageBrush(clone, bounds, new Point(offsetX, offsetY));
+        ImageBrush brush = new(clone, bounds, new Point(offsetX, offsetY));
 
         // Grab hold of an image processor that can fill paths with a brush to allow it to do the hard pixel pushing for us
-        var processor = new FillPathProcessor(this.definition.Options, brush, this.definition.Region);
+        FillPathProcessor processor = new(this.definition.Options, brush, this.definition.Region);
         using IImageProcessor<TPixel> p = processor.CreatePixelSpecificProcessor(this.configuration, this.source, this.sourceRectangle);
 
         // Fill the shape using the image brush

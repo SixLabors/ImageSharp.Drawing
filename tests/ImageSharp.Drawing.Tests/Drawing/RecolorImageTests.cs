@@ -19,7 +19,7 @@ public class RecolorImageTests
     {
         Color sourceColor = TestUtils.GetColorByName(sourceColorName);
         Color targetColor = TestUtils.GetColorByName(targetColorName);
-        var brush = new RecolorBrush(sourceColor, targetColor, threshold);
+        RecolorBrush brush = new(sourceColor, targetColor, threshold);
 
         FormattableString testInfo = $"{sourceColorName}-{targetColorName}-{threshold}";
         provider.RunValidatingProcessorTest(x => x.Fill(brush), testInfo);
@@ -33,14 +33,14 @@ public class RecolorImageTests
     {
         Color sourceColor = TestUtils.GetColorByName(sourceColorName);
         Color targetColor = TestUtils.GetColorByName(targetColorName);
-        var brush = new RecolorBrush(sourceColor, targetColor, threshold);
+        RecolorBrush brush = new(sourceColor, targetColor, threshold);
 
         FormattableString testInfo = $"{sourceColorName}-{targetColorName}-{threshold}";
         provider.RunValidatingProcessorTest(
             x =>
             {
                 Size size = x.GetCurrentSize();
-                var rectangle = new Rectangle(0, (size.Height / 2) - (size.Height / 4), size.Width, size.Height / 2);
+                Rectangle rectangle = new(0, (size.Height / 2) - (size.Height / 4), size.Width, size.Height / 2);
                 x.Fill(brush, rectangle);
             },
             testInfo);

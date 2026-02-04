@@ -30,7 +30,7 @@ public class TestVector4 : IXunitSerializable
 
     public static implicit operator Vector4(TestVector4 d) => d?.AsVector() ?? default;
 
-    public Vector4 AsVector() => new Vector4(this.X, this.Y, this.Z, this.W);
+    public Vector4 AsVector() => new(this.X, this.Y, this.Z, this.W);
 
     public void Deserialize(IXunitSerializationInfo info)
     {

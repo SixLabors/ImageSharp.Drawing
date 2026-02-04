@@ -46,7 +46,7 @@ public class DrawPath : BaseImageOperationsExtensionTest
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
         Assert.Equal(this.path, processor.Path);
         Assert.Equal(this.pen.StrokeFill, processor.Pen.StrokeFill);
-        var processorPen = Assert.IsType<SolidPen>(processor.Pen);
+        SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(10, processorPen.StrokeWidth);
     }
 
@@ -60,7 +60,7 @@ public class DrawPath : BaseImageOperationsExtensionTest
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
         Assert.Equal(this.path, processor.Path);
         Assert.Equal(this.pen.StrokeFill, processor.Pen.StrokeFill);
-        var processorPen = Assert.IsType<SolidPen>(processor.Pen);
+        SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(10, processorPen.StrokeWidth);
     }
 
@@ -75,7 +75,7 @@ public class DrawPath : BaseImageOperationsExtensionTest
         Assert.Equal(this.path, processor.Path);
         SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
         Assert.Equal(Color.Red, brush.Color);
-        var processorPen = Assert.IsType<SolidPen>(processor.Pen);
+        SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(10, processorPen.StrokeWidth);
     }
 
@@ -90,7 +90,7 @@ public class DrawPath : BaseImageOperationsExtensionTest
         Assert.Equal(this.path, processor.Path);
         SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
         Assert.Equal(Color.Red, brush.Color);
-        var processorPen = Assert.IsType<SolidPen>(processor.Pen);
+        SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(10, processorPen.StrokeWidth);
     }
 
@@ -103,7 +103,7 @@ public class DrawPath : BaseImageOperationsExtensionTest
 
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
         Assert.Equal(this.path, processor.Path);
-        var processorPen = Assert.IsType<SolidPen>(processor.Pen);
+        SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
         Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
     }
@@ -117,7 +117,7 @@ public class DrawPath : BaseImageOperationsExtensionTest
 
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
         Assert.Equal(this.path, processor.Path);
-        var processorPen = Assert.IsType<SolidPen>(processor.Pen);
+        SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
         Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
     }

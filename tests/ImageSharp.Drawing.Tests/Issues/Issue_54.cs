@@ -18,7 +18,7 @@ public class Issue_54
         int height = 438;
 
         // Creates a new image with empty pixel data.
-        using (var image = new Image<Rgba32>(width, height))
+        using (Image<Rgba32> image = new(width, height))
         {
             FontFamily family = SystemFonts.Get("verdana");
             Font font = family.CreateFont(48, FontStyle.Bold);
@@ -55,7 +55,7 @@ public class Issue_54
     [Fact]
     public void ComplexPolygoWithZeroPathsCausesBoundsToBeNonSensicalValue()
     {
-        var polygon = new ComplexPolygon(Array.Empty<IPath>());
+        ComplexPolygon polygon = new(Array.Empty<IPath>());
 
         Assert.NotEqual(float.NegativeInfinity, polygon.Bounds.Width);
         Assert.NotEqual(float.PositiveInfinity, polygon.Bounds.Width);

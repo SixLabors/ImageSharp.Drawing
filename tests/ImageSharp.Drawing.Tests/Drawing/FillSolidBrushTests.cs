@@ -74,7 +74,7 @@ public class FillSolidBrushTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         FormattableString testDetails = $"(x{x0},y{y0},w{w},h{h})";
-        var region = new RectangleF(x0, y0, w, h);
+        RectangleF region = new(x0, y0, w, h);
         Color color = TestUtils.GetColorByName("Blue");
 
         provider.RunValidatingProcessorTest(c => c.Fill(color, region), testDetails, ImageComparer.Exact);
@@ -92,7 +92,7 @@ public class FillSolidBrushTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         FormattableString testDetails = $"(x{x0},y{y0},w{w},h{h})";
-        var region = new RectangleF(x0, y0, w, h);
+        RectangleF region = new(x0, y0, w, h);
         Color color = TestUtils.GetColorByName("Blue");
 
         provider.RunValidatingProcessorTestOnWrappedMemoryImage(
@@ -103,8 +103,8 @@ public class FillSolidBrushTests
     }
 
     public static readonly TheoryData<bool, string, float, PixelColorBlendingMode, float> BlendData =
-        new TheoryData<bool, string, float, PixelColorBlendingMode, float>
-            {
+        new()
+        {
                 { false, "Blue", 0.5f, PixelColorBlendingMode.Normal, 1.0f },
                 { false, "Blue", 1.0f, PixelColorBlendingMode.Normal, 0.5f },
                 { false, "Green", 0.5f, PixelColorBlendingMode.Normal, 0.3f },
@@ -148,7 +148,7 @@ public class FillSolidBrushTests
         {
             TPixel bgColor = image[0, 0];
 
-            var options = new DrawingOptions
+            DrawingOptions options = new()
             {
                 GraphicsOptions = new GraphicsOptions
                 {
@@ -160,7 +160,7 @@ public class FillSolidBrushTests
 
             if (triggerFillRegion)
             {
-                var path = new RectangularPolygon(0, 0, 16, 16);
+                RectangularPolygon path = new(0, 0, 16, 16);
                 image.Mutate(c => c.SetGraphicsOptions(options.GraphicsOptions).Fill(new SolidBrush(fillColor), path));
             }
             else

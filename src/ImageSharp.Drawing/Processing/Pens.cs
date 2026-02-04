@@ -8,11 +8,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 public static class Pens
 {
-    private static readonly float[] DashDotPattern = { 3f, 1f, 1f, 1f };
-    private static readonly float[] DashDotDotPattern = { 3f, 1f, 1f, 1f, 1f, 1f };
-    private static readonly float[] DottedPattern = { 1f, 1f };
-    private static readonly float[] DashedPattern = { 3f, 1f };
-    internal static readonly float[] EmptyPattern = Array.Empty<float>();
+    private static readonly float[] DashDotPattern = [3f, 1f, 1f, 1f];
+    private static readonly float[] DashDotDotPattern = [3f, 1f, 1f, 1f, 1f, 1f];
+    private static readonly float[] DottedPattern = [1f, 1f];
+    private static readonly float[] DashedPattern = [3f, 1f];
+    internal static readonly float[] EmptyPattern = [];
 
     /// <summary>
     /// Create a solid pen without any drawing patterns

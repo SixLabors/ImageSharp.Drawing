@@ -45,13 +45,13 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
         this.bottomRight = bottomRight;
         this.Size = new SizeF(bottomRight.X - topLeft.X, bottomRight.Y - topLeft.Y);
 
-        this.points = new PointF[4]
-        {
+        this.points =
+        [
             this.topLeft,
             new Vector2(this.bottomRight.X, this.topLeft.Y),
             this.bottomRight,
             new Vector2(this.topLeft.X, this.bottomRight.Y)
-        };
+        ];
 
         this.halfLength = this.Size.Width + this.Size.Height;
         this.length = this.halfLength * 2;

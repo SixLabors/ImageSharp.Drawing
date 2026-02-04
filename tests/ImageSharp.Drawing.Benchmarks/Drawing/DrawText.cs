@@ -90,7 +90,7 @@ public class DrawText
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
     {
-        using var paint = new SKPaint
+        using SKPaint paint = new()
         {
             Color = SKColors.HotPink,
             IsAntialias = true,

@@ -11,9 +11,9 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void SetDefaultOptionsOnProcessingContext()
     {
-        var option = new ShapeOptions();
-        var config = new Configuration();
-        var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
+        ShapeOptions option = new();
+        Configuration config = new();
+        FakeImageOperationsProvider.FakeImageOperations<Rgba32> context = new(config, null, true);
 
         context.SetShapeOptions(option);
 
@@ -25,13 +25,13 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void UpdateDefaultOptionsOnProcessingContext_AlwaysNewInstance()
     {
-        var option = new ShapeOptions()
+        ShapeOptions option = new()
         {
             ClippingOperation = ClippingOperation.Intersection,
             IntersectionRule = IntersectionRule.NonZero
         };
-        var config = new Configuration();
-        var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
+        Configuration config = new();
+        FakeImageOperationsProvider.FakeImageOperations<Rgba32> context = new(config, null, true);
         context.SetShapeOptions(option);
 
         context.SetShapeOptions(o =>
@@ -54,8 +54,8 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void SetDefaultOptionsOnConfiguration()
     {
-        var option = new ShapeOptions();
-        var config = new Configuration();
+        ShapeOptions option = new();
+        Configuration config = new();
 
         config.SetShapeOptions(option);
 
@@ -65,12 +65,12 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void UpdateDefaultOptionsOnConfiguration_AlwaysNewInstance()
     {
-        var option = new ShapeOptions()
+        ShapeOptions option = new()
         {
             ClippingOperation = ClippingOperation.Intersection,
             IntersectionRule = IntersectionRule.NonZero
         };
-        var config = new Configuration();
+        Configuration config = new();
         config.SetShapeOptions(option);
 
         config.SetShapeOptions(o =>
@@ -91,7 +91,7 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromConfiguration_SettingNullThenReturnsNewInstance()
     {
-        var config = new Configuration();
+        Configuration config = new();
 
         ShapeOptions options = config.GetShapeOptions();
         Assert.NotNull(options);
@@ -107,7 +107,7 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromConfiguration_IgnoreIncorectlyTypesDictionEntry()
     {
-        var config = new Configuration();
+        Configuration config = new();
 
         config.Properties[typeof(ShapeOptions)] = "wronge type";
         ShapeOptions options = config.GetShapeOptions();
@@ -118,7 +118,7 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromConfiguration_AlwaysReturnsInstance()
     {
-        var config = new Configuration();
+        Configuration config = new();
 
         Assert.DoesNotContain(typeof(ShapeOptions), config.Properties.Keys);
         ShapeOptions options = config.GetShapeOptions();
@@ -128,7 +128,7 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromConfiguration_AlwaysReturnsSameValue()
     {
-        var config = new Configuration();
+        Configuration config = new();
 
         ShapeOptions options = config.GetShapeOptions();
         ShapeOptions options2 = config.GetShapeOptions();
@@ -138,8 +138,8 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromProcessingContext_AlwaysReturnsInstance()
     {
-        var config = new Configuration();
-        var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
+        Configuration config = new();
+        FakeImageOperationsProvider.FakeImageOperations<Rgba32> context = new(config, null, true);
 
         ShapeOptions ctxOptions = context.GetShapeOptions();
         Assert.NotNull(ctxOptions);
@@ -148,8 +148,8 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromProcessingContext_AlwaysReturnsInstanceEvenIfSetToNull()
     {
-        var config = new Configuration();
-        var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
+        Configuration config = new();
+        FakeImageOperationsProvider.FakeImageOperations<Rgba32> context = new(config, null, true);
 
         context.SetShapeOptions((ShapeOptions)null);
         ShapeOptions ctxOptions = context.GetShapeOptions();
@@ -159,10 +159,10 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromProcessingContext_FallbackToConfigsInstance()
     {
-        var option = new ShapeOptions();
-        var config = new Configuration();
+        ShapeOptions option = new();
+        Configuration config = new();
         config.SetShapeOptions(option);
-        var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
+        FakeImageOperationsProvider.FakeImageOperations<Rgba32> context = new(config, null, true);
 
         ShapeOptions ctxOptions = context.GetShapeOptions();
         Assert.Equal(option, ctxOptions);
@@ -171,8 +171,8 @@ public class ShapeOptionsDefaultsExtensionsTests
     [Fact]
     public void GetDefaultOptionsFromProcessingContext_IgnoreIncorectlyTypesDictionEntry()
     {
-        var config = new Configuration();
-        var context = new FakeImageOperationsProvider.FakeImageOperations<Rgba32>(config, null, true);
+        Configuration config = new();
+        FakeImageOperationsProvider.FakeImageOperations<Rgba32> context = new(config, null, true);
         context.Properties[typeof(ShapeOptions)] = "wronge type";
         ShapeOptions options = context.GetShapeOptions();
         Assert.NotNull(options);

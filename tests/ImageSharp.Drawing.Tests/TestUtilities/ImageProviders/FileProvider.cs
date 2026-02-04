@@ -46,7 +46,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
             {
                 Type type = options.GetType();
 
-                var data = new Dictionary<string, object>();
+                Dictionary<string, object> data = new();
 
                 while (type != null && type != typeof(object))
                 {
@@ -194,7 +194,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                 return this.DecodeImage(decoder, options);
             }
 
-            var key = new Key(this.PixelType, this.FilePath, decoder, options, null);
+            Key key = new(this.PixelType, this.FilePath, decoder, options, null);
             Image<TPixel> cachedImage = Cache.GetOrAdd(key, _ => this.DecodeImage(decoder, options));
 
             return cachedImage.Clone(this.Configuration);
@@ -225,7 +225,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
                 return this.DecodeImage(decoder, options);
             }
 
-            var key = new Key(this.PixelType, this.FilePath, decoder, options.GeneralOptions, options);
+            Key key = new(this.PixelType, this.FilePath, decoder, options.GeneralOptions, options);
             Image<TPixel> cachedImage = Cache.GetOrAdd(key, _ => this.DecodeImage(decoder, options));
 
             return cachedImage.Clone(this.Configuration);
@@ -259,7 +259,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
         {
             options.SetConfiguration(this.Configuration);
 
-            var testFile = TestFile.Create(this.FilePath);
+            TestFile testFile = TestFile.Create(this.FilePath);
             using Stream stream = new MemoryStream(testFile.Bytes);
             return decoder.Decode<TPixel>(options, stream);
         }
@@ -269,7 +269,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
         {
             options.GeneralOptions.SetConfiguration(this.Configuration);
 
-            var testFile = TestFile.Create(this.FilePath);
+            TestFile testFile = TestFile.Create(this.FilePath);
             using Stream stream = new MemoryStream(testFile.Bytes);
             return decoder.Decode<TPixel>(options, stream);
         }
@@ -277,7 +277,7 @@ public abstract partial class TestImageProvider<TPixel> : IXunitSerializable
 
     public static string GetFilePathOrNull(ITestImageProvider provider)
     {
-        var fileProvider = provider as FileProvider;
+        FileProvider fileProvider = provider as FileProvider;
         return fileProvider?.FilePath;
     }
 }

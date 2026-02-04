@@ -38,7 +38,7 @@ public static class MemoryAllocatorValidator
 
     public static TestMemoryDiagnostics MonitorAllocations()
     {
-        var diag = new TestMemoryDiagnostics();
+        TestMemoryDiagnostics diag = new();
         LocalInstance.Value = diag;
         return diag;
     }
@@ -56,8 +56,8 @@ public static class MemoryAllocatorValidator
 
         public void Validate(int expectedAllocationCount)
         {
-            var count = this.TotalRemainingAllocated;
-            var pass = expectedAllocationCount == count;
+            int count = this.TotalRemainingAllocated;
+            bool pass = expectedAllocationCount == count;
             Assert.True(pass, $"Expected a {expectedAllocationCount} undisposed buffers but found {count}");
         }
 

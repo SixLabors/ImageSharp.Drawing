@@ -17,12 +17,12 @@ internal static class ArrayExtensions
     /// <returns>the Merged arrays</returns>
     public static T[] Merge<T>(this T[] source1, T[] source2)
     {
-        if (source2 is null)
+        if (source2 is null || source2.Length == 0)
         {
             return source1;
         }
 
-        var target = new T[source1.Length + source2.Length];
+        T[] target = new T[source1.Length + source2.Length];
 
         for (int i = 0; i < source1.Length; i++)
         {

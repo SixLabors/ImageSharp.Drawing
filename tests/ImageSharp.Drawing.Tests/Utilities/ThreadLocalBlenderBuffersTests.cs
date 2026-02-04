@@ -8,16 +8,16 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Utils;
 
 public class ThreadLocalBlenderBuffersTests
 {
-    private readonly TestMemoryAllocator memoryAllocator = new TestMemoryAllocator();
+    private readonly TestMemoryAllocator memoryAllocator = new();
 
     [Fact]
     public void CreatesPerThreadUniqueInstances()
     {
-        using var buffers = new ThreadLocalBlenderBuffers<Rgb24>(this.memoryAllocator, 100);
+        using ThreadLocalBlenderBuffers<Rgb24> buffers = new(this.memoryAllocator, 100);
 
-        var allSetSemaphore = new SemaphoreSlim(2);
+        SemaphoreSlim allSetSemaphore = new(2);
 
-        var thread1 = new Thread(() =>
+        Thread thread1 = new(() =>
         {
             Span<float> ams = buffers.AmountSpan;
             Span<Rgb24> overlays = buffers.OverlaySpan;
@@ -32,7 +32,7 @@ public class ThreadLocalBlenderBuffersTests
             Assert.Equal(10, buffers.OverlaySpan[0].R);
         });
 
-        var thread2 = new Thread(() =>
+        Thread thread2 = new(() =>
         {
             Span<float> ams = buffers.AmountSpan;
             Span<Rgb24> overlays = buffers.OverlaySpan;
@@ -60,7 +60,7 @@ public class ThreadLocalBlenderBuffersTests
     [InlineData(true, 3)]
     public void Dispose_ReturnsAllBuffers(bool amountBufferOnly, int threadCount)
     {
-        var buffers = new ThreadLocalBlenderBuffers<Rgb24>(this.memoryAllocator, 100, amountBufferOnly);
+        ThreadLocalBlenderBuffers<Rgb24> buffers = new(this.memoryAllocator, 100, amountBufferOnly);
 
         void RunThread()
         {

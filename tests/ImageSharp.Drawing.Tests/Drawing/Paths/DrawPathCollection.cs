@@ -10,26 +10,24 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths;
 
 public class DrawPathCollection : BaseImageOperationsExtensionTest
 {
-    private readonly GraphicsOptions nonDefault = new GraphicsOptions { Antialias = false };
+    private readonly GraphicsOptions nonDefault = new() { Antialias = false };
     private readonly Color color = Color.HotPink;
     private readonly SolidPen pen = Pens.Solid(Color.HotPink, 1);
     private readonly IPath path1 = new Path(new LinearLineSegment(
-        new PointF[]
-        {
-            new Vector2(10, 10),
+    [
+        new Vector2(10, 10),
             new Vector2(20, 10),
             new Vector2(20, 10),
-            new Vector2(30, 10),
-        }));
+            new Vector2(30, 10)
+    ]));
 
     private readonly IPath path2 = new Path(new LinearLineSegment(
-        new PointF[]
-        {
-            new Vector2(10, 10),
+    [
+        new Vector2(10, 10),
             new Vector2(20, 10),
             new Vector2(20, 10),
-            new Vector2(30, 10),
-        }));
+            new Vector2(30, 10)
+    ]));
 
     private readonly IPathCollection pathCollection;
 
@@ -82,7 +80,7 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
         {
             Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
             Assert.Equal(this.pen.StrokeFill, p.Pen.StrokeFill);
-            var pPen = Assert.IsType<SolidPen>(p.Pen);
+            SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
             Assert.Equal(10, pPen.StrokeWidth);
         });
 
@@ -102,7 +100,7 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
         {
             Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
             Assert.Equal(this.pen.StrokeFill, p.Pen.StrokeFill);
-            var pPen = Assert.IsType<SolidPen>(p.Pen);
+            SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
             Assert.Equal(10, pPen.StrokeWidth);
         });
 
@@ -123,7 +121,7 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
             Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
             SolidBrush brush = Assert.IsType<SolidBrush>(p.Pen.StrokeFill);
             Assert.Equal(Color.Pink, brush.Color);
-            var pPen = Assert.IsType<SolidPen>(p.Pen);
+            SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
             Assert.Equal(10, pPen.StrokeWidth);
         });
 
@@ -144,7 +142,7 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
             Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
             SolidBrush brush = Assert.IsType<SolidBrush>(p.Pen.StrokeFill);
             Assert.Equal(Color.Pink, brush.Color);
-            var pPen = Assert.IsType<SolidPen>(p.Pen);
+            SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
             Assert.Equal(10, pPen.StrokeWidth);
         });
 
@@ -163,7 +161,7 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
         Assert.All(processors, p =>
         {
             Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
-            var pPen = Assert.IsType<SolidPen>(p.Pen);
+            SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
             Assert.Equal(this.pen.JointStyle, pPen.JointStyle);
             Assert.Equal(this.pen.EndCapStyle, pPen.EndCapStyle);
         });
@@ -183,7 +181,7 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
         Assert.All(processors, p =>
         {
             Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
-            var pPen = Assert.IsType<SolidPen>(p.Pen);
+            SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
             Assert.Equal(this.pen.JointStyle, pPen.JointStyle);
             Assert.Equal(this.pen.EndCapStyle, pPen.EndCapStyle);
         });

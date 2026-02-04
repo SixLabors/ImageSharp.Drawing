@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths;
 
 public class Fill : BaseImageOperationsExtensionTest
 {
-    private readonly DrawingOptions nonDefaultOptions = new DrawingOptions();
+    private readonly DrawingOptions nonDefaultOptions = new();
     private readonly Brush brush = new SolidBrush(Color.HotPink);
 
     [Fact]

@@ -14,7 +14,7 @@ internal class Clipper
     /// Initializes a new instance of the <see cref="Clipper"/> class.
     /// </summary>
     public Clipper()
-        => this.polygonClipper = new PolygonClipper();
+        => this.polygonClipper = new PolygonClipper() { PreserveCollinear = true };
 
     /// <summary>
     /// Generates the clipped shapes from the previously provided paths.
@@ -24,8 +24,8 @@ internal class Clipper
     /// <returns>The <see cref="T:IPath[]"/>.</returns>
     public IPath[] GenerateClippedShapes(ClippingOperation operation, IntersectionRule rule)
     {
-        PathsF closedPaths = new();
-        PathsF openPaths = new();
+        PathsF closedPaths = [];
+        PathsF openPaths = [];
 
         FillRule fillRule = rule == IntersectionRule.EvenOdd ? FillRule.EvenOdd : FillRule.NonZero;
         this.polygonClipper.Execute(operation, fillRule, closedPaths, openPaths);

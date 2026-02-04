@@ -63,7 +63,7 @@ public abstract class ImageDataAttributeBase : DataAttribute
 
         if (!addedRows.Any())
         {
-            addedRows = new[] { new object[0] };
+            addedRows = [[]];
         }
 
         bool firstIsProvider = this.FirstIsProvider(testMethod);

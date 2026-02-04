@@ -15,7 +15,7 @@ public class ImageDifferenceIsOverThresholdException : ImagesSimilarityException
 
     private static string StringifyReports(IEnumerable<ImageSimilarityReport> reports)
     {
-        var sb = new StringBuilder();
+        StringBuilder sb = new();
 
         sb.Append(Environment.NewLine);
 

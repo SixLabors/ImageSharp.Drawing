@@ -18,7 +18,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <summary>
     /// The line points.
     /// </summary>
-    private readonly PointF[] linePoints;
+    private PointF[]? linePoints;
+
     private readonly PointF[] controlPoints;
 
     /// <summary>
@@ -36,10 +37,6 @@ public sealed class CubicBezierLineSegment : ILineSegment
         {
             throw new ArgumentOutOfRangeException(nameof(points), "points must be a multiple of 3 plus 1 long.");
         }
-
-        this.linePoints = GetDrawingPoints(this.controlPoints);
-
-        this.EndPoint = this.controlPoints[this.controlPoints.Length - 1];
     }
 
     /// <summary>
@@ -55,19 +52,31 @@ public sealed class CubicBezierLineSegment : ILineSegment
     {
     }
 
+    /// <inheritdoc cref="CubicBezierLineSegment(PointF, PointF, PointF, PointF, PointF[])" />
+    public CubicBezierLineSegment(PointF start, PointF controlPoint1, PointF controlPoint2, PointF end)
+        : this(new[] { start, controlPoint1, controlPoint2, end })
+    {
+    }
+
     /// <summary>
     /// Gets the control points.
     /// </summary>
     public IReadOnlyList<PointF> ControlPoints => this.controlPoints;
 
     /// <inheritdoc/>
-    public PointF EndPoint { get; }
+    public PointF EndPoint => this.controlPoints[^1];
 
     /// <inheritdoc/>
-    public ReadOnlyMemory<PointF> Flatten() => this.linePoints;
+    public ReadOnlyMemory<PointF> Flatten() => this.linePoints ??= GetDrawingPoints(this.controlPoints);
 
     /// <summary>
-    /// Transforms the current LineSegment using specified matrix.
+    /// Gets the control points of this curve.
+    /// </summary>
+    /// <returns>The control points of this curve.</returns>
+    public ReadOnlyMemory<PointF> GetControlPoints() => this.controlPoints;
+
+    /// <summary>
+    /// Transforms this line segment using the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A line segment with the matrix applied to it.</returns>
@@ -79,7 +88,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
             return this;
         }
 
-        var transformedPoints = new PointF[this.controlPoints.Length];
+        PointF[] transformedPoints = new PointF[this.controlPoints.Length];
 
         for (int i = 0; i < this.controlPoints.Length; i++)
         {
@@ -94,7 +103,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
     private static PointF[] GetDrawingPoints(PointF[] controlPoints)
     {
-        var drawingPoints = new List<PointF>();
+        List<PointF> drawingPoints = [];
         int curveCount = (controlPoints.Length - 1) / 3;
 
         for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
@@ -115,7 +124,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
     private static List<PointF> FindDrawingPoints(int curveIndex, PointF[] controlPoints)
     {
-        var pointList = new List<PointF>();
+        List<PointF> pointList = [];
 
         Vector2 left = CalculateBezierPoint(curveIndex, 0, controlPoints);
         Vector2 right = CalculateBezierPoint(curveIndex, 1, controlPoints);
@@ -154,8 +163,8 @@ public sealed class CubicBezierLineSegment : ILineSegment
         float midT = (t0 + t1) / 2;
         Vector2 mid = CalculateBezierPoint(curveIndex, midT, controlPoints);
 
-        var leftDirection = Vector2.Normalize(left - mid);
-        var rightDirection = Vector2.Normalize(right - mid);
+        Vector2 leftDirection = Vector2.Normalize(left - mid);
+        Vector2 rightDirection = Vector2.Normalize(right - mid);
 
         if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
         {

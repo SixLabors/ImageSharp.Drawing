@@ -22,7 +22,7 @@ public class FillPolygonTests
         PointF[] polygon1 = PolygonFactory.CreatePointArray((2, 2), (6, 2), (6, 4), (2, 4));
         PointF[] polygon2 = PolygonFactory.CreatePointArray((2, 8), (4, 6), (6, 8), (4, 10));
 
-        var options = new GraphicsOptions { Antialias = antialias > 0, AntialiasSubpixelDepth = antialias };
+        GraphicsOptions options = new() { Antialias = antialias > 0, AntialiasSubpixelDepth = antialias };
         provider.RunValidatingProcessorTest(
             c => c.SetGraphicsOptions(options)
                 .FillPolygon(Color.White, polygon1)
@@ -41,12 +41,12 @@ public class FillPolygonTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-            {
-                new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
-            };
+        [
+            new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
+        ];
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
 
-        var options = new GraphicsOptions { Antialias = antialias };
+        GraphicsOptions options = new() { Antialias = antialias };
 
         string aa = antialias ? string.Empty : "_NoAntialias";
         FormattableString outputDetails = $"{colorName}_A{alpha}{aa}";
@@ -63,9 +63,9 @@ public class FillPolygonTests
        where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-            {
-                new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
-            };
+        [
+            new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
+        ];
 
         provider.RunValidatingProcessorTest(
             c => c.SetDrawingTransform(Matrix3x2.CreateSkew(GeometryUtilities.DegreeToRadian(-15), 0, new Vector2(200, 200)))
@@ -77,7 +77,7 @@ public class FillPolygonTests
     public void Fill_RectangularPolygon_Solid_Transformed<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var polygon = new RectangularPolygon(25, 25, 50, 50);
+        RectangularPolygon polygon = new(25, 25, 50, 50);
 
         provider.RunValidatingProcessorTest(
             c => c.SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))
@@ -89,13 +89,13 @@ public class FillPolygonTests
     public void Fill_RectangularPolygon_Solid_TransformedUsingConfiguration<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var polygon = new RectangularPolygon(25, 25, 50, 50);
+        RectangularPolygon polygon = new(25, 25, 50, 50);
         provider.Configuration.SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)));
         provider.RunValidatingProcessorTest(c => c.Fill(Color.White, polygon));
     }
 
     public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data { get; } =
-        new TheoryData<bool, IntersectionRule>()
+        new()
         {
             { false, IntersectionRule.EvenOdd },
             { false, IntersectionRule.NonZero },
@@ -117,7 +117,7 @@ public class FillPolygonTests
             Array.Reverse(hole);
         }
 
-        var polygon = new ComplexPolygon(
+        ComplexPolygon polygon = new(
             new Path(new LinearLineSegment(contour)),
             new Path(new LinearLineSegment(hole)));
 
@@ -142,15 +142,15 @@ public class FillPolygonTests
     public void FillPolygon_Concave<TPixel>(TestImageProvider<TPixel> provider, bool reverse)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var points = new PointF[]
-                         {
-                             new Vector2(8, 8),
+        PointF[] points =
+        [
+            new Vector2(8, 8),
                              new Vector2(64, 8),
                              new Vector2(64, 64),
                              new Vector2(120, 64),
                              new Vector2(120, 120),
                              new Vector2(8, 120)
-                         };
+        ];
         if (reverse)
         {
             Array.Reverse(points);
@@ -170,8 +170,8 @@ public class FillPolygonTests
     [WithSolidFilledImages(64, 64, "Black", PixelTypes.Rgba32)]
     public void FillPolygon_StarCircle(TestImageProvider<Rgba32> provider)
     {
-        var circle = new EllipsePolygon(32, 32, 30);
-        var star = new Star(32, 32, 7, 10, 27);
+        EllipsePolygon circle = new(32, 32, 30);
+        Star star = new(32, 32, 7, 10, 27);
         IPath shape = circle.Clip(star);
 
         provider.RunValidatingProcessorTest(
@@ -186,7 +186,7 @@ public class FillPolygonTests
     public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider)
     {
         IPath circle = new EllipsePolygon(36, 36, 36).Translate(28, 28);
-        var star = new Star(64, 64, 5, 24, 64);
+        Star star = new(64, 64, 5, 24, 64);
 
         // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
         foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
@@ -209,9 +209,9 @@ public class FillPolygonTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-            {
-                new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
-            };
+        [
+            new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)
+        ];
         Color color = Color.Yellow;
 
         PatternBrush brush = Brushes.Horizontal(color);
@@ -228,13 +228,13 @@ public class FillPolygonTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-            {
-                new Vector2(10, 10), new Vector2(200, 50), new Vector2(50, 200)
-            };
+        [
+            new Vector2(10, 10), new Vector2(200, 50), new Vector2(50, 200)
+        ];
 
-        using (var brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes))
+        using (Image<TPixel> brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes))
         {
-            var brush = new ImageBrush(brushImage);
+            ImageBrush brush = new(brushImage);
 
             provider.RunValidatingProcessorTest(
                 c => c.FillPolygon(brush, simplePath),
@@ -250,18 +250,18 @@ public class FillPolygonTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         PointF[] simplePath =
-            {
-                new Vector2(10, 10), new Vector2(200, 50), new Vector2(50, 200)
-            };
+        [
+            new Vector2(10, 10), new Vector2(200, 50), new Vector2(50, 200)
+        ];
 
-        using (var brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes))
+        using (Image<TPixel> brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes))
         {
             float top = brushImage.Height / 4;
             float left = brushImage.Width / 4;
             float height = top * 2;
             float width = left * 2;
 
-            var brush = new ImageBrush(brushImage, new RectangleF(left, top, width, height));
+            ImageBrush brush = new(brushImage, new RectangleF(left, top, width, height));
 
             provider.RunValidatingProcessorTest(
                 c => c.FillPolygon(brush, simplePath),
@@ -275,7 +275,7 @@ public class FillPolygonTests
     public void Fill_RectangularPolygon<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        var polygon = new RectangularPolygon(10, 10, 190, 140);
+        RectangularPolygon polygon = new(10, 10, 190, 140);
         Color color = Color.White;
 
         provider.RunValidatingProcessorTest(
@@ -293,7 +293,7 @@ public class FillPolygonTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         float angle = GeometryUtilities.DegreeToRadian(angleDeg);
-        var polygon = new RegularPolygon(100, 100, vertices, radius, angle);
+        RegularPolygon polygon = new(100, 100, vertices, radius, angle);
         Color color = Color.Yellow;
 
         FormattableString testOutput = $"V({vertices})_R({radius})_Ang({angleDeg})";
@@ -305,7 +305,7 @@ public class FillPolygonTests
     }
 
     public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
-        new TheoryData<bool, IntersectionRule>()
+        new()
         {
             { false, IntersectionRule.EvenOdd },
             { false, IntersectionRule.NonZero },
@@ -347,7 +347,7 @@ public class FillPolygonTests
     {
         using (Image<TPixel> img = provider.GetImage())
         {
-            var poly = new Polygon(new LinearLineSegment(
+            Polygon poly = new(new LinearLineSegment(
                 new PointF(10, 30),
                 new PointF(10, 20),
                 new PointF(50, 20),
@@ -382,7 +382,7 @@ public class FillPolygonTests
         Configuration.Default.MaxDegreeOfParallelism = 1;
         using (Image<TPixel> img = provider.GetImage())
         {
-            var poly = new Polygon(new LinearLineSegment(
+            Polygon poly = new(new LinearLineSegment(
                 new PointF(10, 30),
                 new PointF(10, 20),
                 new PointF(50, 20),

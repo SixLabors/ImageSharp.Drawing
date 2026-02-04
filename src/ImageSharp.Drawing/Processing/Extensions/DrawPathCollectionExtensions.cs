@@ -38,8 +38,8 @@ public static class DrawPathCollectionExtensions
     /// <param name="paths">The paths.</param>
     /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
     public static IImageProcessingContext
-        Draw(this IImageProcessingContext source, Pen pen, IPathCollection paths) =>
-        source.Draw(source.GetDrawingOptions(), pen, paths);
+        Draw(this IImageProcessingContext source, Pen pen, IPathCollection paths)
+        => source.Draw(source.GetDrawingOptions(), pen, paths);
 
     /// <summary>
     /// Draws the outline of the polygon with the provided brush at the provided thickness.

@@ -43,7 +43,7 @@ public static class ClipPathExtensions
     /// <returns>The clipped <see cref="IPath"/>.</returns>
     /// <exception cref="ClipperException">Thrown when an error occurred while attempting to clip the polygon.</exception>
     public static IPath Clip(this IPath subjectPath, IEnumerable<IPath> clipPaths)
-        => subjectPath.Clip(new(), clipPaths);
+        => subjectPath.Clip(new ShapeOptions(), clipPaths);
 
     /// <summary>
     /// Clips the specified subject path with the provided clipping paths.

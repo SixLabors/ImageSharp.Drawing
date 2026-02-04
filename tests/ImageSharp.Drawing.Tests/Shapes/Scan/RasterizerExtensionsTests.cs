@@ -15,7 +15,7 @@ public class RasterizerExtensionsTests
     [Fact]
     public void DoesNotOverwriteIsDirtyFlagWhenOnlyFillingSubpixels()
     {
-        var scanner = PolygonScanner.Create(new RectangularPolygon(0.3f, 0.2f, 0.7f, 1.423f), 0, 20, 1, IntersectionRule.EvenOdd, MemoryAllocator.Default);
+        PolygonScanner scanner = PolygonScanner.Create(new RectangularPolygon(0.3f, 0.2f, 0.7f, 1.423f), 0, 20, 1, IntersectionRule.EvenOdd, MemoryAllocator.Default);
 
         float[] buffer = new float[12];
 
@@ -32,13 +32,13 @@ public class RasterizerExtensionsTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Font font36 = TestFontUtilities.GetFont(TestFonts.OpenSans, 20);
-        var textOpt = new RichTextOptions(font36)
+        RichTextOptions textOpt = new(font36)
         {
             Dpi = 96,
             Origin = new PointF(0, 0)
         };
 
-        var comparer = ImageComparer.TolerantPercentage(0.001f);
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.001f);
         provider.RunValidatingProcessorTest(
             x => x
              .SetGraphicsOptions(o => o.Antialias = false)

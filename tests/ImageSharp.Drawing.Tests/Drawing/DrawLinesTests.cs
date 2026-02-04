@@ -33,7 +33,7 @@ public class DrawLinesTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         SolidPen pen = new(Color.Black, thickness);
-        PointF[] path = { new Vector2(15f, 15f), new Vector2(15f, 15f) };
+        PointF[] path = [new Vector2(15f, 15f), new Vector2(15f, 15f)];
 
         GraphicsOptions options = new()
         {
@@ -99,7 +99,7 @@ public class DrawLinesTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Round });
+        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f]) { EndCapStyle = EndCapStyle.Round });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -110,7 +110,7 @@ public class DrawLinesTests
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Butt });
+        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f]) { EndCapStyle = EndCapStyle.Butt });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -121,7 +121,7 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new(new PenOptions(color, thickness, new float[] { 3f, 3f }) { EndCapStyle = EndCapStyle.Square });
+        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f]) { EndCapStyle = EndCapStyle.Square });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -168,7 +168,7 @@ where TPixel : unmanaged, IPixel<TPixel>
         Pen pen)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        PointF[] simplePath = { new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300) };
+        PointF[] simplePath = [new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)];
 
         GraphicsOptions options = new()
         { Antialias = antialias };

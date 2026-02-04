@@ -71,13 +71,13 @@ public static class TestFontUtilities
     /// </returns>
     private static string GetFontsDirectory()
     {
-        var directories = new List<string>
-        {
-             "TestFonts/", // Here for code coverage tests.
-             "tests/ImageSharp.Drawing.Tests/TestFonts/", // from travis/build script
-             "../../../../../ImageSharp.Drawing.Tests/TestFonts/", // from Sandbox46
-             "../../../../TestFonts/"
-        };
+        List<string> directories =
+        [
+            "TestFonts/", // Here for code coverage tests.
+            "tests/ImageSharp.Drawing.Tests/TestFonts/", // from travis/build script
+            "../../../../../ImageSharp.Drawing.Tests/TestFonts/", // from Sandbox46
+            "../../../../TestFonts/"
+        ];
 
         directories = directories.SelectMany(x => new[]
                                  {

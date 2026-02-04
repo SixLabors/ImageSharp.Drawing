@@ -24,8 +24,8 @@ public class FillRadialGradientBrushTests
         {
             Color red = Color.Red;
 
-            var unicolorRadialGradientBrush =
-                new RadialGradientBrush(
+            RadialGradientBrush unicolorRadialGradientBrush =
+                new(
                     new Point(0, 0),
                     100,
                     GradientRepetitionMode.None,
@@ -57,7 +57,7 @@ public class FillRadialGradientBrushTests
             TolerantComparer,
             image =>
                 {
-                    var brush = new RadialGradientBrush(
+                    RadialGradientBrush brush = new(
                         new Point(centerX, centerY),
                         image.Width / 2f,
                         GradientRepetitionMode.None,

@@ -22,7 +22,7 @@ public class FillPathBuilder : BaseImageOperationsExtensionTest
 
     public FillPathBuilder()
     {
-        var pb = new PathBuilder();
+        PathBuilder pb = new();
         this.builder(pb);
         this.path = pb.Build();
     }

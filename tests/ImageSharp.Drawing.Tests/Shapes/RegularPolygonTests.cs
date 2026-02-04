@@ -23,7 +23,7 @@ public class RegularPolygonTests
         }
         else
         {
-            var p = new RegularPolygon(Vector2.Zero, points, 10f, 0);
+            RegularPolygon p = new(Vector2.Zero, points, 10f, 0);
             Assert.NotNull(p);
         }
     }
@@ -43,7 +43,7 @@ public class RegularPolygonTests
         }
         else
         {
-            var p = new RegularPolygon(Vector2.Zero, 3, radius, 0);
+            RegularPolygon p = new(Vector2.Zero, 3, radius, 0);
             Assert.NotNull(p);
         }
     }
@@ -54,7 +54,7 @@ public class RegularPolygonTests
         const float Radius = 10;
         int pointsCount = new Random().Next(3, 20);
 
-        var poly = new RegularPolygon(Vector2.Zero, pointsCount, Radius, 0);
+        RegularPolygon poly = new(Vector2.Zero, pointsCount, Radius, 0);
 
         IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
@@ -83,7 +83,7 @@ public class RegularPolygonTests
         const float Radius = 10;
         double anAngle = new Random().NextDouble() * TwoPI;
 
-        var poly = new RegularPolygon(Vector2.Zero, 3, Radius, (float)anAngle);
+        RegularPolygon poly = new(Vector2.Zero, 3, Radius, (float)anAngle);
         IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
         IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))

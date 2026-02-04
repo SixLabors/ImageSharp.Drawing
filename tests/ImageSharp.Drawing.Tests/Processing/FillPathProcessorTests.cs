@@ -18,28 +18,28 @@ public class FillPathProcessorTests
     [Fact]
     public void FillOffCanvas()
     {
-        var bounds = new Rectangle(-100, -10, 10, 10);
+        Rectangle bounds = new(-100, -10, 10, 10);
 
         // Specifically not using RectangularPolygon here to ensure the FillPathProcessor is used.
-        var points = new LinearLineSegment[]
-        {
-            new LinearLineSegment(new PointF(bounds.Left, bounds.Top), new PointF(bounds.Right, bounds.Top)),
-            new LinearLineSegment(new PointF(bounds.Right, bounds.Top), new PointF(bounds.Right, bounds.Bottom)),
-            new LinearLineSegment(new PointF(bounds.Right, bounds.Bottom), new PointF(bounds.Left, bounds.Bottom)),
-            new LinearLineSegment(new PointF(bounds.Left, bounds.Bottom), new PointF(bounds.Left, bounds.Top))
-        };
-        var path = new Path(points);
-        var brush = new Mock<Brush>();
-        var options = new GraphicsOptions { Antialias = true };
-        var processor = new FillPathProcessor(new DrawingOptions() { GraphicsOptions = options }, brush.Object, path);
-        var img = new Image<Rgba32>(10, 10);
+        LinearLineSegment[] points =
+        [
+            new(new PointF(bounds.Left, bounds.Top), new PointF(bounds.Right, bounds.Top)),
+            new(new PointF(bounds.Right, bounds.Top), new PointF(bounds.Right, bounds.Bottom)),
+            new(new PointF(bounds.Right, bounds.Bottom), new PointF(bounds.Left, bounds.Bottom)),
+            new(new PointF(bounds.Left, bounds.Bottom), new PointF(bounds.Left, bounds.Top))
+        ];
+        Path path = new(points);
+        Mock<Brush> brush = new();
+        GraphicsOptions options = new() { Antialias = true };
+        FillPathProcessor processor = new(new DrawingOptions() { GraphicsOptions = options }, brush.Object, path);
+        Image<Rgba32> img = new(10, 10);
         processor.Execute(img.Configuration, img, bounds);
     }
 
     [Fact]
     public void DrawOffCanvas()
     {
-        using (var img = new Image<Rgba32>(10, 10))
+        using (Image<Rgba32> img = new(10, 10))
         {
             img.Mutate(x => x.DrawLine(
                 new SolidPen(Color.Black, 10),
@@ -51,9 +51,9 @@ public class FillPathProcessorTests
     [Fact]
     public void OtherShape()
     {
-        var imageSize = new Rectangle(0, 0, 500, 500);
-        var path = new EllipsePolygon(1, 1, 23);
-        var processor = new FillPathProcessor(
+        Rectangle imageSize = new(0, 0, 500, 500);
+        EllipsePolygon path = new(1, 1, 23);
+        FillPathProcessor processor = new(
             new DrawingOptions()
             {
                 GraphicsOptions = { Antialias = true }
@@ -69,11 +69,11 @@ public class FillPathProcessorTests
     [Fact]
     public void RectangleFloatAndAntialias()
     {
-        var imageSize = new Rectangle(0, 0, 500, 500);
-        var floatRect = new RectangleF(10.5f, 10.5f, 400.6f, 400.9f);
-        var expectedRect = new Rectangle(10, 10, 400, 400);
-        var path = new RectangularPolygon(floatRect);
-        var processor = new FillPathProcessor(
+        Rectangle imageSize = new(0, 0, 500, 500);
+        RectangleF floatRect = new(10.5f, 10.5f, 400.6f, 400.9f);
+        Rectangle expectedRect = new(10, 10, 400, 400);
+        RectangularPolygon path = new(floatRect);
+        FillPathProcessor processor = new(
             new DrawingOptions()
             {
                 GraphicsOptions = { Antialias = true }
@@ -89,10 +89,10 @@ public class FillPathProcessorTests
     [Fact]
     public void IntRectangle()
     {
-        var imageSize = new Rectangle(0, 0, 500, 500);
-        var expectedRect = new Rectangle(10, 10, 400, 400);
-        var path = new RectangularPolygon(expectedRect);
-        var processor = new FillPathProcessor(
+        Rectangle imageSize = new(0, 0, 500, 500);
+        Rectangle expectedRect = new(10, 10, 400, 400);
+        RectangularPolygon path = new(expectedRect);
+        FillPathProcessor processor = new(
             new DrawingOptions()
             {
                 GraphicsOptions = { Antialias = true }
@@ -109,11 +109,11 @@ public class FillPathProcessorTests
     [Fact]
     public void FloatRectAntialiasingOff()
     {
-        var imageSize = new Rectangle(0, 0, 500, 500);
-        var floatRect = new RectangleF(10.5f, 10.5f, 400.6f, 400.9f);
-        var expectedRect = new Rectangle(10, 10, 400, 400);
-        var path = new RectangularPolygon(floatRect);
-        var processor = new FillPathProcessor(
+        Rectangle imageSize = new(0, 0, 500, 500);
+        RectangleF floatRect = new(10.5f, 10.5f, 400.6f, 400.9f);
+        Rectangle expectedRect = new(10, 10, 400, 400);
+        RectangularPolygon path = new(floatRect);
+        FillPathProcessor processor = new(
             new DrawingOptions()
             {
                 GraphicsOptions = { Antialias = false }
@@ -130,8 +130,8 @@ public class FillPathProcessorTests
     [Fact]
     public void DoesNotThrowForIssue928()
     {
-        var rectText = new RectangleF(0, 0, 2000, 2000);
-        using (var img = new Image<Rgba32>((int)rectText.Width, (int)rectText.Height))
+        RectangleF rectText = new(0, 0, 2000, 2000);
+        using (Image<Rgba32> img = new((int)rectText.Width, (int)rectText.Height))
         {
             img.Mutate(x => x.Fill(Color.Transparent));
 
@@ -153,9 +153,9 @@ public class FillPathProcessorTests
     [Fact]
     public void DoesNotThrowFillingTriangle()
     {
-        using (var image = new Image<Rgba32>(28, 28))
+        using (Image<Rgba32> image = new(28, 28))
         {
-            var path = new Polygon(
+            Polygon path = new(
                 new LinearLineSegment(new PointF(17.11f, 13.99659f), new PointF(14.01433f, 27.06201f)),
                 new LinearLineSegment(new PointF(14.01433f, 27.06201f), new PointF(13.79267f, 14.00023f)),
                 new LinearLineSegment(new PointF(13.79267f, 14.00023f), new PointF(17.11f, 13.99659f)));

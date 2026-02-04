@@ -18,8 +18,8 @@ public class FillRectangle
     [Benchmark(Baseline = true, Description = "System.Drawing Fill Rectangle")]
     public SDSize FillRectangleSystemDrawing()
     {
-        using (var destination = new Bitmap(800, 800))
-        using (var graphics = Graphics.FromImage(destination))
+        using (Bitmap destination = new(800, 800))
+        using (Graphics graphics = Graphics.FromImage(destination))
         {
             graphics.InterpolationMode = InterpolationMode.Default;
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -32,7 +32,7 @@ public class FillRectangle
     [Benchmark(Description = "ImageSharp Fill Rectangle")]
     public Size FillRectangleCore()
     {
-        using (var image = new Image<Rgba32>(800, 800))
+        using (Image<Rgba32> image = new(800, 800))
         {
             image.Mutate(x => x.Fill(Color.HotPink, new Rectangle(10, 10, 190, 140)));
 
@@ -43,7 +43,7 @@ public class FillRectangle
     [Benchmark(Description = "ImageSharp Fill Rectangle - As Polygon")]
     public Size FillPolygonCore()
     {
-        using (var image = new Image<Rgba32>(800, 800))
+        using (Image<Rgba32> image = new(800, 800))
         {
             image.Mutate(x => x.FillPolygon(
                 Color.HotPink,

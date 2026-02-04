@@ -27,7 +27,7 @@ public class PathExtentionTests
             .Callback<Matrix3x2>(m =>
             {
                 // validate matrix in here
-                var targetMatrix = Matrix3x2.CreateRotation(Angle, RectangleF.Center(this.bounds));
+                Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(Angle, RectangleF.Center(this.bounds));
 
                 Assert.Equal(targetMatrix, m);
             }).Returns(this.mockPath.Object);
@@ -48,7 +48,7 @@ public class PathExtentionTests
                 // validate matrix in here
                 const float Radians = (float)(Math.PI * Angle / 180.0);
 
-                var targetMatrix = Matrix3x2.CreateRotation(Radians, RectangleF.Center(this.bounds));
+                Matrix3x2 targetMatrix = Matrix3x2.CreateRotation(Radians, RectangleF.Center(this.bounds));
 
                 Assert.Equal(targetMatrix, m);
             }).Returns(this.mockPath.Object);
@@ -61,13 +61,13 @@ public class PathExtentionTests
     [Fact]
     public void TranslateVector()
     {
-        var point = new Vector2(98, 120);
+        Vector2 point = new(98, 120);
 
         this.mockPath.Setup(x => x.Transform(It.IsAny<Matrix3x2>()))
             .Callback<Matrix3x2>(m =>
             {
                 // validate matrix in here
-                var targetMatrix = Matrix3x2.CreateTranslation(point);
+                Matrix3x2 targetMatrix = Matrix3x2.CreateTranslation(point);
 
                 Assert.Equal(targetMatrix, m);
             }).Returns(this.mockPath.Object);
@@ -87,7 +87,7 @@ public class PathExtentionTests
             .Callback<Matrix3x2>(m =>
             {
                 // validate matrix in here
-                var targetMatrix = Matrix3x2.CreateTranslation(new Vector2(X, Y));
+                Matrix3x2 targetMatrix = Matrix3x2.CreateTranslation(new Vector2(X, Y));
 
                 Assert.Equal(targetMatrix, m);
             }).Returns(this.mockPath.Object);

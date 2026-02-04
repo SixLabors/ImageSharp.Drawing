@@ -41,7 +41,7 @@ public abstract class BaseImageOperationsExtensionTest
 
     public IEnumerable<T> VerifyAll<T>()
     {
-        List<T> items = new();
+        List<T> items = [];
         Assert.All(this.internalOperations.Applied, operation =>
         {
             if (operation.NonGenericProcessor != null)

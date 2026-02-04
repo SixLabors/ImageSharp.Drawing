@@ -20,7 +20,7 @@ public class SolidFillBlendedShapesTests
         {
             foreach (object blending in Enum.GetValues(typeof(PixelColorBlendingMode)))
             {
-                yield return new object[] { blending, composition };
+                yield return [blending, composition];
             }
         }
     }
@@ -193,7 +193,7 @@ public class SolidFillBlendedShapesTests
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
-        var comparer = ImageComparer.TolerantPercentage(0.01f, 3);
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.01f, 3);
         img.CompareFirstFrameToReferenceOutput(
             comparer,
             provider,

@@ -16,7 +16,7 @@ internal class ClipperOffset
     /// <param name="meterLimit">meter limit</param>
     /// <param name="arcTolerance">arc tolerance</param>
     public ClipperOffset(float meterLimit = 2F, float arcTolerance = .25F)
-        => this.polygonClipperOffset = new(meterLimit, arcTolerance);
+        => this.polygonClipperOffset = new PolygonOffsetter(meterLimit, arcTolerance);
 
     /// <summary>
     /// Calculates an offset polygon based on the given path and width.
@@ -25,18 +25,14 @@ internal class ClipperOffset
     /// <returns>path offset</returns>
     public ComplexPolygon Execute(float width)
     {
-        PathsF solution = new();
+        PathsF solution = [];
         this.polygonClipperOffset.Execute(width, solution);
 
         Polygon[] polygons = new Polygon[solution.Count];
         for (int i = 0; i < solution.Count; i++)
         {
             PathF pt = solution[i];
-            PointF[] points = new PointF[pt.Count];
-            for (int j = 0; j < pt.Count; j++)
-            {
-                points[j] = pt[j];
-            }
+            PointF[] points = pt.ToArray();
 
             polygons[i] = new Polygon(points);
         }
@@ -53,10 +49,7 @@ internal class ClipperOffset
     public void AddPath(ReadOnlySpan<PointF> pathPoints, JointStyle jointStyle, EndCapStyle endCapStyle)
     {
         PathF points = new(pathPoints.Length);
-        for (int i = 0; i < pathPoints.Length; i++)
-        {
-            points.Add(pathPoints[i]);
-        }
+        points.AddRange(pathPoints);
 
         this.polygonClipperOffset.AddPath(points, jointStyle, endCapStyle);
     }

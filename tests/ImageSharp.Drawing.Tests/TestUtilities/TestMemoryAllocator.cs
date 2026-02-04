@@ -10,8 +10,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 
 internal class TestMemoryAllocator : MemoryAllocator
 {
-    private readonly List<AllocationRequest> allocationLog = new();
-    private readonly List<ReturnRequest> returnLog = new();
+    private readonly List<AllocationRequest> allocationLog = [];
+    private readonly List<ReturnRequest> returnLog = [];
 
     public TestMemoryAllocator(byte dirtyValue = 42) => this.DirtyValue = dirtyValue;
 
@@ -37,7 +37,7 @@ internal class TestMemoryAllocator : MemoryAllocator
     private T[] AllocateArray<T>(int length, AllocationOptions options)
         where T : struct
     {
-        var array = new T[length + 42];
+        T[] array = new T[length + 42];
         this.allocationLog.Add(AllocationRequest.Create(options, length, array));
 
         if (options == AllocationOptions.None)

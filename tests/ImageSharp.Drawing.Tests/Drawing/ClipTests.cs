@@ -26,9 +26,9 @@ public class ClipTests
             {
                 Size size = x.GetCurrentSize();
                 int outerRadii = (int)(Math.Min(size.Width, size.Height) * sizeMult);
-                var star = new Star(new PointF(size.Width / 2, size.Height / 2), 5, outerRadii / 2, outerRadii);
+                Star star = new(new PointF(size.Width / 2, size.Height / 2), 5, outerRadii / 2, outerRadii);
 
-                var builder = Matrix3x2.CreateTranslation(new Vector2(dx, dy));
+                Matrix3x2 builder = Matrix3x2.CreateTranslation(new Vector2(dx, dy));
                 x.Clip(star.Transform(builder), x => x.DetectEdges());
             },
             testOutputDetails: testDetails,
@@ -39,10 +39,10 @@ public class ClipTests
     [Fact]
     public void Issue250_Vertical_Horizontal_Count_Should_Match()
     {
-        var clip = new PathCollection(new RectangularPolygon(new PointF(24, 16), new PointF(777, 385)));
+        PathCollection clip = new(new RectangularPolygon(new PointF(24, 16), new PointF(777, 385)));
 
-        var vert = new Path(new LinearLineSegment(new PointF(26, 384), new PointF(26, 163)));
-        var horiz = new Path(new LinearLineSegment(new PointF(26, 163), new PointF(176, 163)));
+        Path vert = new(new LinearLineSegment(new PointF(26, 384), new PointF(26, 163)));
+        Path horiz = new(new LinearLineSegment(new PointF(26, 163), new PointF(176, 163)));
 
         IPath reverse = vert.Clip(clip);
         IEnumerable<ReadOnlyMemory<PointF>> result1 = vert.Clip(reverse).Flatten().Select(x => x.Points);

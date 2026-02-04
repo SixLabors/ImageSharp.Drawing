@@ -44,8 +44,6 @@ public class ArcLineSegment : ILineSegment
         {
             this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
         }
-
-        this.EndPoint = this.linePoints[^1];
     }
 
     /// <summary>
@@ -80,18 +78,15 @@ public class ArcLineSegment : ILineSegment
         {
             this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
         }
-
-        this.EndPoint = this.linePoints[^1];
     }
 
     private ArcLineSegment(PointF[] linePoints)
     {
         this.linePoints = linePoints;
-        this.EndPoint = this.linePoints[^1];
     }
 
     /// <inheritdoc/>
-    public PointF EndPoint { get; }
+    public PointF EndPoint => this.linePoints[^1];
 
     /// <inheritdoc/>
     public ReadOnlyMemory<PointF> Flatten() => this.linePoints;
@@ -132,7 +127,7 @@ public class ArcLineSegment : ILineSegment
 
         if (EllipticArcOutOfRange(from, to, radius))
         {
-            return new[] { from, to };
+            return [from, to];
         }
 
         EndpointToCenterArcParams(from, to, ref absRadius, rotation, largeArc, sweep, out Vector2 center, out Vector2 angles);
@@ -172,7 +167,7 @@ public class ArcLineSegment : ILineSegment
 
     private static PointF[] EllipticArcToBezierCurve(Vector2 from, Vector2 center, Vector2 radius, float xAngle, float startAngle, float sweepAngle)
     {
-        List<PointF> points = new();
+        List<PointF> points = [];
 
         float s = startAngle;
         float e = s + sweepAngle;

@@ -68,13 +68,13 @@ public sealed class Star : Polygon
         Guard.MustBeGreaterThan(innerRadii, 0, nameof(innerRadii));
         Guard.MustBeGreaterThan(outerRadii, 0, nameof(outerRadii));
 
-        var distanceVectorInner = new Vector2(0, innerRadii);
-        var distanceVectorOuter = new Vector2(0, outerRadii);
+        Vector2 distanceVectorInner = new(0, innerRadii);
+        Vector2 distanceVectorOuter = new(0, outerRadii);
 
         int vertices = prongs * 2;
         float anglePerSegments = (float)(2 * Math.PI / vertices);
         float current = angle;
-        var points = new PointF[vertices];
+        PointF[] points = new PointF[vertices];
         Vector2 distance = distanceVectorInner;
         for (int i = 0; i < vertices; i++)
         {
@@ -87,7 +87,7 @@ public sealed class Star : Polygon
                 distance = distanceVectorInner;
             }
 
-            var rotated = Vector2.Transform(distance, Matrix3x2.CreateRotation(current));
+            Vector2 rotated = Vector2.Transform(distance, Matrix3x2.CreateRotation(current));
 
             points[i] = rotated + location;
 

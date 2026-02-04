@@ -11,10 +11,10 @@ public class PathTests
     [Fact]
     public void Bounds()
     {
-        var seg1 = new LinearLineSegment(new PointF(0, 0), new PointF(2, 2));
-        var seg2 = new LinearLineSegment(new PointF(4, 4), new PointF(5, 5));
+        LinearLineSegment seg1 = new(new PointF(0, 0), new PointF(2, 2));
+        LinearLineSegment seg2 = new(new PointF(4, 4), new PointF(5, 5));
 
-        var path = new Path(seg1, seg2);
+        Path path = new(seg1, seg2);
 
         Assert.Equal(0, path.Bounds.Left);
         Assert.Equal(5, path.Bounds.Right);
@@ -25,7 +25,7 @@ public class PathTests
     [Fact]
     public void SimplePath()
     {
-        var path = new Path(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
+        Path path = new(new LinearLineSegment(new PointF(0, 0), new PointF(10, 0), new PointF(10, 10), new PointF(0, 10)));
         System.Collections.Generic.IReadOnlyList<PointF> points = path.Flatten().Single().Points.ToArray();
 
         Assert.Equal(4, points.Count);

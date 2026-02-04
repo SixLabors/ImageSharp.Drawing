@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public class PathBuilder
 {
-    private readonly List<Figure> figures = new();
+    private readonly List<Figure> figures = [];
     private readonly Matrix3x2 defaultTransform;
     private Figure currentFigure;
     private Matrix3x2 currentTransform;
@@ -36,6 +36,17 @@ public class PathBuilder
         this.Clear();
         this.ResetTransform();
     }
+
+    /// <summary>
+    /// Gets the current transformation matrix.
+    /// </summary>
+    /// <remarks>
+    /// Returns a copy of the matrix. Because <see cref="Matrix3x2"/> is a value type,
+    /// modifications to the returned value do not affect the internal state. To change the transform,
+    /// call <see cref="SetTransform(Matrix3x2)"/>.
+    /// </remarks>
+    /// <value>The current transformation matrix.</value>
+    public Matrix3x2 Transform => this.currentTransform;
 
     /// <summary>
     /// Sets the translation to be applied to all items to follow being applied to the <see cref="PathBuilder"/>.
@@ -144,7 +155,7 @@ public class PathBuilder
     public PathBuilder AddLines(IEnumerable<PointF> points)
     {
         Guard.NotNull(points, nameof(points));
-        return this.AddLines(points.ToArray());
+        return this.AddLines([.. points]);
     }
 
     /// <summary>
@@ -277,7 +288,7 @@ public class PathBuilder
     /// <param name="endPoint">The end point of the arc.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddArc(PointF startPoint, float radiusX, float radiusY, float rotation, bool largeArc, bool sweep, PointF endPoint)
-        => this.AddSegment(new ArcLineSegment(startPoint, endPoint, new(radiusX, radiusY), rotation, largeArc, sweep));
+        => this.AddSegment(new ArcLineSegment(startPoint, endPoint, new SizeF(radiusX, radiusY), rotation, largeArc, sweep));
 
     /// <summary>
     /// Adds an elliptical arc to the current figure.
@@ -349,7 +360,7 @@ public class PathBuilder
     /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddArc(int x, int y, int radiusX, int radiusY, int rotation, int startAngle, int sweepAngle)
-        => this.AddSegment(new ArcLineSegment(new(x, y), new(radiusX, radiusY), rotation, startAngle, sweepAngle));
+        => this.AddSegment(new ArcLineSegment(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle));
 
     /// <summary>
     /// Adds an elliptical arc to the current figure.
@@ -365,7 +376,7 @@ public class PathBuilder
     /// <param name="sweepAngle">The angle between <paramref name="startAngle"/> and the end of the arc.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder AddArc(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
-        => this.AddSegment(new ArcLineSegment(new(x, y), new(radiusX, radiusY), rotation, startAngle, sweepAngle));
+        => this.AddSegment(new ArcLineSegment(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle));
 
     /// <summary>
     /// Starts a new figure but leaves the previous one open.
@@ -420,7 +431,7 @@ public class PathBuilder
     /// <returns>The current set of operations as a complex polygon</returns>
     public IPath Build()
     {
-        IPath[] paths = this.figures.Where(x => !x.IsEmpty).Select(x => x.Build()).ToArray();
+        IPath[] paths = [.. this.figures.Where(x => !x.IsEmpty).Select(x => x.Build())];
         if (paths.Length == 1)
         {
             return paths[0];
@@ -455,7 +466,7 @@ public class PathBuilder
 
     private class Figure
     {
-        private readonly List<ILineSegment> segments = new();
+        private readonly List<ILineSegment> segments = [];
 
         public bool IsClosed { get; set; }
 
@@ -465,7 +476,7 @@ public class PathBuilder
 
         public IPath Build()
             => this.IsClosed
-            ? new Polygon(this.segments.ToArray())
+            ? new Polygon(this.segments.ToArray(), true)
             : new Path(this.segments.ToArray());
     }
 }

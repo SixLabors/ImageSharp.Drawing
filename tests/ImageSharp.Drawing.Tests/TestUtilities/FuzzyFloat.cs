@@ -32,11 +32,11 @@ public struct FuzzyFloat : IEquatable<float>, IXunitSerializable
 
     public static implicit operator float(FuzzyFloat x) => x.value;
 
-    public static implicit operator FuzzyFloat(float x) => new FuzzyFloat(x);
+    public static implicit operator FuzzyFloat(float x) => new(x);
 
-    public static implicit operator FuzzyFloat(int x) => new FuzzyFloat(x);
+    public static implicit operator FuzzyFloat(int x) => new(x);
 
-    public static implicit operator FuzzyFloat(double x) => new FuzzyFloat((float)x);
+    public static implicit operator FuzzyFloat(double x) => new((float)x);
 
     public bool Equals(float x) => x >= this.min && x <= this.max;
 
@@ -56,7 +56,7 @@ public struct FuzzyFloat : IEquatable<float>, IXunitSerializable
         this.max = this.value + this.eps;
     }
 
-    public static FuzzyFloat operator +(FuzzyFloat a, float b) => new FuzzyFloat(a.value + b, a.eps);
+    public static FuzzyFloat operator +(FuzzyFloat a, float b) => new(a.value + b, a.eps);
 
-    public static FuzzyFloat operator -(FuzzyFloat a, float b) => new FuzzyFloat(a.value - b, a.eps);
+    public static FuzzyFloat operator -(FuzzyFloat a, float b) => new(a.value - b, a.eps);
 }

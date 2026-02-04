@@ -33,3 +33,10 @@ public enum EndCapStyle
     /// </summary>
     Joined = 4
 }
+
+internal enum LineCap
+{
+    Butt,
+    Square,
+    Round
+}

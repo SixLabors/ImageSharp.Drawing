@@ -21,7 +21,7 @@ internal static class PolygonFactory
     // https://github.com/SixLabors/ImageSharp.Drawing/issues/15#issuecomment-521061283
     public static IReadOnlyList<PointF[]> GetGeoJsonPoints(Feature geometryOwner, Matrix3x2 transform)
     {
-        var result = new List<PointF[]>();
+        List<PointF[]> result = [];
         IGeometryObject geometry = geometryOwner.Geometry;
         if (geometry is GeoJSON.Net.Geometry.Polygon p)
         {
@@ -88,7 +88,7 @@ internal static class PolygonFactory
 
     public static T[] CloneArray<T>(this T[] points)
     {
-        var result = new T[points.Length];
+        T[] result = new T[points.Length];
         Array.Copy(points, result, points.Length);
         return result;
     }
