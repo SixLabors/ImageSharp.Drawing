@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.PolygonClipper;
-
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -20,7 +18,7 @@ public class ShapeOptions : IDeepCloneable<ShapeOptions>
     private ShapeOptions(ShapeOptions source)
     {
         this.IntersectionRule = source.IntersectionRule;
-        this.ClippingOperation = source.ClippingOperation;
+        this.BooleanOperation = source.BooleanOperation;
     }
 
     /// <summary>
@@ -28,7 +26,7 @@ public class ShapeOptions : IDeepCloneable<ShapeOptions>
     /// <para/>
     /// Defaults to <see cref="BooleanOperation.Difference"/>.
     /// </summary>
-    public BooleanOperation ClippingOperation { get; set; } = BooleanOperation.Difference;
+    public BooleanOperation BooleanOperation { get; set; } = BooleanOperation.Difference;
 
     /// <summary>
     /// Gets or sets the rule for calculating intersection points.

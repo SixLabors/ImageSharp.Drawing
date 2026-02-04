@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
-using SixLabors.ImageSharp.Drawing.Shapes.Helpers;
+using SixLabors.ImageSharp.Drawing.Processing;
 
 #pragma warning disable SA1201 // Elements should appear in the correct order
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
@@ -28,7 +28,6 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 /// </para>
 /// </remarks>
 internal sealed class PolygonStroker
-
 {
     private ArrayBuilder<PointF> outVertices = new(1);
     private ArrayBuilder<VertexDistance> srcVertices = new(16);
@@ -42,18 +41,56 @@ internal sealed class PolygonStroker
     private double widthEps = 0.5 / 1024.0;
     private int widthSign = 1;
 
-    public double MiterLimit { get; set; } = 4;
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PolygonStroker"/> class with the specified stroke options.
+    /// </summary>
+    /// <param name="options">
+    /// The stroke options to use for configuring line joins, caps, miter limits, and approximation scale.
+    /// Cannot be <see langword="null"/>.
+    /// </param>
+    public PolygonStroker(StrokeOptions options)
+    {
+        this.LineJoin = options.LineJoin;
+        this.InnerJoin = options.InnerJoin;
+        this.LineCap = options.LineCap;
+        this.MiterLimit = options.MiterLimit;
+        this.InnerMiterLimit = options.InnerMiterLimit;
+        this.ApproximationScale = options.ApproximationScale;
+    }
 
-    public double InnerMiterLimit { get; set; } = 1.01;
+    /// <summary>
+    /// Gets the miter limit used to clamp outer miter joins.
+    /// </summary>
+    public double MiterLimit { get; }
 
-    public double ApproximationScale { get; set; } = 1.0;
+    /// <summary>
+    /// Gets the inner miter limit used to clamp joins on acute interior angles.
+    /// </summary>
+    public double InnerMiterLimit { get; }
 
-    public LineJoin LineJoin { get; set; } = LineJoin.BevelJoin;
+    /// <summary>
+    /// Gets the arc approximation scale used for round joins and caps.
+    /// </summary>
+    public double ApproximationScale { get; }
 
-    public LineCap LineCap { get; set; } = LineCap.Butt;
+    /// <summary>
+    /// Gets the outer line join style used for stroking corners.
+    /// </summary>
+    public LineJoin LineJoin { get; }
 
-    public InnerJoin InnerJoin { get; set; } = InnerJoin.InnerMiter;
+    /// <summary>
+    /// Gets the line cap style used for open path ends.
+    /// </summary>
+    public LineCap LineCap { get; }
 
+    /// <summary>
+    /// Gets the join style used for sharp interior angles.
+    /// </summary>
+    public InnerJoin InnerJoin { get; }
+
+    /// <summary>
+    /// Gets or sets the stroke width in the caller's coordinate space.
+    /// </summary>
     public double Width
     {
         get => this.strokeWidth * 2.0;
@@ -75,6 +112,12 @@ internal sealed class PolygonStroker
         }
     }
 
+    /// <summary>
+    /// Strokes the provided polyline or polygon and returns the outline vertices.
+    /// </summary>
+    /// <param name="linePoints">The input points to stroke.</param>
+    /// <param name="isClosed">Whether the input is a closed ring.</param>
+    /// <returns>The stroked outline as a closed point array.</returns>
     public PointF[] ProcessPath(ReadOnlySpan<PointF> linePoints, bool isClosed)
     {
         if (linePoints.Length < 2)
@@ -95,6 +138,10 @@ internal sealed class PolygonStroker
         return [.. results];
     }
 
+    /// <summary>
+    /// Adds a sequence of line segments to the current stroker state.
+    /// </summary>
+    /// <param name="linePoints">The input points to add as line segments.</param>
     public void AddLinePath(ReadOnlySpan<PointF> linePoints)
     {
         for (int i = 0; i < linePoints.Length; i++)
@@ -104,6 +151,9 @@ internal sealed class PolygonStroker
         }
     }
 
+    /// <summary>
+    /// Marks the current path as closed before finishing the outline.
+    /// </summary>
     public void ClosePath()
     {
         // Mark the current src path as closed; no geometry is pushed here.
@@ -111,6 +161,10 @@ internal sealed class PolygonStroker
         this.status = Status.Initial;
     }
 
+    /// <summary>
+    /// Finalizes stroking and appends output points to the provided list.
+    /// </summary>
+    /// <param name="results">The list that receives the stroked outline vertices.</param>
     public void FinishPath(List<PointF> results)
     {
         PointF currentPoint = new(0, 0);
@@ -137,6 +191,9 @@ internal sealed class PolygonStroker
         }
     }
 
+    /// <summary>
+    /// Resets the stroker state so it can be reused for a new path.
+    /// </summary>
     public void Reset()
     {
         this.srcVertices.Clear();
@@ -483,14 +540,14 @@ internal sealed class PolygonStroker
 
         switch (lj)
         {
-            case LineJoin.MiterJoinRevert:
+            case LineJoin.MiterRevert:
 
                 this.AddPoint(v1.X + dx1, v1.Y - dy1);
                 this.AddPoint(v1.X + dx2, v1.Y - dy2);
 
                 break;
 
-            case LineJoin.MiterJoinRound:
+            case LineJoin.MiterRound:
                 this.CalcArc(v1.X, v1.Y, dx1, -dy1, dx2, -dy2);
 
                 break;
@@ -629,19 +686,19 @@ internal sealed class PolygonStroker
 
                     break;
 
-                case InnerJoin.InnerMiter:
-                    this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterJoinRevert, limit, 0);
+                case InnerJoin.Miter:
+                    this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterRevert, limit, 0);
 
                     break;
 
-                case InnerJoin.InnerJag:
-                case InnerJoin.InnerRound:
+                case InnerJoin.Jag:
+                case InnerJoin.Round:
                     cp = ((dx1 - dx2) * (dx1 - dx2)) + ((dy1 - dy2) * (dy1 - dy2));
                     if (cp < len1 * len1 && cp < len2 * len2)
                     {
-                        this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterJoinRevert, limit, 0);
+                        this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterRevert, limit, 0);
                     }
-                    else if (this.InnerJoin == InnerJoin.InnerJag)
+                    else if (this.InnerJoin == InnerJoin.Jag)
                     {
                         this.AddPoint(v1.X + dx1, v1.Y - dy1);
                         this.AddPoint(v1.X, v1.Y);
@@ -665,7 +722,7 @@ internal sealed class PolygonStroker
             double dy = (dy1 + dy2) / 2;
             double dbevel = Math.Sqrt((dx * dx) + (dy * dy));
 
-            if (this.LineJoin is LineJoin.RoundJoin or LineJoin.BevelJoin && this.ApproximationScale * (this.widthAbs - dbevel) < this.widthEps)
+            if (this.LineJoin is LineJoin.Round or LineJoin.Bevel && this.ApproximationScale * (this.widthAbs - dbevel) < this.widthEps)
             {
                 if (UtilityMethods.CalcIntersection(v0.X + dx1, v0.Y - dy1, v1.X + dx1, v1.Y - dy1, v1.X + dx2, v1.Y - dy2, v2.X + dx2, v2.Y - dy2, ref dx, ref dy))
                 {
@@ -681,14 +738,14 @@ internal sealed class PolygonStroker
 
             switch (this.LineJoin)
             {
-                case LineJoin.MiterJoin:
-                case LineJoin.MiterJoinRevert:
-                case LineJoin.MiterJoinRound:
+                case LineJoin.Miter:
+                case LineJoin.MiterRevert:
+                case LineJoin.MiterRound:
                     this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, this.LineJoin, this.MiterLimit, dbevel);
 
                     break;
 
-                case LineJoin.RoundJoin:
+                case LineJoin.Round:
                     this.CalcArc(v1.X, v1.Y, dx1, -dy1, dx2, -dy2);
 
                     break;

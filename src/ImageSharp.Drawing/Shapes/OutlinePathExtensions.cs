@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 namespace SixLabors.ImageSharp.Drawing;
@@ -11,10 +12,6 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public static class OutlinePathExtensions
 {
-    private const float MiterOffsetDelta = 20;
-    private const JointStyle DefaultJointStyle = JointStyle.Square;
-    private const EndCapStyle DefaultEndCapStyle = EndCapStyle.Butt;
-
     /// <summary>
     /// Generates an outline of the path.
     /// </summary>
@@ -22,24 +19,23 @@ public static class OutlinePathExtensions
     /// <param name="width">The outline width.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     public static IPath GenerateOutline(this IPath path, float width)
-        => GenerateOutline(path, width, DefaultJointStyle, DefaultEndCapStyle);
+        => GenerateOutline(path, width, new StrokeOptions());
 
     /// <summary>
     /// Generates an outline of the path.
     /// </summary>
     /// <param name="path">The path to outline</param>
     /// <param name="width">The outline width.</param>
-    /// <param name="jointStyle">The style to apply to the joints.</param>
-    /// <param name="endCapStyle">The style to apply to the end caps.</param>
+    /// <param name="strokeOptions">The stroke geometry options.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
-    public static IPath GenerateOutline(this IPath path, float width, JointStyle jointStyle, EndCapStyle endCapStyle)
+    public static IPath GenerateOutline(this IPath path, float width, StrokeOptions strokeOptions)
     {
         if (width <= 0)
         {
             return Path.Empty;
         }
 
-        StrokedShapeGenerator generator = new(MiterOffsetDelta);
+        StrokedShapeGenerator generator = new(strokeOptions);
         return new ComplexPolygon(generator.GenerateStrokedShapes(path, width));
     }
 
@@ -59,22 +55,21 @@ public static class OutlinePathExtensions
     /// <param name="path">The path to outline</param>
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
+    /// <param name="strokeOptions">The stroke geometry options.</param>
+    /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
+    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, StrokeOptions strokeOptions)
+        => GenerateOutline(path, width, pattern, false, strokeOptions);
+
+    /// <summary>
+    /// Generates an outline of the path with alternating on and off segments based on the pattern.
+    /// </summary>
+    /// <param name="path">The path to outline</param>
+    /// <param name="width">The outline width.</param>
+    /// <param name="pattern">The pattern made of multiples of the width.</param>
     /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
-        => GenerateOutline(path, width, pattern, startOff, DefaultJointStyle, DefaultEndCapStyle);
-
-    /// <summary>
-    /// Generates an outline of the path with alternating on and off segments based on the pattern.
-    /// </summary>
-    /// <param name="path">The path to outline</param>
-    /// <param name="width">The outline width.</param>
-    /// <param name="pattern">The pattern made of multiples of the width.</param>
-    /// <param name="jointStyle">The style to apply to the joints.</param>
-    /// <param name="endCapStyle">The style to apply to the end caps.</param>
-    /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
-    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, JointStyle jointStyle, EndCapStyle endCapStyle)
-        => GenerateOutline(path, width, pattern, false, jointStyle, endCapStyle);
+        => GenerateOutline(path, width, pattern, startOff, new StrokeOptions());
 
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
@@ -83,10 +78,14 @@ public static class OutlinePathExtensions
     /// <param name="width">The outline width.</param>
     /// <param name="pattern">The pattern made of multiples of the width.</param>
     /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
-    /// <param name="jointStyle">The style to apply to the joints.</param>
-    /// <param name="endCapStyle">The style to apply to the end caps.</param>
+    /// <param name="strokeOptions">The stroke geometry options.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
-    public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff, JointStyle jointStyle, EndCapStyle endCapStyle)
+    public static IPath GenerateOutline(
+        this IPath path,
+        float width,
+        ReadOnlySpan<float> pattern,
+        bool startOff,
+        StrokeOptions strokeOptions)
     {
         if (width <= 0)
         {
@@ -95,10 +94,24 @@ public static class OutlinePathExtensions
 
         if (pattern.Length < 2)
         {
-            return path.GenerateOutline(width, jointStyle, endCapStyle);
+            return path.GenerateOutline(width, strokeOptions);
         }
 
         const float eps = 1e-6f;
+        const int maxPatternSegments = 10000;
+
+        // Compute the absolute pattern length in path units to detect degenerate patterns.
+        float patternLength = 0f;
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            patternLength += MathF.Abs(pattern[i]) * width;
+        }
+
+        // Fallback to a solid outline when the dash pattern is too small to be meaningful.
+        if (patternLength <= eps)
+        {
+            return path.GenerateOutline(width, strokeOptions);
+        }
 
         IEnumerable<ISimplePath> paths = path.Flatten();
 
@@ -119,6 +132,24 @@ public static class OutlinePathExtensions
 
             // number of edges to traverse (no wrap for open paths)
             int edgeCount = p.IsClosed ? pts.Length : pts.Length - 1;
+            float totalLength = 0f;
+
+            // Compute total path length to estimate the number of dash segments to produce.
+            for (int j = 0; j < edgeCount; j++)
+            {
+                int nextIndex = p.IsClosed ? (j + 1) % pts.Length : j + 1;
+                totalLength += Vector2.Distance(pts[j], pts[nextIndex]);
+            }
+
+            if (totalLength > eps)
+            {
+                // Avoid runaway segmentation by falling back when the dash count explodes.
+                float estimatedSegments = (totalLength / patternLength) * pattern.Length;
+                if (estimatedSegments > maxPatternSegments)
+                {
+                    return path.GenerateOutline(width, strokeOptions);
+                }
+            }
 
             int i = 0;
             Vector2 current = pts[0];
@@ -129,6 +160,7 @@ public static class OutlinePathExtensions
                 Vector2 next = pts[nextIndex];
                 float segLen = Vector2.Distance(current, next);
 
+                // Skip degenerate segments.
                 if (segLen <= eps)
                 {
                     current = next;
@@ -136,6 +168,7 @@ public static class OutlinePathExtensions
                     continue;
                 }
 
+                // Accumulate into the current dash span when the segment is shorter than the target.
                 if (segLen + eps < targetLength)
                 {
                     buffer.Add(current);
@@ -145,6 +178,7 @@ public static class OutlinePathExtensions
                     continue;
                 }
 
+                // Close out a dash span when the segment length matches the target length.
                 if (MathF.Abs(segLen - targetLength) <= eps)
                 {
                     buffer.Add(current);
@@ -165,7 +199,7 @@ public static class OutlinePathExtensions
                     continue;
                 }
 
-                // split inside this segment
+                // Split inside this segment to end the current dash span.
                 float t = targetLength / segLen; // 0 < t < 1 here
                 Vector2 split = current + (t * (next - current));
 
@@ -201,7 +235,7 @@ public static class OutlinePathExtensions
         }
 
         // Each outline span is stroked as an open polyline; the union cleans overlaps.
-        StrokedShapeGenerator generator = new(MiterOffsetDelta);
+        StrokedShapeGenerator generator = new(strokeOptions);
         return new ComplexPolygon(generator.GenerateStrokedShapes(outlines, width));
     }
 }

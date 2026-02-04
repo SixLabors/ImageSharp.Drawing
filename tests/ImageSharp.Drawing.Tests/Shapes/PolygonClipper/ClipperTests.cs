@@ -4,7 +4,6 @@
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
-using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper;
 

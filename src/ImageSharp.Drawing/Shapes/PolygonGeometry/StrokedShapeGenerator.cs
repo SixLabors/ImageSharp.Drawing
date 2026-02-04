@@ -2,8 +2,8 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Utilities;
-using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
@@ -17,15 +17,8 @@ internal sealed class StrokedShapeGenerator
     /// <summary>
     /// Initializes a new instance of the <see cref="StrokedShapeGenerator"/> class.
     /// </summary>
-    /// <param name="meterLimit">meter limit</param>
-    /// <param name="arcTolerance">arc tolerance</param>
-    public StrokedShapeGenerator(float meterLimit = 2F, float arcTolerance = .25F)
-    {
-        // TODO: We need to consume the joint type properties here.
-        // to do so we need to replace the existing ones with our new enums and update
-        // the overloads and pens.
-        this.polygonStroker = new PolygonStroker();
-    }
+    public StrokedShapeGenerator(StrokeOptions options)
+        => this.polygonStroker = new PolygonStroker(options);
 
     /// <summary>
     /// Strokes a collection of dashed polyline spans and returns a merged outline.
@@ -43,24 +36,17 @@ internal sealed class StrokedShapeGenerator
     /// </returns>
     /// <remarks>
     /// This method streams each dashed span through the internal stroker as an open polyline,
-    /// producing closed stroke rings. To clean self overlaps, the rings are split between
-    /// subject and clip sets and a <see cref="BooleanOperation.Union"/> is performed.
-    /// The split ensures at least two operands so the union resolves overlaps.
+    /// producing closed stroke rings. To clean self overlaps, all rings are added as subject
+    /// paths and a <see cref="BooleanOperation.Union"/> is performed.
     /// The union uses <see cref="IntersectionRule.NonZero"/> to preserve winding density.
     /// </remarks>
     public IPath[] GenerateStrokedShapes(List<PointF[]> spans, float width)
     {
-        // PolygonClipper is not designed to clean up self-intersecting geometry within a single polygon.
-        // It operates strictly on two polygon operands (subject and clip) and only resolves overlaps
-        // between them. To force cleanup of dashed stroke overlaps, we alternate assigning each
-        // stroked segment to subject or clip, ensuring at least two operands exist so the union
-        // operation performs a true merge rather than a no-op on a single polygon.
-
         // 1) Stroke each dashed span as open.
         this.polygonStroker.Width = width;
 
         List<PointF[]> ringPoints = new(spans.Count);
-        List<IPath> rings = new(spans.Count);
+        List<Polygon> rings = new(spans.Count);
         foreach (PointF[] span in spans)
         {
             if (span == null || span.Length < 2)
@@ -89,37 +75,10 @@ internal sealed class StrokedShapeGenerator
             return count == 1 ? [rings[0]] : [.. rings];
         }
 
-        // 2) Partition so the first and last are on different polygons
-        List<IPath> subjectRings = new(count);
-        List<IPath> clipRings = new(count);
-
-        // First => subject
-        subjectRings.Add(rings[0]);
-
-        // Middle by alternation using a single bool flag
-        bool assignToSubject = false; // start with clip for i=1
-        for (int i = 1; i < count - 1; i++)
-        {
-            if (assignToSubject)
-            {
-                subjectRings.Add(rings[i]);
-            }
-            else
-            {
-                clipRings.Add(rings[i]);
-            }
-
-            assignToSubject = !assignToSubject;
-        }
-
-        // Last => opposite of first (i.e., clip)
-        clipRings.Add(rings[count - 1]);
-
-        // 3) Union subject vs clip
+        // 2) Union all rings as subject paths
         ClippedShapeGenerator clipper = new(IntersectionRule.NonZero);
-        clipper.AddPaths(subjectRings, ClippingType.Subject);
-        clipper.AddPaths(clipRings, ClippingType.Clip);
-        return clipper.GenerateClippedShapes(BooleanOperation.Union);
+        clipper.AddPaths(rings, ClippingType.Subject);
+        return clipper.GenerateClippedShapes(BooleanOperation.Union, true);
     }
 
     /// <summary>
@@ -135,16 +94,15 @@ internal sealed class StrokedShapeGenerator
     /// <remarks>
     /// Each flattened simple path is streamed through the internal stroker as open or closed
     /// according to <see cref="ISimplePath.IsClosed"/>. The resulting stroke rings are split
-    /// between subject and clip sets and combined using <see cref="BooleanOperation.Union"/>.
-    /// This split is required because the Martinez based clipper resolves overlaps only between
-    /// two operands. Using <see cref="IntersectionRule.NonZero"/> preserves fill across overlaps
-    /// and prevents unintended holes in the merged outline.
+    /// paths and combined using <see cref="BooleanOperation.Union"/>. Using
+    /// <see cref="IntersectionRule.NonZero"/> preserves fill across overlaps and prevents
+    /// unintended holes in the merged outline.
     /// </remarks>
     public IPath[] GenerateStrokedShapes(IPath path, float width)
     {
         // 1) Stroke the input path into closed rings
         List<PointF[]> ringPoints = [];
-        List<IPath> rings = [];
+        List<Polygon> rings = [];
         this.polygonStroker.Width = width;
 
         foreach (ISimplePath p in path.Flatten())
@@ -170,43 +128,12 @@ internal sealed class StrokedShapeGenerator
             return count == 1 ? [rings[0]] : [.. rings];
         }
 
-        // 2) Partition so the first and last are on different polygons
-        // PolygonClipper is not designed to clean up self-intersecting geometry within a single polygon.
-        // It operates strictly on two polygon operands (subject and clip) and only resolves overlaps
-        // between them. To force cleanup of overlaps, we alternate assigning each stroked ring to
-        // subject or clip, ensuring at least two operands exist so the union performs a true merge.
-        List<IPath> subjectRings = new(count);
-        List<IPath> clipRings = new(count);
-
-        // First => subject
-        subjectRings.Add(rings[0]);
-
-        // Middle by alternation using a single bool flag
-        bool assignToSubject = false; // start with clip for i=1
-        for (int i = 1; i < count - 1; i++)
-        {
-            if (assignToSubject)
-            {
-                subjectRings.Add(rings[i]);
-            }
-            else
-            {
-                clipRings.Add(rings[i]);
-            }
-
-            assignToSubject = !assignToSubject;
-        }
-
-        // Last => opposite of first (i.e., clip)
-        clipRings.Add(rings[count - 1]);
-
-        // 3) Union subject vs clip
+        // 2) Union all rings as subject paths
         ClippedShapeGenerator clipper = new(IntersectionRule.NonZero);
-        clipper.AddPaths(subjectRings, ClippingType.Subject);
-        clipper.AddPaths(clipRings, ClippingType.Clip);
+        clipper.AddPaths(rings, ClippingType.Subject);
 
-        // 4) Return the cleaned, merged outline
-        return clipper.GenerateClippedShapes(BooleanOperation.Union);
+        // 3) Return the cleaned, merged outline
+        return clipper.GenerateClippedShapes(BooleanOperation.Union, true);
     }
 
     /// <summary>

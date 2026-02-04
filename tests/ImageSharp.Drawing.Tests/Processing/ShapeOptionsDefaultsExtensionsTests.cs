@@ -3,7 +3,6 @@
 
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
@@ -28,7 +27,7 @@ public class ShapeOptionsDefaultsExtensionsTests
     {
         ShapeOptions option = new()
         {
-            ClippingOperation = BooleanOperation.Intersection,
+            BooleanOperation = BooleanOperation.Intersection,
             IntersectionRule = IntersectionRule.NonZero
         };
         Configuration config = new();
@@ -37,18 +36,18 @@ public class ShapeOptionsDefaultsExtensionsTests
 
         context.SetShapeOptions(o =>
         {
-            Assert.Equal(BooleanOperation.Intersection, o.ClippingOperation); // has original values
+            Assert.Equal(BooleanOperation.Intersection, o.BooleanOperation); // has original values
             Assert.Equal(IntersectionRule.NonZero, o.IntersectionRule);
 
-            o.ClippingOperation = BooleanOperation.Xor;
+            o.BooleanOperation = BooleanOperation.Xor;
             o.IntersectionRule = IntersectionRule.EvenOdd;
         });
 
         ShapeOptions returnedOption = context.GetShapeOptions();
 
-        Assert.Equal(BooleanOperation.Xor, returnedOption.ClippingOperation);
+        Assert.Equal(BooleanOperation.Xor, returnedOption.BooleanOperation);
         Assert.Equal(IntersectionRule.EvenOdd, returnedOption.IntersectionRule);
-        Assert.Equal(BooleanOperation.Intersection, option.ClippingOperation); // hasn't been mutated
+        Assert.Equal(BooleanOperation.Intersection, option.BooleanOperation); // hasn't been mutated
         Assert.Equal(IntersectionRule.NonZero, option.IntersectionRule);
     }
 
@@ -68,7 +67,7 @@ public class ShapeOptionsDefaultsExtensionsTests
     {
         ShapeOptions option = new()
         {
-            ClippingOperation = BooleanOperation.Intersection,
+            BooleanOperation = BooleanOperation.Intersection,
             IntersectionRule = IntersectionRule.NonZero
         };
         Configuration config = new();
@@ -76,16 +75,16 @@ public class ShapeOptionsDefaultsExtensionsTests
 
         config.SetShapeOptions(o =>
         {
-            Assert.Equal(BooleanOperation.Intersection, o.ClippingOperation); // has original values
+            Assert.Equal(BooleanOperation.Intersection, o.BooleanOperation); // has original values
             Assert.Equal(IntersectionRule.NonZero, o.IntersectionRule);
-            o.ClippingOperation = BooleanOperation.Xor;
+            o.BooleanOperation = BooleanOperation.Xor;
             o.IntersectionRule = IntersectionRule.EvenOdd;
         });
 
         ShapeOptions returnedOption = config.GetShapeOptions();
-        Assert.Equal(BooleanOperation.Xor, returnedOption.ClippingOperation);
+        Assert.Equal(BooleanOperation.Xor, returnedOption.BooleanOperation);
         Assert.Equal(IntersectionRule.EvenOdd, returnedOption.IntersectionRule);
-        Assert.Equal(BooleanOperation.Intersection, option.ClippingOperation); // hasn't been mutated
+        Assert.Equal(BooleanOperation.Intersection, option.BooleanOperation); // hasn't been mutated
         Assert.Equal(IntersectionRule.NonZero, option.IntersectionRule);
     }
 

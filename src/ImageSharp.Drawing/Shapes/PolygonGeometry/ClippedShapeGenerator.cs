@@ -1,32 +1,31 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.PolygonClipper;
-using ClipperPolygon = SixLabors.PolygonClipper.Polygon;
-using PolygonClipperAction = SixLabors.PolygonClipper.PolygonClipper;
-
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
 /// <summary>
 /// Generates clipped shapes from one or more input paths using polygon boolean operations.
 /// </summary>
 /// <remarks>
-/// This class provides a high-level wrapper around the low-level <see cref="PolygonClipperAction"/>.
+/// This class provides a high-level wrapper around the low-level <see cref="PolygonClipper"/>.
 /// It accumulates subject and clip polygons, applies the specified <see cref="BooleanOperation"/>,
 /// and converts the resulting polygon contours back into <see cref="IPath"/> instances suitable
 /// for rendering or further processing.
 /// </remarks>
 internal sealed class ClippedShapeGenerator
 {
-    private ClipperPolygon? subject;
-    private ClipperPolygon? clip;
+    private readonly PolygonClipper polygonClipper;
     private readonly IntersectionRule rule;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ClippedShapeGenerator"/> class.
     /// </summary>
     /// <param name="rule">The intersection rule.</param>
-    public ClippedShapeGenerator(IntersectionRule rule) => this.rule = rule;
+    public ClippedShapeGenerator(IntersectionRule rule)
+    {
+        this.rule = rule;
+        this.polygonClipper = new PolygonClipper() { PreserveCollinear = true };
+    }
 
     /// <summary>
     /// Generates the final clipped shapes from the previously provided subject and clip paths.
@@ -35,30 +34,48 @@ internal sealed class ClippedShapeGenerator
     /// The boolean operation to perform, such as <see cref="BooleanOperation.Union"/>,
     /// <see cref="BooleanOperation.Intersection"/>, or <see cref="BooleanOperation.Difference"/>.
     /// </param>
+    /// <param name="positive">TEMP. Remove when we update IntersectionRule to add missing entries.</param>
     /// <returns>
     /// An array of <see cref="IPath"/> instances representing the result of the boolean operation.
     /// </returns>
-    public IPath[] GenerateClippedShapes(BooleanOperation operation)
+    public IPath[] GenerateClippedShapes(BooleanOperation operation, bool? positive = null)
     {
-        ArgumentNullException.ThrowIfNull(this.subject);
-        ArgumentNullException.ThrowIfNull(this.clip);
+        PathsF closedPaths = [];
+        PathsF openPaths = [];
 
-        PolygonClipperAction polygonClipper = new(this.subject, this.clip, operation);
+        ClipperFillRule fillRule = this.rule == IntersectionRule.EvenOdd ? ClipperFillRule.EvenOdd : ClipperFillRule.NonZero;
 
-        ClipperPolygon result = polygonClipper.Run();
+        if (positive.HasValue)
+        {
+            fillRule = positive.Value ? ClipperFillRule.Positive : ClipperFillRule.Negative;
+        }
 
-        IPath[] shapes = new IPath[result.Count];
+        this.polygonClipper.Execute(operation, fillRule, closedPaths, openPaths);
+
+        IPath[] shapes = new IPath[closedPaths.Count + openPaths.Count];
 
         int index = 0;
-        for (int i = 0; i < result.Count; i++)
+        for (int i = 0; i < closedPaths.Count; i++)
         {
-            Contour contour = result[i];
-            PointF[] points = new PointF[contour.Count];
+            PathF path = closedPaths[i];
+            PointF[] points = new PointF[path.Count];
 
-            for (int j = 0; j < contour.Count; j++)
+            for (int j = 0; j < path.Count; j++)
             {
-                Vertex vertex = contour[j];
-                points[j] = new PointF((float)vertex.X, (float)vertex.Y);
+                points[j] = path[j];
+            }
+
+            shapes[index++] = new Polygon(points);
+        }
+
+        for (int i = 0; i < openPaths.Count; i++)
+        {
+            PathF path = openPaths[i];
+            PointF[] points = new PointF[path.Count];
+
+            for (int j = 0; j < path.Count; j++)
+            {
+                points[j] = path[j];
             }
 
             shapes[index++] = new Polygon(points);
@@ -80,16 +97,9 @@ internal sealed class ClippedShapeGenerator
     {
         Guard.NotNull(paths, nameof(paths));
 
-        // Accumulate all paths of the complex shape into a single polygon.
-        ClipperPolygon polygon = PolygonClipperFactory.FromPaths(paths, this.rule);
-
-        if (clippingType == ClippingType.Clip)
+        foreach (IPath p in paths)
         {
-            this.clip = polygon;
-        }
-        else
-        {
-            this.subject = polygon;
+            this.AddPath(p, clippingType);
         }
     }
 
@@ -104,14 +114,21 @@ internal sealed class ClippedShapeGenerator
     {
         Guard.NotNull(path, nameof(path));
 
-        ClipperPolygon polygon = PolygonClipperFactory.FromSimplePaths(path.Flatten(), this.rule);
-        if (clippingType == ClippingType.Clip)
+        foreach (ISimplePath p in path.Flatten())
         {
-            this.clip = polygon;
+            this.AddPath(p, clippingType);
         }
-        else
+    }
+
+    private void AddPath(ISimplePath path, ClippingType clippingType)
+    {
+        ReadOnlySpan<PointF> vectors = path.Points.Span;
+        PathF points = new(vectors.Length);
+        for (int i = 0; i < vectors.Length; i++)
         {
-            this.subject = polygon;
+            points.Add(vectors[i]);
         }
+
+        this.polygonClipper.AddPath(points, clippingType, !path.IsClosed);
     }
 }

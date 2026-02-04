@@ -99,7 +99,10 @@ public class DrawLinesTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f]) { EndCapStyle = EndCapStyle.Round });
+        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f])
+        {
+            StrokeOptions = new StrokeOptions { LineCap = LineCap.Round },
+        });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -110,7 +113,10 @@ public class DrawLinesTests
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f]) { EndCapStyle = EndCapStyle.Butt });
+        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f])
+        {
+            StrokeOptions = new StrokeOptions { LineCap = LineCap.Butt },
+        });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -121,7 +127,10 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f]) { EndCapStyle = EndCapStyle.Square });
+        PatternPen pen = new(new PenOptions(color, thickness, [3f, 3f])
+        {
+            StrokeOptions = new StrokeOptions { LineCap = LineCap.Square },
+        });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -132,7 +141,10 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        SolidPen pen = new(new PenOptions(color, thickness) { JointStyle = JointStyle.Round });
+        SolidPen pen = new(new PenOptions(color, thickness)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Round },
+        });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -143,7 +155,10 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        SolidPen pen = new(new PenOptions(color, thickness) { JointStyle = JointStyle.Square });
+        SolidPen pen = new(new PenOptions(color, thickness)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Bevel },
+        });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
@@ -154,7 +169,10 @@ where TPixel : unmanaged, IPixel<TPixel>
 where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
-        SolidPen pen = new(new PenOptions(color, thickness) { JointStyle = JointStyle.Miter });
+        SolidPen pen = new(new PenOptions(color, thickness)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter },
+        });
 
         DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
     }
