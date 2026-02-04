@@ -437,4 +437,27 @@ public class FillLinearGradientBrushTests
             },
             false,
             false);
+
+    [Theory]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32)]
+    public void RotatedGradient<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => provider.VerifyOperation(
+            image =>
+            {
+                Color red = Color.Red;
+                Color yellow = Color.Yellow;
+
+                // Start -> End along TL->BR, rotated to horizontal via p2
+                LinearGradientBrush brush = new(
+                    new Point(0, 0),
+                    new Point(200, 200),
+                    new Point(0, 100),  // p2 picks horizontal axis
+                    GradientRepetitionMode.None,
+                    new ColorStop(0, red),
+                    new ColorStop(1, yellow));
+                image.Mutate(x => x.Fill(brush));
+            },
+            false,
+            false);
 }

@@ -13,12 +13,12 @@ public interface IPathCollection : IEnumerable<IPath>
     /// <summary>
     /// Gets the bounds enclosing the path
     /// </summary>
-    RectangleF Bounds { get; }
+    public RectangleF Bounds { get; }
 
     /// <summary>
     /// Transforms the path using the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>
-    /// <returns>A new path with the matrix applied to it.</returns>
-    IPathCollection Transform(Matrix3x2 matrix);
+    /// <returns>A new path collection with the matrix applied to it.</returns>
+    public IPathCollection Transform(Matrix3x2 matrix);
 }

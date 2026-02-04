@@ -16,4 +16,8 @@ internal struct DrawingOperation
     public Point RenderLocation { get; set; }
 
     public Brush Brush { get; internal set; }
+
+    public PixelAlphaCompositionMode PixelAlphaCompositionMode { get; set; }
+
+    public PixelColorBlendingMode PixelColorBlendingMode { get; set; }
 }
