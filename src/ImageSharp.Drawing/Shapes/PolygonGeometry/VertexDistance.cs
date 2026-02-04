@@ -93,5 +93,6 @@ internal static unsafe class UtilityMethods
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double CrossProduct(double x1, double y1, double x2, double y2, double x, double y) => ((x - x2) * (y2 - y1)) - ((y - y2) * (x2 - x1));
+    public static double CrossProduct(double x1, double y1, double x2, double y2, double x, double y)
+        => ((x - x2) * (y2 - y1)) - ((y - y2) * (x2 - x1));
 }

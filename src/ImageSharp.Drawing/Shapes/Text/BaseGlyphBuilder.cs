@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Text;
 
@@ -220,7 +221,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
             ShapeOptions options = new()
             {
-                ClippingOperation = ClippingOperation.Intersection,
+                ClippingOperation = BooleanOperation.Intersection,
                 IntersectionRule = TextUtilities.MapFillRule(this.currentLayerFillRule)
             };
 

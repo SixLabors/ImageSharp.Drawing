@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Utilities;
 using SixLabors.PolygonClipper;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
@@ -57,6 +59,7 @@ internal sealed class StrokedShapeGenerator
         // 1) Stroke each dashed span as open.
         this.polygonStroker.Width = width;
 
+        List<PointF[]> ringPoints = new(spans.Count);
         List<IPath> rings = new(spans.Count);
         foreach (PointF[] span in spans)
         {
@@ -71,6 +74,7 @@ internal sealed class StrokedShapeGenerator
                 continue;
             }
 
+            ringPoints.Add(stroked);
             rings.Add(new Polygon(new LinearLineSegment(stroked)));
         }
 
@@ -80,10 +84,9 @@ internal sealed class StrokedShapeGenerator
             return [];
         }
 
-        if (count == 1)
+        if (!HasIntersections(ringPoints))
         {
-            // Only one stroked ring. Return as-is; two-operand union requires both sides non-empty.
-            return [rings[0]];
+            return count == 1 ? [rings[0]] : [.. rings];
         }
 
         // 2) Partition so the first and last are on different polygons
@@ -140,6 +143,7 @@ internal sealed class StrokedShapeGenerator
     public IPath[] GenerateStrokedShapes(IPath path, float width)
     {
         // 1) Stroke the input path into closed rings
+        List<PointF[]> ringPoints = [];
         List<IPath> rings = [];
         this.polygonStroker.Width = width;
 
@@ -151,6 +155,7 @@ internal sealed class StrokedShapeGenerator
                 continue; // skip degenerate outputs
             }
 
+            ringPoints.Add(stroked);
             rings.Add(new Polygon(new LinearLineSegment(stroked)));
         }
 
@@ -160,10 +165,9 @@ internal sealed class StrokedShapeGenerator
             return [];
         }
 
-        if (count == 1)
+        if (!HasIntersections(ringPoints))
         {
-            // Only one stroked ring. Return as-is; two-operand union requires both sides non-empty.
-            return [rings[0]];
+            return count == 1 ? [rings[0]] : [.. rings];
         }
 
         // 2) Partition so the first and last are on different polygons
@@ -203,5 +207,93 @@ internal sealed class StrokedShapeGenerator
 
         // 4) Return the cleaned, merged outline
         return clipper.GenerateClippedShapes(BooleanOperation.Union);
+    }
+
+    /// <summary>
+    /// Determines whether any of the provided rings contain self-intersections or intersect with other rings.
+    /// </summary>
+    /// <remarks>
+    /// This method performs a conservative scan to detect intersections among the provided rings. It
+    /// checks for both self-intersections within each ring and intersections between different rings. Rings are treated
+    /// as polylines; if a ring is closed (its first and last points are equal), the closing segment is included in the
+    /// intersection checks. This method is intended for fast intersection detection and may be used to determine
+    /// whether further geometric processing, such as clipping, is necessary.
+    /// </remarks>
+    /// <param name="rings">
+    /// A list of rings, where each ring is represented as an array of points defining its vertices. Each ring is
+    /// expected to be a sequence of points forming a polyline or polygon.
+    /// </param>
+    /// <returns><see langword="true"/> if any ring self-intersects or any two rings intersect; otherwise, <see langword="false"/>.</returns>
+    private static bool HasIntersections(List<PointF[]> rings)
+    {
+        // Detect whether any stroked ring self-intersects or intersects another ring.
+        // This is a fast, conservative scan used to decide whether we can skip clipping.
+        Vector2 intersection = default;
+
+        for (int r = 0; r < rings.Count; r++)
+        {
+            PointF[] ring = rings[r];
+            int segmentCount = ring.Length - 1;
+            if (segmentCount < 2)
+            {
+                continue;
+            }
+
+            // 1) Self-intersection scan for the current ring.
+            // Adjacent segments share a vertex and are skipped to avoid trivial hits.
+            bool isClosed = ring[0] == ring[^1];
+            for (int i = 0; i < segmentCount; i++)
+            {
+                Vector2 a0 = new(ring[i].X, ring[i].Y);
+                Vector2 a1 = new(ring[i + 1].X, ring[i + 1].Y);
+
+                for (int j = i + 1; j < segmentCount; j++)
+                {
+                    // Skip neighbors and the closing edge pair in a closed ring.
+                    if (j == i + 1 || (isClosed && i == 0 && j == segmentCount - 1))
+                    {
+                        continue;
+                    }
+
+                    Vector2 b0 = new(ring[j].X, ring[j].Y);
+                    Vector2 b1 = new(ring[j + 1].X, ring[j + 1].Y);
+                    if (Intersect.LineSegmentToLineSegmentIgnoreCollinear(a0, a1, b0, b1, ref intersection))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            // 2) Cross-ring intersection scan against later rings only.
+            // This avoids double work while checking all ring pairs.
+            for (int s = r + 1; s < rings.Count; s++)
+            {
+                PointF[] other = rings[s];
+                int otherSegmentCount = other.Length - 1;
+                if (otherSegmentCount < 1)
+                {
+                    continue;
+                }
+
+                for (int i = 0; i < segmentCount; i++)
+                {
+                    Vector2 a0 = new(ring[i].X, ring[i].Y);
+                    Vector2 a1 = new(ring[i + 1].X, ring[i + 1].Y);
+
+                    for (int j = 0; j < otherSegmentCount; j++)
+                    {
+                        Vector2 b0 = new(other[j].X, other[j].Y);
+                        Vector2 b1 = new(other[j + 1].X, other[j + 1].Y);
+                        if (Intersect.LineSegmentToLineSegmentIgnoreCollinear(a0, a1, b0, b1, ref intersection))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // No intersections detected.
+        return false;
     }
 }
