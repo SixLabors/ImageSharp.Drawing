@@ -3,27 +3,23 @@
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
+/// <summary>
+/// Specifies how a vertex should be joined with adjacent paths during polygon operations.
+/// </summary>
 internal enum JoinWith
 {
+    /// <summary>
+    /// No joining operation.
+    /// </summary>
     None,
+
+    /// <summary>
+    /// Join with the left adjacent path.
+    /// </summary>
     Left,
+
+    /// <summary>
+    /// Join with the right adjacent path.
+    /// </summary>
     Right
-}
-
-internal enum HorzPosition
-{
-    Bottom,
-    Middle,
-    Top
-}
-
-// Vertex: a pre-clipping data structure. It is used to separate polygons
-// into ascending and descending 'bounds' (or sides) that start at local
-// minima and ascend to a local maxima, before descending again.
-[Flags]
-internal enum PointInPolygonResult
-{
-    IsOn = 0,
-    IsInside = 1,
-    IsOutside = 2
 }

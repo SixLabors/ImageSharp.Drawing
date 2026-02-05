@@ -1024,7 +1024,7 @@ internal sealed class PolygonClipper
         OutPt nextNextOp = splitOp.Next.Next;
         outrec.Pts = prevOp;
 
-        PolygonClipperUtilities.GetIntersectPoint(
+        _ = PolygonClipperUtilities.GetLineIntersectPoint(
             prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vector2 ip);
 
         float area1 = Area(prevOp);

@@ -6,7 +6,7 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 /// <summary>
 /// Defines the polygon clipping type.
 /// </summary>
-public enum ClippingType
+internal enum ClippingType
 {
     /// <summary>
     /// Represents a shape to act as a subject which will be clipped or merged.
