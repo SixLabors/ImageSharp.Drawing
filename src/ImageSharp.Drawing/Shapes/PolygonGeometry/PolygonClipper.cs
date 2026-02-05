@@ -21,6 +21,11 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 /// </remarks>
 internal sealed class PolygonClipper
 {
+    private const float MinimumDistanceThreshold = 1e-6f;
+    private const float MinimumAreaThreshold = 1e-6f;
+    private const float JoinYTolerance = 1e-6f;
+    private const float JoinDistanceSqrdThreshold = 1e-12f;
+
     private BooleanOperation clipType;
     private ClipperFillRule fillRule;
     private Active actives; // Head of the active edge list
@@ -1062,7 +1067,8 @@ internal sealed class PolygonClipper
     private static bool PtsReallyClose(Vector2 pt1, Vector2 pt2)
     {
         Vector2 delta = Vector2.Abs(pt1 - pt2);
-        return delta.X < 1e-6f && delta.Y < 1e-6f;
+        return delta.X < MinimumDistanceThreshold &&
+               delta.Y < MinimumDistanceThreshold;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1125,16 +1131,16 @@ internal sealed class PolygonClipper
             prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vector2 ip);
 
         float area1 = Area(prevOp);
-        float absArea1 = Math.Abs(area1);
+        float absArea1 = MathF.Abs(area1);
 
-        if (absArea1 < 2)
+        if (absArea1 < MinimumAreaThreshold)
         {
             outrec.Pts = null;
             return;
         }
 
         float area2 = AreaTriangle(ip, splitOp.Point, splitOp.Next.Point);
-        float absArea2 = Math.Abs(area2);
+        float absArea2 = MathF.Abs(area2);
 
         // de-link splitOp and splitOp.next from the path
         // while inserting the intersection point
@@ -1160,7 +1166,7 @@ internal sealed class PolygonClipper
         // So the only way for these areas to have the same sign is if
         // the split triangle is larger than the path containing prevOp or
         // if there's more than one self=intersection.
-        if (absArea2 > 1 && (absArea2 > absArea1 || ((area2 > 0) == (area1 > 0))))
+        if (absArea2 > MinimumAreaThreshold && (absArea2 > absArea1 || ((area2 > 0) == (area1 > 0))))
         {
             OutRec newOutRec = this.NewOutRec();
             newOutRec.Owner = outrec.Owner;
@@ -3022,7 +3028,7 @@ internal sealed class PolygonClipper
         }
 
         // Avoid trivial joins
-        if ((pt.Y < e.Top.Y + 2 || pt.Y < prev.Top.Y + 2)
+        if ((pt.Y < e.Top.Y + JoinYTolerance || pt.Y < prev.Top.Y + JoinYTolerance)
             && ((e.Bot.Y > pt.Y) || (prev.Bot.Y > pt.Y)))
         {
             return;
@@ -3030,7 +3036,7 @@ internal sealed class PolygonClipper
 
         if (checkCurrX)
         {
-            if (PolygonClipperUtilities.PerpendicDistFromLineSqrd(pt, prev.Bot, prev.Top) > 0.25)
+            if (PolygonClipperUtilities.PerpendicDistFromLineSqrd(pt, prev.Bot, prev.Top) > JoinDistanceSqrdThreshold)
             {
                 return;
             }
@@ -3077,7 +3083,7 @@ internal sealed class PolygonClipper
         }
 
         // Avoid trivial joins
-        if ((pt.Y < e.Top.Y + 2 || pt.Y < next.Top.Y + 2)
+        if ((pt.Y < e.Top.Y + JoinYTolerance || pt.Y < next.Top.Y + JoinYTolerance)
             && ((e.Bot.Y > pt.Y) || (next.Bot.Y > pt.Y)))
         {
             return;
@@ -3085,7 +3091,7 @@ internal sealed class PolygonClipper
 
         if (checkCurrX)
         {
-            if (PolygonClipperUtilities.PerpendicDistFromLineSqrd(pt, next.Bot, next.Top) > 0.25)
+            if (PolygonClipperUtilities.PerpendicDistFromLineSqrd(pt, next.Bot, next.Top) > JoinDistanceSqrdThreshold)
             {
                 return;
             }
