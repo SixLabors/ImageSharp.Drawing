@@ -118,11 +118,6 @@ internal sealed class PolygonStroker
     /// <param name="linePoints">The input points to stroke.</param>
     /// <param name="isClosed">Whether the input is a closed ring.</param>
     /// <returns>The stroked outline as a closed point array.</returns>
-    /// <remarks>
-    /// When a 2-point input contains identical points (degenerate case), this method generates
-    /// a cap shape at that point: a circle for round caps or a square for square/butt caps.
-    /// This ensures that even degenerate input produces visible output when stroked.
-    /// </remarks>
     public PointF[] ProcessPath(ReadOnlySpan<PointF> linePoints, bool isClosed)
     {
         if (linePoints.Length < 2)
@@ -131,7 +126,6 @@ internal sealed class PolygonStroker
         }
 
         // Special case: for 2-point inputs, check if both points are identical (degenerate case)
-        // This avoids overhead for longer paths where the filtering logic handles near-duplicates
         if (linePoints.Length == 2)
         {
             PointF p0 = linePoints[0];

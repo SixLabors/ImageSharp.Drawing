@@ -64,14 +64,6 @@ internal sealed class PolygonClipper
     public bool ReverseSolution { get; set; }
 
     /// <summary>
-    /// Adds subject paths to the clipping operation.
-    /// Subject paths are the primary polygons being clipped.
-    /// </summary>
-    /// <param name="paths">The subject paths to add.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddSubject(PathsF paths) => this.AddPaths(paths, ClippingType.Subject);
-
-    /// <summary>
     /// Adds a single path to the clipping operation.
     /// </summary>
     /// <param name="path">The path to add.</param>
@@ -244,52 +236,13 @@ internal sealed class PolygonClipper
         // Adjust intersection point if it's outside the scanbeam bounds
         if (ip.Y > this.currentBotY || ip.Y < topY)
         {
+            // Clamp Y to scanbeam bounds
+            ip.Y = ip.Y < topY ? topY : this.currentBotY;
+
+            // Use the more vertical edge (smaller |Dx|) to compute X for numerical stability
             float absDx1 = MathF.Abs(ae1.Dx);
             float absDx2 = MathF.Abs(ae2.Dx);
-
-            // For very steep edges, project the point onto the edge
-            // TODO: Check threshold here once we remove upscaling.
-            if (absDx1 > 100 && absDx2 > 100)
-            {
-                if (absDx1 > absDx2)
-                {
-                    ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae1.Bot, ae1.Top);
-                }
-                else
-                {
-                    ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae2.Bot, ae2.Top);
-                }
-            }
-            else if (absDx1 > 100)
-            {
-                ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae1.Bot, ae1.Top);
-            }
-            else if (absDx2 > 100)
-            {
-                ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae2.Bot, ae2.Top);
-            }
-            else
-            {
-                // Clamp Y to scanbeam bounds
-                if (ip.Y < topY)
-                {
-                    ip.Y = topY;
-                }
-                else
-                {
-                    ip.Y = this.currentBotY;
-                }
-
-                // Use the less steep edge to determine X
-                if (absDx1 < absDx2)
-                {
-                    ip.X = TopX(ae1, ip.Y);
-                }
-                else
-                {
-                    ip.X = TopX(ae2, ip.Y);
-                }
-            }
+            ip.X = absDx1 < absDx2 ? TopX(ae1, ip.Y) : TopX(ae2, ip.Y);
         }
 
         IntersectNode node = new(ip, ae1, ae2);
@@ -1107,9 +1060,10 @@ internal sealed class PolygonClipper
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool PtsReallyClose(Vector2 pt1, Vector2 pt2)
-
-        // TODO: Check scale once we can remove upscaling.
-        => (Math.Abs(pt1.X - pt2.X) < 2F) && (Math.Abs(pt1.Y - pt2.Y) < 2F);
+    {
+        Vector2 delta = Vector2.Abs(pt1 - pt2);
+        return delta.X < 1e-6f && delta.Y < 1e-6f;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CleanCollinear(OutRec outrec)
