@@ -14,24 +14,32 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 /// Ported from <see href="https://github.com/AngusJohnson/Clipper2"/> and originally licensed
 /// under <see href="http://www.boost.org/LICENSE_1_0.txt"/>
 /// </summary>
+/// <remarks>
+/// This class implements the Vatti clipping algorithm using a scanline sweep approach.
+/// It processes polygon edges by sweeping a horizontal line from bottom to top,
+/// maintaining an active edge list (AEL) of edges that intersect the current scanline.
+/// </remarks>
 internal sealed class PolygonClipper
 {
     private BooleanOperation clipType;
     private ClipperFillRule fillRule;
-    private Active actives;
-    private Active flaggedHorizontal;
-    private readonly List<LocalMinima> minimaList;
-    private readonly List<IntersectNode> intersectList;
-    private readonly List<Vertex> vertexList;
-    private readonly List<OutRec> outrecList;
-    private readonly List<float> scanlineList;
-    private readonly List<HorzSegment> horzSegList;
-    private readonly List<HorzJoin> horzJoinList;
-    private int currentLocMin;
-    private float currentBotY;
-    private bool isSortedMinimaList;
-    private bool hasOpenPaths;
+    private Active actives; // Head of the active edge list
+    private Active flaggedHorizontal; // Linked list of horizontal edges awaiting processing
+    private readonly List<LocalMinima> minimaList; // Local minima sorted by Y coordinate
+    private readonly List<IntersectNode> intersectList; // Intersections at current scanbeam
+    private readonly List<Vertex> vertexList; // All vertices from input paths
+    private readonly List<OutRec> outrecList; // Output polygon records
+    private readonly List<float> scanlineList; // Y coordinates requiring processing
+    private readonly List<HorzSegment> horzSegList; // Horizontal segments for joining
+    private readonly List<HorzJoin> horzJoinList; // Horizontal joins to process
+    private int currentLocMin; // Index of current local minimum being processed
+    private float currentBotY; // Y coordinate of current scanbeam bottom
+    private bool isSortedMinimaList; // Whether minimaList has been sorted
+    private bool hasOpenPaths; // Whether any input paths are open (not closed)
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PolygonClipper"/> class.
+    /// </summary>
     public PolygonClipper()
     {
         this.minimaList = [];
@@ -44,13 +52,31 @@ internal sealed class PolygonClipper
         this.PreserveCollinear = true;
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether collinear vertices should be preserved in the output.
+    /// When true, only 180-degree spikes are removed. When false, all collinear vertices are removed.
+    /// </summary>
     public bool PreserveCollinear { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the output polygon orientation should be reversed.
+    /// </summary>
     public bool ReverseSolution { get; set; }
 
+    /// <summary>
+    /// Adds subject paths to the clipping operation.
+    /// Subject paths are the primary polygons being clipped.
+    /// </summary>
+    /// <param name="paths">The subject paths to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AddSubject(PathsF paths) => this.AddPaths(paths, ClippingType.Subject);
 
+    /// <summary>
+    /// Adds a single path to the clipping operation.
+    /// </summary>
+    /// <param name="path">The path to add.</param>
+    /// <param name="polytype">Whether this is a subject or clip path.</param>
+    /// <param name="isOpen">Whether the path is open (polyline) or closed (polygon).</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AddPath(PathF path, ClippingType polytype, bool isOpen = false)
     {
@@ -58,6 +84,12 @@ internal sealed class PolygonClipper
         this.AddPaths(tmp, polytype, isOpen);
     }
 
+    /// <summary>
+    /// Adds multiple paths to the clipping operation.
+    /// </summary>
+    /// <param name="paths">The paths to add.</param>
+    /// <param name="polytype">Whether these are subject or clip paths.</param>
+    /// <param name="isOpen">Whether the paths are open (polylines) or closed (polygons).</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void AddPaths(PathsF paths, ClippingType polytype, bool isOpen = false)
     {
@@ -70,10 +102,24 @@ internal sealed class PolygonClipper
         this.AddPathsToVertexList(paths, polytype, isOpen);
     }
 
+    /// <summary>
+    /// Executes the clipping operation and returns only closed paths.
+    /// </summary>
+    /// <param name="clipType">The boolean operation to perform.</param>
+    /// <param name="fillRule">The fill rule to use for polygon interiors.</param>
+    /// <param name="solutionClosed">Output collection for closed solution paths.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Execute(BooleanOperation clipType, ClipperFillRule fillRule, PathsF solutionClosed)
         => this.Execute(clipType, fillRule, solutionClosed, []);
 
+    /// <summary>
+    /// Executes the clipping operation and returns both closed and open paths.
+    /// </summary>
+    /// <param name="clipType">The boolean operation to perform (union, intersection, difference, xor).</param>
+    /// <param name="fillRule">The fill rule to determine polygon interiors (even-odd, non-zero, positive, negative).</param>
+    /// <param name="solutionClosed">Output collection for closed solution paths (polygons).</param>
+    /// <param name="solutionOpen">Output collection for open solution paths (polylines).</param>
+    /// <exception cref="ClipperException">Thrown when an error occurs during clipping.</exception>
     public void Execute(BooleanOperation clipType, ClipperFillRule fillRule, PathsF solutionClosed, PathsF solutionOpen)
     {
         solutionClosed.Clear();
@@ -94,11 +140,19 @@ internal sealed class PolygonClipper
         }
     }
 
+    /// <summary>
+    /// Executes the core clipping algorithm using the Vatti scanbeam sweep.
+    /// Processes all edges from bottom to top, handling intersections and building output polygons.
+    /// </summary>
+    /// <param name="ct">The boolean operation type.</param>
+    /// <param name="fillRule">The fill rule for determining polygon interiors.</param>
     private void ExecuteInternal(BooleanOperation ct, ClipperFillRule fillRule)
     {
         this.fillRule = fillRule;
         this.clipType = ct;
         this.Reset();
+
+        // Get the first scanline Y coordinate
         if (!this.PopScanline(out float y))
         {
             return;
@@ -106,36 +160,53 @@ internal sealed class PolygonClipper
 
         while (true)
         {
+            // Add local minima edges that start at current Y
             this.InsertLocalMinimaIntoAEL(y);
+
+            // Process all horizontal edges at this Y
             Active ae;
             while (this.PopHorz(out ae))
             {
                 this.DoHorizontal(ae);
             }
 
+            // Convert horizontal segments to joins for later processing
             if (this.horzSegList.Count > 0)
             {
                 this.ConvertHorzSegsToJoins();
                 this.horzSegList.Clear();
             }
 
-            this.currentBotY = y; // bottom of scanbeam
+            this.currentBotY = y; // bottom of current scanbeam
+
+            // Get next scanline; break if no more
             if (!this.PopScanline(out y))
             {
-                break; // y new top of scanbeam
+                break;
             }
 
+            // Process intersections between current and next scanline
             this.DoIntersections(y);
+
+            // Update edges at top of scanbeam
             this.DoTopOfScanbeam(y);
+
+            // Process any horizontal edges that emerged
             while (this.PopHorz(out ae))
             {
                 this.DoHorizontal(ae!);
             }
         }
 
+        // Complete horizontal joins
         this.ProcessHorzJoins();
     }
 
+    /// <summary>
+    /// Processes edge intersections at the top of the current scanbeam.
+    /// Builds intersection list, processes intersections in order, then cleans up.
+    /// </summary>
+    /// <param name="topY">The Y coordinate of the top of the scanbeam.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void DoIntersections(float topY)
     {
@@ -146,23 +217,37 @@ internal sealed class PolygonClipper
         }
     }
 
+    /// <summary>
+    /// Clears the intersection node list.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void DisposeIntersectNodes()
         => this.intersectList.Clear();
 
+    /// <summary>
+    /// Adds a new intersection node for two edges at the specified Y coordinate.
+    /// Calculates the exact intersection point, adjusting for numerical precision when needed.
+    /// </summary>
+    /// <param name="ae1">First edge.</param>
+    /// <param name="ae2">Second edge.</param>
+    /// <param name="topY">Top Y coordinate of the scanbeam.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddNewIntersectNode(Active ae1, Active ae2, float topY)
     {
+        // Calculate line intersection point
         if (!PolygonClipperUtilities.GetLineIntersectPoint(ae1.Bot, ae1.Top, ae2.Bot, ae2.Top, out Vector2 ip))
         {
+            // Lines are parallel; use current X position
             ip = new Vector2(ae1.CurX, topY);
         }
 
+        // Adjust intersection point if it's outside the scanbeam bounds
         if (ip.Y > this.currentBotY || ip.Y < topY)
         {
             float absDx1 = MathF.Abs(ae1.Dx);
             float absDx2 = MathF.Abs(ae2.Dx);
 
+            // For very steep edges, project the point onto the edge
             // TODO: Check threshold here once we remove upscaling.
             if (absDx1 > 100 && absDx2 > 100)
             {
@@ -185,6 +270,7 @@ internal sealed class PolygonClipper
             }
             else
             {
+                // Clamp Y to scanbeam bounds
                 if (ip.Y < topY)
                 {
                     ip.Y = topY;
@@ -194,6 +280,7 @@ internal sealed class PolygonClipper
                     ip.Y = this.currentBotY;
                 }
 
+                // Use the less steep edge to determine X
                 if (absDx1 < absDx2)
                 {
                     ip.X = TopX(ae1, ip.Y);
@@ -209,6 +296,13 @@ internal sealed class PolygonClipper
         this.intersectList.Add(node);
     }
 
+    /// <summary>
+    /// Sets the heading direction for a horizontal segment based on two output points.
+    /// </summary>
+    /// <param name="hs">The horizontal segment to configure.</param>
+    /// <param name="opP">Previous output point.</param>
+    /// <param name="opN">Next output point.</param>
+    /// <returns>True if the segment has a valid direction; false if the points have the same X coordinate.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool SetHorzSegHeadingForward(HorzSegment hs, OutPt opP, OutPt opN)
     {
@@ -233,6 +327,11 @@ internal sealed class PolygonClipper
         return true;
     }
 
+    /// <summary>
+    /// Updates a horizontal segment by extending it to include all consecutive horizontal output points.
+    /// </summary>
+    /// <param name="hs">The horizontal segment to update.</param>
+    /// <returns>True if the segment was successfully updated; false otherwise.</returns>
     private static bool UpdateHorzSegment(HorzSegment hs)
     {
         OutPt op = hs.LeftOp;
@@ -240,6 +339,8 @@ internal sealed class PolygonClipper
         bool outrecHasEdges = outrec.FrontEdge != null;
         float curr_y = op.Point.Y;
         OutPt opP = op, opN = op;
+
+        // Extend the segment backwards and forwards along the horizontal line
         if (outrecHasEdges)
         {
             OutPt opA = outrec.Pts!, opZ = opA.Next;
@@ -274,12 +375,18 @@ internal sealed class PolygonClipper
         }
         else
         {
-            hs.RightOp = null; // (for sorting)
+            hs.RightOp = null; // Mark as invalid for sorting
         }
 
         return result;
     }
 
+    /// <summary>
+    /// Duplicates an output point, inserting it either after or before the original.
+    /// </summary>
+    /// <param name="op">The output point to duplicate.</param>
+    /// <param name="insert_after">If true, insert after op; otherwise insert before.</param>
+    /// <returns>The newly created output point.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static OutPt DuplicateOp(OutPt op, bool insert_after)
     {
@@ -302,9 +409,15 @@ internal sealed class PolygonClipper
         return result;
     }
 
+    /// <summary>
+    /// Converts horizontal segments into join operations.
+    /// Finds overlapping horizontal segments and creates joins between them.
+    /// </summary>
     private void ConvertHorzSegsToJoins()
     {
         int k = 0;
+
+        // Update all segments and count valid ones
         foreach (HorzSegment hs in this.horzSegList)
         {
             if (UpdateHorzSegment(hs))
@@ -315,19 +428,23 @@ internal sealed class PolygonClipper
 
         if (k < 2)
         {
-            return;
+            return; // Need at least 2 segments to join
         }
 
+        // Sort segments by left X coordinate
         this.horzSegList.Sort(default(HorzSegSorter));
 
+        // Find overlapping segments and create joins
         for (int i = 0; i < k - 1; i++)
         {
             HorzSegment hs1 = this.horzSegList[i];
 
-            // for each HorzSegment, find others that overlap
+            // Check each subsequent segment for overlap
             for (int j = i + 1; j < k; j++)
             {
                 HorzSegment hs2 = this.horzSegList[j];
+
+                // Skip if no overlap or same direction
                 if ((hs2.LeftOp.Point.X >= hs1.RightOp.Point.X) ||
                     (hs2.LeftToRight == hs1.LeftToRight) ||
                     (hs2.RightOp.Point.X <= hs1.LeftOp.Point.X))
@@ -336,6 +453,8 @@ internal sealed class PolygonClipper
                 }
 
                 float curr_y = hs1.LeftOp.Point.Y;
+
+                // Adjust segment endpoints to find join points
                 if (hs1.LeftToRight)
                 {
                     while (hs1.LeftOp.Next.Point.Y == curr_y &&
@@ -374,6 +493,9 @@ internal sealed class PolygonClipper
         }
     }
 
+    /// <summary>
+    /// Clears the solution data while preserving input paths.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ClearSolutionOnly()
     {
@@ -389,6 +511,13 @@ internal sealed class PolygonClipper
         this.horzJoinList.Clear();
     }
 
+    /// <summary>
+    /// Builds output paths from the output record list.
+    /// Processes each output record, cleaning collinear points and building the final paths.
+    /// </summary>
+    /// <param name="solutionClosed">Collection to receive closed paths (polygons).</param>
+    /// <param name="solutionOpen">Collection to receive open paths (polylines).</param>
+    /// <returns>True if paths were successfully built.</returns>
     private bool BuildPaths(PathsF solutionClosed, PathsF solutionOpen)
     {
         solutionClosed.Clear();
@@ -398,7 +527,7 @@ internal sealed class PolygonClipper
 
         int i = 0;
 
-        // _outrecList.Count is not static here because
+        // Note: outrecList.Count is not static here because
         // CleanCollinear can indirectly add additional OutRec
         while (i < this.outrecList.Count)
         {
@@ -418,9 +547,10 @@ internal sealed class PolygonClipper
             }
             else
             {
+                // Clean collinear points from closed paths
                 this.CleanCollinear(outrec);
 
-                // closed paths should always return a Positive orientation
+                // Closed paths should always return a positive orientation
                 // except when ReverseSolution == true
                 if (BuildPath(outrec.Pts, this.ReverseSolution, false, path))
                 {
@@ -432,8 +562,17 @@ internal sealed class PolygonClipper
         return true;
     }
 
+    /// <summary>
+    /// Builds a path from an output point list.
+    /// </summary>
+    /// <param name="op">Starting output point.</param>
+    /// <param name="reverse">Whether to traverse the list in reverse.</param>
+    /// <param name="isOpen">Whether this is an open path.</param>
+    /// <param name="path">The path to populate.</param>
+    /// <returns>True if a valid path was created.</returns>
     private static bool BuildPath(OutPt op, bool reverse, bool isOpen, PathF path)
     {
+        // Validate minimum path requirements
         if (op == null || op.Next == op || (!isOpen && op.Next == op.Prev))
         {
             return false;
@@ -443,6 +582,8 @@ internal sealed class PolygonClipper
 
         Vector2 lastPt;
         OutPt op2;
+
+        // Set starting point and direction
         if (reverse)
         {
             lastPt = op.Point;
@@ -457,6 +598,7 @@ internal sealed class PolygonClipper
 
         path.Add(lastPt);
 
+        // Traverse the output point list, adding unique points
         while (op2 != op)
         {
             if (op2.Point != lastPt)
@@ -475,6 +617,7 @@ internal sealed class PolygonClipper
             }
         }
 
+        // Filter out very small triangles
         return path.Count != 3 || !IsVerySmallTriangle(op2);
     }
 
@@ -3117,18 +3260,42 @@ internal sealed class PolygonClipper
     private static bool IsFront(Active ae)
         => ae == ae.Outrec.FrontEdge;
 
+    /// <summary>
+    /// Comparer for sorting local minima by Y coordinate (descending).
+    /// </summary>
     private struct LocMinSorter : IComparer<LocalMinima>
     {
         public readonly int Compare(LocalMinima locMin1, LocalMinima locMin2)
             => locMin2.Vertex.Point.Y.CompareTo(locMin1.Vertex.Point.Y);
     }
 
+    /// <summary>
+    /// Represents a local minimum in a polygon path.
+    /// A local minimum is a vertex where the path changes from descending to ascending.
+    /// </summary>
     private readonly struct LocalMinima
     {
+        /// <summary>
+        /// Gets the vertex at the local minimum.
+        /// </summary>
         public readonly Vertex Vertex;
+
+        /// <summary>
+        /// Gets the polygon type (subject or clip).
+        /// </summary>
         public readonly ClippingType Polytype;
+
+        /// <summary>
+        /// Gets a value indicating whether this is an open path (polyline).
+        /// </summary>
         public readonly bool IsOpen;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LocalMinima"/> struct.
+        /// </summary>
+        /// <param name="vertex">The vertex at the local minimum.</param>
+        /// <param name="polytype">The polygon type.</param>
+        /// <param name="isOpen">Whether this is an open path.</param>
         public LocalMinima(Vertex vertex, ClippingType polytype, bool isOpen = false)
         {
             this.Vertex = vertex;
@@ -3137,7 +3304,7 @@ internal sealed class PolygonClipper
         }
 
         public static bool operator ==(LocalMinima lm1, LocalMinima lm2)
-
+            // Use reference equality for vertex comparison
             // TODO: Check this. Why ref equals.
             => ReferenceEquals(lm1.Vertex, lm2.Vertex);
 
@@ -3151,15 +3318,34 @@ internal sealed class PolygonClipper
             => this.Vertex.GetHashCode();
     }
 
-    // IntersectNode: a structure representing 2 intersecting edges.
-    // Intersections must be sorted so they are processed from the largest
-    // Y coordinates to the smallest while keeping edges adjacent.
+    /// <summary>
+    /// Represents an intersection between two active edges.
+    /// Intersections must be sorted so they are processed from the largest
+    /// Y coordinates to the smallest while keeping edges adjacent.
+    /// </summary>
     private readonly struct IntersectNode
     {
+        /// <summary>
+        /// Gets the intersection point.
+        /// </summary>
         public readonly Vector2 Point;
+
+        /// <summary>
+        /// Gets the first intersecting edge.
+        /// </summary>
         public readonly Active Edge1;
+
+        /// <summary>
+        /// Gets the second intersecting edge.
+        /// </summary>
         public readonly Active Edge2;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="IntersectNode"/> struct.
+        /// </summary>
+        /// <param name="pt">The intersection point.</param>
+        /// <param name="edge1">The first intersecting edge.</param>
+        /// <param name="edge2">The second intersecting edge.</param>
         public IntersectNode(Vector2 pt, Active edge1, Active edge2)
         {
             this.Point = pt;
@@ -3168,6 +3354,9 @@ internal sealed class PolygonClipper
         }
     }
 
+    /// <summary>
+    /// Comparer for sorting horizontal segments by left X coordinate.
+    /// </summary>
     private struct HorzSegSorter : IComparer<HorzSegment>
     {
         public readonly int Compare(HorzSegment hs1, HorzSegment hs2)
@@ -3192,6 +3381,9 @@ internal sealed class PolygonClipper
         }
     }
 
+    /// <summary>
+    /// Comparer for sorting intersection nodes by Y coordinate (descending), then X coordinate.
+    /// </summary>
     private struct IntersectListSort : IComparer<IntersectNode>
     {
         public readonly int Compare(IntersectNode a, IntersectNode b)
@@ -3210,8 +3402,16 @@ internal sealed class PolygonClipper
         }
     }
 
+    /// <summary>
+    /// Represents a horizontal segment in the output polygon.
+    /// Used to identify and join horizontal edges.
+    /// </summary>
     private class HorzSegment
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HorzSegment"/> class.
+        /// </summary>
+        /// <param name="op">The starting output point.</param>
         public HorzSegment(OutPt op)
         {
             this.LeftOp = op;
@@ -3219,29 +3419,60 @@ internal sealed class PolygonClipper
             this.LeftToRight = true;
         }
 
+        /// <summary>
+        /// Gets or sets the left output point.
+        /// </summary>
         public OutPt LeftOp { get; set; }
 
+        /// <summary>
+        /// Gets or sets the right output point.
+        /// </summary>
         public OutPt RightOp { get; set; }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether the segment is oriented left-to-right.
+        /// </summary>
         public bool LeftToRight { get; set; }
     }
 
+    /// <summary>
+    /// Represents a horizontal join operation between two output points.
+    /// </summary>
     private class HorzJoin
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HorzJoin"/> class.
+        /// </summary>
+        /// <param name="ltor">Left-to-right output point.</param>
+        /// <param name="rtol">Right-to-left output point.</param>
         public HorzJoin(OutPt ltor, OutPt rtol)
         {
             this.Op1 = ltor;
             this.Op2 = rtol;
         }
 
+        /// <summary>
+        /// Gets the first output point in the join.
+        /// </summary>
         public OutPt Op1 { get; }
 
+        /// <summary>
+        /// Gets the second output point in the join.
+        /// </summary>
         public OutPt Op2 { get; }
     }
 
-    // OutPt: vertex data structure for clipping solutions
+    /// <summary>
+    /// Output point: represents a vertex in a clipping solution polygon.
+    /// Forms a circular doubly-linked list of vertices.
+    /// </summary>
     private class OutPt
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="OutPt"/> class.
+        /// </summary>
+        /// <param name="pt">The point coordinates.</param>
+        /// <param name="outrec">The output record this point belongs to.</param>
         public OutPt(Vector2 pt, OutRec outrec)
         {
             this.Point = pt;
@@ -3251,43 +3482,101 @@ internal sealed class PolygonClipper
             this.HorizSegment = null;
         }
 
+        /// <summary>
+        /// Gets the point coordinates.
+        /// </summary>
         public Vector2 Point { get; }
 
+        /// <summary>
+        /// Gets or sets the next output point in the circular list.
+        /// </summary>
         public OutPt Next { get; set; }
 
+        /// <summary>
+        /// Gets or sets the previous output point in the circular list.
+        /// </summary>
         public OutPt Prev { get; set; }
 
+        /// <summary>
+        /// Gets or sets the output record this point belongs to.
+        /// </summary>
         public OutRec OutRec { get; set; }
 
+        /// <summary>
+        /// Gets or sets the horizontal segment this point is part of (if any).
+        /// </summary>
         public HorzSegment HorizSegment { get; set; }
     }
 
-    // OutRec: path data structure for clipping solutions
+    /// <summary>
+    /// Output record: represents a complete output polygon path.
+    /// Contains a circular doubly-linked list of output points.
+    /// </summary>
     private class OutRec
     {
+        /// <summary>
+        /// Gets or sets the index of this output record in the output list.
+        /// </summary>
         public int Idx { get; set; }
 
+        /// <summary>
+        /// Gets or sets the parent output record (for holes).
+        /// </summary>
         public OutRec Owner { get; set; }
 
+        /// <summary>
+        /// Gets or sets the front (ascending) edge of the output polygon.
+        /// </summary>
         public Active FrontEdge { get; set; }
 
+        /// <summary>
+        /// Gets or sets the back (descending) edge of the output polygon.
+        /// </summary>
         public Active BackEdge { get; set; }
 
+        /// <summary>
+        /// Gets or sets the starting point in the circular output point list.
+        /// </summary>
         public OutPt Pts { get; set; }
 
+        /// <summary>
+        /// Gets or sets the polytree path (for hierarchical output).
+        /// </summary>
         public PolyPathF PolyPath { get; set; }
 
+        /// <summary>
+        /// Gets or sets the bounding rectangle.
+        /// </summary>
         public BoundsF Bounds { get; set; }
 
+        /// <summary>
+        /// Gets or sets the final output path.
+        /// </summary>
         public PathF Path { get; set; } = [];
 
+        /// <summary>
+        /// Gets or sets a value indicating whether this is an open path.
+        /// </summary>
         public bool IsOpen { get; set; }
 
+        /// <summary>
+        /// Gets or sets the list of split indices (for self-intersecting polygons).
+        /// </summary>
         public List<int> Splits { get; set; }
     }
 
+    /// <summary>
+    /// Represents a vertex in an input polygon path.
+    /// Forms a circular doubly-linked list of vertices.
+    /// </summary>
     private class Vertex
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Vertex"/> class.
+        /// </summary>
+        /// <param name="pt">The point coordinates.</param>
+        /// <param name="flags">Vertex flags (local min/max, open start/end).</param>
+        /// <param name="prev">The previous vertex in the list.</param>
         public Vertex(Vector2 pt, VertexFlags flags, Vertex prev)
         {
             this.Point = pt;
@@ -3296,78 +3585,172 @@ internal sealed class PolygonClipper
             this.Prev = prev;
         }
 
+        /// <summary>
+        /// Gets the point coordinates.
+        /// </summary>
         public Vector2 Point { get; }
 
+        /// <summary>
+        /// Gets or sets the next vertex in the circular list.
+        /// </summary>
         public Vertex Next { get; set; }
 
+        /// <summary>
+        /// Gets or sets the previous vertex in the circular list.
+        /// </summary>
         public Vertex Prev { get; set; }
 
+        /// <summary>
+        /// Gets or sets the vertex flags indicating properties like local minima/maxima.
+        /// </summary>
         public VertexFlags Flags { get; set; }
     }
 
+    /// <summary>
+    /// Active edge: represents an edge currently intersecting the scanline.
+    /// Stored in the Active Edge List (AEL) during scanline processing.
+    /// </summary>
     private class Active
     {
+        /// <summary>
+        /// Gets or sets the bottom point of the edge.
+        /// </summary>
         public Vector2 Bot { get; set; }
 
+        /// <summary>
+        /// Gets or sets the top point of the edge.
+        /// </summary>
         public Vector2 Top { get; set; }
 
-        public float CurX { get; set; } // current (updated at every new scanline)
+        /// <summary>
+        /// Gets or sets the current X coordinate at the scanline (updated at every scanline).
+        /// </summary>
+        public float CurX { get; set; }
 
+        /// <summary>
+        /// Gets or sets the edge's reciprocal slope (dx/dy).
+        /// </summary>
         public float Dx { get; set; }
 
-        public int WindDx { get; set; } // 1 or -1 depending on winding direction
+        /// <summary>
+        /// Gets or sets the winding direction (1 for ascending, -1 for descending).
+        /// </summary>
+        public int WindDx { get; set; }
 
+        /// <summary>
+        /// Gets or sets the winding count for this edge's polygon type.
+        /// </summary>
         public int WindCount { get; set; }
 
-        public int WindCount2 { get; set; } // winding count of the opposite polytype
+        /// <summary>
+        /// Gets or sets the winding count for the opposite polygon type.
+        /// </summary>
+        public int WindCount2 { get; set; }
 
+        /// <summary>
+        /// Gets or sets the output record this edge contributes to.
+        /// </summary>
         public OutRec Outrec { get; set; }
 
-        // AEL: 'active edge list' (Vatti's AET - active edge table)
-        //     a linked list of all edges (from left to right) that are present
-        //     (or 'active') within the current scanbeam (a horizontal 'beam' that
-        //     sweeps from bottom to top over the paths in the clipping operation).
+        /// <summary>
+        /// Gets or sets the previous edge in the Active Edge List.
+        /// The AEL is a doubly-linked list of all edges intersecting the current scanbeam,
+        /// ordered from left to right.
+        /// </summary>
         public Active PrevInAEL { get; set; }
 
+        /// <summary>
+        /// Gets or sets the next edge in the Active Edge List.
+        /// </summary>
         public Active NextInAEL { get; set; }
 
-        // SEL: 'sorted edge list' (Vatti's ST - sorted table)
-        //     linked list used when sorting edges into their new positions at the
-        //     top of scanbeams, but also (re)used to process horizontals.
+        /// <summary>
+        /// Gets or sets the previous edge in the Sorted Edge List.
+        /// The SEL is used when sorting edges into their new positions at scanbeam tops,
+        /// and is also reused to process horizontal edges.
+        /// </summary>
         public Active PrevInSEL { get; set; }
 
+        /// <summary>
+        /// Gets or sets the next edge in the Sorted Edge List.
+        /// </summary>
         public Active NextInSEL { get; set; }
 
+        /// <summary>
+        /// Gets or sets the jump pointer used during merge sort operations.
+        /// </summary>
         public Active Jump { get; set; }
 
+        /// <summary>
+        /// Gets or sets the vertex at the top of this edge segment.
+        /// </summary>
         public Vertex VertexTop { get; set; }
 
-        public LocalMinima LocalMin { get; set; } // the bottom of an edge 'bound' (also Vatti)
+        /// <summary>
+        /// Gets or sets the local minimum this edge belongs to.
+        /// </summary>
+        public LocalMinima LocalMin { get; set; }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether this is a left bound edge.
+        /// </summary>
         public bool IsLeftBound { get; set; }
 
+        /// <summary>
+        /// Gets or sets the join status indicating if this edge is joined with an adjacent edge.
+        /// </summary>
         public JoinWith JoinWith { get; set; }
     }
 }
 
+/// <summary>
+/// Represents a node in a hierarchical polygon tree structure.
+/// Can contain child paths representing holes or nested polygons.
+/// </summary>
 internal class PolyPathF : IEnumerable<PolyPathF>
 {
     private readonly PolyPathF parent;
     private readonly List<PolyPathF> items = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PolyPathF"/> class.
+    /// </summary>
+    /// <param name="parent">The parent path, or null for the root.</param>
     public PolyPathF(PolyPathF parent = null)
         => this.parent = parent;
 
-    public PathF Polygon { get; private set; } // polytree root's polygon == null
+    /// <summary>
+    /// Gets the polygon path. The polytree root's polygon is null.
+    /// </summary>
+    public PathF Polygon { get; private set; }
 
+    /// <summary>
+    /// Gets the nesting level in the tree (0 for root).
+    /// </summary>
     public int Level => this.GetLevel();
 
+    /// <summary>
+    /// Gets a value indicating whether this path represents a hole.
+    /// </summary>
     public bool IsHole => this.GetIsHole();
 
+    /// <summary>
+    /// Gets the number of child paths.
+    /// </summary>
     public int Count => this.items.Count;
 
+    /// <summary>
+    /// Gets the child path at the specified index.
+    /// </summary>
+    /// <param name="index">The child index.</param>
+    /// <returns>The child path.</returns>
     public PolyPathF this[int index] => this.items[index];
 
+    /// <summary>
+    /// Adds a child path to this polytree node.
+    /// </summary>
+    /// <param name="p">The polygon path to add.</param>
+    /// <returns>The created child node.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public PolyPathF AddChild(PathF p)
     {
@@ -3380,6 +3763,10 @@ internal class PolyPathF : IEnumerable<PolyPathF>
         return child;
     }
 
+    /// <summary>
+    /// Calculates the total area of this polygon and all its children.
+    /// </summary>
+    /// <returns>The signed area.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float Area()
     {
@@ -3393,6 +3780,9 @@ internal class PolyPathF : IEnumerable<PolyPathF>
         return result;
     }
 
+    /// <summary>
+    /// Removes all child paths.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Clear() => this.items.Clear();
 
@@ -3417,43 +3807,78 @@ internal class PolyPathF : IEnumerable<PolyPathF>
         return result;
     }
 
+    /// <summary>
+    /// Returns an enumerator that iterates through the child paths.
+    /// </summary>
+    /// <returns>An enumerator for the children.</returns>
     public IEnumerator<PolyPathF> GetEnumerator() => this.items.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => this.items.GetEnumerator();
 }
 
+/// <summary>
+/// Root of a polytree structure containing hierarchical polygon data.
+/// </summary>
 internal class PolyTreeF : PolyPathF
 {
 }
 
+/// <summary>
+/// Collection of polygon paths.
+/// </summary>
 internal class PathsF : List<PathF>
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathsF"/> class.
+    /// </summary>
     public PathsF()
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathsF"/> class with items.
+    /// </summary>
+    /// <param name="items">Initial paths.</param>
     public PathsF(IEnumerable<PathF> items)
         : base(items)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathsF"/> class with capacity.
+    /// </summary>
+    /// <param name="capacity">Initial capacity.</param>
     public PathsF(int capacity)
         : base(capacity)
     {
     }
 }
 
+/// <summary>
+/// Represents a polygon path as a list of points.
+/// </summary>
 internal class PathF : List<PointF>
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathF"/> class.
+    /// </summary>
     public PathF()
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathF"/> class with items.
+    /// </summary>
+    /// <param name="items">Initial points.</param>
     public PathF(IEnumerable<PointF> items)
         : base(items)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PathF"/> class with capacity.
+    /// </summary>
+    /// <param name="capacity">Initial capacity.</param>
     public PathF(int capacity)
         : base(capacity)
     {
