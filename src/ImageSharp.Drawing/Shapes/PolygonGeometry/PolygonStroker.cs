@@ -118,11 +118,31 @@ internal sealed class PolygonStroker
     /// <param name="linePoints">The input points to stroke.</param>
     /// <param name="isClosed">Whether the input is a closed ring.</param>
     /// <returns>The stroked outline as a closed point array.</returns>
+    /// <remarks>
+    /// When a 2-point input contains identical points (degenerate case), this method generates
+    /// a cap shape at that point: a circle for round caps or a square for square/butt caps.
+    /// This ensures that even degenerate input produces visible output when stroked.
+    /// </remarks>
     public PointF[] ProcessPath(ReadOnlySpan<PointF> linePoints, bool isClosed)
     {
         if (linePoints.Length < 2)
         {
             return [];
+        }
+
+        // Special case: for 2-point inputs, check if both points are identical (degenerate case)
+        // This avoids overhead for longer paths where the filtering logic handles near-duplicates
+        if (linePoints.Length == 2)
+        {
+            PointF p0 = linePoints[0];
+            PointF p1 = linePoints[1];
+
+            if (Math.Abs(p1.X - p0.X) <= Constants.Misc.VertexDistanceEpsilon &&
+                Math.Abs(p1.Y - p0.Y) <= Constants.Misc.VertexDistanceEpsilon)
+            {
+                // Both points are identical - generate a point cap shape
+                return this.GeneratePointCap(p0.X, p0.Y);
+            }
         }
 
         this.Reset();
@@ -761,6 +781,52 @@ internal sealed class PolygonStroker
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddPoint(double x, double y) => this.outVertices.Add(new PointF((float)x, (float)y));
+
+    /// <summary>
+    /// Generates a cap shape for a degenerate point (when all input points are identical).
+    /// Creates a circle for round caps or a square for square/butt caps.
+    /// </summary>
+    /// <param name="x">The X coordinate of the point.</param>
+    /// <param name="y">The Y coordinate of the point.</param>
+    /// <returns>The vertices forming the cap shape.</returns>
+    private PointF[] GeneratePointCap(double x, double y)
+    {
+        if (this.LineCap == LineCap.Round)
+        {
+            // Generate a circle with radius = strokeWidth
+            double da = Math.Acos(this.widthAbs / (this.widthAbs + (0.125 / this.ApproximationScale))) * 2;
+            int n = Math.Max(4, (int)(Constants.Misc.PiMul2 / da));
+            double angleStep = Constants.Misc.PiMul2 / n;
+
+            PointF[] points = new PointF[n + 1];
+
+            for (int i = 0; i < n; i++)
+            {
+                double angle = i * angleStep;
+                points[i] = new PointF(
+                    (float)(x + (Math.Cos(angle) * this.strokeWidth)),
+                    (float)(y + (Math.Sin(angle) * this.strokeWidth)));
+            }
+
+            // Close the circle
+            points[n] = points[0];
+
+            return points;
+        }
+        else
+        {
+            // Generate a square cap (used for both Square and Butt caps)
+            double w = this.strokeWidth;
+            return
+            [
+                new PointF((float)(x - w), (float)(y - w)),
+                new PointF((float)(x + w), (float)(y - w)),
+                new PointF((float)(x + w), (float)(y + w)),
+                new PointF((float)(x - w), (float)(y + w)),
+                new PointF((float)(x - w), (float)(y - w)) // Close the square
+            ];
+        }
+    }
 
     private enum Status
     {
