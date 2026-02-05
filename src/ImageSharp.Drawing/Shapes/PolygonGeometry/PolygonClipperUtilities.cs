@@ -6,18 +6,16 @@ using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 
-internal static class ClipperUtils
+internal static class PolygonClipperUtilities
 {
-    public const float DefaultArcTolerance = .25F;
-    public const float FloatingPointTolerance = 1e-05F;
-    public const float DefaultMinimumEdgeLength = .1F;
-
-    // TODO: rename to Pow2?
+    /// <summary>
+    /// Computes the signed area of a path using the shoelace formula.
+    /// </summary>
+    /// <remarks>
+    /// Positive values indicate clockwise orientation in screen space.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float Sqr(float value) => value * value;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float Area(PathF path)
+    public static float SignedArea(PathF path)
     {
         // https://en.wikipedia.org/wiki/Shoelace_formula
         float a = 0F;
@@ -26,7 +24,8 @@ internal static class ClipperUtils
             return a;
         }
 
-        Vector2 prevPt = path[path.Count - 1];
+        // Sum over edges (prev -> current).
+        Vector2 prevPt = path[^1];
         for (int i = 0; i < path.Count; i++)
         {
             Vector2 pt = path[i];
@@ -37,87 +36,34 @@ internal static class ClipperUtils
         return a * .5F;
     }
 
-    public static PathF StripDuplicates(PathF path, bool isClosedPath)
-    {
-        int cnt = path.Count;
-        PathF result = new(cnt);
-        if (cnt == 0)
-        {
-            return result;
-        }
-
-        PointF lastPt = path[0];
-        result.Add(lastPt);
-        for (int i = 1; i < cnt; i++)
-        {
-            if (lastPt != path[i])
-            {
-                lastPt = path[i];
-                result.Add(lastPt);
-            }
-        }
-
-        if (isClosedPath && lastPt == result[0])
-        {
-            result.RemoveAt(result.Count - 1);
-        }
-
-        return result;
-    }
-
-    public static PathF Ellipse(Vector2 center, float radiusX, float radiusY = 0, int steps = 0)
-    {
-        if (radiusX <= 0)
-        {
-            return [];
-        }
-
-        if (radiusY <= 0)
-        {
-            radiusY = radiusX;
-        }
-
-        if (steps <= 2)
-        {
-            steps = (int)MathF.Ceiling(MathF.PI * MathF.Sqrt((radiusX + radiusY) * .5F));
-        }
-
-        float si = MathF.Sin(2 * MathF.PI / steps);
-        float co = MathF.Cos(2 * MathF.PI / steps);
-        float dx = co, dy = si;
-        PathF result = new(steps) { new Vector2(center.X + radiusX, center.Y) };
-        Vector2 radiusXY = new(radiusX, radiusY);
-        for (int i = 1; i < steps; ++i)
-        {
-            result.Add(center + (radiusXY * new Vector2(dx, dy)));
-            float x = (dx * co) - (dy * si);
-            dy = (dy * co) + (dx * si);
-            dx = x;
-        }
-
-        return result;
-    }
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float DotProduct(Vector2 vec1, Vector2 vec2)
         => Vector2.Dot(vec1, vec2);
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float CrossProduct(Vector2 vec1, Vector2 vec2)
-        => (vec1.Y * vec2.X) - (vec2.Y * vec1.X);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static float CrossProduct(Vector2 pt1, Vector2 pt2, Vector2 pt3)
-        => ((pt2.X - pt1.X) * (pt3.Y - pt2.Y)) - ((pt2.Y - pt1.Y) * (pt3.X - pt2.X));
-
+    /// <summary>
+    /// Returns the dot product of the segments (pt1->pt2) and (pt2->pt3).
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float DotProduct(Vector2 pt1, Vector2 pt2, Vector2 pt3)
         => Vector2.Dot(pt2 - pt1, pt3 - pt2);
 
+    /// <summary>
+    /// Returns the 2D cross product magnitude of <paramref name="vec1" /> and <paramref name="vec2" />.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAlmostZero(float value)
-        => MathF.Abs(value) <= FloatingPointTolerance;
+    public static float CrossProduct(Vector2 vec1, Vector2 vec2)
+        => (vec1.Y * vec2.X) - (vec2.Y * vec1.X);
 
+    /// <summary>
+    /// Returns the cross product of the segments (pt1->pt2) and (pt2->pt3).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static float CrossProduct(Vector2 pt1, Vector2 pt2, Vector2 pt3)
+        => ((pt2.X - pt1.X) * (pt3.Y - pt2.Y)) - ((pt2.Y - pt1.Y) * (pt3.X - pt2.X));
+
+    /// <summary>
+    /// Returns the squared perpendicular distance from a point to a line segment.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static float PerpendicDistFromLineSqrd(Vector2 pt, Vector2 line1, Vector2 line2)
     {
@@ -128,9 +74,18 @@ internal static class ClipperUtils
             return 0;
         }
 
-        return Sqr(CrossProduct(cd, ab)) / DotProduct(cd, cd);
+        float cross = CrossProduct(cd, ab);
+        return (cross * cross) / DotProduct(cd, cd);
     }
 
+    /// <summary>
+    /// Returns true when two segments intersect.
+    /// </summary>
+    /// <param name="seg1a">First endpoint of segment 1.</param>
+    /// <param name="seg1b">Second endpoint of segment 1.</param>
+    /// <param name="seg2a">First endpoint of segment 2.</param>
+    /// <param name="seg2b">Second endpoint of segment 2.</param>
+    /// <param name="inclusive">If true, allows shared endpoints; if false, requires a proper intersection.</param>
     public static bool SegsIntersect(Vector2 seg1a, Vector2 seg1b, Vector2 seg2a, Vector2 seg2b, bool inclusive = false)
     {
         if (inclusive)
@@ -158,26 +113,7 @@ internal static class ClipperUtils
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static bool GetIntersectPt(Vector2 ln1a, Vector2 ln1b, Vector2 ln2a, Vector2 ln2b, out Vector2 ip)
-    {
-        Vector2 dxy1 = ln1b - ln1a;
-        Vector2 dxy2 = ln2b - ln2a;
-        float cp = CrossProduct(dxy1, dxy2);
-        if (cp == 0F)
-        {
-            ip = default;
-            return false;
-        }
-
-        float qx = CrossProduct(ln1a, dxy1);
-        float qy = CrossProduct(ln2a, dxy2);
-
-        ip = ((dxy1 * qy) - (dxy2 * qx)) / cp;
-        return ip != new Vector2(float.MaxValue);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool GetIntersectPoint(Vector2 ln1a, Vector2 ln1b, Vector2 ln2a, Vector2 ln2b, out Vector2 ip)
+    public static bool GetLineIntersectPoint(Vector2 ln1a, Vector2 ln1b, Vector2 ln2a, Vector2 ln2b, out Vector2 ip)
     {
         Vector2 dxy1 = ln1b - ln1a;
         Vector2 dxy2 = ln2b - ln2a;
@@ -189,6 +125,8 @@ internal static class ClipperUtils
         }
 
         float t = (((ln1a.X - ln2a.X) * dxy2.Y) - ((ln1a.Y - ln2a.Y) * dxy2.X)) / det;
+
+        // Clamp intersection to the segment endpoints.
         if (t <= 0F)
         {
             ip = ln1a;
@@ -205,6 +143,12 @@ internal static class ClipperUtils
         return true;
     }
 
+    /// <summary>
+    /// Returns the closest point on a segment to an external point.
+    /// </summary>
+    /// <param name="offPt">The point to project onto the segment.</param>
+    /// <param name="seg1">First endpoint of the segment.</param>
+    /// <param name="seg2">Second endpoint of the segment.</param>
     public static Vector2 GetClosestPtOnSegment(Vector2 offPt, Vector2 seg1, Vector2 seg2)
     {
         if (seg1 == seg2)
@@ -226,11 +170,5 @@ internal static class ClipperUtils
         }
 
         return seg1 + (dxy * q);
-    }
-
-    public static PathF ReversePath(PathF path)
-    {
-        path.Reverse();
-        return path;
     }
 }

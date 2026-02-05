@@ -153,7 +153,7 @@ internal sealed class PolygonClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddNewIntersectNode(Active ae1, Active ae2, float topY)
     {
-        if (!ClipperUtils.GetIntersectPt(ae1.Bot, ae1.Top, ae2.Bot, ae2.Top, out Vector2 ip))
+        if (!PolygonClipperUtilities.GetLineIntersectPoint(ae1.Bot, ae1.Top, ae2.Bot, ae2.Top, out Vector2 ip))
         {
             ip = new Vector2(ae1.CurX, topY);
         }
@@ -168,20 +168,20 @@ internal sealed class PolygonClipper
             {
                 if (absDx1 > absDx2)
                 {
-                    ip = ClipperUtils.GetClosestPtOnSegment(ip, ae1.Bot, ae1.Top);
+                    ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae1.Bot, ae1.Top);
                 }
                 else
                 {
-                    ip = ClipperUtils.GetClosestPtOnSegment(ip, ae2.Bot, ae2.Top);
+                    ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae2.Bot, ae2.Top);
                 }
             }
             else if (absDx1 > 100)
             {
-                ip = ClipperUtils.GetClosestPtOnSegment(ip, ae1.Bot, ae1.Top);
+                ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae1.Bot, ae1.Top);
             }
             else if (absDx2 > 100)
             {
-                ip = ClipperUtils.GetClosestPtOnSegment(ip, ae2.Bot, ae2.Top);
+                ip = PolygonClipperUtilities.GetClosestPtOnSegment(ip, ae2.Bot, ae2.Top);
             }
             else
             {
@@ -989,8 +989,8 @@ internal sealed class PolygonClipper
         do
         {
             // NB if preserveCollinear == true, then only remove 180 deg. spikes
-            if ((ClipperUtils.CrossProduct(op2.Prev.Point, op2.Point, op2.Next.Point) == 0)
-                && ((op2.Point == op2.Prev.Point) || (op2.Point == op2.Next.Point) || !this.PreserveCollinear || (ClipperUtils.DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
+            if ((PolygonClipperUtilities.CrossProduct(op2.Prev.Point, op2.Point, op2.Next.Point) == 0)
+                && ((op2.Point == op2.Prev.Point) || (op2.Point == op2.Next.Point) || !this.PreserveCollinear || (PolygonClipperUtilities.DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
             {
                 if (op2 == outrec.Pts)
                 {
@@ -1024,7 +1024,7 @@ internal sealed class PolygonClipper
         OutPt nextNextOp = splitOp.Next.Next;
         outrec.Pts = prevOp;
 
-        ClipperUtils.GetIntersectPoint(
+        PolygonClipperUtilities.GetIntersectPoint(
             prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vector2 ip);
 
         float area1 = Area(prevOp);
@@ -1085,7 +1085,7 @@ internal sealed class PolygonClipper
         // triangles can't self-intersect
         while (op2.Prev != op2.Next.Next)
         {
-            if (ClipperUtils.SegsIntersect(op2.Prev.Point, op2.Point, op2.Next.Point, op2.Next.Next.Point))
+            if (PolygonClipperUtilities.SegsIntersect(op2.Prev.Point, op2.Point, op2.Next.Point, op2.Next.Next.Point))
             {
                 this.DoSplitOp(outrec, op2);
                 if (outrec.Pts == null)
@@ -2453,7 +2453,7 @@ internal sealed class PolygonClipper
         }
 
         // get the turning direction  a1.top, a2.bot, a2.top
-        float d = ClipperUtils.CrossProduct(resident.Top, newcomer.Bot, newcomer.Top);
+        float d = PolygonClipperUtilities.CrossProduct(resident.Top, newcomer.Bot, newcomer.Top);
         if (d != 0)
         {
             return d < 0;
@@ -2465,12 +2465,12 @@ internal sealed class PolygonClipper
         // the direction they're about to turn
         if (!IsMaxima(resident) && (resident.Top.Y > newcomer.Top.Y))
         {
-            return ClipperUtils.CrossProduct(newcomer.Bot, resident.Top, NextVertex(resident).Point) <= 0;
+            return PolygonClipperUtilities.CrossProduct(newcomer.Bot, resident.Top, NextVertex(resident).Point) <= 0;
         }
 
         if (!IsMaxima(newcomer) && (newcomer.Top.Y > resident.Top.Y))
         {
-            return ClipperUtils.CrossProduct(newcomer.Bot, newcomer.Top, NextVertex(newcomer).Point) >= 0;
+            return PolygonClipperUtilities.CrossProduct(newcomer.Bot, newcomer.Top, NextVertex(newcomer).Point) >= 0;
         }
 
         float y = newcomer.Bot.Y;
@@ -2487,13 +2487,13 @@ internal sealed class PolygonClipper
             return newcomerIsLeft;
         }
 
-        if (ClipperUtils.CrossProduct(PrevPrevVertex(resident).Point, resident.Bot, resident.Top) == 0)
+        if (PolygonClipperUtilities.CrossProduct(PrevPrevVertex(resident).Point, resident.Bot, resident.Top) == 0)
         {
             return true;
         }
 
         // compare turning direction of the alternate bound
-        return (ClipperUtils.CrossProduct(PrevPrevVertex(resident).Point, newcomer.Bot, PrevPrevVertex(newcomer).Point) > 0) == newcomerIsLeft;
+        return (PolygonClipperUtilities.CrossProduct(PrevPrevVertex(resident).Point, newcomer.Bot, PrevPrevVertex(newcomer).Point) > 0) == newcomerIsLeft;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2933,7 +2933,7 @@ internal sealed class PolygonClipper
 
         if (checkCurrX)
         {
-            if (ClipperUtils.PerpendicDistFromLineSqrd(pt, prev.Bot, prev.Top) > 0.25)
+            if (PolygonClipperUtilities.PerpendicDistFromLineSqrd(pt, prev.Bot, prev.Top) > 0.25)
             {
                 return;
             }
@@ -2943,7 +2943,7 @@ internal sealed class PolygonClipper
             return;
         }
 
-        if (ClipperUtils.CrossProduct(e.Top, pt, prev.Top) != 0)
+        if (PolygonClipperUtilities.CrossProduct(e.Top, pt, prev.Top) != 0)
         {
             return;
         }
@@ -2988,7 +2988,7 @@ internal sealed class PolygonClipper
 
         if (checkCurrX)
         {
-            if (ClipperUtils.PerpendicDistFromLineSqrd(pt, next.Bot, next.Top) > 0.25)
+            if (PolygonClipperUtilities.PerpendicDistFromLineSqrd(pt, next.Bot, next.Top) > 0.25)
             {
                 return;
             }
@@ -2998,7 +2998,7 @@ internal sealed class PolygonClipper
             return;
         }
 
-        if (ClipperUtils.CrossProduct(e.Top, pt, next.Top) != 0)
+        if (PolygonClipperUtilities.CrossProduct(e.Top, pt, next.Top) != 0)
         {
             return;
         }
@@ -3383,7 +3383,7 @@ internal class PolyPathF : IEnumerable<PolyPathF>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public float Area()
     {
-        float result = this.Polygon == null ? 0 : ClipperUtils.Area(this.Polygon);
+        float result = this.Polygon == null ? 0 : PolygonClipperUtilities.SignedArea(this.Polygon);
         for (int i = 0; i < this.items.Count; i++)
         {
             PolyPathF child = this.items[i];
