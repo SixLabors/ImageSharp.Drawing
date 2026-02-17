@@ -31,9 +31,9 @@ public class ShapeOptions : IDeepCloneable<ShapeOptions>
     /// <summary>
     /// Gets or sets the rule for calculating intersection points.
     /// <para/>
-    /// Defaults to <see cref="IntersectionRule.EvenOdd"/>.
+    /// Defaults to <see cref="IntersectionRule.NonZero"/>.
     /// </summary>
-    public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.EvenOdd;
+    public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.NonZero;
 
     /// <inheritdoc/>
     public ShapeOptions DeepClone() => new(this);

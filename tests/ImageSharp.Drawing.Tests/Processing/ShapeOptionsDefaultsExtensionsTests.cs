@@ -94,11 +94,13 @@ public class ShapeOptionsDefaultsExtensionsTests
         Configuration config = new();
 
         ShapeOptions options = config.GetShapeOptions();
+        Assert.Equal(IntersectionRule.NonZero, options.IntersectionRule);
         Assert.NotNull(options);
         config.SetShapeOptions((ShapeOptions)null);
 
         ShapeOptions options2 = config.GetShapeOptions();
         Assert.NotNull(options2);
+        Assert.Equal(IntersectionRule.NonZero, options2.IntersectionRule);
 
         // we set it to null should now be a new instance
         Assert.NotEqual(options, options2);
@@ -123,6 +125,7 @@ public class ShapeOptionsDefaultsExtensionsTests
         Assert.DoesNotContain(typeof(ShapeOptions), config.Properties.Keys);
         ShapeOptions options = config.GetShapeOptions();
         Assert.NotNull(options);
+        Assert.Equal(IntersectionRule.NonZero, options.IntersectionRule);
     }
 
     [Fact]
@@ -143,6 +146,7 @@ public class ShapeOptionsDefaultsExtensionsTests
 
         ShapeOptions ctxOptions = context.GetShapeOptions();
         Assert.NotNull(ctxOptions);
+        Assert.Equal(IntersectionRule.NonZero, ctxOptions.IntersectionRule);
     }
 
     [Fact]
@@ -154,6 +158,7 @@ public class ShapeOptionsDefaultsExtensionsTests
         context.SetShapeOptions((ShapeOptions)null);
         ShapeOptions ctxOptions = context.GetShapeOptions();
         Assert.NotNull(ctxOptions);
+        Assert.Equal(IntersectionRule.NonZero, ctxOptions.IntersectionRule);
     }
 
     [Fact]
