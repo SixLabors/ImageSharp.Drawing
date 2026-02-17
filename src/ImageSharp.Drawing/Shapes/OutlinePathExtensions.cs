@@ -12,6 +12,8 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public static class OutlinePathExtensions
 {
+    private static readonly StrokeOptions DefaultOptions = new();
+
     /// <summary>
     /// Generates an outline of the path.
     /// </summary>
@@ -19,7 +21,7 @@ public static class OutlinePathExtensions
     /// <param name="width">The outline width.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     public static IPath GenerateOutline(this IPath path, float width)
-        => GenerateOutline(path, width, new StrokeOptions());
+        => GenerateOutline(path, width, DefaultOptions);
 
     /// <summary>
     /// Generates an outline of the path.
@@ -35,8 +37,7 @@ public static class OutlinePathExtensions
             return Path.Empty;
         }
 
-        StrokedShapeGenerator generator = new(strokeOptions);
-        return new ComplexPolygon(generator.GenerateStrokedShapes(path, width));
+        return StrokedShapeGenerator.GenerateStrokedShapes(path, width, strokeOptions);
     }
 
     /// <summary>
@@ -69,7 +70,7 @@ public static class OutlinePathExtensions
     /// <param name="startOff">Whether the first item in the pattern is on or off.</param>
     /// <returns>A new <see cref="IPath"/> representing the outline.</returns>
     public static IPath GenerateOutline(this IPath path, float width, ReadOnlySpan<float> pattern, bool startOff)
-        => GenerateOutline(path, width, pattern, startOff, new StrokeOptions());
+        => GenerateOutline(path, width, pattern, startOff, DefaultOptions);
 
     /// <summary>
     /// Generates an outline of the path with alternating on and off segments based on the pattern.
@@ -235,7 +236,6 @@ public static class OutlinePathExtensions
         }
 
         // Each outline span is stroked as an open polyline; the union cleans overlaps.
-        StrokedShapeGenerator generator = new(strokeOptions);
-        return new ComplexPolygon(generator.GenerateStrokedShapes(outlines, width));
+        return StrokedShapeGenerator.GenerateStrokedShapes(outlines, width, strokeOptions);
     }
 }

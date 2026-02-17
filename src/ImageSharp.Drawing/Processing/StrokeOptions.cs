@@ -9,19 +9,31 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 public sealed class StrokeOptions : IEquatable<StrokeOptions?>
 {
     /// <summary>
+    /// Gets or sets a value indicating whether stroked contours should be normalized by
+    /// resolving self-intersections and overlaps before returning.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to <see langword="false"/> for maximum throughput.
+    /// When disabled, callers should rasterize with a non-zero winding fill rule.
+    /// </remarks>
+    public bool NormalizeOutput { get; set; }
+
+    /// <summary>
     /// Gets or sets the miter limit used to clamp outer miter joins.
     /// </summary>
-    public double MiterLimit { get; set; } = 4;
+    public double MiterLimit { get; set; } = 4D;
 
     /// <summary>
     /// Gets or sets the inner miter limit used to clamp joins on acute interior angles.
     /// </summary>
-    public double InnerMiterLimit { get; set; } = 1.01;
+    public double InnerMiterLimit { get; set; } = 1.01D;
 
     /// <summary>
-    /// Gets or sets the arc approximation scale used for round joins and caps.
+    /// Gets or sets the tessellation detail scale for round joins and round caps.
+    /// Higher values produce more vertices (smoother curves, more work).
+    /// Lower values produce fewer vertices.
     /// </summary>
-    public double ApproximationScale { get; set; } = 1.0;
+    public double ArcDetailScale { get; set; } = 1D;
 
     /// <summary>
     /// Gets or sets the outer line join style used for stroking corners.
@@ -44,19 +56,21 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     /// <inheritdoc/>
     public bool Equals(StrokeOptions? other)
         => other is not null &&
-        this.MiterLimit == other.MiterLimit &&
-        this.InnerMiterLimit == other.InnerMiterLimit &&
-        this.ApproximationScale == other.ApproximationScale &&
-        this.LineJoin == other.LineJoin &&
-        this.LineCap == other.LineCap &&
-        this.InnerJoin == other.InnerJoin;
+           this.NormalizeOutput == other.NormalizeOutput &&
+           this.MiterLimit == other.MiterLimit &&
+           this.InnerMiterLimit == other.InnerMiterLimit &&
+           this.ArcDetailScale == other.ArcDetailScale &&
+           this.LineJoin == other.LineJoin &&
+           this.LineCap == other.LineCap &&
+           this.InnerJoin == other.InnerJoin;
 
     /// <inheritdoc/>
     public override int GetHashCode()
         => HashCode.Combine(
+            this.NormalizeOutput,
             this.MiterLimit,
             this.InnerMiterLimit,
-            this.ApproximationScale,
+            this.ArcDetailScale,
             this.LineJoin,
             this.LineCap,
             this.InnerJoin);

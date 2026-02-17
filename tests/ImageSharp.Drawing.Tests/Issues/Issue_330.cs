@@ -21,6 +21,22 @@ public class Issue_330
 
         provider.RunValidatingProcessorTest(p =>
         {
+
+            //p.DrawText(
+            //    new RichTextOptions(namefont)
+            //    {
+            //        VerticalAlignment = VerticalAlignment.Center,
+            //        HorizontalAlignment = HorizontalAlignment.Center,
+            //        TextAlignment = TextAlignment.Center,
+            //        TextDirection = TextDirection.LeftToRight,
+            //        Origin = new Point(1156, 713),
+            //    },
+            //    "O",
+            //    Brushes.Solid(Color.White),
+            //    Pens.Solid(Color.Black, 5));
+
+            //return;
+
             p.DrawText(
                 new RichTextOptions(bibfont)
                 {

@@ -16,11 +16,11 @@ public class InProcessConfig : ManualConfig
 {
     public InProcessConfig()
     {
-        AddLogger(ConsoleLogger.Default);
+        this.AddLogger(ConsoleLogger.Default);
 
-        AddColumnProvider(DefaultColumnProviders.Instance);
+        this.AddColumnProvider(DefaultColumnProviders.Instance);
 
-        AddExporter(DefaultExporters.Html, DefaultExporters.Csv);
+        this.AddExporter(DefaultExporters.Html, DefaultExporters.Csv);
 
         this.AddJob(Job.MediumRun
             .WithToolchain(InProcessEmitToolchain.Instance));

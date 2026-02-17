@@ -11,6 +11,8 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public static class ClipPathExtensions
 {
+    private static readonly ShapeOptions DefaultOptions = new();
+
     /// <summary>
     /// Clips the specified subject path with the provided clipping paths.
     /// </summary>
@@ -18,7 +20,7 @@ public static class ClipPathExtensions
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
     public static IPath Clip(this IPath subjectPath, params IPath[] clipPaths)
-        => subjectPath.Clip((IEnumerable<IPath>)clipPaths);
+        => subjectPath.Clip(DefaultOptions, clipPaths);
 
     /// <summary>
     /// Clips the specified subject path with the provided clipping paths.
@@ -31,7 +33,7 @@ public static class ClipPathExtensions
         this IPath subjectPath,
         ShapeOptions options,
         params IPath[] clipPaths)
-        => subjectPath.Clip(options, (IEnumerable<IPath>)clipPaths);
+        => ClippedShapeGenerator.GenerateClippedShapes(options.BooleanOperation, subjectPath, clipPaths);
 
     /// <summary>
     /// Clips the specified subject path with the provided clipping paths.
@@ -40,7 +42,7 @@ public static class ClipPathExtensions
     /// <param name="clipPaths">The clipping paths.</param>
     /// <returns>The clipped <see cref="IPath"/>.</returns>
     public static IPath Clip(this IPath subjectPath, IEnumerable<IPath> clipPaths)
-        => subjectPath.Clip(new ShapeOptions(), clipPaths);
+        => subjectPath.Clip(DefaultOptions, clipPaths);
 
     /// <summary>
     /// Clips the specified subject path with the provided clipping paths.
@@ -53,14 +55,5 @@ public static class ClipPathExtensions
         this IPath subjectPath,
         ShapeOptions options,
         IEnumerable<IPath> clipPaths)
-    {
-        ClippedShapeGenerator clipper = new(options.IntersectionRule);
-
-        clipper.AddPath(subjectPath, ClippingType.Subject);
-        clipper.AddPaths(clipPaths, ClippingType.Clip);
-
-        IPath[] result = clipper.GenerateClippedShapes(options.BooleanOperation);
-
-        return new ComplexPolygon(result);
-    }
+        => ClippedShapeGenerator.GenerateClippedShapes(options.BooleanOperation, subjectPath, clipPaths);
 }

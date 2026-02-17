@@ -52,7 +52,7 @@ internal class ThreadLocalBlenderBuffers<TPixel> : IDisposable
                     return this.overlayBuffer.Memory.Span;
                 }
 
-                return Span<TPixel>.Empty;
+                return [];
             }
         }
 

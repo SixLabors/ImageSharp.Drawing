@@ -47,5 +47,8 @@
     <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.3" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.49" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\SixLabors\PolygonClipper\src\PolygonClipper\PolygonClipper.csproj" />
+  </ItemGroup>
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 </Project>

@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
@@ -34,7 +33,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// </summary>
     /// <param name="paths">The paths.</param>
     public ComplexPolygon(IEnumerable<IPath> paths)
-        : this(paths.ToArray())
+        : this([.. paths])
     {
     }
 

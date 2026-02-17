@@ -9,6 +9,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.PolygonClipper;
 using SkiaSharp;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
@@ -254,5 +255,74 @@ public class DrawingRobustnessTests
 
         using FileStream fs = File.Create(fn);
         data.SaveTo(fs);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_States_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54) * Matrix3x2.CreateScale(60, 60);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(
+            c =>
+            {
+                foreach (PointF[] loop in points)
+                {
+                    c.DrawPolygon(Color.White, thickness, loop);
+                }
+            });
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeStar_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        List<PointF[]> points = CreateStarPolygon(1001, 100F);
+        Matrix3x2 transform = Matrix3x2.CreateTranslation(250, 250);
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(
+            c =>
+            {
+                foreach (PointF[] loop in points)
+                {
+                    c.SetDrawingTransform(transform);
+                    c.DrawPolygon(Color.White, thickness, loop);
+                }
+            });
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    private static List<PointF[]> CreateStarPolygon(int vertexCount, float radius)
+    {
+        if (vertexCount < 5 || (vertexCount & 1) == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(vertexCount), "Vertex count must be an odd number >= 5.");
+        }
+
+        int step = (vertexCount - 1) / 2;
+        List<PointF> contour = new(vertexCount + 1);
+        for (int i = 0; i < vertexCount; i++)
+        {
+            int index = (i * step) % vertexCount;
+            float angle = (index * MathF.PI * 2) / vertexCount;
+            contour.Add(new PointF(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius));
+        }
+
+        contour.Add(contour[0]);
+        return [[.. contour]];
     }
 }
