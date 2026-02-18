@@ -13,5 +13,5 @@ internal interface IInternalPathOwner
     /// Returns the rings as a readonly collection of <see cref="InternalPath"/> elements.
     /// </summary>
     /// <returns>The <see cref="IReadOnlyList{T}"/>.</returns>
-    IReadOnlyList<InternalPath> GetRingsAsInternalPath();
+    public IReadOnlyList<InternalPath> GetRingsAsInternalPath();
 }

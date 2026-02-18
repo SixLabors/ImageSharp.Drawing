@@ -12,6 +12,8 @@
     <!--BenchmarkDotNet cannot run static benchmarks-->
     <!--Mark members as static-->
     <NoWarn>CA1822</NoWarn>
+    <!--Validate platform compatibility-->
+    <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
 
   <Choose>

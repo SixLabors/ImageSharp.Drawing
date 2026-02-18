@@ -314,7 +314,7 @@ public class DrawingRobustnessTests
 
         image.Mutate(c =>
         {
-            c.SetRasterizer(TiledRasterizer.Instance);
+            c.SetRasterizer(DefaultRasterizer.Instance);
             c.Draw(Color.White, thickness, path);
         });
 

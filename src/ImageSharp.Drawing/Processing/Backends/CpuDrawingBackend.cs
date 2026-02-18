@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 
@@ -10,22 +9,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Default CPU drawing backend.
 /// </summary>
-/// <remarks>
-/// This backend currently dispatches to the existing scanline rasterizer pipeline.
-/// A tiled rasterizer path is wired behind an AppContext switch for incremental rollout.
-/// </remarks>
 internal sealed class CpuDrawingBackend : IDrawingBackend
 {
-    private const string ExperimentalTiledRasterizerSwitch = "SixLabors.ImageSharp.Drawing.ExperimentalTiledRasterizer";
+    private readonly IRasterizer primaryRasterizer;
 
-    private readonly IRasterizer defaultRasterizer;
-    private readonly TiledRasterizer tiledRasterizer;
-
-    private CpuDrawingBackend(IRasterizer defaultRasterizer)
+    private CpuDrawingBackend(IRasterizer primaryRasterizer)
     {
-        Guard.NotNull(defaultRasterizer, nameof(defaultRasterizer));
-        this.defaultRasterizer = defaultRasterizer;
-        this.tiledRasterizer = TiledRasterizer.Instance;
+        Guard.NotNull(primaryRasterizer, nameof(primaryRasterizer));
+        this.primaryRasterizer = primaryRasterizer;
     }
 
     /// <summary>
@@ -36,7 +27,7 @@ internal sealed class CpuDrawingBackend : IDrawingBackend
     /// <summary>
     /// Gets the primary rasterizer used by this backend.
     /// </summary>
-    public IRasterizer PrimaryRasterizer => this.defaultRasterizer;
+    public IRasterizer PrimaryRasterizer => this.primaryRasterizer;
 
     /// <summary>
     /// Creates a backend that uses the given rasterizer as the primary implementation.
@@ -57,16 +48,5 @@ internal sealed class CpuDrawingBackend : IDrawingBackend
         ref TState state,
         RasterizerScanlineHandler<TState> scanlineHandler)
         where TState : struct
-    {
-        if (UseExperimentalTiledRasterizer())
-        {
-            this.tiledRasterizer.Rasterize(path, options, allocator, ref state, scanlineHandler);
-            return;
-        }
-
-        this.defaultRasterizer.Rasterize(path, options, allocator, ref state, scanlineHandler);
-    }
-
-    private static bool UseExperimentalTiledRasterizer()
-        => AppContext.TryGetSwitch(ExperimentalTiledRasterizerSwitch, out bool enabled) && enabled;
+        => this.primaryRasterizer.Rasterize(path, options, allocator, ref state, scanlineHandler);
 }

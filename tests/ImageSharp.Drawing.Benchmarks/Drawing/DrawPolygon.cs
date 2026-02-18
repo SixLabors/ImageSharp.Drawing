@@ -51,6 +51,13 @@ public abstract class DrawPolygon
     [GlobalSetup]
     public void Setup()
     {
+        // Tiled rasterization benefits from a warmed worker pool. Doing this once in setup
+        // reduces first-iteration noise without affecting per-method correctness.
+        ThreadPool.GetMinThreads(out int minWorkerThreads, out int minCompletionPortThreads);
+        int desiredWorkerThreads = Math.Max(minWorkerThreads, Environment.ProcessorCount);
+        ThreadPool.SetMinThreads(desiredWorkerThreads, minCompletionPortThreads);
+        Parallel.For(0, desiredWorkerThreads, static _ => { });
+
         string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
         FeatureCollection featureCollection = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
 
@@ -147,31 +154,34 @@ public abstract class DrawPolygon
     public void SystemDrawing()
         => this.sdGraphics.DrawPath(this.sdPen, this.sdPath);
 
+    // Keep explicit legacy path for side-by-side comparison now that tiled is default.
     [Benchmark]
     public void ImageSharpCombinedPaths()
-        => this.image.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
+        => this.image.Mutate(c => c.SetRasterizer(ScanlineRasterizer.Instance).Draw(this.isPen, this.imageSharpPath));
 
     [Benchmark]
     public void ImageSharpSeparatePaths()
         => this.image.Mutate(
             c =>
             {
+                // Keep explicit legacy path for side-by-side comparison now that tiled is default.
+                c.SetRasterizer(ScanlineRasterizer.Instance);
                 foreach (PointF[] loop in this.points)
                 {
                     c.DrawPolygon(Color.White, this.Thickness, loop);
                 }
             });
 
+    // Tiled is now the framework default rasterizer path.
     [Benchmark]
     public void ImageSharpCombinedPathsTiled()
-        => this.image.Mutate(c => c.SetRasterizer(TiledRasterizer.Instance).Draw(this.isPen, this.imageSharpPath));
+        => this.image.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
 
     [Benchmark]
     public void ImageSharpSeparatePathsTiled()
         => this.image.Mutate(
             c =>
             {
-                c.SetRasterizer(TiledRasterizer.Instance);
                 foreach (PointF[] loop in this.points)
                 {
                     c.DrawPolygon(Color.White, this.Thickness, loop);
@@ -183,16 +193,10 @@ public abstract class DrawPolygon
         => this.skSurface.Canvas.DrawPath(this.skPath, this.skPaint);
 
     [Benchmark]
-    public IPath ImageSharpStrokeAndClip()
-    {
-        return this.isPen.GeneratePath(this.imageSharpPath);
-    }
+    public IPath ImageSharpStrokeAndClip() => this.isPen.GeneratePath(this.imageSharpPath);
 
     [Benchmark]
-    public void FillPolygon()
-    {
-        this.image.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
-    }
+    public void FillPolygon() => this.image.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
 }
 
 public class DrawPolygonAll : DrawPolygon

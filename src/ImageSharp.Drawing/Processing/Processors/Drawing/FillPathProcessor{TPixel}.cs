@@ -64,23 +64,20 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
 
         int minX = interest.Left;
 
-        // The rasterizer always computes continuous coverage, then aliased mode quantizes coverage
-        // in ProcessRasterizedScanline().
-        int subpixelCount = FillPathProcessor.FixedRasterizerSubpixelCount;
         using BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, graphicsOptions, source, this.bounds);
         MemoryAllocator allocator = this.Configuration.MemoryAllocator;
         IDrawingBackend drawingBackend = configuration.GetDrawingBackend();
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
         RasterizerOptions rasterizerOptions = new(
             interest,
-            subpixelCount,
             shapeOptions.IntersectionRule,
+            rasterizationMode,
             RasterizerSamplingOrigin.PixelBoundary);
 
         RasterizationState state = new(
             source,
             applicator,
             minX,
-            graphicsOptions.Antialias,
             isSolidBrushWithoutBlending,
             solidBrushColor);
 
@@ -106,41 +103,6 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
 
     private static void ProcessRasterizedScanline(int y, Span<float> scanline, ref RasterizationState state)
     {
-        if (!state.Antialias)
-        {
-            bool hasOnes = false;
-            bool hasZeros = false;
-            for (int x = 0; x < scanline.Length; x++)
-            {
-                if (scanline[x] >= 0.5F)
-                {
-                    scanline[x] = 1F;
-                    hasOnes = true;
-                }
-                else
-                {
-                    scanline[x] = 0F;
-                    hasZeros = true;
-                }
-            }
-
-            if (state.IsSolidBrushWithoutBlending && hasOnes != hasZeros)
-            {
-                if (hasOnes)
-                {
-                    state.Source.PixelBuffer.DangerousGetRowSpan(y).Slice(state.MinX, scanline.Length).Fill(state.SolidBrushColor);
-                }
-
-                return;
-            }
-
-            if (state.IsSolidBrushWithoutBlending && hasOnes)
-            {
-                FillOpaqueRuns(state.Source, y, state.MinX, scanline, state.SolidBrushColor);
-                return;
-            }
-        }
-
         if (state.IsSolidBrushWithoutBlending)
         {
             ApplyCoverageRunsForOpaqueSolidBrush(state.Source, state.Applicator, scanline, state.MinX, y, state.SolidBrushColor);
@@ -236,46 +198,18 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         }
     }
 
-    private static void FillOpaqueRuns(ImageFrame<TPixel> source, int y, int minX, Span<float> scanline, TPixel solidBrushColor)
-    {
-        Span<TPixel> destinationRow = source.PixelBuffer.DangerousGetRowSpan(y).Slice(minX, scanline.Length);
-        int i = 0;
-
-        while (i < scanline.Length)
-        {
-            while (i < scanline.Length && scanline[i] <= 0F)
-            {
-                i++;
-            }
-
-            int runStart = i;
-            while (i < scanline.Length && scanline[i] > 0F)
-            {
-                i++;
-            }
-
-            int runLength = i - runStart;
-            if (runLength > 0)
-            {
-                destinationRow.Slice(runStart, runLength).Fill(solidBrushColor);
-            }
-        }
-    }
-
     private readonly struct RasterizationState
     {
         public RasterizationState(
             ImageFrame<TPixel> source,
             BrushApplicator<TPixel> applicator,
             int minX,
-            bool antialias,
             bool isSolidBrushWithoutBlending,
             TPixel solidBrushColor)
         {
             this.Source = source;
             this.Applicator = applicator;
             this.MinX = minX;
-            this.Antialias = antialias;
             this.IsSolidBrushWithoutBlending = isSolidBrushWithoutBlending;
             this.SolidBrushColor = solidBrushColor;
         }
@@ -285,8 +219,6 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         public BrushApplicator<TPixel> Applicator { get; }
 
         public int MinX { get; }
-
-        public bool Antialias { get; }
 
         public bool IsSolidBrushWithoutBlending { get; }
 

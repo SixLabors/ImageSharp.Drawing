@@ -4,6 +4,22 @@
 namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
 /// <summary>
+/// Describes whether rasterizers should emit continuous coverage or binary aliased coverage.
+/// </summary>
+internal enum RasterizationMode
+{
+    /// <summary>
+    /// Emit continuous coverage in the range [0, 1].
+    /// </summary>
+    Antialiased = 0,
+
+    /// <summary>
+    /// Emit binary coverage values (0 or 1).
+    /// </summary>
+    Aliased = 1
+}
+
+/// <summary>
 /// Describes where sample coverage is aligned relative to destination pixels.
 /// </summary>
 internal enum RasterizerSamplingOrigin
@@ -28,20 +44,18 @@ internal readonly struct RasterizerOptions
     /// Initializes a new instance of the <see cref="RasterizerOptions"/> struct.
     /// </summary>
     /// <param name="interest">Destination bounds to rasterize into.</param>
-    /// <param name="subpixelCount">Subpixel sampling count.</param>
     /// <param name="intersectionRule">Polygon intersection rule.</param>
+    /// <param name="rasterizationMode">Rasterization coverage mode.</param>
     /// <param name="samplingOrigin">Sampling origin alignment.</param>
     public RasterizerOptions(
         Rectangle interest,
-        int subpixelCount,
         IntersectionRule intersectionRule,
+        RasterizationMode rasterizationMode = RasterizationMode.Antialiased,
         RasterizerSamplingOrigin samplingOrigin = RasterizerSamplingOrigin.PixelBoundary)
     {
-        Guard.MustBeGreaterThan(subpixelCount, 0, nameof(subpixelCount));
-
         this.Interest = interest;
-        this.SubpixelCount = subpixelCount;
         this.IntersectionRule = intersectionRule;
+        this.RasterizationMode = rasterizationMode;
         this.SamplingOrigin = samplingOrigin;
     }
 
@@ -51,14 +65,14 @@ internal readonly struct RasterizerOptions
     public Rectangle Interest { get; }
 
     /// <summary>
-    /// Gets the subpixel sampling count.
-    /// </summary>
-    public int SubpixelCount { get; }
-
-    /// <summary>
     /// Gets the polygon intersection rule.
     /// </summary>
     public IntersectionRule IntersectionRule { get; }
+
+    /// <summary>
+    /// Gets the rasterization coverage mode.
+    /// </summary>
+    public RasterizationMode RasterizationMode { get; }
 
     /// <summary>
     /// Gets the sampling origin alignment.
@@ -71,5 +85,5 @@ internal readonly struct RasterizerOptions
     /// <param name="interest">The replacement interest rectangle.</param>
     /// <returns>A new <see cref="RasterizerOptions"/> value.</returns>
     public RasterizerOptions WithInterest(Rectangle interest)
-        => new(interest, this.SubpixelCount, this.IntersectionRule, this.SamplingOrigin);
+        => new(interest, this.IntersectionRule, this.RasterizationMode, this.SamplingOrigin);
 }

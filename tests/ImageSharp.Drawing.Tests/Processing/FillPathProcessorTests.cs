@@ -238,7 +238,7 @@ public class FillPathProcessorTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void FillPathProcessor_UsesFixedSubpixelCount(bool antialias)
+    public void FillPathProcessor_UsesExpectedRasterizationModeAndPixelBoundarySamplingOrigin(bool antialias)
     {
         RecordingRasterizer rasterizer = new();
         Configuration configuration = new();
@@ -260,14 +260,18 @@ public class FillPathProcessorTests
         using Image<Rgba32> image = new(configuration, 20, 20);
         processor.Execute(configuration, image, image.Bounds);
 
-        Assert.Equal(FillPathProcessor.FixedRasterizerSubpixelCount, rasterizer.LastSubpixelCount);
+        RasterizationMode expectedMode = antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+        Assert.Equal(expectedMode, rasterizer.LastRasterizationMode);
+        Assert.Equal(RasterizerSamplingOrigin.PixelBoundary, rasterizer.LastSamplingOrigin);
     }
 
     private sealed class RecordingRasterizer : IRasterizer
     {
         public int CallCount { get; private set; }
 
-        public int LastSubpixelCount { get; private set; }
+        public RasterizationMode LastRasterizationMode { get; private set; }
+
+        public RasterizerSamplingOrigin LastSamplingOrigin { get; private set; }
 
         public void Rasterize<TState>(
             IPath path,
@@ -278,7 +282,8 @@ public class FillPathProcessorTests
             where TState : struct
         {
             this.CallCount++;
-            this.LastSubpixelCount = options.SubpixelCount;
+            this.LastRasterizationMode = options.RasterizationMode;
+            this.LastSamplingOrigin = options.SamplingOrigin;
         }
     }
 }

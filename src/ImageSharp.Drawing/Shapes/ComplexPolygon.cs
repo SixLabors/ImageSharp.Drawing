@@ -117,10 +117,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// <inheritdoc/>
     SegmentInfo IPathInternals.PointAlongPath(float distance)
     {
-        if (this.internalPaths == null)
-        {
-            this.InitInternalPaths();
-        }
+        this.EnsureInternalPaths();
 
         distance %= this.length;
         foreach (InternalPath p in this.internalPaths)
@@ -141,8 +138,19 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
     {
-        this.InitInternalPaths();
+        this.EnsureInternalPaths();
         return this.internalPaths;
+    }
+
+    [MemberNotNull(nameof(internalPaths))]
+    private void EnsureInternalPaths()
+    {
+        if (this.internalPaths is not null)
+        {
+            return;
+        }
+
+        this.InitInternalPaths();
     }
 
     /// <summary>
@@ -152,6 +160,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     private void InitInternalPaths()
     {
         this.internalPaths = new List<InternalPath>(this.paths.Length);
+        this.length = 0;
 
         foreach (IPath p in this.paths)
         {

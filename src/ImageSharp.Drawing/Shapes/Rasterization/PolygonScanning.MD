@@ -1,76 +1,204 @@
-# Polygon Scanning with Active Edge List
+# Polygon Scanner (Fixed-Point, Banded)
 
-Scanning is done with a variant of the ["Active Edge Table" algorithm](https://en.wikipedia.org/wiki/Scanline_rendering#Algorithm), that doesn't build a table beforehand, just maintains the list of currently active edges.
+This document describes the current `PolygonScanner` implementation in
+`src/ImageSharp.Drawing/Shapes/Rasterization/PolygonScanner.cs`.
 
-After rasterizing polygons a collection of non-horizontal edges (ScanEdge) is extracted into ScanEdgeCollection. These are then sorted by minimum and maximum y-coordinate, which enables the maintanance of the Active Edge List as we traverse the collection from `minY` to `maxY`.
+The scanner is a fixed-point, area/cover rasterizer inspired by Blaze-style
+scan conversion.
 
-When intersecting a ScanEdge start (Y0) and end (Y1) intersections have special handling. Since these belong to vertices (connection points) sometimes we need to emit the intersection point 2 times. In other cases we do not want to emit it at all.
+https://github.com/aurimasg/blaze (MIT-Licensed)
 
-### Illustration
+## Goals
 
-Consider the following polygon with 4 non-horizontal ScanEdge-s, being intersected by scanlines `SCANLINE 1` and `SCANLINE 2`:
+- Robustly rasterize arbitrary tessellated polygon rings (including self intersections).
+- Support `EvenOdd` and `NonZero` fill rules.
+- Keep temporary memory bounded for large targets.
+- Emit coverage spans efficiently for blending.
 
-```
-                + - - - - - - - - - - - - - - - - +
-                | (1)                           (1)\ 
-                |                                   \ B
-                |                                    \
-                |                                 (0) \ 
-SCANLINE 1 >>>> | >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>      | (1)  >>>>>>>>>
-                |                                      |
-                | A                                  C |
-                |                                      |
-                |               (2)         X          | (1)
-SCANLINE 2 >>>> | >>>>>>>>>>>>>> + - - - - - - - - - - +      >>>>>>>>>
-                |                |
-                |                |               
-                |              D |
-                |                |
-                | (1)            | (1)
-                +  - - - - - - - +
+## High-Level Pipeline
 
 ```
+IPath
+  |
+  v
+TessellatedMultipolygon.Create(...)
+  |
+  v
+Band loop over interest rectangle Y
+  |
+  +--> Clear band-local buffers
+  |
+  +--> Rasterize all ring edges into cover/area accumulators
+  |
+  +--> Convert accumulators to coverage scanlines
+  |
+  +--> Invoke rasterizer callback per dirty row
+```
 
+## Coordinate System and Precision
 
-#### Intersections at SCANLINE 1
+- Geometry is transformed to scanner-local coordinates:
+  - `xLocal = (x - interest.Left) + samplingOffsetX`
+  - `yLocal = y - (interest.Top + bandTop)`
+- Scanner math uses signed 24.8 fixed point:
+  - `FixedShift = 8`
+  - `FixedOne = 256`
+- Coverage is normalized to `[0..1]` with 256 steps:
+  - `CoverageStepCount = 256`
+  - `CoverageScale = 1 / 256`
 
-- Intersection with edge A is trivial, since it's being intersected on an internal point of the edge
-- The second intersection is more tricky: the intersection point is at the connection (vertex) between edges B and C, but we do not want to emit the intersection 2 times.
-  - To avoid this, when checking the scanline's collision against edge B we emit 0 intersections at it's endpoint (Y1), when checking against edge C we emit 1 point at its start point (Y0)
+This means 1 fixed unit in Y equals 1/256 pixel row resolution.
 
-#### Intersections at SCANLINE 2
+## Memory Model and Banding
 
-- Intersection with edge A is trivial, since it's being intersected on an internal point
-- However the rest is tricky: We want to to emulate the intersection with the collinear edge X not being listed in `ScanEdgeCollection`.
-  - The easiest way is to emit a point pair for the line part between A-D and a second point pair for D-C (to emulate the intersection with X)
-  - To achieve this, we should emit the start point (Y0) of the D edge 2 times when intersecting it!
+The scanner bounds temporary memory with a per-band budget:
 
-### Edge emit rules
+- `BandMemoryBudgetBytes = 64 MB`
+- Rows per band are computed from per-row byte cost.
 
-The emit rules are there to provide a consistent way for intersecting scanlines as described in the previous "Illustration" part, handling all corner cases.
-These rules only work well, when:
-- The outline polygons are Clockwise in screen-space (= "has positive orientation" according to the terminlogy used in the repository)
-- Holes have Counter-Clockwise ("negative") orientation.
+Per-row temporary storage:
 
-Most real-world inputs tend to follow these rules, however intersecting polygons which do not do so, leads to inaccuracies around horizontal edges. These inaccuracies are visually acceptable.
+```
+bitVectors: wordsPerRow * sizeof(nuint)
+coverArea : (width * 2) * sizeof(int)
+startCover: 1 * sizeof(int)
+```
 
-The rules apply to vertices (edge connections). `⟶` and `⟵` edges are horizontal, `↑` and `↓` edges are non-horizontal.
+Band buffers are reused for each band:
 
-Edge In | Edge Out | Emit on "Edge In" | Emit on "Edge out"
--- | -- | -- | --
-↑ | ↑ | 0 | 1
-↑ | ↓ | 1 | 1
-↑ | ⟵ | 2 | 0
-↑ | ⟶ | 1 | 0
-↓ | ↑ | 1 | 1
-↓ | ↓ | 0 | 1
-↓ | ⟵ | 1 | 0
-↓ | ⟶ | 2 | 0
-⟵ | ↑ | 0 | 1
-⟵ | ↓ | 0 | 2
-⟵ | ⟵ | 0 | 0
-⟵ | ⟶ | 0 | 0
-⟶ | ↑ | 0 | 2
-⟶ | ↓ | 0 | 1
-⟶ | ⟵ | 0 | 0
-⟶ | ⟶ | 0 | 0
+```
+bitVectors  : [bandHeight][wordsPerRow]   // bitset marks touched columns
+coverArea   : [bandHeight][width * 2]     // per x: [deltaCover, deltaArea]
+startCover  : [bandHeight]                // carry-in cover at x=0
+rowHasBits  : [bandHeight]                // fast "row touched" flag
+scanline    : [width] float               // output coverage row
+```
+
+If width/height are too large for safe indexing math, `PolygonScanner.Rasterize`
+throws `InvalidOperationException`.
+
+## Edge Rasterization Stage
+
+For each tessellated ring edge `(p0 -> p1)`:
+
+1. Translate to local band coordinates.
+2. Reject non-finite coordinates.
+3. Clip vertically to `[0, bandHeight]` (`ClipToVerticalBounds`).
+4. Convert endpoints to 24.8 fixed.
+5. Skip horizontal edges (`fy0 == fy1`).
+6. Route to directional line walkers (`LineDownR`, `LineUpL`, etc.).
+
+The walkers decompose edges into affected cells and call:
+
+- `Cell(...)` for general segments
+- `CellVertical(...)` for vertical segments
+
+Both end up in `AddCell(row, column, deltaCover, deltaArea)`.
+
+`AddCell` updates:
+
+- `coverArea[row, column * 2 + 0] += deltaCover`
+- `coverArea[row, column * 2 + 1] += deltaArea`
+- bit in `bitVectors[row]` for `column`
+- `rowHasBits[row] = 1`
+
+If `column < 0`, the contribution is folded into `startCover[row]` so coverage
+to the left of the interest rectangle still influences pixels at `x >= 0`.
+
+## Scanline Emission Stage
+
+For each row in the current band:
+
+1. Skip quickly if `startCover[row] == 0` and `rowHasBits[row] == 0`.
+2. Iterate set bits in the row bitset (`TrailingZeroCount` walk).
+3. Reconstruct area/cover state at each touched `x`.
+4. Convert signed accumulated area to coverage via fill rule.
+5. Coalesce equal coverage into spans.
+6. Fill `scanline[start..end]` for each non-zero span.
+7. Invoke callback for dirty rows only.
+
+Core conversion:
+
+```
+area = coverArea[deltaArea] + (cover << 9)
+```
+
+`cover` is updated incrementally by `deltaCover`.
+
+## Fill Rule Handling
+
+### NonZero
+
+```
+absArea = abs(signedArea)
+coverage = min(absArea, 256) / 256
+```
+
+### EvenOdd
+
+```
+wrapped = absArea & 511
+if wrapped > 256: wrapped = 512 - wrapped
+coverage = min(wrapped, 256) / 256
+```
+
+This is done in `AreaToCoverage(int area)`.
+
+## Why This Handles Self Intersections
+
+The scanner does not require geometric boolean normalization first.
+Overlaps are resolved by accumulated area/cover integration and final fill-rule
+mapping (`EvenOdd` or `NonZero`), so winding/parity behavior is decided at
+rasterization time.
+
+## Fast Paths and Practical Optimizations
+
+- One tessellation build per rasterization call (`TessellatedMultipolygon` reused across bands).
+- Band-buffer reuse avoids per-band allocations.
+- `rowHasBits` avoids scanning all words in empty rows.
+- Bitset iteration visits only touched columns.
+- Span coalescing reduces per-pixel operations before blending.
+
+## Notes on Public Options
+
+- `RasterizerOptions.RasterizationMode` controls whether scanner output is:
+  - `Antialiased`: continuous coverage in `[0, 1]`
+  - `Aliased`: binary coverage (`0` or `1`), thresholded in the scanner
+- `RasterizerSamplingOrigin` still affects X alignment (`PixelBoundary` vs `PixelCenter`).
+
+## Data Flow Diagram (Row-Level)
+
+```
+             per-edge writes
+                   |
+                   v
+        +----------------------+
+        | coverArea[row][x,*]  |  deltaCover + deltaArea
+        +----------------------+
+                   |
+                   +--> bitVectors[row] set bit x
+                   |
+                   +--> rowHasBits[row] = 1
+                   |
+                   +--> startCover[row] (for x < 0 contributions)
+
+Then during emit:
+
+bitVectors[row] -> touched x list -> accumulate cover/area -> coverage spans
+                                                      |
+                                                      v
+                                                scanline[width]
+                                                      |
+                                                      v
+                                               Rasterizer callback
+```
+
+## Failure Modes and Diagnostics
+
+- Exception: interest too large for bounded temporary buffers/indexing.
+- Symptoms like missing fill are usually from invalid input geometry (NaN/Inf) or
+  ring construction upstream; scanner explicitly skips non-finite edges.
+- Performance hotspots are typically in:
+  - edge walking (`RasterizeLine` family),
+  - fill-rule conversion (`EmitRowCoverage`),
+  - downstream blending/compositing callbacks.

@@ -541,19 +541,17 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Pad to prevent edge clipping.
         size += new Size(2, 2);
 
-        // Use one coverage rasterization path for both AA and aliased text.
-        // Aliased mode quantizes coverage in ProcessTextScanline().
-        int subpixelCount = FillPathProcessor.FixedRasterizerSubpixelCount;
         RasterizerSamplingOrigin samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
         GraphicsOptions graphicsOptions = this.drawingOptions.GraphicsOptions;
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
 
         // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
         Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
-        TextRasterizationState state = new(buffer, graphicsOptions.Antialias);
+        TextRasterizationState state = new(buffer);
         RasterizerOptions rasterizerOptions = new(
             new Rectangle(0, 0, size.Width, size.Height),
-            subpixelCount,
             TextUtilities.MapFillRule(this.currentFillRule),
+            rasterizationMode,
             samplingOrigin);
 
         this.drawingBackend.RasterizePath(
@@ -570,14 +568,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     {
         Span<float> destination = state.Buffer.DangerousGetRowSpan(y);
         scanline.CopyTo(destination);
-
-        if (!state.Antialias)
-        {
-            for (int x = 0; x < destination.Length; x++)
-            {
-                destination[x] = destination[x] >= 0.5F ? 1F : 0F;
-            }
-        }
     }
 
     private void Dispose(bool disposing)
@@ -625,15 +615,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
     private readonly struct TextRasterizationState
     {
-        public TextRasterizationState(Buffer2D<float> buffer, bool antialias)
-        {
-            this.Buffer = buffer;
-            this.Antialias = antialias;
-        }
+        public TextRasterizationState(Buffer2D<float> buffer) => this.Buffer = buffer;
 
         public Buffer2D<float> Buffer { get; }
-
-        public bool Antialias { get; }
     }
 
     private readonly struct CacheKey : IEquatable<CacheKey>

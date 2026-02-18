@@ -6,7 +6,7 @@ using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan;
 
-public class TiledRasterizerTests
+public class DefaultRasterizerTests
 {
     [Theory]
     [InlineData(IntersectionRule.EvenOdd)]
@@ -32,10 +32,10 @@ public class TiledRasterizerTests
             .Transform(Matrix3x2.CreateScale(200F));
 
         Rectangle interest = Rectangle.Ceiling(path.Bounds);
-        RasterizerOptions options = new(interest, 4, rule);
+        RasterizerOptions options = new(interest, rule);
 
-        float[] expected = Rasterize(DefaultRasterizer.Instance, path, options);
-        float[] actual = Rasterize(TiledRasterizer.Instance, path, options);
+        float[] expected = Rasterize(ScanlineRasterizer.Instance, path, options);
+        float[] actual = Rasterize(DefaultRasterizer.Instance, path, options);
 
         AssertCoverageEqual(expected, actual);
     }
@@ -47,12 +47,11 @@ public class TiledRasterizerTests
         Rectangle interest = Rectangle.Ceiling(path.Bounds);
         RasterizerOptions options = new(
             interest,
-            1,
             IntersectionRule.NonZero,
-            RasterizerSamplingOrigin.PixelCenter);
+            samplingOrigin: RasterizerSamplingOrigin.PixelCenter);
 
-        float[] expected = Rasterize(DefaultRasterizer.Instance, path, options);
-        float[] actual = Rasterize(TiledRasterizer.Instance, path, options);
+        float[] expected = Rasterize(ScanlineRasterizer.Instance, path, options);
+        float[] actual = Rasterize(DefaultRasterizer.Instance, path, options);
 
         AssertCoverageEqual(expected, actual);
     }
