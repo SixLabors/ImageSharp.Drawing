@@ -123,8 +123,7 @@ internal static class PolygonScanner
         // canonical representation so path flattening/orientation work is never repeated.
         using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(path, allocator);
         using IMemoryOwner<EdgeData> edgeDataOwner = allocator.Allocate<EdgeData>(multipolygon.TotalVertexCount);
-        Span<EdgeData> edgeBuffer = edgeDataOwner.Memory.Span;
-        int edgeCount = BuildEdgeTable(multipolygon, interest.Left, interest.Top, height, samplingOffsetX, edgeBuffer);
+        int edgeCount = BuildEdgeTable(multipolygon, interest.Left, interest.Top, height, samplingOffsetX, edgeDataOwner.Memory.Span);
         if (edgeCount <= 0)
         {
             return;
@@ -291,7 +290,7 @@ internal static class PolygonScanner
     /// <param name="state">Caller-owned mutable state.</param>
     /// <param name="scanlineHandler">Scanline callback invoked in ascending Y order.</param>
     /// <returns>
-    /// <see langword="true"/> when the parallel path executed successfully;
+    /// <see langword="true"/> when the tiled path executed successfully;
     /// <see langword="false"/> when the caller should run sequential fallback.
     /// </returns>
     private static bool TryRasterizeParallel<TState>(
@@ -310,6 +309,32 @@ internal static class PolygonScanner
         RasterizerScanlineHandler<TState> scanlineHandler)
         where TState : struct
     {
+        int tileHeight = Math.Min(DefaultTileHeight, maxBandRows);
+        if (tileHeight < 1)
+        {
+            return false;
+        }
+
+        int tileCount = (height + tileHeight - 1) / tileHeight;
+        if (tileCount == 1)
+        {
+            // Tiny workload fast path: avoid bucket construction, worker scheduling, and
+            // tile-output buffering when everything fits in a single tile.
+            RasterizeSingleTileDirect(
+                edgeMemory.Span[..edgeCount],
+                width,
+                height,
+                interestTop,
+                wordsPerRow,
+                coverStride,
+                intersectionRule,
+                rasterizationMode,
+                allocator,
+                ref state,
+                scanlineHandler);
+            return true;
+        }
+
         if (Environment.ProcessorCount < 2)
         {
             return false;
@@ -320,18 +345,6 @@ internal static class PolygonScanner
         {
             // Parallel mode buffers tile coverage before ordered emission. Skip when the
             // buffered output footprint would exceed our safety budget.
-            return false;
-        }
-
-        int tileHeight = Math.Min(DefaultTileHeight, maxBandRows);
-        if (tileHeight < 1)
-        {
-            return false;
-        }
-
-        int tileCount = (height + tileHeight - 1) / tileHeight;
-        if (tileCount < 2)
-        {
             return false;
         }
 
@@ -444,6 +457,46 @@ internal static class PolygonScanner
                 output?.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// Rasterizes a single tile directly into the caller callback.
+    /// </summary>
+    /// <remarks>
+    /// This avoids parallel setup and tile-output buffering for tiny workloads while preserving
+    /// the same scan-conversion math and callback ordering as the general tiled path.
+    /// </remarks>
+    /// <typeparam name="TState">The caller-owned mutable state type.</typeparam>
+    /// <param name="edges">Prebuilt edge table.</param>
+    /// <param name="width">Destination width in pixels.</param>
+    /// <param name="height">Destination height in pixels.</param>
+    /// <param name="interestTop">Absolute top Y of the interest rectangle.</param>
+    /// <param name="wordsPerRow">Bit-vector words per row.</param>
+    /// <param name="coverStride">Cover-area stride in ints.</param>
+    /// <param name="intersectionRule">Fill rule.</param>
+    /// <param name="rasterizationMode">Coverage mode (AA or aliased).</param>
+    /// <param name="allocator">Temporary buffer allocator.</param>
+    /// <param name="state">Caller-owned mutable state.</param>
+    /// <param name="scanlineHandler">Scanline callback invoked in ascending Y order.</param>
+    private static void RasterizeSingleTileDirect<TState>(
+        ReadOnlySpan<EdgeData> edges,
+        int width,
+        int height,
+        int interestTop,
+        int wordsPerRow,
+        int coverStride,
+        IntersectionRule intersectionRule,
+        RasterizationMode rasterizationMode,
+        MemoryAllocator allocator,
+        ref TState state,
+        RasterizerScanlineHandler<TState> scanlineHandler)
+        where TState : struct
+    {
+        using WorkerScratch scratch = WorkerScratch.Create(allocator, wordsPerRow, coverStride, width, height);
+        Context context = scratch.CreateContext(height, intersectionRule, rasterizationMode);
+        context.RasterizeEdgeTable(edges, bandTop: 0);
+        context.EmitScanlines(interestTop, scratch.Scanline, ref state, scanlineHandler);
+        context.ResetTouchedRows();
     }
 
     /// <summary>
@@ -563,12 +616,8 @@ internal static class PolygonScanner
     }
 
     /// <summary>
-    /// Builds a compact edge table in scanner-local coordinates.
+    /// Builds an edge table in scanner-local coordinates.
     /// </summary>
-    /// <remarks>
-    /// Edges are converted to 24.8 fixed-point once during table construction so the hot
-    /// band/tile rasterization loop does not pay float-to-fixed conversion costs repeatedly.
-    /// </remarks>
     /// <param name="multipolygon">Input tessellated rings.</param>
     /// <param name="minX">Interest left in absolute coordinates.</param>
     /// <param name="minY">Interest top in absolute coordinates.</param>
@@ -608,11 +657,6 @@ internal static class PolygonScanner
                     continue;
                 }
 
-                if (!TryGetEdgeRowRange(y0, y1, height, out int minRow, out int maxRow))
-                {
-                    continue;
-                }
-
                 int fx0 = FloatToFixed24Dot8(x0);
                 int fy0 = FloatToFixed24Dot8(y0);
                 int fx1 = FloatToFixed24Dot8(x1);
@@ -622,46 +666,12 @@ internal static class PolygonScanner
                     continue;
                 }
 
+                ComputeEdgeRowBounds(fy0, fy1, out int minRow, out int maxRow);
                 destination[count++] = new EdgeData(fx0, fy0, fx1, fy1, minRow, maxRow);
             }
         }
 
         return count;
-    }
-
-    /// <summary>
-    /// Computes inclusive row bounds touched by the edge in scanner-local coordinates.
-    /// </summary>
-    /// <param name="y0">Edge start Y.</param>
-    /// <param name="y1">Edge end Y.</param>
-    /// <param name="height">Scanner height.</param>
-    /// <param name="minRow">Minimum affected row.</param>
-    /// <param name="maxRow">Maximum affected row.</param>
-    /// <returns><see langword="true"/> if the edge intersects scanner rows.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool TryGetEdgeRowRange(float y0, float y1, int height, out int minRow, out int maxRow)
-    {
-        float minY = MathF.Min(y0, y1);
-        float maxY = MathF.Max(y0, y1);
-        minRow = (int)MathF.Floor(minY);
-        maxRow = (int)MathF.Ceiling(maxY) - 1;
-
-        if (maxRow < 0 || minRow >= height)
-        {
-            return false;
-        }
-
-        if (minRow < 0)
-        {
-            minRow = 0;
-        }
-
-        if (maxRow >= height)
-        {
-            maxRow = height - 1;
-        }
-
-        return minRow <= maxRow;
     }
 
     /// <summary>
@@ -715,6 +725,33 @@ internal static class PolygonScanner
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int FloatToFixed24Dot8(float value) => (int)MathF.Round(value * FixedOne);
+
+    /// <summary>
+    /// Computes the inclusive row range affected by a clipped non-horizontal edge.
+    /// </summary>
+    /// <param name="y0">Edge start Y in 24.8 fixed-point.</param>
+    /// <param name="y1">Edge end Y in 24.8 fixed-point.</param>
+    /// <param name="minRow">First affected integer scan row.</param>
+    /// <param name="maxRow">Last affected integer scan row.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ComputeEdgeRowBounds(int y0, int y1, out int minRow, out int maxRow)
+    {
+        int y0Row = y0 >> FixedShift;
+        int y1Row = y1 >> FixedShift;
+
+        // First touched row is floor(min(y0, y1)).
+        minRow = y0Row < y1Row ? y0Row : y1Row;
+
+        int y0Fraction = y0 & (FixedOne - 1);
+        int y1Fraction = y1 & (FixedOne - 1);
+
+        // Last touched row is ceil(max(y)) - 1:
+        // - when fractional part is non-zero, row is unchanged;
+        // - when exactly on a row boundary, subtract 1 (edge ownership rule).
+        int y0Candidate = y0Row - (((y0Fraction - 1) >> 31) & 1);
+        int y1Candidate = y1Row - (((y1Fraction - 1) >> 31) & 1);
+        maxRow = y0Candidate > y1Candidate ? y0Candidate : y1Candidate;
+    }
 
     /// <summary>
     /// Clips a fixed-point segment against vertical bounds.
@@ -1007,6 +1044,37 @@ internal static class PolygonScanner
 
                     this.RasterizeLine(fx0, fy0, fx1, fy1);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Rasterizes all prebuilt edges that overlap this context.
+        /// </summary>
+        /// <param name="edges">Shared edge table.</param>
+        /// <param name="bandTop">Top row of this context in global scanner-local coordinates.</param>
+        public void RasterizeEdgeTable(ReadOnlySpan<EdgeData> edges, int bandTop)
+        {
+            int bandTopFixed = bandTop * FixedOne;
+            int bandBottomFixed = bandTopFixed + (this.height * FixedOne);
+
+            for (int i = 0; i < edges.Length; i++)
+            {
+                EdgeData edge = edges[i];
+                int x0 = edge.X0;
+                int y0 = edge.Y0;
+                int x1 = edge.X1;
+                int y1 = edge.Y1;
+
+                if (!ClipToVerticalBoundsFixed(ref x0, ref y0, ref x1, ref y1, bandTopFixed, bandBottomFixed))
+                {
+                    continue;
+                }
+
+                // Convert global scanner Y to band-local Y after clipping.
+                y0 -= bandTopFixed;
+                y1 -= bandTopFixed;
+
+                this.RasterizeLine(x0, y0, x1, y1);
             }
         }
 
@@ -1952,10 +2020,41 @@ internal static class PolygonScanner
     /// Immutable scanner-local edge record with precomputed affected-row bounds.
     /// </summary>
     /// <remarks>
-    /// Coordinates are stored as signed 24.8 fixed-point values.
+    /// All coordinates are stored as signed 24.8 fixed-point integers for predictable hot-path
+    /// access without per-read unpacking.
     /// </remarks>
     private readonly struct EdgeData
     {
+        /// <summary>
+        /// Gets edge start X in scanner-local coordinates (24.8 fixed-point).
+        /// </summary>
+        public readonly int X0;
+
+        /// <summary>
+        /// Gets edge start Y in scanner-local coordinates (24.8 fixed-point).
+        /// </summary>
+        public readonly int Y0;
+
+        /// <summary>
+        /// Gets edge end X in scanner-local coordinates (24.8 fixed-point).
+        /// </summary>
+        public readonly int X1;
+
+        /// <summary>
+        /// Gets edge end Y in scanner-local coordinates (24.8 fixed-point).
+        /// </summary>
+        public readonly int Y1;
+
+        /// <summary>
+        /// Gets the first scanner row affected by this edge.
+        /// </summary>
+        public readonly int MinRow;
+
+        /// <summary>
+        /// Gets the last scanner row affected by this edge.
+        /// </summary>
+        public readonly int MaxRow;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="EdgeData"/> struct.
         /// </summary>
@@ -1968,36 +2067,6 @@ internal static class PolygonScanner
             this.MinRow = minRow;
             this.MaxRow = maxRow;
         }
-
-        /// <summary>
-        /// Gets edge start X in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public int X0 { get; }
-
-        /// <summary>
-        /// Gets edge start Y in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public int Y0 { get; }
-
-        /// <summary>
-        /// Gets edge end X in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public int X1 { get; }
-
-        /// <summary>
-        /// Gets edge end Y in scanner-local coordinates (24.8 fixed-point).
-        /// </summary>
-        public int Y1 { get; }
-
-        /// <summary>
-        /// Gets the first scanner row affected by this edge.
-        /// </summary>
-        public int MinRow { get; }
-
-        /// <summary>
-        /// Gets the last scanner row affected by this edge.
-        /// </summary>
-        public int MaxRow { get; }
     }
 
     /// <summary>
