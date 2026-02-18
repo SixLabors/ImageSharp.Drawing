@@ -1,8 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -63,84 +63,33 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         }
 
         int minX = interest.Left;
-        int subpixelCount = FillPathProcessor.MinimumSubpixelCount;
 
-        // We need to offset the pixel grid to account for when we outline a path.
-        // basically if the line is [1,2] => [3,2] then when outlining at 1 we end up with a region of [0.5,1.5],[1.5, 1.5],[3.5,2.5],[2.5,2.5]
-        // and this can cause missed fills when not using antialiasing.so we offset the pixel grid by 0.5 in the x & y direction thus causing the
-        // region to align with the pixel grid.
-        if (graphicsOptions.Antialias)
-        {
-            subpixelCount = Math.Max(subpixelCount, graphicsOptions.AntialiasSubpixelDepth);
-        }
-
+        // The rasterizer always computes continuous coverage, then aliased mode quantizes coverage
+        // in ProcessRasterizedScanline().
+        int subpixelCount = FillPathProcessor.FixedRasterizerSubpixelCount;
         using BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, graphicsOptions, source, this.bounds);
-        int scanlineWidth = interest.Width;
         MemoryAllocator allocator = this.Configuration.MemoryAllocator;
-        bool scanlineDirty = true;
-
-        PolygonScanner scanner = PolygonScanner.Create(
-            this.path,
-            interest.Top,
-            interest.Bottom,
+        IDrawingBackend drawingBackend = configuration.GetDrawingBackend();
+        RasterizerOptions rasterizerOptions = new(
+            interest,
             subpixelCount,
             shapeOptions.IntersectionRule,
-            configuration.MemoryAllocator);
+            RasterizerSamplingOrigin.PixelBoundary);
 
-        try
-        {
-            using IMemoryOwner<float> bScanline = allocator.Allocate<float>(scanlineWidth);
-            Span<float> scanline = bScanline.Memory.Span;
+        RasterizationState state = new(
+            source,
+            applicator,
+            minX,
+            graphicsOptions.Antialias,
+            isSolidBrushWithoutBlending,
+            solidBrushColor);
 
-            while (scanner.MoveToNextPixelLine())
-            {
-                if (scanlineDirty)
-                {
-                    scanline.Clear();
-                }
-
-                scanlineDirty = scanner.ScanCurrentPixelLineInto(minX, 0F, scanline);
-
-                if (scanlineDirty)
-                {
-                    int y = scanner.PixelLineY;
-                    if (!graphicsOptions.Antialias)
-                    {
-                        bool hasOnes = false;
-                        bool hasZeros = false;
-                        for (int x = 0; x < scanline.Length; x++)
-                        {
-                            if (scanline[x] >= 0.5F)
-                            {
-                                scanline[x] = 1F;
-                                hasOnes = true;
-                            }
-                            else
-                            {
-                                scanline[x] = 0F;
-                                hasZeros = true;
-                            }
-                        }
-
-                        if (isSolidBrushWithoutBlending && hasOnes != hasZeros)
-                        {
-                            if (hasOnes)
-                            {
-                                source.PixelBuffer.DangerousGetRowSpan(y).Slice(minX, scanlineWidth).Fill(solidBrushColor);
-                            }
-
-                            continue;
-                        }
-                    }
-
-                    applicator.Apply(scanline, minX, y);
-                }
-            }
-        }
-        finally
-        {
-            scanner.Dispose();
-        }
+        drawingBackend.RasterizePath(
+            this.path,
+            rasterizerOptions,
+            allocator,
+            ref state,
+            ProcessRasterizedScanline);
     }
 
     private static bool IsSolidBrushWithoutBlending(GraphicsOptions options, Brush inputBrush, [NotNullWhen(true)] out SolidBrush? solidBrush)
@@ -153,5 +102,194 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         }
 
         return options.IsOpaqueColorWithoutBlending(solidBrush.Color);
+    }
+
+    private static void ProcessRasterizedScanline(int y, Span<float> scanline, ref RasterizationState state)
+    {
+        if (!state.Antialias)
+        {
+            bool hasOnes = false;
+            bool hasZeros = false;
+            for (int x = 0; x < scanline.Length; x++)
+            {
+                if (scanline[x] >= 0.5F)
+                {
+                    scanline[x] = 1F;
+                    hasOnes = true;
+                }
+                else
+                {
+                    scanline[x] = 0F;
+                    hasZeros = true;
+                }
+            }
+
+            if (state.IsSolidBrushWithoutBlending && hasOnes != hasZeros)
+            {
+                if (hasOnes)
+                {
+                    state.Source.PixelBuffer.DangerousGetRowSpan(y).Slice(state.MinX, scanline.Length).Fill(state.SolidBrushColor);
+                }
+
+                return;
+            }
+
+            if (state.IsSolidBrushWithoutBlending && hasOnes)
+            {
+                FillOpaqueRuns(state.Source, y, state.MinX, scanline, state.SolidBrushColor);
+                return;
+            }
+        }
+
+        if (state.IsSolidBrushWithoutBlending)
+        {
+            ApplyCoverageRunsForOpaqueSolidBrush(state.Source, state.Applicator, scanline, state.MinX, y, state.SolidBrushColor);
+        }
+        else
+        {
+            ApplyNonZeroCoverageRuns(state.Applicator, scanline, state.MinX, y);
+        }
+    }
+
+    private static void ApplyNonZeroCoverageRuns(BrushApplicator<TPixel> applicator, Span<float> scanline, int minX, int y)
+    {
+        int i = 0;
+        while (i < scanline.Length)
+        {
+            while (i < scanline.Length && scanline[i] <= 0F)
+            {
+                i++;
+            }
+
+            int runStart = i;
+            while (i < scanline.Length && scanline[i] > 0F)
+            {
+                i++;
+            }
+
+            int runLength = i - runStart;
+            if (runLength > 0)
+            {
+                applicator.Apply(scanline.Slice(runStart, runLength), minX + runStart, y);
+            }
+        }
+    }
+
+    private static void ApplyCoverageRunsForOpaqueSolidBrush(
+        ImageFrame<TPixel> source,
+        BrushApplicator<TPixel> applicator,
+        Span<float> scanline,
+        int minX,
+        int y,
+        TPixel solidBrushColor)
+    {
+        Span<TPixel> destinationRow = source.PixelBuffer.DangerousGetRowSpan(y).Slice(minX, scanline.Length);
+        int i = 0;
+
+        while (i < scanline.Length)
+        {
+            while (i < scanline.Length && scanline[i] <= 0F)
+            {
+                i++;
+            }
+
+            int runStart = i;
+            while (i < scanline.Length && scanline[i] > 0F)
+            {
+                i++;
+            }
+
+            int runEnd = i;
+            if (runEnd <= runStart)
+            {
+                continue;
+            }
+
+            int opaqueStart = runStart;
+            while (opaqueStart < runEnd && scanline[opaqueStart] < 1F)
+            {
+                opaqueStart++;
+            }
+
+            if (opaqueStart > runStart)
+            {
+                int prefixLength = opaqueStart - runStart;
+                applicator.Apply(scanline.Slice(runStart, prefixLength), minX + runStart, y);
+            }
+
+            int opaqueEnd = runEnd;
+            while (opaqueEnd > opaqueStart && scanline[opaqueEnd - 1] < 1F)
+            {
+                opaqueEnd--;
+            }
+
+            if (opaqueEnd > opaqueStart)
+            {
+                destinationRow.Slice(opaqueStart, opaqueEnd - opaqueStart).Fill(solidBrushColor);
+            }
+
+            if (runEnd > opaqueEnd)
+            {
+                int suffixLength = runEnd - opaqueEnd;
+                applicator.Apply(scanline.Slice(opaqueEnd, suffixLength), minX + opaqueEnd, y);
+            }
+        }
+    }
+
+    private static void FillOpaqueRuns(ImageFrame<TPixel> source, int y, int minX, Span<float> scanline, TPixel solidBrushColor)
+    {
+        Span<TPixel> destinationRow = source.PixelBuffer.DangerousGetRowSpan(y).Slice(minX, scanline.Length);
+        int i = 0;
+
+        while (i < scanline.Length)
+        {
+            while (i < scanline.Length && scanline[i] <= 0F)
+            {
+                i++;
+            }
+
+            int runStart = i;
+            while (i < scanline.Length && scanline[i] > 0F)
+            {
+                i++;
+            }
+
+            int runLength = i - runStart;
+            if (runLength > 0)
+            {
+                destinationRow.Slice(runStart, runLength).Fill(solidBrushColor);
+            }
+        }
+    }
+
+    private readonly struct RasterizationState
+    {
+        public RasterizationState(
+            ImageFrame<TPixel> source,
+            BrushApplicator<TPixel> applicator,
+            int minX,
+            bool antialias,
+            bool isSolidBrushWithoutBlending,
+            TPixel solidBrushColor)
+        {
+            this.Source = source;
+            this.Applicator = applicator;
+            this.MinX = minX;
+            this.Antialias = antialias;
+            this.IsSolidBrushWithoutBlending = isSolidBrushWithoutBlending;
+            this.SolidBrushColor = solidBrushColor;
+        }
+
+        public ImageFrame<TPixel> Source { get; }
+
+        public BrushApplicator<TPixel> Applicator { get; }
+
+        public int MinX { get; }
+
+        public bool Antialias { get; }
+
+        public bool IsSolidBrushWithoutBlending { get; }
+
+        public TPixel SolidBrushColor { get; }
     }
 }

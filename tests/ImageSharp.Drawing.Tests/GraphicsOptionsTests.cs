@@ -23,14 +23,6 @@ public class GraphicsOptionsTests
     }
 
     [Fact]
-    public void DefaultGraphicsOptionsAntialiasSuppixelDepth()
-    {
-        const int Expected = 16;
-        Assert.Equal(Expected, this.newGraphicsOptions.AntialiasSubpixelDepth);
-        Assert.Equal(Expected, this.cloneGraphicsOptions.AntialiasSubpixelDepth);
-    }
-
-    [Fact]
     public void DefaultGraphicsOptionsBlendPercentage()
     {
         const float Expected = 1F;
@@ -61,7 +53,6 @@ public class GraphicsOptionsTests
         {
             AlphaCompositionMode = PixelAlphaCompositionMode.DestAtop,
             Antialias = false,
-            AntialiasSubpixelDepth = 23,
             BlendPercentage = .25F,
             ColorBlendingMode = PixelColorBlendingMode.HardLight,
         };
@@ -79,7 +70,6 @@ public class GraphicsOptionsTests
 
         actual.AlphaCompositionMode = PixelAlphaCompositionMode.DestAtop;
         actual.Antialias = false;
-        actual.AntialiasSubpixelDepth = 23;
         actual.BlendPercentage = .25F;
         actual.ColorBlendingMode = PixelColorBlendingMode.HardLight;
 

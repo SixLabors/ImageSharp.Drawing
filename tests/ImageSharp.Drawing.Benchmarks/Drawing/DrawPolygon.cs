@@ -8,6 +8,7 @@ using BenchmarkDotNet.Attributes;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -155,6 +156,22 @@ public abstract class DrawPolygon
         => this.image.Mutate(
             c =>
             {
+                foreach (PointF[] loop in this.points)
+                {
+                    c.DrawPolygon(Color.White, this.Thickness, loop);
+                }
+            });
+
+    [Benchmark]
+    public void ImageSharpCombinedPathsTiled()
+        => this.image.Mutate(c => c.SetRasterizer(TiledRasterizer.Instance).Draw(this.isPen, this.imageSharpPath));
+
+    [Benchmark]
+    public void ImageSharpSeparatePathsTiled()
+        => this.image.Mutate(
+            c =>
+            {
+                c.SetRasterizer(TiledRasterizer.Instance);
                 foreach (PointF[] loop in this.points)
                 {
                     c.DrawPolygon(Color.White, this.Thickness, loop);

@@ -37,6 +37,8 @@ internal ref struct ActiveEdgeList
 
     private readonly Span<int> ActiveEdges => this.Buffer.Slice(0, this.count);
 
+    public readonly bool IsEmpty => this.count == 0;
+
     public void EnterEdge(int edgeIdx) => this.Buffer[this.count++] = edgeIdx | EnteringEdgeFlag;
 
     public readonly void LeaveEdge(int edgeIdx)

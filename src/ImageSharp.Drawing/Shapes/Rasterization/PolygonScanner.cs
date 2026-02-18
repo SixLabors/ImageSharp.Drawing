@@ -176,6 +176,21 @@ internal ref struct PolygonScanner
     public bool MoveToNextPixelLine()
     {
         this.PixelLineY++;
+
+        // When there are no active edges we can skip directly to the next row that may receive coverage.
+        if (this.activeEdges.IsEmpty)
+        {
+            if (this.idx0 < this.sorted0.Length)
+            {
+                float nextStartY = this.edges[this.sorted0[this.idx0]].Y0;
+                int nextRelevantPixelLine = (int)MathF.Floor(nextStartY);
+                if (nextRelevantPixelLine > this.PixelLineY)
+                {
+                    this.PixelLineY = nextRelevantPixelLine;
+                }
+            }
+        }
+
         this.yPlusOne = this.PixelLineY + 1;
         this.SubPixelY = this.PixelLineY - this.SubpixelDistance;
         return this.PixelLineY < this.maxY;
@@ -183,6 +198,16 @@ internal ref struct PolygonScanner
 
     public bool MoveToNextSubpixelScanLine()
     {
+        // If the active edge list is empty and the next edge starts at or below the next pixel row,
+        // the current row cannot produce any intersections.
+        if (this.activeEdges.IsEmpty &&
+            this.idx0 < this.sorted0.Length &&
+            this.edges[this.sorted0[this.idx0]].Y0 >= this.yPlusOne)
+        {
+            this.SubPixelY = this.yPlusOne;
+            return false;
+        }
+
         this.SubPixelY += this.SubpixelDistance;
         this.EnterEdges();
         this.LeaveEdges();

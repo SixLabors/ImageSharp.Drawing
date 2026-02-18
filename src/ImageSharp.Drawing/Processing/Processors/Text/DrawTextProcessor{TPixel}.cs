@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.Fonts.Rendering;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -35,6 +36,7 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
             textOptions,
             this.definition.DrawingOptions,
             this.Configuration.MemoryAllocator,
+            this.Configuration.GetDrawingBackend(),
             this.definition.Pen,
             this.definition.Brush);
 

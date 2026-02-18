@@ -12,9 +12,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 public class FillPathProcessor : IImageProcessor
 {
     /// <summary>
-    /// Minimum subpixel count for rasterization, being applied even if antialiasing is off.
+    /// Fixed subpixel sampling density used by the CPU rasterizer for both antialiased and
+    /// quantized-aliased rendering.
     /// </summary>
-    internal const int MinimumSubpixelCount = 8;
+    internal const int FixedRasterizerSubpixelCount = 16;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FillPathProcessor" /> class.

@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -87,7 +88,7 @@ public class DrawingRobustnessTests
         using Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
         {
-            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
+            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0 },
         };
         foreach (PointF[] loop in points)
         {
@@ -123,7 +124,7 @@ public class DrawingRobustnessTests
         Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
         {
-            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
+            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0 },
         };
         Random rnd = new(42);
         byte[] rgb = new byte[3];
@@ -201,7 +202,9 @@ public class DrawingRobustnessTests
         image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }
 
-    [Theory]//(Skip = "For local experiments only")]
+#pragma warning disable xUnit1004 // Test methods should not be skipped
+    [Theory(Skip = "For local experiments only")]
+#pragma warning restore xUnit1004 // Test methods should not be skipped
     [InlineData(0)]
     [InlineData(5000)]
     [InlineData(9000)]
@@ -259,7 +262,7 @@ public class DrawingRobustnessTests
 
     [Theory]
     [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
-    public void LargeGeoJson_States_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    public void LargeGeoJson_States_Separate_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
     {
         string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
 
@@ -280,6 +283,40 @@ public class DrawingRobustnessTests
                     c.DrawPolygon(Color.White, thickness, loop);
                 }
             });
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_States_All_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54) * Matrix3x2.CreateScale(60, 60);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        PathBuilder pb = new();
+        foreach (PointF[] loop in points)
+        {
+            pb.StartFigure();
+            pb.AddLines(loop);
+            pb.CloseFigure();
+        }
+
+        IPath path = pb.Build();
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(c =>
+        {
+            c.SetRasterizer(TiledRasterizer.Instance);
+            c.Draw(Color.White, thickness, path);
+        });
 
         image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }

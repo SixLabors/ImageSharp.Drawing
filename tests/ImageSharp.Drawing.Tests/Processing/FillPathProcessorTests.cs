@@ -8,6 +8,8 @@ using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -213,6 +215,71 @@ public class FillPathProcessorTests
         FillPathProcessor definition = fillProcessor.GetPrivateFieldValue<FillPathProcessor>("definition");
 
         Assert.Equal(IntersectionRule.EvenOdd, definition.Options.ShapeOptions.IntersectionRule);
+    }
+
+    [Fact]
+    public void FillPathProcessor_UsesConfiguredRasterizer()
+    {
+        RecordingRasterizer rasterizer = new();
+        Configuration configuration = new();
+        configuration.SetRasterizer(rasterizer);
+
+        FillPathProcessor processor = new(
+            new DrawingOptions(),
+            Brushes.Solid(Color.White),
+            new EllipsePolygon(6F, 6F, 4F));
+
+        using Image<Rgba32> image = new(configuration, 20, 20);
+        processor.Execute(configuration, image, image.Bounds);
+
+        Assert.True(rasterizer.CallCount > 0);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FillPathProcessor_UsesFixedSubpixelCount(bool antialias)
+    {
+        RecordingRasterizer rasterizer = new();
+        Configuration configuration = new();
+        configuration.SetRasterizer(rasterizer);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = antialias
+            }
+        };
+
+        FillPathProcessor processor = new(
+            drawingOptions,
+            Brushes.Solid(Color.White),
+            new EllipsePolygon(6F, 6F, 4F));
+
+        using Image<Rgba32> image = new(configuration, 20, 20);
+        processor.Execute(configuration, image, image.Bounds);
+
+        Assert.Equal(FillPathProcessor.FixedRasterizerSubpixelCount, rasterizer.LastSubpixelCount);
+    }
+
+    private sealed class RecordingRasterizer : IRasterizer
+    {
+        public int CallCount { get; private set; }
+
+        public int LastSubpixelCount { get; private set; }
+
+        public void Rasterize<TState>(
+            IPath path,
+            in RasterizerOptions options,
+            MemoryAllocator allocator,
+            ref TState state,
+            RasterizerScanlineHandler<TState> scanlineHandler)
+            where TState : struct
+        {
+            this.CallCount++;
+            this.LastSubpixelCount = options.SubpixelCount;
+        }
     }
 }
 

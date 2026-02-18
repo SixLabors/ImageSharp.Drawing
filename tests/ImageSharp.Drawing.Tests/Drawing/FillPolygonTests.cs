@@ -22,7 +22,7 @@ public class FillPolygonTests
         PointF[] polygon1 = PolygonFactory.CreatePointArray((2, 2), (6, 2), (6, 4), (2, 4));
         PointF[] polygon2 = PolygonFactory.CreatePointArray((2, 8), (4, 6), (6, 8), (4, 10));
 
-        GraphicsOptions options = new() { Antialias = antialias > 0, AntialiasSubpixelDepth = antialias };
+        GraphicsOptions options = new() { Antialias = antialias > 0 };
         provider.RunValidatingProcessorTest(
             c => c.SetGraphicsOptions(options)
                 .FillPolygon(Color.White, polygon1)

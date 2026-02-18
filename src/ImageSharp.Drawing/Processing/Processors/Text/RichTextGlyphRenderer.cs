@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.Fonts.Unicode;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -24,6 +25,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
     private readonly DrawingOptions drawingOptions;
     private readonly MemoryAllocator memoryAllocator;
+    private readonly IDrawingBackend drawingBackend;
     private readonly Pen? defaultPen;
     private readonly Brush? defaultBrush;
     private readonly IPathInternals? path;
@@ -55,12 +57,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         RichTextOptions textOptions,
         DrawingOptions drawingOptions,
         MemoryAllocator memoryAllocator,
+        IDrawingBackend drawingBackend,
         Pen? pen,
         Brush? brush)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
         this.memoryAllocator = memoryAllocator;
+        this.drawingBackend = drawingBackend;
         this.defaultPen = pen;
         this.defaultBrush = brush;
         this.DrawingOperations = [];
@@ -537,56 +541,43 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Pad to prevent edge clipping.
         size += new Size(2, 2);
 
-        int subpixelCount = FillPathProcessor.MinimumSubpixelCount;
-        float xOffset = .5F;
+        // Use one coverage rasterization path for both AA and aliased text.
+        // Aliased mode quantizes coverage in ProcessTextScanline().
+        int subpixelCount = FillPathProcessor.FixedRasterizerSubpixelCount;
+        RasterizerSamplingOrigin samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
         GraphicsOptions graphicsOptions = this.drawingOptions.GraphicsOptions;
-        if (graphicsOptions.Antialias)
-        {
-            xOffset = 0F; // We are antialiasing. Skip offsetting as real antialiasing should take care of offset.
-            subpixelCount = Math.Max(subpixelCount, graphicsOptions.AntialiasSubpixelDepth);
-        }
 
         // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
         Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
-
-        PolygonScanner scanner = PolygonScanner.Create(
-            offsetPath,
-            0,
-            size.Height,
+        TextRasterizationState state = new(buffer, graphicsOptions.Antialias);
+        RasterizerOptions rasterizerOptions = new(
+            new Rectangle(0, 0, size.Width, size.Height),
             subpixelCount,
             TextUtilities.MapFillRule(this.currentFillRule),
-            this.memoryAllocator);
+            samplingOrigin);
 
-        try
-        {
-            while (scanner.MoveToNextPixelLine())
-            {
-                Span<float> scanline = buffer.DangerousGetRowSpan(scanner.PixelLineY);
-                bool scanlineDirty = scanner.ScanCurrentPixelLineInto(0, xOffset, scanline);
-
-                if (scanlineDirty && !graphicsOptions.Antialias)
-                {
-                    for (int x = 0; x < size.Width; x++)
-                    {
-                        if (scanline[x] >= 0.5)
-                        {
-                            scanline[x] = 1;
-                        }
-                        else
-                        {
-                            scanline[x] = 0;
-                        }
-                    }
-                }
-            }
-        }
-        finally
-        {
-            // Can't use ref struct as a 'ref' or 'out' value when 'using' so as it is readonly explicitly dispose.
-            scanner.Dispose();
-        }
+        this.drawingBackend.RasterizePath(
+            offsetPath,
+            rasterizerOptions,
+            this.memoryAllocator,
+            ref state,
+            ProcessTextScanline);
 
         return buffer;
+    }
+
+    private static void ProcessTextScanline(int y, Span<float> scanline, ref TextRasterizationState state)
+    {
+        Span<float> destination = state.Buffer.DangerousGetRowSpan(y);
+        scanline.CopyTo(destination);
+
+        if (!state.Antialias)
+        {
+            for (int x = 0; x < destination.Length; x++)
+            {
+                destination[x] = destination[x] >= 0.5F ? 1F : 0F;
+            }
+        }
     }
 
     private void Dispose(bool disposing)
@@ -630,6 +621,19 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.FillMap?.Dispose();
             this.OutlineMap?.Dispose();
         }
+    }
+
+    private readonly struct TextRasterizationState
+    {
+        public TextRasterizationState(Buffer2D<float> buffer, bool antialias)
+        {
+            this.Buffer = buffer;
+            this.Antialias = antialias;
+        }
+
+        public Buffer2D<float> Buffer { get; }
+
+        public bool Antialias { get; }
     }
 
     private readonly struct CacheKey : IEquatable<CacheKey>
