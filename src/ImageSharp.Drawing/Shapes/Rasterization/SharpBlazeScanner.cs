@@ -13,6 +13,10 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 /// </summary>
 internal static class SharpBlazeScanner
 {
+    // Upper bound for temporary scanner buffers (bit vectors + cover/area + start-cover rows).
+    // Keeping this bounded prevents pathological full-image allocations on very large interests.
+    private const long BandMemoryBudgetBytes = 64L * 1024L * 1024L;
+
     private const int FixedShift = 8;
     private const int FixedOne = 1 << FixedShift;
     private static readonly int WordBitCount = IntPtr.Size * 8;
@@ -39,38 +43,107 @@ internal static class SharpBlazeScanner
         }
 
         int wordsPerRow = BitVectorsForMaxBitCount(width);
-        long bitVectorCount = (long)wordsPerRow * height;
         long coverStride = (long)width * 2;
-        long coverCount = coverStride * height;
-        if (bitVectorCount > int.MaxValue || coverCount > int.MaxValue)
+        if (coverStride > int.MaxValue ||
+            !TryGetBandHeight(width, height, wordsPerRow, coverStride, out int maxBandRows))
         {
             return false;
         }
 
-        using IMemoryOwner<nuint> bitVectorsOwner = allocator.Allocate<nuint>((int)bitVectorCount, AllocationOptions.Clean);
-        using IMemoryOwner<int> coverAreaOwner = allocator.Allocate<int>((int)coverCount, AllocationOptions.Clean);
-        using IMemoryOwner<int> startCoverOwner = allocator.Allocate<int>(height, AllocationOptions.Clean);
-        using IMemoryOwner<float> scanlineOwner = allocator.Allocate<float>(width, AllocationOptions.Clean);
+        int coverStrideInt = (int)coverStride;
+        int bitVectorCapacity = checked(wordsPerRow * maxBandRows);
+        int coverAreaCapacity = checked(coverStrideInt * maxBandRows);
+        using IMemoryOwner<nuint> bitVectorsOwner = allocator.Allocate<nuint>(bitVectorCapacity);
+        using IMemoryOwner<int> coverAreaOwner = allocator.Allocate<int>(coverAreaCapacity);
+        using IMemoryOwner<int> startCoverOwner = allocator.Allocate<int>(maxBandRows);
+
+        // Per-row activity flags avoid scanning the full bit-vector row just to detect "empty row".
+        using IMemoryOwner<byte> rowHasBitsOwner = allocator.Allocate<byte>(maxBandRows);
+        using IMemoryOwner<float> scanlineOwner = allocator.Allocate<float>(width);
+
+        Span<nuint> bitVectorsBuffer = bitVectorsOwner.Memory.Span;
+        Span<int> coverAreaBuffer = coverAreaOwner.Memory.Span;
+        Span<int> startCoverBuffer = startCoverOwner.Memory.Span;
+        Span<byte> rowHasBitsBuffer = rowHasBitsOwner.Memory.Span;
+        Span<float> scanline = scanlineOwner.Memory.Span;
 
         float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
 
-        Context context = new(
-            bitVectorsOwner.Memory.Span,
-            coverAreaOwner.Memory.Span,
-            startCoverOwner.Memory.Span,
-            width,
-            height,
-            wordsPerRow,
-            (int)coverStride,
-            options.IntersectionRule);
+        using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(path, allocator);
+        int bandTop = 0;
+        while (bandTop < height)
+        {
+            int bandHeight = Math.Min(maxBandRows, height - bandTop);
+            int bitVectorCount = wordsPerRow * bandHeight;
+            int coverCount = coverStrideInt * bandHeight;
 
-        context.RasterizePath(path, allocator, interest.Left, interest.Top, samplingOffsetX);
-        context.EmitScanlines(interest.Top, scanlineOwner.Memory.Span, ref state, scanlineHandler);
+            Span<nuint> bitVectors = bitVectorsBuffer[..bitVectorCount];
+            Span<int> coverArea = coverAreaBuffer[..coverCount];
+            Span<int> startCover = startCoverBuffer[..bandHeight];
+            Span<byte> rowHasBits = rowHasBitsBuffer[..bandHeight];
+
+            bitVectors.Clear();
+            coverArea.Clear();
+            startCover.Clear();
+            rowHasBits.Clear();
+
+            Context context = new(
+                bitVectors,
+                coverArea,
+                startCover,
+                rowHasBits,
+                width,
+                bandHeight,
+                wordsPerRow,
+                coverStrideInt,
+                options.IntersectionRule);
+
+            context.RasterizeMultipolygon(
+                multipolygon,
+                interest.Left,
+                interest.Top + bandTop,
+                samplingOffsetX);
+
+            context.EmitScanlines(interest.Top + bandTop, scanline, ref state, scanlineHandler);
+            bandTop += bandHeight;
+        }
+
         return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int BitVectorsForMaxBitCount(int maxBitCount) => (maxBitCount + WordBitCount - 1) / WordBitCount;
+
+    private static bool TryGetBandHeight(int width, int height, int wordsPerRow, long coverStride, out int bandHeight)
+    {
+        bandHeight = 0;
+        if (width <= 0 || height <= 0 || wordsPerRow <= 0 || coverStride <= 0)
+        {
+            return false;
+        }
+
+        long bytesPerRow =
+            ((long)wordsPerRow * IntPtr.Size) +
+            (coverStride * sizeof(int)) +
+            sizeof(int);
+
+        long rowsByBudget = BandMemoryBudgetBytes / bytesPerRow;
+        if (rowsByBudget < 1)
+        {
+            rowsByBudget = 1;
+        }
+
+        long rowsByBitVectors = int.MaxValue / wordsPerRow;
+        long rowsByCoverArea = int.MaxValue / coverStride;
+        long maxRows = Math.Min(rowsByBudget, Math.Min(rowsByBitVectors, rowsByCoverArea));
+        if (maxRows < 1)
+        {
+            return false;
+        }
+
+        bandHeight = (int)Math.Min(height, maxRows);
+        return bandHeight > 0;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int FloatToFixed24Dot8(float value) => (int)MathF.Round(value * FixedOne);
@@ -163,6 +236,7 @@ internal static class SharpBlazeScanner
         private readonly Span<nuint> bitVectors;
         private readonly Span<int> coverArea;
         private readonly Span<int> startCover;
+        private readonly Span<byte> rowHasBits;
         private readonly int width;
         private readonly int height;
         private readonly int wordsPerRow;
@@ -173,6 +247,7 @@ internal static class SharpBlazeScanner
             Span<nuint> bitVectors,
             Span<int> coverArea,
             Span<int> startCover,
+            Span<byte> rowHasBits,
             int width,
             int height,
             int wordsPerRow,
@@ -182,6 +257,7 @@ internal static class SharpBlazeScanner
             this.bitVectors = bitVectors;
             this.coverArea = coverArea;
             this.startCover = startCover;
+            this.rowHasBits = rowHasBits;
             this.width = width;
             this.height = height;
             this.wordsPerRow = wordsPerRow;
@@ -189,9 +265,8 @@ internal static class SharpBlazeScanner
             this.intersectionRule = intersectionRule;
         }
 
-        public void RasterizePath(IPath path, MemoryAllocator allocator, int minX, int minY, float samplingOffsetX)
+        public void RasterizeMultipolygon(TessellatedMultipolygon multipolygon, int minX, int minY, float samplingOffsetX)
         {
-            using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(path, allocator);
             foreach (TessellatedMultipolygon.Ring ring in multipolygon)
             {
                 ReadOnlySpan<PointF> vertices = ring.Vertices;
@@ -234,13 +309,13 @@ internal static class SharpBlazeScanner
         {
             for (int row = 0; row < this.height; row++)
             {
-                Span<nuint> rowBitVectors = this.bitVectors.Slice(row * this.wordsPerRow, this.wordsPerRow);
                 int rowCover = this.startCover[row];
-                if (rowCover == 0 && IsRowEmpty(rowBitVectors))
+                if (rowCover == 0 && this.rowHasBits[row] == 0)
                 {
                     continue;
                 }
 
+                Span<nuint> rowBitVectors = this.bitVectors.Slice(row * this.wordsPerRow, this.wordsPerRow);
                 scanline.Clear();
                 bool scanlineDirty = this.EmitRowCoverage(rowBitVectors, row, rowCover, scanline);
                 if (scanlineDirty)
@@ -248,19 +323,6 @@ internal static class SharpBlazeScanner
                     scanlineHandler(destinationTop + row, scanline, ref state);
                 }
             }
-        }
-
-        private static bool IsRowEmpty(ReadOnlySpan<nuint> rowBitVectors)
-        {
-            for (int i = 0; i < rowBitVectors.Length; i++)
-            {
-                if (rowBitVectors[i] != 0)
-                {
-                    return false;
-                }
-            }
-
-            return true;
         }
 
         private bool EmitRowCoverage(ReadOnlySpan<nuint> rowBitVectors, int row, int cover, Span<float> scanline)
@@ -397,7 +459,7 @@ internal static class SharpBlazeScanner
                 return false;
             }
 
-            scanline.Slice(start, end - start).Fill(coverage);
+            scanline[start..end].Fill(coverage);
             return true;
         }
 
@@ -410,6 +472,7 @@ internal static class SharpBlazeScanner
             ref nuint word = ref this.bitVectors[wordIndex];
             bool newlySet = (word & mask) == 0;
             word |= mask;
+            this.rowHasBits[row] = 1;
             return newlySet;
         }
 
