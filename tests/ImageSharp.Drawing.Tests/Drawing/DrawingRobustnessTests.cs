@@ -10,7 +10,6 @@ using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using SixLabors.PolygonClipper;
 using SkiaSharp;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;

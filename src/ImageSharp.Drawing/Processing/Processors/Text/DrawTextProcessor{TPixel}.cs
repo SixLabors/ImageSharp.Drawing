@@ -3,7 +3,6 @@
 
 using System.Numerics;
 using SixLabors.Fonts.Rendering;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;

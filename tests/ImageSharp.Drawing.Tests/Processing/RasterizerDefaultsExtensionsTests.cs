@@ -109,13 +109,24 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public void RasterizePath<TState>(
+        public void FillPath<TPixel>(
+            Configuration configuration,
+            ImageFrame<TPixel> source,
             IPath path,
-            in RasterizerOptions options,
+            Brush brush,
+            in GraphicsOptions graphicsOptions,
+            in RasterizerOptions rasterizerOptions,
+            Rectangle brushBounds,
+            MemoryAllocator allocator)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+        }
+
+        public void RasterizeCoverage(
+            IPath path,
+            in RasterizerOptions rasterizerOptions,
             MemoryAllocator allocator,
-            ref TState state,
-            RasterizerScanlineHandler<TState> scanlineHandler)
-            where TState : struct
+            Buffer2D<float> destination)
         {
         }
     }

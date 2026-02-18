@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
@@ -21,6 +20,13 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
     private readonly IPath path;
     private readonly Rectangle bounds;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FillPathProcessor{TPixel}"/> class.
+    /// </summary>
+    /// <param name="configuration">The processing configuration.</param>
+    /// <param name="definition">The processor definition.</param>
+    /// <param name="source">The source image.</param>
+    /// <param name="sourceRectangle">The source bounds.</param>
     public FillPathProcessor(
         Configuration configuration,
         FillPathProcessor definition,
@@ -47,14 +53,6 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         GraphicsOptions graphicsOptions = this.definition.Options.GraphicsOptions;
         Brush brush = this.definition.Brush;
 
-        TPixel solidBrushColor = default;
-        bool isSolidBrushWithoutBlending = false;
-        if (IsSolidBrushWithoutBlending(graphicsOptions, brush, out SolidBrush? solidBrush))
-        {
-            isSolidBrushWithoutBlending = true;
-            solidBrushColor = solidBrush.Color.ToPixel<TPixel>();
-        }
-
         // Align start/end positions.
         Rectangle interest = Rectangle.Intersect(this.bounds, source.Bounds);
         if (interest.Equals(Rectangle.Empty))
@@ -62,9 +60,6 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
             return; // No effect inside image;
         }
 
-        int minX = interest.Left;
-
-        using BrushApplicator<TPixel> applicator = brush.CreateApplicator(configuration, graphicsOptions, source, this.bounds);
         MemoryAllocator allocator = this.Configuration.MemoryAllocator;
         IDrawingBackend drawingBackend = configuration.GetDrawingBackend();
         RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
@@ -74,154 +69,16 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
             rasterizationMode,
             RasterizerSamplingOrigin.PixelBoundary);
 
-        RasterizationState state = new(
+        // The backend owns rasterization/compositing details. Processors only submit
+        // operation-level data (path, brush, options, bounds).
+        drawingBackend.FillPath(
+            configuration,
             source,
-            applicator,
-            minX,
-            isSolidBrushWithoutBlending,
-            solidBrushColor);
-
-        drawingBackend.RasterizePath(
             this.path,
+            brush,
+            graphicsOptions,
             rasterizerOptions,
-            allocator,
-            ref state,
-            ProcessRasterizedScanline);
-    }
-
-    private static bool IsSolidBrushWithoutBlending(GraphicsOptions options, Brush inputBrush, [NotNullWhen(true)] out SolidBrush? solidBrush)
-    {
-        solidBrush = inputBrush as SolidBrush;
-
-        if (solidBrush == null)
-        {
-            return false;
-        }
-
-        return options.IsOpaqueColorWithoutBlending(solidBrush.Color);
-    }
-
-    private static void ProcessRasterizedScanline(int y, Span<float> scanline, ref RasterizationState state)
-    {
-        if (state.IsSolidBrushWithoutBlending)
-        {
-            ApplyCoverageRunsForOpaqueSolidBrush(state.Source, state.Applicator, scanline, state.MinX, y, state.SolidBrushColor);
-        }
-        else
-        {
-            ApplyNonZeroCoverageRuns(state.Applicator, scanline, state.MinX, y);
-        }
-    }
-
-    private static void ApplyNonZeroCoverageRuns(BrushApplicator<TPixel> applicator, Span<float> scanline, int minX, int y)
-    {
-        int i = 0;
-        while (i < scanline.Length)
-        {
-            while (i < scanline.Length && scanline[i] <= 0F)
-            {
-                i++;
-            }
-
-            int runStart = i;
-            while (i < scanline.Length && scanline[i] > 0F)
-            {
-                i++;
-            }
-
-            int runLength = i - runStart;
-            if (runLength > 0)
-            {
-                applicator.Apply(scanline.Slice(runStart, runLength), minX + runStart, y);
-            }
-        }
-    }
-
-    private static void ApplyCoverageRunsForOpaqueSolidBrush(
-        ImageFrame<TPixel> source,
-        BrushApplicator<TPixel> applicator,
-        Span<float> scanline,
-        int minX,
-        int y,
-        TPixel solidBrushColor)
-    {
-        Span<TPixel> destinationRow = source.PixelBuffer.DangerousGetRowSpan(y).Slice(minX, scanline.Length);
-        int i = 0;
-
-        while (i < scanline.Length)
-        {
-            while (i < scanline.Length && scanline[i] <= 0F)
-            {
-                i++;
-            }
-
-            int runStart = i;
-            while (i < scanline.Length && scanline[i] > 0F)
-            {
-                i++;
-            }
-
-            int runEnd = i;
-            if (runEnd <= runStart)
-            {
-                continue;
-            }
-
-            int opaqueStart = runStart;
-            while (opaqueStart < runEnd && scanline[opaqueStart] < 1F)
-            {
-                opaqueStart++;
-            }
-
-            if (opaqueStart > runStart)
-            {
-                int prefixLength = opaqueStart - runStart;
-                applicator.Apply(scanline.Slice(runStart, prefixLength), minX + runStart, y);
-            }
-
-            int opaqueEnd = runEnd;
-            while (opaqueEnd > opaqueStart && scanline[opaqueEnd - 1] < 1F)
-            {
-                opaqueEnd--;
-            }
-
-            if (opaqueEnd > opaqueStart)
-            {
-                destinationRow.Slice(opaqueStart, opaqueEnd - opaqueStart).Fill(solidBrushColor);
-            }
-
-            if (runEnd > opaqueEnd)
-            {
-                int suffixLength = runEnd - opaqueEnd;
-                applicator.Apply(scanline.Slice(opaqueEnd, suffixLength), minX + opaqueEnd, y);
-            }
-        }
-    }
-
-    private readonly struct RasterizationState
-    {
-        public RasterizationState(
-            ImageFrame<TPixel> source,
-            BrushApplicator<TPixel> applicator,
-            int minX,
-            bool isSolidBrushWithoutBlending,
-            TPixel solidBrushColor)
-        {
-            this.Source = source;
-            this.Applicator = applicator;
-            this.MinX = minX;
-            this.IsSolidBrushWithoutBlending = isSolidBrushWithoutBlending;
-            this.SolidBrushColor = solidBrushColor;
-        }
-
-        public ImageFrame<TPixel> Source { get; }
-
-        public BrushApplicator<TPixel> Applicator { get; }
-
-        public int MinX { get; }
-
-        public bool IsSolidBrushWithoutBlending { get; }
-
-        public TPixel SolidBrushColor { get; }
+            this.bounds,
+            allocator);
     }
 }

@@ -7,7 +7,6 @@ using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Memory;
@@ -531,6 +530,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         return Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
     }
 
+    /// <summary>
+    /// Rasterizes a glyph path to a local coverage map.
+    /// </summary>
+    /// <param name="path">The glyph path in destination coordinates.</param>
+    /// <returns>A coverage buffer used by later text draw operations.</returns>
     private Buffer2D<float> Render(IPath path)
     {
         // We need to offset the path now by the difference between the clamped location and the
@@ -543,31 +547,27 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         RasterizerSamplingOrigin samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
         GraphicsOptions graphicsOptions = this.drawingOptions.GraphicsOptions;
-        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias
+            ? RasterizationMode.Antialiased
+            : RasterizationMode.Aliased;
 
         // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
         Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
-        TextRasterizationState state = new(buffer);
         RasterizerOptions rasterizerOptions = new(
             new Rectangle(0, 0, size.Width, size.Height),
             TextUtilities.MapFillRule(this.currentFillRule),
             rasterizationMode,
             samplingOrigin);
 
-        this.drawingBackend.RasterizePath(
+        // Request coverage generation from the configured backend. CPU backends will produce
+        // this via scanlines; future GPU backends can supply equivalent coverage by other means.
+        this.drawingBackend.RasterizeCoverage(
             offsetPath,
             rasterizerOptions,
             this.memoryAllocator,
-            ref state,
-            ProcessTextScanline);
+            buffer);
 
         return buffer;
-    }
-
-    private static void ProcessTextScanline(int y, Span<float> scanline, ref TextRasterizationState state)
-    {
-        Span<float> destination = state.Buffer.DangerousGetRowSpan(y);
-        scanline.CopyTo(destination);
     }
 
     private void Dispose(bool disposing)
@@ -611,13 +611,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.FillMap?.Dispose();
             this.OutlineMap?.Dispose();
         }
-    }
-
-    private readonly struct TextRasterizationState
-    {
-        public TextRasterizationState(Buffer2D<float> buffer) => this.Buffer = buffer;
-
-        public Buffer2D<float> Buffer { get; }
     }
 
     private readonly struct CacheKey : IEquatable<CacheKey>
