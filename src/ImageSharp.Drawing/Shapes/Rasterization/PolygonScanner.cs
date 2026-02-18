@@ -565,6 +565,10 @@ internal static class PolygonScanner
     /// <summary>
     /// Builds a compact edge table in scanner-local coordinates.
     /// </summary>
+    /// <remarks>
+    /// Edges are converted to 24.8 fixed-point once during table construction so the hot
+    /// band/tile rasterization loop does not pay float-to-fixed conversion costs repeatedly.
+    /// </remarks>
     /// <param name="multipolygon">Input tessellated rings.</param>
     /// <param name="minX">Interest left in absolute coordinates.</param>
     /// <param name="minY">Interest top in absolute coordinates.</param>
@@ -609,7 +613,16 @@ internal static class PolygonScanner
                     continue;
                 }
 
-                destination[count++] = new EdgeData(x0, y0, x1, y1, minRow, maxRow);
+                int fx0 = FloatToFixed24Dot8(x0);
+                int fy0 = FloatToFixed24Dot8(y0);
+                int fx1 = FloatToFixed24Dot8(x1);
+                int fy1 = FloatToFixed24Dot8(y1);
+                if (fy0 == fy1)
+                {
+                    continue;
+                }
+
+                destination[count++] = new EdgeData(fx0, fy0, fx1, fy1, minRow, maxRow);
             }
         }
 
@@ -704,6 +717,49 @@ internal static class PolygonScanner
     private static int FloatToFixed24Dot8(float value) => (int)MathF.Round(value * FixedOne);
 
     /// <summary>
+    /// Clips a fixed-point segment against vertical bounds.
+    /// </summary>
+    /// <param name="x0">Segment start X in 24.8 fixed-point (updated in place).</param>
+    /// <param name="y0">Segment start Y in 24.8 fixed-point (updated in place).</param>
+    /// <param name="x1">Segment end X in 24.8 fixed-point (updated in place).</param>
+    /// <param name="y1">Segment end Y in 24.8 fixed-point (updated in place).</param>
+    /// <param name="minY">Minimum Y bound in 24.8 fixed-point.</param>
+    /// <param name="maxY">Maximum Y bound in 24.8 fixed-point.</param>
+    /// <returns><see langword="true"/> when a non-horizontal clipped segment remains.</returns>
+    private static bool ClipToVerticalBoundsFixed(ref int x0, ref int y0, ref int x1, ref int y1, int minY, int maxY)
+    {
+        double t0 = 0D;
+        double t1 = 1D;
+        int originX0 = x0;
+        int originY0 = y0;
+        long dx = (long)x1 - originX0;
+        long dy = (long)y1 - originY0;
+        if (!ClipTestFixed(-(double)dy, originY0 - (double)minY, ref t0, ref t1))
+        {
+            return false;
+        }
+
+        if (!ClipTestFixed(dy, maxY - (double)originY0, ref t0, ref t1))
+        {
+            return false;
+        }
+
+        if (t1 < 1D)
+        {
+            x1 = originX0 + (int)Math.Round(dx * t1);
+            y1 = originY0 + (int)Math.Round(dy * t1);
+        }
+
+        if (t0 > 0D)
+        {
+            x0 = originX0 + (int)Math.Round(dx * t0);
+            y0 = originY0 + (int)Math.Round(dy * t0);
+        }
+
+        return y0 != y1;
+    }
+
+    /// <summary>
     /// Clips a segment against vertical bounds using Liang-Barsky style parametric tests.
     /// </summary>
     /// <param name="x0">Segment start X (updated in place).</param>
@@ -758,6 +814,46 @@ internal static class PolygonScanner
 
         float r = q / p;
         if (p < 0F)
+        {
+            if (r > t1)
+            {
+                return false;
+            }
+
+            if (r > t0)
+            {
+                t0 = r;
+            }
+        }
+        else
+        {
+            if (r < t0)
+            {
+                return false;
+            }
+
+            if (r < t1)
+            {
+                t1 = r;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// One Liang-Barsky clip test step for fixed-point clipping.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool ClipTestFixed(double p, double q, ref double t0, ref double t1)
+    {
+        if (p == 0D)
+        {
+            return q >= 0D;
+        }
+
+        double r = q / p;
+        if (p < 0D)
         {
             if (r > t1)
             {
@@ -922,34 +1018,27 @@ internal static class PolygonScanner
         /// <param name="bandTop">Top row of this context in global scanner-local coordinates.</param>
         public void RasterizeEdgeTable(ReadOnlySpan<EdgeData> edges, ReadOnlySpan<int> edgeIndices, int bandTop)
         {
-            float minY = bandTop;
-            float maxY = bandTop + this.height;
+            int bandTopFixed = bandTop * FixedOne;
+            int bandBottomFixed = bandTopFixed + (this.height * FixedOne);
 
             for (int i = 0; i < edgeIndices.Length; i++)
             {
                 EdgeData edge = edges[edgeIndices[i]];
-                float x0 = edge.X0;
-                float y0 = edge.Y0;
-                float x1 = edge.X1;
-                float y1 = edge.Y1;
+                int x0 = edge.X0;
+                int y0 = edge.Y0;
+                int x1 = edge.X1;
+                int y1 = edge.Y1;
 
-                if (!ClipToVerticalBounds(ref x0, ref y0, ref x1, ref y1, minY, maxY))
+                if (!ClipToVerticalBoundsFixed(ref x0, ref y0, ref x1, ref y1, bandTopFixed, bandBottomFixed))
                 {
                     continue;
                 }
 
-                // Convert to fixed-point in band-local Y coordinates so downstream walkers can
-                // index 0..bandHeight-1 directly without extra subtraction in hot loops.
-                int fx0 = FloatToFixed24Dot8(x0);
-                int fy0 = FloatToFixed24Dot8(y0 - bandTop);
-                int fx1 = FloatToFixed24Dot8(x1);
-                int fy1 = FloatToFixed24Dot8(y1 - bandTop);
-                if (fy0 == fy1)
-                {
-                    continue;
-                }
+                // Convert global scanner Y to band-local Y after clipping.
+                y0 -= bandTopFixed;
+                y1 -= bandTopFixed;
 
-                this.RasterizeLine(fx0, fy0, fx1, fy1);
+                this.RasterizeLine(x0, y0, x1, y1);
             }
         }
 
@@ -1862,12 +1951,15 @@ internal static class PolygonScanner
     /// <summary>
     /// Immutable scanner-local edge record with precomputed affected-row bounds.
     /// </summary>
+    /// <remarks>
+    /// Coordinates are stored as signed 24.8 fixed-point values.
+    /// </remarks>
     private readonly struct EdgeData
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="EdgeData"/> struct.
         /// </summary>
-        public EdgeData(float x0, float y0, float x1, float y1, int minRow, int maxRow)
+        public EdgeData(int x0, int y0, int x1, int y1, int minRow, int maxRow)
         {
             this.X0 = x0;
             this.Y0 = y0;
@@ -1878,24 +1970,24 @@ internal static class PolygonScanner
         }
 
         /// <summary>
-        /// Gets edge start X in scanner-local coordinates.
+        /// Gets edge start X in scanner-local coordinates (24.8 fixed-point).
         /// </summary>
-        public float X0 { get; }
+        public int X0 { get; }
 
         /// <summary>
-        /// Gets edge start Y in scanner-local coordinates.
+        /// Gets edge start Y in scanner-local coordinates (24.8 fixed-point).
         /// </summary>
-        public float Y0 { get; }
+        public int Y0 { get; }
 
         /// <summary>
-        /// Gets edge end X in scanner-local coordinates.
+        /// Gets edge end X in scanner-local coordinates (24.8 fixed-point).
         /// </summary>
-        public float X1 { get; }
+        public int X1 { get; }
 
         /// <summary>
-        /// Gets edge end Y in scanner-local coordinates.
+        /// Gets edge end Y in scanner-local coordinates (24.8 fixed-point).
         /// </summary>
-        public float Y1 { get; }
+        public int Y1 { get; }
 
         /// <summary>
         /// Gets the first scanner row affected by this edge.
