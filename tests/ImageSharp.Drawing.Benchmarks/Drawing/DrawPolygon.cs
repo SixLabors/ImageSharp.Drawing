@@ -154,17 +154,17 @@ public abstract class DrawPolygon
     public void SystemDrawing()
         => this.sdGraphics.DrawPath(this.sdPen, this.sdPath);
 
-    // Keep explicit legacy path for side-by-side comparison now that tiled is default.
+    // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
     [Benchmark]
-    public void ImageSharpCombinedPaths()
+    public void ImageSharpCombinedPathsScanlineRasterizer()
         => this.image.Mutate(c => c.SetRasterizer(ScanlineRasterizer.Instance).Draw(this.isPen, this.imageSharpPath));
 
     [Benchmark]
-    public void ImageSharpSeparatePaths()
+    public void ImageSharpSeparatePathsScanlineRasterizer()
         => this.image.Mutate(
             c =>
             {
-                // Keep explicit legacy path for side-by-side comparison now that tiled is default.
+                // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
                 c.SetRasterizer(ScanlineRasterizer.Instance);
                 foreach (PointF[] loop in this.points)
                 {

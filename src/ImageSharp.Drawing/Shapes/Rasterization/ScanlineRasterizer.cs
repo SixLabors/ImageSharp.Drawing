@@ -39,6 +39,6 @@ internal sealed class ScanlineRasterizer : IRasterizer
             return;
         }
 
-        PolygonScanner.Rasterize(path, options, allocator, ref state, scanlineHandler);
+        PolygonScanner.RasterizeSequential(path, options, allocator, ref state, scanlineHandler);
     }
 }
