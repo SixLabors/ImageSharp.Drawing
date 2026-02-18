@@ -19,7 +19,7 @@ internal static class SharpBlazeScanner
 
     private const int FixedShift = 8;
     private const int FixedOne = 1 << FixedShift;
-    private static readonly int WordBitCount = IntPtr.Size * 8;
+    private static readonly int WordBitCount = nint.Size * 8;
     private const int AreaToCoverageShift = 9;
     private const int CoverageStepCount = 256;
     private const int EvenOddMask = (CoverageStepCount * 2) - 1;
@@ -123,7 +123,7 @@ internal static class SharpBlazeScanner
         }
 
         long bytesPerRow =
-            ((long)wordsPerRow * IntPtr.Size) +
+            ((long)wordsPerRow * nint.Size) +
             (coverStride * sizeof(int)) +
             sizeof(int);
 
@@ -227,11 +227,11 @@ internal static class SharpBlazeScanner
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int TrailingZeroCount(nuint value)
-        => IntPtr.Size == sizeof(ulong)
+        => nint.Size == sizeof(ulong)
             ? BitOperations.TrailingZeroCount((ulong)value)
             : BitOperations.TrailingZeroCount((uint)value);
 
-    private ref struct Context
+    private readonly ref struct Context
     {
         private readonly Span<nuint> bitVectors;
         private readonly Span<int> coverArea;
