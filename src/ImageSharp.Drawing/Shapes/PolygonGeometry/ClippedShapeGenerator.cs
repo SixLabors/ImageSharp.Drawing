@@ -54,18 +54,60 @@ internal static class ClippedShapeGenerator
         int index = 0;
         for (int i = 0; i < result.Count; i++)
         {
-            Contour contour = result[i];
-            PointF[] points = new PointF[contour.Count];
-
-            for (int j = 0; j < contour.Count; j++)
-            {
-                Vertex vertex = contour[j];
-                points[j] = new PointF((float)vertex.X, (float)vertex.Y);
-            }
-
-            shapes[index++] = new Polygon(points);
+            shapes[index++] = new Polygon(CreateContourPoints(result, i));
         }
 
         return new(shapes);
+    }
+
+    /// <summary>
+    /// Converts a PolygonClipper contour to ImageSharp points and normalizes winding for parent/child rings.
+    /// </summary>
+    /// <param name="polygon">The polygon containing the contour hierarchy.</param>
+    /// <param name="contourIndex">The contour index to convert.</param>
+    /// <returns>The converted point array.</returns>
+    private static PointF[] CreateContourPoints(PCPolygon polygon, int contourIndex)
+    {
+        Contour contour = polygon[contourIndex];
+        PointF[] points = new PointF[contour.Count];
+        bool reverse = ShouldReverseForNonZeroWinding(polygon, contourIndex);
+
+        if (!reverse)
+        {
+            for (int i = 0; i < contour.Count; i++)
+            {
+                Vertex vertex = contour[i];
+                points[i] = new PointF((float)vertex.X, (float)vertex.Y);
+            }
+
+            return points;
+        }
+
+        for (int sourceIndex = contour.Count - 1, targetIndex = 0; sourceIndex >= 0; sourceIndex--, targetIndex++)
+        {
+            Vertex vertex = contour[sourceIndex];
+            points[targetIndex] = new PointF((float)vertex.X, (float)vertex.Y);
+        }
+
+        return points;
+    }
+
+    /// <summary>
+    /// Ensures child contours (holes/islands) use opposite winding to their direct parent.
+    /// This keeps clipped output deterministic when consumed with the NonZero fill rule.
+    /// </summary>
+    /// <param name="polygon">The polygon containing contour hierarchy information.</param>
+    /// <param name="contourIndex">The contour index to inspect.</param>
+    /// <returns><see langword="true"/> when the contour should be reversed.</returns>
+    private static bool ShouldReverseForNonZeroWinding(PCPolygon polygon, int contourIndex)
+    {
+        Contour contour = polygon[contourIndex];
+        if (contour.ParentIndex is not int parentIndex || (uint)parentIndex >= (uint)polygon.Count)
+        {
+            return false;
+        }
+
+        Contour parentContour = polygon[parentIndex];
+        return contour.IsCounterClockwise() == parentContour.IsCounterClockwise();
     }
 }
