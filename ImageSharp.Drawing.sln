@@ -337,10 +337,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 		.github\workflows\build-and-test.yml = .github\workflows\build-and-test.yml
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolygonClipper", "..\..\SixLabors\PolygonClipper\src\PolygonClipper\PolygonClipper.csproj", "{5ED54794-99BF-5E50-A861-0BAAAC794E44}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp", "..\..\SixLabors\ImageSharp\src\ImageSharp\ImageSharp.csproj", "{AAF7501C-8537-7F13-5193-B538318BD071}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -363,14 +359,6 @@ Global
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5493F024-0A3F-420C-AC2D-05B77A36025B}.Release|Any CPU.Build.0 = Release|Any CPU
-		{5ED54794-99BF-5E50-A861-0BAAAC794E44}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5ED54794-99BF-5E50-A861-0BAAAC794E44}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5ED54794-99BF-5E50-A861-0BAAAC794E44}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5ED54794-99BF-5E50-A861-0BAAAC794E44}.Release|Any CPU.Build.0 = Release|Any CPU
-		{AAF7501C-8537-7F13-5193-B538318BD071}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{AAF7501C-8537-7F13-5193-B538318BD071}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{AAF7501C-8537-7F13-5193-B538318BD071}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{AAF7501C-8537-7F13-5193-B538318BD071}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -398,17 +386,13 @@ Global
 		{68A8CC40-6AED-4E96-B524-31B1158FDEEA} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 		{5493F024-0A3F-420C-AC2D-05B77A36025B} = {528610AC-7C0C-46E8-9A2D-D46FD92FEE29}
 		{23859314-5693-4E6C-BE5C-80A433439D2A} = {1799C43E-5C54-4A8F-8D64-B1475241DB0D}
-		{5ED54794-99BF-5E50-A861-0BAAAC794E44} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
-		{AAF7501C-8537-7F13-5193-B538318BD071} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F8B9D1F-CD8B-4CC5-8216-D531E25BD795}
 	EndGlobalSection
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{2e33181e-6e28-4662-a801-e2e7dc206029}*SharedItemsImports = 5
-		..\..\SixLabors\PolygonClipper\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{5ed54794-99bf-5e50-a861-0baaac794e44}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{68a8cc40-6aed-4e96-b524-31b1158fdeea}*SharedItemsImports = 13
-		..\..\SixLabors\ImageSharp\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{aaf7501c-8537-7f13-5193-b538318bd071}*SharedItemsImports = 5
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true
