@@ -58,11 +58,11 @@ internal class ClipPathProcessor<TPixel> : IImageProcessor<TPixel>
 
         // Use the clone as a brush source so only the clipped result contributes to the fill,
         // keeping the effect confined to the clipped region.
-        Point offsetP = new(
+        Point brushOffset = new(
             clipped.X - (int)MathF.Floor(boundsF.Left),
             clipped.Y - (int)MathF.Floor(boundsF.Top));
 
-        ImageBrush brush = new(clone, clone.Bounds, offsetP);
+        ImageBrush brush = new(clone, clone.Bounds, brushOffset);
 
         // Fill the shape using the image brush.
         FillPathProcessor processor = new(this.definition.Options, brush, this.definition.Region);
