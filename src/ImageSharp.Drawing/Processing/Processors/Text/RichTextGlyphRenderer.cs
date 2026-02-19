@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Memory;
@@ -24,6 +24,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
     private readonly DrawingOptions drawingOptions;
     private readonly MemoryAllocator memoryAllocator;
+    private readonly IDrawingBackend drawingBackend;
     private readonly Pen? defaultPen;
     private readonly Brush? defaultBrush;
     private readonly IPathInternals? path;
@@ -55,12 +56,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         RichTextOptions textOptions,
         DrawingOptions drawingOptions,
         MemoryAllocator memoryAllocator,
+        IDrawingBackend drawingBackend,
         Pen? pen,
         Brush? brush)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
         this.memoryAllocator = memoryAllocator;
+        this.drawingBackend = drawingBackend;
         this.defaultPen = pen;
         this.defaultBrush = brush;
         this.DrawingOperations = [];
@@ -527,6 +530,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         return Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
     }
 
+    /// <summary>
+    /// Rasterizes a glyph path to a local coverage map.
+    /// </summary>
+    /// <param name="path">The glyph path in destination coordinates.</param>
+    /// <returns>A coverage buffer used by later text draw operations.</returns>
     private Buffer2D<float> Render(IPath path)
     {
         // We need to offset the path now by the difference between the clamped location and the
@@ -537,54 +545,27 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         // Pad to prevent edge clipping.
         size += new Size(2, 2);
 
-        int subpixelCount = FillPathProcessor.MinimumSubpixelCount;
-        float xOffset = .5F;
+        RasterizerSamplingOrigin samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
         GraphicsOptions graphicsOptions = this.drawingOptions.GraphicsOptions;
-        if (graphicsOptions.Antialias)
-        {
-            xOffset = 0F; // We are antialiasing. Skip offsetting as real antialiasing should take care of offset.
-            subpixelCount = Math.Max(subpixelCount, graphicsOptions.AntialiasSubpixelDepth);
-        }
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias
+            ? RasterizationMode.Antialiased
+            : RasterizationMode.Aliased;
 
         // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
         Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
-
-        PolygonScanner scanner = PolygonScanner.Create(
-            offsetPath,
-            0,
-            size.Height,
-            subpixelCount,
+        RasterizerOptions rasterizerOptions = new(
+            new Rectangle(0, 0, size.Width, size.Height),
             TextUtilities.MapFillRule(this.currentFillRule),
-            this.memoryAllocator);
+            rasterizationMode,
+            samplingOrigin);
 
-        try
-        {
-            while (scanner.MoveToNextPixelLine())
-            {
-                Span<float> scanline = buffer.DangerousGetRowSpan(scanner.PixelLineY);
-                bool scanlineDirty = scanner.ScanCurrentPixelLineInto(0, xOffset, scanline);
-
-                if (scanlineDirty && !graphicsOptions.Antialias)
-                {
-                    for (int x = 0; x < size.Width; x++)
-                    {
-                        if (scanline[x] >= 0.5)
-                        {
-                            scanline[x] = 1;
-                        }
-                        else
-                        {
-                            scanline[x] = 0;
-                        }
-                    }
-                }
-            }
-        }
-        finally
-        {
-            // Can't use ref struct as a 'ref' or 'out' value when 'using' so as it is readonly explicitly dispose.
-            scanner.Dispose();
-        }
+        // Request coverage generation from the configured backend. CPU backends will produce
+        // this via scanlines; future GPU backends can supply equivalent coverage by other means.
+        this.drawingBackend.RasterizeCoverage(
+            offsetPath,
+            rasterizerOptions,
+            this.memoryAllocator,
+            buffer);
 
         return buffer;
     }

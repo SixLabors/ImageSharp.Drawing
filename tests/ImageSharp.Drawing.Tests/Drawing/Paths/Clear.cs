@@ -15,8 +15,7 @@ public class Clear : BaseImageOperationsExtensionTest
         {
             AlphaCompositionMode = PixelFormats.PixelAlphaCompositionMode.Clear,
             BlendPercentage = 0.5f,
-            ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Darken,
-            AntialiasSubpixelDepth = 99
+            ColorBlendingMode = PixelFormats.PixelColorBlendingMode.Darken
         }
     };
 

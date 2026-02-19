@@ -104,8 +104,8 @@ public class DrawPath : BaseImageOperationsExtensionTest
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
         Assert.Equal(this.path, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
-        Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
-        Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
+        Assert.Equal(this.pen.StrokeOptions.LineJoin, processorPen.StrokeOptions.LineJoin);
+        Assert.Equal(this.pen.StrokeOptions.LineCap, processorPen.StrokeOptions.LineCap);
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public class DrawPath : BaseImageOperationsExtensionTest
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
         Assert.Equal(this.path, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
-        Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
-        Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
+        Assert.Equal(this.pen.StrokeOptions.LineJoin, processorPen.StrokeOptions.LineJoin);
+        Assert.Equal(this.pen.StrokeOptions.LineCap, processorPen.StrokeOptions.LineCap);
     }
 }

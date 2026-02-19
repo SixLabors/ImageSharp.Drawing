@@ -220,7 +220,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
             ShapeOptions options = new()
             {
-                ClippingOperation = ClippingOperation.Intersection,
+                BooleanOperation = BooleanOperation.Intersection,
                 IntersectionRule = TextUtilities.MapFillRule(this.currentLayerFillRule)
             };
 

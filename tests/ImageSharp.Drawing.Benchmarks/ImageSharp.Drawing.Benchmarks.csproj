@@ -12,12 +12,14 @@
     <!--BenchmarkDotNet cannot run static benchmarks-->
     <!--Mark members as static-->
     <NoWarn>CA1822</NoWarn>
+    <!--Validate platform compatibility-->
+    <NoWarn>CA1416</NoWarn>
   </PropertyGroup>
 
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
       <PropertyGroup>
-        <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+        <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
       </PropertyGroup>
     </When>
     <Otherwise>
@@ -31,6 +33,7 @@
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="GeoJSON.Net" />
+    <PackageReference Include="runtime.osx.10.10-x64.CoreCompat.System.Drawing" Condition="'$(IsOSX)'=='true'" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Condition="'$(IsLinux)'=='true'"/>
   </ItemGroup>

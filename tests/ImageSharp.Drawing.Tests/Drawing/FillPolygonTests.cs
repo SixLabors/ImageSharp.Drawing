@@ -22,14 +22,14 @@ public class FillPolygonTests
         PointF[] polygon1 = PolygonFactory.CreatePointArray((2, 2), (6, 2), (6, 4), (2, 4));
         PointF[] polygon2 = PolygonFactory.CreatePointArray((2, 8), (4, 6), (6, 8), (4, 10));
 
-        GraphicsOptions options = new() { Antialias = antialias > 0, AntialiasSubpixelDepth = antialias };
+        GraphicsOptions options = new() { Antialias = antialias > 0 };
         provider.RunValidatingProcessorTest(
             c => c.SetGraphicsOptions(options)
                 .FillPolygon(Color.White, polygon1)
                 .FillPolygon(Color.White, polygon2),
+            testOutputDetails: $"aa{antialias}",
             appendPixelTypeToFileName: false,
-            appendSourceFileOrDescription: false,
-            testOutputDetails: $"aa{antialias}");
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
@@ -177,30 +177,30 @@ public class FillPolygonTests
         provider.RunValidatingProcessorTest(
             c => c.Fill(Color.White, shape),
             comparer: ImageComparer.TolerantPercentage(0.01f),
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
-    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32)]
-    public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider)
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Intersection)]
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Union)]
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Difference)]
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Xor)]
+    public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider, BooleanOperation operation)
     {
         IPath circle = new EllipsePolygon(36, 36, 36).Translate(28, 28);
         Star star = new(64, 64, 5, 24, 64);
 
         // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
-        foreach (ClippingOperation operation in (ClippingOperation[])Enum.GetValues(typeof(ClippingOperation)))
-        {
-            ShapeOptions options = new() { ClippingOperation = operation };
-            IPath shape = star.Clip(options, circle);
+        ShapeOptions options = new() { BooleanOperation = operation };
+        IPath shape = star.Clip(options, circle);
 
-            provider.RunValidatingProcessorTest(
-                c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
-                comparer: ImageComparer.TolerantPercentage(0.01F),
-                testOutputDetails: operation.ToString(),
-                appendSourceFileOrDescription: false,
-                appendPixelTypeToFileName: false);
-        }
+        provider.RunValidatingProcessorTest(
+            c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
+            testOutputDetails: operation.ToString(),
+            comparer: ImageComparer.TolerantPercentage(0.01F),
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
@@ -300,8 +300,8 @@ public class FillPolygonTests
         provider.RunValidatingProcessorTest(
             c => c.Fill(color, polygon),
             testOutput,
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     public static readonly TheoryData<bool, IntersectionRule> Fill_EllipsePolygon_Data =
@@ -336,8 +336,8 @@ public class FillPolygonTests
                 c.Fill(color, polygon);
             },
             testOutputDetails: $"Reverse({reverse})_IntersectionRule({intersectionRule})",
-            appendSourceFileOrDescription: false,
-            appendPixelTypeToFileName: false);
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
