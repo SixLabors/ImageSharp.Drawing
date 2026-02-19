@@ -182,25 +182,25 @@ public class FillPolygonTests
     }
 
     [Theory]
-    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32)]
-    public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider)
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Intersection)]
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Union)]
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Difference)]
+    [WithSolidFilledImages(128, 128, "Black", PixelTypes.Rgba32, BooleanOperation.Xor)]
+    public void FillPolygon_StarCircle_AllOperations(TestImageProvider<Rgba32> provider, BooleanOperation operation)
     {
         IPath circle = new EllipsePolygon(36, 36, 36).Translate(28, 28);
         Star star = new(64, 64, 5, 24, 64);
 
         // See http://www.angusj.com/clipper2/Docs/Units/Clipper/Types/ClipType.htm for reference.
-        foreach (BooleanOperation operation in (BooleanOperation[])Enum.GetValues(typeof(BooleanOperation)))
-        {
-            ShapeOptions options = new() { BooleanOperation = operation };
-            IPath shape = star.Clip(options, circle);
+        ShapeOptions options = new() { BooleanOperation = operation };
+        IPath shape = star.Clip(options, circle);
 
-            provider.RunValidatingProcessorTest(
-                c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
-                testOutputDetails: operation.ToString(),
-                comparer: ImageComparer.TolerantPercentage(0.01F),
-                appendPixelTypeToFileName: false,
-                appendSourceFileOrDescription: false);
-        }
+        provider.RunValidatingProcessorTest(
+            c => c.Fill(Color.DeepPink, circle).Fill(Color.LightGray, star).Fill(Color.ForestGreen, shape),
+            testOutputDetails: operation.ToString(),
+            comparer: ImageComparer.TolerantPercentage(0.01F),
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
