@@ -15,6 +15,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
 {
     private readonly ILineSegment[] lineSegments;
     private InternalPath? innerPath;
+    private IReadOnlyList<InternalPath>? internalPathRings;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Path"/> class.
@@ -131,7 +132,8 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
        => this.InnerPath.PointAlongPath(distance);
 
     /// <inheritdoc/>
-    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath() => [this.InnerPath];
+    IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
+        => this.internalPathRings ??= [this.InnerPath];
 
     /// <summary>
     /// Converts an SVG path string into an <see cref="IPath"/>.

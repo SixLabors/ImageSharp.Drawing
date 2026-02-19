@@ -58,7 +58,7 @@ internal sealed class TessellatedMultipolygon : IDisposable, IReadOnlyList<Tesse
         }
         else
         {
-            ReadOnlyMemory<PointF>[] points = path.Flatten().Select(sp => sp.Points).ToArray();
+            ReadOnlyMemory<PointF>[] points = [.. path.Flatten().Select(sp => sp.Points)];
 
             // If we have only one ring, we can change it's orientation without negative side-effects.
             // Since the algorithm works best with positively-oriented polygons,

@@ -48,7 +48,20 @@ public class DrawPathProcessor : IImageProcessor
         // The global transform is applied in the FillPathProcessor.
         IPath outline = this.Pen.GeneratePath(this.Path.Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
 
-        return new FillPathProcessor(this.Options, this.Pen.StrokeFill, outline)
+        DrawingOptions effectiveOptions = this.Options;
+
+        // Non-normalized stroked output can contain overlaps/self-intersections.
+        // Rasterizing these contours with non-zero winding matches the intended stroke semantics.
+        if (!this.Pen.StrokeOptions.NormalizeOutput &&
+            this.Options.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
+        {
+            ShapeOptions shapeOptions = this.Options.ShapeOptions.DeepClone();
+            shapeOptions.IntersectionRule = IntersectionRule.NonZero;
+
+            effectiveOptions = new DrawingOptions(this.Options.GraphicsOptions, shapeOptions, this.Options.Transform);
+        }
+
+        return new FillPathProcessor(effectiveOptions, this.Pen.StrokeFill, outline)
             .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
     }
 }

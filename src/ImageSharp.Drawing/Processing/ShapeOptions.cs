@@ -18,22 +18,22 @@ public class ShapeOptions : IDeepCloneable<ShapeOptions>
     private ShapeOptions(ShapeOptions source)
     {
         this.IntersectionRule = source.IntersectionRule;
-        this.ClippingOperation = source.ClippingOperation;
+        this.BooleanOperation = source.BooleanOperation;
     }
 
     /// <summary>
     /// Gets or sets the clipping operation.
     /// <para/>
-    /// Defaults to <see cref="ClippingOperation.Difference"/>.
+    /// Defaults to <see cref="BooleanOperation.Difference"/>.
     /// </summary>
-    public ClippingOperation ClippingOperation { get; set; } = ClippingOperation.Difference;
+    public BooleanOperation BooleanOperation { get; set; } = BooleanOperation.Difference;
 
     /// <summary>
     /// Gets or sets the rule for calculating intersection points.
     /// <para/>
-    /// Defaults to <see cref="IntersectionRule.EvenOdd"/>.
+    /// Defaults to <see cref="IntersectionRule.NonZero"/>.
     /// </summary>
-    public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.EvenOdd;
+    public IntersectionRule IntersectionRule { get; set; } = IntersectionRule.NonZero;
 
     /// <inheritdoc/>
     public ShapeOptions DeepClone() => new(this);

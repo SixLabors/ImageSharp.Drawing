@@ -19,7 +19,7 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         new PointF(25, 10)
     ];
 
-    private void VerifyPoints(PointF[] expectedPoints, IPath path)
+    private static void VerifyPoints(PointF[] expectedPoints, IPath path)
     {
         ISimplePath simplePath = Assert.Single(path.Flatten());
         Assert.True(simplePath.IsClosed);
@@ -34,7 +34,7 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         Assert.Equal(this.pen, processor.Pen);
     }
 
@@ -46,7 +46,7 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         Assert.Equal(this.pen, processor.Pen);
     }
 
@@ -58,7 +58,7 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(this.pen.StrokeFill, processorPen.StrokeFill);
         Assert.Equal(10, processorPen.StrokeWidth);
@@ -72,7 +72,7 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(this.pen.StrokeFill, processorPen.StrokeFill);
         Assert.Equal(10, processorPen.StrokeWidth);
@@ -86,7 +86,7 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
         Assert.Equal(Color.Red, brush.Color);
@@ -101,7 +101,7 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         SolidBrush brush = Assert.IsType<SolidBrush>(processor.Pen.StrokeFill);
         Assert.Equal(Color.Red, brush.Color);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
@@ -116,10 +116,10 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
-        Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
-        Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
+        Assert.Equal(this.pen.StrokeOptions.LineJoin, processorPen.StrokeOptions.LineJoin);
+        Assert.Equal(this.pen.StrokeOptions.LineCap, processorPen.StrokeOptions.LineCap);
     }
 
     [Fact]
@@ -130,9 +130,9 @@ public class DrawPolygon : BaseImageOperationsExtensionTest
         DrawPathProcessor processor = this.Verify<DrawPathProcessor>();
 
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
-        this.VerifyPoints(this.points, processor.Path);
+        VerifyPoints(this.points, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
-        Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
-        Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
+        Assert.Equal(this.pen.StrokeOptions.LineJoin, processorPen.StrokeOptions.LineJoin);
+        Assert.Equal(this.pen.StrokeOptions.LineCap, processorPen.StrokeOptions.LineCap);
     }
 }

@@ -121,8 +121,8 @@ public class DrawBezier : BaseImageOperationsExtensionTest
         Assert.NotEqual(this.shapeOptions, processor.Options.ShapeOptions);
         this.VerifyPoints(this.points, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
-        Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
-        Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
+        Assert.Equal(this.pen.StrokeOptions.LineJoin, processorPen.StrokeOptions.LineJoin);
+        Assert.Equal(this.pen.StrokeOptions.LineCap, processorPen.StrokeOptions.LineCap);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class DrawBezier : BaseImageOperationsExtensionTest
         Assert.Equal(this.shapeOptions, processor.Options.ShapeOptions);
         this.VerifyPoints(this.points, processor.Path);
         SolidPen processorPen = Assert.IsType<SolidPen>(processor.Pen);
-        Assert.Equal(this.pen.JointStyle, processorPen.JointStyle);
-        Assert.Equal(this.pen.EndCapStyle, processorPen.EndCapStyle);
+        Assert.Equal(this.pen.StrokeOptions.LineJoin, processorPen.StrokeOptions.LineJoin);
+        Assert.Equal(this.pen.StrokeOptions.LineCap, processorPen.StrokeOptions.LineCap);
     }
 }

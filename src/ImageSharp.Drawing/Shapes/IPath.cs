@@ -13,29 +13,29 @@ public interface IPath
     /// <summary>
     /// Gets a value indicating whether this instance is closed, open or a composite path with a mixture of open and closed figures.
     /// </summary>
-    PathTypes PathType { get; }
+    public PathTypes PathType { get; }
 
     /// <summary>
     /// Gets the bounds enclosing the path.
     /// </summary>
-    RectangleF Bounds { get; }
+    public RectangleF Bounds { get; }
 
     /// <summary>
     /// Converts the <see cref="IPath" /> into a simple linear path.
     /// </summary>
     /// <returns>Returns the current <see cref="IPath" /> as simple linear path.</returns>
-    IEnumerable<ISimplePath> Flatten();
+    public IEnumerable<ISimplePath> Flatten();
 
     /// <summary>
     /// Transforms the path using the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A new path with the matrix applied to it.</returns>
-    IPath Transform(Matrix3x2 matrix);
+    public IPath Transform(Matrix3x2 matrix);
 
     /// <summary>
     /// Returns this path with all figures closed.
     /// </summary>
     /// <returns>A new close <see cref="IPath"/>.</returns>
-    IPath AsClosedPath();
+    public IPath AsClosedPath();
 }
