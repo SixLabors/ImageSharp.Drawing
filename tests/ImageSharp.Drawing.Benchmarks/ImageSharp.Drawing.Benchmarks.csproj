@@ -33,6 +33,7 @@
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="GeoJSON.Net" />
+    <PackageReference Include="runtime.osx.10.10-x64.CoreCompat.System.Drawing" Condition="'$(IsOSX)'=='true'" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Condition="'$(IsLinux)'=='true'"/>
   </ItemGroup>
