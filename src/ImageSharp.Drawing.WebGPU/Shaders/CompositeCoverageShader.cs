@@ -5,8 +5,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 internal static class CompositeCoverageShader
 {
-    public static ReadOnlySpan<byte> Code =>
-        """
+    private static readonly byte[] CodeBytes =
+    [
+        .. """
         struct CompositeParams {
             source_offset_x: u32,
             source_offset_y: u32,
@@ -97,5 +98,9 @@ internal static class CompositeCoverageShader
 
             return vec4<f32>(brush.rgb * source_alpha, source_alpha);
         }
-        """u8;
+        """u8,
+        .. "\0"u8
+    ];
+
+    public static ReadOnlySpan<byte> Code => CodeBytes;
 }

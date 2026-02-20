@@ -258,6 +258,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
             graphicsOptions,
             destinationRegion,
             path.Bounds);
+
         FillRasterizationState<TPixel> state = new(
             destinationRegion,
             applicator,

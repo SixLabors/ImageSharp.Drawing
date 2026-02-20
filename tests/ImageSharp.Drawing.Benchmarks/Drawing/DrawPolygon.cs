@@ -211,6 +211,9 @@ public abstract class DrawPolygon
 
     [Benchmark]
     public void FillPolygon() => this.image.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
+
+    [Benchmark]
+    public void FillPolygonWebGpuBackend() => this.webGpuImage.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
 }
 
 public class DrawPolygonAll : DrawPolygon
