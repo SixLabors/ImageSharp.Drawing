@@ -257,12 +257,12 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         }
         finally
         {
+            this.backend.EndCompositeSession(this.configuration, this.targetRegion);
+
             foreach ((_, CoverageCacheEntry coverageEntry) in coverageCache)
             {
                 this.backend.ReleaseCoverage(coverageEntry.CoverageHandle);
             }
-
-            this.backend.EndCompositeSession(this.configuration, this.targetRegion);
         }
     }
 

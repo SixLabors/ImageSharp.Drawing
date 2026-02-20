@@ -8,6 +8,7 @@ using BenchmarkDotNet.Attributes;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
@@ -23,6 +24,7 @@ public abstract class DrawPolygon
     private PointF[][] points;
 
     private Image<Rgba32> image;
+    private Image<Rgba32> webGpuImage;
 
     private Bitmap sdBitmap;
     private Graphics sdGraphics;
@@ -38,6 +40,8 @@ public abstract class DrawPolygon
     private IPath imageSharpPath;
 
     private IPath strokedImageSharpPath;
+    private WebGPUDrawingBackend webGpuBackend;
+    private Configuration webGpuConfiguration;
 
     protected abstract int Width { get; }
 
@@ -107,6 +111,10 @@ public abstract class DrawPolygon
         this.image = new Image<Rgba32>(this.Width, this.Height);
         this.isPen = new SolidPen(Color.White, this.Thickness);
         this.strokedImageSharpPath = this.isPen.GeneratePath(this.imageSharpPath);
+        this.webGpuBackend = new WebGPUDrawingBackend();
+        this.webGpuConfiguration = Configuration.Default.Clone();
+        this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
+        this.webGpuImage = new Image<Rgba32>(this.webGpuConfiguration, this.Width, this.Height);
 
         this.sdBitmap = new Bitmap(this.Width, this.Height);
         this.sdGraphics = Graphics.FromImage(this.sdBitmap);
@@ -148,6 +156,8 @@ public abstract class DrawPolygon
         this.skPath.Dispose();
 
         this.image.Dispose();
+        this.webGpuImage.Dispose();
+        this.webGpuBackend.Dispose();
     }
 
     [Benchmark]
@@ -176,6 +186,10 @@ public abstract class DrawPolygon
     [Benchmark]
     public void ImageSharpCombinedPathsTiled()
         => this.image.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
+
+    [Benchmark(Description = "ImageSharp Combined Paths WebGPU Backend")]
+    public void ImageSharpCombinedPathsWebGpuBackend()
+        => this.webGpuImage.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
 
     [Benchmark]
     public void ImageSharpSeparatePathsTiled()

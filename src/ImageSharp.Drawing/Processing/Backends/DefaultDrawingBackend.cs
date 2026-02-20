@@ -124,7 +124,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
 
         Buffer2D<float> destination = allocator.Allocate2D<float>(size, AllocationOptions.Clean);
 
-        CoverageRasterizationState state = new(destination);
+        CoverageRasterizationState state = new(destination, rasterizerOptions.Interest.Top);
         this.PrimaryRasterizer.Rasterize(path, rasterizerOptions, allocator, ref state, ProcessCoverageScanline);
 
         int handleId = Interlocked.Increment(ref this.nextCoverageHandleId);
@@ -365,7 +365,8 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
     /// <param name="state">Callback state containing destination storage.</param>
     private static void ProcessCoverageScanline(int y, Span<float> scanline, ref CoverageRasterizationState state)
     {
-        Span<float> destination = state.Buffer.DangerousGetRowSpan(y);
+        int row = y - state.DestinationTop;
+        Span<float> destination = state.Buffer.DangerousGetRowSpan(row);
         scanline.CopyTo(destination);
     }
 
@@ -498,12 +499,22 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         /// Initializes a new instance of the <see cref="CoverageRasterizationState"/> struct.
         /// </summary>
         /// <param name="buffer">Destination coverage buffer.</param>
-        public CoverageRasterizationState(Buffer2D<float> buffer) => this.Buffer = buffer;
+        /// <param name="destinationTop">Absolute Y corresponding to destination row 0.</param>
+        public CoverageRasterizationState(Buffer2D<float> buffer, int destinationTop)
+        {
+            this.Buffer = buffer;
+            this.DestinationTop = destinationTop;
+        }
 
         /// <summary>
         /// Gets the destination coverage buffer.
         /// </summary>
         public Buffer2D<float> Buffer { get; }
+
+        /// <summary>
+        /// Gets the absolute Y corresponding to destination row 0.
+        /// </summary>
+        public int DestinationTop { get; }
     }
 
     /// <summary>

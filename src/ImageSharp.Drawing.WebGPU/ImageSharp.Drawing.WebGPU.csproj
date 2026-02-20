@@ -17,6 +17,13 @@
 
     <!-- TEMP: To avoid publishing while we experiment. -->
     <IsPublishable>false</IsPublishable>
+
+    <!--
+      This project is strong-name signed by the shared SixLabors build settings.
+      Silk.NET WebGPU packages are currently unsigned, which triggers CS8002.
+      Keep CS8002 visible as a warning, but do not fail the build for it.
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);8002</WarningsNotAsErrors>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -49,9 +56,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" />
-    <PackageReference Include="Silk.NET.WebGPU.Extensions.WGPU" Version="2.23.0" />
-    <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.23.0" />
+    <!--
+      Silk compile assets are needed by this project but should not flow transitively to consumers.
+      This keeps downstream projects from seeing Silk reference warnings (for example CS8002)
+      unless they explicitly reference Silk themselves.
+      Runtime/native assets still flow so the backend can execute.
+    -->
+    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
+    <PackageReference Include="Silk.NET.WebGPU.Extensions.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
+    <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
   </ItemGroup>
 
   <ItemGroup>

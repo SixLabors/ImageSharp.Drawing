@@ -28,12 +28,17 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 
     private static ReadOnlySpan<byte> EntryPointFragment => "fs_main\0"u8;
 
+    private static readonly byte[] CompositeShaderCode = CreateNullTerminatedUtf8(CompositeCoverageShader.Code);
+
+    private static readonly byte[] CoverageShaderCode = CreateNullTerminatedUtf8(CoverageRasterizationShader.Code);
+
     private readonly object gpuSync = new();
     private readonly ConcurrentDictionary<int, CoverageEntry> preparedCoverage = new();
     private readonly DefaultDrawingBackend fallbackBackend;
 
     private int nextCoverageHandleId;
     private bool isDisposed;
+    private WebGpuRuntime.Lease? runtimeLease;
     private WebGPU? webGpu;
     private Wgpu? wgpuExtension;
     private Instance* instance;
@@ -503,6 +508,11 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 
             foreach (KeyValuePair<int, CoverageEntry> kv in this.preparedCoverage)
             {
+                if (kv.Value.IsFallback)
+                {
+                    this.fallbackBackend.ReleaseCoverage(kv.Value.FallbackCoverageHandle);
+                }
+
                 this.ReleaseCoverageTextureLocked(kv.Value);
                 kv.Value.Dispose();
             }
@@ -559,8 +569,9 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
         Trace("TryInitializeGpuLocked: begin");
         try
         {
-            this.webGpu = WebGPU.GetApi();
-            _ = this.webGpu.TryGetDeviceExtension<Wgpu>(null, out this.wgpuExtension);
+            this.runtimeLease = WebGpuRuntime.Acquire();
+            this.webGpu = this.runtimeLease.Api;
+            this.wgpuExtension = this.runtimeLease.WgpuExtension;
             Trace($"TryInitializeGpuLocked: extension={(this.wgpuExtension is null ? "none" : "wgpu.h")}");
             this.instance = this.webGpu.CreateInstance((InstanceDescriptor*)null);
             if (this.instance is null)
@@ -785,8 +796,7 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
         ShaderModule* shaderModule = null;
         try
         {
-            ReadOnlySpan<byte> shaderCode = CompositeCoverageShader.Code;
-            fixed (byte* shaderCodePtr = shaderCode)
+            fixed (byte* shaderCodePtr = CompositeShaderCode)
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()
                 {
@@ -950,8 +960,7 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
         ShaderModule* shaderModule = null;
         try
         {
-            ReadOnlySpan<byte> shaderCode = CoverageRasterizationShader.Code;
-            fixed (byte* shaderCodePtr = shaderCode)
+            fixed (byte* shaderCodePtr = CoverageShaderCode)
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()
                 {
@@ -1221,10 +1230,6 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
             }
 
             this.webGpu.QueueSubmit(this.queue, 1, ref commandBuffer);
-            if (this.wgpuExtension is not null)
-            {
-                _ = this.wgpuExtension.DevicePoll(this.device, true, (WrappedSubmissionIndex*)null);
-            }
 
             this.webGpu.CommandBufferRelease(commandBuffer);
             commandBuffer = null;
@@ -1296,6 +1301,14 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
     private static void AddEdge(PointF from, PointF to, float offsetX, float offsetY, List<EdgeData> destination)
     {
         if (from.Equals(to))
+        {
+            return;
+        }
+
+        if (!float.IsFinite(from.X) ||
+            !float.IsFinite(from.Y) ||
+            !float.IsFinite(to.X) ||
+            !float.IsFinite(to.Y))
         {
             return;
         }
@@ -1841,10 +1854,6 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
             }
 
             this.webGpu.QueueSubmit(this.queue, 1, ref commandBuffer);
-            if (this.wgpuExtension is not null)
-            {
-                _ = this.wgpuExtension.DevicePoll(this.device, true, (WrappedSubmissionIndex*)null);
-            }
 
             this.webGpu.CommandBufferRelease(commandBuffer);
             commandBuffer = null;
@@ -1984,6 +1993,16 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
     private static uint AlignTo256(uint value) => (value + 255U) & ~255U;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte[] CreateNullTerminatedUtf8(ReadOnlySpan<byte> text)
+    {
+        byte[] buffer = new byte[text.Length + 1];
+        Span<byte> destination = buffer.AsSpan();
+        text.CopyTo(destination);
+        destination[text.Length] = 0;
+        return buffer;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSingleMemory<T>(Buffer2D<T> buffer)
         where T : struct
         => buffer.MemoryGroup.Count == 1;
@@ -2032,6 +2051,30 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
         this.webGpu.BufferRelease(buffer);
     }
 
+    private void TryDestroyAndDrainDeviceLocked()
+    {
+        if (this.webGpu is null || this.device is null)
+        {
+            return;
+        }
+
+        this.webGpu.DeviceDestroy(this.device);
+
+        if (this.wgpuExtension is not null)
+        {
+            // Drain native callbacks/work queues before releasing the device and unloading.
+            _ = this.wgpuExtension.DevicePoll(this.device, true, (WrappedSubmissionIndex*)null);
+            _ = this.wgpuExtension.DevicePoll(this.device, true, (WrappedSubmissionIndex*)null);
+            return;
+        }
+
+        if (this.instance is not null)
+        {
+            this.webGpu.InstanceProcessEvents(this.instance);
+            this.webGpu.InstanceProcessEvents(this.instance);
+        }
+    }
+
     private void ReleaseGpuResourcesLocked()
     {
         Trace("ReleaseGpuResourcesLocked: begin");
@@ -2075,6 +2118,11 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
                 this.compositeBindGroupLayout = null;
             }
 
+            if (this.device is not null)
+            {
+                this.TryDestroyAndDrainDeviceLocked();
+            }
+
             if (this.queue is not null)
             {
                 this.webGpu.QueueRelease(this.queue);
@@ -2099,10 +2147,12 @@ internal sealed unsafe class WebGPUDrawingBackend : IDrawingBackend, IDisposable
                 this.instance = null;
             }
 
-            this.webGpu.Dispose();
             this.webGpu = null;
         }
 
+        this.wgpuExtension = null;
+        this.runtimeLease?.Dispose();
+        this.runtimeLease = null;
         this.IsGpuReady = false;
         this.compositeSessionGpuActive = false;
         this.compositeSessionDepth = 0;

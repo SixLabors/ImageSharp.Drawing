@@ -89,7 +89,6 @@ internal static class CoverageRasterizationShader
 
         fn antialias_sample(pixel: vec2<f32>) -> f32 {
             // Supersample a fixed grid around the configured sample origin.
-            // This produces smoother coverage than the previous 2x2 tap pattern.
             let grid: u32 = 8u;
             let inv_sample_count = 1.0 / f32(grid * grid);
             let origin = vec2<f32>(params.sample_origin_x, params.sample_origin_y);
