@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -43,11 +44,11 @@ public sealed class RecolorBrush : Brush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region) => new RecolorBrushApplicator<TPixel>(
             configuration,
             options,
-            source,
+            targetRegion,
             this.SourceColor.ToPixel<TPixel>(),
             this.TargetColor.ToPixel<TPixel>(),
             this.Threshold);
@@ -87,18 +88,18 @@ public sealed class RecolorBrush : Brush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The options</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="sourceColor">Color of the source.</param>
         /// <param name="targetColor">Color of the target.</param>
         /// <param name="threshold">The threshold .</param>
         public RecolorBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            Buffer2DRegion<TPixel> targetRegion,
             TPixel sourceColor,
             TPixel targetColor,
             float threshold)
-            : base(configuration, options, source)
+            : base(configuration, options, targetRegion)
         {
             this.sourceColor = sourceColor.ToScaledVector4();
             this.targetColorPixel = targetColor;
@@ -108,7 +109,7 @@ public sealed class RecolorBrush : Brush
             TPixel maxColor = TPixel.FromVector4(new Vector4(float.MaxValue));
             TPixel minColor = TPixel.FromVector4(new Vector4(float.MinValue));
             this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
+            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, targetRegion.Width);
         }
 
         internal TPixel this[int x, int y]
@@ -116,7 +117,9 @@ public sealed class RecolorBrush : Brush
             get
             {
                 // Offset the requested pixel by the value in the rectangle (the shapes position)
-                TPixel result = this.Target[x, y];
+                int localY = y - this.TargetRegion.Rectangle.Y;
+                int localX = x - this.TargetRegion.Rectangle.X;
+                TPixel result = this.TargetRegion.DangerousGetRowSpan(localY)[localX];
                 Vector4 background = result.ToVector4();
                 float distance = Vector4.DistanceSquared(background, this.sourceColor);
                 if (distance <= this.threshold)
@@ -135,28 +138,38 @@ public sealed class RecolorBrush : Brush
         /// <inheritdoc />
         public override void Apply(Span<float> scanline, int x, int y)
         {
-            if (x < 0 || y < 0 || x >= this.Target.Width || y >= this.Target.Height)
+            Rectangle targetBounds = this.TargetRegion.Rectangle;
+            if (y < targetBounds.Y || y >= targetBounds.Bottom)
             {
                 return;
             }
 
-            // Limit the scanline to the bounds of the image relative to x.
-            scanline = scanline[..Math.Min(this.Target.Width - x, scanline.Length)];
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
-
-            for (int i = 0; i < scanline.Length; i++)
+            int startX = Math.Max(x, targetBounds.X);
+            int endX = Math.Min(x + scanline.Length, targetBounds.Right);
+            if (startX >= endX)
             {
-                amounts[i] = scanline[i] * this.Options.BlendPercentage;
+                return;
+            }
 
-                int offsetX = x + i;
+            int length = endX - startX;
+            Span<float> clippedScanline = scanline.Slice(startX - x, length);
+            Span<float> amounts = this.blenderBuffers.AmountSpan[..length];
+            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..length];
+
+            for (int i = 0; i < clippedScanline.Length; i++)
+            {
+                amounts[i] = clippedScanline[i] * this.Options.BlendPercentage;
+
+                int offsetX = startX + i;
 
                 // No doubt this one can be optimized further but I can't imagine its
                 // actually being used and can probably be removed/internalized for now
                 overlays[i] = this[offsetX, y];
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
+            int localY = y - targetBounds.Y;
+            int localX = startX - targetBounds.X;
+            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, length);
             this.Blender.Blend(
                 this.Configuration,
                 destinationRow,

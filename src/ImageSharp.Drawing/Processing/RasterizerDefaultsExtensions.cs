@@ -22,9 +22,9 @@ internal static class RasterizerDefaultsExtensions
         Guard.NotNull(backend, nameof(backend));
         context.Properties[typeof(IDrawingBackend)] = backend;
 
-        if (backend is CpuDrawingBackend cpuBackend)
+        if (backend is DefaultDrawingBackend defaultBackend)
         {
-            context.Properties[typeof(IRasterizer)] = cpuBackend.PrimaryRasterizer;
+            context.Properties[typeof(IRasterizer)] = defaultBackend.PrimaryRasterizer;
         }
 
         return context;
@@ -40,9 +40,9 @@ internal static class RasterizerDefaultsExtensions
         Guard.NotNull(backend, nameof(backend));
         configuration.Properties[typeof(IDrawingBackend)] = backend;
 
-        if (backend is CpuDrawingBackend cpuBackend)
+        if (backend is DefaultDrawingBackend defaultBackend)
         {
-            configuration.Properties[typeof(IRasterizer)] = cpuBackend.PrimaryRasterizer;
+            configuration.Properties[typeof(IRasterizer)] = defaultBackend.PrimaryRasterizer;
         }
     }
 
@@ -62,7 +62,7 @@ internal static class RasterizerDefaultsExtensions
         if (context.Properties.TryGetValue(typeof(IRasterizer), out object? rasterizer) &&
             rasterizer is IRasterizer configuredRasterizer)
         {
-            return CpuDrawingBackend.Create(configuredRasterizer);
+            return DefaultDrawingBackend.Create(configuredRasterizer);
         }
 
         return context.Configuration.GetDrawingBackend();
@@ -84,12 +84,12 @@ internal static class RasterizerDefaultsExtensions
         if (configuration.Properties.TryGetValue(typeof(IRasterizer), out object? rasterizer) &&
             rasterizer is IRasterizer configuredRasterizer)
         {
-            IDrawingBackend rasterizerBackend = CpuDrawingBackend.Create(configuredRasterizer);
+            IDrawingBackend rasterizerBackend = DefaultDrawingBackend.Create(configuredRasterizer);
             configuration.Properties[typeof(IDrawingBackend)] = rasterizerBackend;
             return rasterizerBackend;
         }
 
-        IDrawingBackend defaultBackend = CpuDrawingBackend.Instance;
+        IDrawingBackend defaultBackend = DefaultDrawingBackend.Instance;
         configuration.Properties[typeof(IDrawingBackend)] = defaultBackend;
         return defaultBackend;
     }
@@ -104,7 +104,7 @@ internal static class RasterizerDefaultsExtensions
     {
         Guard.NotNull(rasterizer, nameof(rasterizer));
         context.Properties[typeof(IRasterizer)] = rasterizer;
-        context.Properties[typeof(IDrawingBackend)] = CpuDrawingBackend.Create(rasterizer);
+        context.Properties[typeof(IDrawingBackend)] = DefaultDrawingBackend.Create(rasterizer);
         return context;
     }
 
@@ -117,7 +117,7 @@ internal static class RasterizerDefaultsExtensions
     {
         Guard.NotNull(rasterizer, nameof(rasterizer));
         configuration.Properties[typeof(IRasterizer)] = rasterizer;
-        configuration.Properties[typeof(IDrawingBackend)] = CpuDrawingBackend.Create(rasterizer);
+        configuration.Properties[typeof(IDrawingBackend)] = DefaultDrawingBackend.Create(rasterizer);
     }
 
     /// <summary>
@@ -134,9 +134,9 @@ internal static class RasterizerDefaultsExtensions
         }
 
         if (context.Properties.TryGetValue(typeof(IDrawingBackend), out object? backend) &&
-            backend is CpuDrawingBackend cpuBackend)
+            backend is DefaultDrawingBackend defaultBackend)
         {
-            return cpuBackend.PrimaryRasterizer;
+            return defaultBackend.PrimaryRasterizer;
         }
 
         // Do not cache config fallback in the context so changes on configuration reflow.
@@ -157,14 +157,14 @@ internal static class RasterizerDefaultsExtensions
         }
 
         if (configuration.Properties.TryGetValue(typeof(IDrawingBackend), out object? backend) &&
-            backend is CpuDrawingBackend cpuBackend)
+            backend is DefaultDrawingBackend defaultBackend)
         {
-            return cpuBackend.PrimaryRasterizer;
+            return defaultBackend.PrimaryRasterizer;
         }
 
         IRasterizer defaultRasterizer = DefaultRasterizer.Instance;
         configuration.Properties[typeof(IRasterizer)] = defaultRasterizer;
-        configuration.Properties[typeof(IDrawingBackend)] = CpuDrawingBackend.Instance;
+        configuration.Properties[typeof(IDrawingBackend)] = DefaultDrawingBackend.Instance;
         return defaultRasterizer;
     }
 }

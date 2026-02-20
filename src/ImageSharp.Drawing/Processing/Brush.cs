@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Memory;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -18,7 +20,7 @@ public abstract class Brush : IEquatable<Brush>
     /// <typeparam name="TPixel">The pixel type.</typeparam>
     /// <param name="configuration">The configuration instance to use when performing operations.</param>
     /// <param name="options">The graphic options.</param>
-    /// <param name="source">The source image.</param>
+    /// <param name="targetRegion">The destination pixel region.</param>
     /// <param name="region">The region the brush will be applied to.</param>
     /// <returns>
     /// The <see cref="BrushApplicator{TPixel}"/> for this brush.
@@ -30,7 +32,7 @@ public abstract class Brush : IEquatable<Brush>
     public abstract BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
         where TPixel : unmanaged, IPixel<TPixel>;
 

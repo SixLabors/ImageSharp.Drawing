@@ -3,6 +3,8 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
+using SixLabors.ImageSharp.Memory;
+
 /// <summary>
 /// Provides a brush that paints linear gradients within an area.
 /// Supports both classic two-point gradients and three-point (rotated) gradients.
@@ -79,12 +81,12 @@ public sealed class LinearGradientBrush : GradientBrush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
         => new LinearGradientBrushApplicator<TPixel>(
             configuration,
             options,
-            source,
+            targetRegion,
             this.startPoint,
             this.endPoint,
             this.rotationPoint,
@@ -112,7 +114,7 @@ public sealed class LinearGradientBrush : GradientBrush
         /// </summary>
         /// <param name="configuration">The ImageSharp configuration.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The target image frame.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="p0">The gradient start point.</param>
         /// <param name="p1">The gradient end point.</param>
         /// <param name="p2">The optional rotation point.</param>
@@ -121,13 +123,13 @@ public sealed class LinearGradientBrush : GradientBrush
         public LinearGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            Buffer2DRegion<TPixel> targetRegion,
             PointF p0,
             PointF p1,
             PointF? p2,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, source, colorStops, repetitionMode)
+            : base(configuration, options, targetRegion, colorStops, repetitionMode)
         {
             // Determine whether this is a simple linear gradient (2 points)
             // or a rotated one (3 points).

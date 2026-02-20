@@ -47,7 +47,7 @@ Choose execution mode:
 
 - Geometry is transformed to scanner-local coordinates:
   - `xLocal = (x - interest.Left) + samplingOffsetX`
-  - `yLocal = y - interest.Top` (global local-space edge table)
+  - `yLocal = (y - interest.Top) + samplingOffsetY` (global local-space edge table)
   - Per tile/band pass uses `yLocal - currentBandTop`
 - Scanner math uses signed 24.8 fixed point:
   - `FixedShift = 8`
@@ -184,7 +184,7 @@ rasterization time.
 - `RasterizerOptions.RasterizationMode` controls whether scanner output is:
   - `Antialiased`: continuous coverage in `[0, 1]`
   - `Aliased`: binary coverage (`0` or `1`), thresholded in the scanner
-- `RasterizerSamplingOrigin` still affects X alignment (`PixelBoundary` vs `PixelCenter`).
+- `RasterizerSamplingOrigin` affects both X and Y sample alignment (`PixelBoundary` vs `PixelCenter`).
 
 ## Data Flow Diagram (Row-Level)
 

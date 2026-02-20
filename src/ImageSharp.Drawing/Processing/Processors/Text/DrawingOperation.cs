@@ -1,21 +1,31 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Memory;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
+
+internal enum DrawingOperationKind : byte
+{
+    Fill = 0,
+    Draw = 1
+}
 
 internal struct DrawingOperation
 {
-    public Buffer2D<float> Map { get; set; }
+    public int DefinitionKey { get; set; }
+
+    public DrawingOperationKind Kind { get; set; }
 
     public IPath Path { get; set; }
 
-    public byte RenderPass { get; set; }
-
     public Point RenderLocation { get; set; }
 
-    public Brush Brush { get; internal set; }
+    public IntersectionRule IntersectionRule { get; set; }
+
+    public byte RenderPass { get; set; }
+
+    public Brush? Brush { get; set; }
+
+    public Pen? Pen { get; set; }
 
     public PixelAlphaCompositionMode PixelAlphaCompositionMode { get; set; }
 

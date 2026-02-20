@@ -117,13 +117,22 @@ internal static class PolygonScanner
         }
 
         int coverStrideInt = (int)coverStride;
-        float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+        bool samplePixelCenter = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter;
+        float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
+        float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
 
         // Create tessellated rings once. Both sequential and parallel paths consume this single
         // canonical representation so path flattening/orientation work is never repeated.
         using TessellatedMultipolygon multipolygon = TessellatedMultipolygon.Create(path, allocator);
         using IMemoryOwner<EdgeData> edgeDataOwner = allocator.Allocate<EdgeData>(multipolygon.TotalVertexCount);
-        int edgeCount = BuildEdgeTable(multipolygon, interest.Left, interest.Top, height, samplingOffsetX, edgeDataOwner.Memory.Span);
+        int edgeCount = BuildEdgeTable(
+            multipolygon,
+            interest.Left,
+            interest.Top,
+            height,
+            samplingOffsetX,
+            samplingOffsetY,
+            edgeDataOwner.Memory.Span);
         if (edgeCount <= 0)
         {
             return;
@@ -623,6 +632,7 @@ internal static class PolygonScanner
     /// <param name="minY">Interest top in absolute coordinates.</param>
     /// <param name="height">Interest height in pixels.</param>
     /// <param name="samplingOffsetX">Horizontal sampling offset.</param>
+    /// <param name="samplingOffsetY">Vertical sampling offset.</param>
     /// <param name="destination">Destination span for edge records.</param>
     /// <returns>Number of valid edge records written.</returns>
     private static int BuildEdgeTable(
@@ -631,6 +641,7 @@ internal static class PolygonScanner
         int minY,
         int height,
         float samplingOffsetX,
+        float samplingOffsetY,
         Span<EdgeData> destination)
     {
         int count = 0;
@@ -643,9 +654,9 @@ internal static class PolygonScanner
                 PointF p1 = vertices[i + 1];
 
                 float x0 = (p0.X - minX) + samplingOffsetX;
-                float y0 = p0.Y - minY;
+                float y0 = (p0.Y - minY) + samplingOffsetY;
                 float x1 = (p1.X - minX) + samplingOffsetX;
-                float y1 = p1.Y - minY;
+                float y1 = (p1.Y - minY) + samplingOffsetY;
 
                 if (!float.IsFinite(x0) || !float.IsFinite(y0) || !float.IsFinite(x1) || !float.IsFinite(y1))
                 {
@@ -1008,7 +1019,13 @@ internal static class PolygonScanner
         /// <param name="minX">Absolute left coordinate of the current scanner window.</param>
         /// <param name="minY">Absolute top coordinate of the current scanner window.</param>
         /// <param name="samplingOffsetX">Horizontal sample origin offset.</param>
-        public void RasterizeMultipolygon(TessellatedMultipolygon multipolygon, int minX, int minY, float samplingOffsetX)
+        /// <param name="samplingOffsetY">Vertical sample origin offset.</param>
+        public void RasterizeMultipolygon(
+            TessellatedMultipolygon multipolygon,
+            int minX,
+            int minY,
+            float samplingOffsetX,
+            float samplingOffsetY)
         {
             foreach (TessellatedMultipolygon.Ring ring in multipolygon)
             {
@@ -1019,9 +1036,9 @@ internal static class PolygonScanner
                     PointF p1 = vertices[i + 1];
 
                     float x0 = (p0.X - minX) + samplingOffsetX;
-                    float y0 = p0.Y - minY;
+                    float y0 = (p0.Y - minY) + samplingOffsetY;
                     float x1 = (p1.X - minX) + samplingOffsetX;
-                    float y1 = p1.Y - minY;
+                    float y1 = (p1.Y - minY) + samplingOffsetY;
 
                     if (!float.IsFinite(x0) || !float.IsFinite(y0) || !float.IsFinite(x1) || !float.IsFinite(y1))
                     {

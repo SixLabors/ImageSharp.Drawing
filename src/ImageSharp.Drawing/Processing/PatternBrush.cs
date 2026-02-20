@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -103,12 +104,12 @@ public sealed class PatternBrush : Brush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region) =>
         new PatternBrushApplicator<TPixel>(
             configuration,
             options,
-            source,
+            targetRegion,
             this.pattern.ToPixelMatrix<TPixel>());
 
     /// <summary>
@@ -127,17 +128,17 @@ public sealed class PatternBrush : Brush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="pattern">The pattern.</param>
         public PatternBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            Buffer2DRegion<TPixel> targetRegion,
             in DenseMatrix<TPixel> pattern)
-            : base(configuration, options, source)
+            : base(configuration, options, targetRegion)
         {
             this.pattern = pattern;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
+            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, targetRegion.Width);
         }
 
         internal TPixel this[int x, int y]
@@ -167,7 +168,9 @@ public sealed class PatternBrush : Brush
                 overlays[i] = this.pattern[patternY, patternX];
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
+            int localY = y - this.TargetRegion.Rectangle.Y;
+            int localX = x - this.TargetRegion.Rectangle.X;
+            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, scanline.Length);
             this.Blender.Blend(
                 this.Configuration,
                 destinationRow,

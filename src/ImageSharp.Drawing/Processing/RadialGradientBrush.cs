@@ -3,6 +3,8 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
+using SixLabors.ImageSharp.Memory;
+
 /// <summary>
 /// A radial gradient brush defined by either one circle or two circles.
 /// When one circle is provided, the gradient parameter is the distance from the center divided by the radius.
@@ -83,12 +85,12 @@ public sealed class RadialGradientBrush : GradientBrush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
         => new RadialGradientBrushApplicator<TPixel>(
             configuration,
             options,
-            source,
+            targetRegion,
             this.center0,
             this.radius0,
             this.center1,
@@ -125,7 +127,7 @@ public sealed class RadialGradientBrush : GradientBrush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="center0">Center of the starting circle.</param>
         /// <param name="radius0">Radius of the starting circle.</param>
         /// <param name="center1">Center of the ending circle, or null to use single-circle form.</param>
@@ -135,14 +137,14 @@ public sealed class RadialGradientBrush : GradientBrush
         public RadialGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> target,
+            Buffer2DRegion<TPixel> targetRegion,
             PointF center0,
             float radius0,
             PointF? center1,
             float? radius1,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, target, colorStops, repetitionMode)
+            : base(configuration, options, targetRegion, colorStops, repetitionMode)
         {
             this.c0x = center0.X;
             this.c0y = center0.Y;

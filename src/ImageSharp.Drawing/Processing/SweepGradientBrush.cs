@@ -3,6 +3,8 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
+using SixLabors.ImageSharp.Memory;
+
 /// <summary>
 /// Provides an implementation of a brush for painting sweep (conic) gradients within areas.
 /// Angles increase clockwise (y-down coordinate system) with 0° pointing to the +X direction.
@@ -62,12 +64,12 @@ public sealed class SweepGradientBrush : GradientBrush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
         => new SweepGradientBrushApplicator<TPixel>(
             configuration,
             options,
-            source,
+            targetRegion,
             this.center,
             this.startAngleDegrees,
             this.endAngleDegrees,
@@ -98,7 +100,7 @@ public sealed class SweepGradientBrush : GradientBrush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="center">The center of the sweep gradient.</param>
         /// <param name="startAngleDegrees">The start angle in degrees (clockwise).</param>
         /// <param name="endAngleDegrees">The end angle in degrees (clockwise).</param>
@@ -107,13 +109,13 @@ public sealed class SweepGradientBrush : GradientBrush
         public SweepGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            Buffer2DRegion<TPixel> targetRegion,
             PointF center,
             float startAngleDegrees,
             float endAngleDegrees,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, source, colorStops, repetitionMode)
+            : base(configuration, options, targetRegion, colorStops, repetitionMode)
         {
             this.cx = center.X;
             this.cy = center.Y;

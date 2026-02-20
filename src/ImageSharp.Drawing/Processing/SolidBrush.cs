@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -26,8 +27,8 @@ public sealed class SolidBrush : Brush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
-        RectangleF region) => new SolidBrushApplicator<TPixel>(configuration, options, source, this.Color.ToPixel<TPixel>());
+        Buffer2DRegion<TPixel> targetRegion,
+        RectangleF region) => new SolidBrushApplicator<TPixel>(configuration, options, targetRegion, this.Color.ToPixel<TPixel>());
 
     /// <inheritdoc/>
     public override bool Equals(Brush? other)
@@ -59,26 +60,28 @@ public sealed class SolidBrush : Brush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="color">The color.</param>
         public SolidBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            Buffer2DRegion<TPixel> targetRegion,
             TPixel color)
-            : base(configuration, options, source)
+            : base(configuration, options, targetRegion)
         {
-            this.colors = configuration.MemoryAllocator.Allocate<TPixel>(source.Width);
+            this.colors = configuration.MemoryAllocator.Allocate<TPixel>(targetRegion.Width);
             this.colors.Memory.Span.Fill(color);
 
             // The threadlocal value is lazily invoked so there is no need to optionally create the type.
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width, true);
+            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, targetRegion.Width, true);
         }
 
         /// <inheritdoc />
         public override void Apply(Span<float> scanline, int x, int y)
         {
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x);
+            int localY = y - this.TargetRegion.Rectangle.Y;
+            int localX = x - this.TargetRegion.Rectangle.X;
+            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX);
 
             // Constrain the spans to each other
             if (destinationRow.Length > scanline.Length)

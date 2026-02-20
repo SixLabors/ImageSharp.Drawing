@@ -32,7 +32,7 @@ public class RasterizerDefaultsExtensionsTests
         IDrawingBackend second = configuration.GetDrawingBackend();
 
         Assert.Same(first, second);
-        Assert.Same(CpuDrawingBackend.Instance, first);
+        Assert.Same(DefaultDrawingBackend.Instance, first);
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class RasterizerDefaultsExtensionsTests
         configuration.SetRasterizer(rasterizer);
 
         Assert.Same(rasterizer, configuration.GetRasterizer());
-        Assert.IsType<CpuDrawingBackend>(configuration.GetDrawingBackend());
+        Assert.IsType<DefaultDrawingBackend>(configuration.GetDrawingBackend());
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class RasterizerDefaultsExtensionsTests
         context.SetRasterizer(rasterizer);
 
         Assert.Same(rasterizer, context.GetRasterizer());
-        Assert.IsType<CpuDrawingBackend>(context.GetDrawingBackend());
+        Assert.IsType<DefaultDrawingBackend>(context.GetDrawingBackend());
     }
 
     [Fact]
@@ -109,24 +109,68 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public void FillPath<TPixel>(
-            Configuration configuration,
-            ImageFrame<TPixel> source,
-            IPath path,
-            Brush brush,
-            in GraphicsOptions graphicsOptions,
-            in RasterizerOptions rasterizerOptions,
-            Rectangle brushBounds,
-            MemoryAllocator allocator)
+        public void BeginCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
             where TPixel : unmanaged, IPixel<TPixel>
         {
         }
 
-        public void RasterizeCoverage(
+        public void EndCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+        }
+
+        public void FillPath<TPixel>(
+            Configuration configuration,
+            Buffer2DRegion<TPixel> target,
+            IPath path,
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            in RasterizerOptions rasterizerOptions)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+        }
+
+        public void FillRegion<TPixel>(
+            Configuration configuration,
+            Buffer2DRegion<TPixel> target,
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            Rectangle region)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+        }
+
+        public bool SupportsCoverageComposition<TPixel>(Brush brush, in GraphicsOptions graphicsOptions)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            _ = brush;
+            _ = graphicsOptions;
+            return true;
+        }
+
+        public DrawingCoverageHandle PrepareCoverage(
             IPath path,
             in RasterizerOptions rasterizerOptions,
             MemoryAllocator allocator,
-            Buffer2D<float> destination)
+            CoveragePreparationMode preparationMode)
+        {
+            _ = preparationMode;
+            return default;
+        }
+
+        public void CompositeCoverage<TPixel>(
+            Configuration configuration,
+            Buffer2DRegion<TPixel> target,
+            DrawingCoverageHandle coverageHandle,
+            Point sourceOffset,
+            Brush brush,
+            in GraphicsOptions graphicsOptions,
+            Rectangle brushBounds)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+        }
+
+        public void ReleaseCoverage(DrawingCoverageHandle coverageHandle)
         {
         }
     }

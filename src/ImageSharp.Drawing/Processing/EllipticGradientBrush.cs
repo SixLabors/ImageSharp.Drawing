@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -46,12 +47,12 @@ public sealed class EllipticGradientBrush : GradientBrush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region) =>
         new RadialGradientBrushApplicator<TPixel>(
             configuration,
             options,
-            source,
+            targetRegion,
             this.center,
             this.referenceAxisEnd,
             this.axisRatio,
@@ -87,7 +88,7 @@ public sealed class EllipticGradientBrush : GradientBrush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="center">Center of the ellipse.</param>
         /// <param name="referenceAxisEnd">Point on one angular points of the ellipse.</param>
         /// <param name="axisRatio">
@@ -98,13 +99,13 @@ public sealed class EllipticGradientBrush : GradientBrush
         public RadialGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> target,
+            Buffer2DRegion<TPixel> targetRegion,
             PointF center,
             PointF referenceAxisEnd,
             float axisRatio,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, target, colorStops, repetitionMode)
+            : base(configuration, options, targetRegion, colorStops, repetitionMode)
         {
             this.center = center;
             this.referenceAxisEnd = referenceAxisEnd;

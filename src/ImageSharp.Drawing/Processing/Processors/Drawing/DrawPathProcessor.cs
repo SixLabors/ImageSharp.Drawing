@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Processing.Processors;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
@@ -44,9 +44,7 @@ public class DrawPathProcessor : IImageProcessor
     public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        // Offset drawlines to align drawing outlines to pixel centers.
-        // The global transform is applied in the FillPathProcessor.
-        IPath outline = this.Pen.GeneratePath(this.Path.Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
+        IPath outline = this.Pen.GeneratePath(this.Path);
 
         DrawingOptions effectiveOptions = this.Options;
 
@@ -61,7 +59,11 @@ public class DrawPathProcessor : IImageProcessor
             effectiveOptions = new DrawingOptions(this.Options.GraphicsOptions, shapeOptions, this.Options.Transform);
         }
 
-        return new FillPathProcessor(effectiveOptions, this.Pen.StrokeFill, outline)
+        return new FillPathProcessor(
+            effectiveOptions,
+            this.Pen.StrokeFill,
+            outline,
+            RasterizerSamplingOrigin.PixelCenter)
             .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
     }
 }

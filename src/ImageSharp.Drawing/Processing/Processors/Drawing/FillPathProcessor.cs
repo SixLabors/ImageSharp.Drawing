@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Processing.Processors;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
@@ -18,10 +19,20 @@ public class FillPathProcessor : IImageProcessor
     /// <param name="brush">The details how to fill the region of interest.</param>
     /// <param name="path">The logic path to be filled.</param>
     public FillPathProcessor(DrawingOptions options, Brush brush, IPath path)
+        : this(options, brush, path, RasterizerSamplingOrigin.PixelBoundary)
+    {
+    }
+
+    internal FillPathProcessor(
+        DrawingOptions options,
+        Brush brush,
+        IPath path,
+        RasterizerSamplingOrigin samplingOrigin)
     {
         this.Region = path;
         this.Brush = brush;
         this.Options = options;
+        this.SamplingOrigin = samplingOrigin;
     }
 
     /// <summary>
@@ -39,13 +50,16 @@ public class FillPathProcessor : IImageProcessor
     /// </summary>
     public DrawingOptions Options { get; }
 
+    internal RasterizerSamplingOrigin SamplingOrigin { get; }
+
     /// <inheritdoc />
     public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         IPath shape = this.Region.Transform(this.Options.Transform);
 
-        if (shape is RectangularPolygon rectPoly)
+        if (this.SamplingOrigin == RasterizerSamplingOrigin.PixelBoundary &&
+            shape is RectangularPolygon rectPoly)
         {
             RectangleF rectF = new(rectPoly.Location, rectPoly.Size);
             Rectangle rect = (Rectangle)rectF;
@@ -58,7 +72,7 @@ public class FillPathProcessor : IImageProcessor
         }
 
         // Clone the definition so we can pass the transformed path.
-        FillPathProcessor definition = new(this.Options, this.Brush, shape);
+        FillPathProcessor definition = new(this.Options, this.Brush, shape, this.SamplingOrigin);
         return new FillPathProcessor<TPixel>(configuration, definition, source, sourceRectangle);
     }
 }

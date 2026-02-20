@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
@@ -49,8 +46,6 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
     protected override void OnFrameApply(ImageFrame<TPixel> source)
     {
         Configuration configuration = this.Configuration;
-        ShapeOptions shapeOptions = this.definition.Options.ShapeOptions;
-        GraphicsOptions graphicsOptions = this.definition.Options.GraphicsOptions;
         Brush brush = this.definition.Brush;
 
         // Align start/end positions.
@@ -60,25 +55,10 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
             return; // No effect inside image;
         }
 
-        MemoryAllocator allocator = this.Configuration.MemoryAllocator;
-        IDrawingBackend drawingBackend = configuration.GetDrawingBackend();
-        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
-        RasterizerOptions rasterizerOptions = new(
-            interest,
-            shapeOptions.IntersectionRule,
-            rasterizationMode,
-            RasterizerSamplingOrigin.PixelBoundary);
-
-        // The backend owns rasterization/compositing details. Processors only submit
-        // operation-level data (path, brush, options, bounds).
-        drawingBackend.FillPath(
+        using DrawingCanvas<TPixel> canvas = new(
             configuration,
-            source,
-            this.path,
-            brush,
-            graphicsOptions,
-            rasterizerOptions,
-            this.bounds,
-            allocator);
+            new(source.PixelBuffer, source.Bounds));
+
+        canvas.FillPath(this.path, brush, this.definition.Options, this.definition.SamplingOrigin);
     }
 }

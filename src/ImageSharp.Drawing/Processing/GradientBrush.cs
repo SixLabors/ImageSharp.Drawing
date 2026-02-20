@@ -73,23 +73,23 @@ public abstract class GradientBrush : Brush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="colorStops">An array of color stops sorted by their position.</param>
         /// <param name="repetitionMode">Defines if and how the gradient should be repeated.</param>
         protected GradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> target,
+            Buffer2DRegion<TPixel> targetRegion,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, target)
+            : base(configuration, options, targetRegion)
         {
             this.colorStops = colorStops;
 
             // Ensure the color-stop order is correct.
             InsertionSort(this.colorStops, (x, y) => x.Ratio.CompareTo(y.Ratio));
             this.repetitionMode = repetitionMode;
-            this.scanlineWidth = target.Width;
+            this.scanlineWidth = targetRegion.Width;
             this.allocator = configuration.MemoryAllocator;
             this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(this.allocator, this.scanlineWidth);
         }
@@ -170,7 +170,9 @@ public abstract class GradientBrush : Brush
                 }
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
+            int localY = y - this.TargetRegion.Rectangle.Y;
+            int localX = x - this.TargetRegion.Rectangle.X;
+            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, scanline.Length);
             this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
         }
 

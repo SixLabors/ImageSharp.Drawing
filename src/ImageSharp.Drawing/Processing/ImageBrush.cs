@@ -96,16 +96,16 @@ public class ImageBrush : Brush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
     {
         if (this.image is Image<TPixel> specificImage)
         {
-            return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offset, false);
+            return new ImageBrushApplicator<TPixel>(configuration, options, targetRegion, specificImage, region, this.region, this.offset, false);
         }
 
         specificImage = this.image.CloneAs<TPixel>();
-        return new ImageBrushApplicator<TPixel>(configuration, options, source, specificImage, region, this.region, this.offset, true);
+        return new ImageBrushApplicator<TPixel>(configuration, options, targetRegion, specificImage, region, this.region, this.offset, true);
     }
 
     /// <summary>
@@ -140,7 +140,7 @@ public class ImageBrush : Brush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target image.</param>
+        /// <param name="destinationRegion">The destination pixel region.</param>
         /// <param name="image">The image.</param>
         /// <param name="targetRegion">The region of the target image we will be drawing to.</param>
         /// <param name="sourceRegion">The region of the source image we will be using to source pixels to draw from.</param>
@@ -149,13 +149,13 @@ public class ImageBrush : Brush
         public ImageBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> target,
+            Buffer2DRegion<TPixel> destinationRegion,
             Image<TPixel> image,
             RectangleF targetRegion,
             RectangleF sourceRegion,
             Point offset,
             bool shouldDisposeImage)
-            : base(configuration, options, target)
+            : base(configuration, options, destinationRegion)
         {
             this.sourceImage = image;
             this.sourceFrame = image.Frames.RootFrame;
@@ -221,7 +221,9 @@ public class ImageBrush : Brush
                 overlaySpan[i] = sourceRow[sourceX];
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
+            int localY = y - this.TargetRegion.Rectangle.Y;
+            int localX = x - this.TargetRegion.Rectangle.X;
+            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, scanline.Length);
             this.Blender.Blend(
                 this.Configuration,
                 destinationRow,

@@ -190,6 +190,9 @@ public class FillPathProcessorTests
         FillPathProcessor definition = fillProcessor.GetPrivateFieldValue<FillPathProcessor>("definition");
 
         Assert.Equal(IntersectionRule.NonZero, definition.Options.ShapeOptions.IntersectionRule);
+        Assert.Equal(
+            RasterizerSamplingOrigin.PixelCenter,
+            definition.GetProtectedValue<RasterizerSamplingOrigin>("SamplingOrigin"));
     }
 
     [Fact]
@@ -215,6 +218,9 @@ public class FillPathProcessorTests
         FillPathProcessor definition = fillProcessor.GetPrivateFieldValue<FillPathProcessor>("definition");
 
         Assert.Equal(IntersectionRule.EvenOdd, definition.Options.ShapeOptions.IntersectionRule);
+        Assert.Equal(
+            RasterizerSamplingOrigin.PixelCenter,
+            definition.GetProtectedValue<RasterizerSamplingOrigin>("SamplingOrigin"));
     }
 
     [Fact]

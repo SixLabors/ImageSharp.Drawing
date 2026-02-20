@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -88,12 +89,12 @@ public sealed class PathGradientBrush : Brush
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
         => new PathGradientBrushApplicator<TPixel>(
             configuration,
             options,
-            source,
+            targetRegion,
             this.edges,
             this.centerColor,
             this.hasSpecialCenterColor);
@@ -210,18 +211,18 @@ public sealed class PathGradientBrush : Brush
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="targetRegion">The destination pixel region.</param>
         /// <param name="edges">Edges of the polygon.</param>
         /// <param name="centerColor">Color at the center of the gradient area to which the other colors converge.</param>
         /// <param name="hasSpecialCenterColor">Whether the center color is different from a smooth gradient between the edges.</param>
         public PathGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            Buffer2DRegion<TPixel> targetRegion,
             IList<Edge> edges,
             Color centerColor,
             bool hasSpecialCenterColor)
-            : base(configuration, options, source)
+            : base(configuration, options, targetRegion)
         {
             this.edges = edges;
             Vector2[] points = [.. edges.Select(s => s.Start)];
@@ -232,7 +233,7 @@ public sealed class PathGradientBrush : Brush
             this.centerPixel = centerColor.ToPixel<TPixel>();
             this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
             this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
+            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, targetRegion.Width);
         }
 
         internal TPixel this[int x, int y]
@@ -313,7 +314,9 @@ public sealed class PathGradientBrush : Brush
                 }
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
+            int localY = y - this.TargetRegion.Rectangle.Y;
+            int localX = x - this.TargetRegion.Rectangle.X;
+            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, scanline.Length);
             this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
         }
 

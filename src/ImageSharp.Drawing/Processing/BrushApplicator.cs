@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Memory;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -16,11 +18,14 @@ public abstract class BrushApplicator<TPixel> : IDisposable
     /// </summary>
     /// <param name="configuration">The configuration instance to use when performing operations.</param>
     /// <param name="options">The graphics options.</param>
-    /// <param name="target">The target image frame.</param>
-    protected BrushApplicator(Configuration configuration, GraphicsOptions options, ImageFrame<TPixel> target)
+    /// <param name="targetRegion">The destination pixel region.</param>
+    protected BrushApplicator(
+        Configuration configuration,
+        GraphicsOptions options,
+        Buffer2DRegion<TPixel> targetRegion)
     {
         this.Configuration = configuration;
-        this.Target = target;
+        this.TargetRegion = targetRegion;
         this.Options = options;
         this.Blender = PixelOperations<TPixel>.Instance.GetPixelBlender(options);
     }
@@ -36,9 +41,9 @@ public abstract class BrushApplicator<TPixel> : IDisposable
     internal PixelBlender<TPixel> Blender { get; }
 
     /// <summary>
-    /// Gets the target image frame.
+    /// Gets the destination region.
     /// </summary>
-    protected ImageFrame<TPixel> Target { get; }
+    protected Buffer2DRegion<TPixel> TargetRegion { get; }
 
     /// <summary>
     /// Gets the graphics options

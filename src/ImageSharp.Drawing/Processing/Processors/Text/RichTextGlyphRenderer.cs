@@ -6,10 +6,7 @@ using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.Fonts.Unicode;
-using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
-using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 
@@ -23,8 +20,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     private const byte RenderOrderDecoration = 2;
 
     private readonly DrawingOptions drawingOptions;
-    private readonly MemoryAllocator memoryAllocator;
-    private readonly IDrawingBackend drawingBackend;
     private readonly Pen? defaultPen;
     private readonly Brush? defaultBrush;
     private readonly IPathInternals? path;
@@ -46,6 +41,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     // - Cache hit ratio above 60%
     private const float AccuracyMultiple = 8;
     private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache = [];
+    private readonly Dictionary<OperationDefinitionCacheKey, int> operationDefinitionCache = [];
+    private int nextOperationDefinitionKey = 1;
     private int cacheReadIndex;
 
     private bool rasterizationRequired;
@@ -55,15 +52,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     public RichTextGlyphRenderer(
         RichTextOptions textOptions,
         DrawingOptions drawingOptions,
-        MemoryAllocator memoryAllocator,
-        IDrawingBackend drawingBackend,
         Pen? pen,
         Brush? brush)
         : base(drawingOptions.Transform)
     {
         this.drawingOptions = drawingOptions;
-        this.memoryAllocator = memoryAllocator;
-        this.drawingBackend = drawingBackend;
         this.defaultPen = pen;
         this.defaultBrush = brush;
         this.DrawingOperations = [];
@@ -92,12 +85,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     /// <inheritdoc/>
     protected override void BeginText(in FontRectangle bounds)
     {
-        foreach (DrawingOperation operation in this.DrawingOperations)
-        {
-            operation.Map.Dispose();
-        }
-
         this.DrawingOperations.Clear();
+        this.operationDefinitionCache.Clear();
+        this.nextOperationDefinitionKey = 1;
     }
 
     /// <inheritdoc/>
@@ -136,7 +126,11 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 MathF.Round(currentBounds.Width * AccuracyMultiple) / AccuracyMultiple,
                 MathF.Round(currentBounds.Height * AccuracyMultiple) / AccuracyMultiple);
 
-            this.currentCacheKey = CacheKey.FromParameters(parameters, new RectangleF(subPixelLocation, subPixelSize));
+            this.currentCacheKey = CacheKey.FromParameters(
+                parameters,
+                new RectangleF(subPixelLocation, subPixelSize),
+                this.currentBrush ?? this.defaultBrush,
+                this.currentPen ?? this.defaultPen);
             if (this.glyphCache.ContainsKey(this.currentCacheKey))
             {
                 // We have already drawn the glyph vectors.
@@ -154,6 +148,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     protected override void BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
     {
         this.hasLayer = true;
+        this.currentFillRule = fillRule;
         if (TryCreateBrush(paint, this.Builder.Transform, out Brush? brush))
         {
             this.currentBrush = brush;
@@ -165,6 +160,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     protected override void EndLayer()
     {
         GlyphRenderData renderData = default;
+        IPath? fillPath = null;
 
         // Fix up the text runs colors.
         // Only if both brush and pen is null do we fallback to the default value.
@@ -190,7 +186,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
             if (renderFill)
             {
-                renderData.FillMap = this.Render(path);
+                renderData.FillPath = path.Translate(-renderLocation);
+                fillPath = renderData.FillPath;
             }
 
             // Capture the delta between the location and the truncated render location.
@@ -233,15 +230,29 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             }
 
             renderLocation = ClampToPixel(currentLocation);
+
+            if (renderFill && renderData.FillPath is not null)
+            {
+                fillPath = renderData.FillPath;
+            }
         }
 
-        if (renderData.FillMap != null)
+        if (fillPath is not null)
         {
+            IntersectionRule fillRule = TextUtilities.MapFillRule(this.currentFillRule);
             this.DrawingOperations.Add(new DrawingOperation
             {
+                DefinitionKey = this.GetOrCreateOperationDefinitionKey(
+                    fillPath,
+                    fillRule,
+                    DrawingOperationKind.Fill,
+                    this.currentBrush,
+                    null),
+                Kind = DrawingOperationKind.Fill,
+                Path = fillPath,
                 RenderLocation = renderLocation,
-                Map = renderData.FillMap,
-                Brush = this.currentBrush!,
+                IntersectionRule = fillRule,
+                Brush = this.currentBrush,
                 RenderPass = RenderOrderFill,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
                 PixelColorBlendingMode = this.currentBlendingMode
@@ -359,11 +370,22 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
 
         // Render the path here. Decorations are un-cached.
+        Point renderLocation = ClampToPixel(outline.Bounds.Location);
+        IPath decorationPath = outline.Translate(-renderLocation);
+        Brush decorationBrush = pen.StrokeFill;
         this.DrawingOperations.Add(new DrawingOperation
         {
-            Brush = pen.StrokeFill,
-            RenderLocation = ClampToPixel(outline.Bounds.Location),
-            Map = this.Render(outline),
+            DefinitionKey = this.GetOrCreateOperationDefinitionKey(
+                decorationPath,
+                IntersectionRule.NonZero,
+                DrawingOperationKind.Fill,
+                decorationBrush,
+                null),
+            Kind = DrawingOperationKind.Fill,
+            Path = decorationPath,
+            RenderLocation = renderLocation,
+            IntersectionRule = IntersectionRule.NonZero,
+            Brush = decorationBrush,
             RenderPass = RenderOrderDecoration
         });
     }
@@ -378,6 +400,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
 
         GlyphRenderData renderData = default;
+        IPath? glyphPath = null;
 
         // Fix up the text runs colors.
         // Only if both brush and pen is null do we fallback to the default value.
@@ -412,20 +435,16 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 return;
             }
 
-            if (renderFill)
+            IPath localPath = path.Translate(-renderLocation);
+            if (renderFill || renderOutline)
             {
-                renderData.FillMap = this.Render(path);
+                renderData.FillPath = localPath;
+                glyphPath = renderData.FillPath;
             }
 
             // Capture the delta between the location and the truncated render location.
             // We can use this to offset the render location on the next instance of this glyph.
             renderData.LocationDelta = (Vector2)(path.Bounds.Location - renderLocation);
-
-            if (renderOutline)
-            {
-                path = this.currentPen!.GeneratePath(path);
-                renderData.OutlineMap = this.Render(path);
-            }
 
             if (!this.noCache)
             {
@@ -463,29 +482,56 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             }
 
             renderLocation = ClampToPixel(currentLocation);
+
+            if (renderFill && renderData.FillPath is not null)
+            {
+                glyphPath = renderData.FillPath;
+            }
+
+            if (renderOutline && renderData.FillPath is not null)
+            {
+                glyphPath = renderData.FillPath;
+            }
         }
 
-        if (renderData.FillMap != null)
+        if (renderFill && glyphPath is not null)
         {
+            IntersectionRule fillRule = TextUtilities.MapFillRule(this.currentFillRule);
             this.DrawingOperations.Add(new DrawingOperation
             {
+                DefinitionKey = this.GetOrCreateOperationDefinitionKey(
+                    glyphPath,
+                    fillRule,
+                    DrawingOperationKind.Fill,
+                    this.currentBrush,
+                    null),
+                Kind = DrawingOperationKind.Fill,
+                Path = glyphPath,
                 RenderLocation = renderLocation,
-                Map = renderData.FillMap,
-                Brush = this.currentBrush!,
+                IntersectionRule = fillRule,
+                Brush = this.currentBrush,
                 RenderPass = RenderOrderFill,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
                 PixelColorBlendingMode = this.currentBlendingMode
             });
         }
 
-        if (renderData.OutlineMap != null)
+        if (renderOutline && glyphPath is not null)
         {
-            int offset = (int)((this.currentPen?.StrokeWidth ?? 0) / 2);
+            IntersectionRule outlineRule = TextUtilities.MapFillRule(this.currentFillRule);
             this.DrawingOperations.Add(new DrawingOperation
             {
-                RenderLocation = renderLocation - new Size(offset, offset),
-                Map = renderData.OutlineMap,
-                Brush = this.currentPen?.StrokeFill ?? this.currentBrush!,
+                DefinitionKey = this.GetOrCreateOperationDefinitionKey(
+                    glyphPath,
+                    outlineRule,
+                    DrawingOperationKind.Draw,
+                    null,
+                    this.currentPen),
+                Kind = DrawingOperationKind.Draw,
+                Path = glyphPath,
+                RenderLocation = renderLocation,
+                IntersectionRule = outlineRule,
+                Pen = this.currentPen,
                 RenderPass = RenderOrderOutline,
                 PixelAlphaCompositionMode = this.currentCompositionMode,
                 PixelColorBlendingMode = this.currentBlendingMode
@@ -501,6 +547,24 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
 
         this.glyphCache[this.currentCacheKey].Add(renderData);
+    }
+
+    private int GetOrCreateOperationDefinitionKey(
+        IPath path,
+        IntersectionRule intersectionRule,
+        DrawingOperationKind kind,
+        Brush? brush,
+        Pen? pen)
+    {
+        OperationDefinitionCacheKey cacheKey = new(path, intersectionRule, kind, brush, pen);
+        if (this.operationDefinitionCache.TryGetValue(cacheKey, out int existing))
+        {
+            return existing;
+        }
+
+        int next = this.nextOperationDefinitionKey++;
+        this.operationDefinitionCache.Add(cacheKey, next);
+        return next;
     }
 
     public void Dispose() => this.Dispose(true);
@@ -530,67 +594,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         return Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
     }
 
-    /// <summary>
-    /// Rasterizes a glyph path to a local coverage map.
-    /// </summary>
-    /// <param name="path">The glyph path in destination coordinates.</param>
-    /// <returns>A coverage buffer used by later text draw operations.</returns>
-    private Buffer2D<float> Render(IPath path)
-    {
-        // We need to offset the path now by the difference between the clamped location and the
-        // path location.
-        IPath offsetPath = path.Translate(-ClampToPixel(path.Bounds.Location));
-        Size size = Rectangle.Ceiling(offsetPath.Bounds).Size;
-
-        // Pad to prevent edge clipping.
-        size += new Size(2, 2);
-
-        RasterizerSamplingOrigin samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
-        GraphicsOptions graphicsOptions = this.drawingOptions.GraphicsOptions;
-        RasterizationMode rasterizationMode = graphicsOptions.Antialias
-            ? RasterizationMode.Antialiased
-            : RasterizationMode.Aliased;
-
-        // Take the path inside the path builder, scan thing and generate a Buffer2D representing the glyph.
-        Buffer2D<float> buffer = this.memoryAllocator.Allocate2D<float>(size.Width, size.Height, AllocationOptions.Clean);
-        RasterizerOptions rasterizerOptions = new(
-            new Rectangle(0, 0, size.Width, size.Height),
-            TextUtilities.MapFillRule(this.currentFillRule),
-            rasterizationMode,
-            samplingOrigin);
-
-        // Request coverage generation from the configured backend. CPU backends will produce
-        // this via scanlines; future GPU backends can supply equivalent coverage by other means.
-        this.drawingBackend.RasterizeCoverage(
-            offsetPath,
-            rasterizerOptions,
-            this.memoryAllocator,
-            buffer);
-
-        return buffer;
-    }
-
     private void Dispose(bool disposing)
     {
         if (!this.isDisposed)
         {
             if (disposing)
             {
-                foreach (KeyValuePair<CacheKey, List<GlyphRenderData>> kv in this.glyphCache)
-                {
-                    foreach (GlyphRenderData data in kv.Value)
-                    {
-                        data.Dispose();
-                    }
-                }
-
                 this.glyphCache.Clear();
-
-                foreach (DrawingOperation operation in this.DrawingOperations)
-                {
-                    operation.Map.Dispose();
-                }
-
+                this.operationDefinitionCache.Clear();
                 this.DrawingOperations.Clear();
             }
 
@@ -598,19 +609,55 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
     }
 
-    private struct GlyphRenderData : IDisposable
+    private readonly struct OperationDefinitionCacheKey : IEquatable<OperationDefinitionCacheKey>
+    {
+        private readonly IPath path;
+        private readonly IntersectionRule intersectionRule;
+        private readonly DrawingOperationKind kind;
+        private readonly Brush? brush;
+        private readonly Pen? pen;
+
+        public OperationDefinitionCacheKey(
+            IPath path,
+            IntersectionRule intersectionRule,
+            DrawingOperationKind kind,
+            Brush? brush,
+            Pen? pen)
+        {
+            this.path = path;
+            this.intersectionRule = intersectionRule;
+            this.kind = kind;
+            this.brush = brush;
+            this.pen = pen;
+        }
+
+        public bool Equals(OperationDefinitionCacheKey other)
+            => ReferenceEquals(this.path, other.path)
+            && this.intersectionRule == other.intersectionRule
+            && this.kind == other.kind
+            && ReferenceEquals(this.brush, other.brush)
+            && ReferenceEquals(this.pen, other.pen);
+
+        public override bool Equals(object? obj)
+            => obj is OperationDefinitionCacheKey other && this.Equals(other);
+
+        public override int GetHashCode()
+        {
+            HashCode hash = default;
+            hash.Add(RuntimeHelpers.GetHashCode(this.path));
+            hash.Add((int)this.intersectionRule);
+            hash.Add((int)this.kind);
+            hash.Add(this.brush is null ? 0 : RuntimeHelpers.GetHashCode(this.brush));
+            hash.Add(this.pen is null ? 0 : RuntimeHelpers.GetHashCode(this.pen));
+            return hash.ToHashCode();
+        }
+    }
+
+    private struct GlyphRenderData
     {
         public Vector2 LocationDelta;
 
-        public Buffer2D<float> FillMap;
-
-        public Buffer2D<float> OutlineMap;
-
-        public readonly void Dispose()
-        {
-            this.FillMap?.Dispose();
-            this.OutlineMap?.Dispose();
-        }
+        public IPath? FillPath;
     }
 
     private readonly struct CacheKey : IEquatable<CacheKey>
@@ -641,11 +688,19 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         public RectangleF Bounds { get; init; }
 
+        public Brush? BrushReference { get; init; }
+
+        public Pen? PenReference { get; init; }
+
         public static bool operator ==(CacheKey left, CacheKey right) => left.Equals(right);
 
         public static bool operator !=(CacheKey left, CacheKey right) => !(left == right);
 
-        public static CacheKey FromParameters(in GlyphRendererParameters parameters, RectangleF bounds)
+        public static CacheKey FromParameters(
+            in GlyphRendererParameters parameters,
+            RectangleF bounds,
+            Brush? brushReference,
+            Pen? penReference)
             => new()
             {
                 // Do not include the grapheme index as that will
@@ -661,7 +716,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 LayoutMode = parameters.LayoutMode,
                 TextAttributes = parameters.TextRun.TextAttributes,
                 TextDecorations = parameters.TextRun.TextDecorations,
-                Bounds = bounds
+                Bounds = bounds,
+                BrushReference = brushReference,
+                PenReference = penReference
             };
 
         public override bool Equals(object? obj)
@@ -680,7 +737,9 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.LayoutMode == other.LayoutMode &&
             this.TextAttributes == other.TextAttributes &&
             this.TextDecorations == other.TextDecorations &&
-            this.Bounds.Equals(other.Bounds);
+            this.Bounds.Equals(other.Bounds) &&
+            ReferenceEquals(this.BrushReference, other.BrushReference) &&
+            ReferenceEquals(this.PenReference, other.PenReference);
 
         public override int GetHashCode()
         {
@@ -698,6 +757,8 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             hash.Add(this.TextAttributes);
             hash.Add(this.TextDecorations);
             hash.Add(this.Bounds);
+            hash.Add(this.BrushReference is null ? 0 : RuntimeHelpers.GetHashCode(this.BrushReference));
+            hash.Add(this.PenReference is null ? 0 : RuntimeHelpers.GetHashCode(this.PenReference));
             return hash.ToHashCode();
         }
     }
