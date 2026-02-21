@@ -14,7 +14,7 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// A drawing canvas over a pixel buffer region.
+/// A drawing canvas over a frame target.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
 public sealed class DrawingCanvas<TPixel> : IDisposable
@@ -22,7 +22,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 {
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
-    private readonly Buffer2DRegion<TPixel> targetRegion;
+    private readonly ICanvasFrame<TPixel> targetFrame;
     private bool isDisposed;
 
     /// <summary>
@@ -31,23 +31,33 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="targetRegion">The destination target region.</param>
     public DrawingCanvas(Configuration configuration, Buffer2DRegion<TPixel> targetRegion)
-        : this(configuration, configuration.GetDrawingBackend(), targetRegion)
+        : this(configuration, new CpuCanvasFrame<TPixel>(targetRegion))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
+    /// </summary>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="targetFrame">The destination frame.</param>
+    public DrawingCanvas(Configuration configuration, ICanvasFrame<TPixel> targetFrame)
+        : this(configuration, configuration.GetDrawingBackend(), targetFrame)
     {
     }
 
     internal DrawingCanvas(
         Configuration configuration,
         IDrawingBackend backend,
-        Buffer2DRegion<TPixel> targetRegion)
+        ICanvasFrame<TPixel> targetFrame)
     {
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(targetRegion.Buffer, nameof(targetRegion));
         Guard.NotNull(backend, nameof(backend));
+        Guard.NotNull(targetFrame, nameof(targetFrame));
 
         this.configuration = configuration;
         this.backend = backend;
-        this.targetRegion = targetRegion;
-        this.Bounds = new Rectangle(0, 0, targetRegion.Width, targetRegion.Height);
+        this.targetFrame = targetFrame;
+        this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
     }
 
     /// <summary>
@@ -65,8 +75,8 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.EnsureNotDisposed();
 
         Rectangle clipped = Rectangle.Intersect(this.Bounds, region);
-        Buffer2DRegion<TPixel> childRegion = this.targetRegion.GetSubRegion(clipped);
-        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childRegion);
+        ICanvasFrame<TPixel> childFrame = new CanvasRegionFrame<TPixel>(this.targetFrame, clipped);
+        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame);
     }
 
     /// <summary>
@@ -88,8 +98,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.EnsureNotDisposed();
         Guard.NotNull(brush, nameof(brush));
         Guard.NotNull(graphicsOptions, nameof(graphicsOptions));
-
-        this.backend.FillRegion(this.configuration, this.targetRegion, brush, graphicsOptions, region);
+        this.backend.FillRegion(this.configuration, this.targetFrame, brush, graphicsOptions, region);
     }
 
     /// <summary>
@@ -135,7 +144,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             rasterizationMode,
             samplingOrigin);
 
-        this.backend.FillPath(this.configuration, this.targetRegion, path, brush, graphicsOptions, rasterizerOptions);
+        this.backend.FillPath(this.configuration, this.targetFrame, path, brush, graphicsOptions, rasterizerOptions);
     }
 
     /// <summary>
@@ -207,7 +216,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Guard.NotNull(drawingOptions, nameof(drawingOptions));
 
         Dictionary<OperationCoverageCacheKey, CoverageCacheEntry> coverageCache = [];
-        this.backend.BeginCompositeSession(this.configuration, this.targetRegion);
+        this.backend.BeginCompositeSession(this.configuration, this.targetFrame);
         try
         {
             // Operations are layered by render pass (fill, outline, decorations).
@@ -239,7 +248,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
                 if (!this.TryGetCompositeRegion(
                     coverageLocation,
                     coverageEntry.RasterizedSize,
-                    out Buffer2DRegion<TPixel> compositeRegion,
+                    out Rectangle compositeRegion,
                     out Point sourceOffset))
                 {
                     continue;
@@ -247,17 +256,17 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
                 this.backend.CompositeCoverage(
                     this.configuration,
-                    compositeRegion,
+                    new CanvasRegionFrame<TPixel>(this.targetFrame, compositeRegion),
                     coverageEntry.CoverageHandle,
                     sourceOffset,
                     compositeBrush,
                     graphicsOptions,
-                    this.targetRegion.Rectangle);
+                    this.Bounds);
             }
         }
         finally
         {
-            this.backend.EndCompositeSession(this.configuration, this.targetRegion);
+            this.backend.EndCompositeSession(this.configuration, this.targetFrame);
 
             foreach ((_, CoverageCacheEntry coverageEntry) in coverageCache)
             {
@@ -400,7 +409,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     private bool TryGetCompositeRegion(
         Point coverageLocation,
         Size coverageSize,
-        out Buffer2DRegion<TPixel> compositeRegion,
+        out Rectangle compositeRegion,
         out Point sourceOffset)
     {
         Rectangle destination = new(coverageLocation, coverageSize);
@@ -413,7 +422,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         }
 
         sourceOffset = new Point(clipped.X - destination.X, clipped.Y - destination.Y);
-        compositeRegion = this.targetRegion.GetSubRegion(clipped);
+        compositeRegion = clipped;
         return true;
     }
 

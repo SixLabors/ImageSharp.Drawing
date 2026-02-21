@@ -24,8 +24,8 @@ internal interface IDrawingBackend
     /// </remarks>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination target region.</param>
-    public void BeginCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    /// <param name="target">Destination frame.</param>
+    public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
@@ -33,8 +33,8 @@ internal interface IDrawingBackend
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination target region.</param>
-    public void EndCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    /// <param name="target">Destination frame.</param>
+    public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
@@ -42,14 +42,14 @@ internal interface IDrawingBackend
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination target region.</param>
+    /// <param name="target">Destination frame.</param>
     /// <param name="path">Path in target-local coordinates.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="graphicsOptions">Graphics blending/composition options.</param>
     /// <param name="rasterizerOptions">Rasterizer options in target-local coordinates.</param>
     public void FillPath<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
@@ -61,13 +61,13 @@ internal interface IDrawingBackend
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination target region.</param>
+    /// <param name="target">Destination frame.</param>
     /// <param name="brush">Brush used to shade destination pixels.</param>
     /// <param name="graphicsOptions">Graphics blending/composition options.</param>
     /// <param name="region">Region in target-local coordinates.</param>
     public void FillRegion<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         Brush brush,
         GraphicsOptions graphicsOptions,
         Rectangle region)
@@ -103,7 +103,7 @@ internal interface IDrawingBackend
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination target region.</param>
+    /// <param name="target">Destination frame.</param>
     /// <param name="coverageHandle">Handle to prepared coverage data.</param>
     /// <param name="sourceOffset">Source offset inside the prepared coverage.</param>
     /// <param name="brush">Brush used to shade destination pixels.</param>
@@ -111,7 +111,7 @@ internal interface IDrawingBackend
     /// <param name="brushBounds">Brush bounds used when creating the applicator.</param>
     public void CompositeCoverage<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         DrawingCoverageHandle coverageHandle,
         Point sourceOffset,
         Brush brush,

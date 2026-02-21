@@ -52,49 +52,71 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
     }
 
     /// <inheritdoc />
-    public void BeginCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
     }
 
     /// <inheritdoc />
-    public void EndCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
     }
 
     /// <inheritdoc />
     public void FillPath<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
         in RasterizerOptions rasterizerOptions)
         where TPixel : unmanaged, IPixel<TPixel>
-        => FillPath(
+    {
+        Guard.NotNull(configuration, nameof(configuration));
+        Guard.NotNull(target, nameof(target));
+
+        if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationRegion))
+        {
+            throw new NotSupportedException(
+                $"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets for {nameof(this.FillPath)}.");
+        }
+
+        FillPath(
             configuration,
-            target,
+            destinationRegion,
             path,
             brush,
             graphicsOptions,
             rasterizerOptions,
             configuration.MemoryAllocator,
             this.PrimaryRasterizer);
+    }
 
     /// <inheritdoc />
     public void FillRegion<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         Brush brush,
         GraphicsOptions graphicsOptions,
         Rectangle region)
         where TPixel : unmanaged, IPixel<TPixel>
-        => FillRegionCore(configuration, target, brush, graphicsOptions, region);
+    {
+        Guard.NotNull(configuration, nameof(configuration));
+        Guard.NotNull(target, nameof(target));
+
+        if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationRegion))
+        {
+            throw new NotSupportedException(
+                $"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets for {nameof(this.FillRegion)}.");
+        }
+
+        FillRegionCore(configuration, destinationRegion, brush, graphicsOptions, region);
+    }
 
     /// <inheritdoc />
     public bool SupportsCoverageComposition<TPixel>(Brush brush, in GraphicsOptions graphicsOptions)
@@ -140,7 +162,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
     /// <inheritdoc />
     public void CompositeCoverage<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         DrawingCoverageHandle coverageHandle,
         Point sourceOffset,
         Brush brush,
@@ -149,12 +171,18 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
         Guard.NotNull(brush, nameof(brush));
 
         if (!coverageHandle.IsValid)
         {
             return;
+        }
+
+        if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame))
+        {
+            throw new NotSupportedException(
+                $"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets for {nameof(this.CompositeCoverage)}.");
         }
 
         if (!this.preparedCoverage.TryGetValue(coverageHandle.Value, out Buffer2D<float>? coverageMap))
@@ -163,7 +191,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
 
         if (!CoverageCompositor.TryGetCompositeRegions(
-            target,
+            destinationFrame,
             coverageMap,
             sourceOffset,
             out Buffer2DRegion<TPixel> destinationRegion,

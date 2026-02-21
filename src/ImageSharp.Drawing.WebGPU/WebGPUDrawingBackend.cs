@@ -23,7 +23,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// <para>
 /// This backend intentionally preserves the <see cref="IDrawingBackend"/> contract used by
-/// processors and <c>DrawingCanvas&lt;TPixel&gt;</c>. The public flow is identical to the default
+/// processors and <see cref="DrawingCanvas{TPixel}"/>. The public flow is identical to the default
 /// backend:
 /// </para>
 /// <list type="number">
@@ -143,6 +143,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private int compositeSessionResourceWidth;
     private int compositeSessionResourceHeight;
     private TextureFormat compositeSessionResourceTextureFormat;
+    private bool compositeSessionRequiresReadback;
+    private bool compositeSessionOwnsTargetView;
     private Texture* coverageScratchMultisampleTexture;
     private TextureView* coverageScratchMultisampleView;
     private Texture* coverageScratchStencilTexture;
@@ -226,16 +228,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// Begins a composite session for a target region.
     /// </summary>
     /// <remarks>
-    /// Nested calls are reference-counted. The first successful call uploads the target
-    /// pixels into a GPU texture. The final matching <see cref="EndCompositeSession{TPixel}"/>
-    /// flushes GPU results back to the target.
+    /// Nested calls are reference-counted. CPU targets are uploaded to a GPU session texture.
+    /// Native-surface targets bind directly to the surface view.
     /// </remarks>
-    public void BeginCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
 
         if (this.compositeSessionDepth > 0)
         {
@@ -256,7 +257,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         lock (this.gpuSync)
         {
-            bool started = this.TryBeginCompositeSessionCoreLocked(target, pixelHandler.TextureFormat, pixelHandler.PixelSizeInBytes);
+            bool started = false;
+            if (target.TryGetCpuRegion(out Buffer2DRegion<TPixel> cpuTarget))
+            {
+                started = this.TryBeginCompositeSessionCoreLocked(cpuTarget, pixelHandler.TextureFormat, pixelHandler.PixelSizeInBytes);
+            }
+            else if (TryGetNativeSurfaceCapability(target, pixelHandler.TextureFormat, out WebGpuSurfaceCapability nativeSurfaceCapability) &&
+                     this.TryBeginCompositeSurfaceSessionCoreLocked(target, nativeSurfaceCapability))
+            {
+                started = true;
+            }
 
             if (!started)
             {
@@ -271,16 +281,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// Ends a previously started composite session.
     /// </summary>
     /// <remarks>
-    /// When this is the outermost session and GPU work has modified the session texture,
-    /// the method performs one readback into the destination region, then clears active
-    /// session state. Session textures/buffers can be retained and reused by later sessions.
+    /// When this is the outermost session and GPU work has modified the active target, the
+    /// method either reads back into the CPU region (CPU session) or submits recorded commands
+    /// directly to the native surface (native session), then clears active session state.
     /// </remarks>
-    public void EndCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
 
         if (this.compositeSessionDepth <= 0)
         {
@@ -296,9 +306,22 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         lock (this.gpuSync)
         {
             Trace($"EndCompositeSession: gpuActive={this.compositeSessionGpuActive} dirty={this.compositeSessionDirty}");
-            if (this.compositeSessionGpuActive && this.compositeSessionDirty)
+            if (this.compositeSessionGpuActive &&
+                this.compositeSessionDirty)
             {
-                this.TryFlushCompositeSessionLocked(target);
+                if (this.compositeSessionRequiresReadback &&
+                    target.TryGetCpuRegion(out Buffer2DRegion<TPixel> cpuTarget))
+                {
+                    this.TryFlushCompositeSessionLocked(cpuTarget);
+                }
+                else if (!this.compositeSessionRequiresReadback)
+                {
+                    this.TrySubmitCompositeSessionLocked();
+                }
+                else
+                {
+                    Trace("EndCompositeSession: skipped flush because CPU target was unavailable.");
+                }
             }
 
             this.ResetCompositeSessionStateLocked();
@@ -317,7 +340,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// </remarks>
     public void FillPath<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
@@ -326,7 +349,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
         Guard.NotNull(path, nameof(path));
         Guard.NotNull(brush, nameof(brush));
 
@@ -336,7 +359,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return;
         }
 
-        Rectangle localTargetBounds = new(0, 0, target.Width, target.Height);
+        Rectangle localTargetBounds = new(0, 0, target.Bounds.Width, target.Bounds.Height);
         Rectangle clippedInterest = Rectangle.Intersect(localTargetBounds, rasterizerOptions.Interest);
         if (clippedInterest.Equals(Rectangle.Empty))
         {
@@ -381,11 +404,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         try
         {
-            Buffer2DRegion<TPixel> compositeTarget = target.GetSubRegion(clippedInterest);
+            ICanvasFrame<TPixel> compositeFrame = new CanvasRegionFrame<TPixel>(target, clippedInterest);
             bool openedCompositeSession = false;
             if (preparationMode == CoveragePreparationMode.Default && this.compositeSessionDepth == 0)
             {
-                this.BeginCompositeSession(configuration, compositeTarget);
+                this.BeginCompositeSession(configuration, compositeFrame);
                 openedCompositeSession = true;
             }
 
@@ -401,7 +424,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
                 this.CompositeCoverage(
                     configuration,
-                    compositeTarget,
+                    compositeFrame,
                     coverageHandle,
                     Point.Empty,
                     brush,
@@ -418,7 +441,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             {
                 if (openedCompositeSession)
                 {
-                    this.EndCompositeSession(configuration, compositeTarget);
+                    this.EndCompositeSession(configuration, compositeFrame);
                 }
             }
         }
@@ -432,12 +455,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// Fills a rectangular region on the specified target region.
     /// </summary>
     /// <remarks>
-    /// Rect fills are normalized through <see cref="FillPath{TPixel}(Configuration, Buffer2DRegion{TPixel}, IPath, Brush, GraphicsOptions, in RasterizerOptions)"/>
+    /// Rect fills are normalized through <see cref="FillPath{TPixel}(Configuration, ICanvasFrame{TPixel}, IPath, Brush, GraphicsOptions, in RasterizerOptions)"/>
     /// so both APIs share the same coverage and composition paths.
     /// </remarks>
     public void FillRegion<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         Brush brush,
         GraphicsOptions graphicsOptions,
         Rectangle region)
@@ -445,7 +468,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
         Guard.NotNull(brush, nameof(brush));
 
         if (!CanUseGpuSession<TPixel>())
@@ -454,7 +477,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return;
         }
 
-        Rectangle localTargetBounds = new(0, 0, target.Width, target.Height);
+        Rectangle localTargetBounds = new(0, 0, target.Bounds.Width, target.Bounds.Height);
         Rectangle clippedRegion = Rectangle.Intersect(localTargetBounds, region);
         if (clippedRegion.Equals(Rectangle.Empty))
         {
@@ -635,7 +658,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// </remarks>
     public void CompositeCoverage<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         DrawingCoverageHandle coverageHandle,
         Point sourceOffset,
         Brush brush,
@@ -645,7 +668,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(target.Buffer, nameof(target));
+        Guard.NotNull(target, nameof(target));
         Guard.NotNull(brush, nameof(brush));
         this.CompositeCoverageCallCount++;
 
@@ -790,6 +813,32 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private static bool TryGetCompositePixelHandler<TPixel>(out CompositePixelRegistration pixelHandler)
         where TPixel : unmanaged, IPixel<TPixel>
         => CompositePixelHandlers.TryGetValue(typeof(TPixel), out pixelHandler);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryGetNativeSurfaceCapability<TPixel>(
+        ICanvasFrame<TPixel> target,
+        TextureFormat expectedTargetFormat,
+        out WebGpuSurfaceCapability capability)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) || nativeSurface is null)
+        {
+            capability = null!;
+            return false;
+        }
+
+        if (!nativeSurface.TryGetCapability(out WebGpuSurfaceCapability? surfaceCapability) ||
+            surfaceCapability is null ||
+            surfaceCapability.TargetTextureView == 0 ||
+            surfaceCapability.TargetFormat != expectedTargetFormat)
+        {
+            capability = null!;
+            return false;
+        }
+
+        capability = surfaceCapability;
+        return true;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool HasCompositePipelineForTextureFormat(TextureFormat textureFormat)
@@ -1801,7 +1850,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 return false;
             }
 
-            ulong vertexByteCount = checked((ulong)coverageTriangleData.TotalVertexCount * (ulong)Unsafe.SizeOf<StencilVertex>());
+            ulong vertexByteCount = checked(coverageTriangleData.TotalVertexCount * (ulong)Unsafe.SizeOf<StencilVertex>());
             if (!this.TryEnsureCoverageScratchVertexBufferLocked(vertexByteCount) || this.coverageScratchVertexBuffer is null)
             {
                 return false;
@@ -2277,9 +2326,74 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.compositeSessionTargetRectangle = target.Rectangle;
         this.compositeSessionTargetWidth = target.Width;
         this.compositeSessionTargetHeight = target.Height;
+        this.compositeSessionRequiresReadback = true;
+        this.compositeSessionOwnsTargetView = true;
         this.compositeSessionUniformWriteOffset = 0;
         this.compositeSessionDirty = false;
         return true;
+    }
+
+    private bool TryBeginCompositeSurfaceSessionCoreLocked<TPixel>(
+        ICanvasFrame<TPixel> target,
+        WebGpuSurfaceCapability nativeSurfaceCapability)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (!this.IsGpuReady ||
+            this.webGpu is null ||
+            this.device is null ||
+            this.queue is null ||
+            nativeSurfaceCapability.TargetTextureView == 0 ||
+            nativeSurfaceCapability.Device == 0 ||
+            nativeSurfaceCapability.Queue == 0 ||
+            target.Bounds.Width <= 0 ||
+            target.Bounds.Height <= 0 ||
+            target.Bounds.X < 0 ||
+            target.Bounds.Y < 0)
+        {
+            return false;
+        }
+
+        if (nativeSurfaceCapability.Device != (nint)this.device ||
+            nativeSurfaceCapability.Queue != (nint)this.queue)
+        {
+            return false;
+        }
+
+        if (target.Bounds.Right > nativeSurfaceCapability.Width ||
+            target.Bounds.Bottom > nativeSurfaceCapability.Height)
+        {
+            return false;
+        }
+
+        if (!this.TryGetOrCreateCompositePipelineLocked(nativeSurfaceCapability.TargetFormat, out _))
+        {
+            return false;
+        }
+
+        this.ResetCompositeSessionStateLocked();
+        if (this.compositeSessionOwnsTargetView)
+        {
+            this.ReleaseTextureViewLocked(this.compositeSessionTargetView);
+        }
+
+        this.ReleaseTextureLocked(this.compositeSessionTargetTexture);
+        this.compositeSessionTargetTexture = null;
+        this.ReleaseBufferLocked(this.compositeSessionReadbackBuffer);
+        this.compositeSessionReadbackBuffer = null;
+        this.compositeSessionReadbackBytesPerRow = 0;
+        this.compositeSessionReadbackByteCount = 0;
+        this.compositeSessionResourceWidth = 0;
+        this.compositeSessionResourceHeight = 0;
+        this.compositeSessionResourceTextureFormat = nativeSurfaceCapability.TargetFormat;
+        this.compositeSessionTargetView = (TextureView*)nativeSurfaceCapability.TargetTextureView;
+        this.compositeSessionOwnsTargetView = false;
+        this.compositeSessionRequiresReadback = false;
+        this.compositeSessionTargetRectangle = target.Bounds;
+        this.compositeSessionTargetWidth = target.Bounds.Width;
+        this.compositeSessionTargetHeight = target.Bounds.Height;
+        this.compositeSessionUniformWriteOffset = 0;
+        this.compositeSessionDirty = false;
+        return this.TryEnsureCompositeSessionUniformBufferLocked();
     }
 
     private bool TryEnsureCompositeSessionResourcesLocked(
@@ -2388,7 +2502,31 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.compositeSessionResourceWidth = width;
         this.compositeSessionResourceHeight = height;
         this.compositeSessionResourceTextureFormat = textureFormat;
+        this.compositeSessionRequiresReadback = true;
+        this.compositeSessionOwnsTargetView = true;
         return true;
+    }
+
+    private bool TryEnsureCompositeSessionUniformBufferLocked()
+    {
+        if (this.compositeSessionUniformBuffer is not null)
+        {
+            return true;
+        }
+
+        if (this.webGpu is null || this.device is null)
+        {
+            return false;
+        }
+
+        BufferDescriptor uniformBufferDescriptor = new()
+        {
+            Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
+            Size = CompositeUniformBufferSize
+        };
+
+        this.compositeSessionUniformBuffer = this.webGpu.DeviceCreateBuffer(this.device, in uniformBufferDescriptor);
+        return this.compositeSessionUniformBuffer is not null;
     }
 
     /// <summary>
@@ -2496,6 +2634,56 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
             if (commandEncoder is not null)
             {
+                if (this.compositeSessionCommandEncoder == commandEncoder)
+                {
+                    this.compositeSessionCommandEncoder = null;
+                }
+
+                this.webGpu.CommandEncoderRelease(commandEncoder);
+            }
+        }
+    }
+
+    private bool TrySubmitCompositeSessionLocked()
+    {
+        if (this.webGpu is null || this.device is null || this.queue is null)
+        {
+            return false;
+        }
+
+        CommandEncoder* commandEncoder = this.compositeSessionCommandEncoder;
+        CommandBuffer* commandBuffer = null;
+        try
+        {
+            this.TryCloseCompositeSessionPassLocked();
+
+            if (commandEncoder is null)
+            {
+                return true;
+            }
+
+            CommandBufferDescriptor commandBufferDescriptor = default;
+            commandBuffer = this.webGpu.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
+            if (commandBuffer is null)
+            {
+                return false;
+            }
+
+            this.compositeSessionCommandEncoder = null;
+            this.webGpu.QueueSubmit(this.queue, 1, ref commandBuffer);
+            this.webGpu.CommandBufferRelease(commandBuffer);
+            commandBuffer = null;
+            return true;
+        }
+        finally
+        {
+            if (commandBuffer is not null)
+            {
+                this.webGpu.CommandBufferRelease(commandBuffer);
+            }
+
+            if (commandEncoder is not null)
+            {
                 this.webGpu.CommandEncoderRelease(commandEncoder);
             }
         }
@@ -2514,6 +2702,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.compositeSessionTargetRectangle = default;
         this.compositeSessionTargetWidth = 0;
         this.compositeSessionTargetHeight = 0;
+        this.compositeSessionRequiresReadback = false;
         this.compositeSessionDirty = false;
     }
 
@@ -2534,13 +2723,19 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.ReleaseAllCoverageCompositeBindGroupsLocked();
         this.ReleaseBufferLocked(this.compositeSessionUniformBuffer);
         this.ReleaseBufferLocked(this.compositeSessionReadbackBuffer);
-        this.ReleaseTextureViewLocked(this.compositeSessionTargetView);
+        if (this.compositeSessionOwnsTargetView)
+        {
+            this.ReleaseTextureViewLocked(this.compositeSessionTargetView);
+        }
+
         this.ReleaseTextureLocked(this.compositeSessionTargetTexture);
         this.compositeSessionUniformBuffer = null;
         this.compositeSessionUniformWriteOffset = 0;
         this.compositeSessionReadbackBuffer = null;
         this.compositeSessionTargetTexture = null;
         this.compositeSessionTargetView = null;
+        this.compositeSessionRequiresReadback = false;
+        this.compositeSessionOwnsTargetView = false;
         this.compositeSessionReadbackBytesPerRow = 0;
         this.compositeSessionReadbackByteCount = 0;
         this.compositeSessionResourceWidth = 0;
@@ -2549,7 +2744,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     }
 
     private bool TryCompositeCoverageGpu<TPixel>(
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         DrawingCoverageHandle coverageHandle,
         Point sourceOffset,
         WebGpuBrushData brushData,
@@ -2571,7 +2766,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
-        if (target.Width <= 0 || target.Height <= 0)
+        if (target.Bounds.Width <= 0 || target.Bounds.Height <= 0)
         {
             return true;
         }
@@ -2581,14 +2776,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return true;
         }
 
-        int compositeWidth = Math.Min(target.Width, entry.Width - sourceOffset.X);
-        int compositeHeight = Math.Min(target.Height, entry.Height - sourceOffset.Y);
+        int compositeWidth = Math.Min(target.Bounds.Width, entry.Width - sourceOffset.X);
+        int compositeHeight = Math.Min(target.Bounds.Height, entry.Height - sourceOffset.Y);
         if (compositeWidth <= 0 || compositeHeight <= 0)
         {
             return true;
         }
-
-        Buffer2DRegion<TPixel> destinationRegion = target.GetSubRegion(0, 0, compositeWidth, compositeHeight);
 
         lock (this.gpuSync)
         {
@@ -2604,7 +2797,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             }
 
             if (this.compositeSessionGpuActive &&
-                this.compositeSessionTargetTexture is not null &&
                 this.compositeSessionTargetView is not null)
             {
                 RenderPipeline* compositePipeline = this.GetCompositeSessionPipelineLocked();
@@ -2613,8 +2805,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     return false;
                 }
 
-                int destinationX = destinationRegion.Rectangle.X - this.compositeSessionTargetRectangle.X;
-                int destinationY = destinationRegion.Rectangle.Y - this.compositeSessionTargetRectangle.Y;
+                int destinationX = target.Bounds.X - this.compositeSessionTargetRectangle.X;
+                int destinationY = target.Bounds.Y - this.compositeSessionTargetRectangle.Y;
                 if ((uint)destinationX >= (uint)this.compositeSessionTargetWidth ||
                     (uint)destinationY >= (uint)this.compositeSessionTargetHeight)
                 {

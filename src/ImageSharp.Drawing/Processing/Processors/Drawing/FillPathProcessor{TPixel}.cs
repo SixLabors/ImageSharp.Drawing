@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
@@ -57,7 +58,7 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
 
         using DrawingCanvas<TPixel> canvas = new(
             configuration,
-            new(source.PixelBuffer, source.Bounds));
+            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds));
 
         canvas.FillPath(this.path, brush, this.definition.Options, this.definition.SamplingOrigin);
     }

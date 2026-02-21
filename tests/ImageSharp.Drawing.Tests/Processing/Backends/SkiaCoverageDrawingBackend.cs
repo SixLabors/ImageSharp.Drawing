@@ -26,19 +26,19 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
 
     public int LiveCoverageCount => this.preparedCoverage.Count;
 
-    public void BeginCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
     }
 
-    public void EndCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+    public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
     }
 
     public void FillPath<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
@@ -54,7 +54,7 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
 
     public void FillRegion<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         Brush brush,
         GraphicsOptions graphicsOptions,
         Rectangle region)
@@ -125,7 +125,7 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
 
     public void CompositeCoverage<TPixel>(
         Configuration configuration,
-        Buffer2DRegion<TPixel> target,
+        ICanvasFrame<TPixel> target,
         DrawingCoverageHandle coverageHandle,
         Point sourceOffset,
         Brush brush,
@@ -134,11 +134,6 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
         where TPixel : unmanaged, IPixel<TPixel>
     {
         ArgumentNullException.ThrowIfNull(configuration);
-
-        if (target.Buffer is null)
-        {
-            throw new ArgumentNullException(nameof(target));
-        }
 
         ArgumentNullException.ThrowIfNull(brush);
 
@@ -154,6 +149,12 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
             throw new InvalidOperationException($"Prepared coverage handle '{coverageHandle.Value}' is not valid.");
         }
 
+        if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationRegion))
+        {
+            throw new NotSupportedException(
+                $"{nameof(SkiaCoverageDrawingBackend)} requires CPU-accessible frame targets for {nameof(this.CompositeCoverage)}.");
+        }
+
         if (bitmap.ColorType != SKColorType.Alpha8)
         {
             throw new InvalidOperationException($"Prepared coverage '{coverageHandle.Value}' is not Alpha8.");
@@ -164,8 +165,8 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
             return;
         }
 
-        int compositeWidth = Math.Min(target.Width, bitmap.Width - sourceOffset.X);
-        int compositeHeight = Math.Min(target.Height, bitmap.Height - sourceOffset.Y);
+        int compositeWidth = Math.Min(destinationRegion.Width, bitmap.Width - sourceOffset.X);
+        int compositeHeight = Math.Min(destinationRegion.Height, bitmap.Height - sourceOffset.Y);
         if (compositeWidth <= 0 || compositeHeight <= 0)
         {
             return;
@@ -174,13 +175,13 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
         using BrushApplicator<TPixel> applicator = brush.CreateApplicator(
             configuration,
             graphicsOptions,
-            target,
+            destinationRegion,
             brushBounds);
 
         ReadOnlySpan<byte> source = bitmap.GetPixelSpan();
         int rowBytes = bitmap.RowBytes;
-        int absoluteX = target.Rectangle.X;
-        int absoluteY = target.Rectangle.Y;
+        int absoluteX = destinationRegion.Rectangle.X;
+        int absoluteY = destinationRegion.Rectangle.Y;
 
         float[] rented = ArrayPool<float>.Shared.Rent(compositeWidth);
         try

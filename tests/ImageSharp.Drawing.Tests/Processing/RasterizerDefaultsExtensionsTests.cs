@@ -109,19 +109,19 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public void BeginCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+        public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
             where TPixel : unmanaged, IPixel<TPixel>
         {
         }
 
-        public void EndCompositeSession<TPixel>(Configuration configuration, Buffer2DRegion<TPixel> target)
+        public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
             where TPixel : unmanaged, IPixel<TPixel>
         {
         }
 
         public void FillPath<TPixel>(
             Configuration configuration,
-            Buffer2DRegion<TPixel> target,
+            ICanvasFrame<TPixel> target,
             IPath path,
             Brush brush,
             GraphicsOptions graphicsOptions,
@@ -132,7 +132,7 @@ public class RasterizerDefaultsExtensionsTests
 
         public void FillRegion<TPixel>(
             Configuration configuration,
-            Buffer2DRegion<TPixel> target,
+            ICanvasFrame<TPixel> target,
             Brush brush,
             GraphicsOptions graphicsOptions,
             Rectangle region)
@@ -160,7 +160,7 @@ public class RasterizerDefaultsExtensionsTests
 
         public void CompositeCoverage<TPixel>(
             Configuration configuration,
-            Buffer2DRegion<TPixel> target,
+            ICanvasFrame<TPixel> target,
             DrawingCoverageHandle coverageHandle,
             Point sourceOffset,
             Brush brush,
