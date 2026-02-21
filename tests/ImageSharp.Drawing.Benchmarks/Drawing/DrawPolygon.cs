@@ -188,7 +188,7 @@ public abstract class DrawPolygon
         => this.image.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
 
     [Benchmark(Description = "ImageSharp Combined Paths WebGPU Backend")]
-    public void ImageSharpCombinedPathsWebGpuBackend()
+    public void ImageSharpCombinedPathsWebGPUBackend()
         => this.webGpuImage.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
 
     [Benchmark]
@@ -213,7 +213,7 @@ public abstract class DrawPolygon
     public void FillPolygon() => this.image.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
 
     [Benchmark]
-    public void FillPolygonWebGpuBackend() => this.webGpuImage.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
+    public void FillPolygonWebGPUBackend() => this.webGpuImage.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
 }
 
 public class DrawPolygonAll : DrawPolygon

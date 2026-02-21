@@ -5,30 +5,31 @@ using System.Numerics;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
-internal enum WebGpuBrushKind : uint
+internal enum WebGPUBrushKind : uint
 {
     SolidColor = 0
 }
 
-internal readonly struct WebGpuBrushData
+internal readonly struct WebGPUBrushData
 {
-    public WebGpuBrushData(WebGpuBrushKind kind, Vector4 solidColor)
+    public WebGPUBrushData(WebGPUBrushKind kind, Vector4 solidColor)
     {
         this.Kind = kind;
         this.SolidColor = solidColor;
     }
 
-    public WebGpuBrushKind Kind { get; }
+    public WebGPUBrushKind Kind { get; }
 
     public Vector4 SolidColor { get; }
 
-    public static bool TryCreate(Brush brush, out WebGpuBrushData brushData)
+    public static bool TryCreate(Brush brush, Rectangle brushBounds, out WebGPUBrushData brushData)
     {
         Guard.NotNull(brush, nameof(brush));
+        _ = brushBounds;
 
         if (brush is SolidBrush solidBrush)
         {
-            brushData = new WebGpuBrushData(WebGpuBrushKind.SolidColor, solidBrush.Color.ToScaledVector4());
+            brushData = new WebGPUBrushData(WebGPUBrushKind.SolidColor, solidBrush.Color.ToScaledVector4());
             return true;
         }
 

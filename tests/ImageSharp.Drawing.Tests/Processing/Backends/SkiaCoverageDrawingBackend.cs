@@ -26,52 +26,43 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
 
     public int LiveCoverageCount => this.preparedCoverage.Count;
 
-    public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-    }
-
-    public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-    }
-
     public void FillPath<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions)
+        in RasterizerOptions rasterizerOptions,
+        DrawingCanvasBatcher<TPixel> batcher)
         where TPixel : unmanaged, IPixel<TPixel>
-        => DefaultDrawingBackend.Instance.FillPath(
-            configuration,
-            target,
-            path,
-            brush,
-            graphicsOptions,
-            rasterizerOptions);
+        => batcher.AddComposition(CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions));
 
-    public void FillRegion<TPixel>(
+    public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        Brush brush,
-        GraphicsOptions graphicsOptions,
-        Rectangle region)
-        where TPixel : unmanaged, IPixel<TPixel>
-        => DefaultDrawingBackend.Instance.FillRegion(
-            configuration,
-            target,
-            brush,
-            graphicsOptions,
-            region);
-
-    public bool SupportsCoverageComposition<TPixel>(Brush brush, in GraphicsOptions graphicsOptions)
+        IReadOnlyList<CompositionCommand> compositions)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        ArgumentNullException.ThrowIfNull(brush);
-        _ = graphicsOptions;
-        return true;
+        for (int i = 0; i < compositions.Count; i++)
+        {
+            CompositionCommand composition = compositions[i];
+            DrawingCoverageHandle coverage = this.PrepareCoverage(
+                composition.Path,
+                composition.RasterizerOptions,
+                configuration.MemoryAllocator,
+                CoveragePreparationMode.Default);
+
+            this.CompositeCoverage(
+                configuration,
+                target,
+                coverage,
+                Point.Empty,
+                composition.Brush,
+                composition.GraphicsOptions,
+                composition.BrushBounds);
+
+            this.ReleaseCoverage(coverage);
+        }
     }
 
     public DrawingCoverageHandle PrepareCoverage(

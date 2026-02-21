@@ -8,22 +8,24 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Native WebGPU surface capability attached to <see cref="NativeSurface"/>.
 /// </summary>
-public sealed class WebGpuSurfaceCapability
+public sealed class WebGPUSurfaceCapability
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="WebGpuSurfaceCapability"/> class.
+    /// Initializes a new instance of the <see cref="WebGPUSurfaceCapability"/> class.
     /// </summary>
     /// <param name="device">Opaque <c>WGPUDevice*</c> handle.</param>
     /// <param name="queue">Opaque <c>WGPUQueue*</c> handle.</param>
+    /// <param name="targetTexture">Opaque <c>WGPUTexture*</c> handle for the current frame when writable upload is supported.</param>
     /// <param name="targetTextureView">Opaque <c>WGPUTextureView*</c> handle for the current frame.</param>
     /// <param name="targetFormat">Native render target texture format.</param>
     /// <param name="width">Surface width in pixels.</param>
     /// <param name="height">Surface height in pixels.</param>
     /// <param name="isSrgb">Whether the target format is sRGB encoded.</param>
     /// <param name="isPremultipliedAlpha">Whether alpha is premultiplied in the target surface.</param>
-    public WebGpuSurfaceCapability(
+    public WebGPUSurfaceCapability(
         nint device,
         nint queue,
+        nint targetTexture,
         nint targetTextureView,
         TextureFormat targetFormat,
         int width,
@@ -33,6 +35,7 @@ public sealed class WebGpuSurfaceCapability
     {
         this.Device = device;
         this.Queue = queue;
+        this.TargetTexture = targetTexture;
         this.TargetTextureView = targetTextureView;
         this.TargetFormat = targetFormat;
         this.Width = width;
@@ -50,6 +53,11 @@ public sealed class WebGpuSurfaceCapability
     /// Gets the opaque <c>WGPUQueue*</c> handle.
     /// </summary>
     public nint Queue { get; }
+
+    /// <summary>
+    /// Gets the opaque <c>WGPUTexture*</c> handle for the current frame.
+    /// </summary>
+    public nint TargetTexture { get; }
 
     /// <summary>
     /// Gets the opaque <c>WGPUTextureView*</c> handle for the current frame.

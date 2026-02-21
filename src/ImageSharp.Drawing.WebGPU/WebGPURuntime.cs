@@ -30,7 +30,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// The shutdown path is resilient to duplicate native unload attempts.
 /// </para>
 /// </remarks>
-internal static unsafe class WebGpuRuntime
+internal static unsafe class WebGPURuntime
 {
     /// <summary>
     /// Synchronizes all runtime state transitions.
@@ -182,7 +182,7 @@ internal static unsafe class WebGpuRuntime
     }
 
     /// <summary>
-    /// Ref-counted access token for <see cref="WebGpuRuntime"/>.
+    /// Ref-counted access token for <see cref="WebGPURuntime"/>.
     /// </summary>
     /// <remarks>
     /// Disposing the lease decrements the runtime lease count exactly once.

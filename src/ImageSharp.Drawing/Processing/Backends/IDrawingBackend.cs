@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
-using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -16,28 +15,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal interface IDrawingBackend
 {
     /// <summary>
-    /// Begins a composition session over a target region.
-    /// </summary>
-    /// <remarks>
-    /// Backends can use this as an optional batching boundary (for example: keep the destination
-    /// resident on an accelerator while multiple composite calls are applied).
-    /// </remarks>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination frame.</param>
-    public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
-        where TPixel : unmanaged, IPixel<TPixel>;
-
-    /// <summary>
-    /// Ends a composition session over a target region.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination frame.</param>
-    public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
-        where TPixel : unmanaged, IPixel<TPixel>;
-
-    /// <summary>
     /// Fills a path into a destination target region.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
@@ -47,81 +24,27 @@ internal interface IDrawingBackend
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="graphicsOptions">Graphics blending/composition options.</param>
     /// <param name="rasterizerOptions">Rasterizer options in target-local coordinates.</param>
+    /// <param name="batcher">Batcher used to queue normalized composition commands.</param>
     public void FillPath<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions)
-        where TPixel : unmanaged, IPixel<TPixel>;
-
-    /// <summary>
-    /// Fills a local region in a destination target.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="target">Destination frame.</param>
-    /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    /// <param name="region">Region in target-local coordinates.</param>
-    public void FillRegion<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target,
-        Brush brush,
-        GraphicsOptions graphicsOptions,
-        Rectangle region)
-        where TPixel : unmanaged, IPixel<TPixel>;
-
-    /// <summary>
-    /// Determines whether this backend can composite coverage using the accelerated path
-    /// for the given brush/options combination.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    /// <returns><see langword="true"/> when accelerated composition is supported.</returns>
-    public bool SupportsCoverageComposition<TPixel>(Brush brush, in GraphicsOptions graphicsOptions)
-        where TPixel : unmanaged, IPixel<TPixel>;
-
-    /// <summary>
-    /// Prepares coverage for a path and returns a backend-owned handle.
-    /// </summary>
-    /// <param name="path">The local path to rasterize.</param>
-    /// <param name="rasterizerOptions">Rasterizer options.</param>
-    /// <param name="allocator">Allocator for temporary data.</param>
-    /// <param name="preparationMode">Coverage preparation mode (<see cref="CoveragePreparationMode.Default"/> or <see cref="CoveragePreparationMode.Fallback"/>).</param>
-    /// <returns>An opaque handle to prepared coverage data.</returns>
-    public DrawingCoverageHandle PrepareCoverage(
-        IPath path,
         in RasterizerOptions rasterizerOptions,
-        MemoryAllocator allocator,
-        CoveragePreparationMode preparationMode);
+        DrawingCanvasBatcher<TPixel> batcher)
+        where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
-    /// Composites prepared coverage into a destination region using a brush.
+    /// Flushes queued composition operations for the target.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
     /// <param name="target">Destination frame.</param>
-    /// <param name="coverageHandle">Handle to prepared coverage data.</param>
-    /// <param name="sourceOffset">Source offset inside the prepared coverage.</param>
-    /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    /// <param name="brushBounds">Brush bounds used when creating the applicator.</param>
-    public void CompositeCoverage<TPixel>(
+    /// <param name="compositions">Queued composition commands in batch order.</param>
+    public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        DrawingCoverageHandle coverageHandle,
-        Point sourceOffset,
-        Brush brush,
-        in GraphicsOptions graphicsOptions,
-        Rectangle brushBounds)
+        IReadOnlyList<CompositionCommand> compositions)
         where TPixel : unmanaged, IPixel<TPixel>;
-
-    /// <summary>
-    /// Releases a prepared coverage handle.
-    /// </summary>
-    /// <param name="coverageHandle">Handle to release.</param>
-    public void ReleaseCoverage(DrawingCoverageHandle coverageHandle);
 }

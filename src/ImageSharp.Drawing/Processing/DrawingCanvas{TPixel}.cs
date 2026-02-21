@@ -23,6 +23,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
     private readonly ICanvasFrame<TPixel> targetFrame;
+    private readonly DrawingCanvasBatcher<TPixel> batcher;
     private bool isDisposed;
 
     /// <summary>
@@ -58,6 +59,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.backend = backend;
         this.targetFrame = targetFrame;
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
+        this.batcher = new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame);
     }
 
     /// <summary>
@@ -98,7 +100,19 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.EnsureNotDisposed();
         Guard.NotNull(brush, nameof(brush));
         Guard.NotNull(graphicsOptions, nameof(graphicsOptions));
-        this.backend.FillRegion(this.configuration, this.targetFrame, brush, graphicsOptions, region);
+
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias
+            ? RasterizationMode.Antialiased
+            : RasterizationMode.Aliased;
+
+        RasterizerOptions rasterizerOptions = new(
+            region,
+            IntersectionRule.NonZero,
+            rasterizationMode,
+            RasterizerSamplingOrigin.PixelBoundary);
+
+        RectangularPolygon regionPath = new(region.X, region.Y, region.Width, region.Height);
+        this.batcher.AddComposition(CompositionCommand.Create(regionPath, brush, graphicsOptions, rasterizerOptions));
     }
 
     /// <summary>
@@ -144,7 +158,14 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             rasterizationMode,
             samplingOrigin);
 
-        this.backend.FillPath(this.configuration, this.targetFrame, path, brush, graphicsOptions, rasterizerOptions);
+        this.backend.FillPath(
+            this.configuration,
+            this.targetFrame,
+            path,
+            brush,
+            graphicsOptions,
+            rasterizerOptions,
+            this.batcher);
     }
 
     /// <summary>
@@ -215,64 +236,24 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Guard.NotNull(operations, nameof(operations));
         Guard.NotNull(drawingOptions, nameof(drawingOptions));
 
-        Dictionary<OperationCoverageCacheKey, CoverageCacheEntry> coverageCache = [];
-        this.backend.BeginCompositeSession(this.configuration, this.targetFrame);
-        try
+        foreach (DrawingOperation operation in operations.OrderBy(x => x.RenderPass))
         {
-            // Operations are layered by render pass (fill, outline, decorations).
-            foreach (DrawingOperation operation in operations.OrderBy(x => x.RenderPass))
+            if (!TryCreateCompositionCommand(operation, drawingOptions, out CompositionCommand composition))
             {
-                Brush? compositeBrush = GetCompositeBrush(operation);
-                if (compositeBrush is null)
-                {
-                    continue;
-                }
-
-                GraphicsOptions graphicsOptions =
-                    drawingOptions.GraphicsOptions.CloneOrReturnForRules(
-                        operation.PixelAlphaCompositionMode,
-                        operation.PixelColorBlendingMode);
-                bool useFallbackCoverage = !this.backend.SupportsCoverageComposition<TPixel>(compositeBrush, graphicsOptions);
-
-                if (!this.TryGetCoverage(
-                    operation,
-                    drawingOptions,
-                    useFallbackCoverage,
-                    coverageCache,
-                    out CoverageCacheEntry coverageEntry,
-                    out Point coverageLocation))
-                {
-                    continue;
-                }
-
-                if (!this.TryGetCompositeRegion(
-                    coverageLocation,
-                    coverageEntry.RasterizedSize,
-                    out Rectangle compositeRegion,
-                    out Point sourceOffset))
-                {
-                    continue;
-                }
-
-                this.backend.CompositeCoverage(
-                    this.configuration,
-                    new CanvasRegionFrame<TPixel>(this.targetFrame, compositeRegion),
-                    coverageEntry.CoverageHandle,
-                    sourceOffset,
-                    compositeBrush,
-                    graphicsOptions,
-                    this.Bounds);
+                continue;
             }
-        }
-        finally
-        {
-            this.backend.EndCompositeSession(this.configuration, this.targetFrame);
 
-            foreach ((_, CoverageCacheEntry coverageEntry) in coverageCache)
-            {
-                this.backend.ReleaseCoverage(coverageEntry.CoverageHandle);
-            }
+            this.batcher.AddComposition(composition);
         }
+    }
+
+    /// <summary>
+    /// Flushes queued drawing commands to the target in submission order.
+    /// </summary>
+    public void Flush()
+    {
+        this.EnsureNotDisposed();
+        this.batcher.FlushCompositions();
     }
 
     /// <inheritdoc />
@@ -283,91 +264,12 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             return;
         }
 
+        this.batcher.FlushCompositions();
         this.isDisposed = true;
     }
 
     private void EnsureNotDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-    private bool TryGetCoverage(
-        DrawingOperation operation,
-        DrawingOptions drawingOptions,
-        bool useFallbackCoverage,
-        Dictionary<OperationCoverageCacheKey, CoverageCacheEntry> coverageCache,
-        out CoverageCacheEntry coverageEntry,
-        out Point coverageLocation)
-    {
-        coverageLocation = operation.RenderLocation;
-        if (!TryCreateCoveragePath(operation, out IPath? coveragePath))
-        {
-            coverageEntry = default;
-            return false;
-        }
-
-        Point localOffset = Point.Empty;
-        if (operation.Kind == DrawingOperationKind.Draw)
-        {
-            int strokeHalf = (int)((operation.Pen?.StrokeWidth ?? 0F) / 2F);
-            coverageLocation = operation.RenderLocation - new Size(strokeHalf, strokeHalf);
-
-            Point coverageMapOrigin = Point.Truncate(coveragePath.Bounds.Location);
-            localOffset = new Point(
-                coverageMapOrigin.X - operation.RenderLocation.X,
-                coverageMapOrigin.Y - operation.RenderLocation.Y);
-            coveragePath = coveragePath.Translate(-coverageMapOrigin);
-        }
-
-        OperationCoverageCacheKey cacheKey = CreateOperationCoverageCacheKey(operation, localOffset, useFallbackCoverage);
-        if (coverageCache.TryGetValue(cacheKey, out coverageEntry))
-        {
-            return true;
-        }
-
-        Size rasterizedSize = Rectangle.Ceiling(coveragePath.Bounds).Size + new Size(2, 2);
-        if (rasterizedSize.Width <= 0 || rasterizedSize.Height <= 0)
-        {
-            coverageEntry = default;
-            return false;
-        }
-
-        RasterizationMode rasterizationMode = drawingOptions.GraphicsOptions.Antialias
-            ? RasterizationMode.Antialiased
-            : RasterizationMode.Aliased;
-        RasterizerSamplingOrigin samplingOrigin = operation.Kind == DrawingOperationKind.Draw
-            ? RasterizerSamplingOrigin.PixelCenter
-            : RasterizerSamplingOrigin.PixelBoundary;
-
-        RasterizerOptions rasterizerOptions = new(
-            new Rectangle(0, 0, rasterizedSize.Width, rasterizedSize.Height),
-            operation.IntersectionRule,
-            rasterizationMode,
-            samplingOrigin);
-
-        DrawingCoverageHandle coverageHandle = this.backend.PrepareCoverage(
-            coveragePath,
-            rasterizerOptions,
-            this.configuration.MemoryAllocator,
-            useFallbackCoverage ? CoveragePreparationMode.Fallback : CoveragePreparationMode.Default);
-        if (!coverageHandle.IsValid)
-        {
-            coverageEntry = default;
-            return false;
-        }
-
-        coverageEntry = new CoverageCacheEntry(coverageHandle, rasterizedSize);
-        coverageCache.Add(cacheKey, coverageEntry);
-        return true;
-    }
-
-    private static Brush? GetCompositeBrush(DrawingOperation operation)
-    {
-        if (operation.Kind == DrawingOperationKind.Fill)
-        {
-            return operation.Brush;
-        }
-
-        return operation.Pen?.StrokeFill;
-    }
 
     private static RichTextOptions ConfigureTextOptions(RichTextOptions options)
     {
@@ -385,110 +287,96 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         return options;
     }
 
-    private static bool TryCreateCoveragePath(
+    private static bool TryCreateCompositionCommand(
         DrawingOperation operation,
-        [NotNullWhen(true)] out IPath? coveragePath)
+        DrawingOptions drawingOptions,
+        out CompositionCommand composition)
     {
-        if (operation.Kind == DrawingOperationKind.Fill)
+        Brush? compositeBrush = operation.Kind == DrawingOperationKind.Fill
+            ? operation.Brush
+            : operation.Pen?.StrokeFill;
+        if (compositeBrush is null)
         {
-            coveragePath = operation.Path;
-            return true;
-        }
-
-        if (operation.Kind == DrawingOperationKind.Draw && operation.Pen is not null)
-        {
-            IPath globalPath = operation.Path.Translate(operation.RenderLocation);
-            coveragePath = operation.Pen.GeneratePath(globalPath);
-            return true;
-        }
-
-        coveragePath = null;
-        return false;
-    }
-
-    private bool TryGetCompositeRegion(
-        Point coverageLocation,
-        Size coverageSize,
-        out Rectangle compositeRegion,
-        out Point sourceOffset)
-    {
-        Rectangle destination = new(coverageLocation, coverageSize);
-        Rectangle clipped = Rectangle.Intersect(this.Bounds, destination);
-        if (clipped.Equals(Rectangle.Empty))
-        {
-            compositeRegion = default;
-            sourceOffset = default;
+            composition = default;
             return false;
         }
 
-        sourceOffset = new Point(clipped.X - destination.X, clipped.Y - destination.Y);
-        compositeRegion = clipped;
+        GraphicsOptions graphicsOptions =
+            drawingOptions.GraphicsOptions.CloneOrReturnForRules(
+                operation.PixelAlphaCompositionMode,
+                operation.PixelColorBlendingMode);
+
+        IPath translatedPath = operation.Path.Translate(operation.RenderLocation);
+        IPath compositionPath;
+        RasterizerSamplingOrigin samplingOrigin;
+        if (operation.Kind == DrawingOperationKind.Draw)
+        {
+            if (operation.Pen is null)
+            {
+                composition = default;
+                return false;
+            }
+
+            compositionPath = operation.Pen.GeneratePath(translatedPath);
+            samplingOrigin = RasterizerSamplingOrigin.PixelCenter;
+        }
+        else
+        {
+            compositionPath = translatedPath;
+            samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
+        }
+
+        RectangleF bounds = compositionPath.Bounds;
+        if (samplingOrigin == RasterizerSamplingOrigin.PixelCenter)
+        {
+            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
+        }
+
+        Rectangle interest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right),
+            (int)MathF.Ceiling(bounds.Bottom));
+        if (interest.Width <= 0 || interest.Height <= 0)
+        {
+            composition = default;
+            return false;
+        }
+
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias
+            ? RasterizationMode.Antialiased
+            : RasterizationMode.Aliased;
+        RasterizerOptions rasterizerOptions = new(
+            interest,
+            operation.IntersectionRule,
+            rasterizationMode,
+            samplingOrigin);
+
+        int definitionKey = operation.DefinitionKey > 0
+            ? operation.DefinitionKey
+            : CreateFallbackDefinitionKey(operation, compositeBrush);
+
+        composition = CompositionCommand.Create(
+            definitionKey,
+            compositionPath,
+            compositeBrush,
+            graphicsOptions,
+            rasterizerOptions);
         return true;
     }
 
-    private static OperationCoverageCacheKey CreateOperationCoverageCacheKey(
-        DrawingOperation operation,
-        Point localOffset,
-        bool useFallbackCoverage)
-    {
-        int definitionKey = operation.DefinitionKey > 0
-            ? operation.DefinitionKey
-            : CreateFallbackDefinitionKey(operation);
-        return new OperationCoverageCacheKey(definitionKey, localOffset, useFallbackCoverage);
-    }
-
-    private static int CreateFallbackDefinitionKey(DrawingOperation operation)
+    private static int CreateFallbackDefinitionKey(DrawingOperation operation, Brush compositeBrush)
     {
         HashCode hash = default;
         hash.Add(RuntimeHelpers.GetHashCode(operation.Path));
         hash.Add((int)operation.Kind);
         hash.Add((int)operation.IntersectionRule);
-        hash.Add(operation.Brush is null ? 0 : RuntimeHelpers.GetHashCode(operation.Brush));
-        hash.Add(operation.Pen is null ? 0 : RuntimeHelpers.GetHashCode(operation.Pen));
+        hash.Add(RuntimeHelpers.GetHashCode(compositeBrush));
+        if (operation.Pen is not null)
+        {
+            hash.Add(RuntimeHelpers.GetHashCode(operation.Pen));
+        }
+
         return hash.ToHashCode();
-    }
-
-    private readonly struct CoverageCacheEntry
-    {
-        public CoverageCacheEntry(DrawingCoverageHandle coverageHandle, Size rasterizedSize)
-        {
-            this.CoverageHandle = coverageHandle;
-            this.RasterizedSize = rasterizedSize;
-        }
-
-        public DrawingCoverageHandle CoverageHandle { get; }
-
-        public Size RasterizedSize { get; }
-    }
-
-    private readonly struct OperationCoverageCacheKey : IEquatable<OperationCoverageCacheKey>
-    {
-        private readonly int definitionKey;
-        private readonly Point localOffset;
-        private readonly bool useFallbackCoverage;
-
-        public OperationCoverageCacheKey(int definitionKey, Point localOffset, bool useFallbackCoverage)
-        {
-            this.definitionKey = definitionKey;
-            this.localOffset = localOffset;
-            this.useFallbackCoverage = useFallbackCoverage;
-        }
-
-        public bool Equals(OperationCoverageCacheKey other)
-            => this.definitionKey == other.definitionKey
-            && this.localOffset == other.localOffset
-            && this.useFallbackCoverage == other.useFallbackCoverage;
-
-        public override bool Equals(object? obj)
-            => obj is OperationCoverageCacheKey other && this.Equals(other);
-
-        public override int GetHashCode()
-        {
-            HashCode hash = default;
-            hash.Add(this.definitionKey);
-            hash.Add(this.localOffset);
-            hash.Add(this.useFallbackCoverage);
-            return hash.ToHashCode();
-        }
     }
 }

@@ -39,10 +39,10 @@ public class WebGPUDrawingBackendTests
         Assert.Equal(backend.PrepareCoverageCallCount, backend.ReleaseCoverageCallCount);
         Assert.Equal(0, backend.LiveCoverageCount);
         AssertCoverageExecutionAccounting(backend);
-        if (backend.IsGpuReady)
+        if (backend.IsGPUReady)
         {
-            Assert.True(backend.GpuPrepareCoverageCallCount > 0);
-            Assert.True(backend.GpuCompositeCoverageCallCount + backend.FallbackCompositeCoverageCallCount > 0);
+            Assert.True(backend.GPUPrepareCoverageCallCount > 0);
+            Assert.True(backend.GPUCompositeCoverageCallCount + backend.FallbackCompositeCoverageCallCount > 0);
         }
 
         ImageComparer comparer = ImageComparer.TolerantPercentage(0.5F);
@@ -202,10 +202,10 @@ public class WebGPUDrawingBackendTests
     {
         Assert.Equal(
             backend.PrepareCoverageCallCount,
-            backend.GpuPrepareCoverageCallCount + backend.FallbackPrepareCoverageCallCount);
+            backend.GPUPrepareCoverageCallCount + backend.FallbackPrepareCoverageCallCount);
         Assert.Equal(
             backend.CompositeCoverageCallCount,
-            backend.GpuCompositeCoverageCallCount + backend.FallbackCompositeCoverageCallCount);
+            backend.GPUCompositeCoverageCallCount + backend.FallbackCompositeCoverageCallCount);
     }
 
     private static void AssertGpuPathWhenRequired(WebGPUDrawingBackend backend)
@@ -221,14 +221,14 @@ public class WebGPUDrawingBackendTests
         }
 
         Assert.True(
-            backend.IsGpuReady,
-            $"WebGPU initialization did not succeed. Reason='{backend.LastGpuInitializationFailure}'. Prepare(total/gpu/fallback)={backend.PrepareCoverageCallCount}/{backend.GpuPrepareCoverageCallCount}/{backend.FallbackPrepareCoverageCallCount}, Composite(total/gpu/fallback)={backend.CompositeCoverageCallCount}/{backend.GpuCompositeCoverageCallCount}/{backend.FallbackCompositeCoverageCallCount}");
+            backend.IsGPUReady,
+            $"WebGPU initialization did not succeed. Reason='{backend.LastGPUInitializationFailure}'. Prepare(total/gpu/fallback)={backend.PrepareCoverageCallCount}/{backend.GPUPrepareCoverageCallCount}/{backend.FallbackPrepareCoverageCallCount}, Composite(total/gpu/fallback)={backend.CompositeCoverageCallCount}/{backend.GPUCompositeCoverageCallCount}/{backend.FallbackCompositeCoverageCallCount}");
         Assert.True(
-            backend.GpuPrepareCoverageCallCount > 0,
-            $"No GPU coverage preparation calls were observed. Prepare(total/gpu/fallback)={backend.PrepareCoverageCallCount}/{backend.GpuPrepareCoverageCallCount}/{backend.FallbackPrepareCoverageCallCount}");
+            backend.GPUPrepareCoverageCallCount > 0,
+            $"No GPU coverage preparation calls were observed. Prepare(total/gpu/fallback)={backend.PrepareCoverageCallCount}/{backend.GPUPrepareCoverageCallCount}/{backend.FallbackPrepareCoverageCallCount}");
         Assert.True(
-            backend.GpuCompositeCoverageCallCount > 0,
-            $"No GPU composite calls were observed. Composite(total/gpu/fallback)={backend.CompositeCoverageCallCount}/{backend.GpuCompositeCoverageCallCount}/{backend.FallbackCompositeCoverageCallCount}");
+            backend.GPUCompositeCoverageCallCount > 0,
+            $"No GPU composite calls were observed. Composite(total/gpu/fallback)={backend.CompositeCoverageCallCount}/{backend.GPUCompositeCoverageCallCount}/{backend.FallbackCompositeCoverageCallCount}");
         Assert.Equal(
             0,
             backend.FallbackPrepareCoverageCallCount);

@@ -109,68 +109,23 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public void BeginCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-        }
-
-        public void EndCompositeSession<TPixel>(Configuration configuration, ICanvasFrame<TPixel> target)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-        }
-
         public void FillPath<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
             IPath path,
             Brush brush,
             GraphicsOptions graphicsOptions,
-            in RasterizerOptions rasterizerOptions)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-        }
-
-        public void FillRegion<TPixel>(
-            Configuration configuration,
-            ICanvasFrame<TPixel> target,
-            Brush brush,
-            GraphicsOptions graphicsOptions,
-            Rectangle region)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-        }
-
-        public bool SupportsCoverageComposition<TPixel>(Brush brush, in GraphicsOptions graphicsOptions)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-            _ = brush;
-            _ = graphicsOptions;
-            return true;
-        }
-
-        public DrawingCoverageHandle PrepareCoverage(
-            IPath path,
             in RasterizerOptions rasterizerOptions,
-            MemoryAllocator allocator,
-            CoveragePreparationMode preparationMode)
-        {
-            _ = preparationMode;
-            return default;
-        }
-
-        public void CompositeCoverage<TPixel>(
-            Configuration configuration,
-            ICanvasFrame<TPixel> target,
-            DrawingCoverageHandle coverageHandle,
-            Point sourceOffset,
-            Brush brush,
-            in GraphicsOptions graphicsOptions,
-            Rectangle brushBounds)
+            DrawingCanvasBatcher<TPixel> batcher)
             where TPixel : unmanaged, IPixel<TPixel>
         {
         }
 
-        public void ReleaseCoverage(DrawingCoverageHandle coverageHandle)
+        public void FlushCompositions<TPixel>(
+            Configuration configuration,
+            ICanvasFrame<TPixel> target,
+            IReadOnlyList<CompositionCommand> compositions)
+            where TPixel : unmanaged, IPixel<TPixel>
         {
         }
     }
