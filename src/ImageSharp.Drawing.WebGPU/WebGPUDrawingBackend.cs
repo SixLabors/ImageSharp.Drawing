@@ -85,6 +85,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
     private const uint CompositeVertexCount = 6;
+    private const uint CompositeUniformAlignment = 256;
+    private const uint CompositeUniformBufferSize = 256 * 1024;
     private const uint CoverageCoverVertexCount = 3;
     private const uint CoverageSampleCount = 4;
     private const int CallbackTimeoutMilliseconds = 10_000;
@@ -126,18 +128,29 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private int compositeSessionDepth;
     private bool compositeSessionGpuActive;
     private bool compositeSessionDirty;
+    private RenderPassEncoder* compositeSessionPassEncoder;
     private Rectangle compositeSessionTargetRectangle;
     private int compositeSessionTargetWidth;
     private int compositeSessionTargetHeight;
     private Texture* compositeSessionTargetTexture;
     private TextureView* compositeSessionTargetView;
     private WgpuBuffer* compositeSessionReadbackBuffer;
+    private WgpuBuffer* compositeSessionUniformBuffer;
+    private uint compositeSessionUniformWriteOffset;
     private CommandEncoder* compositeSessionCommandEncoder;
     private uint compositeSessionReadbackBytesPerRow;
     private ulong compositeSessionReadbackByteCount;
     private int compositeSessionResourceWidth;
     private int compositeSessionResourceHeight;
     private TextureFormat compositeSessionResourceTextureFormat;
+    private Texture* coverageScratchMultisampleTexture;
+    private TextureView* coverageScratchMultisampleView;
+    private Texture* coverageScratchStencilTexture;
+    private TextureView* coverageScratchStencilView;
+    private int coverageScratchWidth;
+    private int coverageScratchHeight;
+    private WgpuBuffer* coverageScratchVertexBuffer;
+    private ulong coverageScratchVertexCapacityBytes;
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
     private static readonly bool TraceEnabled = string.Equals(
         Environment.GetEnvironmentVariable("IMAGESHARP_WEBGPU_TRACE"),
@@ -1031,6 +1044,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             Buffer = new BufferBindingLayout
             {
                 Type = BufferBindingType.Uniform,
+                HasDynamicOffset = true,
                 MinBindingSize = (ulong)Unsafe.SizeOf<CompositeParams>()
             }
         };
@@ -1414,14 +1428,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                         DepthBiasClamp = 0F
                     };
 
-                    PrimitiveState incrementPrimitiveState = primitiveState;
-                    incrementPrimitiveState.CullMode = CullMode.Back;
-
                     RenderPipelineDescriptor incrementPipelineDescriptor = new()
                     {
                         Layout = this.coveragePipelineLayout,
                         Vertex = stencilVertexState,
-                        Primitive = incrementPrimitiveState,
+                        Primitive = primitiveState,
                         DepthStencil = &incrementDepthStencilState,
                         Multisample = multisampleState,
                         Fragment = &stencilFragmentState
@@ -1455,14 +1466,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                         DepthBiasClamp = 0F
                     };
 
-                    PrimitiveState decrementPrimitiveState = primitiveState;
-                    decrementPrimitiveState.CullMode = CullMode.Front;
-
                     RenderPipelineDescriptor decrementPipelineDescriptor = new()
                     {
                         Layout = this.coveragePipelineLayout,
                         Vertex = stencilVertexState,
-                        Primitive = decrementPrimitiveState,
+                        Primitive = primitiveState,
                         DepthStencil = &decrementDepthStencilState,
                         Multisample = multisampleState,
                         Fragment = &stencilFragmentState
@@ -1562,6 +1570,160 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
+    private bool TryEnsureCoverageScratchTargetsLocked(
+        int width,
+        int height,
+        out TextureView* multisampleCoverageView,
+        out TextureView* stencilView)
+    {
+        multisampleCoverageView = null;
+        stencilView = null;
+
+        if (this.webGpu is null || this.device is null || width <= 0 || height <= 0)
+        {
+            return false;
+        }
+
+        if (this.coverageScratchMultisampleView is not null &&
+            this.coverageScratchStencilView is not null &&
+            this.coverageScratchWidth == width &&
+            this.coverageScratchHeight == height)
+        {
+            multisampleCoverageView = this.coverageScratchMultisampleView;
+            stencilView = this.coverageScratchStencilView;
+            return true;
+        }
+
+        this.ReleaseTextureViewLocked(this.coverageScratchMultisampleView);
+        this.ReleaseTextureLocked(this.coverageScratchMultisampleTexture);
+        this.ReleaseTextureViewLocked(this.coverageScratchStencilView);
+        this.ReleaseTextureLocked(this.coverageScratchStencilTexture);
+        this.coverageScratchMultisampleView = null;
+        this.coverageScratchMultisampleTexture = null;
+        this.coverageScratchStencilView = null;
+        this.coverageScratchStencilTexture = null;
+        this.coverageScratchWidth = 0;
+        this.coverageScratchHeight = 0;
+
+        TextureDescriptor multisampleCoverageTextureDescriptor = new()
+        {
+            Usage = TextureUsage.RenderAttachment,
+            Dimension = TextureDimension.Dimension2D,
+            Size = new Extent3D((uint)width, (uint)height, 1),
+            Format = TextureFormat.R8Unorm,
+            MipLevelCount = 1,
+            SampleCount = CoverageSampleCount
+        };
+
+        Texture* createdMultisampleCoverageTexture =
+            this.webGpu.DeviceCreateTexture(this.device, in multisampleCoverageTextureDescriptor);
+        if (createdMultisampleCoverageTexture is null)
+        {
+            return false;
+        }
+
+        TextureViewDescriptor coverageViewDescriptor = new()
+        {
+            Format = TextureFormat.R8Unorm,
+            Dimension = TextureViewDimension.Dimension2D,
+            BaseMipLevel = 0,
+            MipLevelCount = 1,
+            BaseArrayLayer = 0,
+            ArrayLayerCount = 1,
+            Aspect = TextureAspect.All
+        };
+
+        TextureView* createdMultisampleCoverageView = this.webGpu.TextureCreateView(createdMultisampleCoverageTexture, in coverageViewDescriptor);
+        if (createdMultisampleCoverageView is null)
+        {
+            this.ReleaseTextureLocked(createdMultisampleCoverageTexture);
+            return false;
+        }
+
+        TextureDescriptor stencilTextureDescriptor = new()
+        {
+            Usage = TextureUsage.RenderAttachment,
+            Dimension = TextureDimension.Dimension2D,
+            Size = new Extent3D((uint)width, (uint)height, 1),
+            Format = TextureFormat.Depth24PlusStencil8,
+            MipLevelCount = 1,
+            SampleCount = CoverageSampleCount
+        };
+
+        Texture* createdStencilTexture = this.webGpu.DeviceCreateTexture(this.device, in stencilTextureDescriptor);
+        if (createdStencilTexture is null)
+        {
+            this.ReleaseTextureViewLocked(createdMultisampleCoverageView);
+            this.ReleaseTextureLocked(createdMultisampleCoverageTexture);
+            return false;
+        }
+
+        TextureViewDescriptor stencilViewDescriptor = new()
+        {
+            Format = TextureFormat.Depth24PlusStencil8,
+            Dimension = TextureViewDimension.Dimension2D,
+            BaseMipLevel = 0,
+            MipLevelCount = 1,
+            BaseArrayLayer = 0,
+            ArrayLayerCount = 1,
+            Aspect = TextureAspect.All
+        };
+
+        TextureView* createdStencilView = this.webGpu.TextureCreateView(createdStencilTexture, in stencilViewDescriptor);
+        if (createdStencilView is null)
+        {
+            this.ReleaseTextureLocked(createdStencilTexture);
+            this.ReleaseTextureViewLocked(createdMultisampleCoverageView);
+            this.ReleaseTextureLocked(createdMultisampleCoverageTexture);
+            return false;
+        }
+
+        this.coverageScratchMultisampleTexture = createdMultisampleCoverageTexture;
+        this.coverageScratchMultisampleView = createdMultisampleCoverageView;
+        this.coverageScratchStencilTexture = createdStencilTexture;
+        this.coverageScratchStencilView = createdStencilView;
+        this.coverageScratchWidth = width;
+        this.coverageScratchHeight = height;
+
+        multisampleCoverageView = createdMultisampleCoverageView;
+        stencilView = createdStencilView;
+        return true;
+    }
+
+    private bool TryEnsureCoverageScratchVertexBufferLocked(ulong requiredByteCount)
+    {
+        if (this.webGpu is null || this.device is null || requiredByteCount == 0)
+        {
+            return false;
+        }
+
+        if (this.coverageScratchVertexBuffer is not null &&
+            this.coverageScratchVertexCapacityBytes >= requiredByteCount)
+        {
+            return true;
+        }
+
+        this.ReleaseBufferLocked(this.coverageScratchVertexBuffer);
+        this.coverageScratchVertexBuffer = null;
+        this.coverageScratchVertexCapacityBytes = 0;
+
+        BufferDescriptor vertexBufferDescriptor = new()
+        {
+            Usage = BufferUsage.Vertex | BufferUsage.CopyDst,
+            Size = requiredByteCount
+        };
+
+        WgpuBuffer* createdVertexBuffer = this.webGpu.DeviceCreateBuffer(this.device, in vertexBufferDescriptor);
+        if (createdVertexBuffer is null)
+        {
+            return false;
+        }
+
+        this.coverageScratchVertexBuffer = createdVertexBuffer;
+        this.coverageScratchVertexCapacityBytes = requiredByteCount;
+        return true;
+    }
+
     /// <summary>
     /// Rasterizes edge triangles through a stencil-and-cover pass into an <c>R8Unorm</c> texture.
     /// </summary>
@@ -1571,7 +1733,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         out Texture* coverageTexture,
         out TextureView* coverageView)
     {
-        Trace($"TryRasterizeCoverageTextureLocked: begin triangles={coverageTriangleData.Vertices.Length / 3} size={rasterizerOptions.Interest.Width}x{rasterizerOptions.Interest.Height}");
+        Trace($"TryRasterizeCoverageTextureLocked: begin triangles={coverageTriangleData.TotalVertexCount / 3} size={rasterizerOptions.Interest.Width}x{rasterizerOptions.Interest.Height}");
         coverageTexture = null;
         coverageView = null;
 
@@ -1582,7 +1744,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.coverageStencilNonZeroIncrementPipeline is null ||
             this.coverageStencilNonZeroDecrementPipeline is null ||
             this.coverageCoverPipeline is null ||
-            coverageTriangleData.Vertices.Length == 0 ||
+            coverageTriangleData.TotalVertexCount == 0 ||
             rasterizerOptions.Interest.Width <= 0 ||
             rasterizerOptions.Interest.Height <= 0)
         {
@@ -1591,17 +1753,21 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         Texture* createdCoverageTexture = null;
         TextureView* createdCoverageView = null;
-        Texture* multisampleCoverageTexture = null;
-        TextureView* multisampleCoverageView = null;
-        Texture* stencilTexture = null;
-        TextureView* stencilView = null;
-        WgpuBuffer* vertexBuffer = null;
         CommandEncoder* commandEncoder = null;
         RenderPassEncoder* passEncoder = null;
         CommandBuffer* commandBuffer = null;
         bool success = false;
         try
         {
+            if (!this.TryEnsureCoverageScratchTargetsLocked(
+                    rasterizerOptions.Interest.Width,
+                    rasterizerOptions.Interest.Height,
+                    out TextureView* multisampleCoverageView,
+                    out TextureView* stencilView))
+            {
+                return false;
+            }
+
             TextureDescriptor coverageTextureDescriptor = new()
             {
                 Usage = TextureUsage.RenderAttachment | TextureUsage.TextureBinding | TextureUsage.CopySrc,
@@ -1635,76 +1801,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 return false;
             }
 
-            TextureDescriptor multisampleCoverageTextureDescriptor = new()
-            {
-                Usage = TextureUsage.RenderAttachment,
-                Dimension = TextureDimension.Dimension2D,
-                Size = new Extent3D((uint)rasterizerOptions.Interest.Width, (uint)rasterizerOptions.Interest.Height, 1),
-                Format = TextureFormat.R8Unorm,
-                MipLevelCount = 1,
-                SampleCount = CoverageSampleCount
-            };
-
-            multisampleCoverageTexture = this.webGpu.DeviceCreateTexture(this.device, in multisampleCoverageTextureDescriptor);
-            if (multisampleCoverageTexture is null)
-            {
-                return false;
-            }
-
-            multisampleCoverageView = this.webGpu.TextureCreateView(multisampleCoverageTexture, in coverageViewDescriptor);
-            if (multisampleCoverageView is null)
-            {
-                return false;
-            }
-
-            TextureDescriptor stencilTextureDescriptor = new()
-            {
-                Usage = TextureUsage.RenderAttachment,
-                Dimension = TextureDimension.Dimension2D,
-                Size = new Extent3D((uint)rasterizerOptions.Interest.Width, (uint)rasterizerOptions.Interest.Height, 1),
-                Format = TextureFormat.Depth24PlusStencil8,
-                MipLevelCount = 1,
-                SampleCount = CoverageSampleCount
-            };
-
-            stencilTexture = this.webGpu.DeviceCreateTexture(this.device, in stencilTextureDescriptor);
-            if (stencilTexture is null)
-            {
-                return false;
-            }
-
-            TextureViewDescriptor stencilViewDescriptor = new()
-            {
-                Format = TextureFormat.Depth24PlusStencil8,
-                Dimension = TextureViewDimension.Dimension2D,
-                BaseMipLevel = 0,
-                MipLevelCount = 1,
-                BaseArrayLayer = 0,
-                ArrayLayerCount = 1,
-                Aspect = TextureAspect.All
-            };
-
-            stencilView = this.webGpu.TextureCreateView(stencilTexture, in stencilViewDescriptor);
-            if (stencilView is null)
-            {
-                return false;
-            }
-
-            ulong vertexByteCount = checked((ulong)coverageTriangleData.Vertices.Length * (ulong)Unsafe.SizeOf<StencilVertex>());
-            BufferDescriptor vertexBufferDescriptor = new()
-            {
-                Usage = BufferUsage.Vertex | BufferUsage.CopyDst,
-                Size = vertexByteCount
-            };
-            vertexBuffer = this.webGpu.DeviceCreateBuffer(this.device, in vertexBufferDescriptor);
-            if (vertexBuffer is null)
+            ulong vertexByteCount = checked((ulong)coverageTriangleData.TotalVertexCount * (ulong)Unsafe.SizeOf<StencilVertex>());
+            if (!this.TryEnsureCoverageScratchVertexBufferLocked(vertexByteCount) || this.coverageScratchVertexBuffer is null)
             {
                 return false;
             }
 
             fixed (StencilVertex* verticesPtr = coverageTriangleData.Vertices)
             {
-                this.webGpu.QueueWriteBuffer(this.queue, vertexBuffer, 0, verticesPtr, (nuint)vertexByteCount);
+                this.webGpu.QueueWriteBuffer(this.queue, this.coverageScratchVertexBuffer, 0, verticesPtr, (nuint)vertexByteCount);
             }
 
             CommandEncoderDescriptor commandEncoderDescriptor = default;
@@ -1750,19 +1855,30 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             }
 
             this.webGpu.RenderPassEncoderSetStencilReference(passEncoder, 0);
-            this.webGpu.RenderPassEncoderSetVertexBuffer(passEncoder, 0, vertexBuffer, 0, vertexByteCount);
+            this.webGpu.RenderPassEncoderSetVertexBuffer(passEncoder, 0, this.coverageScratchVertexBuffer, 0, vertexByteCount);
             if (rasterizerOptions.IntersectionRule == IntersectionRule.EvenOdd)
             {
                 this.webGpu.RenderPassEncoderSetPipeline(passEncoder, this.coverageStencilEvenOddPipeline);
-                this.webGpu.RenderPassEncoderDraw(passEncoder, (uint)coverageTriangleData.Vertices.Length, 1, 0, 0);
+                this.webGpu.RenderPassEncoderDraw(passEncoder, coverageTriangleData.TotalVertexCount, 1, 0, 0);
             }
             else
             {
-                this.webGpu.RenderPassEncoderSetPipeline(passEncoder, this.coverageStencilNonZeroIncrementPipeline);
-                this.webGpu.RenderPassEncoderDraw(passEncoder, (uint)coverageTriangleData.Vertices.Length, 1, 0, 0);
+                if (coverageTriangleData.IncrementVertexCount > 0)
+                {
+                    this.webGpu.RenderPassEncoderSetPipeline(passEncoder, this.coverageStencilNonZeroIncrementPipeline);
+                    this.webGpu.RenderPassEncoderDraw(passEncoder, coverageTriangleData.IncrementVertexCount, 1, 0, 0);
+                }
 
-                this.webGpu.RenderPassEncoderSetPipeline(passEncoder, this.coverageStencilNonZeroDecrementPipeline);
-                this.webGpu.RenderPassEncoderDraw(passEncoder, (uint)coverageTriangleData.Vertices.Length, 1, 0, 0);
+                if (coverageTriangleData.DecrementVertexCount > 0)
+                {
+                    this.webGpu.RenderPassEncoderSetPipeline(passEncoder, this.coverageStencilNonZeroDecrementPipeline);
+                    this.webGpu.RenderPassEncoderDraw(
+                        passEncoder,
+                        coverageTriangleData.DecrementVertexCount,
+                        1,
+                        coverageTriangleData.IncrementVertexCount,
+                        0);
+                }
             }
 
             this.webGpu.RenderPassEncoderSetStencilReference(passEncoder, 0);
@@ -1809,12 +1925,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 this.webGpu.CommandEncoderRelease(commandEncoder);
             }
 
-            this.ReleaseBufferLocked(vertexBuffer);
-            this.ReleaseTextureViewLocked(stencilView);
-            this.ReleaseTextureLocked(stencilTexture);
-            this.ReleaseTextureViewLocked(multisampleCoverageView);
-            this.ReleaseTextureLocked(multisampleCoverageTexture);
-
             if (!success)
             {
                 this.ReleaseTextureViewLocked(createdCoverageView);
@@ -1824,8 +1934,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     }
 
     /// <summary>
-    /// Flattens a path into local-interest coordinates and converts each edge to a triangle
-    /// anchored at an external origin. These triangles are consumed by the stencil pass.
+    /// Flattens a path into local-interest coordinates and converts each non-horizontal edge
+    /// into a trapezoid (two triangles) anchored at a left-side sentinel X.
     /// </summary>
     private static bool TryBuildCoverageTriangles(
         IPath path,
@@ -1846,7 +1956,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         List<CoverageSegment> segments = [];
         float minX = float.PositiveInfinity;
-        float minY = float.PositiveInfinity;
 
         foreach (ISimplePath simplePath in path.Flatten())
         {
@@ -1858,35 +1967,97 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
             for (int i = 1; i < points.Length; i++)
             {
-                AddCoverageSegment(points[i - 1], points[i], offsetX, offsetY, segments, ref minX, ref minY);
+                AddCoverageSegment(points[i - 1], points[i], offsetX, offsetY, segments, ref minX);
             }
 
             if (simplePath.IsClosed)
             {
-                AddCoverageSegment(points[^1], points[0], offsetX, offsetY, segments, ref minX, ref minY);
+                AddCoverageSegment(points[^1], points[0], offsetX, offsetY, segments, ref minX);
             }
         }
 
-        if (segments.Count == 0 || !float.IsFinite(minX) || !float.IsFinite(minY))
+        if (segments.Count == 0 || !float.IsFinite(minX))
         {
             return false;
         }
 
-        float originX = minX - 1F;
-        float originY = minY - 1F;
+        int incrementEdgeCount = 0;
+        int decrementEdgeCount = 0;
+        foreach (CoverageSegment segment in segments)
+        {
+            if (segment.FromY == segment.ToY)
+            {
+                continue;
+            }
+
+            if (segment.ToY > segment.FromY)
+            {
+                incrementEdgeCount++;
+            }
+            else
+            {
+                decrementEdgeCount++;
+            }
+        }
+
+        int totalEdgeCount = incrementEdgeCount + decrementEdgeCount;
+        if (totalEdgeCount == 0)
+        {
+            return false;
+        }
+
+        float sentinelX = minX - 1F;
         float widthScale = 2F / interestSize.Width;
         float heightScale = 2F / interestSize.Height;
+        int incrementVertexCount = checked(incrementEdgeCount * 6);
+        int decrementVertexCount = checked(decrementEdgeCount * 6);
+        StencilVertex[] vertices = new StencilVertex[checked(incrementVertexCount + decrementVertexCount)];
 
-        StencilVertex[] vertices = new StencilVertex[checked(segments.Count * 3)];
         int vertexIndex = 0;
         foreach (CoverageSegment segment in segments)
         {
-            vertices[vertexIndex++] = ToStencilVertex(originX, originY, widthScale, heightScale);
-            vertices[vertexIndex++] = ToStencilVertex(segment.FromX, segment.FromY, widthScale, heightScale);
-            vertices[vertexIndex++] = ToStencilVertex(segment.ToX, segment.ToY, widthScale, heightScale);
+            if (segment.ToY <= segment.FromY)
+            {
+                continue;
+            }
+
+            AppendCoverageEdgeQuad(
+                vertices,
+                ref vertexIndex,
+                sentinelX,
+                segment.FromX,
+                segment.FromY,
+                segment.ToX,
+                segment.ToY,
+                widthScale,
+                heightScale);
         }
 
-        coverageTriangleData = new CoverageTriangleData(vertices);
+        int decrementStartIndex = incrementVertexCount;
+        vertexIndex = decrementStartIndex;
+        foreach (CoverageSegment segment in segments)
+        {
+            if (segment.ToY >= segment.FromY)
+            {
+                continue;
+            }
+
+            AppendCoverageEdgeQuad(
+                vertices,
+                ref vertexIndex,
+                sentinelX,
+                segment.FromX,
+                segment.FromY,
+                segment.ToX,
+                segment.ToY,
+                widthScale,
+                heightScale);
+        }
+
+        coverageTriangleData = new CoverageTriangleData(
+            vertices,
+            (uint)incrementVertexCount,
+            (uint)decrementVertexCount);
         return true;
     }
 
@@ -1896,8 +2067,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         float offsetX,
         float offsetY,
         List<CoverageSegment> destination,
-        ref float minX,
-        ref float minY)
+        ref float minX)
     {
         if (from.Equals(to))
         {
@@ -1919,7 +2089,30 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         destination.Add(new CoverageSegment(fromX, fromY, toX, toY));
         minX = MathF.Min(minX, MathF.Min(fromX, toX));
-        minY = MathF.Min(minY, MathF.Min(fromY, toY));
+    }
+
+    private static void AppendCoverageEdgeQuad(
+        StencilVertex[] destination,
+        ref int destinationIndex,
+        float sentinelX,
+        float fromX,
+        float fromY,
+        float toX,
+        float toY,
+        float widthScale,
+        float heightScale)
+    {
+        StencilVertex a = ToStencilVertex(sentinelX, fromY, widthScale, heightScale);
+        StencilVertex b = ToStencilVertex(fromX, fromY, widthScale, heightScale);
+        StencilVertex c = ToStencilVertex(toX, toY, widthScale, heightScale);
+        StencilVertex d = ToStencilVertex(sentinelX, toY, widthScale, heightScale);
+
+        destination[destinationIndex++] = a;
+        destination[destinationIndex++] = b;
+        destination[destinationIndex++] = c;
+        destination[destinationIndex++] = a;
+        destination[destinationIndex++] = c;
+        destination[destinationIndex++] = d;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2084,6 +2277,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.compositeSessionTargetRectangle = target.Rectangle;
         this.compositeSessionTargetWidth = target.Width;
         this.compositeSessionTargetHeight = target.Height;
+        this.compositeSessionUniformWriteOffset = 0;
         this.compositeSessionDirty = false;
         return true;
     }
@@ -2107,6 +2301,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         if (this.compositeSessionTargetTexture is not null &&
             this.compositeSessionTargetView is not null &&
             this.compositeSessionReadbackBuffer is not null &&
+            this.compositeSessionUniformBuffer is not null &&
             this.compositeSessionResourceWidth == width &&
             this.compositeSessionResourceHeight == height &&
             this.compositeSessionResourceTextureFormat == textureFormat)
@@ -2168,9 +2363,26 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
+        BufferDescriptor uniformBufferDescriptor = new()
+        {
+            Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
+            Size = CompositeUniformBufferSize
+        };
+
+        WgpuBuffer* uniformBuffer = this.webGpu.DeviceCreateBuffer(this.device, in uniformBufferDescriptor);
+        if (uniformBuffer is null)
+        {
+            this.ReleaseBufferLocked(readbackBuffer);
+            this.ReleaseTextureViewLocked(targetView);
+            this.ReleaseTextureLocked(targetTexture);
+            return false;
+        }
+
         this.compositeSessionTargetTexture = targetTexture;
         this.compositeSessionTargetView = targetView;
         this.compositeSessionReadbackBuffer = readbackBuffer;
+        this.compositeSessionUniformBuffer = uniformBuffer;
+        this.compositeSessionUniformWriteOffset = 0;
         this.compositeSessionReadbackBytesPerRow = readbackRowBytes;
         this.compositeSessionReadbackByteCount = readbackByteCount;
         this.compositeSessionResourceWidth = width;
@@ -2209,6 +2421,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         CommandBuffer* commandBuffer = null;
         try
         {
+            this.TryCloseCompositeSessionPassLocked();
+
             if (commandEncoder is null)
             {
                 CommandEncoderDescriptor commandEncoderDescriptor = default;
@@ -2289,6 +2503,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     private void ResetCompositeSessionStateLocked()
     {
+        this.TryCloseCompositeSessionPassLocked();
+
         if (this.compositeSessionCommandEncoder is not null && this.webGpu is not null)
         {
             this.webGpu.CommandEncoderRelease(this.compositeSessionCommandEncoder);
@@ -2303,15 +2519,25 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     private void ReleaseCompositeSessionResourcesLocked()
     {
+        if (this.compositeSessionPassEncoder is not null && this.webGpu is not null)
+        {
+            this.webGpu.RenderPassEncoderRelease(this.compositeSessionPassEncoder);
+            this.compositeSessionPassEncoder = null;
+        }
+
         if (this.compositeSessionCommandEncoder is not null && this.webGpu is not null)
         {
             this.webGpu.CommandEncoderRelease(this.compositeSessionCommandEncoder);
             this.compositeSessionCommandEncoder = null;
         }
 
+        this.ReleaseAllCoverageCompositeBindGroupsLocked();
+        this.ReleaseBufferLocked(this.compositeSessionUniformBuffer);
         this.ReleaseBufferLocked(this.compositeSessionReadbackBuffer);
         this.ReleaseTextureViewLocked(this.compositeSessionTargetView);
         this.ReleaseTextureLocked(this.compositeSessionTargetTexture);
+        this.compositeSessionUniformBuffer = null;
+        this.compositeSessionUniformWriteOffset = 0;
         this.compositeSessionReadbackBuffer = null;
         this.compositeSessionTargetTexture = null;
         this.compositeSessionTargetView = null;
@@ -2453,6 +2679,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return this.compositeSessionCommandEncoder is not null;
     }
 
+    private void TryCloseCompositeSessionPassLocked()
+    {
+        if (this.compositeSessionPassEncoder is null || this.webGpu is null)
+        {
+            return;
+        }
+
+        this.webGpu.RenderPassEncoderEnd(this.compositeSessionPassEncoder);
+        this.webGpu.RenderPassEncoderRelease(this.compositeSessionPassEncoder);
+        this.compositeSessionPassEncoder = null;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private RenderPipeline* GetCompositeSessionPipelineLocked()
     {
@@ -2474,6 +2712,61 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
 
         return false;
+    }
+
+    private BindGroup* GetOrCreateCoverageBindGroupLocked(
+        CoverageEntry coverageEntry,
+        WgpuBuffer* uniformBuffer,
+        uint uniformDataSize)
+    {
+        if (this.webGpu is null ||
+            this.device is null ||
+            this.compositeBindGroupLayout is null ||
+            coverageEntry.GpuCoverageView is null ||
+            uniformBuffer is null ||
+            uniformDataSize == 0)
+        {
+            return null;
+        }
+
+        if (coverageEntry.GpuCompositeBindGroup is not null &&
+            coverageEntry.GpuCompositeUniformBuffer == uniformBuffer)
+        {
+            return coverageEntry.GpuCompositeBindGroup;
+        }
+
+        this.ReleaseCoverageCompositeBindGroupLocked(coverageEntry);
+
+        BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[2];
+        bindGroupEntries[0] = new BindGroupEntry
+        {
+            Binding = 0,
+            TextureView = coverageEntry.GpuCoverageView
+        };
+        bindGroupEntries[1] = new BindGroupEntry
+        {
+            Binding = 1,
+            Buffer = uniformBuffer,
+            Offset = 0,
+            Size = uniformDataSize
+        };
+
+        BindGroupDescriptor bindGroupDescriptor = new()
+        {
+            Layout = this.compositeBindGroupLayout,
+            EntryCount = 2,
+            Entries = bindGroupEntries
+        };
+
+        BindGroup* bindGroup = this.webGpu.DeviceCreateBindGroup(this.device, in bindGroupDescriptor);
+        if (bindGroup is null)
+        {
+            return null;
+        }
+
+        coverageEntry.GpuCompositeBindGroup = bindGroup;
+        coverageEntry.GpuCompositeUniformBuffer = uniformBuffer;
+        return bindGroup;
     }
 
     /// <summary>
@@ -2512,86 +2805,58 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return true;
         }
 
-        ulong uniformByteCount = (ulong)Unsafe.SizeOf<CompositeParams>();
-        WgpuBuffer* uniformBuffer = null;
-        BindGroup* bindGroup = null;
-        CommandEncoder* createdCommandEncoder = null;
-        RenderPassEncoder* passEncoder = null;
-        CommandBuffer* commandBuffer = null;
-        try
+        if (this.compositeSessionUniformBuffer is null)
         {
-            BufferDescriptor uniformBufferDescriptor = new()
-            {
-                Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
-                Size = uniformByteCount
-            };
-            uniformBuffer = this.webGpu.DeviceCreateBuffer(this.device, in uniformBufferDescriptor);
-            if (uniformBuffer is null)
-            {
-                return false;
-            }
+            return false;
+        }
 
-            CompositeParams parameters = new()
-            {
-                SourceOffsetX = (uint)sourceOffset.X,
-                SourceOffsetY = (uint)sourceOffset.Y,
-                DestinationX = (uint)destinationX,
-                DestinationY = (uint)destinationY,
-                DestinationWidth = (uint)compositeWidth,
-                DestinationHeight = (uint)compositeHeight,
-                TargetWidth = (uint)targetWidth,
-                TargetHeight = (uint)targetHeight,
-                BrushKind = (uint)brushData.Kind,
-                SolidBrushColor = brushData.SolidColor,
-                BlendPercentage = blendPercentage
-            };
+        uint uniformDataSize = (uint)Unsafe.SizeOf<CompositeParams>();
+        uint uniformStride = AlignTo256(uniformDataSize);
+        if (uniformStride == 0 ||
+            this.compositeSessionUniformWriteOffset > CompositeUniformBufferSize ||
+            this.compositeSessionUniformWriteOffset + uniformStride > CompositeUniformBufferSize)
+        {
+            return false;
+        }
 
-            this.webGpu.QueueWriteBuffer(
-                this.queue,
-                uniformBuffer,
-                0,
-                ref parameters,
-                (nuint)Unsafe.SizeOf<CompositeParams>());
+        uint uniformOffset = this.compositeSessionUniformWriteOffset;
+        this.compositeSessionUniformWriteOffset += uniformStride;
 
-            BindGroupEntry* bindEntries = stackalloc BindGroupEntry[2];
-            bindEntries[0] = new BindGroupEntry
-            {
-                Binding = 0,
-                TextureView = coverageEntry.GpuCoverageView
-            };
-            bindEntries[1] = new BindGroupEntry
-            {
-                Binding = 1,
-                Buffer = uniformBuffer,
-                Offset = 0,
-                Size = uniformByteCount
-            };
+        BindGroup* bindGroup = this.GetOrCreateCoverageBindGroupLocked(coverageEntry, this.compositeSessionUniformBuffer, uniformDataSize);
+        if (bindGroup is null)
+        {
+            return false;
+        }
 
-            BindGroupDescriptor bindGroupDescriptor = new()
-            {
-                Layout = this.compositeBindGroupLayout,
-                EntryCount = 2,
-                Entries = bindEntries
-            };
-            bindGroup = this.webGpu.DeviceCreateBindGroup(this.device, in bindGroupDescriptor);
-            if (bindGroup is null)
-            {
-                return false;
-            }
+        if (commandEncoder is null)
+        {
+            return false;
+        }
 
-            CommandEncoder* compositeCommandEncoder = commandEncoder;
-            if (compositeCommandEncoder is null)
-            {
-                CommandEncoderDescriptor commandEncoderDescriptor = default;
-                createdCommandEncoder = this.webGpu.DeviceCreateCommandEncoder(this.device, in commandEncoderDescriptor);
-                if (createdCommandEncoder is null)
-                {
-                    return false;
-                }
+        CompositeParams parameters = new()
+        {
+            SourceOffsetX = (uint)sourceOffset.X,
+            SourceOffsetY = (uint)sourceOffset.Y,
+            DestinationX = (uint)destinationX,
+            DestinationY = (uint)destinationY,
+            DestinationWidth = (uint)compositeWidth,
+            DestinationHeight = (uint)compositeHeight,
+            TargetWidth = (uint)targetWidth,
+            TargetHeight = (uint)targetHeight,
+            BrushKind = (uint)brushData.Kind,
+            SolidBrushColor = brushData.SolidColor,
+            BlendPercentage = blendPercentage
+        };
 
-                compositeCommandEncoder = createdCommandEncoder;
-            }
+        this.webGpu.QueueWriteBuffer(
+            this.queue,
+            this.compositeSessionUniformBuffer,
+            uniformOffset,
+            ref parameters,
+            (nuint)Unsafe.SizeOf<CompositeParams>());
 
+        if (this.compositeSessionPassEncoder is null)
+        {
             RenderPassColorAttachment colorAttachment = new()
             {
                 View = targetView,
@@ -2607,61 +2872,20 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 ColorAttachments = &colorAttachment
             };
 
-            passEncoder = this.webGpu.CommandEncoderBeginRenderPass(compositeCommandEncoder, in renderPassDescriptor);
-            if (passEncoder is null)
+            this.compositeSessionPassEncoder = this.webGpu.CommandEncoderBeginRenderPass(commandEncoder, in renderPassDescriptor);
+            if (this.compositeSessionPassEncoder is null)
             {
                 return false;
             }
-
-            this.webGpu.RenderPassEncoderSetPipeline(passEncoder, compositePipeline);
-            this.webGpu.RenderPassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, (uint*)null);
-            this.webGpu.RenderPassEncoderDraw(passEncoder, CompositeVertexCount, 1, 0, 0);
-            this.webGpu.RenderPassEncoderEnd(passEncoder);
-            this.webGpu.RenderPassEncoderRelease(passEncoder);
-            passEncoder = null;
-
-            if (createdCommandEncoder is null)
-            {
-                return true;
-            }
-
-            CommandBufferDescriptor commandBufferDescriptor = default;
-            commandBuffer = this.webGpu.CommandEncoderFinish(createdCommandEncoder, in commandBufferDescriptor);
-            if (commandBuffer is null)
-            {
-                return false;
-            }
-
-            this.webGpu.QueueSubmit(this.queue, 1, ref commandBuffer);
-
-            this.webGpu.CommandBufferRelease(commandBuffer);
-            commandBuffer = null;
-            return true;
         }
-        finally
-        {
-            if (passEncoder is not null)
-            {
-                this.webGpu.RenderPassEncoderRelease(passEncoder);
-            }
 
-            if (commandBuffer is not null)
-            {
-                this.webGpu.CommandBufferRelease(commandBuffer);
-            }
+        uint dynamicOffset = uniformOffset;
+        uint* dynamicOffsets = &dynamicOffset;
 
-            if (createdCommandEncoder is not null)
-            {
-                this.webGpu.CommandEncoderRelease(createdCommandEncoder);
-            }
-
-            if (bindGroup is not null)
-            {
-                this.webGpu.BindGroupRelease(bindGroup);
-            }
-
-            this.ReleaseBufferLocked(uniformBuffer);
-        }
+        this.webGpu.RenderPassEncoderSetPipeline(this.compositeSessionPassEncoder, compositePipeline);
+        this.webGpu.RenderPassEncoderSetBindGroup(this.compositeSessionPassEncoder, 0, bindGroup, 1, dynamicOffsets);
+        this.webGpu.RenderPassEncoderDraw(this.compositeSessionPassEncoder, CompositeVertexCount, 1, 0, 0);
+        return true;
     }
 
     private bool TryMapReadBufferLocked(WgpuBuffer* readbackBuffer, nuint byteCount, out byte* mappedData)
@@ -2762,11 +2986,48 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     private void ReleaseCoverageTextureLocked(CoverageEntry entry)
     {
+        this.ReleaseCoverageCompositeBindGroupLocked(entry);
         Trace($"ReleaseCoverageTextureLocked: tex={(nint)entry.GpuCoverageTexture:X} view={(nint)entry.GpuCoverageView:X}");
         this.ReleaseTextureViewLocked(entry.GpuCoverageView);
         this.ReleaseTextureLocked(entry.GpuCoverageTexture);
         entry.GpuCoverageView = null;
         entry.GpuCoverageTexture = null;
+    }
+
+    private void ReleaseCoverageCompositeBindGroupLocked(CoverageEntry entry)
+    {
+        if (entry.GpuCompositeBindGroup is not null && this.webGpu is not null)
+        {
+            this.webGpu.BindGroupRelease(entry.GpuCompositeBindGroup);
+        }
+
+        entry.GpuCompositeBindGroup = null;
+        entry.GpuCompositeUniformBuffer = null;
+    }
+
+    private void ReleaseAllCoverageCompositeBindGroupsLocked()
+    {
+        foreach (KeyValuePair<int, CoverageEntry> kv in this.preparedCoverage)
+        {
+            this.ReleaseCoverageCompositeBindGroupLocked(kv.Value);
+        }
+    }
+
+    private void ReleaseCoverageScratchResourcesLocked()
+    {
+        this.ReleaseBufferLocked(this.coverageScratchVertexBuffer);
+        this.ReleaseTextureViewLocked(this.coverageScratchStencilView);
+        this.ReleaseTextureLocked(this.coverageScratchStencilTexture);
+        this.ReleaseTextureViewLocked(this.coverageScratchMultisampleView);
+        this.ReleaseTextureLocked(this.coverageScratchMultisampleTexture);
+        this.coverageScratchVertexBuffer = null;
+        this.coverageScratchVertexCapacityBytes = 0;
+        this.coverageScratchStencilView = null;
+        this.coverageScratchStencilTexture = null;
+        this.coverageScratchMultisampleView = null;
+        this.coverageScratchMultisampleTexture = null;
+        this.coverageScratchWidth = 0;
+        this.coverageScratchHeight = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -2850,6 +3111,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         Trace("ReleaseGpuResourcesLocked: begin");
         this.ResetCompositeSessionStateLocked();
         this.ReleaseCompositeSessionResourcesLocked();
+        this.ReleaseCoverageScratchResourcesLocked();
 
         if (this.webGpu is not null)
         {
@@ -3000,10 +3262,20 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     private readonly struct CoverageTriangleData
     {
-        public CoverageTriangleData(StencilVertex[] vertices)
-            => this.Vertices = vertices;
+        public CoverageTriangleData(StencilVertex[] vertices, uint incrementVertexCount, uint decrementVertexCount)
+        {
+            this.Vertices = vertices;
+            this.IncrementVertexCount = incrementVertexCount;
+            this.DecrementVertexCount = decrementVertexCount;
+        }
 
         public StencilVertex[] Vertices { get; }
+
+        public uint IncrementVertexCount { get; }
+
+        public uint DecrementVertexCount { get; }
+
+        public uint TotalVertexCount => this.IncrementVertexCount + this.DecrementVertexCount;
     }
 
     private sealed class CoverageEntry : IDisposable
@@ -3025,6 +3297,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         public Texture* GpuCoverageTexture { get; set; }
 
         public TextureView* GpuCoverageView { get; set; }
+
+        public BindGroup* GpuCompositeBindGroup { get; set; }
+
+        public WgpuBuffer* GpuCompositeUniformBuffer { get; set; }
 
         public void Dispose()
         {
