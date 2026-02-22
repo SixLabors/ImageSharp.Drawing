@@ -11,8 +11,6 @@ internal enum DrawingOperationKind : byte
 
 internal struct DrawingOperation
 {
-    public int DefinitionKey { get; set; }
-
     public DrawingOperationKind Kind { get; set; }
 
     public IPath Path { get; set; }

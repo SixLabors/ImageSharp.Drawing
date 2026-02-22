@@ -41,8 +41,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     // - Cache hit ratio above 60%
     private const float AccuracyMultiple = 8;
     private readonly Dictionary<CacheKey, List<GlyphRenderData>> glyphCache = [];
-    private readonly Dictionary<OperationDefinitionCacheKey, int> operationDefinitionCache = [];
-    private int nextOperationDefinitionKey = 1;
     private int cacheReadIndex;
 
     private bool rasterizationRequired;
@@ -86,8 +84,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     protected override void BeginText(in FontRectangle bounds)
     {
         this.DrawingOperations.Clear();
-        this.operationDefinitionCache.Clear();
-        this.nextOperationDefinitionKey = 1;
     }
 
     /// <inheritdoc/>
@@ -129,7 +125,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.currentCacheKey = CacheKey.FromParameters(
                 parameters,
                 new RectangleF(subPixelLocation, subPixelSize),
-                this.currentBrush ?? this.defaultBrush,
                 this.currentPen ?? this.defaultPen);
             if (this.glyphCache.ContainsKey(this.currentCacheKey))
             {
@@ -242,12 +237,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             IntersectionRule fillRule = TextUtilities.MapFillRule(this.currentFillRule);
             this.DrawingOperations.Add(new DrawingOperation
             {
-                DefinitionKey = this.GetOrCreateOperationDefinitionKey(
-                    fillPath,
-                    fillRule,
-                    DrawingOperationKind.Fill,
-                    this.currentBrush,
-                    null),
                 Kind = DrawingOperationKind.Fill,
                 Path = fillPath,
                 RenderLocation = renderLocation,
@@ -375,12 +364,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         Brush decorationBrush = pen.StrokeFill;
         this.DrawingOperations.Add(new DrawingOperation
         {
-            DefinitionKey = this.GetOrCreateOperationDefinitionKey(
-                decorationPath,
-                IntersectionRule.NonZero,
-                DrawingOperationKind.Fill,
-                decorationBrush,
-                null),
             Kind = DrawingOperationKind.Fill,
             Path = decorationPath,
             RenderLocation = renderLocation,
@@ -499,12 +482,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             IntersectionRule fillRule = TextUtilities.MapFillRule(this.currentFillRule);
             this.DrawingOperations.Add(new DrawingOperation
             {
-                DefinitionKey = this.GetOrCreateOperationDefinitionKey(
-                    glyphPath,
-                    fillRule,
-                    DrawingOperationKind.Fill,
-                    this.currentBrush,
-                    null),
                 Kind = DrawingOperationKind.Fill,
                 Path = glyphPath,
                 RenderLocation = renderLocation,
@@ -521,12 +498,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             IntersectionRule outlineRule = TextUtilities.MapFillRule(this.currentFillRule);
             this.DrawingOperations.Add(new DrawingOperation
             {
-                DefinitionKey = this.GetOrCreateOperationDefinitionKey(
-                    glyphPath,
-                    outlineRule,
-                    DrawingOperationKind.Draw,
-                    null,
-                    this.currentPen),
                 Kind = DrawingOperationKind.Draw,
                 Path = glyphPath,
                 RenderLocation = renderLocation,
@@ -547,24 +518,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         }
 
         this.glyphCache[this.currentCacheKey].Add(renderData);
-    }
-
-    private int GetOrCreateOperationDefinitionKey(
-        IPath path,
-        IntersectionRule intersectionRule,
-        DrawingOperationKind kind,
-        Brush? brush,
-        Pen? pen)
-    {
-        OperationDefinitionCacheKey cacheKey = new(path, intersectionRule, kind, brush, pen);
-        if (this.operationDefinitionCache.TryGetValue(cacheKey, out int existing))
-        {
-            return existing;
-        }
-
-        int next = this.nextOperationDefinitionKey++;
-        this.operationDefinitionCache.Add(cacheKey, next);
-        return next;
     }
 
     public void Dispose() => this.Dispose(true);
@@ -601,55 +554,10 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             if (disposing)
             {
                 this.glyphCache.Clear();
-                this.operationDefinitionCache.Clear();
                 this.DrawingOperations.Clear();
             }
 
             this.isDisposed = true;
-        }
-    }
-
-    private readonly struct OperationDefinitionCacheKey : IEquatable<OperationDefinitionCacheKey>
-    {
-        private readonly IPath path;
-        private readonly IntersectionRule intersectionRule;
-        private readonly DrawingOperationKind kind;
-        private readonly Brush? brush;
-        private readonly Pen? pen;
-
-        public OperationDefinitionCacheKey(
-            IPath path,
-            IntersectionRule intersectionRule,
-            DrawingOperationKind kind,
-            Brush? brush,
-            Pen? pen)
-        {
-            this.path = path;
-            this.intersectionRule = intersectionRule;
-            this.kind = kind;
-            this.brush = brush;
-            this.pen = pen;
-        }
-
-        public bool Equals(OperationDefinitionCacheKey other)
-            => ReferenceEquals(this.path, other.path)
-            && this.intersectionRule == other.intersectionRule
-            && this.kind == other.kind
-            && ReferenceEquals(this.brush, other.brush)
-            && ReferenceEquals(this.pen, other.pen);
-
-        public override bool Equals(object? obj)
-            => obj is OperationDefinitionCacheKey other && this.Equals(other);
-
-        public override int GetHashCode()
-        {
-            HashCode hash = default;
-            hash.Add(RuntimeHelpers.GetHashCode(this.path));
-            hash.Add((int)this.intersectionRule);
-            hash.Add((int)this.kind);
-            hash.Add(this.brush is null ? 0 : RuntimeHelpers.GetHashCode(this.brush));
-            hash.Add(this.pen is null ? 0 : RuntimeHelpers.GetHashCode(this.pen));
-            return hash.ToHashCode();
         }
     }
 
@@ -688,8 +596,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         public RectangleF Bounds { get; init; }
 
-        public Brush? BrushReference { get; init; }
-
         public Pen? PenReference { get; init; }
 
         public static bool operator ==(CacheKey left, CacheKey right) => left.Equals(right);
@@ -699,7 +605,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
         public static CacheKey FromParameters(
             in GlyphRendererParameters parameters,
             RectangleF bounds,
-            Brush? brushReference,
             Pen? penReference)
             => new()
             {
@@ -717,7 +622,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 TextAttributes = parameters.TextRun.TextAttributes,
                 TextDecorations = parameters.TextRun.TextDecorations,
                 Bounds = bounds,
-                BrushReference = brushReference,
                 PenReference = penReference
             };
 
@@ -738,7 +642,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             this.TextAttributes == other.TextAttributes &&
             this.TextDecorations == other.TextDecorations &&
             this.Bounds.Equals(other.Bounds) &&
-            ReferenceEquals(this.BrushReference, other.BrushReference) &&
             ReferenceEquals(this.PenReference, other.PenReference);
 
         public override int GetHashCode()
@@ -757,7 +660,6 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
             hash.Add(this.TextAttributes);
             hash.Add(this.TextDecorations);
             hash.Add(this.Bounds);
-            hash.Add(this.BrushReference is null ? 0 : RuntimeHelpers.GetHashCode(this.BrushReference));
             hash.Add(this.PenReference is null ? 0 : RuntimeHelpers.GetHashCode(this.PenReference));
             return hash.ToHashCode();
         }

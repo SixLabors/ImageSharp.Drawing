@@ -1,9 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
@@ -112,7 +110,13 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             RasterizerSamplingOrigin.PixelBoundary);
 
         RectangularPolygon regionPath = new(region.X, region.Y, region.Width, region.Height);
-        this.batcher.AddComposition(CompositionCommand.Create(regionPath, brush, graphicsOptions, rasterizerOptions));
+        this.batcher.AddComposition(
+            CompositionCommand.Create(
+                regionPath,
+                brush,
+                graphicsOptions,
+                rasterizerOptions,
+                this.targetFrame.Bounds.Location));
     }
 
     /// <summary>
@@ -238,12 +242,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
         foreach (DrawingOperation operation in operations.OrderBy(x => x.RenderPass))
         {
-            if (!TryCreateCompositionCommand(operation, drawingOptions, out CompositionCommand composition))
-            {
-                continue;
-            }
-
-            this.batcher.AddComposition(composition);
+            this.batcher.AddComposition(this.CreateCompositionCommand(operation, drawingOptions));
         }
     }
 
@@ -287,42 +286,29 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         return options;
     }
 
-    private static bool TryCreateCompositionCommand(
+    private CompositionCommand CreateCompositionCommand(
         DrawingOperation operation,
-        DrawingOptions drawingOptions,
-        out CompositionCommand composition)
+        DrawingOptions drawingOptions)
     {
-        Brush? compositeBrush = operation.Kind == DrawingOperationKind.Fill
-            ? operation.Brush
-            : operation.Pen?.StrokeFill;
-        if (compositeBrush is null)
-        {
-            composition = default;
-            return false;
-        }
+        Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
+            ? operation.Brush!
+            : operation.Pen!.StrokeFill;
 
         GraphicsOptions graphicsOptions =
             drawingOptions.GraphicsOptions.CloneOrReturnForRules(
                 operation.PixelAlphaCompositionMode,
                 operation.PixelColorBlendingMode);
 
-        IPath translatedPath = operation.Path.Translate(operation.RenderLocation);
         IPath compositionPath;
         RasterizerSamplingOrigin samplingOrigin;
         if (operation.Kind == DrawingOperationKind.Draw)
         {
-            if (operation.Pen is null)
-            {
-                composition = default;
-                return false;
-            }
-
-            compositionPath = operation.Pen.GeneratePath(translatedPath);
+            compositionPath = operation.Pen!.GeneratePath(operation.Path);
             samplingOrigin = RasterizerSamplingOrigin.PixelCenter;
         }
         else
         {
-            compositionPath = translatedPath;
+            compositionPath = operation.Path;
             samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
         }
 
@@ -337,46 +323,26 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             (int)MathF.Floor(bounds.Top),
             (int)MathF.Ceiling(bounds.Right),
             (int)MathF.Ceiling(bounds.Bottom));
-        if (interest.Width <= 0 || interest.Height <= 0)
-        {
-            composition = default;
-            return false;
-        }
 
         RasterizationMode rasterizationMode = graphicsOptions.Antialias
             ? RasterizationMode.Antialiased
             : RasterizationMode.Aliased;
+
         RasterizerOptions rasterizerOptions = new(
             interest,
             operation.IntersectionRule,
             rasterizationMode,
             samplingOrigin);
 
-        int definitionKey = operation.DefinitionKey > 0
-            ? operation.DefinitionKey
-            : CreateFallbackDefinitionKey(operation, compositeBrush);
+        Point destinationOffset = new(
+            this.targetFrame.Bounds.X + operation.RenderLocation.X,
+            this.targetFrame.Bounds.Y + operation.RenderLocation.Y);
 
-        composition = CompositionCommand.Create(
-            definitionKey,
+        return CompositionCommand.Create(
             compositionPath,
             compositeBrush,
             graphicsOptions,
-            rasterizerOptions);
-        return true;
-    }
-
-    private static int CreateFallbackDefinitionKey(DrawingOperation operation, Brush compositeBrush)
-    {
-        HashCode hash = default;
-        hash.Add(RuntimeHelpers.GetHashCode(operation.Path));
-        hash.Add((int)operation.Kind);
-        hash.Add((int)operation.IntersectionRule);
-        hash.Add(RuntimeHelpers.GetHashCode(compositeBrush));
-        if (operation.Pen is not null)
-        {
-            hash.Add(RuntimeHelpers.GetHashCode(operation.Pen));
-        }
-
-        return hash.ToHashCode();
+            rasterizerOptions,
+            destinationOffset);
     }
 }

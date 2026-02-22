@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Collections.Concurrent;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 
@@ -11,6 +12,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal sealed class DefaultDrawingBackend : IDrawingBackend
 {
+    private readonly ConcurrentDictionary<int, Buffer2D<float>> coverageCache = new();
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DefaultDrawingBackend"/> class.
     /// </summary>
@@ -52,55 +55,99 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         in RasterizerOptions rasterizerOptions,
         DrawingCanvasBatcher<TPixel> batcher)
         where TPixel : unmanaged, IPixel<TPixel>
-        => batcher.AddComposition(CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions));
+        => batcher.AddComposition(
+            CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions, target.Bounds.Location));
 
     /// <inheritdoc />
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        IReadOnlyList<CompositionCommand> compositions)
+        CompositionBatch compositionBatch)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        _ = target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame);
-
-        CompositionCommand coverageDefinition = compositions[0];
-        using Buffer2D<float> coverageMap = this.CreateCoverageMap(coverageDefinition, configuration.MemoryAllocator);
-        Buffer2DRegion<TPixel> destinationRegion = destinationFrame.GetSubRegion(coverageDefinition.RasterizerOptions.Interest);
-
-        for (int row = 0; row < coverageMap.Height; row++)
+        if (compositionBatch.Commands.Count == 0)
         {
-            Span<float> rowCoverage = coverageMap.DangerousGetRowSpan(row);
-            int y = destinationRegion.Rectangle.Y + row;
+            return;
+        }
 
-            for (int i = 0; i < compositions.Count; i++)
+        _ = target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame);
+        CompositionCoverageDefinition definition = compositionBatch.Definition;
+        Buffer2D<float> coverageMap = this.GetOrCreateCoverageMap(definition, configuration.MemoryAllocator);
+
+        Rectangle destinationBounds = destinationFrame.Rectangle;
+        IReadOnlyList<PreparedCompositionCommand> commands = compositionBatch.Commands;
+        int commandCount = commands.Count;
+        BrushApplicator<TPixel>[] applicators = new BrushApplicator<TPixel>[commandCount];
+        try
+        {
+            int maxHeight = 0;
+            for (int i = 0; i < commandCount; i++)
             {
-                CompositionCommand command = compositions[i];
-
-                // TODO: This should be optimized to avoid creating multiple applicators
-                // for the same brush/graphics options.
-                // We should create them first outside of the loop then dispose after.
-                using BrushApplicator<TPixel> applicator = command.Brush.CreateApplicator(
+                PreparedCompositionCommand command = commands[i];
+                Buffer2DRegion<TPixel> commandRegion = destinationFrame.GetSubRegion(command.DestinationRegion);
+                applicators[i] = command.Brush.CreateApplicator(
                     configuration,
                     command.GraphicsOptions,
-                    destinationRegion,
+                    commandRegion,
                     command.BrushBounds);
 
-                applicator.Apply(rowCoverage, destinationRegion.Rectangle.X, y);
+                if (command.DestinationRegion.Height > maxHeight)
+                {
+                    maxHeight = command.DestinationRegion.Height;
+                }
+            }
+
+            for (int row = 0; row < maxHeight; row++)
+            {
+                for (int i = 0; i < commandCount; i++)
+                {
+                    PreparedCompositionCommand command = commands[i];
+                    if (row >= command.DestinationRegion.Height)
+                    {
+                        continue;
+                    }
+
+                    int destinationX = destinationBounds.X + command.DestinationRegion.X;
+                    int destinationY = destinationBounds.Y + command.DestinationRegion.Y;
+                    int sourceStartX = command.SourceOffset.X;
+                    int sourceStartY = command.SourceOffset.Y;
+
+                    Span<float> rowCoverage = coverageMap.DangerousGetRowSpan(sourceStartY + row);
+                    Span<float> rowSlice = rowCoverage.Slice(sourceStartX, command.DestinationRegion.Width);
+                    applicators[i].Apply(rowSlice, destinationX, destinationY + row);
+                }
+            }
+        }
+        finally
+        {
+            for (int i = 0; i < applicators.Length; i++)
+            {
+                applicators[i]?.Dispose();
             }
         }
     }
 
-    private Buffer2D<float> CreateCoverageMap(
-        CompositionCommand command,
+    private Buffer2D<float> GetOrCreateCoverageMap(
+        in CompositionCoverageDefinition definition,
         MemoryAllocator allocator)
     {
-        Size size = command.RasterizerOptions.Interest.Size;
+        CompositionCoverageDefinition localDefinition = definition;
+        return this.coverageCache.GetOrAdd(
+            localDefinition.DefinitionKey,
+            _ => this.CreateCoverageMap(localDefinition, allocator));
+    }
+
+    private Buffer2D<float> CreateCoverageMap(
+        in CompositionCoverageDefinition definition,
+        MemoryAllocator allocator)
+    {
+        Size size = definition.RasterizerOptions.Interest.Size;
         Buffer2D<float> coverage = allocator.Allocate2D<float>(size, AllocationOptions.Clean);
 
-        (Buffer2D<float> Buffer, int DestinationTop) state = (coverage, command.RasterizerOptions.Interest.Top);
+        (Buffer2D<float> Buffer, int DestinationTop) state = (coverage, definition.RasterizerOptions.Interest.Top);
         this.PrimaryRasterizer.Rasterize(
-            command.Path,
-            command.RasterizerOptions,
+            definition.Path,
+            definition.RasterizerOptions,
             allocator,
             ref state,
             static (int y, Span<float> scanline, ref (Buffer2D<float> Buffer, int DestinationTop) callbackState) =>
@@ -110,5 +157,15 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
             });
 
         return coverage;
+    }
+
+    public void Dispose()
+    {
+        foreach (Buffer2D<float> entry in this.coverageCache.Values)
+        {
+            entry.Dispose();
+        }
+
+        this.coverageCache.Clear();
     }
 }

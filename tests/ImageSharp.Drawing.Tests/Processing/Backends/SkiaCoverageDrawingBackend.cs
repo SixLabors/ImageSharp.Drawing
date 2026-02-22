@@ -35,33 +35,52 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
         in RasterizerOptions rasterizerOptions,
         DrawingCanvasBatcher<TPixel> batcher)
         where TPixel : unmanaged, IPixel<TPixel>
-        => batcher.AddComposition(CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions));
+        => batcher.AddComposition(
+            CompositionCommand.Create(
+                path,
+                brush,
+                graphicsOptions,
+                rasterizerOptions,
+                target.Bounds.Location));
 
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        IReadOnlyList<CompositionCommand> compositions)
+        CompositionBatch compositionBatch)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        for (int i = 0; i < compositions.Count; i++)
+        if (compositionBatch.Commands.Count == 0)
         {
-            CompositionCommand composition = compositions[i];
-            DrawingCoverageHandle coverage = this.PrepareCoverage(
-                composition.Path,
-                composition.RasterizerOptions,
-                configuration.MemoryAllocator,
-                CoveragePreparationMode.Default);
+            return;
+        }
 
-            this.CompositeCoverage(
-                configuration,
-                target,
-                coverage,
-                Point.Empty,
-                composition.Brush,
-                composition.GraphicsOptions,
-                composition.BrushBounds);
+        CompositionCoverageDefinition definition = compositionBatch.Definition;
+        DrawingCoverageHandle coverageHandle = this.PrepareCoverage(
+            definition.Path,
+            definition.RasterizerOptions,
+            configuration.MemoryAllocator,
+            CoveragePreparationMode.Default);
+        try
+        {
+            IReadOnlyList<PreparedCompositionCommand> commands = compositionBatch.Commands;
+            for (int i = 0; i < commands.Count; i++)
+            {
+                PreparedCompositionCommand composition = commands[i];
+                ICanvasFrame<TPixel> commandTarget = new CanvasRegionFrame<TPixel>(target, composition.DestinationRegion);
 
-            this.ReleaseCoverage(coverage);
+                this.CompositeCoverage(
+                    configuration,
+                    commandTarget,
+                    coverageHandle,
+                    composition.SourceOffset,
+                    composition.Brush,
+                    composition.GraphicsOptions,
+                    composition.BrushBounds);
+            }
+        }
+        finally
+        {
+            this.ReleaseCoverage(coverageHandle);
         }
     }
 

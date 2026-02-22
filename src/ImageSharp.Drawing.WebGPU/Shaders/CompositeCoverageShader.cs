@@ -8,7 +8,7 @@ internal static class CompositeCoverageShader
     private static readonly byte[] CodeBytes =
     [
         .. """
-        struct CompositeParams {
+        struct CompositeInstanceData {
             source_offset_x: u32,
             source_offset_y: u32,
             destination_x: u32,
@@ -34,15 +34,19 @@ internal static class CompositeCoverageShader
         var coverage: texture_2d<f32>;
 
         @group(0) @binding(1)
-        var<uniform> params: CompositeParams;
+        var<storage, read> instances: array<CompositeInstanceData>;
 
         struct VertexOutput {
             @builtin(position) position: vec4<f32>,
             @location(0) local: vec2<f32>,
+            @location(1) @interpolate(flat) instance_index: u32,
         };
 
         @vertex
-        fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+        fn vs_main(
+            @builtin(vertex_index) vertex_index: u32,
+            @builtin(instance_index) instance_index: u32) -> VertexOutput {
+            let params = instances[instance_index];
             var vertices = array<vec2<f32>, 6>(
                 vec2<f32>(0.0, 0.0),
                 vec2<f32>(f32(params.destination_width), 0.0),
@@ -59,10 +63,11 @@ internal static class CompositeCoverageShader
             var output: VertexOutput;
             output.position = vec4<f32>(ndc_x, ndc_y, 0.0, 1.0);
             output.local = local;
+            output.instance_index = instance_index;
             return output;
         }
 
-        fn sample_brush(_local: vec2<f32>) -> vec4<f32> {
+        fn sample_brush(params: CompositeInstanceData, _local: vec2<f32>) -> vec4<f32> {
             switch params.brush_kind {
                 case 0u: {
                     return params.solid_brush_color;
@@ -75,6 +80,7 @@ internal static class CompositeCoverageShader
 
         @fragment
         fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+            let params = instances[input.instance_index];
             let local_x = u32(floor(input.local.x));
             let local_y = u32(floor(input.local.y));
             let source = vec2<i32>(
@@ -86,7 +92,7 @@ internal static class CompositeCoverageShader
                 discard;
             }
 
-            let brush = sample_brush(input.local);
+            let brush = sample_brush(params, input.local);
             if (brush.a <= 0.0) {
                 discard;
             }
