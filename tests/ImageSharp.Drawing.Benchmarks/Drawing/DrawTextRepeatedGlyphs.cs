@@ -66,17 +66,19 @@ public class DrawTextRepeatedGlyphs
         this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
         this.webGpuCpuImage = new Image<Rgba32>(this.webGpuConfiguration, Width, Height);
 
-        if (!this.webGpuBackend.TryCreateNativeSurfaceTarget<Rgba32>(
+        if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
+                this.webGpuBackend,
                 Width,
                 Height,
                 isSrgb: false,
                 isPremultipliedAlpha: false,
                 out NativeSurface nativeSurface,
                 out this.webGpuNativeTextureHandle,
-                out this.webGpuNativeTextureViewHandle))
+                out this.webGpuNativeTextureViewHandle,
+                out string nativeSurfaceError))
         {
             throw new InvalidOperationException(
-                $"Unable to create benchmark native WebGPU target. GPUReady={this.webGpuBackend.IsGPUReady}, Error='{this.webGpuBackend.LastGPUInitializationFailure ?? "<none>"}'.");
+                $"Unable to create benchmark native WebGPU target. GPUReady={this.webGpuBackend.TestingIsGPUReady}, Error='{(nativeSurfaceError.Length > 0 ? nativeSurfaceError : this.webGpuBackend.TestingLastGPUInitializationFailure ?? "<none>")}'.");
         }
 
         this.webGpuNativeFrame = new NativeSurfaceOnlyFrame<Rgba32>(
@@ -109,7 +111,9 @@ public class DrawTextRepeatedGlyphs
     {
         this.defaultImage.Dispose();
         this.webGpuCpuImage.Dispose();
-        this.webGpuBackend.ReleaseNativeSurfaceTarget(this.webGpuNativeTextureHandle, this.webGpuNativeTextureViewHandle);
+        WebGPUTestNativeSurfaceAllocator.Release(
+            this.webGpuNativeTextureHandle,
+            this.webGpuNativeTextureViewHandle);
         this.webGpuNativeTextureHandle = 0;
         this.webGpuNativeTextureViewHandle = 0;
         this.webGpuBackend.Dispose();

@@ -131,10 +131,22 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         in CompositionCoverageDefinition definition,
         MemoryAllocator allocator)
     {
-        CompositionCoverageDefinition localDefinition = definition;
-        return this.coverageCache.GetOrAdd(
-            localDefinition.DefinitionKey,
-            _ => this.CreateCoverageMap(localDefinition, allocator));
+        // Hot path: coverage for this definition is already cached.
+        if (this.coverageCache.TryGetValue(definition.DefinitionKey, out Buffer2D<float>? cached))
+        {
+            return cached;
+        }
+
+        // Miss path: create coverage once for this definition.
+        Buffer2D<float> created = this.CreateCoverageMap(definition, allocator);
+        if (this.coverageCache.TryAdd(definition.DefinitionKey, created))
+        {
+            return created;
+        }
+
+        // Another thread won the insert race; dispose loser map and use the winner.
+        created.Dispose();
+        return this.coverageCache[definition.DefinitionKey];
     }
 
     private Buffer2D<float> CreateCoverageMap(

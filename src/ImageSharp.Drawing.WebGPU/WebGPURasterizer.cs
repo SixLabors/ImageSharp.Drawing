@@ -18,8 +18,6 @@ internal sealed unsafe class WebGPURasterizer
     private const uint CoverageSampleCount = 4;
 
     private readonly WebGPU webGPU;
-    private readonly Device* device;
-    private readonly Queue* queue;
 
     private PipelineLayout* coveragePipelineLayout;
     private RenderPipeline* coverageStencilEvenOddPipeline;
@@ -35,12 +33,7 @@ internal sealed unsafe class WebGPURasterizer
     private WgpuBuffer* coverageScratchVertexBuffer;
     private ulong coverageScratchVertexCapacityBytes;
 
-    public WebGPURasterizer(WebGPU webGPU, Device* device, Queue* queue)
-    {
-        this.webGPU = webGPU;
-        this.device = device;
-        this.queue = queue;
-    }
+    public WebGPURasterizer(WebGPU webGPU) => this.webGPU = webGPU;
 
     private static ReadOnlySpan<byte> CoverageStencilVertexEntryPoint => "vs_edge\0"u8;
 
@@ -57,19 +50,21 @@ internal sealed unsafe class WebGPURasterizer
         this.coverageStencilNonZeroDecrementPipeline is not null &&
         this.coverageCoverPipeline is not null;
 
-    public bool Initialize()
+    public bool Initialize(Device* device)
     {
         if (this.IsInitialized)
         {
             return true;
         }
 
-        return this.TryCreateCoveragePipelineLocked();
+        return this.TryCreateCoveragePipelineLocked(device);
     }
 
     public bool TryCreateCoverageTexture(
         IPath path,
         in RasterizerOptions rasterizerOptions,
+        Device* device,
+        Queue* queue,
         out Texture* coverageTexture,
         out TextureView* coverageView)
     {
@@ -91,7 +86,13 @@ internal sealed unsafe class WebGPURasterizer
             return false;
         }
 
-        return this.TryRasterizeCoverageTextureLocked(in coverageTriangleData, in rasterizerOptions, out coverageTexture, out coverageView);
+        return this.TryRasterizeCoverageTextureLocked(
+            in coverageTriangleData,
+            in rasterizerOptions,
+            device,
+            queue,
+            out coverageTexture,
+            out coverageView);
     }
 
     public void Release()
@@ -132,7 +133,7 @@ internal sealed unsafe class WebGPURasterizer
     /// <summary>
     /// Creates the render pipeline used for coverage rasterization.
     /// </summary>
-    private bool TryCreateCoveragePipelineLocked()
+    private bool TryCreateCoveragePipelineLocked(Device* device)
     {
         PipelineLayoutDescriptor pipelineLayoutDescriptor = new()
         {
@@ -140,7 +141,7 @@ internal sealed unsafe class WebGPURasterizer
             BindGroupLayouts = null
         };
 
-        this.coveragePipelineLayout = this.webGPU.DeviceCreatePipelineLayout(this.device, in pipelineLayoutDescriptor);
+        this.coveragePipelineLayout = this.webGPU.DeviceCreatePipelineLayout(device, in pipelineLayoutDescriptor);
         if (this.coveragePipelineLayout is null)
         {
             return false;
@@ -166,7 +167,7 @@ internal sealed unsafe class WebGPURasterizer
                     NextInChain = (ChainedStruct*)&wgslDescriptor
                 };
 
-                shaderModule = this.webGPU.DeviceCreateShaderModule(this.device, in shaderDescriptor);
+                shaderModule = this.webGPU.DeviceCreateShaderModule(device, in shaderDescriptor);
             }
 
             if (shaderModule is null)
@@ -270,7 +271,7 @@ internal sealed unsafe class WebGPURasterizer
                         Fragment = &stencilFragmentState
                     };
 
-                    this.coverageStencilEvenOddPipeline = this.webGPU.DeviceCreateRenderPipeline(this.device, in evenOddPipelineDescriptor);
+                    this.coverageStencilEvenOddPipeline = this.webGPU.DeviceCreateRenderPipeline(device, in evenOddPipelineDescriptor);
                     if (this.coverageStencilEvenOddPipeline is null)
                     {
                         return false;
@@ -308,7 +309,7 @@ internal sealed unsafe class WebGPURasterizer
                         Fragment = &stencilFragmentState
                     };
 
-                    this.coverageStencilNonZeroIncrementPipeline = this.webGPU.DeviceCreateRenderPipeline(this.device, in incrementPipelineDescriptor);
+                    this.coverageStencilNonZeroIncrementPipeline = this.webGPU.DeviceCreateRenderPipeline(device, in incrementPipelineDescriptor);
                     if (this.coverageStencilNonZeroIncrementPipeline is null)
                     {
                         return false;
@@ -346,7 +347,7 @@ internal sealed unsafe class WebGPURasterizer
                         Fragment = &stencilFragmentState
                     };
 
-                    this.coverageStencilNonZeroDecrementPipeline = this.webGPU.DeviceCreateRenderPipeline(this.device, in decrementPipelineDescriptor);
+                    this.coverageStencilNonZeroDecrementPipeline = this.webGPU.DeviceCreateRenderPipeline(device, in decrementPipelineDescriptor);
                     if (this.coverageStencilNonZeroDecrementPipeline is null)
                     {
                         return false;
@@ -425,7 +426,7 @@ internal sealed unsafe class WebGPURasterizer
                         Fragment = &coverFragmentState
                     };
 
-                    this.coverageCoverPipeline = this.webGPU.DeviceCreateRenderPipeline(this.device, in coverPipelineDescriptor);
+                    this.coverageCoverPipeline = this.webGPU.DeviceCreateRenderPipeline(device, in coverPipelineDescriptor);
                 }
             }
 
@@ -441,6 +442,7 @@ internal sealed unsafe class WebGPURasterizer
     }
 
     private bool TryEnsureCoverageScratchTargetsLocked(
+        Device* device,
         int width,
         int height,
         out TextureView* multisampleCoverageView,
@@ -481,7 +483,7 @@ internal sealed unsafe class WebGPURasterizer
         };
 
         Texture* createdMultisampleCoverageTexture =
-            this.webGPU.DeviceCreateTexture(this.device, in multisampleCoverageTextureDescriptor);
+            this.webGPU.DeviceCreateTexture(device, in multisampleCoverageTextureDescriptor);
         if (createdMultisampleCoverageTexture is null)
         {
             return false;
@@ -515,7 +517,7 @@ internal sealed unsafe class WebGPURasterizer
             SampleCount = CoverageSampleCount
         };
 
-        Texture* createdStencilTexture = this.webGPU.DeviceCreateTexture(this.device, in stencilTextureDescriptor);
+        Texture* createdStencilTexture = this.webGPU.DeviceCreateTexture(device, in stencilTextureDescriptor);
         if (createdStencilTexture is null)
         {
             this.ReleaseTextureViewLocked(createdMultisampleCoverageView);
@@ -555,7 +557,7 @@ internal sealed unsafe class WebGPURasterizer
         return true;
     }
 
-    private bool TryEnsureCoverageScratchVertexBufferLocked(ulong requiredByteCount)
+    private bool TryEnsureCoverageScratchVertexBufferLocked(Device* device, ulong requiredByteCount)
     {
         if (this.coverageScratchVertexBuffer is not null &&
             this.coverageScratchVertexCapacityBytes >= requiredByteCount)
@@ -573,7 +575,7 @@ internal sealed unsafe class WebGPURasterizer
             Size = requiredByteCount
         };
 
-        WgpuBuffer* createdVertexBuffer = this.webGPU.DeviceCreateBuffer(this.device, in vertexBufferDescriptor);
+        WgpuBuffer* createdVertexBuffer = this.webGPU.DeviceCreateBuffer(device, in vertexBufferDescriptor);
         if (createdVertexBuffer is null)
         {
             return false;
@@ -590,6 +592,8 @@ internal sealed unsafe class WebGPURasterizer
     private bool TryRasterizeCoverageTextureLocked(
         in CoverageTriangleData coverageTriangleData,
         in RasterizerOptions rasterizerOptions,
+        Device* device,
+        Queue* queue,
         out Texture* coverageTexture,
         out TextureView* coverageView)
     {
@@ -605,6 +609,7 @@ internal sealed unsafe class WebGPURasterizer
         try
         {
             if (!this.TryEnsureCoverageScratchTargetsLocked(
+                    device,
                     rasterizerOptions.Interest.Width,
                     rasterizerOptions.Interest.Height,
                     out TextureView* multisampleCoverageView,
@@ -623,7 +628,7 @@ internal sealed unsafe class WebGPURasterizer
                 SampleCount = 1
             };
 
-            createdCoverageTexture = this.webGPU.DeviceCreateTexture(this.device, in coverageTextureDescriptor);
+            createdCoverageTexture = this.webGPU.DeviceCreateTexture(device, in coverageTextureDescriptor);
             if (createdCoverageTexture is null)
             {
                 return false;
@@ -647,18 +652,18 @@ internal sealed unsafe class WebGPURasterizer
             }
 
             ulong vertexByteCount = checked(coverageTriangleData.TotalVertexCount * (ulong)Unsafe.SizeOf<StencilVertex>());
-            if (!this.TryEnsureCoverageScratchVertexBufferLocked(vertexByteCount) || this.coverageScratchVertexBuffer is null)
+            if (!this.TryEnsureCoverageScratchVertexBufferLocked(device, vertexByteCount) || this.coverageScratchVertexBuffer is null)
             {
                 return false;
             }
 
             fixed (StencilVertex* verticesPtr = coverageTriangleData.Vertices)
             {
-                this.webGPU.QueueWriteBuffer(this.queue, this.coverageScratchVertexBuffer, 0, verticesPtr, (nuint)vertexByteCount);
+                this.webGPU.QueueWriteBuffer(queue, this.coverageScratchVertexBuffer, 0, verticesPtr, (nuint)vertexByteCount);
             }
 
             CommandEncoderDescriptor commandEncoderDescriptor = default;
-            commandEncoder = this.webGPU.DeviceCreateCommandEncoder(this.device, in commandEncoderDescriptor);
+            commandEncoder = this.webGPU.DeviceCreateCommandEncoder(device, in commandEncoderDescriptor);
             if (commandEncoder is null)
             {
                 return false;
@@ -741,7 +746,7 @@ internal sealed unsafe class WebGPURasterizer
                 return false;
             }
 
-            this.webGPU.QueueSubmit(this.queue, 1, ref commandBuffer);
+            this.webGPU.QueueSubmit(queue, 1, ref commandBuffer);
 
             this.webGPU.CommandBufferRelease(commandBuffer);
             commandBuffer = null;

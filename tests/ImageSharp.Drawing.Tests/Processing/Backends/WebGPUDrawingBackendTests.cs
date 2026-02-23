@@ -2,10 +2,8 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.Fonts;
-using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -35,14 +33,14 @@ public class WebGPUDrawingBackendTests
         webGpuImage.Configuration.SetDrawingBackend(backend);
         webGpuImage.Mutate(ctx => ctx.Fill(drawingOptions, brush, polygon));
 
-        Assert.True(backend.PrepareCoverageCallCount > 0);
-        Assert.Equal(backend.PrepareCoverageCallCount, backend.ReleaseCoverageCallCount);
-        Assert.Equal(0, backend.LiveCoverageCount);
+        Assert.True(backend.TestingPrepareCoverageCallCount > 0);
+        Assert.Equal(backend.TestingPrepareCoverageCallCount, backend.TestingReleaseCoverageCallCount);
+        Assert.Equal(0, backend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(backend);
-        if (backend.IsGPUReady)
+        if (backend.TestingIsGPUReady)
         {
-            Assert.True(backend.GPUPrepareCoverageCallCount > 0);
-            Assert.True(backend.GPUCompositeCoverageCallCount + backend.FallbackCompositeCoverageCallCount > 0);
+            Assert.True(backend.TestingGPUPrepareCoverageCallCount > 0);
+            Assert.True(backend.TestingGPUCompositeCoverageCallCount + backend.TestingFallbackCompositeCoverageCallCount > 0);
         }
 
         ImageComparer comparer = ImageComparer.TolerantPercentage(0.5F);
@@ -96,9 +94,9 @@ public class WebGPUDrawingBackendTests
         webGpuImage.Configuration.SetDrawingBackend(backend);
         webGpuImage.Mutate(ctx => ctx.Fill(drawingOptions, brush, path));
 
-        Assert.True(backend.PrepareCoverageCallCount > 0);
-        Assert.Equal(backend.PrepareCoverageCallCount, backend.ReleaseCoverageCallCount);
-        Assert.Equal(0, backend.LiveCoverageCount);
+        Assert.True(backend.TestingPrepareCoverageCallCount > 0);
+        Assert.Equal(backend.TestingPrepareCoverageCallCount, backend.TestingReleaseCoverageCallCount);
+        Assert.Equal(0, backend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(backend);
         AssertGpuPathWhenRequired(backend);
 
@@ -148,10 +146,10 @@ public class WebGPUDrawingBackendTests
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
-        Assert.True(backend.PrepareCoverageCallCount > 0);
-        Assert.True(backend.CompositeCoverageCallCount >= backend.PrepareCoverageCallCount);
-        Assert.Equal(backend.PrepareCoverageCallCount, backend.ReleaseCoverageCallCount);
-        Assert.Equal(0, backend.LiveCoverageCount);
+        Assert.True(backend.TestingPrepareCoverageCallCount > 0);
+        Assert.True(backend.TestingCompositeCoverageCallCount >= backend.TestingPrepareCoverageCallCount);
+        Assert.Equal(backend.TestingPrepareCoverageCallCount, backend.TestingReleaseCoverageCallCount);
+        Assert.Equal(0, backend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(backend);
         AssertGpuPathWhenRequired(backend);
 
@@ -190,10 +188,10 @@ public class WebGPUDrawingBackendTests
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
-        Assert.InRange(backend.PrepareCoverageCallCount, 1, 20);
-        Assert.True(backend.CompositeCoverageCallCount >= backend.PrepareCoverageCallCount);
-        Assert.Equal(backend.PrepareCoverageCallCount, backend.ReleaseCoverageCallCount);
-        Assert.Equal(0, backend.LiveCoverageCount);
+        Assert.InRange(backend.TestingPrepareCoverageCallCount, 1, 20);
+        Assert.True(backend.TestingCompositeCoverageCallCount >= backend.TestingPrepareCoverageCallCount);
+        Assert.Equal(backend.TestingPrepareCoverageCallCount, backend.TestingReleaseCoverageCallCount);
+        Assert.Equal(0, backend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(backend);
         AssertGpuPathWhenRequired(backend);
     }
@@ -201,11 +199,11 @@ public class WebGPUDrawingBackendTests
     private static void AssertCoverageExecutionAccounting(WebGPUDrawingBackend backend)
     {
         Assert.Equal(
-            backend.PrepareCoverageCallCount,
-            backend.GPUPrepareCoverageCallCount + backend.FallbackPrepareCoverageCallCount);
+            backend.TestingPrepareCoverageCallCount,
+            backend.TestingGPUPrepareCoverageCallCount + backend.TestingFallbackPrepareCoverageCallCount);
         Assert.Equal(
-            backend.CompositeCoverageCallCount,
-            backend.GPUCompositeCoverageCallCount + backend.FallbackCompositeCoverageCallCount);
+            backend.TestingCompositeCoverageCallCount,
+            backend.TestingGPUCompositeCoverageCallCount + backend.TestingFallbackCompositeCoverageCallCount);
     }
 
     private static void AssertGpuPathWhenRequired(WebGPUDrawingBackend backend)
@@ -221,19 +219,19 @@ public class WebGPUDrawingBackendTests
         }
 
         Assert.True(
-            backend.IsGPUReady,
-            $"WebGPU initialization did not succeed. Reason='{backend.LastGPUInitializationFailure}'. Prepare(total/gpu/fallback)={backend.PrepareCoverageCallCount}/{backend.GPUPrepareCoverageCallCount}/{backend.FallbackPrepareCoverageCallCount}, Composite(total/gpu/fallback)={backend.CompositeCoverageCallCount}/{backend.GPUCompositeCoverageCallCount}/{backend.FallbackCompositeCoverageCallCount}");
+            backend.TestingIsGPUReady,
+            $"WebGPU initialization did not succeed. Reason='{backend.TestingLastGPUInitializationFailure}'. Prepare(total/gpu/fallback)={backend.TestingPrepareCoverageCallCount}/{backend.TestingGPUPrepareCoverageCallCount}/{backend.TestingFallbackPrepareCoverageCallCount}, Composite(total/gpu/fallback)={backend.TestingCompositeCoverageCallCount}/{backend.TestingGPUCompositeCoverageCallCount}/{backend.TestingFallbackCompositeCoverageCallCount}");
         Assert.True(
-            backend.GPUPrepareCoverageCallCount > 0,
-            $"No GPU coverage preparation calls were observed. Prepare(total/gpu/fallback)={backend.PrepareCoverageCallCount}/{backend.GPUPrepareCoverageCallCount}/{backend.FallbackPrepareCoverageCallCount}");
+            backend.TestingGPUPrepareCoverageCallCount > 0,
+            $"No GPU coverage preparation calls were observed. Prepare(total/gpu/fallback)={backend.TestingPrepareCoverageCallCount}/{backend.TestingGPUPrepareCoverageCallCount}/{backend.TestingFallbackPrepareCoverageCallCount}");
         Assert.True(
-            backend.GPUCompositeCoverageCallCount > 0,
-            $"No GPU composite calls were observed. Composite(total/gpu/fallback)={backend.CompositeCoverageCallCount}/{backend.GPUCompositeCoverageCallCount}/{backend.FallbackCompositeCoverageCallCount}");
+            backend.TestingGPUCompositeCoverageCallCount > 0,
+            $"No GPU composite calls were observed. Composite(total/gpu/fallback)={backend.TestingCompositeCoverageCallCount}/{backend.TestingGPUCompositeCoverageCallCount}/{backend.TestingFallbackCompositeCoverageCallCount}");
         Assert.Equal(
             0,
-            backend.FallbackPrepareCoverageCallCount);
+            backend.TestingFallbackPrepareCoverageCallCount);
         Assert.Equal(
             0,
-            backend.FallbackCompositeCoverageCallCount);
+            backend.TestingFallbackCompositeCoverageCallCount);
     }
 }

@@ -81,10 +81,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
     public List<DrawingOperation> DrawingOperations { get; }
 
     /// <inheritdoc/>
-    protected override void BeginText(in FontRectangle bounds)
-    {
-        this.DrawingOperations.Clear();
-    }
+    protected override void BeginText(in FontRectangle bounds) => this.DrawingOperations.Clear();
 
     /// <inheritdoc/>
     protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
@@ -126,6 +123,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 parameters,
                 new RectangleF(subPixelLocation, subPixelSize),
                 this.currentPen ?? this.defaultPen);
+
             if (this.glyphCache.ContainsKey(this.currentCacheKey))
             {
                 // We have already drawn the glyph vectors.

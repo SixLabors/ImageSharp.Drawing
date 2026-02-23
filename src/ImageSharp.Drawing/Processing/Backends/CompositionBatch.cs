@@ -9,11 +9,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed class CompositionBatch
 {
     public CompositionBatch(
-        CompositionCoverageDefinition definition,
-        IReadOnlyList<PreparedCompositionCommand> commands)
+        in CompositionCoverageDefinition definition,
+        IReadOnlyList<PreparedCompositionCommand> commands,
+        int flushId = 0,
+        bool isFinalBatchInFlush = true)
     {
         this.Definition = definition;
         this.Commands = commands;
+        this.FlushId = flushId;
+        this.IsFinalBatchInFlush = isFinalBatchInFlush;
     }
 
     /// <summary>
@@ -25,4 +29,14 @@ internal sealed class CompositionBatch
     /// Gets normalized composition commands in original draw order.
     /// </summary>
     public IReadOnlyList<PreparedCompositionCommand> Commands { get; }
+
+    /// <summary>
+    /// Gets the batcher flush identifier shared by all batches emitted from one canvas flush call.
+    /// </summary>
+    public int FlushId { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether this is the last batch emitted for the current flush identifier.
+    /// </summary>
+    public bool IsFinalBatchInFlush { get; }
 }

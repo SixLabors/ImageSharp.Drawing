@@ -31,6 +31,7 @@
     <PackageReference Include="runtime.osx.10.10-x64.CoreCompat.System.Drawing" Condition="'$(IsOSX)'=='true'" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="GeoJSON.Net" />
+    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Condition="'$(IsLinux)'=='true'" />
   </ItemGroup>
@@ -56,4 +57,3 @@
   </ItemGroup>
 
 </Project>
-

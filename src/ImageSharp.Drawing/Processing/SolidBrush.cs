@@ -81,16 +81,16 @@ public sealed class SolidBrush : Brush
         {
             int localY = y - this.TargetRegion.Rectangle.Y;
             int localX = x - this.TargetRegion.Rectangle.X;
-            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX);
+            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY)[localX..];
 
             // Constrain the spans to each other
             if (destinationRow.Length > scanline.Length)
             {
-                destinationRow = destinationRow.Slice(0, scanline.Length);
+                destinationRow = destinationRow[..scanline.Length];
             }
             else
             {
-                scanline = scanline.Slice(0, destinationRow.Length);
+                scanline = scanline[..destinationRow.Length];
             }
 
             Configuration configuration = this.Configuration;
@@ -101,7 +101,7 @@ public sealed class SolidBrush : Brush
             }
             else
             {
-                Span<float> amounts = this.blenderBuffers.AmountSpan.Slice(0, scanline.Length);
+                Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
 
                 for (int i = 0; i < scanline.Length; i++)
                 {

@@ -17,6 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 internal sealed class DrawingCanvasBatcher<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
+    private static int nextFlushId;
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
     private readonly ICanvasFrame<TPixel> targetFrame;
@@ -67,6 +68,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         {
             Rectangle targetBounds = this.targetFrame.Bounds;
             int index = 0;
+            List<CompositionBatch> batches = [];
             while (index < this.commands.Count)
             {
                 CompositionCommand definitionCommand = this.commands[index];
@@ -123,10 +125,28 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                         definitionCommand.Path,
                         definitionCommand.RasterizerOptions);
 
+                batches.Add(new CompositionBatch(definition, preparedCommands));
+            }
+
+            if (batches.Count == 0)
+            {
+                return;
+            }
+
+            // All batches emitted by this call share one flush id so backends can keep
+            // transient per-flush GPU state and finalize once on the last batch.
+            int flushId = Interlocked.Increment(ref nextFlushId);
+            for (int i = 0; i < batches.Count; i++)
+            {
+                CompositionBatch batch = batches[i];
                 this.backend.FlushCompositions(
                     this.configuration,
                     this.targetFrame,
-                    new CompositionBatch(definition, preparedCommands));
+                    new CompositionBatch(
+                        batch.Definition,
+                        batch.Commands,
+                        flushId,
+                        isFinalBatchInFlush: i == batches.Count - 1));
             }
         }
         finally

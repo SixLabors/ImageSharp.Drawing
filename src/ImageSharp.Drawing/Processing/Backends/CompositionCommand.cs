@@ -26,7 +26,7 @@ internal readonly struct CompositionCommand
         Brush brush,
         Rectangle brushBounds,
         GraphicsOptions graphicsOptions,
-        RasterizerOptions rasterizerOptions,
+        in RasterizerOptions rasterizerOptions,
         Point destinationOffset)
     {
         this.DefinitionKey = definitionKey;
@@ -89,7 +89,7 @@ internal readonly struct CompositionCommand
         in RasterizerOptions rasterizerOptions,
         Point destinationOffset = default)
     {
-        int definitionKey = ComputeCoverageDefinitionKey(path, rasterizerOptions);
+        int definitionKey = ComputeCoverageDefinitionKey(path, in rasterizerOptions);
         RectangleF bounds = path.Bounds;
         Rectangle localBrushBounds = Rectangle.FromLTRB(
             (int)MathF.Floor(bounds.Left),
@@ -108,7 +108,7 @@ internal readonly struct CompositionCommand
             brush,
             brushBounds,
             graphicsOptions,
-            rasterizerOptions,
+            in rasterizerOptions,
             destinationOffset);
     }
 

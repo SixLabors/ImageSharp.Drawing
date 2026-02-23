@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Silk.NET.WebGPU;
-
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -17,7 +15,7 @@ public sealed class WebGPUSurfaceCapability
     /// <param name="queue">Opaque <c>WGPUQueue*</c> handle.</param>
     /// <param name="targetTexture">Opaque <c>WGPUTexture*</c> handle for the current frame when writable upload is supported.</param>
     /// <param name="targetTextureView">Opaque <c>WGPUTextureView*</c> handle for the current frame.</param>
-    /// <param name="targetFormat">Native render target texture format.</param>
+    /// <param name="targetFormat">Native render target texture format identifier.</param>
     /// <param name="width">Surface width in pixels.</param>
     /// <param name="height">Surface height in pixels.</param>
     /// <param name="isSrgb">Whether the target format is sRGB encoded.</param>
@@ -27,7 +25,7 @@ public sealed class WebGPUSurfaceCapability
         nint queue,
         nint targetTexture,
         nint targetTextureView,
-        TextureFormat targetFormat,
+        WebGPUTextureFormatId targetFormat,
         int width,
         int height,
         bool isSrgb,
@@ -65,9 +63,9 @@ public sealed class WebGPUSurfaceCapability
     public nint TargetTextureView { get; }
 
     /// <summary>
-    /// Gets the native render target texture format.
+    /// Gets the native render target texture format identifier.
     /// </summary>
-    public TextureFormat TargetFormat { get; }
+    public WebGPUTextureFormatId TargetFormat { get; }
 
     /// <summary>
     /// Gets the surface width in pixels.

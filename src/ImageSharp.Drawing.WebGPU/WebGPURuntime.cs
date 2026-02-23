@@ -48,6 +48,16 @@ internal static unsafe class WebGPURuntime
     private static Wgpu? wgpuExtension;
 
     /// <summary>
+    /// Shared device handle used by active backends in the current process.
+    /// </summary>
+    private static nint sharedDeviceHandle;
+
+    /// <summary>
+    /// Shared queue handle used by active backends in the current process.
+    /// </summary>
+    private static nint sharedQueueHandle;
+
+    /// <summary>
     /// Number of currently active runtime leases.
     /// </summary>
     private static int leaseCount;
@@ -80,11 +90,60 @@ internal static unsafe class WebGPURuntime
 
             if (wgpuExtension is null)
             {
-                _ = api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension);
+                api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension);
             }
 
             leaseCount++;
             return new Lease(api, wgpuExtension);
+        }
+    }
+
+    /// <summary>
+    /// Sets shared GPU handles for active backend execution.
+    /// </summary>
+    /// <param name="deviceHandle">Opaque device handle.</param>
+    /// <param name="queueHandle">Opaque queue handle.</param>
+    internal static void SetSharedHandles(nint deviceHandle, nint queueHandle)
+    {
+        lock (Sync)
+        {
+            sharedDeviceHandle = deviceHandle;
+            sharedQueueHandle = queueHandle;
+        }
+    }
+
+    /// <summary>
+    /// Clears shared GPU handles.
+    /// </summary>
+    internal static void ClearSharedHandles()
+    {
+        lock (Sync)
+        {
+            sharedDeviceHandle = 0;
+            sharedQueueHandle = 0;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to get shared GPU handles.
+    /// </summary>
+    /// <param name="device">Receives the shared device pointer.</param>
+    /// <param name="queue">Receives the shared queue pointer.</param>
+    /// <returns><see langword="true"/> when handles are available; otherwise <see langword="false"/>.</returns>
+    internal static bool TryGetSharedHandles(out Device* device, out Queue* queue)
+    {
+        lock (Sync)
+        {
+            if (sharedDeviceHandle == 0 || sharedQueueHandle == 0)
+            {
+                device = null;
+                queue = null;
+                return false;
+            }
+
+            device = (Device*)sharedDeviceHandle;
+            queue = (Queue*)sharedQueueHandle;
+            return true;
         }
     }
 
@@ -154,6 +213,9 @@ internal static unsafe class WebGPURuntime
     /// </remarks>
     private static void DisposeRuntimeCore()
     {
+        sharedDeviceHandle = 0;
+        sharedQueueHandle = 0;
+
         try
         {
             wgpuExtension?.Dispose();

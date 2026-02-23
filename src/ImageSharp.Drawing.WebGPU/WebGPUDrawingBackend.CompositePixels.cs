@@ -43,6 +43,20 @@ internal sealed partial class WebGPUDrawingBackend
             [typeof(Rgba64)] = CompositePixelRegistration.Create<Rgba64>(TextureFormat.Rgba16Uint)
         };
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (!CompositePixelHandlers.TryGetValue(typeof(TPixel), out CompositePixelRegistration registration))
+        {
+            formatId = default;
+            return false;
+        }
+
+        formatId = WebGPUTextureFormatMapper.FromSilk(registration.TextureFormat);
+        return true;
+    }
+
     private readonly struct CompositePixelRegistration
     {
         public CompositePixelRegistration(Type pixelType, TextureFormat textureFormat, int pixelSizeInBytes)
