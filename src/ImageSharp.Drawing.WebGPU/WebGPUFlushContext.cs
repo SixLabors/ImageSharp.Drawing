@@ -21,7 +21,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 {
     private static readonly ConcurrentDictionary<Type, IDisposable> FallbackStagingCache = new();
     private static readonly ConcurrentDictionary<nint, DeviceSharedState> DeviceStateCache = new();
-    private static readonly ConcurrentDictionary<int, WebGPUFlushContext> CpuReadbackFlushContexts = new();
+    private static readonly ConcurrentDictionary<int, WebGPUFlushContext> FlushSessionContexts = new();
     private static readonly object SharedHandleSync = new();
     private const int CallbackTimeoutMilliseconds = 10_000;
 
@@ -78,6 +78,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public WgpuBuffer* InstanceBuffer { get; private set; }
 
     public nuint InstanceBufferCapacity { get; private set; }
+
+    public nuint InstanceBufferWriteOffset { get; internal set; }
 
     public CommandEncoder* CommandEncoder { get; set; }
 
@@ -204,12 +206,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
     public static void ClearDeviceStateCache()
     {
-        foreach (WebGPUFlushContext context in CpuReadbackFlushContexts.Values)
+        foreach (WebGPUFlushContext context in FlushSessionContexts.Values)
         {
             context.Dispose();
         }
 
-        CpuReadbackFlushContexts.Clear();
+        FlushSessionContexts.Clear();
 
         foreach (DeviceSharedState state in DeviceStateCache.Values)
         {
@@ -219,7 +221,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         DeviceStateCache.Clear();
     }
 
-    public static WebGPUFlushContext GetOrCreateCpuReadbackFlushContext<TPixel>(
+    public static WebGPUFlushContext GetOrCreateFlushSessionContext<TPixel>(
         int flushId,
         ICanvasFrame<TPixel> frame,
         TextureFormat expectedTextureFormat,
@@ -227,7 +229,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         out bool fromCache)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (CpuReadbackFlushContexts.TryGetValue(flushId, out WebGPUFlushContext? cached))
+        if (FlushSessionContexts.TryGetValue(flushId, out WebGPUFlushContext? cached))
         {
             fromCache = true;
             return cached;
@@ -235,24 +237,19 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         fromCache = false;
         WebGPUFlushContext created = Create(frame, expectedTextureFormat, pixelSizeInBytes);
-        if (!created.RequiresReadback)
-        {
-            return created;
-        }
-
-        if (CpuReadbackFlushContexts.TryAdd(flushId, created))
+        if (FlushSessionContexts.TryAdd(flushId, created))
         {
             return created;
         }
 
         created.Dispose();
         fromCache = true;
-        return CpuReadbackFlushContexts[flushId];
+        return FlushSessionContexts[flushId];
     }
 
-    public static void CompleteCpuReadbackFlushContext(int flushId)
+    public static void CompleteFlushSession(int flushId)
     {
-        if (CpuReadbackFlushContexts.TryRemove(flushId, out WebGPUFlushContext? context))
+        if (FlushSessionContexts.TryRemove(flushId, out WebGPUFlushContext? context))
         {
             context.Dispose();
         }
@@ -396,6 +393,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             this.InstanceBuffer = null;
             this.InstanceBufferCapacity = 0;
         }
+
+        this.InstanceBufferWriteOffset = 0;
 
         if (this.ownsReadbackBuffer && this.ReadbackBuffer is not null)
         {
@@ -836,8 +835,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
+    public void ResetInstanceBufferOffset()
+        => this.InstanceBufferWriteOffset = 0;
+
+    public void AdvanceInstanceBufferOffset(nuint newOffset)
+        => this.InstanceBufferWriteOffset = AlignToStorageBufferOffset(newOffset);
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignTo256(uint value) => (value + 255U) & ~255U;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static nuint AlignToStorageBufferOffset(nuint value) => (value + 255) & ~(nuint)255;
 
     internal sealed class DeviceSharedState : IDisposable
     {

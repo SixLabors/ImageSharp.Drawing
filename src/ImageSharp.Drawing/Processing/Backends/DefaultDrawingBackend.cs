@@ -148,6 +148,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
 
     public void Dispose()
     {
+        // WTF is this here for?
         GC.KeepAlive(this.PrimaryRasterizer);
     }
 }

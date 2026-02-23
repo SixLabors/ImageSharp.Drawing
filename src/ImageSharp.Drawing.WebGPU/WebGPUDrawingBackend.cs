@@ -153,22 +153,22 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return;
         }
 
-        bool useCpuReadbackFlushSession = hasCpuRegion && !hasNativeSurface && compositionBatch.FlushId != 0;
+        bool useFlushSession = compositionBatch.FlushId != 0;
         bool gpuSuccess = false;
         bool gpuReady = false;
         string? failure = null;
-        bool hadExistingCpuSession = false;
+        bool hadExistingSession = false;
         WebGPUFlushContext? flushContext = null;
 
         try
         {
-            flushContext = useCpuReadbackFlushSession
-                ? WebGPUFlushContext.GetOrCreateCpuReadbackFlushContext(
+            flushContext = useFlushSession
+                ? WebGPUFlushContext.GetOrCreateFlushSessionContext(
                     compositionBatch.FlushId,
                     target,
                     pixelHandler.TextureFormat,
                     pixelHandler.PixelSizeInBytes,
-                    out hadExistingCpuSession)
+                    out hadExistingSession)
                 : WebGPUFlushContext.Create(target, pixelHandler.TextureFormat, pixelHandler.PixelSizeInBytes);
 
             CompositionCoverageDefinition definition = compositionBatch.Definition;
@@ -184,11 +184,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 gpuSuccess = this.TryCompositeBatch(flushContext, pipeline, coverageEntry, target.Bounds, compositionBatch.Commands);
                 if (gpuSuccess)
                 {
-                    if (useCpuReadbackFlushSession)
+                    if (useFlushSession && !compositionBatch.IsFinalBatchInFlush)
                     {
-                        gpuSuccess = compositionBatch.IsFinalBatchInFlush
-                            ? this.TryFinalizeFlush(flushContext, cpuRegion)
-                            : TrySubmitBatch(flushContext);
+                        // Keep the render pass open for the next batch.
                     }
                     else
                     {
@@ -204,7 +202,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
         finally
         {
-            if (!useCpuReadbackFlushSession)
+            if (!useFlushSession)
             {
                 flushContext?.Dispose();
             }
@@ -215,7 +213,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.TestingLastGPUInitializationFailure = gpuSuccess ? null : failure;
         this.TestingLiveCoverageCount = 0;
 
-        if (useCpuReadbackFlushSession)
+        if (useFlushSession)
         {
             if (gpuSuccess)
             {
@@ -223,16 +221,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 this.TestingGPUCompositeCoverageCallCount += commandCount;
                 if (compositionBatch.IsFinalBatchInFlush)
                 {
-                    WebGPUFlushContext.CompleteCpuReadbackFlushContext(compositionBatch.FlushId);
+                    WebGPUFlushContext.CompleteFlushSession(compositionBatch.FlushId);
                 }
 
                 return;
             }
 
-            WebGPUFlushContext.CompleteCpuReadbackFlushContext(compositionBatch.FlushId);
-            if (hadExistingCpuSession)
+            WebGPUFlushContext.CompleteFlushSession(compositionBatch.FlushId);
+            if (hadExistingSession)
             {
-                throw new InvalidOperationException($"WebGPU CPURegion flush session failed after prior GPU batches. Reason: {failure ?? "Unknown error"}");
+                throw new InvalidOperationException($"WebGPU flush session failed after prior GPU batches. Reason: {failure ?? "Unknown error"}");
             }
 
             this.TestingFallbackPrepareCoverageCallCount++;
@@ -323,7 +321,25 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
 
         nuint instanceBytes = checked((nuint)commandCount * (nuint)Unsafe.SizeOf<WebGPUCompositeInstanceData>());
-        if (!flushContext.EnsureInstanceBufferCapacity(instanceBytes, CompositeInstanceBufferSize) ||
+        nuint instanceOffset = flushContext.InstanceBufferWriteOffset;
+        nuint requiredCapacity = checked(instanceOffset + instanceBytes);
+
+        // If the buffer exists but cannot fit at the current offset, flush pending
+        // draws and reset so the next batch starts at offset 0.
+        if (flushContext.InstanceBuffer is not null &&
+            flushContext.InstanceBufferCapacity < requiredCapacity &&
+            instanceOffset > 0)
+        {
+            if (!TrySubmitBatch(flushContext))
+            {
+                return false;
+            }
+
+            instanceOffset = 0;
+            requiredCapacity = instanceBytes;
+        }
+
+        if (!flushContext.EnsureInstanceBufferCapacity(requiredCapacity, Math.Max(requiredCapacity, CompositeInstanceBufferSize)) ||
             !flushContext.EnsureCommandEncoder() ||
             !flushContext.BeginRenderPass())
         {
@@ -363,10 +379,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         fixed (WebGPUCompositeInstanceData* instancesPtr = instances)
         {
             // QueueWriteBuffer copies source bytes into driver-owned staging immediately.
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, flushContext.InstanceBuffer, 0, instancesPtr, instanceBytes);
+            flushContext.Api.QueueWriteBuffer(flushContext.Queue, flushContext.InstanceBuffer, instanceOffset, instancesPtr, instanceBytes);
         }
 
-        BindGroup* bindGroup = this.CreateCoverageBindGroup(flushContext, coverageEntry, instanceBytes);
+        BindGroup* bindGroup = this.CreateCoverageBindGroup(flushContext, coverageEntry, instanceOffset, instanceBytes);
         if (bindGroup is null)
         {
             return false;
@@ -377,12 +393,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         flushContext.Api.RenderPassEncoderSetBindGroup(flushContext.PassEncoder, 0, bindGroup, 0, null);
         flushContext.Api.RenderPassEncoderDraw(flushContext.PassEncoder, CompositeVertexCount, (uint)commandCount, 0, 0);
 
+        flushContext.AdvanceInstanceBufferOffset(instanceOffset + instanceBytes);
+
         return true;
     }
 
     private BindGroup* CreateCoverageBindGroup(
         WebGPUFlushContext flushContext,
         WebGPUFlushContext.CoverageEntry coverageEntry,
+        nuint instanceOffset,
         nuint instanceBytes)
     {
         if (flushContext.DeviceState.CompositeBindGroupLayout is null ||
@@ -402,7 +421,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         {
             Binding = 1,
             Buffer = flushContext.InstanceBuffer,
-            Offset = 0,
+            Offset = instanceOffset,
             Size = instanceBytes
         };
 
@@ -467,7 +486,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private static bool TrySubmitBatch(WebGPUFlushContext flushContext)
     {
         flushContext.EndRenderPassIfOpen();
-        return TrySubmit(flushContext);
+        if (!TrySubmit(flushContext))
+        {
+            return false;
+        }
+
+        flushContext.ResetInstanceBufferOffset();
+        return true;
     }
 
     private bool TryReadBackToCpuRegion<TPixel>(WebGPUFlushContext flushContext, Buffer2DRegion<TPixel> destinationRegion)
