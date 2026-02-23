@@ -182,7 +182,6 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             samplingOrigin);
 
         this.backend.FillPath(
-            this.configuration,
             this.targetFrame,
             path,
             brush,
@@ -259,9 +258,25 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Guard.NotNull(operations, nameof(operations));
         Guard.NotNull(drawingOptions, nameof(drawingOptions));
 
-        foreach (DrawingOperation operation in operations.OrderBy(x => x.RenderPass))
+        // Build composition commands and sort by render pass then definition key so that
+        // same-coverage glyph variants are contiguous. Text glyphs within the same render
+        // pass occupy non-overlapping positions, making this reordering visually safe while
+        // maximizing batch sizes in the downstream batcher.
+        List<(byte RenderPass, CompositionCommand Command)> entries = [];
+        foreach (DrawingOperation operation in operations)
         {
-            this.batcher.AddComposition(this.CreateCompositionCommand(operation, drawingOptions));
+            entries.Add((operation.RenderPass, this.CreateCompositionCommand(operation, drawingOptions)));
+        }
+
+        entries.Sort(static (a, b) =>
+        {
+            int cmp = a.RenderPass.CompareTo(b.RenderPass);
+            return cmp != 0 ? cmp : a.Command.DefinitionKey.CompareTo(b.Command.DefinitionKey);
+        });
+
+        foreach ((_, CompositionCommand command) in entries)
+        {
+            this.batcher.AddComposition(command);
         }
     }
 

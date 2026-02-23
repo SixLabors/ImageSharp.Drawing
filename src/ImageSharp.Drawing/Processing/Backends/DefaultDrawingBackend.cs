@@ -44,7 +44,6 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
 
     /// <inheritdoc />
     public void FillPath<TPixel>(
-        Configuration configuration,
         ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
@@ -117,9 +116,9 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
         finally
         {
-            for (int i = 0; i < applicators.Length; i++)
+            foreach (BrushApplicator<TPixel>? applicator in applicators)
             {
-                applicators[i]?.Dispose();
+                applicator?.Dispose();
             }
         }
     }
@@ -144,11 +143,5 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
             });
 
         return coverage;
-    }
-
-    public void Dispose()
-    {
-        // WTF is this here for?
-        GC.KeepAlive(this.PrimaryRasterizer);
     }
 }

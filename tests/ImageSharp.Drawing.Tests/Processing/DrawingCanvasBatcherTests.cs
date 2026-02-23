@@ -52,7 +52,6 @@ public class DrawingCanvasBatcherTests
             Array.Empty<PreparedCompositionCommand>());
 
         public void FillPath<TPixel>(
-            Configuration configuration,
             ICanvasFrame<TPixel> target,
             IPath path,
             Brush brush,

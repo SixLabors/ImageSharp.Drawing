@@ -52,6 +52,13 @@ public class DrawTextRepeatedGlyphs
     [GlobalSetup]
     public void Setup()
     {
+        // Tiled rasterization benefits from a warmed worker pool. Doing this once in setup
+        // reduces first-iteration noise without affecting per-method correctness.
+        ThreadPool.GetMinThreads(out int minWorkerThreads, out int minCompletionPortThreads);
+        int desiredWorkerThreads = Math.Max(minWorkerThreads, Environment.ProcessorCount);
+        ThreadPool.SetMinThreads(desiredWorkerThreads, minCompletionPortThreads);
+        Parallel.For(0, desiredWorkerThreads, static _ => { });
+
         Font font = SystemFonts.CreateFont("Arial", 48);
         this.textOptions = new RichTextOptions(font)
         {
@@ -178,16 +185,15 @@ public class DrawTextRepeatedGlyphs
     private sealed class NativeSurfaceOnlyFrame<TPixel> : ICanvasFrame<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        private readonly Rectangle bounds;
         private readonly NativeSurface surface;
 
         public NativeSurfaceOnlyFrame(Rectangle bounds, NativeSurface surface)
         {
-            this.bounds = bounds;
+            this.Bounds = bounds;
             this.surface = surface;
         }
 
-        public Rectangle Bounds => this.bounds;
+        public Rectangle Bounds { get; }
 
         public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
         {

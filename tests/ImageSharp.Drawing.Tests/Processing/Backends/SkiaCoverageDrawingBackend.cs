@@ -27,7 +27,6 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
     public int LiveCoverageCount => this.preparedCoverage.Count;
 
     public void FillPath<TPixel>(
-        Configuration configuration,
         ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,

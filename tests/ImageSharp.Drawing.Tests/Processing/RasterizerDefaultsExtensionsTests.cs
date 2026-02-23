@@ -110,7 +110,6 @@ public class RasterizerDefaultsExtensionsTests
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
         public void FillPath<TPixel>(
-            Configuration configuration,
             ICanvasFrame<TPixel> target,
             IPath path,
             Brush brush,

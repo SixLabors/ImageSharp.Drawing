@@ -105,7 +105,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     /// <inheritdoc />
     public void FillPath<TPixel>(
-        Configuration configuration,
         ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
@@ -143,8 +142,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.TestingCompositeCoverageCallCount += commandCount;
 
         bool hasCpuRegion = target.TryGetCpuRegion(out Buffer2DRegion<TPixel> cpuRegion);
-        bool hasNativeSurface = target.TryGetNativeSurface(out _);
-
         if (!CompositePixelHandlers.TryGetValue(typeof(TPixel), out CompositePixelRegistration pixelHandler))
         {
             this.TestingFallbackPrepareCoverageCallCount++;
@@ -177,8 +174,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     in definition,
                     out RenderPipeline* pipeline,
                     out WebGPUFlushContext.CoverageEntry? coverageEntry,
-                    out failure) &&
-                coverageEntry is not null)
+                    out failure))
             {
                 gpuReady = true;
                 gpuSuccess = this.TryCompositeBatch(flushContext, pipeline, coverageEntry, target.Bounds, compositionBatch.Commands);

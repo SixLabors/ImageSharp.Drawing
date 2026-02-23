@@ -18,7 +18,6 @@ internal interface IDrawingBackend
     /// Fills a path into a destination target region.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="configuration">Active processing configuration.</param>
     /// <param name="target">Destination frame.</param>
     /// <param name="path">Path in target-local coordinates.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
@@ -26,7 +25,6 @@ internal interface IDrawingBackend
     /// <param name="rasterizerOptions">Rasterizer options in target-local coordinates.</param>
     /// <param name="batcher">Batcher used to queue normalized composition commands.</param>
     public void FillPath<TPixel>(
-        Configuration configuration,
         ICanvasFrame<TPixel> target,
         IPath path,
         Brush brush,
