@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Concurrent;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 
@@ -12,8 +11,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal sealed class DefaultDrawingBackend : IDrawingBackend
 {
-    private readonly ConcurrentDictionary<int, Buffer2D<float>> coverageCache = new();
-
     /// <summary>
     /// Initializes a new instance of the <see cref="DefaultDrawingBackend"/> class.
     /// </summary>
@@ -72,7 +69,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
 
         _ = target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame);
         CompositionCoverageDefinition definition = compositionBatch.Definition;
-        Buffer2D<float> coverageMap = this.GetOrCreateCoverageMap(definition, configuration.MemoryAllocator);
+        using Buffer2D<float> coverageMap = this.CreateCoverageMap(definition, configuration.MemoryAllocator);
 
         Rectangle destinationBounds = destinationFrame.Rectangle;
         IReadOnlyList<PreparedCompositionCommand> commands = compositionBatch.Commands;
@@ -127,28 +124,6 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
     }
 
-    private Buffer2D<float> GetOrCreateCoverageMap(
-        in CompositionCoverageDefinition definition,
-        MemoryAllocator allocator)
-    {
-        // Hot path: coverage for this definition is already cached.
-        if (this.coverageCache.TryGetValue(definition.DefinitionKey, out Buffer2D<float>? cached))
-        {
-            return cached;
-        }
-
-        // Miss path: create coverage once for this definition.
-        Buffer2D<float> created = this.CreateCoverageMap(definition, allocator);
-        if (this.coverageCache.TryAdd(definition.DefinitionKey, created))
-        {
-            return created;
-        }
-
-        // Another thread won the insert race; dispose loser map and use the winner.
-        created.Dispose();
-        return this.coverageCache[definition.DefinitionKey];
-    }
-
     private Buffer2D<float> CreateCoverageMap(
         in CompositionCoverageDefinition definition,
         MemoryAllocator allocator)
@@ -173,11 +148,6 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
 
     public void Dispose()
     {
-        foreach (Buffer2D<float> entry in this.coverageCache.Values)
-        {
-            entry.Dispose();
-        }
-
-        this.coverageCache.Clear();
+        GC.KeepAlive(this.PrimaryRasterizer);
     }
 }

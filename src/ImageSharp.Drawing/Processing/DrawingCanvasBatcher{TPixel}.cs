@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -76,9 +77,14 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
                 // Build one batch for the contiguous run sharing the same coverage definition.
                 List<PreparedCompositionCommand> preparedCommands = [];
-                for (; index < this.commands.Count && this.commands[index].DefinitionKey == definitionKey; index++)
+                for (; index < this.commands.Count; index++)
                 {
                     CompositionCommand command = this.commands[index];
+                    if (command.DefinitionKey != definitionKey)
+                    {
+                        break;
+                    }
+
                     Rectangle interest = command.RasterizerOptions.Interest;
                     Rectangle commandDestination = new(
                         command.DestinationOffset.X + interest.X,

@@ -48,16 +48,30 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Configuration configuration,
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame)
+        : this(
+            configuration,
+            backend,
+            targetFrame,
+            new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame))
+    {
+    }
+
+    private DrawingCanvas(
+        Configuration configuration,
+        IDrawingBackend backend,
+        ICanvasFrame<TPixel> targetFrame,
+        DrawingCanvasBatcher<TPixel> batcher)
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(backend, nameof(backend));
         Guard.NotNull(targetFrame, nameof(targetFrame));
+        Guard.NotNull(batcher, nameof(batcher));
 
         this.configuration = configuration;
         this.backend = backend;
         this.targetFrame = targetFrame;
+        this.batcher = batcher;
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
-        this.batcher = new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame);
     }
 
     /// <summary>
@@ -76,7 +90,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
         Rectangle clipped = Rectangle.Intersect(this.Bounds, region);
         ICanvasFrame<TPixel> childFrame = new CanvasRegionFrame<TPixel>(this.targetFrame, clipped);
-        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame);
+        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame, this.batcher);
     }
 
     /// <summary>
@@ -301,10 +315,19 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
         IPath compositionPath;
         RasterizerSamplingOrigin samplingOrigin;
+        IntersectionRule intersectionRule = operation.IntersectionRule;
         if (operation.Kind == DrawingOperationKind.Draw)
         {
-            compositionPath = operation.Pen!.GeneratePath(operation.Path);
+            Pen pen = operation.Pen!;
+            compositionPath = pen.GeneratePath(operation.Path);
             samplingOrigin = RasterizerSamplingOrigin.PixelCenter;
+
+            // Keep draw semantics aligned with DrawPath: non-normalized stroke output
+            // requires non-zero winding to preserve stroke interior behavior.
+            if (!pen.StrokeOptions.NormalizeOutput && intersectionRule != IntersectionRule.NonZero)
+            {
+                intersectionRule = IntersectionRule.NonZero;
+            }
         }
         else
         {
@@ -330,7 +353,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
         RasterizerOptions rasterizerOptions = new(
             interest,
-            operation.IntersectionRule,
+            intersectionRule,
             rasterizationMode,
             samplingOrigin);
 

@@ -5,6 +5,7 @@ using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -158,6 +159,189 @@ public class WebGPUDrawingBackendTests
     }
 
     [Theory]
+    [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
+    public void FillPath_WithWebGPUCoverageBackend_NativeSurface_MatchesDefaultOutput(TestImageProvider<Rgba32> provider)
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+        GraphicsOptions clearOptions = new()
+        {
+            Antialias = false,
+            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
+            ColorBlendingMode = PixelColorBlendingMode.Normal,
+            BlendPercentage = 1F
+        };
+
+        RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
+        Brush brush = Brushes.Solid(Color.Black);
+        Brush clearBrush = Brushes.Solid(Color.White);
+
+        using Image<Rgba32> defaultImage = provider.GetImage();
+        using (DrawingCanvas<Rgba32> defaultCanvas = new(Configuration.Default, GetFrameRegion(defaultImage)))
+        {
+            defaultCanvas.Fill(clearBrush, clearOptions);
+            defaultCanvas.FillPath(polygon, brush, drawingOptions);
+            defaultCanvas.Flush();
+        }
+
+        defaultImage.DebugSave(
+            provider,
+            "DefaultBackend_FillPath_NativeSurfaceParity",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
+        using WebGPUDrawingBackend backend = new();
+        Assert.True(
+            WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
+                backend,
+                defaultImage.Width,
+                defaultImage.Height,
+                isSrgb: false,
+                isPremultipliedAlpha: false,
+                out NativeSurface nativeSurface,
+                out nint textureHandle,
+                out nint textureViewHandle,
+                out string createError),
+            createError);
+
+        try
+        {
+            Configuration configuration = Configuration.Default.Clone();
+            configuration.SetDrawingBackend(backend);
+
+            using DrawingCanvas<Rgba32> canvas =
+                new(configuration, new NativeSurfaceOnlyFrame<Rgba32>(defaultImage.Bounds, nativeSurface));
+            canvas.Fill(clearBrush, clearOptions);
+            canvas.FillPath(polygon, brush, drawingOptions);
+            canvas.Flush();
+
+            Assert.True(
+                WebGPUTestNativeSurfaceAllocator.TryReadTexture<Rgba32>(
+                    backend,
+                    textureHandle,
+                    defaultImage.Width,
+                    defaultImage.Height,
+                    out Image<Rgba32> webGpuImage,
+                    out string readError),
+                readError);
+
+            using (webGpuImage)
+            {
+                webGpuImage.DebugSave(
+                    provider,
+                    "WebGPUBackend_FillPath_NativeSurfaceParity",
+                    appendPixelTypeToFileName: false,
+                    appendSourceFileOrDescription: false);
+
+                ImageComparer comparer = ImageComparer.TolerantPercentage(0.5F);
+                comparer.VerifySimilarity(defaultImage, webGpuImage);
+            }
+        }
+        finally
+        {
+            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+        }
+    }
+
+    [Theory]
+    [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
+    public void FillPath_WithWebGPUCoverageBackend_NativeSurfaceSubregion_MatchesDefaultOutput(TestImageProvider<Rgba32> provider)
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+        GraphicsOptions clearOptions = new()
+        {
+            Antialias = false,
+            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
+            ColorBlendingMode = PixelColorBlendingMode.Normal,
+            BlendPercentage = 1F
+        };
+
+        Rectangle region = new(72, 64, 320, 240);
+        RectangularPolygon localPolygon = new(16.25F, 24.5F, 250.5F, 160.75F);
+        Brush brush = Brushes.Solid(Color.Black);
+        Brush clearBrush = Brushes.Solid(Color.White);
+
+        using Image<Rgba32> defaultImage = provider.GetImage();
+        using DrawingCanvas<Rgba32> defaultCanvas = new(Configuration.Default, GetFrameRegion(defaultImage));
+        defaultCanvas.Fill(clearBrush, clearOptions);
+
+        using (DrawingCanvas<Rgba32> defaultRegionCanvas = defaultCanvas.CreateRegion(region))
+        {
+            defaultRegionCanvas.FillPath(localPolygon, brush, drawingOptions);
+        }
+
+        defaultImage.DebugSave(
+            provider,
+            "DefaultBackend_FillPath_NativeSurfaceSubregionParity",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
+        using WebGPUDrawingBackend backend = new();
+        Assert.True(
+            WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
+                backend,
+                defaultImage.Width,
+                defaultImage.Height,
+                isSrgb: false,
+                isPremultipliedAlpha: false,
+                out NativeSurface nativeSurface,
+                out nint textureHandle,
+                out nint textureViewHandle,
+                out string createError),
+            createError);
+
+        try
+        {
+            Configuration configuration = Configuration.Default.Clone();
+            configuration.SetDrawingBackend(backend);
+
+            using DrawingCanvas<Rgba32> canvas =
+                new(configuration, new NativeSurfaceOnlyFrame<Rgba32>(defaultImage.Bounds, nativeSurface));
+            canvas.Fill(clearBrush, clearOptions);
+            using (DrawingCanvas<Rgba32> regionCanvas = canvas.CreateRegion(region))
+            {
+                regionCanvas.FillPath(localPolygon, brush, drawingOptions);
+            }
+
+            Assert.True(
+                WebGPUTestNativeSurfaceAllocator.TryReadTexture(
+                    backend,
+                    textureHandle,
+                    defaultImage.Width,
+                    defaultImage.Height,
+                    out Image<Rgba32> webGpuImage,
+                    out string readError),
+                readError);
+
+            using (webGpuImage)
+            {
+                webGpuImage.DebugSave(
+                    provider,
+                    "WebGPUBackend_FillPath_NativeSurfaceSubregionParity",
+                    appendPixelTypeToFileName: false,
+                    appendSourceFileOrDescription: false);
+
+                int defaultCoveragePixels = CountNonBackgroundPixels(defaultImage, Color.White);
+                int webGpuCoveragePixels = CountNonBackgroundPixels(webGpuImage, Color.White);
+                Assert.True(defaultCoveragePixels > 0, "Default backend produced no subregion fill coverage.");
+                Assert.True(webGpuCoveragePixels > 0, "WebGPU backend produced no subregion fill coverage.");
+
+                ImageComparer comparer = ImageComparer.TolerantPercentage(0.5F);
+                comparer.VerifySimilarity(defaultImage, webGpuImage);
+            }
+        }
+        finally
+        {
+            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+        }
+    }
+
+    [Theory]
     [WithSolidFilledImages(420, 220, "White", PixelTypes.Rgba32)]
     public void DrawText_WithRepeatedGlyphs_UsesCoverageCache(TestImageProvider<Rgba32> provider)
     {
@@ -176,17 +360,35 @@ public class WebGPUDrawingBackendTests
         string text = new('A', 200);
         Brush brush = Brushes.Solid(Color.Black);
 
-        using Image<Rgba32> image = provider.GetImage();
+        using Image<Rgba32> defaultImage = provider.GetImage();
+        defaultImage.Mutate(ctx => ctx.DrawText(drawingOptions, textOptions, text, brush, pen: null));
+        defaultImage.DebugSave(
+            provider,
+            "DefaultBackend_RepeatedGlyphs",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
+        using Image<Rgba32> webGpuImage = provider.GetImage();
         using WebGPUDrawingBackend backend = new();
-        image.Configuration.SetDrawingBackend(backend);
+        webGpuImage.Configuration.SetDrawingBackend(backend);
 
-        image.Mutate(ctx => ctx.DrawText(drawingOptions, textOptions, text, brush, pen: null));
+        webGpuImage.Mutate(ctx => ctx.DrawText(drawingOptions, textOptions, text, brush, pen: null));
 
-        image.DebugSave(
+        webGpuImage.DebugSave(
             provider,
             "WebGPUBackend_RepeatedGlyphs",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+
+        int defaultCoveragePixels = CountNonBackgroundPixels(defaultImage, Color.White);
+        int webGpuCoveragePixels = CountNonBackgroundPixels(webGpuImage, Color.White);
+        Assert.True(defaultCoveragePixels > 0, "Default backend produced no text coverage.");
+        Assert.True(
+            webGpuCoveragePixels >= (defaultCoveragePixels * 9) / 10,
+            $"WebGPU text coverage is too low. default={defaultCoveragePixels}, webgpu={webGpuCoveragePixels}");
+
+        ImageComparer comparer = ImageComparer.TolerantPercentage(2F);
+        comparer.VerifySimilarity(defaultImage, webGpuImage);
 
         Assert.InRange(backend.TestingPrepareCoverageCallCount, 1, 20);
         Assert.True(backend.TestingCompositeCoverageCallCount >= backend.TestingPrepareCoverageCallCount);
@@ -233,5 +435,59 @@ public class WebGPUDrawingBackendTests
         Assert.Equal(
             0,
             backend.TestingFallbackCompositeCoverageCallCount);
+    }
+
+    private static int CountNonBackgroundPixels(Image<Rgba32> image, Color background)
+    {
+        Rgba32 bg = background.ToPixel<Rgba32>();
+        Buffer2D<Rgba32> buffer = image.Frames.RootFrame.PixelBuffer;
+        int count = 0;
+        for (int y = 0; y < buffer.Height; y++)
+        {
+            Span<Rgba32> row = buffer.DangerousGetRowSpan(y);
+            for (int x = 0; x < row.Length; x++)
+            {
+                Rgba32 pixel = row[x];
+                if (Math.Abs(pixel.R - bg.R) > 2 ||
+                    Math.Abs(pixel.G - bg.G) > 2 ||
+                    Math.Abs(pixel.B - bg.B) > 2 ||
+                    Math.Abs(pixel.A - bg.A) > 2)
+                {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+    private static Buffer2DRegion<Rgba32> GetFrameRegion(Image<Rgba32> image)
+        => new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+    private sealed class NativeSurfaceOnlyFrame<TPixel> : ICanvasFrame<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private readonly Rectangle bounds;
+        private readonly NativeSurface surface;
+
+        public NativeSurfaceOnlyFrame(Rectangle bounds, NativeSurface surface)
+        {
+            this.bounds = bounds;
+            this.surface = surface;
+        }
+
+        public Rectangle Bounds => this.bounds;
+
+        public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
+        {
+            region = default;
+            return false;
+        }
+
+        public bool TryGetNativeSurface(out NativeSurface surface)
+        {
+            surface = this.surface;
+            return true;
+        }
     }
 }

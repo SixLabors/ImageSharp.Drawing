@@ -104,6 +104,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 device = (Device*)nativeCapability.Device;
                 queue = (Queue*)nativeCapability.Queue;
                 textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
+                bounds = new Rectangle(0, 0, nativeCapability.Width, nativeCapability.Height);
                 deviceState = GetOrCreateDeviceState(lease.Api, device);
                 context = new WebGPUFlushContext(lease, device, queue, in bounds, textureFormat, deviceState);
                 context.InitializeNativeTarget(nativeCapability);
@@ -142,7 +143,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         try
         {
-            Rectangle bounds = frame.Bounds;
+            Rectangle bounds = new Rectangle(0, 0, nativeCapability.Width, nativeCapability.Height);
             TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
             Device* device = (Device*)nativeCapability.Device;
             DeviceSharedState deviceState = GetOrCreateDeviceState(lease.Api, device);

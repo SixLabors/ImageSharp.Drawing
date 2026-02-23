@@ -190,9 +190,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 {
                     gpuReady = true;
                     gpuSuccess = this.TryCompositeBatch(flushContext, pipeline, coverageEntry, target.Bounds, compositionBatch.Commands);
-                    if (gpuSuccess && (!useCpuReadbackFlushSession || compositionBatch.IsFinalBatchInFlush))
+                    if (gpuSuccess)
                     {
-                        gpuSuccess = this.TryFinalizeFlush(flushContext, hasCpuRegion, cpuRegion);
+                        if (useCpuReadbackFlushSession)
+                        {
+                            gpuSuccess = compositionBatch.IsFinalBatchInFlush
+                                ? this.TryFinalizeFlush(flushContext, hasCpuRegion, cpuRegion)
+                                : TrySubmitBatch(flushContext);
+                        }
+                        else
+                        {
+                            gpuSuccess = this.TryFinalizeFlush(flushContext, hasCpuRegion, cpuRegion);
+                        }
                     }
                 }
             }
@@ -439,6 +448,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 flushContext.Api.CommandBufferRelease(commandBuffer);
             }
         }
+    }
+
+    private static bool TrySubmitBatch(WebGPUFlushContext flushContext)
+    {
+        flushContext.EndRenderPassIfOpen();
+        return TrySubmit(flushContext);
     }
 
     private bool TryReadBackToCpuRegion<TPixel>(WebGPUFlushContext flushContext, Buffer2DRegion<TPixel> destinationRegion)
