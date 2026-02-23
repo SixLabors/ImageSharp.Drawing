@@ -36,6 +36,21 @@ public class ClipTests
             appendSourceFileOrDescription: false);
     }
 
+    [Theory]
+    [WithFile(TestImages.Png.Ducky, PixelTypes.Rgba32)]
+    public void Clip_ConstrainsOperationToClipBounds<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => provider.RunValidatingProcessorTest(
+            x =>
+            {
+                Size size = x.GetCurrentSize();
+                RectangleF rect = new(0, 0, size.Width / 2, size.Height / 2);
+                RectangularPolygon clipRect = new(rect);
+                x.Clip(clipRect, ctx => ctx.Flip(FlipMode.Vertical));
+            },
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
     [Fact]
     public void Issue250_Vertical_Horizontal_Count_Should_Match()
     {

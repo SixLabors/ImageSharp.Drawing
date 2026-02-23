@@ -11,11 +11,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 public static class ClipPathExtensions
 {
     /// <summary>
-    /// Applies the processing operation within the provided region defined by an <see cref="IPath"/>.
+    /// Applies the processing operation within the region defined by an <see cref="IPath"/>.
     /// </summary>
     /// <param name="source">The source image processing context.</param>
-    /// <param name="region">The <see cref="IPath"/> defining the region to operation within.</param>
-    /// <param name="operation">The operation to perform.</param>
+    /// <param name="region">
+    /// The <see cref="IPath"/> defining the clip region. Only pixels inside the clip are affected.
+    /// </param>
+    /// <param name="operation">
+    /// The operation to perform. This executes in the clipped context so results are constrained to the
+    /// clip bounds.
+    /// </param>
     /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
     public static IImageProcessingContext Clip(
         this IImageProcessingContext source,
