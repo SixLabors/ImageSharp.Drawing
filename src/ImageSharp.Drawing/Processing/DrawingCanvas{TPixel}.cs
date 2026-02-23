@@ -67,6 +67,11 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Guard.NotNull(targetFrame, nameof(targetFrame));
         Guard.NotNull(batcher, nameof(batcher));
 
+        if (!targetFrame.TryGetCpuRegion(out _) && !targetFrame.TryGetNativeSurface(out _))
+        {
+            throw new NotSupportedException("Canvas frame must expose either a CPU region or a native surface.");
+        }
+
         this.configuration = configuration;
         this.backend = backend;
         this.targetFrame = targetFrame;

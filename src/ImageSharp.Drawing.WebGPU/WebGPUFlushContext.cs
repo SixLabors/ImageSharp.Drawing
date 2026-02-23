@@ -29,6 +29,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private bool ownsTargetTexture;
     private bool ownsTargetView;
     private bool ownsReadbackBuffer;
+    private WebGPUCompositeInstanceData[]? compositeInstanceData;
     private readonly List<nint> transientBindGroups = [];
 
     private WebGPUFlushContext(
@@ -81,6 +82,23 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public CommandEncoder* CommandEncoder { get; set; }
 
     public RenderPassEncoder* PassEncoder { get; private set; }
+
+    public Span<WebGPUCompositeInstanceData> GetCompositeInstanceSpan(int count)
+    {
+        if (count <= 0)
+        {
+            return Span<WebGPUCompositeInstanceData>.Empty;
+        }
+
+        WebGPUCompositeInstanceData[]? cached = this.compositeInstanceData;
+        if (cached is null || cached.Length < count)
+        {
+            cached = new WebGPUCompositeInstanceData[count];
+            this.compositeInstanceData = cached;
+        }
+
+        return cached.AsSpan(0, count);
+    }
 
     public static WebGPUFlushContext Create<TPixel>(
         ICanvasFrame<TPixel> frame,
@@ -410,6 +428,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ownsReadbackBuffer = false;
         this.ownsTargetView = false;
         this.ownsTargetTexture = false;
+        this.compositeInstanceData = null;
 
         this.RuntimeLease.Dispose();
         this.disposed = true;
@@ -424,15 +443,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         DeviceSharedState created = new(api, device);
-        if (DeviceStateCache.TryAdd(cacheKey, created))
+        DeviceSharedState winner = DeviceStateCache.GetOrAdd(cacheKey, created);
+        if (!ReferenceEquals(winner, created))
         {
-            return created;
+            created.Dispose();
         }
 
-        created.Dispose();
-        return DeviceStateCache.TryGetValue(cacheKey, out DeviceSharedState? winner)
-            ? winner
-            : GetOrCreateDeviceState(api, device);
+        return winner;
     }
 
     private static bool TryGetOrCreateSharedHandles(
@@ -671,7 +688,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         try
         {
-            QueueWriteTextureFromRegion(this.Api, this.Queue, targetTexture, cpuRegion);
+            UploadTextureFromRegion(this.Api, this.Queue, targetTexture, cpuRegion);
         }
         catch
         {
@@ -747,7 +764,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return capability;
     }
 
-    private static void QueueWriteTextureFromRegion<TPixel>(
+    internal static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
         Queue* queue,
         Texture* destinationTexture,
@@ -828,6 +845,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         private readonly ConcurrentDictionary<TextureFormat, nint> compositePipelines = new();
         private WebGPURasterizer? coverageRasterizer;
         private PipelineLayout* compositePipelineLayout;
+        private ShaderModule* compositeShaderModule;
         private bool disposed;
 
         internal DeviceSharedState(WebGPU api, Device* device)
@@ -988,6 +1006,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 this.compositePipelineLayout = null;
             }
 
+            if (this.compositeShaderModule is not null)
+            {
+                this.Api.ShaderModuleRelease(this.compositeShaderModule);
+                this.compositeShaderModule = null;
+            }
+
             if (this.CompositeBindGroupLayout is not null)
             {
                 this.Api.BindGroupLayoutRelease(this.CompositeBindGroupLayout);
@@ -1051,57 +1075,47 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 return false;
             }
 
+            ReadOnlySpan<byte> shaderCode = CompositeCoverageShader.Code;
+            fixed (byte* shaderCodePtr = shaderCode)
+            {
+                ShaderModuleWGSLDescriptor wgslDescriptor = new()
+                {
+                    Chain = new ChainedStruct { SType = SType.ShaderModuleWgslDescriptor },
+                    Code = shaderCodePtr
+                };
+
+                ShaderModuleDescriptor shaderDescriptor = new()
+                {
+                    NextInChain = (ChainedStruct*)&wgslDescriptor
+                };
+
+                this.compositeShaderModule = this.Api.DeviceCreateShaderModule(this.Device, in shaderDescriptor);
+            }
+
+            if (this.compositeShaderModule is null)
+            {
+                error = "Failed to create composite shader module.";
+                return false;
+            }
+
             error = null;
             return true;
         }
 
         private RenderPipeline* CreateCompositePipelineForFormat(TextureFormat textureFormat)
         {
-            if (this.compositePipelineLayout is null)
+            if (this.compositePipelineLayout is null || this.compositeShaderModule is null)
             {
                 return null;
             }
 
-            ShaderModule* shaderModule = null;
-            try
+            ReadOnlySpan<byte> vertexEntryPoint = CompositeVertexEntryPoint;
+            ReadOnlySpan<byte> fragmentEntryPoint = CompositeFragmentEntryPoint;
+            fixed (byte* vertexEntryPointPtr = vertexEntryPoint)
             {
-                ReadOnlySpan<byte> shaderCode = CompositeCoverageShader.Code;
-                fixed (byte* shaderCodePtr = shaderCode)
+                fixed (byte* fragmentEntryPointPtr = fragmentEntryPoint)
                 {
-                    ShaderModuleWGSLDescriptor wgslDescriptor = new()
-                    {
-                        Chain = new ChainedStruct { SType = SType.ShaderModuleWgslDescriptor },
-                        Code = shaderCodePtr
-                    };
-
-                    ShaderModuleDescriptor shaderDescriptor = new()
-                    {
-                        NextInChain = (ChainedStruct*)&wgslDescriptor
-                    };
-
-                    shaderModule = this.Api.DeviceCreateShaderModule(this.Device, in shaderDescriptor);
-                }
-
-                if (shaderModule is null)
-                {
-                    return null;
-                }
-
-                ReadOnlySpan<byte> vertexEntryPoint = CompositeVertexEntryPoint;
-                ReadOnlySpan<byte> fragmentEntryPoint = CompositeFragmentEntryPoint;
-                fixed (byte* vertexEntryPointPtr = vertexEntryPoint)
-                {
-                    fixed (byte* fragmentEntryPointPtr = fragmentEntryPoint)
-                    {
-                        return this.CreateCompositePipeline(shaderModule, vertexEntryPointPtr, fragmentEntryPointPtr, textureFormat);
-                    }
-                }
-            }
-            finally
-            {
-                if (shaderModule is not null)
-                {
-                    this.Api.ShaderModuleRelease(shaderModule);
+                    return this.CreateCompositePipeline(this.compositeShaderModule, vertexEntryPointPtr, fragmentEntryPointPtr, textureFormat);
                 }
             }
         }
