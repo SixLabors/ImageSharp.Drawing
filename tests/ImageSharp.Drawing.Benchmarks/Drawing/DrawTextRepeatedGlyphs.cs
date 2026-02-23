@@ -11,6 +11,8 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 
 [MemoryDiagnoser]
+[WarmupCount(5)]
+[IterationCount(15)]
 public class DrawTextRepeatedGlyphs
 {
     public const int Width = 1200;
@@ -95,24 +97,6 @@ public class DrawTextRepeatedGlyphs
         this.text = new string('A', this.GlyphCount);
     }
 
-    [IterationSetup(Target = nameof(DrawingCanvasDefaultBackend))]
-    public void IterationSetupDefault()
-        => this.ClearWithDrawingCanvas(
-            this.defaultConfiguration,
-            new CpuRegionOnlyFrame<Rgba32>(GetFrameRegion(this.defaultImage)));
-
-    [IterationSetup(Target = nameof(DrawingCanvasWebGPUBackendCpuRegion))]
-    public void IterationSetupWebGpuCpuRegion()
-        => this.ClearWithDrawingCanvas(
-            this.webGpuConfiguration,
-            new CpuRegionOnlyFrame<Rgba32>(GetFrameRegion(this.webGpuCpuImage)));
-
-    [IterationSetup(Target = nameof(DrawingCanvasWebGPUBackendNativeSurface))]
-    public void IterationSetupWebGpuNativeSurface()
-        => this.ClearWithDrawingCanvas(
-            this.webGpuConfiguration,
-            this.webGpuNativeFrame);
-
     [GlobalCleanup]
     public void Cleanup()
     {
@@ -129,7 +113,9 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Baseline = true, Description = "DrawingCanvas Default Backend")]
     public void DrawingCanvasDefaultBackend()
     {
-        using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, new CpuRegionOnlyFrame<Rgba32>(GetFrameRegion(this.defaultImage)));
+        CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.defaultImage));
+        this.ClearWithDrawingCanvas(this.defaultConfiguration, frame);
+        using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, frame);
         canvas.DrawText(this.textOptions, this.text, this.drawingOptions, this.brush, pen: null);
         canvas.Flush();
     }
@@ -137,7 +123,9 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Description = "DrawingCanvas WebGPU Backend (CPURegion)")]
     public void DrawingCanvasWebGPUBackendCpuRegion()
     {
-        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, new CpuRegionOnlyFrame<Rgba32>(GetFrameRegion(this.webGpuCpuImage)));
+        CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.webGpuCpuImage));
+        this.ClearWithDrawingCanvas(this.webGpuConfiguration, frame);
+        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, frame);
         canvas.DrawText(this.textOptions, this.text, this.drawingOptions, this.brush, pen: null);
         canvas.Flush();
     }
@@ -145,6 +133,7 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Description = "DrawingCanvas WebGPU Backend (NativeSurface)")]
     public void DrawingCanvasWebGPUBackendNativeSurface()
     {
+        this.ClearWithDrawingCanvas(this.webGpuConfiguration, this.webGpuNativeFrame);
         using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame);
         canvas.DrawText(this.textOptions, this.text, this.drawingOptions, this.brush, pen: null);
         canvas.Flush();

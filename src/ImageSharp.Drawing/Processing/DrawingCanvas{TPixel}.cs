@@ -262,11 +262,12 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         // same-coverage glyph variants are contiguous. Text glyphs within the same render
         // pass occupy non-overlapping positions, making this reordering visually safe while
         // maximizing batch sizes in the downstream batcher.
+        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)> definitionKeyCache = [];
         List<(byte RenderPass, CompositionCommand Command)> entries = new(operations.Count);
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, this.CreateCompositionCommand(operation, drawingOptions)));
+            entries.Add((operation.RenderPass, this.CreateCompositionCommand(operation, drawingOptions, definitionKeyCache)));
         }
 
         entries.Sort(static (a, b) =>
@@ -275,9 +276,9 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             return cmp != 0 ? cmp : a.Command.DefinitionKey.CompareTo(b.Command.DefinitionKey);
         });
 
-        foreach ((_, CompositionCommand command) in entries)
+        for (int i = 0; i < entries.Count; i++)
         {
-            this.batcher.AddComposition(command);
+            this.batcher.AddComposition(entries[i].Command);
         }
     }
 
@@ -323,7 +324,8 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
     private CompositionCommand CreateCompositionCommand(
         DrawingOperation operation,
-        DrawingOptions drawingOptions)
+        DrawingOptions drawingOptions,
+        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
     {
         Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
             ? operation.Brush!
@@ -387,6 +389,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             compositeBrush,
             graphicsOptions,
             rasterizerOptions,
-            destinationOffset);
+            destinationOffset,
+            definitionKeyCache);
     }
 }

@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -81,15 +82,17 @@ internal readonly struct CompositionCommand
     /// <param name="graphicsOptions">Graphics options used for composition.</param>
     /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
+    /// <param name="definitionKeyCache">Optional scoped cache to avoid repeated path flattening for the same <see cref="IPath"/> reference.</param>
     /// <returns>The normalized composition command.</returns>
     public static CompositionCommand Create(
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
         in RasterizerOptions rasterizerOptions,
-        Point destinationOffset = default)
+        Point destinationOffset = default,
+        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
     {
-        int definitionKey = ComputeCoverageDefinitionKey(path, in rasterizerOptions);
+        int definitionKey = ComputeCoverageDefinitionKey(path, in rasterizerOptions, definitionKeyCache);
         RectangleF bounds = path.Bounds;
         Rectangle localBrushBounds = Rectangle.FromLTRB(
             (int)MathF.Floor(bounds.Left),
@@ -117,8 +120,42 @@ internal readonly struct CompositionCommand
     /// </summary>
     /// <param name="path">Path to rasterize.</param>
     /// <param name="rasterizerOptions">Rasterizer options used for coverage generation.</param>
+    /// <param name="definitionKeyCache">Optional scoped cache keyed by path identity to avoid repeated path flattening.</param>
     /// <returns>A stable key for coverage-equivalent commands.</returns>
-    public static int ComputeCoverageDefinitionKey(IPath path, in RasterizerOptions rasterizerOptions)
+    public static int ComputeCoverageDefinitionKey(
+        IPath path,
+        in RasterizerOptions rasterizerOptions,
+        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
+    {
+        // Fast path: when the caller provides a cache and the same IPath object is
+        // reused (e.g. cached glyph sub-pixel variants), skip the expensive
+        // Flatten + point-hash and return the cached key.
+        if (definitionKeyCache is not null)
+        {
+            int pathIdentity = RuntimeHelpers.GetHashCode(path);
+            int rasterState = HashCode.Combine(
+                rasterizerOptions.Interest.Size,
+                (int)rasterizerOptions.IntersectionRule,
+                (int)rasterizerOptions.RasterizationMode,
+                (int)rasterizerOptions.SamplingOrigin);
+            int cacheProbe = HashCode.Combine(pathIdentity, rasterState);
+
+            if (definitionKeyCache.TryGetValue(cacheProbe, out (IPath Path, int RasterState, int DefinitionKey) cached) &&
+                ReferenceEquals(cached.Path, path) &&
+                cached.RasterState == rasterState)
+            {
+                return cached.DefinitionKey;
+            }
+
+            int definitionKey = ComputeCoverageDefinitionKeySlow(path, in rasterizerOptions);
+            definitionKeyCache[cacheProbe] = (path, rasterState, definitionKey);
+            return definitionKey;
+        }
+
+        return ComputeCoverageDefinitionKeySlow(path, in rasterizerOptions);
+    }
+
+    private static int ComputeCoverageDefinitionKeySlow(IPath path, in RasterizerOptions rasterizerOptions)
     {
         HashCode hash = default;
         foreach (ISimplePath simplePath in path.Flatten())
