@@ -10,9 +10,16 @@ namespace SixLabors.ImageSharp.Drawing.Text;
 
 /// <summary>
 /// A rendering surface that Fonts can use to generate shapes by following a path.
+/// Each glyph is positioned along the path and rotated to match the path tangent
+/// at the glyph's horizontal center.
 /// </summary>
 internal sealed class PathGlyphBuilder : GlyphBuilder
 {
+    /// <summary>
+    /// The path that glyphs are laid out along. Exposed as <see cref="IPathInternals"/>
+    /// to access the <see cref="IPathInternals.PointAlongPath"/> method for efficient
+    /// position + tangent queries.
+    /// </summary>
     private readonly IPathInternals path;
 
     /// <summary>
@@ -27,23 +34,35 @@ internal sealed class PathGlyphBuilder : GlyphBuilder
         }
         else
         {
+            // Wrap in ComplexPolygon to gain IPathInternals.
             this.path = new ComplexPolygon(path);
         }
     }
 
     /// <inheritdoc/>
-    protected override void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
-        => this.TransformGlyph(in bounds);
+    protected override bool BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
+    {
+        // Translate + rotate the glyph to follow the path. Always returns true because
+        // path-based glyphs are never cached (each has a unique per-position transform).
+        this.TransformGlyph(in bounds);
+        return true;
+    }
 
+    /// <summary>
+    /// Computes the translation + rotation matrix that places a glyph along the path.
+    /// The glyph's horizontal center is mapped to the path distance, and the glyph
+    /// is rotated to match the path tangent at that point.
+    /// </summary>
+    /// <param name="bounds">The font-metric bounding rectangle of the glyph.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void TransformGlyph(in FontRectangle bounds)
     {
-        // Find the point of this intersection along the given path.
-        // We want to find the point on the path that is closest to the center-bottom side of the glyph.
+        // Query the path at the glyph's horizontal center.
         Vector2 half = new(bounds.Width * .5F, 0);
         SegmentInfo pathPoint = this.path.PointAlongPath(bounds.Left + half.X);
 
-        // Now offset to our target point since we're aligning the top-left location of our glyph against the path.
+        // Translate so the glyph's top-left aligns with the path point,
+        // then rotate around the path point to follow the tangent.
         Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
         Matrix3x2 matrix = Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
 

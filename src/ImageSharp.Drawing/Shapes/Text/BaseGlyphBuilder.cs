@@ -14,20 +14,39 @@ namespace SixLabors.ImageSharp.Drawing.Text;
 /// </summary>
 internal class BaseGlyphBuilder : IGlyphRenderer
 {
+    /// <summary>
+    /// The last point emitted by <c>MoveTo</c> / <c>LineTo</c> / curve commands.
+    /// Used as the implicit start of the next segment.
+    /// </summary>
     private Vector2 currentPoint;
+
+    /// <summary>
+    /// Snapshot of the <see cref="GlyphRendererParameters"/> for the glyph currently
+    /// being processed. Set at the start of each <c>BeginGlyph</c> call and read by
+    /// <c>SetDecoration</c> to determine layout orientation.
+    /// </summary>
     private GlyphRendererParameters parameters;
 
     // Tracks whether geometry was emitted inside BeginLayer/EndLayer pairs for this glyph.
+    // When true, EndGlyph skips its default single-layer path capture because layers
+    // already contributed their paths individually.
     private bool usedLayers;
 
     // Tracks whether we are currently inside a layer block.
+    // Guards against unbalanced EndLayer calls.
     private bool inLayer;
 
-    // Per-GRAPHEME layered capture (aggregate multiple glyphs of the same grapheme, e.g. COLR v0 layers):
+    // --- Per-GRAPHEME layered capture ---
+    // A grapheme cluster (e.g. a base glyph + COLR v0 color layers) may span
+    // multiple BeginGlyph/EndGlyph calls. These fields aggregate all layers
+    // belonging to the same grapheme into a single GlyphPathCollection.
     private GlyphPathCollection.Builder? graphemeBuilder;
     private int graphemePathCount;
     private int currentGraphemeIndex = -1;
     private readonly List<GlyphPathCollection> currentGlyphs = [];
+
+    // Previous decoration details per decoration type, used to stitch adjacent
+    // decorations together and eliminate sub-pixel gaps between glyphs.
     private TextDecorationDetails? previousUnderlineTextDecoration;
     private TextDecorationDetails? previousOverlineTextDecoration;
     private TextDecorationDetails? previousStrikeoutTextDecoration;
@@ -38,8 +57,17 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     private FillRule currentLayerFillRule;
     private ClipQuad? currentClipBounds;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class
+    /// with an identity transform.
+    /// </summary>
     public BaseGlyphBuilder() => this.Builder = new PathBuilder();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BaseGlyphBuilder"/> class
+    /// with the specified transform applied to all incoming glyph geometry.
+    /// </summary>
+    /// <param name="transform">A matrix transform applied to every point received from the font engine.</param>
     public BaseGlyphBuilder(Matrix3x2 transform) => this.Builder = new PathBuilder(transform);
 
     /// <summary>
@@ -53,13 +81,25 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// </summary>
     public IReadOnlyList<GlyphPathCollection> Glyphs => this.currentGlyphs;
 
+    /// <summary>
+    /// Gets the <see cref="PathBuilder"/> used to accumulate outline segments
+    /// (<c>MoveTo</c>, <c>LineTo</c>, curves) for the current glyph or layer.
+    /// The builder is cleared between glyphs / layers.
+    /// </summary>
     protected PathBuilder Builder { get; }
 
     /// <summary>
-    /// Gets the paths captured for the current glyph/grapheme.
+    /// Gets the running list of all <see cref="IPath"/> instances produced so far
+    /// (glyph outlines, layer outlines, and decoration rectangles). Subclasses
+    /// read from the end of this list (e.g. <c>CurrentPaths[^1]</c>) to obtain
+    /// the most recently built path.
     /// </summary>
     protected List<IPath> CurrentPaths { get; } = [];
 
+    /// <summary>
+    /// Called by the font engine after all glyphs in the text block have been rendered.
+    /// Flushes any in-progress grapheme aggregate and resets per-text-block state.
+    /// </summary>
     void IGlyphRenderer.EndText()
     {
         // Finalize the last grapheme, if any:
@@ -80,6 +120,15 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
     void IGlyphRenderer.BeginText(in FontRectangle bounds) => this.BeginText(bounds);
 
+    /// <summary>
+    /// Called by the font engine before emitting outline data for a single glyph.
+    /// Manages grapheme-cluster transitions and resets per-glyph state.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> to have the font engine emit the full outline
+    /// (MoveTo/LineTo/curves/EndGlyph); <see langword="false"/> to skip it entirely,
+    /// which is used by caching subclasses when the glyph path is already available.
+    /// </returns>
     bool IGlyphRenderer.BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
     {
         // If grapheme changed, flush previous aggregate and start a new one:
@@ -110,8 +159,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.currentLayerPaint = null;
         this.currentLayerFillRule = FillRule.NonZero;
         this.currentClipBounds = null;
-        this.BeginGlyph(in bounds, in parameters);
-        return true;
+        return this.BeginGlyph(in bounds, in parameters);
     }
 
     /// <inheritdoc/>
@@ -124,10 +172,15 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.currentPoint = point;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Called by the font engine after the outline for a single glyph has been fully emitted.
+    /// Builds the accumulated path and registers it as a grapheme layer unless explicit
+    /// <c>BeginLayer</c>/<c>EndLayer</c> pairs already handled layer registration.
+    /// </summary>
     void IGlyphRenderer.EndGlyph()
     {
-        // If the glyph did not open any explicit layer, treat its geometry as a single layer in the current grapheme:
+        // If the glyph did not open any explicit layer, treat its geometry as a single
+        // implicit layer so that non-color glyphs still produce a GlyphPathCollection entry.
         if (!this.usedLayers)
         {
             IPath path = this.Builder.Build();
@@ -187,7 +240,10 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.currentPoint = point;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Called by the font engine to begin a color layer within a COLR v0/v1 glyph.
+    /// Each layer receives its own paint, fill rule, and optional clip bounds.
+    /// </summary>
     void IGlyphRenderer.BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
     {
         this.usedLayers = true;
@@ -201,7 +257,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.BeginLayer(paint, fillRule, clipBounds);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Called by the font engine to close a color layer opened by <c>BeginLayer</c>.
+    /// Builds the layer path, applies any clip quad, and registers the result
+    /// as a painted layer in the current grapheme aggregate.
+    /// </summary>
     void IGlyphRenderer.EndLayer()
     {
         if (!this.inLayer)
@@ -211,6 +271,8 @@ internal class BaseGlyphBuilder : IGlyphRenderer
 
         IPath path = this.Builder.Build();
 
+        // If the layer defines a clip quad (e.g. from COLR v1), intersect the
+        // built path with the quad polygon to constrain rendering.
         if (this.currentClipBounds is not null)
         {
             ClipQuad clip = this.currentClipBounds.Value;
@@ -251,7 +313,13 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.EndLayer();
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Called by the font engine to emit a text decoration (underline, strikeout, or overline)
+    /// for the current glyph. Builds a filled rectangle path from the start/end positions and
+    /// thickness, then registers it as a <see cref="GlyphLayerKind.Decoration"/> layer.
+    /// Adjacent decorations are stitched together using the previous decoration details to
+    /// eliminate sub-pixel gaps caused by font metric rounding.
+    /// </summary>
     void IGlyphRenderer.SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
     {
         if (thickness == 0)
@@ -392,52 +460,100 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     {
     }
 
-    /// <inheritdoc cref="IGlyphRenderer.BeginGlyph(in FontRectangle, in GlyphRendererParameters)"/>
-    protected virtual void BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
-    {
-    }
+    /// <summary>
+    /// Called after base-class bookkeeping in <c>IGlyphRenderer.BeginGlyph</c>.
+    /// Subclasses override this to apply transforms, consult caches, or opt out of
+    /// outline emission by returning <see langword="false"/>.
+    /// </summary>
+    /// <param name="bounds">The font-metric bounding rectangle of the glyph.</param>
+    /// <param name="parameters">Identifies the glyph (id, font, layout mode, text run, etc.).</param>
+    /// <returns>
+    /// <see langword="true"/> to receive outline data and an <c>EndGlyph</c> call;
+    /// <see langword="false"/> to skip outline emission for this glyph entirely.
+    /// </returns>
+    protected virtual bool BeginGlyph(in FontRectangle bounds, in GlyphRendererParameters parameters)
+        => true;
 
-    /// <inheritdoc cref="IGlyphRenderer.EndGlyph"/>
+    /// <summary>
+    /// Called after the base class has built and registered the glyph path.
+    /// Subclasses override this to emit drawing operations from the captured path.
+    /// </summary>
     protected virtual void EndGlyph()
     {
     }
 
-    /// <inheritdoc cref="IGlyphRenderer.EndText"/>
+    /// <summary>
+    /// Called after the base class has flushed all grapheme aggregates.
+    /// Subclasses override this for any per-text-block finalization.
+    /// </summary>
     protected virtual void EndText()
     {
     }
 
-    /// <inheritdoc cref="IGlyphRenderer.BeginLayer(Paint?, FillRule, ClipQuad?)"/>
+    /// <summary>
+    /// Called when a COLR color layer begins. Subclasses override this to
+    /// capture the layer's paint and composite mode.
+    /// </summary>
+    /// <param name="paint">The paint for this color layer, or <see langword="null"/> for the default foreground.</param>
+    /// <param name="fillRule">The fill rule to use when rasterizing this layer.</param>
+    /// <param name="clipBounds">Optional clip quad constraining the layer region.</param>
     protected virtual void BeginLayer(Paint? paint, FillRule fillRule, ClipQuad? clipBounds)
     {
     }
 
-    /// <inheritdoc cref="IGlyphRenderer.EndLayer"/>
+    /// <summary>
+    /// Called when a COLR color layer ends. Subclasses override this to
+    /// emit the layer as a drawing operation.
+    /// </summary>
     protected virtual void EndLayer()
     {
     }
 
+    /// <summary>
+    /// Returns the set of text decorations enabled for the current glyph.
+    /// The font engine calls this to decide which <c>SetDecoration</c> callbacks to emit.
+    /// Subclasses override this to include decorations implied by rich-text pens
+    /// (e.g. <see cref="RichTextRun.UnderlinePen"/>).
+    /// </summary>
+    /// <returns>A flags enum of the active text decorations.</returns>
     public virtual TextDecorations EnabledDecorations()
         => this.parameters.TextRun.TextDecorations;
 
-    /// <inheritdoc cref="IGlyphRenderer.SetDecoration(TextDecorations, Vector2, Vector2, float)"/>
+    /// <summary>
+    /// Override point for subclasses to emit decoration drawing operations.
+    /// Called after the base class has built and registered the decoration path
+    /// in <see cref="CurrentPaths"/>.
+    /// </summary>
+    /// <param name="textDecorations">The type of decoration (underline, strikeout, or overline).</param>
+    /// <param name="start">The start position of the decoration line.</param>
+    /// <param name="end">The end position of the decoration line.</param>
+    /// <param name="thickness">The thickness of the decoration line in pixels.</param>
     public virtual void SetDecoration(TextDecorations textDecorations, Vector2 start, Vector2 end, float thickness)
     {
     }
 
+    /// <summary>
+    /// Truncates a floating-point position to the nearest whole pixel toward negative infinity.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Point ClampToPixel(PointF point) => Point.Truncate(point);
 
+    /// <summary>
+    /// Snaps a decoration endpoint to the pixel grid, taking stroke thickness and
+    /// orientation into account. Even-thickness lines snap to whole pixels; odd-thickness
+    /// lines snap to half pixels so the stroke center lands on a pixel boundary.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static PointF ClampToPixel(PointF point, int thickness, bool rotated)
     {
-        // Even. Clamp to whole pixels.
+        // Even thickness: snap to whole pixels.
         if ((thickness & 1) == 0)
         {
             return Point.Truncate(point);
         }
 
-        // Odd. Clamp to half pixels.
+        // Odd thickness: snap to half pixels along the perpendicular axis
+        // so the 1px-wide center row/column aligns with physical pixels.
         if (rotated)
         {
             return Point.Truncate(point) + new Vector2(.5F, 0);
@@ -446,12 +562,19 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         return Point.Truncate(point) + new Vector2(0, .5F);
     }
 
+    /// <summary>
+    /// Records the start, end, and thickness of a previously emitted decoration line
+    /// so that the next adjacent decoration can be stitched seamlessly.
+    /// </summary>
     private struct TextDecorationDetails
     {
+        /// <summary>Gets or sets the start position of the decoration.</summary>
         public Vector2 Start { get; set; }
 
+        /// <summary>Gets or sets the end position of the decoration.</summary>
         public Vector2 End { get; set; }
 
+        /// <summary>Gets or sets the decoration thickness in pixels.</summary>
         public float Thickness { get; internal set; }
     }
 }

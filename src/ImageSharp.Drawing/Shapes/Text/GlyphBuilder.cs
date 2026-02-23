@@ -6,7 +6,9 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing.Text;
 
 /// <summary>
-/// rendering surface that Fonts can use to generate Shapes.
+/// A rendering surface that Fonts can use to generate shapes.
+/// Extends <see cref="BaseGlyphBuilder"/> by adding a configurable origin offset
+/// so that all captured geometry is translated by the specified amount.
 /// </summary>
 internal class GlyphBuilder : BaseGlyphBuilder
 {
