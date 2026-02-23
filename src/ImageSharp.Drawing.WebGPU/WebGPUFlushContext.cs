@@ -29,7 +29,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private bool ownsTargetTexture;
     private bool ownsTargetView;
     private bool ownsReadbackBuffer;
-    private WebGPUCompositeInstanceData[]? compositeInstanceData;
     private readonly List<nint> transientBindGroups = [];
     private readonly List<nint> transientTextureViews = [];
     private readonly List<nint> transientTextures = [];
@@ -91,23 +90,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public CommandEncoder* CommandEncoder { get; set; }
 
     public RenderPassEncoder* PassEncoder { get; private set; }
-
-    public Span<WebGPUCompositeInstanceData> GetCompositeInstanceSpan(int count)
-    {
-        if (count <= 0)
-        {
-            return [];
-        }
-
-        WebGPUCompositeInstanceData[]? cached = this.compositeInstanceData;
-        if (cached is null || cached.Length < count)
-        {
-            cached = new WebGPUCompositeInstanceData[count];
-            this.compositeInstanceData = cached;
-        }
-
-        return cached.AsSpan(0, count);
-    }
 
     public static WebGPUFlushContext Create<TPixel>(
         ICanvasFrame<TPixel> frame,
@@ -540,7 +522,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ownsReadbackBuffer = false;
         this.ownsTargetView = false;
         this.ownsTargetTexture = false;
-        this.compositeInstanceData = null;
 
         this.RuntimeLease.Dispose();
         this.disposed = true;
@@ -1189,6 +1170,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 return false;
             }
 
+            // The native wgpu C API expects a null-terminated byte* for Code.
+            // Shader spans include the \0 terminator so fixed pinning is sufficient.
             fixed (byte* shaderCodePtr = shaderCode)
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()

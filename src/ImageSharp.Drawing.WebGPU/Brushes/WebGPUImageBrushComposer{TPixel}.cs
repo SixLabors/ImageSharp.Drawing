@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -31,6 +34,9 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
         this.imageBrushOriginX = imageBrushOriginX;
         this.imageBrushOriginY = imageBrushOriginY;
     }
+
+    /// <inheritdoc />
+    public nuint InstanceDataSizeInBytes => (nuint)Unsafe.SizeOf<ImageBrushInstanceData>();
 
     /// <inheritdoc />
     public bool TryGetOrCreatePipeline(
@@ -72,14 +78,30 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
     }
 
     /// <inheritdoc />
-    public void PopulateInstanceData(ref WebGPUCompositeInstanceData instance)
+    public void WriteInstanceData(in WebGPUCompositeCommonParameters common, Span<byte> destination)
     {
-        instance.ImageRegionX = this.sourceRegion.X;
-        instance.ImageRegionY = this.sourceRegion.Y;
-        instance.ImageRegionWidth = this.sourceRegion.Width;
-        instance.ImageRegionHeight = this.sourceRegion.Height;
-        instance.ImageBrushOriginX = this.imageBrushOriginX;
-        instance.ImageBrushOriginY = this.imageBrushOriginY;
+        ImageBrushInstanceData data = new()
+        {
+            SourceOffsetX = common.SourceOffsetX,
+            SourceOffsetY = common.SourceOffsetY,
+            DestinationX = common.DestinationX,
+            DestinationY = common.DestinationY,
+            DestinationWidth = common.DestinationWidth,
+            DestinationHeight = common.DestinationHeight,
+            TargetWidth = common.TargetWidth,
+            TargetHeight = common.TargetHeight,
+            ImageRegionX = this.sourceRegion.X,
+            ImageRegionY = this.sourceRegion.Y,
+            ImageRegionWidth = this.sourceRegion.Width,
+            ImageRegionHeight = this.sourceRegion.Height,
+            ImageBrushOriginX = this.imageBrushOriginX,
+            ImageBrushOriginY = this.imageBrushOriginY,
+            Padding0 = 0,
+            Padding1 = 0,
+            BlendData = new Vector4(common.BlendPercentage, 0, 0, 0)
+        };
+
+        MemoryMarshal.Write(destination, in data);
     }
 
     /// <inheritdoc />
@@ -180,5 +202,27 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
 
         error = null;
         return true;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ImageBrushInstanceData
+    {
+        public int SourceOffsetX;
+        public int SourceOffsetY;
+        public int DestinationX;
+        public int DestinationY;
+        public int DestinationWidth;
+        public int DestinationHeight;
+        public int TargetWidth;
+        public int TargetHeight;
+        public int ImageRegionX;
+        public int ImageRegionY;
+        public int ImageRegionWidth;
+        public int ImageRegionHeight;
+        public int ImageBrushOriginX;
+        public int ImageBrushOriginY;
+        public int Padding0;
+        public int Padding1;
+        public Vector4 BlendData;
     }
 }

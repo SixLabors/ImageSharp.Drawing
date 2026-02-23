@@ -2,6 +2,8 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends.Brushes;
@@ -22,6 +24,9 @@ internal sealed unsafe class WebGPUSolidBrushComposer : IWebGPUBrushComposer
     }
 
     /// <inheritdoc />
+    public nuint InstanceDataSizeInBytes => (nuint)Unsafe.SizeOf<SolidBrushInstanceData>();
+
+    /// <inheritdoc />
     public bool TryGetOrCreatePipeline(
         WebGPUFlushContext flushContext,
         out RenderPipeline* pipeline,
@@ -36,8 +41,24 @@ internal sealed unsafe class WebGPUSolidBrushComposer : IWebGPUBrushComposer
             out error);
 
     /// <inheritdoc />
-    public void PopulateInstanceData(ref WebGPUCompositeInstanceData instance)
-        => instance.SolidBrushColor = this.color;
+    public void WriteInstanceData(in WebGPUCompositeCommonParameters common, Span<byte> destination)
+    {
+        SolidBrushInstanceData data = new()
+        {
+            SourceOffsetX = common.SourceOffsetX,
+            SourceOffsetY = common.SourceOffsetY,
+            DestinationX = common.DestinationX,
+            DestinationY = common.DestinationY,
+            DestinationWidth = common.DestinationWidth,
+            DestinationHeight = common.DestinationHeight,
+            TargetWidth = common.TargetWidth,
+            TargetHeight = common.TargetHeight,
+            BlendData = new Vector4(common.BlendPercentage, 0, 0, 0),
+            SolidBrushColor = this.color
+        };
+
+        MemoryMarshal.Write(destination, in data);
+    }
 
     /// <inheritdoc />
     public BindGroup* CreateBindGroup(
@@ -121,5 +142,20 @@ internal sealed unsafe class WebGPUSolidBrushComposer : IWebGPUBrushComposer
 
         error = null;
         return true;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SolidBrushInstanceData
+    {
+        public int SourceOffsetX;
+        public int SourceOffsetY;
+        public int DestinationX;
+        public int DestinationY;
+        public int DestinationWidth;
+        public int DestinationHeight;
+        public int TargetWidth;
+        public int TargetHeight;
+        public Vector4 BlendData;
+        public Vector4 SolidBrushColor;
     }
 }

@@ -1,9 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
@@ -348,14 +348,31 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
 
         IWebGPUBrushComposer[] composers = new IWebGPUBrushComposer[commandCount];
-        for (int i = 0; i < commandCount; i++)
+        for (int i = 0; i < composers.Length; i++)
         {
             composers[i] = WebGPUBrushComposerFactory.Create<TPixel>(flushContext, commands[i]);
         }
 
-        nuint instanceBytes = checked((nuint)commandCount * (nuint)Unsafe.SizeOf<WebGPUCompositeInstanceData>());
+        nuint totalInstanceBytes = 0;
+        nuint maxInstanceBytes = 0;
+        for (int i = 0; i < composers.Length; i++)
+        {
+            nuint instanceBytes = composers[i].InstanceDataSizeInBytes;
+            if (instanceBytes == 0)
+            {
+                error = "Brush composer returned an empty instance payload.";
+                return false;
+            }
+
+            totalInstanceBytes = checked(totalInstanceBytes + AlignToStorageBufferOffset(instanceBytes));
+            if (instanceBytes > maxInstanceBytes)
+            {
+                maxInstanceBytes = instanceBytes;
+            }
+        }
+
         nuint instanceOffset = flushContext.InstanceBufferWriteOffset;
-        nuint requiredCapacity = checked(instanceOffset + instanceBytes);
+        nuint requiredCapacity = checked(instanceOffset + totalInstanceBytes);
 
         // If the buffer exists but cannot fit at the current offset, flush pending
         // draws and reset so the next batch starts at offset 0.
@@ -369,7 +386,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             }
 
             instanceOffset = 0;
-            requiredCapacity = instanceBytes;
+            requiredCapacity = totalInstanceBytes;
         }
 
         if (!flushContext.EnsureInstanceBufferCapacity(requiredCapacity, Math.Max(requiredCapacity, CompositeInstanceBufferSize)) ||
@@ -380,62 +397,71 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
-        Span<WebGPUCompositeInstanceData> instances = flushContext.GetCompositeInstanceSpan(commandCount);
-        int targetWidth = flushContext.TargetBounds.Width;
-        int targetHeight = flushContext.TargetBounds.Height;
-        for (int i = 0; i < commandCount; i++)
+        byte[]? rentedInstanceData = null;
+        try
         {
-            PreparedCompositionCommand command = commands[i];
-            int destinationX = destinationBounds.X + command.DestinationRegion.X - flushContext.TargetBounds.X;
-            int destinationY = destinationBounds.Y + command.DestinationRegion.Y - flushContext.TargetBounds.Y;
-
-            instances[i] = new WebGPUCompositeInstanceData
+            rentedInstanceData = ArrayPool<byte>.Shared.Rent(checked((int)maxInstanceBytes));
+            Span<byte> instanceScratch = rentedInstanceData;
+            nuint commandOffset = instanceOffset;
+            int targetWidth = flushContext.TargetBounds.Width;
+            int targetHeight = flushContext.TargetBounds.Height;
+            for (int i = 0; i < composers.Length; i++)
             {
-                SourceOffsetX = command.SourceOffset.X,
-                SourceOffsetY = command.SourceOffset.Y,
-                DestinationX = destinationX,
-                DestinationY = destinationY,
-                DestinationWidth = command.DestinationRegion.Width,
-                DestinationHeight = command.DestinationRegion.Height,
-                TargetWidth = targetWidth,
-                TargetHeight = targetHeight,
-                BlendData = new Vector4(command.GraphicsOptions.BlendPercentage, 0, 0, 0)
-            };
+                IWebGPUBrushComposer composer = composers[i];
+                PreparedCompositionCommand command = commands[i];
+                nuint instanceBytes = composer.InstanceDataSizeInBytes;
+                int instanceBytesInt = checked((int)instanceBytes);
+                int destinationX = destinationBounds.X + command.DestinationRegion.X - flushContext.TargetBounds.X;
+                int destinationY = destinationBounds.Y + command.DestinationRegion.Y - flushContext.TargetBounds.Y;
+                WebGPUCompositeCommonParameters common = new(
+                    command.SourceOffset.X,
+                    command.SourceOffset.Y,
+                    destinationX,
+                    destinationY,
+                    command.DestinationRegion.Width,
+                    command.DestinationRegion.Height,
+                    targetWidth,
+                    targetHeight,
+                    command.GraphicsOptions.BlendPercentage);
 
-            composers[i].PopulateInstanceData(ref instances[i]);
-        }
+                Span<byte> payload = instanceScratch[..instanceBytesInt];
+                composer.WriteInstanceData(in common, payload);
 
-        fixed (WebGPUCompositeInstanceData* instancesPtr = instances)
-        {
-            // QueueWriteBuffer copies source bytes into driver-owned staging immediately.
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, flushContext.InstanceBuffer, instanceOffset, instancesPtr, instanceBytes);
-        }
+                fixed (byte* payloadPtr = payload)
+                {
+                    // QueueWriteBuffer copies source bytes into driver-owned staging immediately.
+                    flushContext.Api.QueueWriteBuffer(flushContext.Queue, flushContext.InstanceBuffer, commandOffset, payloadPtr, instanceBytes);
+                }
 
-        for (int i = 0; i < commandCount; i++)
-        {
-            IWebGPUBrushComposer composer = composers[i];
+                if (!composer.TryGetOrCreatePipeline(flushContext, out RenderPipeline* pipeline, out string? pipelineError))
+                {
+                    error = pipelineError ?? "Failed to create composite pipeline.";
+                    return false;
+                }
 
-            if (!composer.TryGetOrCreatePipeline(flushContext, out RenderPipeline* pipeline, out string? pipelineError))
-            {
-                error = pipelineError ?? "Failed to create composite pipeline.";
-                return false;
+                BindGroup* bindGroup = composer.CreateBindGroup(
+                    flushContext,
+                    coverageEntry.GPUCoverageView,
+                    commandOffset,
+                    instanceBytes);
+
+                flushContext.TrackBindGroup(bindGroup);
+                flushContext.Api.RenderPassEncoderSetPipeline(flushContext.PassEncoder, pipeline);
+                flushContext.Api.RenderPassEncoderSetBindGroup(flushContext.PassEncoder, 0, bindGroup, 0, null);
+                flushContext.Api.RenderPassEncoderDraw(flushContext.PassEncoder, CompositeVertexCount, 1, 0, 0);
+                commandOffset = checked(commandOffset + AlignToStorageBufferOffset(instanceBytes));
             }
 
-            BindGroup* bindGroup = composer.CreateBindGroup(
-                flushContext,
-                coverageEntry.GPUCoverageView,
-                instanceOffset,
-                instanceBytes);
-
-            flushContext.TrackBindGroup(bindGroup);
-            flushContext.Api.RenderPassEncoderSetPipeline(flushContext.PassEncoder, pipeline);
-            flushContext.Api.RenderPassEncoderSetBindGroup(flushContext.PassEncoder, 0, bindGroup, 0, null);
-            flushContext.Api.RenderPassEncoderDraw(flushContext.PassEncoder, CompositeVertexCount, 1, 0, (uint)i);
+            flushContext.AdvanceInstanceBufferOffset(commandOffset);
+            return true;
         }
-
-        flushContext.AdvanceInstanceBufferOffset(instanceOffset + instanceBytes);
-
-        return true;
+        finally
+        {
+            if (rentedInstanceData is not null)
+            {
+                ArrayPool<byte>.Shared.Return(rentedInstanceData);
+            }
+        }
     }
 
     private bool TryFinalizeFlush<TPixel>(
@@ -648,6 +674,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static nuint AlignToStorageBufferOffset(nuint value)
+        => (value + 255) & ~(nuint)255;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSingleMemory<T>(Buffer2D<T> buffer)
