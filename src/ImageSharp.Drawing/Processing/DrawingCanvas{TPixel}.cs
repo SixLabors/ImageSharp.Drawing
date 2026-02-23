@@ -252,7 +252,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.DrawTextOperations(textRenderer.DrawingOperations, drawingOptions);
     }
 
-    private void DrawTextOperations(IEnumerable<DrawingOperation> operations, DrawingOptions drawingOptions)
+    private void DrawTextOperations(List<DrawingOperation> operations, DrawingOptions drawingOptions)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(operations, nameof(operations));
@@ -262,9 +262,10 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         // same-coverage glyph variants are contiguous. Text glyphs within the same render
         // pass occupy non-overlapping positions, making this reordering visually safe while
         // maximizing batch sizes in the downstream batcher.
-        List<(byte RenderPass, CompositionCommand Command)> entries = [];
-        foreach (DrawingOperation operation in operations)
+        List<(byte RenderPass, CompositionCommand Command)> entries = new(operations.Count);
+        for (int i = 0; i < operations.Count; i++)
         {
+            DrawingOperation operation = operations[i];
             entries.Add((operation.RenderPass, this.CreateCompositionCommand(operation, drawingOptions)));
         }
 
