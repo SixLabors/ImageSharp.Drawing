@@ -138,9 +138,20 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                 return;
             }
 
-            // All batches emitted by this call share one flush id so backends can keep
-            // transient per-flush GPU state and finalize once on the last batch.
-            int flushId = Interlocked.Increment(ref nextFlushId);
+            // Use one shared flush id only when all queued brushes are directly supported by
+            // the active backend. If any brush is unsupported, backends receive independent
+            // batches (flushId = 0) so they can route each batch safely without shared state.
+            bool supportsSharedFlush = true;
+            for (int i = 0; i < this.commands.Count; i++)
+            {
+                if (!this.backend.IsCompositionBrushSupported<TPixel>(this.commands[i].Brush))
+                {
+                    supportsSharedFlush = false;
+                    break;
+                }
+            }
+
+            int flushId = supportsSharedFlush ? Interlocked.Increment(ref nextFlushId) : 0;
             for (int i = 0; i < batches.Count; i++)
             {
                 CompositionBatch batch = batches[i];

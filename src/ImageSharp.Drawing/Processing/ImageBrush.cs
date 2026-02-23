@@ -12,21 +12,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 public class ImageBrush : Brush
 {
     /// <summary>
-    /// The image to paint.
-    /// </summary>
-    private readonly Image image;
-
-    /// <summary>
-    /// The region of the source image we will be using to paint.
-    /// </summary>
-    private readonly RectangleF region;
-
-    /// <summary>
-    /// The offet to apply to the source image while applying the imagebrush
-    /// </summary>
-    private readonly Point offset;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ImageBrush"/> class.
     /// </summary>
     /// <param name="image">The source image to draw.</param>
@@ -73,24 +58,30 @@ public class ImageBrush : Brush
     /// </param>
     public ImageBrush(Image image, RectangleF region, Point offset)
     {
-        this.image = image;
-        this.region = RectangleF.Intersect(image.Bounds, region);
-        this.offset = offset;
+        this.SourceImage = image;
+        this.SourceRegion = RectangleF.Intersect(image.Bounds, region);
+        this.Offset = offset;
     }
+
+    internal Image SourceImage { get; }
+
+    internal RectangleF SourceRegion { get; }
+
+    internal Point Offset { get; }
 
     /// <inheritdoc />
     public override bool Equals(Brush? other)
     {
         if (other is ImageBrush ib)
         {
-            return ib.image == this.image && ib.region == this.region;
+            return ib.SourceImage == this.SourceImage && ib.SourceRegion == this.SourceRegion;
         }
 
         return false;
     }
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(this.image, this.region);
+    public override int GetHashCode() => HashCode.Combine(this.SourceImage, this.SourceRegion);
 
     /// <inheritdoc />
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
@@ -99,13 +90,13 @@ public class ImageBrush : Brush
         Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
     {
-        if (this.image is Image<TPixel> specificImage)
+        if (this.SourceImage is Image<TPixel> specificImage)
         {
-            return new ImageBrushApplicator<TPixel>(configuration, options, targetRegion, specificImage, region, this.region, this.offset, false);
+            return new ImageBrushApplicator<TPixel>(configuration, options, targetRegion, specificImage, region, this.SourceRegion, this.Offset, false);
         }
 
-        specificImage = this.image.CloneAs<TPixel>();
-        return new ImageBrushApplicator<TPixel>(configuration, options, targetRegion, specificImage, region, this.region, this.offset, true);
+        specificImage = this.SourceImage.CloneAs<TPixel>();
+        return new ImageBrushApplicator<TPixel>(configuration, options, targetRegion, specificImage, region, this.SourceRegion, this.Offset, true);
     }
 
     /// <summary>

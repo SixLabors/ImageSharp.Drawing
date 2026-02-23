@@ -9,21 +9,22 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 [StructLayout(LayoutKind.Sequential)]
 internal struct WebGPUCompositeInstanceData
 {
-    public uint SourceOffsetX;
-    public uint SourceOffsetY;
-    public uint DestinationX;
-    public uint DestinationY;
-    public uint DestinationWidth;
-    public uint DestinationHeight;
-    public uint TargetWidth;
-    public uint TargetHeight;
-    public uint BrushKind;
-    public uint Padding0;
-    public uint Padding1;
-    public uint Padding2;
+    public int SourceOffsetX;
+    public int SourceOffsetY;
+    public int DestinationX;
+    public int DestinationY;
+    public int DestinationWidth;
+    public int DestinationHeight;
+    public int TargetWidth;
+    public int TargetHeight;
+    public int ImageRegionX;
+    public int ImageRegionY;
+    public int ImageRegionWidth;
+    public int ImageRegionHeight;
+    public int ImageBrushOriginX;
+    public int ImageBrushOriginY;
+    public int Padding0;
+    public int Padding1;
     public Vector4 SolidBrushColor;
-    public float BlendPercentage;
-    public float Padding3;
-    public float Padding4;
-    public float Padding5;
+    public Vector4 BlendData;
 }

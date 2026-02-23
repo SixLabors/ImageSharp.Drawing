@@ -15,6 +15,17 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal interface IDrawingBackend
 {
     /// <summary>
+    /// Determines whether the backend can compose the provided brush type directly for <typeparamref name="TPixel"/>.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
+    /// <param name="brush">The brush used by a pending composition command.</param>
+    /// <returns>
+    /// <see langword="true"/> when the backend can compose the brush directly; otherwise <see langword="false"/>.
+    /// </returns>
+    public bool IsCompositionBrushSupported<TPixel>(Brush brush)
+        where TPixel : unmanaged, IPixel<TPixel>;
+
+    /// <summary>
     /// Fills a path into a destination target region.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>

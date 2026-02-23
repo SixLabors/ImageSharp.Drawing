@@ -799,7 +799,7 @@ internal sealed unsafe class WebGPURasterizer
             return false;
         }
 
-        float sampleShift = samplingOrigin == RasterizerSamplingOrigin.PixelBoundary ? 0.5F : 0F;
+        float sampleShift = samplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
         float offsetX = sampleShift - interestLocation.X;
         float offsetY = sampleShift - interestLocation.Y;
 

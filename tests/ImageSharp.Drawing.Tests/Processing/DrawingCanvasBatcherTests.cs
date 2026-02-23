@@ -36,8 +36,37 @@ public class DrawingCanvasBatcherTests
         Assert.Same(brushB, backend.LastBatch.Commands[1].Brush);
     }
 
+    [Fact]
+    public void Flush_WhenAnyBrushUnsupported_DisablesSharedFlushId()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new()
+        {
+            IsBrushSupported = static brush => brush is SolidBrush
+        };
+
+        using Image<Rgba32> image = new(40, 40);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        using DrawingCanvas<Rgba32> canvas = new(configuration, backend, new CpuCanvasFrame<Rgba32>(region));
+
+        IPath pathA = new RectangularPolygon(2, 2, 12, 12);
+        IPath pathB = new RectangularPolygon(18, 18, 12, 12);
+        DrawingOptions options = new();
+
+        canvas.FillPath(pathA, Brushes.Solid(Color.Red), options);
+        canvas.FillPath(pathB, Brushes.Horizontal(Color.Blue), options);
+        canvas.Flush();
+
+        Assert.NotEmpty(backend.Batches);
+        Assert.All(backend.Batches, static batch => Assert.Equal(0, batch.FlushId));
+    }
+
     private sealed class CapturingBackend : IDrawingBackend
     {
+        public Func<Brush, bool> IsBrushSupported { get; init; } = static _ => true;
+
+        public List<CompositionBatch> Batches { get; } = [];
+
         public bool HasBatch { get; private set; }
 
         public CompositionBatch LastBatch { get; private set; } = new(
@@ -62,6 +91,10 @@ public class DrawingCanvasBatcherTests
             => batcher.AddComposition(
                 CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions, target.Bounds.Location));
 
+        public bool IsCompositionBrushSupported<TPixel>(Brush brush)
+            where TPixel : unmanaged, IPixel<TPixel>
+            => this.IsBrushSupported(brush);
+
         public void FlushCompositions<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
@@ -70,6 +103,7 @@ public class DrawingCanvasBatcherTests
         {
             this.LastBatch = compositionBatch;
             this.HasBatch = true;
+            this.Batches.Add(compositionBatch);
         }
     }
 }

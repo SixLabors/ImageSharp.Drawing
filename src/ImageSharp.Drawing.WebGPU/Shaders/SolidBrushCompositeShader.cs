@@ -3,31 +3,32 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
-internal static class CompositeCoverageShader
+internal static class SolidBrushCompositeShader
 {
     private static readonly byte[] CodeBytes =
     [
         .. """
         struct CompositeInstanceData {
-            source_offset_x: u32,
-            source_offset_y: u32,
-            destination_x: u32,
-            destination_y: u32,
-            destination_width: u32,
-            destination_height: u32,
-            target_width: u32,
-            target_height: u32,
+            source_offset_x: i32,
+            source_offset_y: i32,
+            destination_x: i32,
+            destination_y: i32,
+            destination_width: i32,
+            destination_height: i32,
+            target_width: i32,
+            target_height: i32,
 
-            brush_kind: u32,
-            _pad0: u32,
-            _pad1: u32,
-            _pad2: u32,
+            image_region_x: i32,
+            image_region_y: i32,
+            image_region_width: i32,
+            image_region_height: i32,
+            image_brush_origin_x: i32,
+            image_brush_origin_y: i32,
+            _pad0: i32,
+            _pad1: i32,
 
             solid_brush_color: vec4<f32>,
-            blend_percentage: f32,
-            _pad3: f32,
-            _pad4: f32,
-            _pad5: f32,
+            blend_data: vec4<f32>,
         };
 
         @group(0) @binding(0)
@@ -67,37 +68,26 @@ internal static class CompositeCoverageShader
             return output;
         }
 
-        fn sample_brush(params: CompositeInstanceData, _local: vec2<f32>) -> vec4<f32> {
-            switch params.brush_kind {
-                case 0u: {
-                    return params.solid_brush_color;
-                }
-                default: {
-                    return vec4<f32>(0.0);
-                }
-            }
-        }
-
         @fragment
         fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             let params = instances[input.instance_index];
-            let local_x = u32(floor(input.local.x));
-            let local_y = u32(floor(input.local.y));
+            let local_x = i32(floor(input.local.x));
+            let local_y = i32(floor(input.local.y));
             let source = vec2<i32>(
-                i32(params.source_offset_x + local_x),
-                i32(params.source_offset_y + local_y));
+                params.source_offset_x + local_x,
+                params.source_offset_y + local_y);
 
             let coverage_value = textureLoad(coverage, source, 0).r;
             if (coverage_value <= 0.0) {
                 discard;
             }
 
-            let brush = sample_brush(params, input.local);
+            let brush = params.solid_brush_color;
             if (brush.a <= 0.0) {
                 discard;
             }
 
-            let source_alpha = brush.a * coverage_value * params.blend_percentage;
+            let source_alpha = brush.a * coverage_value * params.blend_data.x;
             if (source_alpha <= 0.0) {
                 discard;
             }

@@ -31,6 +31,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private bool ownsReadbackBuffer;
     private WebGPUCompositeInstanceData[]? compositeInstanceData;
     private readonly List<nint> transientBindGroups = [];
+    private readonly List<nint> transientTextureViews = [];
+    private readonly List<nint> transientTextures = [];
+
+    // Flush-scoped source image cache:
+    // key = source Image reference, value = uploaded texture view handle.
+    // Handles are released when this flush context is disposed.
+    private readonly Dictionary<Image, nint> cachedSourceTextureViews = new(ReferenceEqualityComparer.Instance);
 
     private WebGPUFlushContext(
         WebGPURuntime.Lease runtimeLease,
@@ -89,7 +96,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     {
         if (count <= 0)
         {
-            return Span<WebGPUCompositeInstanceData>.Empty;
+            return [];
         }
 
         WebGPUCompositeInstanceData[]? cached = this.compositeInstanceData;
@@ -163,7 +170,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         try
         {
-            Rectangle bounds = new Rectangle(0, 0, nativeCapability.Width, nativeCapability.Height);
+            Rectangle bounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
             TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
             Device* device = (Device*)nativeCapability.Device;
             DeviceSharedState deviceState = GetOrCreateDeviceState(lease.Api, device);
@@ -372,6 +379,97 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
+    /// <summary>
+    /// Tracks a transient texture view allocated during this flush.
+    /// </summary>
+    public void TrackTextureView(TextureView* textureView)
+    {
+        if (textureView is not null)
+        {
+            this.transientTextureViews.Add((nint)textureView);
+        }
+    }
+
+    /// <summary>
+    /// Tracks a transient texture allocated during this flush.
+    /// </summary>
+    public void TrackTexture(Texture* texture)
+    {
+        if (texture is not null)
+        {
+            this.transientTextures.Add((nint)texture);
+        }
+    }
+
+    /// <summary>
+    /// Gets a texture view for the source image from this flush cache, creating and uploading it on first use.
+    /// </summary>
+    internal bool TryGetOrCreateSourceTextureView<TPixel>(Image<TPixel> sourceImage, out TextureView* textureView)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Guard.NotNull(sourceImage, nameof(sourceImage));
+
+        if (this.cachedSourceTextureViews.TryGetValue(sourceImage, out nint cachedHandle) && cachedHandle != 0)
+        {
+            textureView = (TextureView*)cachedHandle;
+            return true;
+        }
+
+        return this.TryCreateAndCacheSourceTextureView(sourceImage, out textureView);
+    }
+
+    /// <summary>
+    /// Uploads one source image into a transient GPU texture and stores the resulting view in the flush cache.
+    /// </summary>
+    private bool TryCreateAndCacheSourceTextureView<TPixel>(Image<TPixel> sourceImage, out TextureView* textureView)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        TextureDescriptor textureDescriptor = new()
+        {
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            Dimension = TextureDimension.Dimension2D,
+            Size = new Extent3D((uint)sourceImage.Width, (uint)sourceImage.Height, 1),
+            Format = this.TextureFormat,
+            MipLevelCount = 1,
+            SampleCount = 1
+        };
+
+        Texture* sourceTexture = this.Api.DeviceCreateTexture(this.Device, in textureDescriptor);
+        if (sourceTexture is null)
+        {
+            textureView = null;
+            return false;
+        }
+
+        TextureViewDescriptor sourceViewDescriptor = new()
+        {
+            Format = this.TextureFormat,
+            Dimension = TextureViewDimension.Dimension2D,
+            BaseMipLevel = 0,
+            MipLevelCount = 1,
+            BaseArrayLayer = 0,
+            ArrayLayerCount = 1,
+            Aspect = TextureAspect.All
+        };
+
+        TextureView* sourceView = this.Api.TextureCreateView(sourceTexture, in sourceViewDescriptor);
+        if (sourceView is null)
+        {
+            this.Api.TextureRelease(sourceTexture);
+            textureView = null;
+            return false;
+        }
+
+        Buffer2DRegion<TPixel> sourceRegionPixels = new(sourceImage.Frames.RootFrame.PixelBuffer, sourceImage.Bounds);
+        UploadTextureFromRegion(this.Api, this.Queue, sourceTexture, sourceRegionPixels);
+
+        this.TrackTexture(sourceTexture);
+        this.TrackTextureView(sourceView);
+        this.cachedSourceTextureViews[sourceImage] = (nint)sourceView;
+        textureView = sourceView;
+        return true;
+    }
+
     public void Dispose()
     {
         if (this.disposed)
@@ -416,7 +514,22 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             this.Api.BindGroupRelease((BindGroup*)this.transientBindGroups[i]);
         }
 
+        for (int i = 0; i < this.transientTextureViews.Count; i++)
+        {
+            this.Api.TextureViewRelease((TextureView*)this.transientTextureViews[i]);
+        }
+
+        for (int i = 0; i < this.transientTextures.Count; i++)
+        {
+            this.Api.TextureRelease((Texture*)this.transientTextures[i]);
+        }
+
         this.transientBindGroups.Clear();
+        this.transientTextureViews.Clear();
+        this.transientTextures.Clear();
+
+        // Cache entries point to transient texture views that are released above.
+        this.cachedSourceTextureViews.Clear();
 
         this.ReadbackBuffer = null;
         this.TargetView = null;
@@ -850,10 +963,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     internal sealed class DeviceSharedState : IDisposable
     {
         private readonly Dictionary<int, CoverageEntry> coverageCache = [];
-        private readonly ConcurrentDictionary<TextureFormat, nint> compositePipelines = new();
+        private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
         private WebGPURasterizer? coverageRasterizer;
-        private PipelineLayout* compositePipelineLayout;
-        private ShaderModule* compositeShaderModule;
         private bool disposed;
 
         internal DeviceSharedState(WebGPU api, Device* device)
@@ -872,24 +983,14 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         public Device* Device { get; }
 
-        public BindGroupLayout* CompositeBindGroupLayout { get; private set; }
-
         public int CoverageCount => this.coverageCache.Count;
 
-        public bool TryEnsureResources(out string? error)
+        public bool TryEnsureCoverageResources(out string? error)
         {
             if (this.disposed)
             {
                 error = "WebGPU device state is disposed.";
                 return false;
-            }
-
-            if (this.CompositeBindGroupLayout is null || this.compositePipelineLayout is null)
-            {
-                if (!this.TryCreateCompositeInfrastructure(out error))
-                {
-                    return false;
-                }
             }
 
             this.coverageRasterizer ??= new WebGPURasterizer(this.Api);
@@ -909,7 +1010,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             [NotNullWhen(true)] out CoverageEntry? coverageEntry,
             out string? error)
         {
-            if (!this.TryEnsureResources(out error))
+            if (!this.TryEnsureCoverageResources(out error))
             {
                 coverageEntry = null;
                 return false;
@@ -947,38 +1048,85 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return true;
         }
 
-        public bool TryGetOrCreateCompositePipeline(TextureFormat textureFormat, out RenderPipeline* pipeline, out string? error)
+        public bool TryGetOrCreateCompositePipeline(
+            string pipelineKey,
+            ReadOnlySpan<byte> shaderCode,
+            WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
+            TextureFormat textureFormat,
+            out BindGroupLayout* bindGroupLayout,
+            out RenderPipeline* pipeline,
+            out string? error)
         {
-            if (!this.TryEnsureResources(out error))
+            bindGroupLayout = null;
+            pipeline = null;
+
+            if (this.disposed)
             {
-                pipeline = null;
+                error = "WebGPU device state is disposed.";
                 return false;
             }
 
-            if (this.compositePipelines.TryGetValue(textureFormat, out nint existingHandle) && existingHandle != 0)
+            if (string.IsNullOrWhiteSpace(pipelineKey))
             {
-                pipeline = (RenderPipeline*)existingHandle;
+                error = "Composite pipeline key cannot be empty.";
+                return false;
+            }
+
+            if (shaderCode.IsEmpty)
+            {
+                error = $"Composite shader code is missing for pipeline '{pipelineKey}'.";
+                return false;
+            }
+
+            CompositePipelineInfrastructure infrastructure = this.compositePipelines.GetOrAdd(
+                pipelineKey,
+                static _ => new CompositePipelineInfrastructure());
+
+            lock (infrastructure)
+            {
+                if (infrastructure.BindGroupLayout is null ||
+                    infrastructure.PipelineLayout is null ||
+                    infrastructure.ShaderModule is null)
+                {
+                    if (!this.TryCreateCompositeInfrastructure(
+                            shaderCode,
+                            bindGroupLayoutFactory,
+                            out BindGroupLayout* createdBindGroupLayout,
+                            out PipelineLayout* createdPipelineLayout,
+                            out ShaderModule* createdShaderModule,
+                            out error))
+                    {
+                        return false;
+                    }
+
+                    infrastructure.BindGroupLayout = createdBindGroupLayout;
+                    infrastructure.PipelineLayout = createdPipelineLayout;
+                    infrastructure.ShaderModule = createdShaderModule;
+                }
+
+                bindGroupLayout = infrastructure.BindGroupLayout;
+                if (infrastructure.Pipelines.TryGetValue(textureFormat, out nint cachedPipelineHandle) && cachedPipelineHandle != 0)
+                {
+                    pipeline = (RenderPipeline*)cachedPipelineHandle;
+                    error = null;
+                    return true;
+                }
+
+                RenderPipeline* createdPipeline = this.CreateCompositePipeline(
+                    infrastructure.PipelineLayout,
+                    infrastructure.ShaderModule,
+                    textureFormat);
+                if (createdPipeline is null)
+                {
+                    error = $"Failed to create composite pipeline '{pipelineKey}' for format '{textureFormat}'.";
+                    return false;
+                }
+
+                infrastructure.Pipelines[textureFormat] = (nint)createdPipeline;
+                pipeline = createdPipeline;
+                error = null;
                 return true;
             }
-
-            RenderPipeline* created = this.CreateCompositePipelineForFormat(textureFormat);
-            if (created is null)
-            {
-                pipeline = null;
-                error = $"Failed to create composite pipeline for format '{textureFormat}'.";
-                return false;
-            }
-
-            nint createdHandle = (nint)created;
-            nint cachedHandle = this.compositePipelines.GetOrAdd(textureFormat, createdHandle);
-            if (cachedHandle != createdHandle)
-            {
-                this.Api.RenderPipelineRelease(created);
-            }
-
-            pipeline = (RenderPipeline*)cachedHandle;
-            error = null;
-            return true;
         }
 
         public void Dispose()
@@ -998,92 +1146,49 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             this.coverageRasterizer?.Release();
             this.coverageRasterizer = null;
 
-            foreach (KeyValuePair<TextureFormat, nint> entry in this.compositePipelines)
+            foreach (CompositePipelineInfrastructure infrastructure in this.compositePipelines.Values)
             {
-                if (entry.Value != 0)
-                {
-                    this.Api.RenderPipelineRelease((RenderPipeline*)entry.Value);
-                }
+                this.ReleaseCompositeInfrastructure(infrastructure);
             }
 
             this.compositePipelines.Clear();
 
-            if (this.compositePipelineLayout is not null)
-            {
-                this.Api.PipelineLayoutRelease(this.compositePipelineLayout);
-                this.compositePipelineLayout = null;
-            }
-
-            if (this.compositeShaderModule is not null)
-            {
-                this.Api.ShaderModuleRelease(this.compositeShaderModule);
-                this.compositeShaderModule = null;
-            }
-
-            if (this.CompositeBindGroupLayout is not null)
-            {
-                this.Api.BindGroupLayoutRelease(this.CompositeBindGroupLayout);
-                this.CompositeBindGroupLayout = null;
-            }
-
             this.disposed = true;
         }
 
-        private bool TryCreateCompositeInfrastructure(out string? error)
+        private bool TryCreateCompositeInfrastructure(
+            ReadOnlySpan<byte> shaderCode,
+            WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
+            out BindGroupLayout* bindGroupLayout,
+            out PipelineLayout* pipelineLayout,
+            out ShaderModule* shaderModule,
+            out string? error)
         {
-            BindGroupLayoutEntry* layoutEntries = stackalloc BindGroupLayoutEntry[2];
-            layoutEntries[0] = new BindGroupLayoutEntry
-            {
-                Binding = 0,
-                Visibility = ShaderStage.Fragment,
-                Texture = new TextureBindingLayout
-                {
-                    SampleType = TextureSampleType.Float,
-                    ViewDimension = TextureViewDimension.Dimension2D,
-                    Multisampled = false
-                }
-            };
-            layoutEntries[1] = new BindGroupLayoutEntry
-            {
-                Binding = 1,
-                Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
-                Buffer = new BufferBindingLayout
-                {
-                    Type = BufferBindingType.ReadOnlyStorage,
-                    HasDynamicOffset = false,
-                    MinBindingSize = 0
-                }
-            };
+            bindGroupLayout = null;
+            pipelineLayout = null;
+            shaderModule = null;
 
-            BindGroupLayoutDescriptor layoutDescriptor = new()
+            if (!bindGroupLayoutFactory(this.Api, this.Device, out bindGroupLayout, out error))
             {
-                EntryCount = 2,
-                Entries = layoutEntries
-            };
-
-            this.CompositeBindGroupLayout = this.Api.DeviceCreateBindGroupLayout(this.Device, in layoutDescriptor);
-            if (this.CompositeBindGroupLayout is null)
-            {
-                error = "Failed to create composite bind group layout.";
                 return false;
             }
 
             BindGroupLayout** bindGroupLayouts = stackalloc BindGroupLayout*[1];
-            bindGroupLayouts[0] = this.CompositeBindGroupLayout;
+            bindGroupLayouts[0] = bindGroupLayout;
             PipelineLayoutDescriptor pipelineLayoutDescriptor = new()
             {
                 BindGroupLayoutCount = 1,
                 BindGroupLayouts = bindGroupLayouts
             };
 
-            this.compositePipelineLayout = this.Api.DeviceCreatePipelineLayout(this.Device, in pipelineLayoutDescriptor);
-            if (this.compositePipelineLayout is null)
+            pipelineLayout = this.Api.DeviceCreatePipelineLayout(this.Device, in pipelineLayoutDescriptor);
+            if (pipelineLayout is null)
             {
+                this.Api.BindGroupLayoutRelease(bindGroupLayout);
                 error = "Failed to create composite pipeline layout.";
                 return false;
             }
 
-            ReadOnlySpan<byte> shaderCode = CompositeCoverageShader.Code;
             fixed (byte* shaderCodePtr = shaderCode)
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()
@@ -1097,11 +1202,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                     NextInChain = (ChainedStruct*)&wgslDescriptor
                 };
 
-                this.compositeShaderModule = this.Api.DeviceCreateShaderModule(this.Device, in shaderDescriptor);
+                shaderModule = this.Api.DeviceCreateShaderModule(this.Device, in shaderDescriptor);
             }
 
-            if (this.compositeShaderModule is null)
+            if (shaderModule is null)
             {
+                this.Api.PipelineLayoutRelease(pipelineLayout);
+                this.Api.BindGroupLayoutRelease(bindGroupLayout);
                 error = "Failed to create composite shader module.";
                 return false;
             }
@@ -1110,25 +1217,29 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return true;
         }
 
-        private RenderPipeline* CreateCompositePipelineForFormat(TextureFormat textureFormat)
+        private RenderPipeline* CreateCompositePipeline(
+            PipelineLayout* pipelineLayout,
+            ShaderModule* shaderModule,
+            TextureFormat textureFormat)
         {
-            if (this.compositePipelineLayout is null || this.compositeShaderModule is null)
-            {
-                return null;
-            }
-
             ReadOnlySpan<byte> vertexEntryPoint = CompositeVertexEntryPoint;
             ReadOnlySpan<byte> fragmentEntryPoint = CompositeFragmentEntryPoint;
             fixed (byte* vertexEntryPointPtr = vertexEntryPoint)
             {
                 fixed (byte* fragmentEntryPointPtr = fragmentEntryPoint)
                 {
-                    return this.CreateCompositePipeline(this.compositeShaderModule, vertexEntryPointPtr, fragmentEntryPointPtr, textureFormat);
+                    return this.CreateCompositePipelineCore(
+                        pipelineLayout,
+                        shaderModule,
+                        vertexEntryPointPtr,
+                        fragmentEntryPointPtr,
+                        textureFormat);
                 }
             }
         }
 
-        private RenderPipeline* CreateCompositePipeline(
+        private RenderPipeline* CreateCompositePipelineCore(
+            PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
             byte* vertexEntryPointPtr,
             byte* fragmentEntryPointPtr,
@@ -1176,7 +1287,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
             RenderPipelineDescriptor descriptor = new()
             {
-                Layout = this.compositePipelineLayout,
+                Layout = pipelineLayout,
                 Vertex = vertexState,
                 Primitive = new PrimitiveState
                 {
@@ -1198,6 +1309,37 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return this.Api.DeviceCreateRenderPipeline(this.Device, in descriptor);
         }
 
+        private void ReleaseCompositeInfrastructure(CompositePipelineInfrastructure infrastructure)
+        {
+            foreach (nint pipelineHandle in infrastructure.Pipelines.Values)
+            {
+                if (pipelineHandle != 0)
+                {
+                    this.Api.RenderPipelineRelease((RenderPipeline*)pipelineHandle);
+                }
+            }
+
+            infrastructure.Pipelines.Clear();
+
+            if (infrastructure.PipelineLayout is not null)
+            {
+                this.Api.PipelineLayoutRelease(infrastructure.PipelineLayout);
+                infrastructure.PipelineLayout = null;
+            }
+
+            if (infrastructure.ShaderModule is not null)
+            {
+                this.Api.ShaderModuleRelease(infrastructure.ShaderModule);
+                infrastructure.ShaderModule = null;
+            }
+
+            if (infrastructure.BindGroupLayout is not null)
+            {
+                this.Api.BindGroupLayoutRelease(infrastructure.BindGroupLayout);
+                infrastructure.BindGroupLayout = null;
+            }
+        }
+
         private static void ReleaseCoverageTexture(WebGPU api, CoverageEntry entry)
         {
             if (entry.GPUCoverageView is not null)
@@ -1211,6 +1353,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 api.TextureRelease(entry.GPUCoverageTexture);
                 entry.GPUCoverageTexture = null;
             }
+        }
+
+        private sealed class CompositePipelineInfrastructure
+        {
+            public Dictionary<TextureFormat, nint> Pipelines { get; } = [];
+
+            public BindGroupLayout* BindGroupLayout { get; set; }
+
+            public PipelineLayout* PipelineLayout { get; set; }
+
+            public ShaderModule* ShaderModule { get; set; }
         }
     }
 
