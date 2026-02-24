@@ -1,11 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.PixelFormats;
+using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends.Brushes;
 
@@ -21,7 +21,12 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
     private readonly Rectangle sourceRegion;
     private readonly int imageBrushOriginX;
     private readonly int imageBrushOriginY;
+    private BindGroup* cachedBindGroup;
+    private nint cachedCoverageView;
+    private nint cachedDestinationBuffer;
+    private nuint cachedInstanceBytes;
     private BindGroupLayout* bindGroupLayout;
+    private ComputePipeline* computePipeline;
 
     private WebGPUImageBrushComposer(
         TextureView* sourceTextureView,
@@ -41,16 +46,31 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
     /// <inheritdoc />
     public bool TryGetOrCreatePipeline(
         WebGPUFlushContext flushContext,
-        out RenderPipeline* pipeline,
+        out ComputePipeline* pipeline,
         out string? error)
-        => flushContext.DeviceState.TryGetOrCreateCompositePipeline(
+    {
+        if (this.computePipeline is not null)
+        {
+            pipeline = this.computePipeline;
+            error = null;
+            return true;
+        }
+
+        bool success = flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
             PipelineKey,
-            ImageBrushCompositeShader.Code,
+            ImageBrushCompositeComputeShader.Code,
             TryCreateBindGroupLayout,
-            flushContext.TextureFormat,
             out this.bindGroupLayout,
             out pipeline,
             out error);
+
+        if (success)
+        {
+            this.computePipeline = pipeline;
+        }
+
+        return success;
+    }
 
     /// <summary>
     /// Creates a composer for one image brush command.
@@ -88,17 +108,20 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
             DestinationY = common.DestinationY,
             DestinationWidth = common.DestinationWidth,
             DestinationHeight = common.DestinationHeight,
-            TargetWidth = common.TargetWidth,
-            TargetHeight = common.TargetHeight,
+            DestinationBufferWidth = common.DestinationBufferWidth,
+            DestinationBufferHeight = common.DestinationBufferHeight,
+            BlendPercentage = common.BlendPercentage,
+            ColorBlendingMode = common.ColorBlendingMode,
+            AlphaCompositionMode = common.AlphaCompositionMode,
+            CommonPadding0 = 0,
             ImageRegionX = this.sourceRegion.X,
             ImageRegionY = this.sourceRegion.Y,
             ImageRegionWidth = this.sourceRegion.Width,
             ImageRegionHeight = this.sourceRegion.Height,
-            ImageBrushOriginX = this.imageBrushOriginX,
-            ImageBrushOriginY = this.imageBrushOriginY,
+            ImageBrushOriginX = this.imageBrushOriginX - common.DestinationBufferOriginX,
+            ImageBrushOriginY = this.imageBrushOriginY - common.DestinationBufferOriginY,
             Padding0 = 0,
-            Padding1 = 0,
-            BlendData = new Vector4(common.BlendPercentage, 0, 0, 0)
+            Padding1 = 0
         };
 
         MemoryMarshal.Write(destination, in data);
@@ -108,10 +131,23 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
     public BindGroup* CreateBindGroup(
         WebGPUFlushContext flushContext,
         TextureView* coverageView,
+        WgpuBuffer* destinationPixelsBuffer,
+        nuint destinationPixelsByteSize,
         nuint instanceOffset,
         nuint instanceBytes)
     {
-        BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[3];
+        _ = instanceOffset;
+        nint coverageKey = (nint)coverageView;
+        nint destinationBufferKey = (nint)destinationPixelsBuffer;
+        if (this.cachedBindGroup is not null &&
+            this.cachedCoverageView == coverageKey &&
+            this.cachedDestinationBuffer == destinationBufferKey &&
+            this.cachedInstanceBytes == instanceBytes)
+        {
+            return this.cachedBindGroup;
+        }
+
+        BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[4];
         bindGroupEntries[0] = new BindGroupEntry
         {
             Binding = 0,
@@ -121,7 +157,7 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
         {
             Binding = 1,
             Buffer = flushContext.InstanceBuffer,
-            Offset = instanceOffset,
+            Offset = 0,
             Size = instanceBytes
         };
         bindGroupEntries[2] = new BindGroupEntry
@@ -129,11 +165,17 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
             Binding = 2,
             TextureView = this.sourceTextureView
         };
+        bindGroupEntries[3] = new BindGroupEntry
+        {
+            Binding = 3,
+            Buffer = destinationPixelsBuffer,
+            Size = destinationPixelsByteSize
+        };
 
         BindGroupDescriptor bindGroupDescriptor = new()
         {
             Layout = this.bindGroupLayout,
-            EntryCount = 3,
+            EntryCount = 4,
             Entries = bindGroupEntries
         };
 
@@ -143,6 +185,11 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
             throw new InvalidOperationException("Failed to create image brush bind group.");
         }
 
+        flushContext.TrackBindGroup(bindGroup);
+        this.cachedBindGroup = bindGroup;
+        this.cachedCoverageView = coverageKey;
+        this.cachedDestinationBuffer = destinationBufferKey;
+        this.cachedInstanceBytes = instanceBytes;
         return bindGroup;
     }
 
@@ -152,11 +199,11 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* layoutEntries = stackalloc BindGroupLayoutEntry[3];
+        BindGroupLayoutEntry* layoutEntries = stackalloc BindGroupLayoutEntry[4];
         layoutEntries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
-            Visibility = ShaderStage.Fragment,
+            Visibility = ShaderStage.Compute,
             Texture = new TextureBindingLayout
             {
                 SampleType = TextureSampleType.Float,
@@ -167,18 +214,18 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
         layoutEntries[1] = new BindGroupLayoutEntry
         {
             Binding = 1,
-            Visibility = ShaderStage.Vertex | ShaderStage.Fragment,
+            Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
                 Type = BufferBindingType.ReadOnlyStorage,
-                HasDynamicOffset = false,
+                HasDynamicOffset = true,
                 MinBindingSize = 0
             }
         };
         layoutEntries[2] = new BindGroupLayoutEntry
         {
             Binding = 2,
-            Visibility = ShaderStage.Fragment,
+            Visibility = ShaderStage.Compute,
             Texture = new TextureBindingLayout
             {
                 SampleType = TextureSampleType.Float,
@@ -186,10 +233,21 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
                 Multisampled = false
             }
         };
+        layoutEntries[3] = new BindGroupLayoutEntry
+        {
+            Binding = 3,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
 
         BindGroupLayoutDescriptor layoutDescriptor = new()
         {
-            EntryCount = 3,
+            EntryCount = 4,
             Entries = layoutEntries
         };
 
@@ -213,8 +271,12 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
         public int DestinationY;
         public int DestinationWidth;
         public int DestinationHeight;
-        public int TargetWidth;
-        public int TargetHeight;
+        public int DestinationBufferWidth;
+        public int DestinationBufferHeight;
+        public float BlendPercentage;
+        public int ColorBlendingMode;
+        public int AlphaCompositionMode;
+        public int CommonPadding0;
         public int ImageRegionX;
         public int ImageRegionY;
         public int ImageRegionWidth;
@@ -223,6 +285,5 @@ internal sealed unsafe class WebGPUImageBrushComposer<TPixel> : IWebGPUBrushComp
         public int ImageBrushOriginY;
         public int Padding0;
         public int Padding1;
-        public Vector4 BlendData;
     }
 }

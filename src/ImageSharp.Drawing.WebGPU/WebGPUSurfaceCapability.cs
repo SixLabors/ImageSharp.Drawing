@@ -20,6 +20,9 @@ public sealed class WebGPUSurfaceCapability
     /// <param name="height">Surface height in pixels.</param>
     /// <param name="isSrgb">Whether the target format is sRGB encoded.</param>
     /// <param name="isPremultipliedAlpha">Whether alpha is premultiplied in the target surface.</param>
+    /// <param name="supportsTextureSampling">
+    /// Whether <paramref name="targetTexture"/> can be sampled as a texture binding.
+    /// </param>
     public WebGPUSurfaceCapability(
         nint device,
         nint queue,
@@ -29,7 +32,8 @@ public sealed class WebGPUSurfaceCapability
         int width,
         int height,
         bool isSrgb,
-        bool isPremultipliedAlpha)
+        bool isPremultipliedAlpha,
+        bool supportsTextureSampling)
     {
         this.Device = device;
         this.Queue = queue;
@@ -40,6 +44,7 @@ public sealed class WebGPUSurfaceCapability
         this.Height = height;
         this.IsSrgb = isSrgb;
         this.IsPremultipliedAlpha = isPremultipliedAlpha;
+        this.SupportsTextureSampling = supportsTextureSampling;
     }
 
     /// <summary>
@@ -86,4 +91,9 @@ public sealed class WebGPUSurfaceCapability
     /// Gets a value indicating whether the target uses premultiplied alpha.
     /// </summary>
     public bool IsPremultipliedAlpha { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the target texture supports texture sampling.
+    /// </summary>
+    public bool SupportsTextureSampling { get; }
 }

@@ -14,6 +14,20 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing.Backends;
 [GroupOutput("Drawing")]
 public class WebGPUDrawingBackendTests
 {
+    private static readonly (PixelColorBlendingMode ColorMode, PixelAlphaCompositionMode AlphaMode)[] GraphicsOptionsModePairs =
+    [
+        (PixelColorBlendingMode.Normal, PixelAlphaCompositionMode.SrcOver),
+        (PixelColorBlendingMode.Multiply, PixelAlphaCompositionMode.SrcAtop),
+        (PixelColorBlendingMode.Add, PixelAlphaCompositionMode.Src),
+        (PixelColorBlendingMode.Subtract, PixelAlphaCompositionMode.DestOut),
+        (PixelColorBlendingMode.Screen, PixelAlphaCompositionMode.DestOver),
+        (PixelColorBlendingMode.Darken, PixelAlphaCompositionMode.DestAtop),
+        (PixelColorBlendingMode.Lighten, PixelAlphaCompositionMode.DestIn),
+        (PixelColorBlendingMode.Overlay, PixelAlphaCompositionMode.SrcIn),
+        (PixelColorBlendingMode.HardLight, PixelAlphaCompositionMode.Xor),
+        (PixelColorBlendingMode.Normal, PixelAlphaCompositionMode.Clear)
+    ];
+
     [Theory]
     [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
     public void FillPath_WithWebGPUCoverageBackend_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
@@ -205,6 +219,7 @@ public class WebGPUDrawingBackendTests
             "FillPath_NonZeroNestedContours_Expected",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+
         webGpuImage.CompareToReferenceOutput(
             referenceComparer,
             provider,
@@ -214,6 +229,104 @@ public class WebGPUDrawingBackendTests
 
         ImageComparer comparer = ImageComparer.TolerantPercentage(0.5F);
         comparer.VerifySimilarity(defaultImage, webGpuImage);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
+    public void FillPath_WithGraphicsOptionsModes_SolidBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        RectangularPolygon polygon = new(26.5F, 18.25F, 324.5F, 208.75F);
+        Brush brush = Brushes.Solid(Color.OrangeRed.WithAlpha(0.78F));
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.1F);
+        for (int i = 0; i < GraphicsOptionsModePairs.Length; i++)
+        {
+            (PixelColorBlendingMode colorMode, PixelAlphaCompositionMode alphaMode) = GraphicsOptionsModePairs[i];
+            DrawingOptions drawingOptions = new()
+            {
+                GraphicsOptions = new GraphicsOptions
+                {
+                    Antialias = true,
+                    BlendPercentage = 0.73F,
+                    ColorBlendingMode = colorMode,
+                    AlphaCompositionMode = alphaMode
+                }
+            };
+
+            using Image<TPixel> baseImage = provider.GetImage();
+            using Image<TPixel> defaultImage = baseImage.Clone();
+            defaultImage.Mutate(ctx => ctx.Fill(drawingOptions, brush, polygon));
+            defaultImage.DebugSave(
+                provider,
+                $"DefaultBackend_FillPath_GraphicsOptions_SolidBrush_{colorMode}_{alphaMode}",
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
+
+            using Image<TPixel> webGpuImage = baseImage.Clone();
+            using WebGPUDrawingBackend backend = new();
+            Configuration webGpuConfiguration = Configuration.Default.Clone();
+            webGpuConfiguration.SetDrawingBackend(backend);
+            webGpuImage.Mutate(webGpuConfiguration, ctx => ctx.Fill(drawingOptions, brush, polygon));
+            webGpuImage.DebugSave(
+                provider,
+                $"WebGPUBackend_FillPath_GraphicsOptions_SolidBrush_{colorMode}_{alphaMode}",
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
+
+            AssertCoverageExecutionAccounting(backend);
+            AssertGpuPathWhenRequired(backend);
+            comparer.VerifySimilarity(defaultImage, webGpuImage);
+        }
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
+    public void FillPath_WithGraphicsOptionsModes_ImageBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        RectangularPolygon polygon = new(26.5F, 18.25F, 324.5F, 208.75F);
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.1F);
+        for (int i = 0; i < GraphicsOptionsModePairs.Length; i++)
+        {
+            (PixelColorBlendingMode colorMode, PixelAlphaCompositionMode alphaMode) = GraphicsOptionsModePairs[i];
+            DrawingOptions drawingOptions = new()
+            {
+                GraphicsOptions = new GraphicsOptions
+                {
+                    Antialias = true,
+                    BlendPercentage = 0.73F,
+                    ColorBlendingMode = colorMode,
+                    AlphaCompositionMode = alphaMode
+                }
+            };
+
+            using Image<TPixel> foreground = provider.GetImage();
+            Brush brush = new ImageBrush(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
+
+            using Image<TPixel> baseImage = provider.GetImage();
+            using Image<TPixel> defaultImage = baseImage.Clone();
+            defaultImage.Mutate(ctx => ctx.Fill(drawingOptions, brush, polygon));
+            defaultImage.DebugSave(
+                provider,
+                $"DefaultBackend_FillPath_GraphicsOptions_ImageBrush_{colorMode}_{alphaMode}",
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
+
+            using Image<TPixel> webGpuImage = baseImage.Clone();
+            using WebGPUDrawingBackend backend = new();
+            Configuration webGpuConfiguration = Configuration.Default.Clone();
+            webGpuConfiguration.SetDrawingBackend(backend);
+            webGpuImage.Mutate(webGpuConfiguration, ctx => ctx.Fill(drawingOptions, brush, polygon));
+            webGpuImage.DebugSave(
+                provider,
+                $"WebGPUBackend_FillPath_GraphicsOptions_ImageBrush_{colorMode}_{alphaMode}",
+                appendPixelTypeToFileName: false,
+                appendSourceFileOrDescription: false);
+
+            AssertCoverageExecutionAccounting(backend);
+            AssertGpuPathWhenRequired(backend);
+            comparer.VerifySimilarity(defaultImage, webGpuImage);
+        }
     }
 
     [Theory]

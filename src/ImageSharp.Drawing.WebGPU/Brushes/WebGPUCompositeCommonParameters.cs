@@ -20,11 +20,19 @@ internal readonly struct WebGPUCompositeCommonParameters
 
     public readonly int DestinationHeight;
 
-    public readonly int TargetWidth;
+    public readonly int DestinationBufferWidth;
 
-    public readonly int TargetHeight;
+    public readonly int DestinationBufferHeight;
+
+    public readonly int DestinationBufferOriginX;
+
+    public readonly int DestinationBufferOriginY;
 
     public readonly float BlendPercentage;
+
+    public readonly int ColorBlendingMode;
+
+    public readonly int AlphaCompositionMode;
 
     public WebGPUCompositeCommonParameters(
         int sourceOffsetX,
@@ -33,9 +41,13 @@ internal readonly struct WebGPUCompositeCommonParameters
         int destinationY,
         int destinationWidth,
         int destinationHeight,
-        int targetWidth,
-        int targetHeight,
-        float blendPercentage)
+        int destinationBufferWidth,
+        int destinationBufferHeight,
+        int destinationBufferOriginX,
+        int destinationBufferOriginY,
+        float blendPercentage,
+        int colorBlendingMode,
+        int alphaCompositionMode)
     {
         this.SourceOffsetX = sourceOffsetX;
         this.SourceOffsetY = sourceOffsetY;
@@ -43,8 +55,12 @@ internal readonly struct WebGPUCompositeCommonParameters
         this.DestinationY = destinationY;
         this.DestinationWidth = destinationWidth;
         this.DestinationHeight = destinationHeight;
-        this.TargetWidth = targetWidth;
-        this.TargetHeight = targetHeight;
+        this.DestinationBufferWidth = destinationBufferWidth;
+        this.DestinationBufferHeight = destinationBufferHeight;
+        this.DestinationBufferOriginX = destinationBufferOriginX;
+        this.DestinationBufferOriginY = destinationBufferOriginY;
         this.BlendPercentage = blendPercentage;
+        this.ColorBlendingMode = colorBlendingMode;
+        this.AlphaCompositionMode = alphaCompositionMode;
     }
 }

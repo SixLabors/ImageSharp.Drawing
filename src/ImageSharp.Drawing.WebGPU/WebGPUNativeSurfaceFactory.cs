@@ -23,6 +23,9 @@ public static class WebGPUNativeSurfaceFactory
     /// <param name="height">Surface height in pixels.</param>
     /// <param name="isSrgb">Whether the surface is sRGB encoded.</param>
     /// <param name="isPremultipliedAlpha">Whether surface alpha is premultiplied.</param>
+    /// <param name="supportsTextureSampling">
+    /// Whether <paramref name="targetTextureHandle"/> supports texture sampling.
+    /// </param>
     /// <returns>A configured <see cref="NativeSurface"/> instance.</returns>
     public static NativeSurface Create<TPixel>(
         nint deviceHandle,
@@ -33,7 +36,8 @@ public static class WebGPUNativeSurfaceFactory
         int width,
         int height,
         bool isSrgb,
-        bool isPremultipliedAlpha)
+        bool isPremultipliedAlpha,
+        bool supportsTextureSampling)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         ValidateCommon(
@@ -55,7 +59,8 @@ public static class WebGPUNativeSurfaceFactory
             width,
             height,
             isSrgb,
-            isPremultipliedAlpha));
+            isPremultipliedAlpha,
+            supportsTextureSampling));
         return nativeSurface;
     }
 

@@ -57,7 +57,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
 
         TextureDescriptor targetTextureDescriptor = new()
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst,
+            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
             Dimension = TextureDimension.Dimension2D,
             Size = new Extent3D((uint)width, (uint)height, 1),
             Format = textureFormat,
@@ -108,7 +108,8 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             width,
             height,
             isSrgb,
-            isPremultipliedAlpha);
+            isPremultipliedAlpha,
+            supportsTextureSampling: true);
         error = string.Empty;
         return true;
     }

@@ -32,8 +32,6 @@ internal static class WebGPUBrushComposerFactory
         in PreparedCompositionCommand command)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        Guard.NotNull(command.Brush, nameof(command.Brush));
-
         if (command.Brush is SolidBrush solidBrush)
         {
             return new WebGPUSolidBrushComposer(solidBrush);
@@ -45,5 +43,14 @@ internal static class WebGPUBrushComposerFactory
         }
 
         throw new InvalidOperationException($"Unexpected brush type '{command.Brush.GetType().FullName}'.");
+    }
+
+    /// <summary>
+    /// Creates a cache key for reusing brush composers within one batch.
+    /// </summary>
+    public static WebGPUBrushComposerCacheKey CreateCacheKey(in PreparedCompositionCommand command)
+    {
+        bool includeBrushBounds = command.Brush is ImageBrush;
+        return new WebGPUBrushComposerCacheKey(command.Brush, command.BrushBounds, includeBrushBounds);
     }
 }
