@@ -1,13 +1,13 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
-using SixLabors.ImageSharp.Drawing.Processing.Backends.Brushes;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -23,7 +23,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private const uint CompositeVertexCount = 6;
     private const int CompositeComputeWorkgroupSize = 8;
     private const int CompositeDestinationPixelStride = 16;
-    private const nuint CompositeInstanceBufferSize = 256 * 1024;
     private const int CallbackTimeoutMilliseconds = 10_000;
 
     private readonly DefaultDrawingBackend fallbackBackend;
@@ -89,6 +88,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// </summary>
     internal int TestingLiveCoverageCount { get; private set; }
 
+    /// <summary>
+    /// Gets the testing-only diagnostic counter for composition batches that used
+    /// the compute composition path.
+    /// </summary>
+    internal int TestingComputePathBatchCount { get; private set; }
+
     internal bool TryGetInteropHandles(out nint deviceHandle, out nint queueHandle)
     {
         this.ThrowIfDisposed();
@@ -131,7 +136,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
-        return WebGPUBrushComposerFactory.IsSupportedBrush(brush);
+        return IsSupportedCompositionBrush(brush);
     }
 
     /// <inheritdoc />
@@ -275,7 +280,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     {
         for (int i = 0; i < commands.Count; i++)
         {
-            if (!WebGPUBrushComposerFactory.IsSupportedBrush(commands[i].Brush))
+            if (!IsSupportedCompositionBrush(commands[i].Brush))
             {
                 return false;
             }
@@ -283,6 +288,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         return true;
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsSupportedCompositionBrush(Brush brush) => brush is SolidBrush or ImageBrush;
 
     private void FlushCompositionsFallback<TPixel>(
         Configuration configuration,
@@ -338,191 +346,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        error = null;
-        int commandCount = commands.Count;
-        if (commandCount == 0)
-        {
-            return true;
-        }
-
-        Rectangle targetLocalBounds = new(0, 0, flushContext.TargetBounds.Width, flushContext.TargetBounds.Height);
-        if (targetLocalBounds.Width <= 0 || targetLocalBounds.Height <= 0)
-        {
-            return true;
-        }
-
-        IWebGPUBrushComposer[] composers = new IWebGPUBrushComposer[commandCount];
-        bool hasPreviousComposer = false;
-        WebGPUBrushComposerCacheKey previousComposerKey = default;
-        IWebGPUBrushComposer? previousComposer = null;
-        for (int i = 0; i < composers.Length; i++)
-        {
-            PreparedCompositionCommand command = commands[i];
-            WebGPUBrushComposerCacheKey cacheKey = WebGPUBrushComposerFactory.CreateCacheKey(command);
-            IWebGPUBrushComposer? composer;
-            if (hasPreviousComposer && cacheKey.Equals(previousComposerKey))
-            {
-                composer = previousComposer!;
-            }
-            else
-            {
-                composer = WebGPUBrushComposerFactory.Create<TPixel>(flushContext, command);
-            }
-
-            composers[i] = composer!;
-            previousComposerKey = cacheKey;
-            previousComposer = composer!;
-            hasPreviousComposer = true;
-        }
-
-        nuint totalInstanceBytes = 0;
-        for (int i = 0; i < composers.Length; i++)
-        {
-            nuint instanceBytes = composers[i].InstanceDataSizeInBytes;
-            totalInstanceBytes = checked(totalInstanceBytes + AlignToStorageBufferOffset(instanceBytes));
-        }
-
-        nuint instanceOffset = flushContext.InstanceBufferWriteOffset;
-        nuint requiredCapacity = checked(instanceOffset + totalInstanceBytes);
-
-        // If the buffer exists but cannot fit at the current offset, flush pending
-        // draws and reset so the next batch starts at offset 0.
-        if (flushContext.InstanceBuffer is not null &&
-            flushContext.InstanceBufferCapacity < requiredCapacity &&
-            instanceOffset > 0)
-        {
-            if (!TrySubmitBatch(flushContext))
-            {
-                return false;
-            }
-
-            instanceOffset = 0;
-            requiredCapacity = totalInstanceBytes;
-        }
-
-        if (!flushContext.EnsureInstanceBufferCapacity(requiredCapacity, Math.Max(requiredCapacity, CompositeInstanceBufferSize)) ||
-            !flushContext.EnsureCommandEncoder())
-        {
-            error = "Failed to allocate WebGPU composition buffers.";
-            return false;
-        }
-
-        if (flushContext.TargetTexture is null || flushContext.TargetView is null)
-        {
-            error = "WebGPU flush context does not expose a target texture/view.";
-            return false;
-        }
-
-        WgpuBuffer* destinationPixelsBuffer = flushContext.CompositeDestinationPixelsBuffer;
-        nuint destinationPixelsByteSize = flushContext.CompositeDestinationPixelsByteSize;
-        if (destinationPixelsBuffer is null)
-        {
-            // Initialize the destination buffer once per flush from the current target texture.
-            TextureView* sourceTextureView = flushContext.TargetView;
-            if (!flushContext.CanSampleTargetTexture)
-            {
-                if (!TryCreateCompositionTexture(
-                        flushContext,
-                        targetLocalBounds.Width,
-                        targetLocalBounds.Height,
-                        out Texture* sourceTexture,
-                        out sourceTextureView,
-                        out error))
-                {
-                    return false;
-                }
-
-                CopyTextureRegion(flushContext, flushContext.TargetTexture, sourceTexture, targetLocalBounds);
-            }
-
-            if (!TryCreateDestinationPixelsBuffer(
-                    flushContext,
-                    targetLocalBounds.Width,
-                    targetLocalBounds.Height,
-                    out destinationPixelsBuffer,
-                    out destinationPixelsByteSize,
-                    out error) ||
-                !TryInitializeDestinationPixels(
-                    flushContext,
-                    sourceTextureView,
-                    destinationPixelsBuffer,
-                    targetLocalBounds.Width,
-                    targetLocalBounds.Height,
-                    destinationPixelsByteSize,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.CompositeDestinationPixelsBuffer = destinationPixelsBuffer;
-            flushContext.CompositeDestinationPixelsByteSize = destinationPixelsByteSize;
-        }
-
-        Span<byte> instanceScratch = flushContext.GetCompositionInstanceScratchBuffer(checked((int)totalInstanceBytes));
-        nuint localInstanceOffset = 0;
-        int destinationBufferWidth = targetLocalBounds.Width;
-        int destinationBufferHeight = targetLocalBounds.Height;
-        for (int i = 0; i < composers.Length; i++)
-        {
-            IWebGPUBrushComposer composer = composers[i];
-            PreparedCompositionCommand command = commands[i];
-            nuint instanceBytes = composer.InstanceDataSizeInBytes;
-            int instanceBytesInt = checked((int)instanceBytes);
-            int destinationX = command.DestinationRegion.X - flushContext.TargetBounds.X;
-            int destinationY = command.DestinationRegion.Y - flushContext.TargetBounds.Y;
-            WebGPUCompositeCommonParameters common = new(
-                command.SourceOffset.X,
-                command.SourceOffset.Y,
-                destinationX,
-                destinationY,
-                command.DestinationRegion.Width,
-                command.DestinationRegion.Height,
-                destinationBufferWidth,
-                destinationBufferHeight,
-                0,
-                0,
-                command.GraphicsOptions.BlendPercentage,
-                (int)command.GraphicsOptions.ColorBlendingMode,
-                (int)command.GraphicsOptions.AlphaCompositionMode);
-
-            Span<byte> payload = instanceScratch.Slice(checked((int)localInstanceOffset), instanceBytesInt);
-            composer.WriteInstanceData(in common, payload);
-            localInstanceOffset = checked(localInstanceOffset + AlignToStorageBufferOffset(instanceBytes));
-        }
-
-        fixed (byte* payloadPtr = instanceScratch)
-        {
-            // Upload all instance payloads in one call to minimize queue write overhead.
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, flushContext.InstanceBuffer, instanceOffset, payloadPtr, totalInstanceBytes);
-        }
-
-        if (!TryRunCompositeCommandComputePass(
-                flushContext,
-                coverageEntry.GPUCoverageView,
-                destinationPixelsBuffer,
-                destinationPixelsByteSize,
-                commands,
-                composers,
-                instanceOffset,
-                out nuint finalCommandOffset,
-                out error))
-        {
-            return false;
-        }
-
-        if (blitToTarget &&
-            !TryBlitDestinationPixelsToTarget(
-                flushContext,
-                destinationPixelsBuffer,
-                destinationPixelsByteSize,
-                targetLocalBounds,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.AdvanceInstanceBufferOffset(finalCommandOffset);
-        return true;
+        return this.TryCompositeBatchTiled<TPixel>(
+            flushContext,
+            coverageEntry.GPUCoverageView,
+            commands,
+            blitToTarget,
+            out error);
     }
 
     private static bool TryCreateDestinationPixelsBuffer(
@@ -627,87 +456,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
-    private static bool TryRunCompositeCommandComputePass(
-        WebGPUFlushContext flushContext,
-        TextureView* coverageView,
-        WgpuBuffer* destinationPixelsBuffer,
-        nuint destinationPixelsByteSize,
-        IReadOnlyList<PreparedCompositionCommand> commands,
-        IWebGPUBrushComposer[] composers,
-        nuint instanceOffset,
-        out nuint finalCommandOffset,
-        out string? error)
-    {
-        finalCommandOffset = instanceOffset;
-        error = null;
-        ComputePassDescriptor passDescriptor = default;
-        ComputePassEncoder* passEncoder = flushContext.Api.CommandEncoderBeginComputePass(flushContext.CommandEncoder, in passDescriptor);
-        if (passEncoder is null)
-        {
-            error = "Failed to begin WebGPU composition compute pass.";
-            return false;
-        }
-
-        try
-        {
-            nuint commandOffset = instanceOffset;
-            IWebGPUBrushComposer? previousComposer = null;
-            ComputePipeline* previousComposerPipeline = null;
-            ComputePipeline* currentBoundPipeline = null;
-            for (int i = 0; i < composers.Length; i++)
-            {
-                IWebGPUBrushComposer composer = composers[i];
-                PreparedCompositionCommand command = commands[i];
-                nuint instanceBytes = composer.InstanceDataSizeInBytes;
-                ComputePipeline* pipeline;
-                if (ReferenceEquals(composer, previousComposer))
-                {
-                    pipeline = previousComposerPipeline;
-                }
-                else if (!composer.TryGetOrCreatePipeline(flushContext, out pipeline, out string? pipelineError))
-                {
-                    error = pipelineError ?? "Failed to create composite compute pipeline.";
-                    return false;
-                }
-
-                BindGroup* bindGroup = composer.CreateBindGroup(
-                    flushContext,
-                    coverageView,
-                    destinationPixelsBuffer,
-                    destinationPixelsByteSize,
-                    commandOffset,
-                    instanceBytes);
-
-                if (pipeline != currentBoundPipeline)
-                {
-                    flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
-                    currentBoundPipeline = pipeline;
-                }
-
-                uint dynamicOffset = checked((uint)commandOffset);
-                flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 1, &dynamicOffset);
-                uint dispatchX = DivideRoundUp(command.DestinationRegion.Width, CompositeComputeWorkgroupSize);
-                uint dispatchY = DivideRoundUp(command.DestinationRegion.Height, CompositeComputeWorkgroupSize);
-                if (dispatchX > 0 && dispatchY > 0)
-                {
-                    flushContext.Api.ComputePassEncoderDispatchWorkgroups(passEncoder, dispatchX, dispatchY, 1);
-                }
-
-                commandOffset = checked(commandOffset + AlignToStorageBufferOffset(instanceBytes));
-                previousComposer = composer;
-                previousComposerPipeline = pipeline;
-            }
-
-            finalCommandOffset = commandOffset;
-            return true;
-        }
-        finally
-        {
-            flushContext.Api.ComputePassEncoderEnd(passEncoder);
-            flushContext.Api.ComputePassEncoderRelease(passEncoder);
-        }
-    }
-
     private static bool TryBlitDestinationPixelsToTarget(
         WebGPUFlushContext flushContext,
         WgpuBuffer* destinationPixelsBuffer,
@@ -720,6 +468,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 CompositeDestinationBlitShader.Code,
                 TryCreateDestinationBlitBindGroupLayout,
                 flushContext.TextureFormat,
+                CompositePipelineBlendMode.None,
                 out BindGroupLayout* bindGroupLayout,
                 out RenderPipeline* pipeline,
                 out error))
@@ -1195,10 +944,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static nuint AlignToStorageBufferOffset(nuint value)
-        => (value + 255) & ~(nuint)255;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSingleMemory<T>(Buffer2D<T> buffer)

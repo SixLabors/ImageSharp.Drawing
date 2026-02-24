@@ -3,35 +3,72 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
-internal static class SolidBrushCompositeComputeShader
+internal static class TiledCompositeComputeShader
 {
     // Compile-time constant backed by static PE data (no heap allocation).
     public static ReadOnlySpan<byte> Code =>
         """
-        struct SolidBrushCompositeData {
+        struct CompositeCommand {
             source_offset_x: i32,
             source_offset_y: i32,
             destination_x: i32,
             destination_y: i32,
             destination_width: i32,
             destination_height: i32,
-            destination_buffer_width: i32,
-            destination_buffer_height: i32,
             blend_percentage: f32,
             color_blending_mode: i32,
             alpha_composition_mode: i32,
-            _common_pad0: i32,
-            solid_brush_color: vec4<f32>,
+            brush_data_index: i32,
+            _pad0: i32,
+            _pad1: i32,
+        };
+
+        struct TileRange {
+            start_index: u32,
+            count: u32,
+        };
+
+        struct BrushData {
+            source_region_x: i32,
+            source_region_y: i32,
+            source_region_width: i32,
+            source_region_height: i32,
+            brush_origin_x: i32,
+            brush_origin_y: i32,
+            source_layer: i32,
+            _pad0: i32,
+        };
+
+        struct TiledCompositeParams {
+            destination_width: i32,
+            destination_height: i32,
+            tiles_x: i32,
+            tile_size: i32,
         };
 
         @group(0) @binding(0)
         var coverage: texture_2d<f32>;
 
         @group(0) @binding(1)
-        var<storage, read> instance: SolidBrushCompositeData;
+        var<storage, read> commands: array<CompositeCommand>;
 
         @group(0) @binding(2)
+        var<storage, read> tile_ranges: array<TileRange>;
+
+        @group(0) @binding(3)
+        var<storage, read> tile_command_indices: array<u32>;
+
+        @group(0) @binding(4)
+        var<storage, read> brushes: array<BrushData>;
+
+        @group(0) @binding(5)
+        var source_layers: texture_2d_array<f32>;
+
+        @group(0) @binding(6)
         var<storage, read_write> destination_pixels: array<vec4<f32>>;
+
+        @group(0) @binding(7)
+        var<uniform> params: TiledCompositeParams;
 
         fn overlay_value(backdrop: f32, source: f32) -> f32 {
             if (backdrop <= 0.5) {
@@ -222,39 +259,86 @@ internal static class SolidBrushCompositeComputeShader
             }
         }
 
+        fn positive_mod(value: i32, divisor: i32) -> i32 {
+            return ((value % divisor) + divisor) % divisor;
+        }
+
+        fn sample_brush(brush_data: BrushData, destination_x: i32, destination_y: i32) -> vec4<f32> {
+            if (brush_data.source_region_width <= 0 || brush_data.source_region_height <= 0) {
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            }
+
+            let source_x = positive_mod(
+                destination_x - brush_data.brush_origin_x,
+                brush_data.source_region_width) + brush_data.source_region_x;
+            let source_y = positive_mod(
+                destination_y - brush_data.brush_origin_y,
+                brush_data.source_region_height) + brush_data.source_region_y;
+            return textureLoad(source_layers, vec2<i32>(source_x, source_y), brush_data.source_layer, 0);
+        }
+
         @compute @workgroup_size(8, 8, 1)
-        fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-            let params = instance;
-            let local_x = i32(global_id.x);
-            let local_y = i32(global_id.y);
-            if (local_x >= params.destination_width || local_y >= params.destination_height) {
+        fn cs_main(
+            @builtin(workgroup_id) workgroup_id: vec3<u32>,
+            @builtin(local_invocation_id) local_id: vec3<u32>)
+        {
+            let tile_x = i32(workgroup_id.x);
+            let tile_y = i32(workgroup_id.y);
+            if (tile_x < 0 || tile_x >= params.tiles_x || tile_y < 0) {
                 return;
             }
 
-            let destination_pixel_x = params.destination_x + local_x;
-            let destination_pixel_y = params.destination_y + local_y;
-            if (destination_pixel_x < 0 ||
-                destination_pixel_y < 0 ||
-                destination_pixel_x >= params.destination_buffer_width ||
-                destination_pixel_y >= params.destination_buffer_height) {
+            let pixel_x = tile_x * params.tile_size + i32(local_id.x);
+            let pixel_y = tile_y * params.tile_size + i32(local_id.y);
+            if (pixel_x < 0 ||
+                pixel_y < 0 ||
+                pixel_x >= params.destination_width ||
+                pixel_y >= params.destination_height)
+            {
                 return;
             }
 
-            let coverage_source = vec2<i32>(
-                params.source_offset_x + local_x,
-                params.source_offset_y + local_y);
-            let coverage_value = textureLoad(coverage, coverage_source, 0).r;
-            let brush = params.solid_brush_color;
-            let source = vec4<f32>(brush.rgb, brush.a * coverage_value);
+            let destination_index = (pixel_y * params.destination_width) + pixel_x;
+            var destination = destination_pixels[destination_index];
 
-            let destination_index = (destination_pixel_y * params.destination_buffer_width) + destination_pixel_x;
-            let destination = destination_pixels[destination_index];
-            destination_pixels[destination_index] = compose_pixel(
-                destination,
-                source,
-                params.blend_percentage,
-                params.color_blending_mode,
-                params.alpha_composition_mode);
+            let tile_index = (tile_y * params.tiles_x) + tile_x;
+            let tile_range = tile_ranges[tile_index];
+            let tile_end = tile_range.start_index + tile_range.count;
+            var tile_cursor = tile_range.start_index;
+            loop {
+                if (tile_cursor >= tile_end) {
+                    break;
+                }
+
+                let command_index = tile_command_indices[tile_cursor];
+                let command = commands[command_index];
+                if (pixel_x >= command.destination_x &&
+                    pixel_y >= command.destination_y &&
+                    pixel_x < (command.destination_x + command.destination_width) &&
+                    pixel_y < (command.destination_y + command.destination_height))
+                {
+                    let local_x = pixel_x - command.destination_x;
+                    let local_y = pixel_y - command.destination_y;
+                    let coverage_source = vec2<i32>(
+                        command.source_offset_x + local_x,
+                        command.source_offset_y + local_y);
+                    let coverage_value = textureLoad(coverage, coverage_source, 0).r;
+                    if (coverage_value > 0.0) {
+                        let brush = sample_brush(brushes[command.brush_data_index], pixel_x, pixel_y);
+                        let source = vec4<f32>(brush.rgb, brush.a * coverage_value);
+                        destination = compose_pixel(
+                            destination,
+                            source,
+                            command.blend_percentage,
+                            command.color_blending_mode,
+                            command.alpha_composition_mode);
+                    }
+                }
+
+                tile_cursor = tile_cursor + 1u;
+            }
+
+            destination_pixels[destination_index] = destination;
         } 
         """u8;
 }

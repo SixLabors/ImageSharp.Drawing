@@ -130,7 +130,10 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                         definitionCommand.Path,
                         definitionCommand.RasterizerOptions);
 
-                batches.Add(new CompositionBatch(definition, preparedCommands));
+                batches.Add(
+                    new CompositionBatch(
+                        definition,
+                        preparedCommands));
             }
 
             if (batches.Count == 0)

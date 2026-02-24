@@ -14,6 +14,11 @@ using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+internal enum CompositePipelineBlendMode
+{
+    None = 0
+}
+
 /// <summary>
 /// Per-flush WebGPU execution context created from a single frame target.
 /// </summary>
@@ -942,13 +947,24 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         Texture* destinationTexture,
         Buffer2DRegion<TPixel> sourceRegion)
         where TPixel : unmanaged
+        => UploadTextureFromRegion(api, queue, destinationTexture, sourceRegion, 0, 0, 0);
+
+    internal static void UploadTextureFromRegion<TPixel>(
+        WebGPU api,
+        Queue* queue,
+        Texture* destinationTexture,
+        Buffer2DRegion<TPixel> sourceRegion,
+        uint destinationX,
+        uint destinationY,
+        uint destinationLayer)
+        where TPixel : unmanaged
     {
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
         ImageCopyTexture destination = new()
         {
             Texture = destinationTexture,
             MipLevel = 0,
-            Origin = new Origin3D(0, 0, 0),
+            Origin = new Origin3D(destinationX, destinationY, destinationLayer),
             Aspect = TextureAspect.All
         };
 
@@ -1116,6 +1132,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             ReadOnlySpan<byte> shaderCode,
             WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
             TextureFormat textureFormat,
+            CompositePipelineBlendMode blendMode,
             out BindGroupLayout* bindGroupLayout,
             out RenderPipeline* pipeline,
             out string? error)
@@ -1168,7 +1185,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 }
 
                 bindGroupLayout = infrastructure.BindGroupLayout;
-                if (infrastructure.Pipelines.TryGetValue(textureFormat, out nint cachedPipelineHandle) && cachedPipelineHandle != 0)
+                (TextureFormat TextureFormat, CompositePipelineBlendMode BlendMode) variantKey = (textureFormat, blendMode);
+                if (infrastructure.Pipelines.TryGetValue(variantKey, out nint cachedPipelineHandle) && cachedPipelineHandle != 0)
                 {
                     pipeline = (RenderPipeline*)cachedPipelineHandle;
                     error = null;
@@ -1178,14 +1196,15 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 RenderPipeline* createdPipeline = this.CreateCompositePipeline(
                     infrastructure.PipelineLayout,
                     infrastructure.ShaderModule,
-                    textureFormat);
+                    textureFormat,
+                    blendMode);
                 if (createdPipeline is null)
                 {
                     error = $"Failed to create composite pipeline '{pipelineKey}' for format '{textureFormat}'.";
                     return false;
                 }
 
-                infrastructure.Pipelines[textureFormat] = (nint)createdPipeline;
+                infrastructure.Pipelines[variantKey] = (nint)createdPipeline;
                 pipeline = createdPipeline;
                 error = null;
                 return true;
@@ -1355,7 +1374,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         private RenderPipeline* CreateCompositePipeline(
             PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
-            TextureFormat textureFormat)
+            TextureFormat textureFormat,
+            CompositePipelineBlendMode blendMode)
         {
             ReadOnlySpan<byte> vertexEntryPoint = CompositeVertexEntryPoint;
             ReadOnlySpan<byte> fragmentEntryPoint = CompositeFragmentEntryPoint;
@@ -1368,7 +1388,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                         shaderModule,
                         vertexEntryPointPtr,
                         fragmentEntryPointPtr,
-                        textureFormat);
+                        textureFormat,
+                        blendMode);
                 }
             }
         }
@@ -1378,8 +1399,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             ShaderModule* shaderModule,
             byte* vertexEntryPointPtr,
             byte* fragmentEntryPointPtr,
-            TextureFormat textureFormat)
+            TextureFormat textureFormat,
+            CompositePipelineBlendMode blendMode)
         {
+            _ = blendMode;
             VertexState vertexState = new()
             {
                 Module = shaderModule,
@@ -1549,7 +1572,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         private sealed class CompositePipelineInfrastructure
         {
-            public Dictionary<TextureFormat, nint> Pipelines { get; } = [];
+            public Dictionary<(TextureFormat TextureFormat, CompositePipelineBlendMode BlendMode), nint> Pipelines { get; } = [];
 
             public BindGroupLayout* BindGroupLayout { get; set; }
 

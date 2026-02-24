@@ -26,7 +26,9 @@ internal static class GraphicsOptionsExtensions
             return false;
         }
 
-        if (options.AlphaCompositionMode is not PixelAlphaCompositionMode.SrcOver and not PixelAlphaCompositionMode.Src)
+        // Only the first two alpha composition enum values can fully replace backdrop
+        // for an opaque source at full blend amount.
+        if ((uint)options.AlphaCompositionMode > 1U)
         {
             return false;
         }
