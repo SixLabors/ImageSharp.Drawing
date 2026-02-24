@@ -98,12 +98,20 @@ public class DrawingCanvasBatcherTests
         public void FlushCompositions<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
-            CompositionBatch compositionBatch)
+            CompositionScene compositionScene)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            this.LastBatch = compositionBatch;
+            List<CompositionBatch> batches = CompositionScenePlanner.CreatePreparedBatches(
+                compositionScene.Commands,
+                target.Bounds);
+            if (batches.Count == 0)
+            {
+                return;
+            }
+
+            this.LastBatch = batches[batches.Count - 1];
             this.HasBatch = true;
-            this.Batches.Add(compositionBatch);
+            this.Batches.AddRange(batches);
         }
     }
 }

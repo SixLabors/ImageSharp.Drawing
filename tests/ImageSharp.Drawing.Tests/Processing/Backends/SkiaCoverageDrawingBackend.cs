@@ -49,41 +49,53 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        CompositionBatch compositionBatch)
+        CompositionScene compositionScene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (compositionBatch.Commands.Count == 0)
+        if (compositionScene.Commands.Count == 0)
         {
             return;
         }
 
-        CompositionCoverageDefinition definition = compositionBatch.Definition;
-        DrawingCoverageHandle coverageHandle = this.PrepareCoverage(
-            definition.Path,
-            definition.RasterizerOptions,
-            configuration.MemoryAllocator,
-            CoveragePreparationMode.Default);
-        try
+        List<CompositionBatch> preparedBatches = CompositionScenePlanner.CreatePreparedBatches(
+            compositionScene.Commands,
+            target.Bounds);
+        for (int batchIndex = 0; batchIndex < preparedBatches.Count; batchIndex++)
         {
-            IReadOnlyList<PreparedCompositionCommand> commands = compositionBatch.Commands;
-            for (int i = 0; i < commands.Count; i++)
+            CompositionBatch compositionBatch = preparedBatches[batchIndex];
+            if (compositionBatch.Commands.Count == 0)
             {
-                PreparedCompositionCommand composition = commands[i];
-                ICanvasFrame<TPixel> commandTarget = new CanvasRegionFrame<TPixel>(target, composition.DestinationRegion);
-
-                this.CompositeCoverage(
-                    configuration,
-                    commandTarget,
-                    coverageHandle,
-                    composition.SourceOffset,
-                    composition.Brush,
-                    composition.GraphicsOptions,
-                    composition.BrushBounds);
+                continue;
             }
-        }
-        finally
-        {
-            this.ReleaseCoverage(coverageHandle);
+
+            CompositionCoverageDefinition definition = compositionBatch.Definition;
+            DrawingCoverageHandle coverageHandle = this.PrepareCoverage(
+                definition.Path,
+                definition.RasterizerOptions,
+                configuration.MemoryAllocator,
+                CoveragePreparationMode.Default);
+            try
+            {
+                IReadOnlyList<PreparedCompositionCommand> commands = compositionBatch.Commands;
+                for (int i = 0; i < commands.Count; i++)
+                {
+                    PreparedCompositionCommand composition = commands[i];
+                    ICanvasFrame<TPixel> commandTarget = new CanvasRegionFrame<TPixel>(target, composition.DestinationRegion);
+
+                    this.CompositeCoverage(
+                        configuration,
+                        commandTarget,
+                        coverageHandle,
+                        composition.SourceOffset,
+                        composition.Brush,
+                        composition.GraphicsOptions,
+                        composition.BrushBounds);
+                }
+            }
+            finally
+            {
+                this.ReleaseCoverage(coverageHandle);
+            }
         }
     }
 

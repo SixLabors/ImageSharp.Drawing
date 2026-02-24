@@ -63,6 +63,27 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
+        CompositionScene compositionScene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (compositionScene.Commands.Count == 0)
+        {
+            return;
+        }
+
+        List<CompositionBatch> preparedBatches = CompositionScenePlanner.CreatePreparedBatches(
+            compositionScene.Commands,
+            target.Bounds);
+
+        for (int i = 0; i < preparedBatches.Count; i++)
+        {
+            this.FlushPreparedBatch(configuration, target, preparedBatches[i]);
+        }
+    }
+
+    internal void FlushPreparedBatch<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
         CompositionBatch compositionBatch)
         where TPixel : unmanaged, IPixel<TPixel>
     {

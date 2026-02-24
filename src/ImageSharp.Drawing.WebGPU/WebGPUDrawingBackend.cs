@@ -29,6 +29,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private bool isDisposed;
 
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
+    private static int nextSceneFlushId;
 
     public WebGPUDrawingBackend()
         => this.fallbackBackend = DefaultDrawingBackend.Instance;
@@ -141,6 +142,51 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     /// <inheritdoc />
     public void FlushCompositions<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        CompositionScene compositionScene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        this.ThrowIfDisposed();
+        if (compositionScene.Commands.Count == 0)
+        {
+            return;
+        }
+
+        List<CompositionBatch> preparedBatches = CompositionScenePlanner.CreatePreparedBatches(
+            compositionScene.Commands,
+            target.Bounds);
+        if (preparedBatches.Count == 0)
+        {
+            return;
+        }
+
+        bool supportsSharedFlush = true;
+        for (int i = 0; i < compositionScene.Commands.Count; i++)
+        {
+            if (!IsSupportedCompositionBrush(compositionScene.Commands[i].Brush))
+            {
+                supportsSharedFlush = false;
+                break;
+            }
+        }
+
+        int flushId = supportsSharedFlush ? Interlocked.Increment(ref nextSceneFlushId) : 0;
+        for (int i = 0; i < preparedBatches.Count; i++)
+        {
+            CompositionBatch batch = preparedBatches[i];
+            this.FlushPreparedBatch(
+                configuration,
+                target,
+                new CompositionBatch(
+                    batch.Definition,
+                    batch.Commands,
+                    flushId,
+                    isFinalBatchInFlush: i == preparedBatches.Count - 1));
+        }
+    }
+
+    private void FlushPreparedBatch<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         CompositionBatch compositionBatch)
@@ -301,7 +347,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     {
         if (hasCpuRegion)
         {
-            this.fallbackBackend.FlushCompositions(configuration, target, compositionBatch);
+            this.fallbackBackend.FlushPreparedBatch(configuration, target, compositionBatch);
             return;
         }
 
@@ -311,7 +357,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         Buffer2DRegion<TPixel> stagingRegion = stagingLease.Region;
         ICanvasFrame<TPixel> stagingFrame = new CpuCanvasFrame<TPixel>(stagingRegion);
-        this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionBatch);
+        this.fallbackBackend.FlushPreparedBatch(configuration, stagingFrame, compositionBatch);
 
         using WebGPUFlushContext uploadContext = WebGPUFlushContext.CreateUploadContext(target);
         WebGPUFlushContext.UploadTextureFromRegion(

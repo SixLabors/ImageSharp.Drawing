@@ -127,7 +127,7 @@ public class RasterizerDefaultsExtensionsTests
         public void FlushCompositions<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
-            CompositionBatch compositionBatch)
+            CompositionScene compositionScene)
             where TPixel : unmanaged, IPixel<TPixel>
         {
         }

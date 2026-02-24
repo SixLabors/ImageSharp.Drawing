@@ -50,10 +50,10 @@ internal interface IDrawingBackend
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
     /// <param name="target">Destination frame.</param>
-    /// <param name="compositionBatch">Prepared composition definitions and commands in batch order.</param>
+    /// <param name="compositionScene">Scene commands in submission order.</param>
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        CompositionBatch compositionBatch)
+        CompositionScene compositionScene)
         where TPixel : unmanaged, IPixel<TPixel>;
 }

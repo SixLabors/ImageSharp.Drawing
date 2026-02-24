@@ -11,13 +11,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 /// <remarks>
 /// The batcher owns command buffering and normalization only; it does not rasterize or composite.
-/// During flush it groups consecutive commands sharing the same coverage definition into a single
-/// <see cref="CompositionBatch"/> so backends rasterize once and apply multiple brushes in order.
+/// During flush it emits a <see cref="CompositionScene"/> so each backend can plan execution
+/// (for example: CPU batching or GPU tiling) without changing the canvas call surface.
 /// </remarks>
 internal sealed class DrawingCanvasBatcher<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private static int nextFlushId;
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
     private readonly ICanvasFrame<TPixel> targetFrame;
@@ -45,17 +44,11 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         => this.commands.Add(composition);
 
     /// <summary>
-    /// Flushes queued commands to the backend, preserving submission order.
+    /// Flushes queued commands to the backend as one scene packet, preserving submission order.
     /// </summary>
     /// <remarks>
-    /// This method performs only command normalization and grouping:
-    /// <list type="number">
-    /// <item><description>Split the queue into contiguous runs of matching <see cref="CompositionCommand.DefinitionKey"/>.</description></item>
-    /// <item><description>Clip each run command to the target frame bounds.</description></item>
-    /// <item><description>Compute <see cref="PreparedCompositionCommand.SourceOffset"/> so clipped destination pixels map to the correct coverage pixels.</description></item>
-    /// <item><description>Send one <see cref="CompositionBatch"/> per contiguous run.</description></item>
-    /// </list>
-    /// The backend then rasterizes coverage once per batch definition and composites commands in order.
+    /// Backends are responsible for planning execution (for example: grouping by coverage, caching,
+    /// or GPU binning). The batcher only records scene commands and forwards them on flush.
     /// </remarks>
     public void FlushCompositions()
     {
@@ -66,107 +59,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         try
         {
-            Rectangle targetBounds = this.targetFrame.Bounds;
-            int index = 0;
-            List<CompositionBatch> batches = [];
-            while (index < this.commands.Count)
-            {
-                CompositionCommand definitionCommand = this.commands[index];
-                int definitionKey = definitionCommand.DefinitionKey;
-
-                // Build one batch for the contiguous run sharing the same coverage definition.
-                List<PreparedCompositionCommand> preparedCommands = [];
-                for (; index < this.commands.Count; index++)
-                {
-                    CompositionCommand command = this.commands[index];
-                    if (command.DefinitionKey != definitionKey)
-                    {
-                        break;
-                    }
-
-                    Rectangle interest = command.RasterizerOptions.Interest;
-                    Rectangle commandDestination = new(
-                        command.DestinationOffset.X + interest.X,
-                        command.DestinationOffset.Y + interest.Y,
-                        interest.Width,
-                        interest.Height);
-
-                    Rectangle clippedDestination = Rectangle.Intersect(targetBounds, commandDestination);
-
-                    // Off-target commands in this run are dropped before backend dispatch.
-                    if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
-                    {
-                        continue;
-                    }
-
-                    Rectangle destinationLocalRegion = new(
-                        clippedDestination.X - targetBounds.X,
-                        clippedDestination.Y - targetBounds.Y,
-                        clippedDestination.Width,
-                        clippedDestination.Height);
-
-                    Point sourceOffset = new(
-                        clippedDestination.X - commandDestination.X,
-                        clippedDestination.Y - commandDestination.Y);
-
-                    // Keep command ordering exactly as submitted.
-                    preparedCommands.Add(
-                        new PreparedCompositionCommand(
-                            destinationLocalRegion,
-                            sourceOffset,
-                            command.Brush,
-                            command.BrushBounds,
-                            command.GraphicsOptions));
-                }
-
-                if (preparedCommands.Count == 0)
-                {
-                    continue;
-                }
-
-                CompositionCoverageDefinition definition =
-                    new(
-                        definitionKey,
-                        definitionCommand.Path,
-                        definitionCommand.RasterizerOptions);
-
-                batches.Add(
-                    new CompositionBatch(
-                        definition,
-                        preparedCommands));
-            }
-
-            if (batches.Count == 0)
-            {
-                return;
-            }
-
-            // Use one shared flush id only when all queued brushes are directly supported by
-            // the active backend. If any brush is unsupported, backends receive independent
-            // batches (flushId = 0) so they can route each batch safely without shared state.
-            bool supportsSharedFlush = true;
-            for (int i = 0; i < this.commands.Count; i++)
-            {
-                if (!this.backend.IsCompositionBrushSupported<TPixel>(this.commands[i].Brush))
-                {
-                    supportsSharedFlush = false;
-                    break;
-                }
-            }
-
-            int flushId = supportsSharedFlush ? Interlocked.Increment(ref nextFlushId) : 0;
-            for (int i = 0; i < batches.Count; i++)
-            {
-                CompositionBatch batch = batches[i];
-                this.backend.FlushCompositions(
-                    this.configuration,
-                    this.targetFrame,
-                    new CompositionBatch(
-                        batch.Definition,
-                        batch.Commands,
-                        flushId,
-                        isFinalBatchInFlush: i == batches.Count - 1));
-            }
+            CompositionScene scene = new(this.commands.ToArray());
+            this.backend.FlushCompositions(this.configuration, this.targetFrame, scene);
         }
         finally
         {

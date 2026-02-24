@@ -17,6 +17,30 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     private const int TiledCompositeTileSize = CompositeComputeWorkgroupSize;
     private const string TiledCompositePipelineKey = "tiled-composite";
 
+    /// <summary>
+    /// Composes one brush command into GPU brush/source-layer data consumed by the tiled compute shader.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination/source pixel format.</typeparam>
+    private interface ITiledCompositeBrushComposer<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        /// <summary>
+        /// Converts one prepared command into brush data and source-layer bindings.
+        /// </summary>
+        /// <param name="command">The prepared command being encoded.</param>
+        /// <param name="flushContext">The active flush context for target-space mapping.</param>
+        /// <param name="buildContext">Shared build context accumulating source layers and brush data.</param>
+        /// <param name="brushDataIndex">The encoded brush-data index for the command.</param>
+        /// <param name="error">Failure reason when conversion cannot complete.</param>
+        /// <returns><see langword="true"/> when conversion succeeds; otherwise <see langword="false"/>.</returns>
+        bool TryCompose(
+            PreparedCompositionCommand command,
+            WebGPUFlushContext flushContext,
+            TiledCompositeBuildContext<TPixel> buildContext,
+            out int brushDataIndex,
+            out string? error);
+    }
+
     private bool TryCompositeBatchTiled<TPixel>(
         WebGPUFlushContext flushContext,
         TextureView* coverageView,
@@ -153,10 +177,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         Span<int> tileCommandCounts = rentedTileCounts.AsSpan(0, tileCount);
 
         TiledCompositeCommandData[] commandData = new TiledCompositeCommandData[commandCount];
-        List<TiledCompositeBrushData> brushData = [];
-        List<TiledSourceLayer<TPixel>> sourceLayers = [];
-        Dictionary<Image, int> sourceImageLayers = new(ReferenceEqualityComparer.Instance);
-        Dictionary<TPixel, int> solidColorLayers = [];
+        TiledCompositeBuildContext<TPixel> buildContext = new();
 
         try
         {
@@ -182,54 +203,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     }
                 }
 
-                int sourceLayer;
-                Rectangle sourceRegion;
-                int brushOriginX;
-                int brushOriginY;
-                if (command.Brush is ImageBrush imageBrush)
-                {
-                    Image<TPixel> sourceImage = (Image<TPixel>)imageBrush.SourceImage;
-                    if (!sourceImageLayers.TryGetValue(sourceImage, out sourceLayer))
-                    {
-                        sourceLayer = sourceLayers.Count;
-                        sourceImageLayers.Add(sourceImage, sourceLayer);
-                        sourceLayers.Add(TiledSourceLayer<TPixel>.CreateImage(sourceImage));
-                    }
-
-                    sourceRegion = Rectangle.Intersect(sourceImage.Bounds, (Rectangle)imageBrush.SourceRegion);
-                    brushOriginX = checked(command.BrushBounds.Left + imageBrush.Offset.X - flushContext.TargetBounds.X);
-                    brushOriginY = checked(command.BrushBounds.Top + imageBrush.Offset.Y - flushContext.TargetBounds.Y);
-                }
-                else if (command.Brush is SolidBrush solidBrush)
-                {
-                    TPixel solidPixel = solidBrush.Color.ToPixel<TPixel>();
-                    if (!solidColorLayers.TryGetValue(solidPixel, out sourceLayer))
-                    {
-                        sourceLayer = sourceLayers.Count;
-                        solidColorLayers.Add(solidPixel, sourceLayer);
-                        sourceLayers.Add(TiledSourceLayer<TPixel>.CreateSolid(solidPixel));
-                    }
-
-                    sourceRegion = new Rectangle(0, 0, 1, 1);
-                    brushOriginX = 0;
-                    brushOriginY = 0;
-                }
-                else
+                if (!TryGetBrushComposer(command.Brush, out ITiledCompositeBrushComposer<TPixel> composer))
                 {
                     error = $"Unsupported brush type for tiled composition: '{command.Brush.GetType().FullName}'.";
                     return false;
                 }
 
-                int brushDataIndex = brushData.Count;
-                brushData.Add(
-                    new TiledCompositeBrushData(
-                        sourceRegion.X,
-                        sourceRegion.Y,
-                        sourceRegion.Width,
-                        sourceRegion.Height,
-                        brushOriginX,
-                        brushOriginY,
-                        sourceLayer));
+                if (!composer.TryCompose(command, flushContext, buildContext, out int brushDataIndex, out error))
+                {
+                    return false;
+                }
 
                 GraphicsOptions options = command.GraphicsOptions;
                 commandData[commandIndex] = new TiledCompositeCommandData(
@@ -280,7 +263,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 }
             }
 
-            if (!TryCreateSourceLayerTextureArray(flushContext, sourceLayers, out TextureView* sourceLayerView, out error) ||
+            if (!TryCreateSourceLayerTextureArray(flushContext, buildContext.SourceLayers, out TextureView* sourceLayerView, out error) ||
                 !TryCreateAndUploadBuffer<TiledCompositeCommandData>(
                     flushContext,
                     BufferUsage.Storage,
@@ -305,7 +288,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 !TryCreateAndUploadBuffer<TiledCompositeBrushData>(
                     flushContext,
                     BufferUsage.Storage,
-                    CollectionsMarshal.AsSpan(brushData),
+                    CollectionsMarshal.AsSpan(buildContext.BrushData),
                     out WgpuBuffer* brushDataBuffer,
                     out nuint brushDataBufferBytes,
                     out error))
@@ -543,6 +526,28 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         flushContext.TrackTextureView(sourceLayerView);
         error = null;
         return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryGetBrushComposer<TPixel>(
+        Brush brush,
+        out ITiledCompositeBrushComposer<TPixel> composer)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (brush is ImageBrush)
+        {
+            composer = ImageBrushTiledCompositeComposer<TPixel>.Instance;
+            return true;
+        }
+
+        if (brush is SolidBrush)
+        {
+            composer = SolidBrushTiledCompositeComposer<TPixel>.Instance;
+            return true;
+        }
+
+        composer = default!;
+        return false;
     }
 
     private static void UploadSolidSourceLayer<TPixel>(
@@ -819,5 +824,115 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public static TiledSourceLayer<TPixel> CreateImage(Image<TPixel> image) => new(image);
 
         public static TiledSourceLayer<TPixel> CreateSolid(TPixel solidPixel) => new(solidPixel);
+    }
+
+    private sealed class SolidBrushTiledCompositeComposer<TPixel> : ITiledCompositeBrushComposer<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        public static SolidBrushTiledCompositeComposer<TPixel> Instance { get; } = new();
+
+        public bool TryCompose(
+            PreparedCompositionCommand command,
+            WebGPUFlushContext flushContext,
+            TiledCompositeBuildContext<TPixel> buildContext,
+            out int brushDataIndex,
+            out string? error)
+        {
+            SolidBrush solidBrush = (SolidBrush)command.Brush;
+            TPixel solidPixel = solidBrush.Color.ToPixel<TPixel>();
+            int sourceLayer = buildContext.GetOrAddSolidLayer(solidPixel);
+
+            brushDataIndex = buildContext.AddBrushData(
+                new TiledCompositeBrushData(
+                    0,
+                    0,
+                    1,
+                    1,
+                    0,
+                    0,
+                    sourceLayer));
+
+            error = null;
+            return true;
+        }
+    }
+
+    private sealed class ImageBrushTiledCompositeComposer<TPixel> : ITiledCompositeBrushComposer<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        public static ImageBrushTiledCompositeComposer<TPixel> Instance { get; } = new();
+
+        public bool TryCompose(
+            PreparedCompositionCommand command,
+            WebGPUFlushContext flushContext,
+            TiledCompositeBuildContext<TPixel> buildContext,
+            out int brushDataIndex,
+            out string? error)
+        {
+            ImageBrush imageBrush = (ImageBrush)command.Brush;
+            Image<TPixel> sourceImage = (Image<TPixel>)imageBrush.SourceImage;
+            int sourceLayer = buildContext.GetOrAddImageLayer(sourceImage);
+            Rectangle sourceRegion = Rectangle.Intersect(sourceImage.Bounds, (Rectangle)imageBrush.SourceRegion);
+            int brushOriginX = checked(command.BrushBounds.Left + imageBrush.Offset.X - flushContext.TargetBounds.X);
+            int brushOriginY = checked(command.BrushBounds.Top + imageBrush.Offset.Y - flushContext.TargetBounds.Y);
+
+            brushDataIndex = buildContext.AddBrushData(
+                new TiledCompositeBrushData(
+                    sourceRegion.X,
+                    sourceRegion.Y,
+                    sourceRegion.Width,
+                    sourceRegion.Height,
+                    brushOriginX,
+                    brushOriginY,
+                    sourceLayer));
+
+            error = null;
+            return true;
+        }
+    }
+
+    private sealed class TiledCompositeBuildContext<TPixel>
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private readonly Dictionary<Image, int> sourceImageLayers = new(ReferenceEqualityComparer.Instance);
+        private readonly Dictionary<TPixel, int> solidColorLayers = [];
+
+        public List<TiledCompositeBrushData> BrushData { get; } = [];
+
+        public List<TiledSourceLayer<TPixel>> SourceLayers { get; } = [];
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int AddBrushData(in TiledCompositeBrushData brushData)
+        {
+            int index = this.BrushData.Count;
+            this.BrushData.Add(brushData);
+            return index;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetOrAddSolidLayer(TPixel solidPixel)
+        {
+            if (!this.solidColorLayers.TryGetValue(solidPixel, out int sourceLayer))
+            {
+                sourceLayer = this.SourceLayers.Count;
+                this.solidColorLayers.Add(solidPixel, sourceLayer);
+                this.SourceLayers.Add(TiledSourceLayer<TPixel>.CreateSolid(solidPixel));
+            }
+
+            return sourceLayer;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int GetOrAddImageLayer(Image<TPixel> sourceImage)
+        {
+            if (!this.sourceImageLayers.TryGetValue(sourceImage, out int sourceLayer))
+            {
+                sourceLayer = this.SourceLayers.Count;
+                this.sourceImageLayers.Add(sourceImage, sourceLayer);
+                this.SourceLayers.Add(TiledSourceLayer<TPixel>.CreateImage(sourceImage));
+            }
+
+            return sourceLayer;
+        }
     }
 }
