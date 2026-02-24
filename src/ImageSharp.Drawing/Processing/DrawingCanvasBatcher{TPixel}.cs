@@ -27,10 +27,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame)
     {
-        Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(backend, nameof(backend));
-        Guard.NotNull(targetFrame, nameof(targetFrame));
-
         this.configuration = configuration;
         this.backend = backend;
         this.targetFrame = targetFrame;

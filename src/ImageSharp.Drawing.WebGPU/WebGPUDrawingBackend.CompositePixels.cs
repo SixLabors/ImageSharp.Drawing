@@ -10,8 +10,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Pixel-format registration for composite session I/O.
 /// </summary>
+/// <remarks>
+/// The map defined by <see cref="CreateCompositePixelHandlers"/> is intentionally explicit and only
+/// includes one-to-one format mappings where the GPU texture format can round-trip the pixel payload
+/// without channel swizzle or custom conversion logic.
+/// </remarks>
 internal sealed partial class WebGPUDrawingBackend
 {
+    /// <summary>
+    /// Builds the static registration table that maps <see cref="IPixel{TSelf}"/> implementations to
+    /// compatible WebGPU storage/sampling formats.
+    /// </summary>
+    /// <returns>The registration map used during flush dispatch.</returns>
     private static Dictionary<Type, CompositePixelRegistration> CreateCompositePixelHandlers() =>
 
         // No-swizzle mappings only. Unsupported types are intentionally omitted from this map.
@@ -43,6 +53,14 @@ internal sealed partial class WebGPUDrawingBackend
             [typeof(Rgba64)] = CompositePixelRegistration.Create<Rgba64>(TextureFormat.Rgba16Uint)
         };
 
+    /// <summary>
+    /// Resolves the WebGPU texture format identifier for <typeparamref name="TPixel"/> when supported.
+    /// </summary>
+    /// <typeparam name="TPixel">The requested pixel type.</typeparam>
+    /// <param name="formatId">Receives the mapped texture format identifier on success.</param>
+    /// <returns>
+    /// <see langword="true"/> when the pixel type is supported for GPU composition; otherwise <see langword="false"/>.
+    /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -57,8 +75,17 @@ internal sealed partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Per-pixel registration payload consumed by GPU composition setup.
+    /// </summary>
     private readonly struct CompositePixelRegistration
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CompositePixelRegistration"/> struct.
+        /// </summary>
+        /// <param name="pixelType">The registered pixel CLR type.</param>
+        /// <param name="textureFormat">The matching WebGPU texture format.</param>
+        /// <param name="pixelSizeInBytes">The unmanaged pixel size in bytes.</param>
         public CompositePixelRegistration(Type pixelType, TextureFormat textureFormat, int pixelSizeInBytes)
         {
             this.PixelType = pixelType;
@@ -72,6 +99,11 @@ internal sealed partial class WebGPUDrawingBackend
 
         public int PixelSizeInBytes { get; }
 
+        /// <summary>
+        /// Creates a registration record for <typeparamref name="TPixel"/>.
+        /// </summary>
+        /// <param name="textureFormat">The matching WebGPU texture format.</param>
+        /// <returns>The initialized registration.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static CompositePixelRegistration Create<TPixel>(TextureFormat textureFormat)
             where TPixel : unmanaged, IPixel<TPixel>

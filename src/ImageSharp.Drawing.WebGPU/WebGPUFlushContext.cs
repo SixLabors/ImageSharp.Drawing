@@ -333,11 +333,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return this.CommandEncoder is not null;
     }
 
-    public bool BeginRenderPass()
-    {
-        return this.BeginRenderPass(this.TargetView);
-    }
-
     /// <summary>
     /// Begins a render pass that targets the specified texture view.
     /// </summary>
@@ -1024,17 +1019,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
-    public void ResetInstanceBufferOffset()
-        => this.InstanceBufferWriteOffset = 0;
-
-    public void AdvanceInstanceBufferOffset(nuint newOffset)
-        => this.InstanceBufferWriteOffset = AlignToStorageBufferOffset(newOffset);
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignTo256(uint value) => (value + 255U) & ~255U;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static nuint AlignToStorageBufferOffset(nuint value) => (value + 255) & ~(nuint)255;
 
     internal sealed class DeviceSharedState : IDisposable
     {

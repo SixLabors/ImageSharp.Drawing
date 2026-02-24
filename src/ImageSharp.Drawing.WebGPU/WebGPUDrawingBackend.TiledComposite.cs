@@ -41,6 +41,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             out string? error);
     }
 
+    /// <summary>
+    /// Composites one prepared batch using the tiled compute path.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
+    /// <param name="flushContext">The active flush context for the current frame target.</param>
+    /// <param name="coverageView">The prepared GPU coverage texture view.</param>
+    /// <param name="commands">The prepared composition commands to apply in order.</param>
+    /// <param name="blitToTarget">
+    /// Indicates whether destination storage should be blitted back to the target texture after this batch.
+    /// </param>
+    /// <param name="error">Receives an error message when composition fails.</param>
+    /// <returns><see langword="true"/> when composition succeeds; otherwise <see langword="false"/>.</returns>
     private bool TryCompositeBatchTiled<TPixel>(
         WebGPUFlushContext flushContext,
         TextureView* coverageView,
@@ -73,6 +85,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
+        // Reuse destination storage across batches in the same flush session when available.
         WgpuBuffer* destinationPixelsBuffer = flushContext.CompositeDestinationPixelsBuffer;
         nuint destinationPixelsByteSize = flushContext.CompositeDestinationPixelsByteSize;
         if (destinationPixelsBuffer is null)
@@ -91,6 +104,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     return false;
                 }
 
+                // When the target cannot be sampled directly, copy into a transient sampling texture first.
                 CopyTextureRegion(flushContext, flushContext.TargetTexture, sourceTexture, targetLocalBounds);
             }
 
@@ -146,6 +160,19 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Builds tiled command indirection buffers and dispatches the tiled composite compute shader.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
+    /// <param name="flushContext">The active flush context.</param>
+    /// <param name="coverageView">The prepared GPU coverage texture view.</param>
+    /// <param name="destinationPixelsBuffer">The destination storage buffer.</param>
+    /// <param name="destinationPixelsByteSize">The destination storage size in bytes.</param>
+    /// <param name="commands">The prepared composition commands.</param>
+    /// <param name="destinationWidth">The destination width.</param>
+    /// <param name="destinationHeight">The destination height.</param>
+    /// <param name="error">Receives an error message when dispatch fails.</param>
+    /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
     private bool TryRunTiledCompositeComputePass<TPixel>(
         WebGPUFlushContext flushContext,
         TextureView* coverageView,
@@ -190,6 +217,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     continue;
                 }
 
+                // First pass: count how many commands overlap each tile.
                 int minTileX = Math.Clamp(destinationRegion.X / TiledCompositeTileSize, 0, tilesX - 1);
                 int minTileY = Math.Clamp(destinationRegion.Y / TiledCompositeTileSize, 0, tilesY - 1);
                 int maxTileX = Math.Clamp((destinationRegion.Right - 1) / TiledCompositeTileSize, 0, tilesX - 1);
@@ -228,6 +256,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     brushDataIndex);
             }
 
+            // Convert command counts into prefix ranges for compact tile command lists.
             TiledCompositeTileRange[] tileRanges = new TiledCompositeTileRange[tileCount];
             int totalTileCommandRefs = 0;
             for (int tileIndex = 0; tileIndex < tileCount; tileIndex++)
@@ -238,6 +267,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 totalTileCommandRefs = checked(totalTileCommandRefs + count);
             }
 
+            // Second pass: write per-tile command index lists.
             uint[] tileCommandIndices = new uint[Math.Max(totalTileCommandRefs, 1)];
             for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
             {
@@ -319,6 +349,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 return false;
             }
 
+            // Bind all shader inputs in one bind group so each tile dispatch has fixed resource layout.
             BindGroupEntry* entries = stackalloc BindGroupEntry[8];
             entries[0] = new BindGroupEntry
             {
@@ -417,6 +448,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         }
     }
 
+    /// <summary>
+    /// Builds and uploads the source layer texture array referenced by brush data.
+    /// </summary>
+    /// <typeparam name="TPixel">The source pixel format.</typeparam>
+    /// <param name="flushContext">The active flush context.</param>
+    /// <param name="sourceLayers">The source layers to upload.</param>
+    /// <param name="sourceLayerView">Receives the created texture array view.</param>
+    /// <param name="error">Receives an error message when creation or upload fails.</param>
+    /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
     private static bool TryCreateSourceLayerTextureArray<TPixel>(
         WebGPUFlushContext flushContext,
         List<TiledSourceLayer<TPixel>> sourceLayers,
@@ -487,6 +527,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         {
             if (sourceLayers.Count == 0)
             {
+                // Keep resource bindings valid even when no command produced a source layer.
                 UploadSolidSourceLayer(flushContext, texture, default(TPixel), 0);
             }
             else
@@ -528,6 +569,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Resolves the brush composer that maps a command brush to tiled shader data.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination/source pixel format.</typeparam>
+    /// <param name="brush">The command brush.</param>
+    /// <param name="composer">Receives the matching composer when found.</param>
+    /// <returns><see langword="true"/> when a composer exists; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool TryGetBrushComposer<TPixel>(
         Brush brush,
@@ -550,6 +598,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return false;
     }
 
+    /// <summary>
+    /// Uploads one 1x1 solid-color source layer into the texture array.
+    /// </summary>
     private static void UploadSolidSourceLayer<TPixel>(
         WebGPUFlushContext flushContext,
         Texture* texture,
@@ -583,6 +634,17 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             in size);
     }
 
+    /// <summary>
+    /// Allocates one GPU buffer and uploads source data into it.
+    /// </summary>
+    /// <typeparam name="T">The unmanaged element type.</typeparam>
+    /// <param name="flushContext">The active flush context.</param>
+    /// <param name="usage">The target buffer usage flags.</param>
+    /// <param name="sourceData">The data to upload.</param>
+    /// <param name="buffer">Receives the created buffer.</param>
+    /// <param name="bufferSize">Receives the allocated byte size.</param>
+    /// <param name="error">Receives an error message when creation fails.</param>
+    /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
     private static bool TryCreateAndUploadBuffer<T>(
         WebGPUFlushContext flushContext,
         BufferUsage usage,
@@ -622,6 +684,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by <see cref="TiledCompositeComputeShader"/>.
+    /// </summary>
     private static bool TryCreateTiledCompositeBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -735,6 +800,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Per-command payload consumed by <see cref="TiledCompositeComputeShader"/>.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct TiledCompositeCommandData(
         int sourceOffsetX,
@@ -762,6 +830,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public readonly int Padding1 = 0;
     }
 
+    /// <summary>
+    /// Per-tile range into the compact tile-command index array.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct TiledCompositeTileRange(uint startIndex, uint count)
     {
@@ -769,6 +840,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public readonly uint Count = count;
     }
 
+    /// <summary>
+    /// Brush source sampling payload consumed by <see cref="TiledCompositeComputeShader"/>.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct TiledCompositeBrushData(
         int sourceRegionX,
@@ -789,6 +863,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public readonly int Padding0 = 0;
     }
 
+    /// <summary>
+    /// Global dispatch parameters consumed by <see cref="TiledCompositeComputeShader"/>.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct TiledCompositeParameters(
         int destinationWidth,
@@ -802,6 +879,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public readonly int TileSize = tileSize;
     }
 
+    /// <summary>
+    /// One tiled source layer entry, either sampled from an image or synthesized from a solid pixel.
+    /// </summary>
     private readonly struct TiledSourceLayer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -826,11 +906,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public static TiledSourceLayer<TPixel> CreateSolid(TPixel solidPixel) => new(solidPixel);
     }
 
+    /// <summary>
+    /// Brush composer for <see cref="SolidBrush"/>.
+    /// </summary>
     private sealed class SolidBrushTiledCompositeComposer<TPixel> : ITiledCompositeBrushComposer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         public static SolidBrushTiledCompositeComposer<TPixel> Instance { get; } = new();
 
+        /// <inheritdoc />
         public bool TryCompose(
             PreparedCompositionCommand command,
             WebGPUFlushContext flushContext,
@@ -857,11 +941,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         }
     }
 
+    /// <summary>
+    /// Brush composer for <see cref="ImageBrush"/>.
+    /// </summary>
     private sealed class ImageBrushTiledCompositeComposer<TPixel> : ITiledCompositeBrushComposer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         public static ImageBrushTiledCompositeComposer<TPixel> Instance { get; } = new();
 
+        /// <inheritdoc />
         public bool TryCompose(
             PreparedCompositionCommand command,
             WebGPUFlushContext flushContext,
@@ -891,6 +979,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         }
     }
 
+    /// <summary>
+    /// Mutable build context that accumulates deduplicated source layers and brush payloads per batch.
+    /// </summary>
     private sealed class TiledCompositeBuildContext<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -901,6 +992,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
         public List<TiledSourceLayer<TPixel>> SourceLayers { get; } = [];
 
+        /// <summary>
+        /// Adds brush payload data and returns its index.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int AddBrushData(in TiledCompositeBrushData brushData)
         {
@@ -909,6 +1003,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return index;
         }
 
+        /// <summary>
+        /// Gets or creates a source layer index for a solid-color brush payload.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetOrAddSolidLayer(TPixel solidPixel)
         {
@@ -922,6 +1019,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return sourceLayer;
         }
 
+        /// <summary>
+        /// Gets or creates a source layer index for an image brush payload.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int GetOrAddImageLayer(Image<TPixel> sourceImage)
         {

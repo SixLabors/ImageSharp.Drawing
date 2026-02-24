@@ -7,8 +7,32 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Default drawing backend.
+/// CPU fallback backend that executes path coverage rasterization and brush composition directly against a CPU region.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This backend is the correctness baseline for all composition behavior. It is also used as the
+/// fallback path by GPU backends when the target surface, pixel format, or brush command cannot be
+/// executed directly on the GPU.
+/// </para>
+/// <para>
+/// Flush execution is intentionally split:
+/// </para>
+/// <list type="number">
+/// <item>
+/// <description>
+/// <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
+/// converts scene commands into prepared batches with <see cref="CompositionScenePlanner"/>.
+/// </description>
+/// </item>
+/// <item>
+/// <description>
+/// <see cref="FlushPreparedBatch{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionBatch)"/>
+/// rasterizes one shared coverage map per batch and applies brushes in original command order.
+/// </description>
+/// </item>
+/// </list>
+/// </remarks>
 internal sealed class DefaultDrawingBackend : IDrawingBackend
 {
     /// <summary>
@@ -81,6 +105,19 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
     }
 
+    /// <summary>
+    /// Executes one prepared batch on the CPU.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The destination frame.</param>
+    /// <param name="compositionBatch">
+    /// One prepared batch where all commands share the same coverage definition and differ only by brush/options.
+    /// </param>
+    /// <remarks>
+    /// This method is intentionally reusable so GPU backends can delegate unsupported batches
+    /// without reconstructing a full <see cref="CompositionScene"/>.
+    /// </remarks>
     internal void FlushPreparedBatch<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
@@ -119,6 +156,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
                 }
             }
 
+            // Iterate by row so we slice the already-rasterized coverage map once per command row.
             for (int row = 0; row < maxHeight; row++)
             {
                 for (int i = 0; i < commandCount; i++)
@@ -149,6 +187,12 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
     }
 
+    /// <summary>
+    /// Rasterizes one batch coverage map into a dense floating-point buffer.
+    /// </summary>
+    /// <param name="definition">The path and rasterizer options shared by every command in the batch.</param>
+    /// <param name="allocator">The allocator used for temporary coverage storage.</param>
+    /// <returns>The populated coverage map for the batch interest region.</returns>
     private Buffer2D<float> CreateCoverageMap(
         in CompositionCoverageDefinition definition,
         MemoryAllocator allocator)

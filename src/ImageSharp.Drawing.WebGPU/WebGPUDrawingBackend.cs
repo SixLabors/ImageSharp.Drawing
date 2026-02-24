@@ -18,6 +18,33 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// WebGPU-backed implementation of <see cref="IDrawingBackend"/>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// This backend executes coverage generation and composition on WebGPU where possible and falls back to
+/// <see cref="DefaultDrawingBackend"/> when GPU execution is unavailable for a specific command set.
+/// </para>
+/// <para>
+/// High-level flush pipeline:
+/// </para>
+/// <code>
+/// CompositionScene
+///   -> CompositionScenePlanner (prepared batches)
+///   -> For each batch:
+///        1) Resolve pixel-format handler
+///        2) Acquire flush context (shared session when possible)
+///        3) Prepare/reuse GPU coverage for path definition
+///        4) Composite commands via tiled compute shader into destination pixel buffer
+///        5) Blit to target and optionally read back to CPU region
+///        6) On failure: delegate batch to DefaultDrawingBackend
+/// </code>
+/// <para>
+/// Shared flush sessions allow multiple contiguous GPU-compatible batches to reuse destination initialization
+/// and transient GPU resources for one scene flush.
+/// </para>
+/// <para>
+/// See src/ImageSharp.Drawing.WebGPU/WEBGPU_BACKEND_PROCESS.md for a full process walkthrough.
+/// </para>
+/// </remarks>
 internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
     private const uint CompositeVertexCount = 6;
@@ -31,6 +58,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
     private static int nextSceneFlushId;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUDrawingBackend"/> class.
+    /// </summary>
     public WebGPUDrawingBackend()
         => this.fallbackBackend = DefaultDrawingBackend.Instance;
 
@@ -95,6 +125,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// </summary>
     internal int TestingComputePathBatchCount { get; private set; }
 
+    /// <summary>
+    /// Attempts to expose native WebGPU device and queue handles for interop.
+    /// </summary>
+    /// <param name="deviceHandle">Receives the device pointer when available.</param>
+    /// <param name="queueHandle">Receives the queue pointer when available.</param>
+    /// <returns><see langword="true"/> when both handles are available; otherwise <see langword="false"/>.</returns>
     internal bool TryGetInteropHandles(out nint deviceHandle, out nint queueHandle)
     {
         this.ThrowIfDisposed();
@@ -161,6 +197,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return;
         }
 
+        // Shared flush sessions are used only when every command brush is directly supported by GPU composition.
         bool supportsSharedFlush = true;
         for (int i = 0; i < compositionScene.Commands.Count; i++)
         {
@@ -186,6 +223,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
+    /// <summary>
+    /// Executes one prepared composition batch, preferring GPU execution and falling back to CPU when required.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The destination frame.</param>
+    /// <param name="compositionBatch">The prepared batch to execute.</param>
     private void FlushPreparedBatch<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
@@ -220,6 +264,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return;
         }
 
+        // Flush sessions keep destination state alive across batch boundaries for one scene flush.
         bool useFlushSession = compositionBatch.FlushId != 0;
         bool gpuSuccess = false;
         bool gpuReady = false;
@@ -246,9 +291,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     out failure))
             {
                 gpuReady = true;
-                gpuSuccess = this.TryCompositeBatch<TPixel>(
+                gpuSuccess = this.TryCompositeBatchTiled<TPixel>(
                     flushContext,
-                    coverageEntry,
+                    coverageEntry.GPUCoverageView,
                     compositionBatch.Commands,
                     blitToTarget: !useFlushSession || compositionBatch.IsFinalBatchInFlush,
                     out failure);
@@ -256,7 +301,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 {
                     if (useFlushSession && !compositionBatch.IsFinalBatchInFlush)
                     {
-                        // Keep the render pass open for the next batch.
+                        // Intermediate session batches defer final submit/readback until the last batch.
                     }
                     else
                     {
@@ -321,6 +366,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.FlushCompositionsFallback(configuration, target, compositionBatch, hasCpuRegion);
     }
 
+    /// <summary>
+    /// Checks whether all prepared commands in the batch are directly composable by WebGPU.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool AreAllCompositionBrushesSupported(IReadOnlyList<PreparedCompositionCommand> commands)
     {
@@ -335,9 +383,23 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
+    /// <summary>
+    /// Checks whether the brush type is supported by the WebGPU composition path.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSupportedCompositionBrush(Brush brush) => brush is SolidBrush or ImageBrush;
 
+    /// <summary>
+    /// Executes one prepared batch on the CPU fallback backend.
+    /// </summary>
+    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The original destination frame.</param>
+    /// <param name="compositionBatch">The prepared batch to execute.</param>
+    /// <param name="hasCpuRegion">
+    /// Indicates whether <paramref name="target"/> exposes CPU pixels directly. When <see langword="false"/>,
+    /// a temporary staging frame is composed and uploaded to the native surface.
+    /// </param>
     private void FlushCompositionsFallback<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
@@ -367,6 +429,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             stagingRegion);
     }
 
+    /// <summary>
+    /// Resolves (or creates) cached GPU coverage for the batch definition.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool TryPrepareGpuCoverage(
         WebGPUFlushContext flushContext,
@@ -384,22 +449,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
-    private bool TryCompositeBatch<TPixel>(
-        WebGPUFlushContext flushContext,
-        WebGPUFlushContext.CoverageEntry coverageEntry,
-        IReadOnlyList<PreparedCompositionCommand> commands,
-        bool blitToTarget,
-        out string? error)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        return this.TryCompositeBatchTiled<TPixel>(
-            flushContext,
-            coverageEntry.GPUCoverageView,
-            commands,
-            blitToTarget,
-            out error);
-    }
-
+    /// <summary>
+    /// Allocates destination storage used by compute composition.
+    /// </summary>
     private static bool TryCreateDestinationPixelsBuffer(
         WebGPUFlushContext flushContext,
         int width,
@@ -427,6 +479,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
+    /// <summary>
+    /// Initializes destination storage from the current destination texture contents.
+    /// </summary>
     private static bool TryInitializeDestinationPixels(
         WebGPUFlushContext flushContext,
         TextureView* sourceTextureView,
@@ -502,6 +557,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
+    /// <summary>
+    /// Writes composed destination storage back to the render target through a fullscreen blit.
+    /// </summary>
     private static bool TryBlitDestinationPixelsToTarget(
         WebGPUFlushContext flushContext,
         WgpuBuffer* destinationPixelsBuffer,
@@ -598,6 +656,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by destination initialization compute shader.
+    /// </summary>
     private static bool TryCreateDestinationInitBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -645,6 +706,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by destination blit render shader.
+    /// </summary>
     private static bool TryCreateDestinationBlitBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -749,6 +813,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
+    /// <summary>
+    /// Copies one texture region from source to destination texture.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void CopyTextureRegion(
         WebGPUFlushContext flushContext,
@@ -776,10 +843,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         flushContext.Api.CommandEncoderCopyTextureToTexture(flushContext.CommandEncoder, in source, in destination, in copySize);
     }
 
+    /// <summary>
+    /// Divides <paramref name="value"/> by <paramref name="divisor"/> and rounds up.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint DivideRoundUp(int value, int divisor)
         => (uint)((value + divisor - 1) / divisor);
 
+    /// <summary>
+    /// Finalizes one flush by submitting command buffers and optionally reading results back to CPU memory.
+    /// </summary>
     private bool TryFinalizeFlush<TPixel>(
         WebGPUFlushContext flushContext,
         Buffer2DRegion<TPixel> cpuRegion)
@@ -794,6 +867,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return TrySubmit(flushContext);
     }
 
+    /// <summary>
+    /// Submits the current command encoder, if any.
+    /// </summary>
     private static bool TrySubmit(WebGPUFlushContext flushContext)
     {
         CommandEncoder* commandEncoder = flushContext.CommandEncoder;
@@ -828,18 +904,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
-    private static bool TrySubmitBatch(WebGPUFlushContext flushContext)
-    {
-        flushContext.EndRenderPassIfOpen();
-        if (!TrySubmit(flushContext))
-        {
-            return false;
-        }
-
-        flushContext.ResetInstanceBufferOffset();
-        return true;
-    }
-
+    /// <summary>
+    /// Copies target texture contents to the readback buffer and transfers bytes into destination CPU pixels.
+    /// </summary>
     private bool TryReadBackToCpuRegion<TPixel>(WebGPUFlushContext flushContext, Buffer2DRegion<TPixel> destinationRegion)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -890,6 +957,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             destinationRegion);
     }
 
+    /// <summary>
+    /// Maps the readback buffer and copies pixel data into the destination region.
+    /// </summary>
     private bool TryReadBackBufferToRegion<TPixel>(
         WebGPUFlushContext flushContext,
         WgpuBuffer* readbackBuffer,
@@ -909,6 +979,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             ReadOnlySpan<byte> sourceData = new(mappedData, readbackByteCount);
             int destinationStrideBytes = checked(destinationRegion.Buffer.Width * Unsafe.SizeOf<TPixel>());
 
+            // Fast path for contiguous full-width rows.
             if (destinationRegion.Rectangle.X == 0 &&
                 sourceRowBytes == destinationStrideBytes &&
                 TryGetSingleMemory(destinationRegion.Buffer, out Memory<TPixel> contiguousDestination))
@@ -934,6 +1005,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
+    /// <summary>
+    /// Maps a readback buffer for CPU access and returns the mapped pointer.
+    /// </summary>
     private bool TryMapReadBuffer(
         WebGPUFlushContext flushContext,
         WgpuBuffer* readbackBuffer,
@@ -987,15 +1061,24 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.isDisposed = true;
     }
 
+    /// <summary>
+    /// Throws <see cref="ObjectDisposedException"/> when this backend is disposed.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
+    /// <summary>
+    /// Returns whether the 2D buffer is backed by a single contiguous memory segment.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSingleMemory<T>(Buffer2D<T> buffer)
         where T : struct
         => buffer.MemoryGroup.Count == 1;
 
+    /// <summary>
+    /// Returns the single contiguous memory segment of the provided buffer when available.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool TryGetSingleMemory<T>(Buffer2D<T> buffer, out Memory<T> memory)
         where T : struct
@@ -1010,6 +1093,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
+    /// <summary>
+    /// Waits for a GPU callback signal, polling the device when the WGPU extension is available.
+    /// </summary>
     private static bool WaitForSignal(WebGPUFlushContext flushContext, ManualResetEventSlim signal)
     {
         Wgpu? extension = flushContext.RuntimeLease.WgpuExtension;
@@ -1031,6 +1117,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return signal.IsSet;
     }
 
+    /// <summary>
+    /// Destination blit parameters consumed by <see cref="CompositeDestinationBlitShader"/>.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct CompositeDestinationBlitParameters(
         int batchWidth,

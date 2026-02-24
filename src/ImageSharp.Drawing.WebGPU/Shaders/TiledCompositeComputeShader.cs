@@ -3,9 +3,27 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// WGSL compute shader for tiled brush composition over prepared path coverage.
+/// </summary>
+/// <remarks>
+/// The shader resolves tile-local command ranges, samples brush/source data, applies color blending
+/// and Porter-Duff alpha composition, and writes updated destination pixels into storage.
+/// </remarks>
 internal static class TiledCompositeComputeShader
 {
-    // Compile-time constant backed by static PE data (no heap allocation).
+    /// <summary>
+    /// Gets the UTF-8 WGSL source bytes used by the tiled composite compute pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The literal intentionally includes a trailing U+0000 null terminator before the <see langword="u8"/> suffix.
+    /// </para>
+    /// <para>
+    /// Native WebGPU shader creation expects WGSL as a null-terminated byte pointer. The explicit
+    /// terminator keeps shader bytes as a compile-time constant and avoids runtime append/copy overhead.
+    /// </para>
+    /// </remarks>
     public static ReadOnlySpan<byte> Code =>
         """
         struct CompositeCommand {
