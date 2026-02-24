@@ -5,10 +5,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// Public WebGPU texture format identifiers used by <see cref="WebGPUSurfaceCapability"/>.
-/// Numeric values intentionally match <c>WGPUTextureFormat</c>.
 /// </summary>
 public enum WebGPUTextureFormatId
 {
+    // Numeric values intentionally match <c>WGPUTextureFormat</c>.
+
     /// <summary>
     /// Single-channel 8-bit normalized unsigned format.
     /// </summary>
