@@ -34,7 +34,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private bool ownsTargetTexture;
     private bool ownsTargetView;
     private bool ownsReadbackBuffer;
-    private byte[]? compositionInstanceScratchBuffer;
+    private DeviceSharedState.CpuTargetLease? cpuTargetLease;
     private readonly List<nint> transientBindGroups = [];
     private readonly List<nint> transientBuffers = [];
     private readonly List<nint> transientTextureViews = [];
@@ -51,6 +51,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         Queue* queue,
         in Rectangle targetBounds,
         TextureFormat textureFormat,
+        MemoryAllocator memoryAllocator,
         DeviceSharedState deviceState)
     {
         this.RuntimeLease = runtimeLease;
@@ -59,6 +60,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.Queue = queue;
         this.TargetBounds = targetBounds;
         this.TextureFormat = textureFormat;
+        this.MemoryAllocator = memoryAllocator;
         this.DeviceState = deviceState;
     }
 
@@ -73,6 +75,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public Rectangle TargetBounds { get; }
 
     public TextureFormat TextureFormat { get; }
+
+    /// <summary>
+    /// Gets the allocator used for temporary CPU staging buffers in this flush context.
+    /// </summary>
+    public MemoryAllocator MemoryAllocator { get; }
 
     public DeviceSharedState DeviceState { get; }
 
@@ -110,6 +117,16 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     public nuint CompositeDestinationPixelsByteSize { get; internal set; }
 
+    /// <summary>
+    /// Gets or sets the destination buffer width represented by <see cref="CompositeDestinationPixelsBuffer"/>.
+    /// </summary>
+    public int CompositeDestinationWidth { get; internal set; }
+
+    /// <summary>
+    /// Gets or sets the destination buffer height represented by <see cref="CompositeDestinationPixelsBuffer"/>.
+    /// </summary>
+    public int CompositeDestinationHeight { get; internal set; }
+
     public CommandEncoder* CommandEncoder { get; set; }
 
     public RenderPassEncoder* PassEncoder { get; private set; }
@@ -117,7 +134,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public static WebGPUFlushContext Create<TPixel>(
         ICanvasFrame<TPixel> frame,
         TextureFormat expectedTextureFormat,
-        int pixelSizeInBytes)
+        int pixelSizeInBytes,
+        MemoryAllocator memoryAllocator,
+        Rectangle? initialUploadBounds = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         WebGPUSurfaceCapability? nativeCapability = TryGetNativeSurfaceCapability(frame, expectedTextureFormat);
@@ -138,7 +157,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
                 bounds = new Rectangle(0, 0, nativeCapability.Width, nativeCapability.Height);
                 deviceState = GetOrCreateDeviceState(lease.Api, device);
-                context = new WebGPUFlushContext(lease, device, queue, in bounds, textureFormat, deviceState);
+                context = new WebGPUFlushContext(lease, device, queue, in bounds, textureFormat, memoryAllocator, deviceState);
                 context.InitializeNativeTarget(nativeCapability);
                 return context;
             }
@@ -154,8 +173,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
 
             deviceState = GetOrCreateDeviceState(lease.Api, device);
-            context = new WebGPUFlushContext(lease, device, queue, in bounds, expectedTextureFormat, deviceState);
-            context.InitializeCpuTarget(cpuRegion, pixelSizeInBytes);
+            context = new WebGPUFlushContext(lease, device, queue, in bounds, expectedTextureFormat, memoryAllocator, deviceState);
+            context.InitializeCpuTarget(cpuRegion, pixelSizeInBytes, initialUploadBounds);
             return context;
         }
         catch
@@ -165,7 +184,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
-    public static WebGPUFlushContext CreateUploadContext<TPixel>(ICanvasFrame<TPixel> frame)
+    public static WebGPUFlushContext CreateUploadContext<TPixel>(ICanvasFrame<TPixel> frame, MemoryAllocator memoryAllocator)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         WebGPUSurfaceCapability? nativeCapability =
@@ -185,6 +204,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 (Queue*)nativeCapability.Queue,
                 in bounds,
                 textureFormat,
+                memoryAllocator,
                 deviceState);
             context.InitializeNativeTarget(nativeCapability);
             return context;
@@ -238,6 +258,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         ICanvasFrame<TPixel> frame,
         TextureFormat expectedTextureFormat,
         int pixelSizeInBytes,
+        MemoryAllocator memoryAllocator,
+        Rectangle? initialUploadBounds,
         out bool fromCache)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -248,7 +270,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         fromCache = false;
-        WebGPUFlushContext created = Create(frame, expectedTextureFormat, pixelSizeInBytes);
+        WebGPUFlushContext created = Create(frame, expectedTextureFormat, pixelSizeInBytes, memoryAllocator, initialUploadBounds);
         if (FlushSessionContexts.TryAdd(flushId, created))
         {
             return created;
@@ -420,100 +442,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets a flush-scoped scratch buffer for writing composition instance payload bytes.
-    /// </summary>
-    public Span<byte> GetCompositionInstanceScratchBuffer(int requiredLength)
-    {
-        if (requiredLength <= 0)
-        {
-            return Span<byte>.Empty;
-        }
-
-        byte[]? current = this.compositionInstanceScratchBuffer;
-        if (current is null || current.Length < requiredLength)
-        {
-            if (current is not null)
-            {
-                ArrayPool<byte>.Shared.Return(current);
-            }
-
-            this.compositionInstanceScratchBuffer = ArrayPool<byte>.Shared.Rent(requiredLength);
-            current = this.compositionInstanceScratchBuffer;
-        }
-
-        return current.AsSpan(0, requiredLength);
-    }
-
-    /// <summary>
-    /// Gets a texture view for the source image from this flush cache, creating and uploading it on first use.
-    /// </summary>
-    internal bool TryGetOrCreateSourceTextureView<TPixel>(Image<TPixel> sourceImage, out TextureView* textureView)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        Guard.NotNull(sourceImage, nameof(sourceImage));
-
-        if (this.cachedSourceTextureViews.TryGetValue(sourceImage, out nint cachedHandle) && cachedHandle != 0)
-        {
-            textureView = (TextureView*)cachedHandle;
-            return true;
-        }
-
-        return this.TryCreateAndCacheSourceTextureView(sourceImage, out textureView);
-    }
-
-    /// <summary>
-    /// Uploads one source image into a transient GPU texture and stores the resulting view in the flush cache.
-    /// </summary>
-    private bool TryCreateAndCacheSourceTextureView<TPixel>(Image<TPixel> sourceImage, out TextureView* textureView)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        TextureDescriptor textureDescriptor = new()
-        {
-            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
-            Dimension = TextureDimension.Dimension2D,
-            Size = new Extent3D((uint)sourceImage.Width, (uint)sourceImage.Height, 1),
-            Format = this.TextureFormat,
-            MipLevelCount = 1,
-            SampleCount = 1
-        };
-
-        Texture* sourceTexture = this.Api.DeviceCreateTexture(this.Device, in textureDescriptor);
-        if (sourceTexture is null)
-        {
-            textureView = null;
-            return false;
-        }
-
-        TextureViewDescriptor sourceViewDescriptor = new()
-        {
-            Format = this.TextureFormat,
-            Dimension = TextureViewDimension.Dimension2D,
-            BaseMipLevel = 0,
-            MipLevelCount = 1,
-            BaseArrayLayer = 0,
-            ArrayLayerCount = 1,
-            Aspect = TextureAspect.All
-        };
-
-        TextureView* sourceView = this.Api.TextureCreateView(sourceTexture, in sourceViewDescriptor);
-        if (sourceView is null)
-        {
-            this.Api.TextureRelease(sourceTexture);
-            textureView = null;
-            return false;
-        }
-
-        Buffer2DRegion<TPixel> sourceRegionPixels = new(sourceImage.Frames.RootFrame.PixelBuffer, sourceImage.Bounds);
-        UploadTextureFromRegion(this.Api, this.Queue, sourceTexture, sourceRegionPixels);
-
-        this.TrackTexture(sourceTexture);
-        this.TrackTextureView(sourceView);
-        this.cachedSourceTextureViews[sourceImage] = (nint)sourceView;
-        textureView = sourceView;
-        return true;
-    }
-
     public void Dispose()
     {
         if (this.disposed)
@@ -537,6 +465,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         this.InstanceBufferWriteOffset = 0;
+
+        this.cpuTargetLease?.Dispose();
+        this.cpuTargetLease = null;
 
         if (this.ownsReadbackBuffer && this.ReadbackBuffer is not null)
         {
@@ -578,12 +509,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.transientTextureViews.Clear();
         this.transientTextures.Clear();
 
-        if (this.compositionInstanceScratchBuffer is not null)
-        {
-            ArrayPool<byte>.Shared.Return(this.compositionInstanceScratchBuffer);
-            this.compositionInstanceScratchBuffer = null;
-        }
-
         // Cache entries point to transient texture views that are released above.
         this.cachedSourceTextureViews.Clear();
 
@@ -592,6 +517,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.TargetTexture = null;
         this.CompositeDestinationPixelsBuffer = null;
         this.CompositeDestinationPixelsByteSize = 0;
+        this.CompositeDestinationWidth = 0;
+        this.CompositeDestinationHeight = 0;
         this.ReadbackBytesPerRow = 0;
         this.ReadbackByteCount = 0;
         this.RequiresReadback = false;
@@ -800,75 +727,46 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ownsReadbackBuffer = false;
     }
 
-    private void InitializeCpuTarget<TPixel>(Buffer2DRegion<TPixel> cpuRegion, int pixelSizeInBytes)
+    private void InitializeCpuTarget<TPixel>(
+        Buffer2DRegion<TPixel> cpuRegion,
+        int pixelSizeInBytes,
+        Rectangle? initialUploadBounds)
         where TPixel : unmanaged
     {
         int width = cpuRegion.Width;
         int height = cpuRegion.Height;
-        uint textureRowBytes = checked((uint)width * (uint)pixelSizeInBytes);
-        uint readbackRowBytes = AlignTo256(textureRowBytes);
-        ulong readbackByteCount = checked((ulong)readbackRowBytes * (uint)height);
-
-        TextureDescriptor targetTextureDescriptor = new()
-        {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
-            Dimension = TextureDimension.Dimension2D,
-            Size = new Extent3D((uint)width, (uint)height, 1),
-            Format = this.TextureFormat,
-            MipLevelCount = 1,
-            SampleCount = 1
-        };
-
-        Texture* targetTexture = this.Api.DeviceCreateTexture(this.Device, in targetTextureDescriptor);
-        if (targetTexture is null)
-        {
-            throw new InvalidOperationException("Failed to create CPU flush target texture.");
-        }
-
-        TextureViewDescriptor targetViewDescriptor = new()
-        {
-            Format = this.TextureFormat,
-            Dimension = TextureViewDimension.Dimension2D,
-            BaseMipLevel = 0,
-            MipLevelCount = 1,
-            BaseArrayLayer = 0,
-            ArrayLayerCount = 1,
-            Aspect = TextureAspect.All
-        };
-
-        TextureView* targetView = this.Api.TextureCreateView(targetTexture, in targetViewDescriptor);
-        if (targetView is null)
-        {
-            this.Api.TextureRelease(targetTexture);
-            throw new InvalidOperationException("Failed to create CPU flush target view.");
-        }
-
-        BufferDescriptor readbackDescriptor = new()
-        {
-            Usage = BufferUsage.MapRead | BufferUsage.CopyDst,
-            Size = readbackByteCount
-        };
-
-        WgpuBuffer* readbackBuffer = this.Api.DeviceCreateBuffer(this.Device, in readbackDescriptor);
-        if (readbackBuffer is null)
-        {
-            this.Api.TextureViewRelease(targetView);
-            this.Api.TextureRelease(targetTexture);
-            throw new InvalidOperationException("Failed to create CPU flush readback buffer.");
-        }
+        DeviceSharedState.CpuTargetLease lease = this.DeviceState.RentCpuTarget(
+            this.TextureFormat,
+            width,
+            height,
+            pixelSizeInBytes);
+        Texture* targetTexture = lease.TargetTexture;
+        TextureView* targetView = lease.TargetView;
+        WgpuBuffer* readbackBuffer = lease.ReadbackBuffer;
+        uint readbackRowBytes = lease.ReadbackBytesPerRow;
+        ulong readbackByteCount = lease.ReadbackByteCount;
 
         try
         {
-            UploadTextureFromRegion(this.Api, this.Queue, targetTexture, cpuRegion);
+            if (initialUploadBounds is Rectangle uploadBounds &&
+                uploadBounds.Width > 0 &&
+                uploadBounds.Height > 0)
+            {
+                Buffer2DRegion<TPixel> uploadRegion = cpuRegion.GetSubRegion(uploadBounds);
+                UploadTextureFromRegion(this.Api, this.Queue, targetTexture, uploadRegion, this.MemoryAllocator, (uint)uploadBounds.X, (uint)uploadBounds.Y, 0);
+            }
+            else
+            {
+                UploadTextureFromRegion(this.Api, this.Queue, targetTexture, cpuRegion, this.MemoryAllocator);
+            }
         }
         catch
         {
-            this.Api.BufferRelease(readbackBuffer);
-            this.Api.TextureViewRelease(targetView);
-            this.Api.TextureRelease(targetTexture);
+            lease.Dispose();
             throw;
         }
 
+        this.cpuTargetLease = lease;
         this.TargetTexture = targetTexture;
         this.TargetView = targetView;
         this.ReadbackBuffer = readbackBuffer;
@@ -876,9 +774,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ReadbackByteCount = readbackByteCount;
         this.RequiresReadback = true;
         this.CanSampleTargetTexture = true;
-        this.ownsTargetTexture = true;
-        this.ownsTargetView = true;
-        this.ownsReadbackBuffer = true;
+        this.ownsTargetTexture = false;
+        this.ownsTargetView = false;
+        this.ownsReadbackBuffer = false;
     }
 
     private static WebGPUSurfaceCapability? TryGetNativeSurfaceCapability<TPixel>(ICanvasFrame<TPixel> frame, TextureFormat expectedTextureFormat)
@@ -940,15 +838,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         WebGPU api,
         Queue* queue,
         Texture* destinationTexture,
-        Buffer2DRegion<TPixel> sourceRegion)
+        Buffer2DRegion<TPixel> sourceRegion,
+        MemoryAllocator memoryAllocator)
         where TPixel : unmanaged
-        => UploadTextureFromRegion(api, queue, destinationTexture, sourceRegion, 0, 0, 0);
+        => UploadTextureFromRegion(api, queue, destinationTexture, sourceRegion, memoryAllocator, 0, 0, 0);
 
     internal static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
         Queue* queue,
         Texture* destinationTexture,
         Buffer2DRegion<TPixel> sourceRegion,
+        MemoryAllocator memoryAllocator,
         uint destinationX,
         uint destinationY,
         uint destinationLayer)
@@ -965,57 +865,60 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         Extent3D writeSize = new((uint)sourceRegion.Width, (uint)sourceRegion.Height, 1);
 
-        if (sourceRegion.Rectangle.X == 0 &&
-            sourceRegion.Width == sourceRegion.Buffer.Width &&
-            sourceRegion.Buffer.MemoryGroup.Count == 1)
+        if (sourceRegion.Buffer.MemoryGroup.Count == 1)
         {
             int sourceStrideBytes = checked(sourceRegion.Buffer.Width * pixelSizeInBytes);
-            int sourceRowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
-            nuint sourceByteCount = checked((nuint)(((long)sourceStrideBytes * (sourceRegion.Height - 1)) + sourceRowBytes));
+            int directPathRowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
+            long directByteCount = ((long)sourceStrideBytes * (sourceRegion.Height - 1)) + directPathRowBytes;
+            long directPathPackedByteCount = (long)directPathRowBytes * sourceRegion.Height;
 
-            TextureDataLayout layout = new()
+            // For contiguous backing memory, avoid row packing unless the region is very sparse.
+            // This keeps the hot path allocation-free for common text and image workloads.
+            if (directByteCount <= directPathPackedByteCount * 2)
             {
-                Offset = 0,
-                BytesPerRow = (uint)sourceStrideBytes,
-                RowsPerImage = (uint)sourceRegion.Height
-            };
+                int startPixelIndex = checked((sourceRegion.Rectangle.Y * sourceRegion.Buffer.Width) + sourceRegion.Rectangle.X);
+                int startByteOffset = checked(startPixelIndex * pixelSizeInBytes);
+                int uploadByteCount = checked((int)directByteCount);
+                nuint uploadByteCountNuint = checked((nuint)uploadByteCount);
 
-            Span<TPixel> firstRow = sourceRegion.DangerousGetRowSpan(0);
-            fixed (TPixel* uploadPtr = firstRow)
-            {
-                api.QueueWriteTexture(queue, in destination, uploadPtr, sourceByteCount, in layout, in writeSize);
+                TextureDataLayout layout = new()
+                {
+                    Offset = 0,
+                    BytesPerRow = (uint)sourceStrideBytes,
+                    RowsPerImage = (uint)sourceRegion.Height
+                };
+
+                Memory<TPixel> sourceMemory = sourceRegion.Buffer.MemoryGroup[0];
+                Span<byte> sourceBytes = MemoryMarshal.AsBytes(sourceMemory.Span).Slice(startByteOffset, uploadByteCount);
+                fixed (byte* uploadPtr = sourceBytes)
+                {
+                    api.QueueWriteTexture(queue, in destination, uploadPtr, uploadByteCountNuint, in layout, in writeSize);
+                }
+
+                return;
             }
-
-            return;
         }
 
         int packedRowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
         int packedByteCount = checked(packedRowBytes * sourceRegion.Height);
-        byte[] rented = ArrayPool<byte>.Shared.Rent(packedByteCount);
-        try
+        using IMemoryOwner<byte> packedOwner = memoryAllocator.Allocate<byte>(packedByteCount);
+        Span<byte> packedData = packedOwner.Memory.Span[..packedByteCount];
+        for (int y = 0; y < sourceRegion.Height; y++)
         {
-            Span<byte> packedData = rented.AsSpan(0, packedByteCount);
-            for (int y = 0; y < sourceRegion.Height; y++)
-            {
-                ReadOnlySpan<TPixel> sourceRow = sourceRegion.DangerousGetRowSpan(y);
-                MemoryMarshal.AsBytes(sourceRow).CopyTo(packedData.Slice(y * packedRowBytes, packedRowBytes));
-            }
-
-            TextureDataLayout layout = new()
-            {
-                Offset = 0,
-                BytesPerRow = (uint)packedRowBytes,
-                RowsPerImage = (uint)sourceRegion.Height
-            };
-
-            fixed (byte* uploadPtr = packedData)
-            {
-                api.QueueWriteTexture(queue, in destination, uploadPtr, (nuint)packedByteCount, in layout, in writeSize);
-            }
+            ReadOnlySpan<TPixel> sourceRow = sourceRegion.DangerousGetRowSpan(y);
+            MemoryMarshal.AsBytes(sourceRow).CopyTo(packedData.Slice(y * packedRowBytes, packedRowBytes));
         }
-        finally
+
+        TextureDataLayout packedLayout = new()
         {
-            ArrayPool<byte>.Shared.Return(rented);
+            Offset = 0,
+            BytesPerRow = (uint)packedRowBytes,
+            RowsPerImage = (uint)sourceRegion.Height
+        };
+
+        fixed (byte* uploadPtr = packedData)
+        {
+            api.QueueWriteTexture(queue, in destination, uploadPtr, (nuint)packedByteCount, in packedLayout, in writeSize);
         }
     }
 
@@ -1025,6 +928,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     internal sealed class DeviceSharedState : IDisposable
     {
         private readonly Dictionary<int, CoverageEntry> coverageCache = [];
+        private readonly ConcurrentDictionary<CpuTargetCacheKey, CpuTargetEntry> cpuTargetCache = new();
         private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
         private WebGPURasterizer? coverageRasterizer;
@@ -1049,6 +953,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         public Device* Device { get; }
 
         public int CoverageCount => this.coverageCache.Count;
+
+        public CpuTargetLease RentCpuTarget(
+            TextureFormat textureFormat,
+            int width,
+            int height,
+            int pixelSizeInBytes)
+        {
+            CpuTargetCacheKey key = new(textureFormat, width, height, pixelSizeInBytes);
+            CpuTargetEntry entry = this.cpuTargetCache.GetOrAdd(key, static _ => new CpuTargetEntry());
+            return entry.Rent(this.Api, this.Device, in key);
+        }
 
         public bool TryEnsureCoverageResources(out string? error)
         {
@@ -1307,6 +1222,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
             this.compositeComputePipelines.Clear();
 
+            foreach (CpuTargetEntry entry in this.cpuTargetCache.Values)
+            {
+                entry.Dispose(this.Api);
+            }
+
+            this.cpuTargetCache.Clear();
+
             this.disposed = true;
         }
 
@@ -1553,6 +1475,295 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             {
                 api.TextureRelease(entry.GPUCoverageTexture);
                 entry.GPUCoverageTexture = null;
+            }
+        }
+
+        internal readonly struct CpuTargetCacheKey(
+            TextureFormat textureFormat,
+            int width,
+            int height,
+            int pixelSizeInBytes) : IEquatable<CpuTargetCacheKey>
+        {
+            public TextureFormat TextureFormat { get; } = textureFormat;
+
+            public int Width { get; } = width;
+
+            public int Height { get; } = height;
+
+            public int PixelSizeInBytes { get; } = pixelSizeInBytes;
+
+            public bool Equals(CpuTargetCacheKey other)
+                => this.TextureFormat == other.TextureFormat &&
+                   this.Width == other.Width &&
+                   this.Height == other.Height &&
+                   this.PixelSizeInBytes == other.PixelSizeInBytes;
+
+            public override bool Equals(object? obj) => obj is CpuTargetCacheKey other && this.Equals(other);
+
+            public override int GetHashCode() => HashCode.Combine((int)this.TextureFormat, this.Width, this.Height, this.PixelSizeInBytes);
+        }
+
+        internal sealed class CpuTargetEntry
+        {
+            private Texture* targetTexture;
+            private TextureView* targetView;
+            private WgpuBuffer* readbackBuffer;
+            private uint readbackBytesPerRow;
+            private ulong readbackByteCount;
+            private int inUse;
+
+            internal CpuTargetLease Rent(WebGPU api, Device* device, in CpuTargetCacheKey key)
+            {
+                if (Interlocked.CompareExchange(ref this.inUse, 1, 0) == 0)
+                {
+                    try
+                    {
+                        this.EnsureResources(api, device, in key);
+                    }
+                    catch
+                    {
+                        this.Release();
+                        throw;
+                    }
+
+                    return new CpuTargetLease(
+                        api,
+                        this,
+                        ownsResources: false,
+                        this.targetTexture,
+                        this.targetView,
+                        this.readbackBuffer,
+                        this.readbackBytesPerRow,
+                        this.readbackByteCount);
+                }
+
+                if (!TryCreateCpuTargetResources(
+                        api,
+                        device,
+                        in key,
+                        out Texture* temporaryTexture,
+                        out TextureView* temporaryView,
+                        out WgpuBuffer* temporaryReadbackBuffer,
+                        out uint temporaryReadbackRowBytes,
+                        out ulong temporaryReadbackByteCount))
+                {
+                    throw new InvalidOperationException("Failed to create temporary CPU flush target resources.");
+                }
+
+                return new CpuTargetLease(
+                    api,
+                    owner: null,
+                    ownsResources: true,
+                    temporaryTexture,
+                    temporaryView,
+                    temporaryReadbackBuffer,
+                    temporaryReadbackRowBytes,
+                    temporaryReadbackByteCount);
+            }
+
+            internal void Release() => Volatile.Write(ref this.inUse, 0);
+
+            internal void Dispose(WebGPU api)
+            {
+                ReleaseCpuTargetResources(api, this.targetTexture, this.targetView, this.readbackBuffer);
+                this.targetTexture = null;
+                this.targetView = null;
+                this.readbackBuffer = null;
+                this.readbackBytesPerRow = 0;
+                this.readbackByteCount = 0;
+                this.inUse = 0;
+            }
+
+            private void EnsureResources(WebGPU api, Device* device, in CpuTargetCacheKey key)
+            {
+                if (this.targetTexture is not null &&
+                    this.targetView is not null &&
+                    this.readbackBuffer is not null)
+                {
+                    return;
+                }
+
+                ReleaseCpuTargetResources(api, this.targetTexture, this.targetView, this.readbackBuffer);
+                this.targetTexture = null;
+                this.targetView = null;
+                this.readbackBuffer = null;
+                this.readbackBytesPerRow = 0;
+                this.readbackByteCount = 0;
+
+                if (!TryCreateCpuTargetResources(
+                        api,
+                        device,
+                        in key,
+                        out this.targetTexture,
+                        out this.targetView,
+                        out this.readbackBuffer,
+                        out this.readbackBytesPerRow,
+                        out this.readbackByteCount))
+                {
+                    throw new InvalidOperationException("Failed to create cached CPU flush target resources.");
+                }
+            }
+
+            private static bool TryCreateCpuTargetResources(
+                WebGPU api,
+                Device* device,
+                in CpuTargetCacheKey key,
+                out Texture* targetTexture,
+                out TextureView* targetView,
+                out WgpuBuffer* readbackBuffer,
+                out uint readbackBytesPerRow,
+                out ulong readbackByteCount)
+            {
+                targetTexture = null;
+                targetView = null;
+                readbackBuffer = null;
+                readbackBytesPerRow = 0;
+                readbackByteCount = 0;
+
+                uint textureRowBytes = checked((uint)key.Width * (uint)key.PixelSizeInBytes);
+                readbackBytesPerRow = AlignTo256(textureRowBytes);
+                readbackByteCount = checked((ulong)readbackBytesPerRow * (uint)key.Height);
+
+                TextureDescriptor targetTextureDescriptor = new()
+                {
+                    Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
+                    Dimension = TextureDimension.Dimension2D,
+                    Size = new Extent3D((uint)key.Width, (uint)key.Height, 1),
+                    Format = key.TextureFormat,
+                    MipLevelCount = 1,
+                    SampleCount = 1
+                };
+
+                targetTexture = api.DeviceCreateTexture(device, in targetTextureDescriptor);
+                if (targetTexture is null)
+                {
+                    return false;
+                }
+
+                TextureViewDescriptor targetViewDescriptor = new()
+                {
+                    Format = key.TextureFormat,
+                    Dimension = TextureViewDimension.Dimension2D,
+                    BaseMipLevel = 0,
+                    MipLevelCount = 1,
+                    BaseArrayLayer = 0,
+                    ArrayLayerCount = 1,
+                    Aspect = TextureAspect.All
+                };
+
+                targetView = api.TextureCreateView(targetTexture, in targetViewDescriptor);
+                if (targetView is null)
+                {
+                    api.TextureRelease(targetTexture);
+                    targetTexture = null;
+                    return false;
+                }
+
+                BufferDescriptor readbackDescriptor = new()
+                {
+                    Usage = BufferUsage.MapRead | BufferUsage.CopyDst,
+                    Size = readbackByteCount
+                };
+
+                readbackBuffer = api.DeviceCreateBuffer(device, in readbackDescriptor);
+                if (readbackBuffer is null)
+                {
+                    api.TextureViewRelease(targetView);
+                    api.TextureRelease(targetTexture);
+                    targetView = null;
+                    targetTexture = null;
+                    return false;
+                }
+
+                return true;
+            }
+
+            private static void ReleaseCpuTargetResources(
+                WebGPU api,
+                Texture* targetTexture,
+                TextureView* targetView,
+                WgpuBuffer* readbackBuffer)
+            {
+                if (readbackBuffer is not null)
+                {
+                    api.BufferRelease(readbackBuffer);
+                }
+
+                if (targetView is not null)
+                {
+                    api.TextureViewRelease(targetView);
+                }
+
+                if (targetTexture is not null)
+                {
+                    api.TextureRelease(targetTexture);
+                }
+            }
+        }
+
+        public sealed class CpuTargetLease : IDisposable
+        {
+            private readonly WebGPU api;
+            private readonly CpuTargetEntry? owner;
+            private readonly bool ownsResources;
+            private int disposed;
+
+            internal CpuTargetLease(
+                WebGPU api,
+                CpuTargetEntry? owner,
+                bool ownsResources,
+                Texture* targetTexture,
+                TextureView* targetView,
+                WgpuBuffer* readbackBuffer,
+                uint readbackBytesPerRow,
+                ulong readbackByteCount)
+            {
+                this.api = api;
+                this.owner = owner;
+                this.ownsResources = ownsResources;
+                this.TargetTexture = targetTexture;
+                this.TargetView = targetView;
+                this.ReadbackBuffer = readbackBuffer;
+                this.ReadbackBytesPerRow = readbackBytesPerRow;
+                this.ReadbackByteCount = readbackByteCount;
+            }
+
+            public Texture* TargetTexture { get; }
+
+            public TextureView* TargetView { get; }
+
+            public WgpuBuffer* ReadbackBuffer { get; }
+
+            public uint ReadbackBytesPerRow { get; }
+
+            public ulong ReadbackByteCount { get; }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref this.disposed, 1) != 0)
+                {
+                    return;
+                }
+
+                if (this.ownsResources)
+                {
+                    if (this.ReadbackBuffer is not null)
+                    {
+                        this.api.BufferRelease(this.ReadbackBuffer);
+                    }
+
+                    if (this.TargetView is not null)
+                    {
+                        this.api.TextureViewRelease(this.TargetView);
+                    }
+
+                    if (this.TargetTexture is not null)
+                    {
+                        this.api.TextureRelease(this.TargetTexture);
+                    }
+                }
+
+                this.owner?.Release();
             }
         }
 

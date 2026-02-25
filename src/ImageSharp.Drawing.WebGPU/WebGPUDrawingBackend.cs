@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -192,6 +191,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         List<CompositionBatch> preparedBatches = CompositionScenePlanner.CreatePreparedBatches(
             compositionScene.Commands,
             target.Bounds);
+
         if (preparedBatches.Count == 0)
         {
             return;
@@ -209,9 +209,21 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
 
         int flushId = supportsSharedFlush ? Interlocked.Increment(ref nextSceneFlushId) : 0;
+        Rectangle? sharedCompositionBounds = null;
+        if (supportsSharedFlush && TryGetCompositionBounds(preparedBatches, out Rectangle sceneBounds))
+        {
+            sharedCompositionBounds = sceneBounds;
+        }
+
         for (int i = 0; i < preparedBatches.Count; i++)
         {
             CompositionBatch batch = preparedBatches[i];
+            Rectangle? compositionBounds = sharedCompositionBounds;
+            if (compositionBounds is null && TryGetCompositionBounds(batch.Commands, out Rectangle batchBounds))
+            {
+                compositionBounds = batchBounds;
+            }
+
             this.FlushPreparedBatch(
                 configuration,
                 target,
@@ -219,7 +231,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     batch.Definition,
                     batch.Commands,
                     flushId,
-                    isFinalBatchInFlush: i == preparedBatches.Count - 1));
+                    isFinalBatchInFlush: i == preparedBatches.Count - 1,
+                    compositionBounds));
         }
     }
 
@@ -280,8 +293,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     target,
                     pixelHandler.TextureFormat,
                     pixelHandler.PixelSizeInBytes,
+                    configuration.MemoryAllocator,
+                    compositionBatch.CompositionBounds,
                     out hadExistingSession)
-                : WebGPUFlushContext.Create(target, pixelHandler.TextureFormat, pixelHandler.PixelSizeInBytes);
+                : WebGPUFlushContext.Create(
+                    target,
+                    pixelHandler.TextureFormat,
+                    pixelHandler.PixelSizeInBytes,
+                    configuration.MemoryAllocator,
+                    compositionBatch.CompositionBounds);
 
             CompositionCoverageDefinition definition = compositionBatch.Definition;
             if (TryPrepareGpuCoverage(
@@ -295,6 +315,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     flushContext,
                     coverageEntry.GPUCoverageView,
                     compositionBatch.Commands,
+                    compositionBatch.CompositionBounds,
                     blitToTarget: !useFlushSession || compositionBatch.IsFinalBatchInFlush,
                     out failure);
                 if (gpuSuccess)
@@ -305,7 +326,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     }
                     else
                     {
-                        gpuSuccess = this.TryFinalizeFlush(flushContext, cpuRegion);
+                        gpuSuccess = this.TryFinalizeFlush(flushContext, cpuRegion, compositionBatch.CompositionBounds);
                     }
                 }
             }
@@ -389,6 +410,45 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSupportedCompositionBrush(Brush brush) => brush is SolidBrush or ImageBrush;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryGetCompositionBounds(IReadOnlyList<PreparedCompositionCommand> commands, out Rectangle bounds)
+    {
+        if (commands.Count == 0)
+        {
+            bounds = default;
+            return false;
+        }
+
+        Rectangle union = commands[0].DestinationRegion;
+        for (int i = 1; i < commands.Count; i++)
+        {
+            union = Rectangle.Union(union, commands[i].DestinationRegion);
+        }
+
+        bounds = union;
+        return union.Width > 0 && union.Height > 0;
+    }
+
+    private static bool TryGetCompositionBounds(List<CompositionBatch> batches, out Rectangle bounds)
+    {
+        bool hasBounds = false;
+        Rectangle union = default;
+
+        for (int i = 0; i < batches.Count; i++)
+        {
+            if (!TryGetCompositionBounds(batches[i].Commands, out Rectangle batchBounds))
+            {
+                continue;
+            }
+
+            union = hasBounds ? Rectangle.Union(union, batchBounds) : batchBounds;
+            hasBounds = true;
+        }
+
+        bounds = union;
+        return hasBounds;
+    }
+
     /// <summary>
     /// Executes one prepared batch on the CPU fallback backend.
     /// </summary>
@@ -421,12 +481,31 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         ICanvasFrame<TPixel> stagingFrame = new CpuCanvasFrame<TPixel>(stagingRegion);
         this.fallbackBackend.FlushPreparedBatch(configuration, stagingFrame, compositionBatch);
 
-        using WebGPUFlushContext uploadContext = WebGPUFlushContext.CreateUploadContext(target);
-        WebGPUFlushContext.UploadTextureFromRegion(
-            uploadContext.Api,
-            uploadContext.Queue,
-            uploadContext.TargetTexture,
-            stagingRegion);
+        using WebGPUFlushContext uploadContext = WebGPUFlushContext.CreateUploadContext(target, configuration.MemoryAllocator);
+        if (compositionBatch.CompositionBounds is Rectangle uploadBounds &&
+            uploadBounds.Width > 0 &&
+            uploadBounds.Height > 0)
+        {
+            Buffer2DRegion<TPixel> uploadRegion = stagingRegion.GetSubRegion(uploadBounds);
+            WebGPUFlushContext.UploadTextureFromRegion(
+                uploadContext.Api,
+                uploadContext.Queue,
+                uploadContext.TargetTexture,
+                uploadRegion,
+                configuration.MemoryAllocator,
+                (uint)uploadBounds.X,
+                (uint)uploadBounds.Y,
+                0);
+        }
+        else
+        {
+            WebGPUFlushContext.UploadTextureFromRegion(
+                uploadContext.Api,
+                uploadContext.Queue,
+                uploadContext.TargetTexture,
+                stagingRegion,
+                configuration.MemoryAllocator);
+        }
     }
 
     /// <summary>
@@ -486,8 +565,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         WebGPUFlushContext flushContext,
         TextureView* sourceTextureView,
         WgpuBuffer* destinationPixelsBuffer,
-        int destinationWidth,
-        int destinationHeight,
+        in Rectangle destinationBounds,
+        int sourceOriginX,
+        int sourceOriginY,
         nuint destinationPixelsByteSize,
         out string? error)
     {
@@ -502,7 +582,33 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
-        BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[2];
+        BufferDescriptor paramsDescriptor = new()
+        {
+            Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
+            Size = (nuint)Unsafe.SizeOf<CompositeDestinationInitParameters>()
+        };
+
+        WgpuBuffer* paramsBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in paramsDescriptor);
+        if (paramsBuffer is null)
+        {
+            error = "Failed to create destination initialization parameter buffer.";
+            return false;
+        }
+
+        flushContext.TrackBuffer(paramsBuffer);
+        CompositeDestinationInitParameters parameters = new(
+            destinationBounds.Width,
+            destinationBounds.Height,
+            sourceOriginX,
+            sourceOriginY);
+        flushContext.Api.QueueWriteBuffer(
+            flushContext.Queue,
+            paramsBuffer,
+            0,
+            &parameters,
+            (nuint)Unsafe.SizeOf<CompositeDestinationInitParameters>());
+
+        BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[3];
         bindGroupEntries[0] = new BindGroupEntry
         {
             Binding = 0,
@@ -515,11 +621,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             Offset = 0,
             Size = destinationPixelsByteSize
         };
+        bindGroupEntries[2] = new BindGroupEntry
+        {
+            Binding = 2,
+            Buffer = paramsBuffer,
+            Offset = 0,
+            Size = (nuint)Unsafe.SizeOf<CompositeDestinationInitParameters>()
+        };
 
         BindGroupDescriptor bindGroupDescriptor = new()
         {
             Layout = bindGroupLayout,
-            EntryCount = 2,
+            EntryCount = 3,
             Entries = bindGroupEntries
         };
 
@@ -543,8 +656,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         {
             flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
             flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
-            uint dispatchX = DivideRoundUp(destinationWidth, CompositeComputeWorkgroupSize);
-            uint dispatchY = DivideRoundUp(destinationHeight, CompositeComputeWorkgroupSize);
+            uint dispatchX = DivideRoundUp(destinationBounds.Width, CompositeComputeWorkgroupSize);
+            uint dispatchY = DivideRoundUp(destinationBounds.Height, CompositeComputeWorkgroupSize);
             flushContext.Api.ComputePassEncoderDispatchWorkgroups(passEncoder, dispatchX, dispatchY, 1);
         }
         finally
@@ -665,7 +778,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[3];
         entries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
@@ -688,10 +801,21 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 MinBindingSize = 0
             }
         };
+        entries[2] = new BindGroupLayoutEntry
+        {
+            Binding = 2,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Uniform,
+                HasDynamicOffset = false,
+                MinBindingSize = (nuint)Unsafe.SizeOf<CompositeDestinationInitParameters>()
+            }
+        };
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 2,
+            EntryCount = 3,
             Entries = entries
         };
 
@@ -855,13 +979,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// </summary>
     private bool TryFinalizeFlush<TPixel>(
         WebGPUFlushContext flushContext,
-        Buffer2DRegion<TPixel> cpuRegion)
+        Buffer2DRegion<TPixel> cpuRegion,
+        Rectangle? readbackBounds)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         flushContext.EndRenderPassIfOpen();
         if (flushContext.RequiresReadback)
         {
-            return this.TryReadBackToCpuRegion(flushContext, cpuRegion);
+            return this.TryReadBackToCpuRegion(flushContext, cpuRegion, readbackBounds);
         }
 
         return TrySubmit(flushContext);
@@ -907,7 +1032,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// <summary>
     /// Copies target texture contents to the readback buffer and transfers bytes into destination CPU pixels.
     /// </summary>
-    private bool TryReadBackToCpuRegion<TPixel>(WebGPUFlushContext flushContext, Buffer2DRegion<TPixel> destinationRegion)
+    private bool TryReadBackToCpuRegion<TPixel>(
+        WebGPUFlushContext flushContext,
+        Buffer2DRegion<TPixel> destinationRegion,
+        Rectangle? readbackBounds)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (flushContext.TargetTexture is null ||
@@ -923,11 +1051,20 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
+        Rectangle copyBounds = readbackBounds ?? new Rectangle(0, 0, destinationRegion.Width, destinationRegion.Height);
+        if (copyBounds.Width <= 0 || copyBounds.Height <= 0)
+        {
+            return true;
+        }
+
+        uint copyBytesPerRow = checked((uint)copyBounds.Width * (uint)Unsafe.SizeOf<TPixel>());
+        copyBytesPerRow = (copyBytesPerRow + 255U) & ~255U;
+
         ImageCopyTexture source = new()
         {
             Texture = flushContext.TargetTexture,
             MipLevel = 0,
-            Origin = new Origin3D(0, 0, 0),
+            Origin = new Origin3D((uint)copyBounds.X, (uint)copyBounds.Y, 0),
             Aspect = TextureAspect.All
         };
 
@@ -937,12 +1074,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             Layout = new TextureDataLayout
             {
                 Offset = 0,
-                BytesPerRow = flushContext.ReadbackBytesPerRow,
-                RowsPerImage = (uint)destinationRegion.Height
+                BytesPerRow = copyBytesPerRow,
+                RowsPerImage = (uint)copyBounds.Height
             }
         };
 
-        Extent3D copySize = new((uint)destinationRegion.Width, (uint)destinationRegion.Height, 1);
+        Extent3D copySize = new((uint)copyBounds.Width, (uint)copyBounds.Height, 1);
         flushContext.Api.CommandEncoderCopyTextureToBuffer(flushContext.CommandEncoder, in source, in destination, in copySize);
 
         if (!TrySubmit(flushContext))
@@ -953,8 +1090,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return this.TryReadBackBufferToRegion(
             flushContext,
             flushContext.ReadbackBuffer,
-            checked((int)flushContext.ReadbackBytesPerRow),
-            destinationRegion);
+            checked((int)copyBytesPerRow),
+            destinationRegion,
+            copyBounds);
     }
 
     /// <summary>
@@ -964,11 +1102,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         WebGPUFlushContext flushContext,
         WgpuBuffer* readbackBuffer,
         int sourceRowBytes,
-        Buffer2DRegion<TPixel> destinationRegion)
+        Buffer2DRegion<TPixel> destinationRegion,
+        in Rectangle copyBounds)
         where TPixel : unmanaged
     {
-        int destinationRowBytes = checked(destinationRegion.Width * Unsafe.SizeOf<TPixel>());
-        int readbackByteCount = checked(sourceRowBytes * destinationRegion.Height);
+        int destinationRowBytes = checked(copyBounds.Width * Unsafe.SizeOf<TPixel>());
+        int readbackByteCount = checked(sourceRowBytes * copyBounds.Height);
         if (!this.TryMapReadBuffer(flushContext, readbackBuffer, (nuint)readbackByteCount, out byte* mappedData))
         {
             return false;
@@ -980,21 +1119,34 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             int destinationStrideBytes = checked(destinationRegion.Buffer.Width * Unsafe.SizeOf<TPixel>());
 
             // Fast path for contiguous full-width rows.
-            if (destinationRegion.Rectangle.X == 0 &&
-                sourceRowBytes == destinationStrideBytes &&
+            if (copyBounds.X == 0 &&
+                copyBounds.Width == destinationRegion.Width &&
                 TryGetSingleMemory(destinationRegion.Buffer, out Memory<TPixel> contiguousDestination))
             {
                 Span<byte> destinationBytes = MemoryMarshal.AsBytes(contiguousDestination.Span);
-                int destinationStart = checked(destinationRegion.Rectangle.Y * destinationStrideBytes);
-                int copyByteCount = checked(destinationStrideBytes * destinationRegion.Height);
-                sourceData[..copyByteCount].CopyTo(destinationBytes.Slice(destinationStart, copyByteCount));
+                int destinationStart = checked((destinationRegion.Rectangle.Y + copyBounds.Y) * destinationStrideBytes);
+                int copyByteCount = checked(destinationStrideBytes * copyBounds.Height);
+                Span<byte> destinationSlice = destinationBytes.Slice(destinationStart, copyByteCount);
+                if (sourceRowBytes == destinationStrideBytes)
+                {
+                    sourceData[..copyByteCount].CopyTo(destinationSlice);
+                    return true;
+                }
+
+                for (int y = 0; y < copyBounds.Height; y++)
+                {
+                    sourceData.Slice(y * sourceRowBytes, destinationStrideBytes)
+                        .CopyTo(destinationSlice.Slice(y * destinationStrideBytes, destinationStrideBytes));
+                }
+
                 return true;
             }
 
-            for (int y = 0; y < destinationRegion.Height; y++)
+            for (int y = 0; y < copyBounds.Height; y++)
             {
                 ReadOnlySpan<byte> sourceRow = sourceData.Slice(y * sourceRowBytes, destinationRowBytes);
-                MemoryMarshal.Cast<byte, TPixel>(sourceRow).CopyTo(destinationRegion.DangerousGetRowSpan(y));
+                MemoryMarshal.Cast<byte, TPixel>(sourceRow).CopyTo(
+                    destinationRegion.DangerousGetRowSpan(copyBounds.Y + y).Slice(copyBounds.X, copyBounds.Width));
             }
 
             return true;
@@ -1115,6 +1267,25 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
 
         return signal.IsSet;
+    }
+
+    /// <summary>
+    /// Destination initialization parameters consumed by <see cref="CompositeDestinationInitShader"/>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct CompositeDestinationInitParameters(
+        int batchWidth,
+        int batchHeight,
+        int sourceOriginX,
+        int sourceOriginY)
+    {
+        public readonly int BatchWidth = batchWidth;
+
+        public readonly int BatchHeight = batchHeight;
+
+        public readonly int SourceOriginX = sourceOriginX;
+
+        public readonly int SourceOriginY = sourceOriginY;
     }
 
     /// <summary>

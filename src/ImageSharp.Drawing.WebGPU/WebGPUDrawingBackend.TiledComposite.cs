@@ -30,13 +30,17 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         /// <param name="command">The prepared command being encoded.</param>
         /// <param name="flushContext">The active flush context for target-space mapping.</param>
         /// <param name="buildContext">Shared build context accumulating source layers and brush data.</param>
+        /// <param name="compositionBounds">
+        /// The destination-local composition bounds used to map brush-space origins into destination-buffer space.
+        /// </param>
         /// <param name="brushDataIndex">The encoded brush-data index for the command.</param>
         /// <param name="error">Failure reason when conversion cannot complete.</param>
         /// <returns><see langword="true"/> when conversion succeeds; otherwise <see langword="false"/>.</returns>
-        bool TryCompose(
+        public bool TryCompose(
             PreparedCompositionCommand command,
             WebGPUFlushContext flushContext,
             TiledCompositeBuildContext<TPixel> buildContext,
+            in Rectangle compositionBounds,
             out int brushDataIndex,
             out string? error);
     }
@@ -48,6 +52,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     /// <param name="flushContext">The active flush context for the current frame target.</param>
     /// <param name="coverageView">The prepared GPU coverage texture view.</param>
     /// <param name="commands">The prepared composition commands to apply in order.</param>
+    /// <param name="compositionBounds">The destination-local bounds to initialize/compose/read back for this batch.</param>
     /// <param name="blitToTarget">
     /// Indicates whether destination storage should be blitted back to the target texture after this batch.
     /// </param>
@@ -57,6 +62,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         WebGPUFlushContext flushContext,
         TextureView* coverageView,
         IReadOnlyList<PreparedCompositionCommand> commands,
+        Rectangle? compositionBounds,
         bool blitToTarget,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -67,7 +73,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return true;
         }
 
-        Rectangle targetLocalBounds = new(0, 0, flushContext.TargetBounds.Width, flushContext.TargetBounds.Height);
+        Rectangle frameLocalBounds = new(0, 0, flushContext.TargetBounds.Width, flushContext.TargetBounds.Height);
+        Rectangle targetLocalBounds = compositionBounds is Rectangle requestedBounds
+            ? Rectangle.Intersect(frameLocalBounds, requestedBounds)
+            : frameLocalBounds;
         if (targetLocalBounds.Width <= 0 || targetLocalBounds.Height <= 0)
         {
             return true;
@@ -88,9 +97,19 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         // Reuse destination storage across batches in the same flush session when available.
         WgpuBuffer* destinationPixelsBuffer = flushContext.CompositeDestinationPixelsBuffer;
         nuint destinationPixelsByteSize = flushContext.CompositeDestinationPixelsByteSize;
+        if (destinationPixelsBuffer is not null &&
+            (flushContext.CompositeDestinationWidth != targetLocalBounds.Width ||
+             flushContext.CompositeDestinationHeight != targetLocalBounds.Height))
+        {
+            error = "Mismatched composition bounds detected for a reused destination pixel buffer.";
+            return false;
+        }
+
         if (destinationPixelsBuffer is null)
         {
             TextureView* sourceTextureView = flushContext.TargetView;
+            int sourceOriginX = targetLocalBounds.X;
+            int sourceOriginY = targetLocalBounds.Y;
             if (!flushContext.CanSampleTargetTexture)
             {
                 if (!TryCreateCompositionTexture(
@@ -106,6 +125,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
                 // When the target cannot be sampled directly, copy into a transient sampling texture first.
                 CopyTextureRegion(flushContext, flushContext.TargetTexture, sourceTexture, targetLocalBounds);
+                sourceOriginX = 0;
+                sourceOriginY = 0;
             }
 
             if (!TryCreateDestinationPixelsBuffer(
@@ -119,8 +140,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     flushContext,
                     sourceTextureView,
                     destinationPixelsBuffer,
-                    targetLocalBounds.Width,
-                    targetLocalBounds.Height,
+                    targetLocalBounds,
+                    sourceOriginX,
+                    sourceOriginY,
                     destinationPixelsByteSize,
                     out error))
             {
@@ -129,6 +151,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
             flushContext.CompositeDestinationPixelsBuffer = destinationPixelsBuffer;
             flushContext.CompositeDestinationPixelsByteSize = destinationPixelsByteSize;
+            flushContext.CompositeDestinationWidth = targetLocalBounds.Width;
+            flushContext.CompositeDestinationHeight = targetLocalBounds.Height;
         }
 
         if (!this.TryRunTiledCompositeComputePass<TPixel>(
@@ -137,8 +161,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 destinationPixelsBuffer,
                 destinationPixelsByteSize,
                 commands,
-                targetLocalBounds.Width,
-                targetLocalBounds.Height,
+                targetLocalBounds,
                 out error))
         {
             return false;
@@ -169,8 +192,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     /// <param name="destinationPixelsBuffer">The destination storage buffer.</param>
     /// <param name="destinationPixelsByteSize">The destination storage size in bytes.</param>
     /// <param name="commands">The prepared composition commands.</param>
-    /// <param name="destinationWidth">The destination width.</param>
-    /// <param name="destinationHeight">The destination height.</param>
+    /// <param name="destinationBounds">The destination-local bounds covered by this composition pass.</param>
     /// <param name="error">Receives an error message when dispatch fails.</param>
     /// <returns><see langword="true"/> on success; otherwise <see langword="false"/>.</returns>
     private bool TryRunTiledCompositeComputePass<TPixel>(
@@ -179,8 +201,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         WgpuBuffer* destinationPixelsBuffer,
         nuint destinationPixelsByteSize,
         IReadOnlyList<PreparedCompositionCommand> commands,
-        int destinationWidth,
-        int destinationHeight,
+        in Rectangle destinationBounds,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -191,6 +212,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return true;
         }
 
+        int destinationWidth = destinationBounds.Width;
+        int destinationHeight = destinationBounds.Height;
         int tilesX = (destinationWidth + TiledCompositeTileSize - 1) / TiledCompositeTileSize;
         int tilesY = (destinationHeight + TiledCompositeTileSize - 1) / TiledCompositeTileSize;
         if (tilesX <= 0 || tilesY <= 0)
@@ -199,253 +222,256 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         }
 
         int tileCount = checked(tilesX * tilesY);
-        int[] rentedTileCounts = ArrayPool<int>.Shared.Rent(tileCount);
-        Array.Clear(rentedTileCounts, 0, tileCount);
-        Span<int> tileCommandCounts = rentedTileCounts.AsSpan(0, tileCount);
+        using IMemoryOwner<int> tileCommandCountsOwner = flushContext.MemoryAllocator.Allocate<int>(tileCount, AllocationOptions.Clean);
+        Span<int> tileCommandCounts = tileCommandCountsOwner.Memory.Span[..tileCount];
 
         TiledCompositeCommandData[] commandData = new TiledCompositeCommandData[commandCount];
         TiledCompositeBuildContext<TPixel> buildContext = new();
 
+        for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
+        {
+            PreparedCompositionCommand command = commands[commandIndex];
+            Rectangle destinationRegion = command.DestinationRegion;
+            Rectangle localDestinationRegion = new(
+                destinationRegion.X - destinationBounds.X,
+                destinationRegion.Y - destinationBounds.Y,
+                destinationRegion.Width,
+                destinationRegion.Height);
+
+            if (destinationRegion.Width <= 0 || destinationRegion.Height <= 0)
+            {
+                continue;
+            }
+
+            // First pass: count how many commands overlap each tile.
+            int minTileX = Math.Clamp(localDestinationRegion.X / TiledCompositeTileSize, 0, tilesX - 1);
+            int minTileY = Math.Clamp(localDestinationRegion.Y / TiledCompositeTileSize, 0, tilesY - 1);
+            int maxTileX = Math.Clamp((localDestinationRegion.Right - 1) / TiledCompositeTileSize, 0, tilesX - 1);
+            int maxTileY = Math.Clamp((localDestinationRegion.Bottom - 1) / TiledCompositeTileSize, 0, tilesY - 1);
+            for (int tileY = minTileY; tileY <= maxTileY; tileY++)
+            {
+                int rowStart = checked(tileY * tilesX);
+                for (int tileX = minTileX; tileX <= maxTileX; tileX++)
+                {
+                    tileCommandCounts[rowStart + tileX]++;
+                }
+            }
+
+            if (!TryGetBrushComposer(command.Brush, out ITiledCompositeBrushComposer<TPixel> composer))
+            {
+                error = $"Unsupported brush type for tiled composition: '{command.Brush.GetType().FullName}'.";
+                return false;
+            }
+
+            if (!composer.TryCompose(command, flushContext, buildContext, destinationBounds, out int brushDataIndex, out error))
+            {
+                return false;
+            }
+
+            GraphicsOptions options = command.GraphicsOptions;
+            commandData[commandIndex] = new TiledCompositeCommandData(
+                command.SourceOffset.X,
+                command.SourceOffset.Y,
+                localDestinationRegion.X,
+                localDestinationRegion.Y,
+                localDestinationRegion.Width,
+                localDestinationRegion.Height,
+                options.BlendPercentage,
+                (int)options.ColorBlendingMode,
+                (int)options.AlphaCompositionMode,
+                brushDataIndex);
+        }
+
+        // Convert command counts into prefix ranges for compact tile command lists.
+        TiledCompositeTileRange[] tileRanges = new TiledCompositeTileRange[tileCount];
+        int totalTileCommandRefs = 0;
+        for (int tileIndex = 0; tileIndex < tileCount; tileIndex++)
+        {
+            int count = tileCommandCounts[tileIndex];
+            tileRanges[tileIndex] = new TiledCompositeTileRange((uint)totalTileCommandRefs, (uint)count);
+            tileCommandCounts[tileIndex] = totalTileCommandRefs;
+            totalTileCommandRefs = checked(totalTileCommandRefs + count);
+        }
+
+        // Second pass: write per-tile command index lists.
+        uint[] tileCommandIndices = new uint[Math.Max(totalTileCommandRefs, 1)];
+        for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
+        {
+            TiledCompositeCommandData command = commandData[commandIndex];
+            Rectangle destinationRegion = new(
+                command.DestinationX,
+                command.DestinationY,
+                command.DestinationWidth,
+                command.DestinationHeight);
+            if (destinationRegion.Width <= 0 || destinationRegion.Height <= 0)
+            {
+                continue;
+            }
+
+            int minTileX = Math.Clamp(destinationRegion.X / TiledCompositeTileSize, 0, tilesX - 1);
+            int minTileY = Math.Clamp(destinationRegion.Y / TiledCompositeTileSize, 0, tilesY - 1);
+            int maxTileX = Math.Clamp((destinationRegion.Right - 1) / TiledCompositeTileSize, 0, tilesX - 1);
+            int maxTileY = Math.Clamp((destinationRegion.Bottom - 1) / TiledCompositeTileSize, 0, tilesY - 1);
+            for (int tileY = minTileY; tileY <= maxTileY; tileY++)
+            {
+                int rowStart = checked(tileY * tilesX);
+                for (int tileX = minTileX; tileX <= maxTileX; tileX++)
+                {
+                    int tileIndex = rowStart + tileX;
+                    int writeIndex = tileCommandCounts[tileIndex]++;
+                    tileCommandIndices[writeIndex] = (uint)commandIndex;
+                }
+            }
+        }
+
+        if (!TryCreateSourceLayerTextureArray(flushContext, buildContext.SourceLayers, out TextureView* sourceLayerView, out error) ||
+            !TryCreateAndUploadBuffer<TiledCompositeCommandData>(
+                flushContext,
+                BufferUsage.Storage,
+                commandData.AsSpan(),
+                out WgpuBuffer* commandBuffer,
+                out nuint commandBufferBytes,
+                out error) ||
+            !TryCreateAndUploadBuffer<TiledCompositeTileRange>(
+                flushContext,
+                BufferUsage.Storage,
+                tileRanges.AsSpan(),
+                out WgpuBuffer* tileRangeBuffer,
+                out nuint tileRangeBufferBytes,
+                out error) ||
+            !TryCreateAndUploadBuffer<uint>(
+                flushContext,
+                BufferUsage.Storage,
+                tileCommandIndices.AsSpan(),
+                out WgpuBuffer* tileCommandIndexBuffer,
+                out nuint tileCommandIndexBufferBytes,
+                out error) ||
+            !TryCreateAndUploadBuffer<TiledCompositeBrushData>(
+                flushContext,
+                BufferUsage.Storage,
+                CollectionsMarshal.AsSpan(buildContext.BrushData),
+                out WgpuBuffer* brushDataBuffer,
+                out nuint brushDataBufferBytes,
+                out error))
+        {
+            return false;
+        }
+
+        TiledCompositeParameters parameters = new(destinationWidth, destinationHeight, tilesX, TiledCompositeTileSize);
+        if (!TryCreateAndUploadBuffer(
+                flushContext,
+                BufferUsage.Uniform,
+                MemoryMarshal.CreateReadOnlySpan(ref parameters, 1),
+                out WgpuBuffer* parameterBuffer,
+                out nuint parameterBufferBytes,
+                out error))
+        {
+            return false;
+        }
+
+        if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
+                TiledCompositePipelineKey,
+                TiledCompositeComputeShader.Code,
+                TryCreateTiledCompositeBindGroupLayout,
+                out BindGroupLayout* bindGroupLayout,
+                out ComputePipeline* pipeline,
+                out error))
+        {
+            return false;
+        }
+
+        // Bind all shader inputs in one bind group so each tile dispatch has fixed resource layout.
+        BindGroupEntry* entries = stackalloc BindGroupEntry[8];
+        entries[0] = new BindGroupEntry
+        {
+            Binding = 0,
+            TextureView = coverageView
+        };
+        entries[1] = new BindGroupEntry
+        {
+            Binding = 1,
+            Buffer = commandBuffer,
+            Offset = 0,
+            Size = commandBufferBytes
+        };
+        entries[2] = new BindGroupEntry
+        {
+            Binding = 2,
+            Buffer = tileRangeBuffer,
+            Offset = 0,
+            Size = tileRangeBufferBytes
+        };
+        entries[3] = new BindGroupEntry
+        {
+            Binding = 3,
+            Buffer = tileCommandIndexBuffer,
+            Offset = 0,
+            Size = tileCommandIndexBufferBytes
+        };
+        entries[4] = new BindGroupEntry
+        {
+            Binding = 4,
+            Buffer = brushDataBuffer,
+            Offset = 0,
+            Size = brushDataBufferBytes
+        };
+        entries[5] = new BindGroupEntry
+        {
+            Binding = 5,
+            TextureView = sourceLayerView
+        };
+        entries[6] = new BindGroupEntry
+        {
+            Binding = 6,
+            Buffer = destinationPixelsBuffer,
+            Offset = 0,
+            Size = destinationPixelsByteSize
+        };
+        entries[7] = new BindGroupEntry
+        {
+            Binding = 7,
+            Buffer = parameterBuffer,
+            Offset = 0,
+            Size = parameterBufferBytes
+        };
+
+        BindGroupDescriptor bindGroupDescriptor = new()
+        {
+            Layout = bindGroupLayout,
+            EntryCount = 8,
+            Entries = entries
+        };
+
+        BindGroup* bindGroup = flushContext.Api.DeviceCreateBindGroup(flushContext.Device, in bindGroupDescriptor);
+        if (bindGroup is null)
+        {
+            error = "Failed to create tiled composite bind group.";
+            return false;
+        }
+
+        flushContext.TrackBindGroup(bindGroup);
+
+        ComputePassDescriptor passDescriptor = default;
+        ComputePassEncoder* passEncoder = flushContext.Api.CommandEncoderBeginComputePass(flushContext.CommandEncoder, in passDescriptor);
+        if (passEncoder is null)
+        {
+            error = "Failed to begin tiled composite compute pass.";
+            return false;
+        }
+
         try
         {
-            for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
-            {
-                PreparedCompositionCommand command = commands[commandIndex];
-                Rectangle destinationRegion = command.DestinationRegion;
-                if (destinationRegion.Width <= 0 || destinationRegion.Height <= 0)
-                {
-                    continue;
-                }
-
-                // First pass: count how many commands overlap each tile.
-                int minTileX = Math.Clamp(destinationRegion.X / TiledCompositeTileSize, 0, tilesX - 1);
-                int minTileY = Math.Clamp(destinationRegion.Y / TiledCompositeTileSize, 0, tilesY - 1);
-                int maxTileX = Math.Clamp((destinationRegion.Right - 1) / TiledCompositeTileSize, 0, tilesX - 1);
-                int maxTileY = Math.Clamp((destinationRegion.Bottom - 1) / TiledCompositeTileSize, 0, tilesY - 1);
-                for (int tileY = minTileY; tileY <= maxTileY; tileY++)
-                {
-                    int rowStart = checked(tileY * tilesX);
-                    for (int tileX = minTileX; tileX <= maxTileX; tileX++)
-                    {
-                        tileCommandCounts[rowStart + tileX]++;
-                    }
-                }
-
-                if (!TryGetBrushComposer(command.Brush, out ITiledCompositeBrushComposer<TPixel> composer))
-                {
-                    error = $"Unsupported brush type for tiled composition: '{command.Brush.GetType().FullName}'.";
-                    return false;
-                }
-
-                if (!composer.TryCompose(command, flushContext, buildContext, out int brushDataIndex, out error))
-                {
-                    return false;
-                }
-
-                GraphicsOptions options = command.GraphicsOptions;
-                commandData[commandIndex] = new TiledCompositeCommandData(
-                    command.SourceOffset.X,
-                    command.SourceOffset.Y,
-                    destinationRegion.X,
-                    destinationRegion.Y,
-                    destinationRegion.Width,
-                    destinationRegion.Height,
-                    options.BlendPercentage,
-                    (int)options.ColorBlendingMode,
-                    (int)options.AlphaCompositionMode,
-                    brushDataIndex);
-            }
-
-            // Convert command counts into prefix ranges for compact tile command lists.
-            TiledCompositeTileRange[] tileRanges = new TiledCompositeTileRange[tileCount];
-            int totalTileCommandRefs = 0;
-            for (int tileIndex = 0; tileIndex < tileCount; tileIndex++)
-            {
-                int count = tileCommandCounts[tileIndex];
-                tileRanges[tileIndex] = new TiledCompositeTileRange((uint)totalTileCommandRefs, (uint)count);
-                tileCommandCounts[tileIndex] = totalTileCommandRefs;
-                totalTileCommandRefs = checked(totalTileCommandRefs + count);
-            }
-
-            // Second pass: write per-tile command index lists.
-            uint[] tileCommandIndices = new uint[Math.Max(totalTileCommandRefs, 1)];
-            for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
-            {
-                Rectangle destinationRegion = commands[commandIndex].DestinationRegion;
-                if (destinationRegion.Width <= 0 || destinationRegion.Height <= 0)
-                {
-                    continue;
-                }
-
-                int minTileX = Math.Clamp(destinationRegion.X / TiledCompositeTileSize, 0, tilesX - 1);
-                int minTileY = Math.Clamp(destinationRegion.Y / TiledCompositeTileSize, 0, tilesY - 1);
-                int maxTileX = Math.Clamp((destinationRegion.Right - 1) / TiledCompositeTileSize, 0, tilesX - 1);
-                int maxTileY = Math.Clamp((destinationRegion.Bottom - 1) / TiledCompositeTileSize, 0, tilesY - 1);
-                for (int tileY = minTileY; tileY <= maxTileY; tileY++)
-                {
-                    int rowStart = checked(tileY * tilesX);
-                    for (int tileX = minTileX; tileX <= maxTileX; tileX++)
-                    {
-                        int tileIndex = rowStart + tileX;
-                        int writeIndex = tileCommandCounts[tileIndex]++;
-                        tileCommandIndices[writeIndex] = (uint)commandIndex;
-                    }
-                }
-            }
-
-            if (!TryCreateSourceLayerTextureArray(flushContext, buildContext.SourceLayers, out TextureView* sourceLayerView, out error) ||
-                !TryCreateAndUploadBuffer<TiledCompositeCommandData>(
-                    flushContext,
-                    BufferUsage.Storage,
-                    commandData.AsSpan(),
-                    out WgpuBuffer* commandBuffer,
-                    out nuint commandBufferBytes,
-                    out error) ||
-                !TryCreateAndUploadBuffer<TiledCompositeTileRange>(
-                    flushContext,
-                    BufferUsage.Storage,
-                    tileRanges.AsSpan(),
-                    out WgpuBuffer* tileRangeBuffer,
-                    out nuint tileRangeBufferBytes,
-                    out error) ||
-                !TryCreateAndUploadBuffer<uint>(
-                    flushContext,
-                    BufferUsage.Storage,
-                    tileCommandIndices.AsSpan(),
-                    out WgpuBuffer* tileCommandIndexBuffer,
-                    out nuint tileCommandIndexBufferBytes,
-                    out error) ||
-                !TryCreateAndUploadBuffer<TiledCompositeBrushData>(
-                    flushContext,
-                    BufferUsage.Storage,
-                    CollectionsMarshal.AsSpan(buildContext.BrushData),
-                    out WgpuBuffer* brushDataBuffer,
-                    out nuint brushDataBufferBytes,
-                    out error))
-            {
-                return false;
-            }
-
-            TiledCompositeParameters parameters = new(destinationWidth, destinationHeight, tilesX, TiledCompositeTileSize);
-            if (!TryCreateAndUploadBuffer<TiledCompositeParameters>(
-                    flushContext,
-                    BufferUsage.Uniform,
-                    MemoryMarshal.CreateReadOnlySpan(ref parameters, 1),
-                    out WgpuBuffer* parameterBuffer,
-                    out nuint parameterBufferBytes,
-                    out error))
-            {
-                return false;
-            }
-
-            if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
-                    TiledCompositePipelineKey,
-                    TiledCompositeComputeShader.Code,
-                    TryCreateTiledCompositeBindGroupLayout,
-                    out BindGroupLayout* bindGroupLayout,
-                    out ComputePipeline* pipeline,
-                    out error))
-            {
-                return false;
-            }
-
-            // Bind all shader inputs in one bind group so each tile dispatch has fixed resource layout.
-            BindGroupEntry* entries = stackalloc BindGroupEntry[8];
-            entries[0] = new BindGroupEntry
-            {
-                Binding = 0,
-                TextureView = coverageView
-            };
-            entries[1] = new BindGroupEntry
-            {
-                Binding = 1,
-                Buffer = commandBuffer,
-                Offset = 0,
-                Size = commandBufferBytes
-            };
-            entries[2] = new BindGroupEntry
-            {
-                Binding = 2,
-                Buffer = tileRangeBuffer,
-                Offset = 0,
-                Size = tileRangeBufferBytes
-            };
-            entries[3] = new BindGroupEntry
-            {
-                Binding = 3,
-                Buffer = tileCommandIndexBuffer,
-                Offset = 0,
-                Size = tileCommandIndexBufferBytes
-            };
-            entries[4] = new BindGroupEntry
-            {
-                Binding = 4,
-                Buffer = brushDataBuffer,
-                Offset = 0,
-                Size = brushDataBufferBytes
-            };
-            entries[5] = new BindGroupEntry
-            {
-                Binding = 5,
-                TextureView = sourceLayerView
-            };
-            entries[6] = new BindGroupEntry
-            {
-                Binding = 6,
-                Buffer = destinationPixelsBuffer,
-                Offset = 0,
-                Size = destinationPixelsByteSize
-            };
-            entries[7] = new BindGroupEntry
-            {
-                Binding = 7,
-                Buffer = parameterBuffer,
-                Offset = 0,
-                Size = parameterBufferBytes
-            };
-
-            BindGroupDescriptor bindGroupDescriptor = new()
-            {
-                Layout = bindGroupLayout,
-                EntryCount = 8,
-                Entries = entries
-            };
-
-            BindGroup* bindGroup = flushContext.Api.DeviceCreateBindGroup(flushContext.Device, in bindGroupDescriptor);
-            if (bindGroup is null)
-            {
-                error = "Failed to create tiled composite bind group.";
-                return false;
-            }
-
-            flushContext.TrackBindGroup(bindGroup);
-
-            ComputePassDescriptor passDescriptor = default;
-            ComputePassEncoder* passEncoder = flushContext.Api.CommandEncoderBeginComputePass(flushContext.CommandEncoder, in passDescriptor);
-            if (passEncoder is null)
-            {
-                error = "Failed to begin tiled composite compute pass.";
-                return false;
-            }
-
-            try
-            {
-                flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
-                flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
-                flushContext.Api.ComputePassEncoderDispatchWorkgroups(passEncoder, (uint)tilesX, (uint)tilesY, 1);
-            }
-            finally
-            {
-                flushContext.Api.ComputePassEncoderEnd(passEncoder);
-                flushContext.Api.ComputePassEncoderRelease(passEncoder);
-            }
-
-            return true;
+            flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
+            flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
+            flushContext.Api.ComputePassEncoderDispatchWorkgroups(passEncoder, (uint)tilesX, (uint)tilesY, 1);
         }
         finally
         {
-            ArrayPool<int>.Shared.Return(rentedTileCounts);
+            flushContext.Api.ComputePassEncoderEnd(passEncoder);
+            flushContext.Api.ComputePassEncoderRelease(passEncoder);
         }
+
+        return true;
     }
 
     /// <summary>
@@ -543,6 +569,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                             flushContext.Queue,
                             texture,
                             sourceRegion,
+                            flushContext.MemoryAllocator,
                             0,
                             0,
                             (uint)i);
@@ -656,7 +683,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     {
         nuint elementSize = (nuint)Unsafe.SizeOf<T>();
         nuint writeSize = checked((nuint)sourceData.Length * elementSize);
-        bufferSize = Math.Max(writeSize, Math.Max(elementSize, (nuint)16));
+        bufferSize = Math.Max(writeSize, Math.Max(elementSize, 16));
 
         BufferDescriptor descriptor = new()
         {
@@ -919,12 +946,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             PreparedCompositionCommand command,
             WebGPUFlushContext flushContext,
             TiledCompositeBuildContext<TPixel> buildContext,
+            in Rectangle compositionBounds,
             out int brushDataIndex,
             out string? error)
         {
             SolidBrush solidBrush = (SolidBrush)command.Brush;
-            TPixel solidPixel = solidBrush.Color.ToPixel<TPixel>();
-            int sourceLayer = buildContext.GetOrAddSolidLayer(solidPixel);
+            int sourceLayer = buildContext.GetOrAddSolidLayer(solidBrush);
 
             brushDataIndex = buildContext.AddBrushData(
                 new TiledCompositeBrushData(
@@ -954,6 +981,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             PreparedCompositionCommand command,
             WebGPUFlushContext flushContext,
             TiledCompositeBuildContext<TPixel> buildContext,
+            in Rectangle compositionBounds,
             out int brushDataIndex,
             out string? error)
         {
@@ -961,8 +989,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             Image<TPixel> sourceImage = (Image<TPixel>)imageBrush.SourceImage;
             int sourceLayer = buildContext.GetOrAddImageLayer(sourceImage);
             Rectangle sourceRegion = Rectangle.Intersect(sourceImage.Bounds, (Rectangle)imageBrush.SourceRegion);
-            int brushOriginX = checked(command.BrushBounds.Left + imageBrush.Offset.X - flushContext.TargetBounds.X);
-            int brushOriginY = checked(command.BrushBounds.Top + imageBrush.Offset.Y - flushContext.TargetBounds.Y);
+            int brushOriginX = checked(command.BrushBounds.Left + imageBrush.Offset.X - flushContext.TargetBounds.X - compositionBounds.X);
+            int brushOriginY = checked(command.BrushBounds.Top + imageBrush.Offset.Y - flushContext.TargetBounds.Y - compositionBounds.Y);
 
             brushDataIndex = buildContext.AddBrushData(
                 new TiledCompositeBrushData(
@@ -987,6 +1015,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     {
         private readonly Dictionary<Image, int> sourceImageLayers = new(ReferenceEqualityComparer.Instance);
         private readonly Dictionary<TPixel, int> solidColorLayers = [];
+        private SolidBrush? lastSolidBrush;
+        private int lastSolidLayer;
 
         public List<TiledCompositeBrushData> BrushData { get; } = [];
 
@@ -1007,8 +1037,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         /// Gets or creates a source layer index for a solid-color brush payload.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetOrAddSolidLayer(TPixel solidPixel)
+        public int GetOrAddSolidLayer(SolidBrush solidBrush)
         {
+            if (ReferenceEquals(this.lastSolidBrush, solidBrush))
+            {
+                return this.lastSolidLayer;
+            }
+
+            TPixel solidPixel = solidBrush.Color.ToPixel<TPixel>();
             if (!this.solidColorLayers.TryGetValue(solidPixel, out int sourceLayer))
             {
                 sourceLayer = this.SourceLayers.Count;
@@ -1016,6 +1052,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 this.SourceLayers.Add(TiledSourceLayer<TPixel>.CreateSolid(solidPixel));
             }
 
+            this.lastSolidBrush = solidBrush;
+            this.lastSolidLayer = sourceLayer;
             return sourceLayer;
         }
 

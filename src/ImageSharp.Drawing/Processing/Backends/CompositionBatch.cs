@@ -12,12 +12,14 @@ internal sealed class CompositionBatch
         in CompositionCoverageDefinition definition,
         IReadOnlyList<PreparedCompositionCommand> commands,
         int flushId = 0,
-        bool isFinalBatchInFlush = true)
+        bool isFinalBatchInFlush = true,
+        Rectangle? compositionBounds = null)
     {
         this.Definition = definition;
         this.Commands = commands;
         this.FlushId = flushId;
         this.IsFinalBatchInFlush = isFinalBatchInFlush;
+        this.CompositionBounds = compositionBounds;
     }
 
     /// <summary>
@@ -39,4 +41,13 @@ internal sealed class CompositionBatch
     /// Gets a value indicating whether this is the last batch emitted for the current flush identifier.
     /// </summary>
     public bool IsFinalBatchInFlush { get; }
+
+    /// <summary>
+    /// Gets the destination-local bounds touched by this batch or scene flush when known.
+    /// </summary>
+    /// <remarks>
+    /// GPU backends can use this region to limit destination initialization, composition, and readback
+    /// to modified pixels.
+    /// </remarks>
+    public Rectangle? CompositionBounds { get; }
 }
