@@ -138,6 +138,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     atlasWidth,
                     atlasHeight,
                     configuration.MemoryAllocator,
+                    totalLineCount == 0,
                     out Texture* coverageTexture,
                     out coverageView,
                     out error))
@@ -201,7 +202,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             int pathBufferBytes = checked(pathBuilds.Length * PathStrideBytes);
             using IMemoryOwner<byte> pathUploadOwner = configuration.MemoryAllocator.Allocate<byte>(pathBufferBytes);
             Span<byte> pathUpload = pathUploadOwner.Memory.Span[..pathBufferBytes];
-            pathUpload.Clear();
             int tileBase = 0;
             for (int i = 0; i < pathBuilds.Length; i++)
             {
@@ -249,20 +249,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 return false;
             }
 
-            using (IMemoryOwner<byte> tileZeroOwner = configuration.MemoryAllocator.Allocate<byte>(tileBufferBytes))
-            {
-                Span<byte> tileZero = tileZeroOwner.Memory.Span[..tileBufferBytes];
-                tileZero.Clear();
-                fixed (byte* tilePtr = tileZero)
-                {
-                    flushContext.Api.QueueWriteBuffer(
-                        flushContext.Queue,
-                        tileBuffer,
-                        0,
-                        tilePtr,
-                        (nuint)tileBufferBytes);
-                }
-            }
+            flushContext.Api.CommandEncoderClearBuffer(
+                flushContext.CommandEncoder,
+                tileBuffer,
+                0,
+                (nuint)tileBufferBytes);
 
             int tileCountsBytes = checked(totalTileCount * sizeof(uint));
             if (!TryGetOrCreateCoverageBuffer(
@@ -276,20 +267,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 return false;
             }
 
-            using (IMemoryOwner<byte> tileCountsZeroOwner = configuration.MemoryAllocator.Allocate<byte>(tileCountsBytes))
-            {
-                Span<byte> tileCountsZero = tileCountsZeroOwner.Memory.Span[..tileCountsBytes];
-                tileCountsZero.Clear();
-                fixed (byte* tileCountsPtr = tileCountsZero)
-                {
-                    flushContext.Api.QueueWriteBuffer(
-                        flushContext.Queue,
-                        tileCountsBuffer,
-                        0,
-                        tileCountsPtr,
-                        (nuint)tileCountsBytes);
-                }
-            }
+            flushContext.Api.CommandEncoderClearBuffer(
+                flushContext.CommandEncoder,
+                tileCountsBuffer,
+                0,
+                (nuint)tileCountsBytes);
 
             if (totalEstimatedSegments > int.MaxValue)
             {
@@ -311,20 +293,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 return false;
             }
 
-            using (IMemoryOwner<byte> segCountsZeroOwner = configuration.MemoryAllocator.Allocate<byte>(segCountsBytes))
-            {
-                Span<byte> segCountsZero = segCountsZeroOwner.Memory.Span[..segCountsBytes];
-                segCountsZero.Clear();
-                fixed (byte* segCountsPtr = segCountsZero)
-                {
-                    flushContext.Api.QueueWriteBuffer(
-                        flushContext.Queue,
-                        segCountsBuffer,
-                        0,
-                        segCountsPtr,
-                        (nuint)segCountsBytes);
-                }
-            }
+            flushContext.Api.CommandEncoderClearBuffer(
+                flushContext.CommandEncoder,
+                segCountsBuffer,
+                0,
+                (nuint)segCountsBytes);
 
             int segmentsBytes = checked((int)segmentsCapacity * SegmentStrideBytes);
             if (!TryGetOrCreateCoverageBuffer(
@@ -521,6 +494,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     interest.Width,
                     interest.Height,
                     configuration.MemoryAllocator,
+                    lineCount == 0,
                     out Texture* coverageTexture,
                     out coverageView,
                     out error))
@@ -587,7 +561,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             }
 
             Span<byte> pathBytes = stackalloc byte[PathStrideBytes];
-            pathBytes.Clear();
             WritePath(pathBytes, (uint)tileMinX, (uint)tileMinY, (uint)tileMaxX, (uint)tileMaxY);
 
             BufferDescriptor pathDescriptor = new()
@@ -1118,6 +1091,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(8, 4), x1);
         BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(12, 4), y1);
         BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(16, 4), tiles);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(20, 4), 0u);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(24, 4), 0u);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(28, 4), 0u);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1171,6 +1147,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         int width,
         int height,
         MemoryAllocator allocator,
+        bool clearOnCreate,
         out Texture* coverageTexture,
         out TextureView* coverageView,
         out string? error)
@@ -1212,10 +1189,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
-        int rowBytes = checked(width * sizeof(float));
-        int byteCount = checked(rowBytes * height);
-        using (IMemoryOwner<byte> zeroOwner = allocator.Allocate<byte>(byteCount))
+        if (clearOnCreate)
         {
+            int rowBytes = checked(width * sizeof(float));
+            int byteCount = checked(rowBytes * height);
+            using IMemoryOwner<byte> zeroOwner = allocator.Allocate<byte>(byteCount);
             Span<byte> zeroData = zeroOwner.Memory.Span[..byteCount];
             zeroData.Clear();
             ImageCopyTexture destination = new()

@@ -36,10 +36,15 @@ internal static class PreparedCompositeComputeShader
             solid_a: u32,
         };
 
-        struct DispatchConfig {
+        struct TileRange {
+            command_start: u32,
             command_count: u32,
+        };
+
+        struct DispatchConfig {
             target_width: u32,
             target_height: u32,
+            tile_count_x: u32,
             pad0: u32,
         };
 
@@ -47,7 +52,9 @@ internal static class PreparedCompositeComputeShader
         @group(0) @binding(1) var source_texture: texture_2d<f32>;
         @group(0) @binding(2) var<storage, read_write> destination_pixels: array<vec4<f32>>;
         @group(0) @binding(3) var<storage, read> commands: array<Params>;
-        @group(0) @binding(4) var<uniform> dispatch_config: DispatchConfig;
+        @group(0) @binding(4) var<storage, read> tile_ranges: array<TileRange>;
+        @group(0) @binding(5) var<storage, read> tile_command_indices: array<u32>;
+        @group(0) @binding(6) var<uniform> dispatch_config: DispatchConfig;
 
         fn u32_to_f32(bits: u32) -> f32 {
             return bitcast<f32>(bits);
@@ -179,17 +186,25 @@ internal static class PreparedCompositeComputeShader
                 return;
             }
 
+            let tile_width: u32 = 16u;
+            let tile_height: u32 = 16u;
+            let tile_x = global_id.x / tile_width;
+            let tile_y = global_id.y / tile_height;
+            let tile_index = (tile_y * dispatch_config.tile_count_x) + tile_x;
+            let tile_range = tile_ranges[tile_index];
+
             let dest_x = i32(global_id.x);
             let dest_y = i32(global_id.y);
             let dest_index = (global_id.y * dispatch_config.target_width) + global_id.x;
             var destination = destination_pixels[dest_index];
 
-            var command_index: u32 = 0u;
+            var tile_command_offset: u32 = 0u;
             loop {
-                if (command_index >= dispatch_config.command_count) {
+                if (tile_command_offset >= tile_range.command_count) {
                     break;
                 }
 
+                let command_index = tile_command_indices[tile_range.command_start + tile_command_offset];
                 let command = commands[command_index];
                 let command_min_x = i32(command.destination_x);
                 let command_min_y = i32(command.destination_y);
@@ -228,7 +243,7 @@ internal static class PreparedCompositeComputeShader
                     }
                 }
 
-                command_index = command_index + 1u;
+                tile_command_offset = tile_command_offset + 1u;
             }
 
             destination_pixels[dest_index] = destination;
