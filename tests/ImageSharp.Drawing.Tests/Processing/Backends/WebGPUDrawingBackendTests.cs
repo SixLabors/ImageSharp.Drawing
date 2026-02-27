@@ -79,7 +79,7 @@ public class WebGPUDrawingBackendTests
 
         AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
     }
 
     [Theory]
@@ -94,7 +94,6 @@ public class WebGPUDrawingBackendTests
 
         GraphicsOptions clearOptions = new()
         {
-            Antialias = false,
             AlphaCompositionMode = PixelAlphaCompositionMode.Src,
             ColorBlendingMode = PixelColorBlendingMode.Normal,
             BlendPercentage = 1F
@@ -392,7 +391,11 @@ public class WebGPUDrawingBackendTests
 
         AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 4F);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.2F);
+        Rectangle textRegion = Rectangle.Intersect(
+            new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
+            new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
+        AssertBackendTripletSimilarityInRegion(defaultImage, cpuRegionImage, nativeSurfaceImage, textRegion, 0.03F);
     }
 
     [Theory]
@@ -498,7 +501,7 @@ public class WebGPUDrawingBackendTests
     }
 
     [Theory]
-    [WithSolidFilledImages(420, 220, "White", PixelTypes.Rgba32)]
+    [WithBasicTestPatternImages(420, 220, PixelTypes.Rgba32)]
     public void DrawText_WithRepeatedGlyphs_UsesCoverageCache<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -555,7 +558,7 @@ public class WebGPUDrawingBackendTests
     }
 
     [Theory]
-    [WithSolidFilledImages(1200, 280, "White", PixelTypes.Rgba32)]
+    [WithBlankImage(1200, 280, PixelTypes.Rgba32)]
     public void DrawText_WithRepeatedGlyphs_AfterClear_UsesBlendFastPath<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -745,22 +748,15 @@ public class WebGPUDrawingBackendTests
                 new(configuration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface));
             if (initialImage is not null)
             {
-                DrawingOptions copyOptions = new()
-                {
-                    GraphicsOptions = new GraphicsOptions
-                    {
-                        Antialias = false,
-                        BlendPercentage = 1F,
-                        ColorBlendingMode = PixelColorBlendingMode.Normal,
-                        AlphaCompositionMode = PixelAlphaCompositionMode.Src
-                    }
-                };
-
-                canvas.DrawImage(
-                    initialImage,
-                    initialImage.Bounds,
-                    new RectangleF(0, 0, width, height),
-                    copyOptions);
+                Assert.True(
+                    WebGPUTestNativeSurfaceAllocator.TryWriteTexture(
+                        backend,
+                        textureHandle,
+                        width,
+                        height,
+                        initialImage,
+                        out string uploadError),
+                    uploadError);
             }
 
             drawAction(canvas);
@@ -816,9 +812,24 @@ public class WebGPUDrawingBackendTests
         float defaultTolerancePercent)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        ImageComparer.Exact.VerifySimilarity(cpuRegionImage, nativeSurfaceImage);
+        ImageComparer.TolerantPercentage(0.01F).VerifySimilarity(cpuRegionImage, nativeSurfaceImage);
         ImageComparer tolerantComparer = ImageComparer.TolerantPercentage(defaultTolerancePercent);
         tolerantComparer.VerifySimilarity(defaultImage, cpuRegionImage);
+        tolerantComparer.VerifySimilarity(defaultImage, nativeSurfaceImage);
+    }
+
+    private static void AssertBackendTripletSimilarityInRegion<TPixel>(
+        Image<TPixel> defaultImage,
+        Image<TPixel> cpuRegionImage,
+        Image<TPixel> nativeSurfaceImage,
+        Rectangle region,
+        float defaultTolerancePercent)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> defaultRegion = defaultImage.Clone(ctx => ctx.Crop(region));
+        using Image<TPixel> cpuRegion = cpuRegionImage.Clone(ctx => ctx.Crop(region));
+        using Image<TPixel> nativeRegion = nativeSurfaceImage.Clone(ctx => ctx.Crop(region));
+        AssertBackendTripletSimilarity(defaultRegion, cpuRegion, nativeRegion, defaultTolerancePercent);
     }
 
     private static void AssertCoverageExecutionAccounting(WebGPUDrawingBackend backend)

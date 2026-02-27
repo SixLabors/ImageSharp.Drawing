@@ -7,6 +7,7 @@ using System.Threading;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -112,6 +113,53 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             supportsTextureSampling: true);
         error = string.Empty;
         return true;
+    }
+
+    internal static bool TryWriteTexture<TPixel>(
+        WebGPUDrawingBackend backend,
+        nint textureHandle,
+        int width,
+        int height,
+        Image<TPixel> image,
+        out string error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (textureHandle == 0)
+        {
+            error = "Texture handle is zero.";
+            return false;
+        }
+
+        if (image.Width != width || image.Height != height)
+        {
+            error = "Source image dimensions must match the target texture dimensions.";
+            return false;
+        }
+
+        if (!backend.TryGetInteropHandles(out _, out nint queueHandle))
+        {
+            error = backend.TestingLastGPUInitializationFailure ?? "WebGPU backend is not initialized.";
+            return false;
+        }
+
+        try
+        {
+            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+            Buffer2DRegion<TPixel> sourceRegion = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+            WebGPUFlushContext.UploadTextureFromRegion(
+                lease.Api,
+                (Queue*)queueHandle,
+                (Texture*)textureHandle,
+                sourceRegion,
+                Configuration.Default.MemoryAllocator);
+            error = string.Empty;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
     }
 
     internal static bool TryReadTexture<TPixel>(

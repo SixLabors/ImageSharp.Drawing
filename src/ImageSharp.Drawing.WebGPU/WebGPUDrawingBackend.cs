@@ -1,12 +1,14 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
+using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -19,7 +21,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This backend executes coverage generation and composition on WebGPU where possible and falls back to
+/// This backend executes scene composition on WebGPU where possible and falls back to
 /// <see cref="DefaultDrawingBackend"/> when GPU execution is unavailable for a specific command set.
 /// </para>
 /// <para>
@@ -27,19 +29,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </para>
 /// <code>
 /// CompositionScene
-///   -> CompositionScenePlanner (prepared batches)
-///   -> For each batch:
-///        1) Resolve pixel-format handler
-///        2) Acquire flush context (shared session when possible)
-///        3) Prepare/reuse GPU coverage for path definition
-///        4) Composite commands via tiled compute shader into destination pixel buffer
-///        5) Blit to target and optionally read back to CPU region
-///        6) On failure: delegate batch to DefaultDrawingBackend
+///   -> Encoded scene stream (draw tags + draw-data stream)
+///   -> Acquire flush context
+///   -> Execute one tiled scene pass (binning -> coarse -> fine)
+///   -> Blit once and optionally read back to CPU region
+///   -> On failure: delegate scene to DefaultDrawingBackend
 /// </code>
-/// <para>
-/// Shared flush sessions allow multiple contiguous GPU-compatible batches to reuse destination initialization
-/// and transient GPU resources for one scene flush.
-/// </para>
 /// <para>
 /// See src/ImageSharp.Drawing.WebGPU/WEBGPU_BACKEND_PROCESS.md for a full process walkthrough.
 /// </para>
@@ -49,13 +44,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private const uint CompositeVertexCount = 6;
     private const int CompositeComputeWorkgroupSize = 8;
     private const int CompositeDestinationPixelStride = 16;
+    private const uint PreparedBrushTypeSolid = 0;
+    private const uint PreparedBrushTypeImage = 1;
     private const int CallbackTimeoutMilliseconds = 10_000;
 
     private readonly DefaultDrawingBackend fallbackBackend;
     private bool isDisposed;
 
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
-    private static int nextSceneFlushId;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUDrawingBackend"/> class.
@@ -188,160 +184,98 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return;
         }
 
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId) ||
+            !AreAllCompositionBrushesSupported<TPixel>(compositionScene.Commands))
+        {
+            int fallbackCommandCount = compositionScene.Commands.Count;
+            this.TestingFallbackPrepareCoverageCallCount += fallbackCommandCount;
+            this.TestingFallbackCompositeCoverageCallCount += fallbackCommandCount;
+            this.FlushCompositionsFallback(
+                configuration,
+                target,
+                compositionScene,
+                target.TryGetCpuRegion(out Buffer2DRegion<TPixel> _),
+                compositionBounds: null);
+            return;
+        }
+
         List<CompositionBatch> preparedBatches = CompositionScenePlanner.CreatePreparedBatches(
             compositionScene.Commands,
             target.Bounds);
-
         if (preparedBatches.Count == 0)
         {
             return;
         }
 
-        // Shared flush sessions are used only when every command brush is directly supported by GPU composition.
-        bool supportsSharedFlush = true;
-        for (int i = 0; i < compositionScene.Commands.Count; i++)
+        int commandCount = 0;
+        Rectangle? compositionBounds = null;
+        for (int batchIndex = 0; batchIndex < preparedBatches.Count; batchIndex++)
         {
-            if (!IsSupportedCompositionBrush(compositionScene.Commands[i].Brush))
+            CompositionBatch batch = preparedBatches[batchIndex];
+            IReadOnlyList<PreparedCompositionCommand> commands = batch.Commands;
+            for (int i = 0; i < commands.Count; i++)
             {
-                supportsSharedFlush = false;
-                break;
-            }
-        }
-
-        int flushId = supportsSharedFlush ? Interlocked.Increment(ref nextSceneFlushId) : 0;
-        Rectangle? sharedCompositionBounds = null;
-        if (supportsSharedFlush && TryGetCompositionBounds(preparedBatches, out Rectangle sceneBounds))
-        {
-            sharedCompositionBounds = sceneBounds;
-        }
-
-        for (int i = 0; i < preparedBatches.Count; i++)
-        {
-            CompositionBatch batch = preparedBatches[i];
-            Rectangle? compositionBounds = sharedCompositionBounds;
-            if (compositionBounds is null && TryGetCompositionBounds(batch.Commands, out Rectangle batchBounds))
-            {
-                compositionBounds = batchBounds;
+                Rectangle destination = commands[i].DestinationRegion;
+                compositionBounds = compositionBounds.HasValue
+                    ? Rectangle.Union(compositionBounds.Value, destination)
+                    : destination;
             }
 
-            this.FlushPreparedBatch(
-                configuration,
-                target,
-                new CompositionBatch(
-                    batch.Definition,
-                    batch.Commands,
-                    flushId,
-                    isFinalBatchInFlush: i == preparedBatches.Count - 1,
-                    compositionBounds));
+            commandCount += commands.Count;
         }
-    }
 
-    /// <summary>
-    /// Executes one prepared composition batch, preferring GPU execution and falling back to CPU when required.
-    /// </summary>
-    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
-    /// <param name="configuration">The active processing configuration.</param>
-    /// <param name="target">The destination frame.</param>
-    /// <param name="compositionBatch">The prepared batch to execute.</param>
-    private void FlushPreparedBatch<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target,
-        CompositionBatch compositionBatch)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        this.ThrowIfDisposed();
-        if (compositionBatch.Commands.Count == 0)
+        if (commandCount == 0)
         {
             return;
         }
 
-        int commandCount = compositionBatch.Commands.Count;
-        this.TestingPrepareCoverageCallCount++;
-        this.TestingReleaseCoverageCallCount++;
+        if (compositionBounds is null)
+        {
+            return;
+        }
+
         this.TestingCompositeCoverageCallCount += commandCount;
 
         bool hasCpuRegion = target.TryGetCpuRegion(out Buffer2DRegion<TPixel> cpuRegion);
-        if (compositionBatch.FlushId == 0 && !AreAllCompositionBrushesSupported(compositionBatch.Commands))
+        compositionBounds = Rectangle.Intersect(
+            compositionBounds.Value,
+            new Rectangle(0, 0, target.Bounds.Width, target.Bounds.Height));
+        if (compositionBounds.Value.Width <= 0 || compositionBounds.Value.Height <= 0)
         {
-            this.TestingFallbackPrepareCoverageCallCount++;
-            this.TestingFallbackCompositeCoverageCallCount += commandCount;
-            this.FlushCompositionsFallback(configuration, target, compositionBatch, hasCpuRegion);
             return;
         }
 
-        if (!CompositePixelHandlers.TryGetValue(typeof(TPixel), out CompositePixelRegistration pixelHandler))
-        {
-            this.TestingFallbackPrepareCoverageCallCount++;
-            this.TestingFallbackCompositeCoverageCallCount += commandCount;
-            this.FlushCompositionsFallback(configuration, target, compositionBatch, hasCpuRegion);
-            return;
-        }
-
-        // Flush sessions keep destination state alive across batch boundaries for one scene flush.
-        bool useFlushSession = compositionBatch.FlushId != 0;
         bool gpuSuccess = false;
         bool gpuReady = false;
         string? failure = null;
-        bool hadExistingSession = false;
-        WebGPUFlushContext? flushContext = null;
+        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
+        int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
+        using WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
+            target,
+            textureFormat,
+            pixelSizeInBytes,
+            configuration.MemoryAllocator,
+            compositionBounds);
 
         try
         {
-            flushContext = useFlushSession
-                ? WebGPUFlushContext.GetOrCreateFlushSessionContext(
-                    compositionBatch.FlushId,
-                    target,
-                    pixelHandler.TextureFormat,
-                    pixelHandler.PixelSizeInBytes,
-                    configuration.MemoryAllocator,
-                    compositionBatch.CompositionBounds,
-                    out hadExistingSession)
-                : WebGPUFlushContext.Create(
-                    target,
-                    pixelHandler.TextureFormat,
-                    pixelHandler.PixelSizeInBytes,
-                    configuration.MemoryAllocator,
-                    compositionBatch.CompositionBounds);
+            gpuReady = true;
+            this.TestingPrepareCoverageCallCount += commandCount;
+            this.TestingReleaseCoverageCallCount += commandCount;
 
-            CompositionCoverageDefinition definition = compositionBatch.Definition;
-            if (TryPrepareGpuCoverage(
-                    flushContext,
-                    in definition,
-                    out WebGPUFlushContext.CoverageEntry? coverageEntry,
-                    out failure))
-            {
-                gpuReady = true;
-                gpuSuccess = this.TryCompositeBatchTiled<TPixel>(
-                    flushContext,
-                    coverageEntry.GPUCoverageView,
-                    compositionBatch.Commands,
-                    compositionBatch.CompositionBounds,
-                    blitToTarget: !useFlushSession || compositionBatch.IsFinalBatchInFlush,
-                    out failure);
-                if (gpuSuccess)
-                {
-                    if (useFlushSession && !compositionBatch.IsFinalBatchInFlush)
-                    {
-                        // Intermediate session batches defer final submit/readback until the last batch.
-                    }
-                    else
-                    {
-                        gpuSuccess = this.TryFinalizeFlush(flushContext, cpuRegion, compositionBatch.CompositionBounds);
-                    }
-                }
-            }
+            gpuSuccess = this.TryRenderPreparedFlush<TPixel>(
+                flushContext,
+                preparedBatches,
+                configuration,
+                target.Bounds,
+                compositionBounds.Value,
+                out failure) &&
+                this.TryFinalizeFlush(flushContext, cpuRegion, compositionBounds);
         }
         catch (Exception ex)
         {
             failure = ex.Message;
             gpuSuccess = false;
-        }
-        finally
-        {
-            if (!useFlushSession)
-            {
-                flushContext?.Dispose();
-            }
         }
 
         this.TestingGPUInitializationAttempted = true;
@@ -349,53 +283,34 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         this.TestingLastGPUInitializationFailure = gpuSuccess ? null : failure;
         this.TestingLiveCoverageCount = 0;
 
-        if (useFlushSession)
-        {
-            if (gpuSuccess)
-            {
-                this.TestingGPUPrepareCoverageCallCount++;
-                this.TestingGPUCompositeCoverageCallCount += commandCount;
-                if (compositionBatch.IsFinalBatchInFlush)
-                {
-                    WebGPUFlushContext.CompleteFlushSession(compositionBatch.FlushId);
-                }
-
-                return;
-            }
-
-            WebGPUFlushContext.CompleteFlushSession(compositionBatch.FlushId);
-            if (hadExistingSession)
-            {
-                throw new InvalidOperationException($"WebGPU flush session failed after prior GPU batches. Reason: {failure ?? "Unknown error"}");
-            }
-
-            this.TestingFallbackPrepareCoverageCallCount++;
-            this.TestingFallbackCompositeCoverageCallCount += commandCount;
-            this.FlushCompositionsFallback(configuration, target, compositionBatch, hasCpuRegion);
-            return;
-        }
-
         if (gpuSuccess)
         {
-            this.TestingGPUPrepareCoverageCallCount++;
+            this.TestingGPUPrepareCoverageCallCount += commandCount;
             this.TestingGPUCompositeCoverageCallCount += commandCount;
             return;
         }
 
-        this.TestingFallbackPrepareCoverageCallCount++;
+        this.TestingFallbackPrepareCoverageCallCount += commandCount;
         this.TestingFallbackCompositeCoverageCallCount += commandCount;
-        this.FlushCompositionsFallback(configuration, target, compositionBatch, hasCpuRegion);
+        this.FlushCompositionsFallback(
+            configuration,
+            target,
+            compositionScene,
+            hasCpuRegion,
+            compositionBounds);
     }
 
     /// <summary>
-    /// Checks whether all prepared commands in the batch are directly composable by WebGPU.
+    /// Checks whether all scene commands are directly composable by WebGPU.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool AreAllCompositionBrushesSupported(IReadOnlyList<PreparedCompositionCommand> commands)
+    private static bool AreAllCompositionBrushesSupported<TPixel>(IReadOnlyList<CompositionCommand> commands)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         for (int i = 0; i < commands.Count; i++)
         {
-            if (!IsSupportedCompositionBrush(commands[i].Brush))
+            Brush brush = commands[i].Brush;
+            if (!IsSupportedCompositionBrush(brush))
             {
                 return false;
             }
@@ -410,66 +325,29 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSupportedCompositionBrush(Brush brush) => brush is SolidBrush or ImageBrush;
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool TryGetCompositionBounds(IReadOnlyList<PreparedCompositionCommand> commands, out Rectangle bounds)
-    {
-        if (commands.Count == 0)
-        {
-            bounds = default;
-            return false;
-        }
-
-        Rectangle union = commands[0].DestinationRegion;
-        for (int i = 1; i < commands.Count; i++)
-        {
-            union = Rectangle.Union(union, commands[i].DestinationRegion);
-        }
-
-        bounds = union;
-        return union.Width > 0 && union.Height > 0;
-    }
-
-    private static bool TryGetCompositionBounds(List<CompositionBatch> batches, out Rectangle bounds)
-    {
-        bool hasBounds = false;
-        Rectangle union = default;
-
-        for (int i = 0; i < batches.Count; i++)
-        {
-            if (!TryGetCompositionBounds(batches[i].Commands, out Rectangle batchBounds))
-            {
-                continue;
-            }
-
-            union = hasBounds ? Rectangle.Union(union, batchBounds) : batchBounds;
-            hasBounds = true;
-        }
-
-        bounds = union;
-        return hasBounds;
-    }
-
     /// <summary>
-    /// Executes one prepared batch on the CPU fallback backend.
+    /// Executes the scene on the CPU fallback backend.
     /// </summary>
     /// <typeparam name="TPixel">The destination pixel format.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="target">The original destination frame.</param>
-    /// <param name="compositionBatch">The prepared batch to execute.</param>
+    /// <param name="compositionScene">The scene to execute.</param>
     /// <param name="hasCpuRegion">
     /// Indicates whether <paramref name="target"/> exposes CPU pixels directly. When <see langword="false"/>,
     /// a temporary staging frame is composed and uploaded to the native surface.
     /// </param>
+    /// <param name="compositionBounds">The destination-local bounds touched by the scene when known.</param>
     private void FlushCompositionsFallback<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        CompositionBatch compositionBatch,
-        bool hasCpuRegion)
+        CompositionScene compositionScene,
+        bool hasCpuRegion,
+        Rectangle? compositionBounds)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (hasCpuRegion)
         {
-            this.fallbackBackend.FlushPreparedBatch(configuration, target, compositionBatch);
+            this.fallbackBackend.FlushCompositions(configuration, target, compositionScene);
             return;
         }
 
@@ -479,10 +357,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         Buffer2DRegion<TPixel> stagingRegion = stagingLease.Region;
         ICanvasFrame<TPixel> stagingFrame = new CpuCanvasFrame<TPixel>(stagingRegion);
-        this.fallbackBackend.FlushPreparedBatch(configuration, stagingFrame, compositionBatch);
+        this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
 
         using WebGPUFlushContext uploadContext = WebGPUFlushContext.CreateUploadContext(target, configuration.MemoryAllocator);
-        if (compositionBatch.CompositionBounds is Rectangle uploadBounds &&
+        if (compositionBounds is Rectangle uploadBounds &&
             uploadBounds.Width > 0 &&
             uploadBounds.Height > 0)
         {
@@ -508,24 +386,526 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
-    /// <summary>
-    /// Resolves (or creates) cached GPU coverage for the batch definition.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool TryPrepareGpuCoverage(
+    private bool TryRenderPreparedFlush<TPixel>(
         WebGPUFlushContext flushContext,
-        in CompositionCoverageDefinition definition,
-        [NotNullWhen(true)] out WebGPUFlushContext.CoverageEntry? coverageEntry,
+        List<CompositionBatch> preparedBatches,
+        Configuration configuration,
+        Rectangle targetBounds,
+        Rectangle compositionBounds,
         out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
-        lock (flushContext.DeviceState.SyncRoot)
+        Rectangle targetLocalBounds = Rectangle.Intersect(
+            new Rectangle(0, 0, flushContext.TargetBounds.Width, flushContext.TargetBounds.Height),
+            compositionBounds);
+        if (targetLocalBounds.Width <= 0 || targetLocalBounds.Height <= 0)
         {
-            return flushContext.DeviceState.TryGetOrCreateCoverageEntry(
-                in definition,
-                flushContext.Queue,
-                out coverageEntry,
-                out error);
+            error = null;
+            return true;
         }
+
+        if (!flushContext.EnsureCommandEncoder())
+        {
+            error = "Failed to create WebGPU command encoder.";
+            return false;
+        }
+
+        if (flushContext.TargetTexture is null || flushContext.TargetView is null)
+        {
+            error = "WebGPU flush context does not expose required target resources.";
+            return false;
+        }
+
+        WgpuBuffer* destinationPixelsBuffer = flushContext.CompositeDestinationPixelsBuffer;
+        nuint destinationPixelsByteSize = flushContext.CompositeDestinationPixelsByteSize;
+        bool hasValidDestinationBuffer =
+            destinationPixelsBuffer is not null &&
+            destinationPixelsByteSize != 0 &&
+            flushContext.CompositeDestinationWidth == targetLocalBounds.Width &&
+            flushContext.CompositeDestinationHeight == targetLocalBounds.Height;
+
+        TextureView* sourceTextureView = flushContext.TargetView;
+        int sourceOriginX = targetLocalBounds.X;
+        int sourceOriginY = targetLocalBounds.Y;
+        if (!flushContext.CanSampleTargetTexture)
+        {
+            if (!TryCreateCompositionTexture(
+                    flushContext,
+                    targetLocalBounds.Width,
+                    targetLocalBounds.Height,
+                    out Texture* sourceTexture,
+                    out sourceTextureView,
+                    out error))
+            {
+                return false;
+            }
+
+            CopyTextureRegion(flushContext, flushContext.TargetTexture, sourceTexture, targetLocalBounds);
+            sourceOriginX = 0;
+            sourceOriginY = 0;
+        }
+
+        if (!hasValidDestinationBuffer)
+        {
+            if (!TryCreateDestinationPixelsBuffer(
+                    flushContext,
+                    targetLocalBounds.Width,
+                    targetLocalBounds.Height,
+                    out destinationPixelsBuffer,
+                    out destinationPixelsByteSize,
+                    out error))
+            {
+                return false;
+            }
+
+            flushContext.CompositeDestinationPixelsBuffer = destinationPixelsBuffer;
+            flushContext.CompositeDestinationPixelsByteSize = destinationPixelsByteSize;
+            flushContext.CompositeDestinationWidth = targetLocalBounds.Width;
+            flushContext.CompositeDestinationHeight = targetLocalBounds.Height;
+        }
+
+        if (!TryInitializeDestinationPixels(
+                flushContext,
+                sourceTextureView,
+                destinationPixelsBuffer,
+                targetLocalBounds,
+                sourceOriginX,
+                sourceOriginY,
+                destinationPixelsByteSize,
+                out error))
+        {
+            return false;
+        }
+
+        List<CompositionCoverageDefinition> coverageDefinitions = new();
+        Dictionary<int, int> coverageDefinitionIndexByKey = new();
+        List<PreparedCompositePendingCommand> pendingCommands = new();
+        for (int i = 0; i < preparedBatches.Count; i++)
+        {
+            CompositionBatch batch = preparedBatches[i];
+            if (batch.Commands.Count == 0)
+            {
+                continue;
+            }
+
+            int definitionKey = batch.Definition.DefinitionKey;
+            if (!coverageDefinitionIndexByKey.TryGetValue(definitionKey, out int coverageDefinitionIndex))
+            {
+                coverageDefinitionIndex = coverageDefinitions.Count;
+                coverageDefinitions.Add(batch.Definition);
+                coverageDefinitionIndexByKey.Add(definitionKey, coverageDefinitionIndex);
+            }
+
+            IReadOnlyList<PreparedCompositionCommand> commands = batch.Commands;
+            for (int commandIndex = 0; commandIndex < commands.Count; commandIndex++)
+            {
+                pendingCommands.Add(new PreparedCompositePendingCommand(coverageDefinitionIndex, commands[commandIndex]));
+            }
+
+            this.TestingComputePathBatchCount++;
+        }
+
+        if (!this.TryCreateCoverageTextureFromFlattened<TPixel>(
+                flushContext,
+                coverageDefinitions,
+                configuration,
+                out TextureView* coverageView,
+                out CoveragePlacement[] coveragePlacements,
+                out error))
+        {
+            return false;
+        }
+
+        List<PreparedCompositeWorkItem> compositeCommands = new(pendingCommands.Count);
+        for (int i = 0; i < pendingCommands.Count; i++)
+        {
+            PreparedCompositePendingCommand pending = pendingCommands[i];
+            CoveragePlacement coveragePlacement = coveragePlacements[pending.CoverageDefinitionIndex];
+            compositeCommands.Add(new PreparedCompositeWorkItem(pending.Command, coveragePlacement.OriginX, coveragePlacement.OriginY, (nint)coverageView));
+        }
+
+        if (!this.TryDispatchPreparedCompositeCommands<TPixel>(
+                flushContext,
+                sourceTextureView,
+                destinationPixelsBuffer,
+                destinationPixelsByteSize,
+                targetBounds,
+                targetLocalBounds,
+                compositeCommands,
+                out error))
+        {
+            return false;
+        }
+
+        if (!TryBlitDestinationPixelsToTarget(
+                flushContext,
+                destinationPixelsBuffer,
+                destinationPixelsByteSize,
+                targetLocalBounds,
+                out error))
+        {
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private bool TryDispatchPreparedCompositeCommands<TPixel>(
+        WebGPUFlushContext flushContext,
+        TextureView* defaultBrushTextureView,
+        WgpuBuffer* destinationPixelsBuffer,
+        nuint destinationPixelsByteSize,
+        Rectangle targetBounds,
+        Rectangle targetLocalBounds,
+        IReadOnlyList<PreparedCompositeWorkItem> compositeCommands,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        error = null;
+        if (compositeCommands.Count == 0)
+        {
+            return true;
+        }
+
+        if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
+                "prepared-composite",
+                PreparedCompositeComputeShader.Code,
+                TryCreatePreparedCompositeBindGroupLayout,
+                out BindGroupLayout* bindGroupLayout,
+                out ComputePipeline* pipeline,
+                out error))
+        {
+            return false;
+        }
+
+        uint parameterSize = (uint)Unsafe.SizeOf<PreparedCompositeParameters>();
+        int parameterUploadByteCount = checked((int)(parameterSize * (uint)compositeCommands.Count));
+        IMemoryOwner<byte> parametersUploadOwner = flushContext.MemoryAllocator.Allocate<byte>(parameterUploadByteCount);
+        try
+        {
+            Span<byte> parameterUpload = parametersUploadOwner.Memory.Span[..parameterUploadByteCount];
+            parameterUpload.Clear();
+            TextureView* sourceTextureView = defaultBrushTextureView;
+            nint sourceTextureViewHandle = (nint)defaultBrushTextureView;
+            bool hasImageTexture = false;
+            nint coverageTextureViewHandle = 0;
+            bool hasCoverageTexture = false;
+            uint validCommandCount = 0;
+
+            for (int i = 0; i < compositeCommands.Count; i++)
+            {
+                PreparedCompositeWorkItem workItem = compositeCommands[i];
+                PreparedCompositionCommand command = workItem.Command;
+                if (command.DestinationRegion.Width <= 0 || command.DestinationRegion.Height <= 0)
+                {
+                    continue;
+                }
+
+                uint brushType;
+                int brushOriginX = 0;
+                int brushOriginY = 0;
+                int brushRegionX = 0;
+                int brushRegionY = 0;
+                int brushRegionWidth = 1;
+                int brushRegionHeight = 1;
+                Vector4 solidColor = default;
+
+                if (command.Brush is SolidBrush solidBrush)
+                {
+                    brushType = PreparedBrushTypeSolid;
+                    solidColor = solidBrush.Color.ToScaledVector4();
+                }
+                else if (command.Brush is ImageBrush imageBrush)
+                {
+                    brushType = PreparedBrushTypeImage;
+                    Image<TPixel> image = (Image<TPixel>)imageBrush.SourceImage;
+
+                    if (!TryGetOrCreateImageTextureView(
+                            flushContext,
+                            image,
+                            flushContext.TextureFormat,
+                            out TextureView* brushTextureView,
+                            out error))
+                    {
+                        return false;
+                    }
+
+                    if (!hasImageTexture)
+                    {
+                        sourceTextureView = brushTextureView;
+                        sourceTextureViewHandle = (nint)brushTextureView;
+                        hasImageTexture = true;
+                    }
+                    else if (sourceTextureViewHandle != (nint)brushTextureView)
+                    {
+                        error = "Prepared composite flush currently supports one image brush texture per dispatch.";
+                        return false;
+                    }
+
+                    Rectangle sourceRegion = Rectangle.Intersect(image.Bounds, (Rectangle)imageBrush.SourceRegion);
+                    brushRegionX = sourceRegion.X;
+                    brushRegionY = sourceRegion.Y;
+                    brushRegionWidth = sourceRegion.Width;
+                    brushRegionHeight = sourceRegion.Height;
+                    brushOriginX = command.BrushBounds.X + imageBrush.Offset.X - targetBounds.X - targetLocalBounds.X;
+                    brushOriginY = command.BrushBounds.Y + imageBrush.Offset.Y - targetBounds.Y - targetLocalBounds.Y;
+                }
+                else
+                {
+                    error = "Unsupported brush type.";
+                    return false;
+                }
+
+                if (!hasCoverageTexture)
+                {
+                    coverageTextureViewHandle = workItem.CoverageTextureView;
+                    hasCoverageTexture = true;
+                }
+                else if (coverageTextureViewHandle != workItem.CoverageTextureView)
+                {
+                    error = "Prepared composite flush requires a shared coverage texture.";
+                    return false;
+                }
+
+                int destinationX = command.DestinationRegion.X - targetLocalBounds.X;
+                int destinationY = command.DestinationRegion.Y - targetLocalBounds.Y;
+                PreparedCompositeParameters parameters = new(
+                    destinationX,
+                    destinationY,
+                    command.DestinationRegion.Width,
+                    command.DestinationRegion.Height,
+                    command.SourceOffset.X + workItem.CoverageOriginX,
+                    command.SourceOffset.Y + workItem.CoverageOriginY,
+                    targetLocalBounds.Width,
+                    brushType,
+                    brushOriginX,
+                    brushOriginY,
+                    brushRegionX,
+                    brushRegionY,
+                    brushRegionWidth,
+                    brushRegionHeight,
+                    (uint)command.GraphicsOptions.ColorBlendingMode,
+                    (uint)command.GraphicsOptions.AlphaCompositionMode,
+                    command.GraphicsOptions.BlendPercentage,
+                    solidColor);
+
+                int parameterOffset = checked((int)(validCommandCount * parameterSize));
+                MemoryMarshal.Write(
+                    parameterUpload.Slice(parameterOffset, (int)parameterSize),
+                    in parameters);
+
+                validCommandCount++;
+            }
+
+            if (validCommandCount == 0)
+            {
+                error = null;
+                return true;
+            }
+
+            int usedParameterByteCount = checked((int)(validCommandCount * parameterSize));
+            BufferDescriptor paramsDescriptor = new()
+            {
+                Usage = BufferUsage.Storage | BufferUsage.CopyDst,
+                Size = (nuint)usedParameterByteCount
+            };
+
+            WgpuBuffer* paramsBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in paramsDescriptor);
+            if (paramsBuffer is null)
+            {
+                error = "Failed to create composite parameter buffer.";
+                return false;
+            }
+
+            flushContext.TrackBuffer(paramsBuffer);
+            fixed (byte* parameterUploadPtr = parameterUpload)
+            {
+                flushContext.Api.QueueWriteBuffer(
+                    flushContext.Queue,
+                    paramsBuffer,
+                    0,
+                    parameterUploadPtr,
+                    (nuint)usedParameterByteCount);
+            }
+
+            BufferDescriptor dispatchConfigDescriptor = new()
+            {
+                Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
+                Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
+            };
+
+            WgpuBuffer* dispatchConfigBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in dispatchConfigDescriptor);
+            if (dispatchConfigBuffer is null)
+            {
+                error = "Failed to create composite dispatch config buffer.";
+                return false;
+            }
+
+            flushContext.TrackBuffer(dispatchConfigBuffer);
+            PreparedCompositeDispatchConfig dispatchConfig = new(
+                validCommandCount,
+                (uint)targetLocalBounds.Width,
+                (uint)targetLocalBounds.Height);
+            flushContext.Api.QueueWriteBuffer(
+                flushContext.Queue,
+                dispatchConfigBuffer,
+                0,
+                &dispatchConfig,
+                (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>());
+
+            if (!hasCoverageTexture)
+            {
+                error = "Prepared composite flush did not produce a coverage texture.";
+                return false;
+            }
+
+            BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[5];
+            bindGroupEntries[0] = new BindGroupEntry
+            {
+                Binding = 0,
+                TextureView = (TextureView*)coverageTextureViewHandle
+            };
+            bindGroupEntries[1] = new BindGroupEntry
+            {
+                Binding = 1,
+                TextureView = sourceTextureView
+            };
+            bindGroupEntries[2] = new BindGroupEntry
+            {
+                Binding = 2,
+                Buffer = destinationPixelsBuffer,
+                Offset = 0,
+                Size = destinationPixelsByteSize
+            };
+            bindGroupEntries[3] = new BindGroupEntry
+            {
+                Binding = 3,
+                Buffer = paramsBuffer,
+                Offset = 0,
+                Size = (nuint)usedParameterByteCount
+            };
+            bindGroupEntries[4] = new BindGroupEntry
+            {
+                Binding = 4,
+                Buffer = dispatchConfigBuffer,
+                Offset = 0,
+                Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
+            };
+
+            BindGroupDescriptor bindGroupDescriptor = new()
+            {
+                Layout = bindGroupLayout,
+                EntryCount = 5,
+                Entries = bindGroupEntries
+            };
+
+            BindGroup* bindGroup = flushContext.Api.DeviceCreateBindGroup(flushContext.Device, in bindGroupDescriptor);
+            if (bindGroup is null)
+            {
+                error = "Failed to create prepared composite bind group.";
+                return false;
+            }
+
+            flushContext.TrackBindGroup(bindGroup);
+            ComputePassDescriptor passDescriptor = default;
+            ComputePassEncoder* passEncoder = flushContext.Api.CommandEncoderBeginComputePass(flushContext.CommandEncoder, in passDescriptor);
+            if (passEncoder is null)
+            {
+                error = "Failed to begin prepared composite compute pass.";
+                return false;
+            }
+
+            try
+            {
+                flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
+                flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
+                flushContext.Api.ComputePassEncoderDispatchWorkgroups(
+                    passEncoder,
+                    DivideRoundUp(targetLocalBounds.Width, CompositeComputeWorkgroupSize),
+                    DivideRoundUp(targetLocalBounds.Height, CompositeComputeWorkgroupSize),
+                    1);
+            }
+            finally
+            {
+                flushContext.Api.ComputePassEncoderEnd(passEncoder);
+                flushContext.Api.ComputePassEncoderRelease(passEncoder);
+            }
+        }
+        finally
+        {
+            parametersUploadOwner.Dispose();
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryGetOrCreateImageTextureView<TPixel>(
+        WebGPUFlushContext flushContext,
+        Image<TPixel> image,
+        TextureFormat textureFormat,
+        out TextureView* textureView,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (flushContext.TryGetCachedSourceTextureView(image, out textureView))
+        {
+            error = null;
+            return true;
+        }
+
+        TextureDescriptor descriptor = new()
+        {
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            Dimension = TextureDimension.Dimension2D,
+            Size = new Extent3D((uint)image.Width, (uint)image.Height, 1),
+            Format = textureFormat,
+            MipLevelCount = 1,
+            SampleCount = 1
+        };
+
+        Texture* texture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in descriptor);
+        if (texture is null)
+        {
+            textureView = null;
+            error = "Failed to create image texture.";
+            return false;
+        }
+
+        TextureViewDescriptor viewDescriptor = new()
+        {
+            Format = descriptor.Format,
+            Dimension = TextureViewDimension.Dimension2D,
+            BaseMipLevel = 0,
+            MipLevelCount = 1,
+            BaseArrayLayer = 0,
+            ArrayLayerCount = 1,
+            Aspect = TextureAspect.All
+        };
+
+        textureView = flushContext.Api.TextureCreateView(texture, in viewDescriptor);
+        if (textureView is null)
+        {
+            flushContext.Api.TextureRelease(texture);
+            error = "Failed to create image texture view.";
+            return false;
+        }
+
+        flushContext.TrackTexture(texture);
+        flushContext.TrackTextureView(textureView);
+        flushContext.CacheSourceTextureView(image, textureView);
+
+        Buffer2DRegion<TPixel> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        WebGPUFlushContext.UploadTextureFromRegion(
+            flushContext.Api,
+            flushContext.Queue,
+            texture,
+            region,
+            flushContext.MemoryAllocator);
+
+        error = null;
+        return true;
     }
 
     /// <summary>
@@ -559,7 +939,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     }
 
     /// <summary>
-    /// Initializes destination storage from the current destination texture contents.
+    /// Initializes destination storage from the current destination texture contents in premultiplied form.
     /// </summary>
     private static bool TryInitializeDestinationPixels(
         WebGPUFlushContext flushContext,
@@ -671,7 +1051,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     }
 
     /// <summary>
-    /// Writes composed destination storage back to the render target through a fullscreen blit.
+    /// Writes composed premultiplied destination storage back to the render target through a fullscreen blit.
     /// </summary>
     private static bool TryBlitDestinationPixelsToTarget(
         WebGPUFlushContext flushContext,
@@ -749,7 +1129,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
 
         flushContext.TrackBindGroup(bindGroup);
-        if (!flushContext.BeginRenderPass(flushContext.TargetView))
+        if (!flushContext.BeginRenderPass(flushContext.TargetView, loadExisting: true))
         {
             error = "Failed to begin destination blit render pass.";
             return false;
@@ -757,6 +1137,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         flushContext.Api.RenderPassEncoderSetPipeline(flushContext.PassEncoder, pipeline);
         flushContext.Api.RenderPassEncoderSetBindGroup(flushContext.PassEncoder, 0, bindGroup, 0, null);
+        flushContext.Api.RenderPassEncoderSetViewport(
+            flushContext.PassEncoder,
+            0,
+            0,
+            flushContext.TargetBounds.Width,
+            flushContext.TargetBounds.Height,
+            0,
+            1);
         flushContext.Api.RenderPassEncoderSetScissorRect(
             flushContext.PassEncoder,
             (uint)destinationBounds.X,
@@ -881,6 +1269,89 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     }
 
     /// <summary>
+    /// Creates the bind-group layout used by prepared composite compute shader.
+    /// </summary>
+    private static bool TryCreatePreparedCompositeBindGroupLayout(
+        WebGPU api,
+        Device* device,
+        out BindGroupLayout* layout,
+        out string? error)
+    {
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[5];
+        entries[0] = new BindGroupLayoutEntry
+        {
+            Binding = 0,
+            Visibility = ShaderStage.Compute,
+            Texture = new TextureBindingLayout
+            {
+                SampleType = TextureSampleType.UnfilterableFloat,
+                ViewDimension = TextureViewDimension.Dimension2D,
+                Multisampled = false
+            }
+        };
+        entries[1] = new BindGroupLayoutEntry
+        {
+            Binding = 1,
+            Visibility = ShaderStage.Compute,
+            Texture = new TextureBindingLayout
+            {
+                SampleType = TextureSampleType.Float,
+                ViewDimension = TextureViewDimension.Dimension2D,
+                Multisampled = false
+            }
+        };
+        entries[2] = new BindGroupLayoutEntry
+        {
+            Binding = 2,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[3] = new BindGroupLayoutEntry
+        {
+            Binding = 3,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[4] = new BindGroupLayoutEntry
+        {
+            Binding = 4,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Uniform,
+                HasDynamicOffset = false,
+                MinBindingSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
+            }
+        };
+
+        BindGroupLayoutDescriptor descriptor = new()
+        {
+            EntryCount = 5,
+            Entries = entries
+        };
+
+        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
+        if (layout is null)
+        {
+            error = "Failed to create prepared composite bind group layout.";
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
     /// Creates one transient composition texture that can be rendered to, sampled from, and copied.
     /// </summary>
     private static bool TryCreateCompositionTexture(
@@ -973,6 +1444,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint DivideRoundUp(int value, int divisor)
         => (uint)((value + divisor - 1) / divisor);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint AlignTo256(uint value) => (value + 255U) & ~255U;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint FloatToUInt32Bits(float value)
+        => unchecked((uint)System.BitConverter.SingleToInt32Bits(value));
 
     /// <summary>
     /// Finalizes one flush by submitting command buffers and optionally reading results back to CPU memory.
@@ -1273,37 +1751,187 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// Destination initialization parameters consumed by <see cref="CompositeDestinationInitShader"/>.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
-    private readonly struct CompositeDestinationInitParameters(
-        int batchWidth,
-        int batchHeight,
-        int sourceOriginX,
-        int sourceOriginY)
+    private readonly struct CompositeDestinationInitParameters
     {
-        public readonly int BatchWidth = batchWidth;
+        public readonly int BatchWidth;
+        public readonly int BatchHeight;
+        public readonly int SourceOriginX;
+        public readonly int SourceOriginY;
 
-        public readonly int BatchHeight = batchHeight;
-
-        public readonly int SourceOriginX = sourceOriginX;
-
-        public readonly int SourceOriginY = sourceOriginY;
+        public CompositeDestinationInitParameters(
+            int batchWidth,
+            int batchHeight,
+            int sourceOriginX,
+            int sourceOriginY)
+        {
+            this.BatchWidth = batchWidth;
+            this.BatchHeight = batchHeight;
+            this.SourceOriginX = sourceOriginX;
+            this.SourceOriginY = sourceOriginY;
+        }
     }
 
     /// <summary>
     /// Destination blit parameters consumed by <see cref="CompositeDestinationBlitShader"/>.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
-    private readonly struct CompositeDestinationBlitParameters(
-        int batchWidth,
-        int batchHeight,
-        int targetOriginX,
-        int targetOriginY)
+    private readonly struct CompositeDestinationBlitParameters
     {
-        public readonly int BatchWidth = batchWidth;
+        public readonly int BatchWidth;
+        public readonly int BatchHeight;
+        public readonly int TargetOriginX;
+        public readonly int TargetOriginY;
 
-        public readonly int BatchHeight = batchHeight;
+        public CompositeDestinationBlitParameters(
+            int batchWidth,
+            int batchHeight,
+            int targetOriginX,
+            int targetOriginY)
+        {
+            this.BatchWidth = batchWidth;
+            this.BatchHeight = batchHeight;
+            this.TargetOriginX = targetOriginX;
+            this.TargetOriginY = targetOriginY;
+        }
+    }
 
-        public readonly int TargetOriginX = targetOriginX;
+    private readonly struct PreparedCompositeWorkItem
+    {
+        public PreparedCompositeWorkItem(in PreparedCompositionCommand command, int coverageOriginX, int coverageOriginY, nint coverageTextureView)
+        {
+            this.Command = command;
+            this.CoverageOriginX = coverageOriginX;
+            this.CoverageOriginY = coverageOriginY;
+            this.CoverageTextureView = coverageTextureView;
+        }
 
-        public readonly int TargetOriginY = targetOriginY;
+        public PreparedCompositionCommand Command { get; }
+
+        public int CoverageOriginX { get; }
+
+        public int CoverageOriginY { get; }
+
+        public nint CoverageTextureView { get; }
+    }
+
+    private readonly struct PreparedCompositePendingCommand
+    {
+        public PreparedCompositePendingCommand(int coverageDefinitionIndex, in PreparedCompositionCommand command)
+        {
+            this.CoverageDefinitionIndex = coverageDefinitionIndex;
+            this.Command = command;
+        }
+
+        public int CoverageDefinitionIndex { get; }
+
+        public PreparedCompositionCommand Command { get; }
+    }
+
+    private readonly struct CoveragePlacement
+    {
+        public CoveragePlacement(int originX, int originY, int width, int height)
+        {
+            this.OriginX = originX;
+            this.OriginY = originY;
+            this.Width = width;
+            this.Height = height;
+        }
+
+        public int OriginX { get; }
+
+        public int OriginY { get; }
+
+        public int Width { get; }
+
+        public int Height { get; }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct PreparedCompositeDispatchConfig
+    {
+        public readonly uint CommandCount;
+        public readonly uint TargetWidth;
+        public readonly uint TargetHeight;
+        public readonly uint Pad0;
+
+        public PreparedCompositeDispatchConfig(uint commandCount, uint targetWidth, uint targetHeight)
+        {
+            this.CommandCount = commandCount;
+            this.TargetWidth = targetWidth;
+            this.TargetHeight = targetHeight;
+            this.Pad0 = 0;
+        }
+    }
+
+    /// <summary>
+    /// Prepared composite command parameters consumed by <see cref="PreparedCompositeComputeShader"/>.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct PreparedCompositeParameters
+    {
+        public readonly uint DestinationX;
+        public readonly uint DestinationY;
+        public readonly uint DestinationWidth;
+        public readonly uint DestinationHeight;
+        public readonly uint CoverageOffsetX;
+        public readonly uint CoverageOffsetY;
+        public readonly uint TargetWidth;
+        public readonly uint BrushType;
+        public readonly uint BrushOriginX;
+        public readonly uint BrushOriginY;
+        public readonly uint BrushRegionX;
+        public readonly uint BrushRegionY;
+        public readonly uint BrushRegionWidth;
+        public readonly uint BrushRegionHeight;
+        public readonly uint ColorBlendMode;
+        public readonly uint AlphaCompositionMode;
+        public readonly uint BlendPercentage;
+        public readonly uint SolidR;
+        public readonly uint SolidG;
+        public readonly uint SolidB;
+        public readonly uint SolidA;
+
+        public PreparedCompositeParameters(
+            int destinationX,
+            int destinationY,
+            int destinationWidth,
+            int destinationHeight,
+            int coverageOffsetX,
+            int coverageOffsetY,
+            int targetWidth,
+            uint brushType,
+            int brushOriginX,
+            int brushOriginY,
+            int brushRegionX,
+            int brushRegionY,
+            int brushRegionWidth,
+            int brushRegionHeight,
+            uint colorBlendMode,
+            uint alphaCompositionMode,
+            float blendPercentage,
+            Vector4 solidColor)
+        {
+            this.DestinationX = (uint)destinationX;
+            this.DestinationY = (uint)destinationY;
+            this.DestinationWidth = (uint)destinationWidth;
+            this.DestinationHeight = (uint)destinationHeight;
+            this.CoverageOffsetX = (uint)coverageOffsetX;
+            this.CoverageOffsetY = (uint)coverageOffsetY;
+            this.TargetWidth = (uint)targetWidth;
+            this.BrushType = brushType;
+            this.BrushOriginX = (uint)brushOriginX;
+            this.BrushOriginY = (uint)brushOriginY;
+            this.BrushRegionX = (uint)brushRegionX;
+            this.BrushRegionY = (uint)brushRegionY;
+            this.BrushRegionWidth = (uint)brushRegionWidth;
+            this.BrushRegionHeight = (uint)brushRegionHeight;
+            this.ColorBlendMode = colorBlendMode;
+            this.AlphaCompositionMode = alphaCompositionMode;
+            this.BlendPercentage = FloatToUInt32Bits(blendPercentage);
+            this.SolidR = FloatToUInt32Bits(solidColor.X);
+            this.SolidG = FloatToUInt32Bits(solidColor.Y);
+            this.SolidB = FloatToUInt32Bits(solidColor.Z);
+            this.SolidA = FloatToUInt32Bits(solidColor.W);
+        }
     }
 }

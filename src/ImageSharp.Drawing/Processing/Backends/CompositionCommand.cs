@@ -161,6 +161,7 @@ internal readonly struct CompositionCommand
         foreach (ISimplePath simplePath in path.Flatten())
         {
             ReadOnlySpan<PointF> points = simplePath.Points.Span;
+            hash.Add(simplePath.IsClosed);
             hash.Add(points.Length);
             for (int i = 0; i < points.Length; i++)
             {

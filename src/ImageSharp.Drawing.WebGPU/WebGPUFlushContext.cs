@@ -3,11 +3,9 @@
 
 using System.Buffers;
 using System.Collections.Concurrent;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
@@ -26,7 +24,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 {
     private static readonly ConcurrentDictionary<Type, IDisposable> FallbackStagingCache = new();
     private static readonly ConcurrentDictionary<nint, DeviceSharedState> DeviceStateCache = new();
-    private static readonly ConcurrentDictionary<int, WebGPUFlushContext> FlushSessionContexts = new();
     private static readonly object SharedHandleSync = new();
     private const int CallbackTimeoutMilliseconds = 10_000;
 
@@ -238,55 +235,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
     public static void ClearDeviceStateCache()
     {
-        foreach (WebGPUFlushContext context in FlushSessionContexts.Values)
-        {
-            context.Dispose();
-        }
-
-        FlushSessionContexts.Clear();
-
         foreach (DeviceSharedState state in DeviceStateCache.Values)
         {
             state.Dispose();
         }
 
         DeviceStateCache.Clear();
-    }
-
-    public static WebGPUFlushContext GetOrCreateFlushSessionContext<TPixel>(
-        int flushId,
-        ICanvasFrame<TPixel> frame,
-        TextureFormat expectedTextureFormat,
-        int pixelSizeInBytes,
-        MemoryAllocator memoryAllocator,
-        Rectangle? initialUploadBounds,
-        out bool fromCache)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (FlushSessionContexts.TryGetValue(flushId, out WebGPUFlushContext? cached))
-        {
-            fromCache = true;
-            return cached;
-        }
-
-        fromCache = false;
-        WebGPUFlushContext created = Create(frame, expectedTextureFormat, pixelSizeInBytes, memoryAllocator, initialUploadBounds);
-        if (FlushSessionContexts.TryAdd(flushId, created))
-        {
-            return created;
-        }
-
-        created.Dispose();
-        fromCache = true;
-        return FlushSessionContexts[flushId];
-    }
-
-    public static void CompleteFlushSession(int flushId)
-    {
-        if (FlushSessionContexts.TryRemove(flushId, out WebGPUFlushContext? context))
-        {
-            context.Dispose();
-        }
     }
 
     public static bool TryGetInteropHandles(out nint deviceHandle, out nint queueHandle, out string? error)
@@ -359,6 +313,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// Begins a render pass that targets the specified texture view.
     /// </summary>
     public bool BeginRenderPass(TextureView* targetView)
+        => this.BeginRenderPass(targetView, loadExisting: false);
+
+    /// <summary>
+    /// Begins a render pass that targets the specified texture view, optionally preserving existing contents.
+    /// </summary>
+    public bool BeginRenderPass(TextureView* targetView, bool loadExisting)
     {
         if (this.PassEncoder is not null)
         {
@@ -374,7 +334,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         {
             View = targetView,
             ResolveTarget = null,
-            LoadOp = LoadOp.Load,
+            LoadOp = loadExisting ? LoadOp.Load : LoadOp.Clear,
             StoreOp = StoreOp.Store,
             ClearValue = default
         };
@@ -441,6 +401,21 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             this.transientTextures.Add((nint)texture);
         }
     }
+
+    public bool TryGetCachedSourceTextureView(Image image, out TextureView* textureView)
+    {
+        if (this.cachedSourceTextureViews.TryGetValue(image, out nint handle) && handle != 0)
+        {
+            textureView = (TextureView*)handle;
+            return true;
+        }
+
+        textureView = null;
+        return false;
+    }
+
+    public void CacheSourceTextureView(Image image, TextureView* textureView)
+        => this.cachedSourceTextureViews[image] = (nint)textureView;
 
     public void Dispose()
     {
@@ -864,17 +839,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         };
 
         Extent3D writeSize = new((uint)sourceRegion.Width, (uint)sourceRegion.Height, 1);
+        int rowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
+        uint alignedRowBytes = AlignTo256((uint)rowBytes);
 
         if (sourceRegion.Buffer.MemoryGroup.Count == 1)
         {
             int sourceStrideBytes = checked(sourceRegion.Buffer.Width * pixelSizeInBytes);
-            int directPathRowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
-            long directByteCount = ((long)sourceStrideBytes * (sourceRegion.Height - 1)) + directPathRowBytes;
-            long directPathPackedByteCount = (long)directPathRowBytes * sourceRegion.Height;
+            long directByteCount = ((long)sourceStrideBytes * (sourceRegion.Height - 1)) + rowBytes;
+            long packedByteCountEstimate = (long)alignedRowBytes * sourceRegion.Height;
 
-            // For contiguous backing memory, avoid row packing unless the region is very sparse.
-            // This keeps the hot path allocation-free for common text and image workloads.
-            if (directByteCount <= directPathPackedByteCount * 2)
+            // Only use the direct path when the stride satisfies WebGPU's alignment requirement.
+            if ((uint)sourceStrideBytes == alignedRowBytes && directByteCount <= packedByteCountEstimate * 2)
             {
                 int startPixelIndex = checked((sourceRegion.Rectangle.Y * sourceRegion.Buffer.Width) + sourceRegion.Rectangle.X);
                 int startByteOffset = checked(startPixelIndex * pixelSizeInBytes);
@@ -899,20 +874,21 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
-        int packedRowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
-        int packedByteCount = checked(packedRowBytes * sourceRegion.Height);
+        int alignedRowBytesInt = checked((int)alignedRowBytes);
+        int packedByteCount = checked(alignedRowBytesInt * sourceRegion.Height);
         using IMemoryOwner<byte> packedOwner = memoryAllocator.Allocate<byte>(packedByteCount);
         Span<byte> packedData = packedOwner.Memory.Span[..packedByteCount];
+        packedData.Clear();
         for (int y = 0; y < sourceRegion.Height; y++)
         {
             ReadOnlySpan<TPixel> sourceRow = sourceRegion.DangerousGetRowSpan(y);
-            MemoryMarshal.AsBytes(sourceRow).CopyTo(packedData.Slice(y * packedRowBytes, packedRowBytes));
+            MemoryMarshal.AsBytes(sourceRow).Slice(0, rowBytes).CopyTo(packedData.Slice(y * alignedRowBytesInt, rowBytes));
         }
 
         TextureDataLayout packedLayout = new()
         {
             Offset = 0,
-            BytesPerRow = (uint)packedRowBytes,
+            BytesPerRow = alignedRowBytes,
             RowsPerImage = (uint)sourceRegion.Height
         };
 
@@ -927,11 +903,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
     internal sealed class DeviceSharedState : IDisposable
     {
-        private readonly Dictionary<int, CoverageEntry> coverageCache = [];
         private readonly ConcurrentDictionary<CpuTargetCacheKey, CpuTargetEntry> cpuTargetCache = new();
         private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
-        private WebGPURasterizer? coverageRasterizer;
+        private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
         private bool disposed;
 
         internal DeviceSharedState(WebGPU api, Device* device)
@@ -952,8 +927,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         public Device* Device { get; }
 
-        public int CoverageCount => this.coverageCache.Count;
-
         public CpuTargetLease RentCpuTarget(
             TextureFormat textureFormat,
             int width,
@@ -963,69 +936,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             CpuTargetCacheKey key = new(textureFormat, width, height, pixelSizeInBytes);
             CpuTargetEntry entry = this.cpuTargetCache.GetOrAdd(key, static _ => new CpuTargetEntry());
             return entry.Rent(this.Api, this.Device, in key);
-        }
-
-        public bool TryEnsureCoverageResources(out string? error)
-        {
-            if (this.disposed)
-            {
-                error = "WebGPU device state is disposed.";
-                return false;
-            }
-
-            this.coverageRasterizer ??= new WebGPURasterizer(this.Api);
-            if (!this.coverageRasterizer.IsInitialized && !this.coverageRasterizer.Initialize(this.Device))
-            {
-                error = "Failed to initialize WebGPU coverage rasterizer.";
-                return false;
-            }
-
-            error = null;
-            return true;
-        }
-
-        public bool TryGetOrCreateCoverageEntry(
-            in CompositionCoverageDefinition definition,
-            Queue* queue,
-            [NotNullWhen(true)] out CoverageEntry? coverageEntry,
-            out string? error)
-        {
-            if (!this.TryEnsureCoverageResources(out error))
-            {
-                coverageEntry = null;
-                return false;
-            }
-
-            if (this.coverageCache.TryGetValue(definition.DefinitionKey, out CoverageEntry? cached))
-            {
-                coverageEntry = cached;
-                return true;
-            }
-
-            RasterizerOptions rasterizerOptions = definition.RasterizerOptions;
-            if (this.coverageRasterizer is null ||
-                !this.coverageRasterizer.TryCreateCoverageTexture(
-                    definition.Path,
-                    in rasterizerOptions,
-                    this.Device,
-                    queue,
-                    out Texture* coverageTexture,
-                    out TextureView* coverageView))
-            {
-                coverageEntry = null;
-                error = "Failed to rasterize coverage texture.";
-                return false;
-            }
-
-            Size size = rasterizerOptions.Interest.Size;
-            coverageEntry = new CoverageEntry(size.Width, size.Height)
-            {
-                GPUCoverageTexture = coverageTexture,
-                GPUCoverageView = coverageView
-            };
-            this.coverageCache.Add(definition.DefinitionKey, coverageEntry);
-            error = null;
-            return true;
         }
 
         public bool TryGetOrCreateCompositePipeline(
@@ -1191,22 +1101,86 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
+        public bool TryGetOrCreateSharedBuffer(
+            string bufferKey,
+            BufferUsage usage,
+            nuint requiredSize,
+            out WgpuBuffer* buffer,
+            out nuint capacity,
+            out string? error)
+        {
+            buffer = null;
+            capacity = 0;
+
+            if (this.disposed)
+            {
+                error = "WebGPU device state is disposed.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(bufferKey))
+            {
+                error = "Shared buffer key cannot be empty.";
+                return false;
+            }
+
+            if (requiredSize == 0)
+            {
+                error = $"Shared buffer '{bufferKey}' requires a non-zero size.";
+                return false;
+            }
+
+            SharedBufferInfrastructure infrastructure = this.sharedBuffers.GetOrAdd(
+                bufferKey,
+                static _ => new SharedBufferInfrastructure());
+            lock (infrastructure)
+            {
+                if (infrastructure.Buffer is not null &&
+                    infrastructure.Capacity >= requiredSize &&
+                    infrastructure.Usage == usage)
+                {
+                    buffer = infrastructure.Buffer;
+                    capacity = infrastructure.Capacity;
+                    error = null;
+                    return true;
+                }
+
+                if (infrastructure.Buffer is not null)
+                {
+                    this.Api.BufferRelease(infrastructure.Buffer);
+                    infrastructure.Buffer = null;
+                    infrastructure.Capacity = 0;
+                }
+
+                BufferDescriptor descriptor = new()
+                {
+                    Usage = usage,
+                    Size = requiredSize
+                };
+
+                WgpuBuffer* createdBuffer = this.Api.DeviceCreateBuffer(this.Device, in descriptor);
+                if (createdBuffer is null)
+                {
+                    error = $"Failed to create shared buffer '{bufferKey}'.";
+                    return false;
+                }
+
+                infrastructure.Buffer = createdBuffer;
+                infrastructure.Capacity = requiredSize;
+                infrastructure.Usage = usage;
+                buffer = createdBuffer;
+                capacity = requiredSize;
+                error = null;
+                return true;
+            }
+        }
+
         public void Dispose()
         {
             if (this.disposed)
             {
                 return;
             }
-
-            foreach (CoverageEntry entry in this.coverageCache.Values)
-            {
-                ReleaseCoverageTexture(this.Api, entry);
-            }
-
-            this.coverageCache.Clear();
-
-            this.coverageRasterizer?.Release();
-            this.coverageRasterizer = null;
 
             foreach (CompositePipelineInfrastructure infrastructure in this.compositePipelines.Values)
             {
@@ -1222,13 +1196,27 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
             this.compositeComputePipelines.Clear();
 
+            foreach (SharedBufferInfrastructure infrastructure in this.sharedBuffers.Values)
+            {
+                lock (infrastructure)
+                {
+                    if (infrastructure.Buffer is not null)
+                    {
+                        this.Api.BufferRelease(infrastructure.Buffer);
+                        infrastructure.Buffer = null;
+                        infrastructure.Capacity = 0;
+                    }
+                }
+            }
+
+            this.sharedBuffers.Clear();
+
             foreach (CpuTargetEntry entry in this.cpuTargetCache.Values)
             {
                 entry.Dispose(this.Api);
             }
 
             this.cpuTargetCache.Clear();
-
             this.disposed = true;
         }
 
@@ -1460,21 +1448,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             {
                 this.Api.BindGroupLayoutRelease(infrastructure.BindGroupLayout);
                 infrastructure.BindGroupLayout = null;
-            }
-        }
-
-        private static void ReleaseCoverageTexture(WebGPU api, CoverageEntry entry)
-        {
-            if (entry.GPUCoverageView is not null)
-            {
-                api.TextureViewRelease(entry.GPUCoverageView);
-                entry.GPUCoverageView = null;
-            }
-
-            if (entry.GPUCoverageTexture is not null)
-            {
-                api.TextureRelease(entry.GPUCoverageTexture);
-                entry.GPUCoverageTexture = null;
             }
         }
 
@@ -1788,23 +1761,15 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
             public ComputePipeline* Pipeline { get; set; }
         }
-    }
 
-    internal sealed class CoverageEntry
-    {
-        public CoverageEntry(int width, int height)
+        private sealed class SharedBufferInfrastructure
         {
-            this.Width = width;
-            this.Height = height;
+            public WgpuBuffer* Buffer { get; set; }
+
+            public nuint Capacity { get; set; }
+
+            public BufferUsage Usage { get; set; }
         }
-
-        public int Width { get; }
-
-        public int Height { get; }
-
-        public Texture* GPUCoverageTexture { get; set; }
-
-        public TextureView* GPUCoverageView { get; set; }
     }
 
     /// <summary>
