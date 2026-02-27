@@ -36,25 +36,25 @@ internal static class PreparedCompositeComputeShader
             solid_a: u32,
         };
 
-        struct TileRange {
-            command_start: u32,
-            command_count: u32,
-        };
-
         struct DispatchConfig {
             target_width: u32,
             target_height: u32,
             tile_count_x: u32,
+            tile_count_y: u32,
+            tile_count: u32,
+            command_count: u32,
             pad0: u32,
+            pad1: u32,
         };
 
         @group(0) @binding(0) var coverage_texture: texture_2d<f32>;
         @group(0) @binding(1) var source_texture: texture_2d<f32>;
         @group(0) @binding(2) var<storage, read_write> destination_pixels: array<vec4<f32>>;
         @group(0) @binding(3) var<storage, read> commands: array<Params>;
-        @group(0) @binding(4) var<storage, read> tile_ranges: array<TileRange>;
-        @group(0) @binding(5) var<storage, read> tile_command_indices: array<u32>;
-        @group(0) @binding(6) var<uniform> dispatch_config: DispatchConfig;
+        @group(0) @binding(4) var<storage, read> tile_starts: array<u32>;
+        @group(0) @binding(5) var<storage, read_write> tile_counts: array<atomic<u32>>;
+        @group(0) @binding(6) var<storage, read> tile_command_indices: array<u32>;
+        @group(0) @binding(7) var<uniform> dispatch_config: DispatchConfig;
 
         fn u32_to_f32(bits: u32) -> f32 {
             return bitcast<f32>(bits);
@@ -191,7 +191,8 @@ internal static class PreparedCompositeComputeShader
             let tile_x = global_id.x / tile_width;
             let tile_y = global_id.y / tile_height;
             let tile_index = (tile_y * dispatch_config.tile_count_x) + tile_x;
-            let tile_range = tile_ranges[tile_index];
+            let tile_command_start = tile_starts[tile_index];
+            let tile_command_count = atomicLoad(&tile_counts[tile_index]);
 
             let dest_x = i32(global_id.x);
             let dest_y = i32(global_id.y);
@@ -200,21 +201,21 @@ internal static class PreparedCompositeComputeShader
 
             var tile_command_offset: u32 = 0u;
             loop {
-                if (tile_command_offset >= tile_range.command_count) {
+                if (tile_command_offset >= tile_command_count) {
                     break;
                 }
 
-                let command_index = tile_command_indices[tile_range.command_start + tile_command_offset];
+                let command_index = tile_command_indices[tile_command_start + tile_command_offset];
                 let command = commands[command_index];
-                let command_min_x = i32(command.destination_x);
-                let command_min_y = i32(command.destination_y);
+                let command_min_x = bitcast<i32>(command.destination_x);
+                let command_min_y = bitcast<i32>(command.destination_y);
                 let command_max_x = command_min_x + i32(command.destination_width);
                 let command_max_y = command_min_y + i32(command.destination_height);
                 if (dest_x >= command_min_x && dest_x < command_max_x && dest_y >= command_min_y && dest_y < command_max_y) {
                     let local_x = dest_x - command_min_x;
                     let local_y = dest_y - command_min_y;
-                    let coverage_x = i32(command.coverage_offset_x) + local_x;
-                    let coverage_y = i32(command.coverage_offset_y) + local_y;
+                    let coverage_x = bitcast<i32>(command.coverage_offset_x) + local_x;
+                    let coverage_y = bitcast<i32>(command.coverage_offset_y) + local_y;
                     let coverage_value = textureLoad(coverage_texture, vec2<i32>(coverage_x, coverage_y), 0).x;
                     if (coverage_value > 0.0) {
                         let blend_percentage = u32_to_f32(command.blend_percentage);
@@ -227,8 +228,8 @@ internal static class PreparedCompositeComputeShader
                             u32_to_f32(command.solid_a));
 
                         if (command.brush_type == 1u) {
-                            let origin_x = i32(command.brush_origin_x);
-                            let origin_y = i32(command.brush_origin_y);
+                            let origin_x = bitcast<i32>(command.brush_origin_x);
+                            let origin_y = bitcast<i32>(command.brush_origin_y);
                             let region_x = i32(command.brush_region_x);
                             let region_y = i32(command.brush_region_y);
                             let region_w = i32(command.brush_region_width);
