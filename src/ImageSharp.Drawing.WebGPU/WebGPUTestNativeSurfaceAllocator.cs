@@ -58,7 +58,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
 
         TextureDescriptor targetTextureDescriptor = new()
         {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
+            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding,
             Dimension = TextureDimension.Dimension2D,
             Size = new Extent3D((uint)width, (uint)height, 1),
             Format = textureFormat,

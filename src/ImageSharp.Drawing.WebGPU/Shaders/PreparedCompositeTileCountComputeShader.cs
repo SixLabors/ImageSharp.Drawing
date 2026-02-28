@@ -31,6 +31,8 @@ internal static class PreparedCompositeTileCountComputeShader
             solid_g: u32,
             solid_b: u32,
             solid_a: u32,
+            tile_emit_offset: u32,
+            tile_emit_count: u32,
         };
 
         struct DispatchConfig {
@@ -77,21 +79,24 @@ internal static class PreparedCompositeTileCountComputeShader
                 return;
             }
 
+            let emit_count = command.tile_emit_count;
+            var emitted: u32 = 0u;
             var tile_y = min_tile_y;
             loop {
-                if (tile_y > max_tile_y) {
+                if (tile_y > max_tile_y || emitted >= emit_count) {
                     break;
                 }
 
                 let row_offset = tile_y * dispatch_config.tile_count_x;
                 var tile_x = min_tile_x;
                 loop {
-                    if (tile_x > max_tile_x) {
+                    if (tile_x > max_tile_x || emitted >= emit_count) {
                         break;
                     }
 
                     let tile_index = row_offset + tile_x;
                     _ = atomicAdd(&tile_counts[tile_index], 1u);
+                    emitted += 1u;
                     tile_x += 1u;
                 }
 

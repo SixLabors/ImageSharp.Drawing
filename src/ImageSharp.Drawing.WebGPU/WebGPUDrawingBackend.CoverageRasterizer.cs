@@ -29,6 +29,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     private const int SegmentStrideBytes = 24;
     private const int SegmentAllocWorkgroupSize = 256;
 
+    private readonly Dictionary<CoverageDefinitionIdentity, CachedCoverageGeometry> coverageGeometryCache = new();
+
     private delegate uint BindGroupEntryWriter(Span<BindGroupEntry> entries);
 
     private unsafe delegate void ComputePassDispatch(ComputePassEncoder* pass);
@@ -60,865 +62,409 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         int currentTileY = 0;
         uint? fillRuleValue = null;
         uint? aliasedValue = null;
-        try
+        for (int i = 0; i < definitions.Count; i++)
         {
-            for (int i = 0; i < definitions.Count; i++)
+            CompositionCoverageDefinition definition = definitions[i];
+            Rectangle interest = definition.RasterizerOptions.Interest;
+            if (interest.Width <= 0 || interest.Height <= 0)
             {
-                CompositionCoverageDefinition definition = definitions[i];
-                Rectangle interest = definition.RasterizerOptions.Interest;
-                if (interest.Width <= 0 || interest.Height <= 0)
-                {
-                    error = "Invalid coverage bounds.";
-                    return false;
-                }
-
-                uint fillRule = definition.RasterizerOptions.IntersectionRule == IntersectionRule.EvenOdd ? 1u : 0u;
-                uint isAliased = definition.RasterizerOptions.RasterizationMode == RasterizationMode.Aliased ? 1u : 0u;
-                if ((fillRuleValue.HasValue && fillRuleValue.Value != fillRule) ||
-                    (aliasedValue.HasValue && aliasedValue.Value != isAliased))
-                {
-                    error = "Mixed rasterization modes are not supported in one flush coverage pass.";
-                    return false;
-                }
-
-                fillRuleValue ??= fillRule;
-                aliasedValue ??= isAliased;
-
-                int widthInTiles = (int)DivideRoundUp(interest.Width, TileWidth);
-                int heightInTiles = (int)DivideRoundUp(interest.Height, TileHeight);
-                int originTileX = 0;
-                int originTileY = currentTileY;
-                int originX = originTileX * TileWidth;
-                int originY = originTileY * TileHeight;
-
-                if (!TryBuildLineBuffer(
-                        definition.Path,
-                        in interest,
-                        definition.RasterizerOptions.SamplingOrigin,
-                        configuration.MemoryAllocator,
-                        out IMemoryOwner<byte>? lineOwner,
-                        out int lineCount,
-                        out _,
-                        out _,
-                        out _,
-                        out _,
-                        out uint estimatedSegments,
-                        out error))
-                {
-                    return false;
-                }
-
-                pathBuilds[i] = new CoveragePathBuild(
-                    lineOwner,
-                    lineCount,
-                    estimatedSegments,
-                    widthInTiles,
-                    heightInTiles,
-                    originTileX,
-                    originTileY,
-                    originX,
-                    originY,
-                    interest.Width,
-                    interest.Height);
-                coveragePlacements[i] = new CoveragePlacement(originX, originY, interest.Width, interest.Height);
-
-                totalLineCount = checked(totalLineCount + lineCount);
-                totalEstimatedSegments += estimatedSegments;
-                atlasWidthInTiles = Math.Max(atlasWidthInTiles, widthInTiles);
-                atlasHeightInTiles = Math.Max(atlasHeightInTiles, originTileY + heightInTiles);
-                currentTileY += heightInTiles;
-            }
-
-            totalTileCount = checked(atlasWidthInTiles * atlasHeightInTiles);
-
-            int atlasWidth = Math.Max(1, atlasWidthInTiles * TileWidth);
-            int atlasHeight = Math.Max(1, atlasHeightInTiles * TileHeight);
-            if (!TryCreateCoverageTexture(
-                    flushContext,
-                    atlasWidth,
-                    atlasHeight,
-                    configuration.MemoryAllocator,
-                    totalLineCount == 0,
-                    out Texture* coverageTexture,
-                    out coverageView,
-                    out error))
-            {
+                error = "Invalid coverage bounds.";
                 return false;
             }
-
-            flushContext.TrackTexture(coverageTexture);
-            flushContext.TrackTextureView(coverageView);
-            if (totalLineCount == 0)
-            {
-                return true;
-            }
-
-            int lineBufferBytes = checked(totalLineCount * LineStrideBytes);
-            using IMemoryOwner<byte> lineUploadOwner = configuration.MemoryAllocator.Allocate<byte>(lineBufferBytes);
-            Span<byte> lineUpload = lineUploadOwner.Memory.Span[..lineBufferBytes];
-            int mergedLineIndex = 0;
-            for (int pathIndex = 0; pathIndex < pathBuilds.Length; pathIndex++)
-            {
-                CoveragePathBuild build = pathBuilds[pathIndex];
-                if (build.LineCount == 0 || build.LineOwner is null)
-                {
-                    continue;
-                }
-
-                ReadOnlySpan<byte> sourceLines = build.LineOwner.Memory.Span[..(build.LineCount * LineStrideBytes)];
-                for (int lineIndex = 0; lineIndex < build.LineCount; lineIndex++)
-                {
-                    int sourceOffset = lineIndex * LineStrideBytes;
-                    float x0 = ReadFloat(sourceLines, sourceOffset + 8) + build.OriginX;
-                    float y0 = ReadFloat(sourceLines, sourceOffset + 12) + build.OriginY;
-                    float x1 = ReadFloat(sourceLines, sourceOffset + 16) + build.OriginX;
-                    float y1 = ReadFloat(sourceLines, sourceOffset + 20) + build.OriginY;
-                    WriteLine(lineUpload, mergedLineIndex, (uint)pathIndex, x0, y0, x1, y1);
-                    mergedLineIndex++;
-                }
-            }
-
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-lines",
-                    BufferUsage.Storage | BufferUsage.CopyDst,
-                    (nuint)lineBufferBytes,
-                    out WgpuBuffer* lineBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            fixed (byte* linePtr = lineUpload)
-            {
-                flushContext.Api.QueueWriteBuffer(
-                    flushContext.Queue,
-                    lineBuffer,
-                    0,
-                    linePtr,
-                    (nuint)lineBufferBytes);
-            }
-
-            int pathBufferBytes = checked(pathBuilds.Length * PathStrideBytes);
-            using IMemoryOwner<byte> pathUploadOwner = configuration.MemoryAllocator.Allocate<byte>(pathBufferBytes);
-            Span<byte> pathUpload = pathUploadOwner.Memory.Span[..pathBufferBytes];
-            int tileBase = 0;
-            for (int i = 0; i < pathBuilds.Length; i++)
-            {
-                CoveragePathBuild build = pathBuilds[i];
-                WritePath(
-                    pathUpload.Slice(i * PathStrideBytes, PathStrideBytes),
-                    (uint)build.OriginTileX,
-                    (uint)build.OriginTileY,
-                    (uint)(build.OriginTileX + atlasWidthInTiles),
-                    (uint)(build.OriginTileY + build.HeightInTiles),
-                    (uint)tileBase);
-                tileBase = checked(tileBase + (atlasWidthInTiles * build.HeightInTiles));
-            }
-
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-paths",
-                    BufferUsage.Storage | BufferUsage.CopyDst,
-                    (nuint)pathBufferBytes,
-                    out WgpuBuffer* pathBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            fixed (byte* pathPtr = pathUpload)
-            {
-                flushContext.Api.QueueWriteBuffer(
-                    flushContext.Queue,
-                    pathBuffer,
-                    0,
-                    pathPtr,
-                    (nuint)pathBufferBytes);
-            }
-
-            int tileBufferBytes = checked(totalTileCount * TileStrideBytes);
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-tiles",
-                    BufferUsage.Storage | BufferUsage.CopyDst,
-                    (nuint)tileBufferBytes,
-                    out WgpuBuffer* tileBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.CommandEncoderClearBuffer(
-                flushContext.CommandEncoder,
-                tileBuffer,
-                0,
-                (nuint)tileBufferBytes);
-
-            int tileCountsBytes = checked(totalTileCount * sizeof(uint));
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-tile-counts",
-                    BufferUsage.Storage | BufferUsage.CopyDst,
-                    (nuint)tileCountsBytes,
-                    out WgpuBuffer* tileCountsBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.CommandEncoderClearBuffer(
-                flushContext.CommandEncoder,
-                tileCountsBuffer,
-                0,
-                (nuint)tileCountsBytes);
-
-            if (totalEstimatedSegments > int.MaxValue)
-            {
-                error = "Coverage segment estimate overflow.";
-                return false;
-            }
-
-            uint segCountsCapacity = totalEstimatedSegments == 0 ? 1u : checked((uint)totalEstimatedSegments);
-            uint segmentsCapacity = segCountsCapacity;
-            int segCountsBytes = checked((int)segCountsCapacity * SegmentCountStrideBytes);
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-segment-counts",
-                    BufferUsage.Storage | BufferUsage.CopyDst,
-                    (nuint)segCountsBytes,
-                    out WgpuBuffer* segCountsBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.CommandEncoderClearBuffer(
-                flushContext.CommandEncoder,
-                segCountsBuffer,
-                0,
-                (nuint)segCountsBytes);
-
-            int segmentsBytes = checked((int)segmentsCapacity * SegmentStrideBytes);
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-segments",
-                    BufferUsage.Storage,
-                    (nuint)segmentsBytes,
-                    out WgpuBuffer* segmentsBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            RasterConfig config = new()
-            {
-                WidthInTiles = (uint)atlasWidthInTiles,
-                HeightInTiles = (uint)atlasHeightInTiles,
-                TargetWidth = (uint)atlasWidth,
-                TargetHeight = (uint)atlasHeight,
-                BaseColor = 0,
-                NDrawObj = 0,
-                NPath = (uint)pathBuilds.Length,
-                NClip = 0,
-                BinDataStart = 0,
-                PathtagBase = 0,
-                PathdataBase = 0,
-                DrawtagBase = 0,
-                DrawdataBase = 0,
-                TransformBase = 0,
-                StyleBase = 0,
-                LinesSize = (uint)totalLineCount,
-                BinningSize = (uint)pathBuilds.Length,
-                TilesSize = (uint)totalTileCount,
-                SegCountsSize = segCountsCapacity,
-                SegmentsSize = segmentsCapacity,
-                BlendSize = 1,
-                PtclSize = 1
-            };
-
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-raster-config",
-                    BufferUsage.Uniform | BufferUsage.CopyDst,
-                    (nuint)Unsafe.SizeOf<RasterConfig>(),
-                    out WgpuBuffer* configBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, configBuffer, 0, &config, (nuint)Unsafe.SizeOf<RasterConfig>());
-
-            BumpAllocatorsData bumpData = new()
-            {
-                Failed = 0,
-                Binning = 0,
-                Ptcl = 0,
-                Tile = 0,
-                SegCounts = 0,
-                Segments = 0,
-                Blend = 0,
-                Lines = (uint)totalLineCount
-            };
-
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-bump",
-                    BufferUsage.Storage | BufferUsage.CopyDst,
-                    (nuint)Unsafe.SizeOf<BumpAllocatorsData>(),
-                    out WgpuBuffer* bumpBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, bumpBuffer, 0, &bumpData, (nuint)Unsafe.SizeOf<BumpAllocatorsData>());
-
-            IndirectCountData indirectData = default;
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-indirect",
-                    BufferUsage.Storage | BufferUsage.Indirect | BufferUsage.CopyDst,
-                    (nuint)Unsafe.SizeOf<IndirectCountData>(),
-                    out WgpuBuffer* indirectBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, indirectBuffer, 0, &indirectData, (nuint)Unsafe.SizeOf<IndirectCountData>());
-
-            SegmentAllocConfig segmentAllocConfig = new() { TileCount = (uint)totalTileCount };
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-segment-alloc",
-                    BufferUsage.Uniform | BufferUsage.CopyDst,
-                    (nuint)Unsafe.SizeOf<SegmentAllocConfig>(),
-                    out WgpuBuffer* segmentAllocBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, segmentAllocBuffer, 0, &segmentAllocConfig, (nuint)Unsafe.SizeOf<SegmentAllocConfig>());
-
-            CoverageConfig coverageConfig = new()
-            {
-                TargetWidth = (uint)atlasWidth,
-                TargetHeight = (uint)atlasHeight,
-                TileOriginX = 0,
-                TileOriginY = 0,
-                TileWidthInTiles = (uint)atlasWidthInTiles,
-                TileHeightInTiles = (uint)atlasHeightInTiles,
-                FillRule = fillRuleValue.GetValueOrDefault(0),
-                IsAliased = aliasedValue.GetValueOrDefault(0)
-            };
-
-            if (!TryGetOrCreateCoverageBuffer(
-                    flushContext,
-                    "coverage-aggregated-coverage-config",
-                    BufferUsage.Uniform | BufferUsage.CopyDst,
-                    (nuint)Unsafe.SizeOf<CoverageConfig>(),
-                    out WgpuBuffer* coverageConfigBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.Api.QueueWriteBuffer(flushContext.Queue, coverageConfigBuffer, 0, &coverageConfig, (nuint)Unsafe.SizeOf<CoverageConfig>());
-
-            if (!this.DispatchPathCountSetup(flushContext, bumpBuffer, indirectBuffer, out error) ||
-                !this.DispatchPathCount(flushContext, configBuffer, bumpBuffer, lineBuffer, pathBuffer, tileBuffer, segCountsBuffer, indirectBuffer, out error) ||
-                !this.DispatchBackdrop(flushContext, configBuffer, tileBuffer, atlasHeightInTiles, out error) ||
-                !this.DispatchSegmentAlloc(flushContext, bumpBuffer, tileBuffer, tileCountsBuffer, segmentAllocBuffer, totalTileCount, out error) ||
-                !this.DispatchPathTilingSetup(flushContext, bumpBuffer, indirectBuffer, out error) ||
-                !this.DispatchPathTiling(flushContext, bumpBuffer, segCountsBuffer, lineBuffer, pathBuffer, tileBuffer, segmentsBuffer, indirectBuffer, out error) ||
-                !this.DispatchCoverageFine(flushContext, coverageConfigBuffer, tileBuffer, tileCountsBuffer, segmentsBuffer, coverageView, atlasWidthInTiles, atlasHeightInTiles, out error))
-            {
-                return false;
-            }
-
-            error = null;
-            return true;
-        }
-        finally
-        {
-            for (int i = 0; i < pathBuilds.Length; i++)
-            {
-                pathBuilds[i].LineOwner?.Dispose();
-            }
-        }
-    }
-
-    private bool TryCreateCoverageTextureFromFlattened<TPixel>(
-        WebGPUFlushContext flushContext,
-        in CompositionCoverageDefinition definition,
-        Configuration configuration,
-        out TextureView* coverageView,
-        out string? error)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        coverageView = null;
-        error = null;
-
-        Rectangle interest = definition.RasterizerOptions.Interest;
-        if (interest.Width <= 0 || interest.Height <= 0)
-        {
-            error = "Invalid coverage bounds.";
-            return false;
-        }
-
-        IMemoryOwner<byte>? lineOwner = null;
-        try
-        {
-            if (!TryBuildLineBuffer(
-                    definition.Path,
-                    in interest,
-                    definition.RasterizerOptions.SamplingOrigin,
-                    configuration.MemoryAllocator,
-                    out lineOwner,
-                    out int lineCount,
-                    out float minX,
-                    out float minY,
-                    out float maxX,
-                    out float maxY,
-                    out uint estimatedSegments,
-                    out error))
-            {
-                return false;
-            }
-
-            if (!TryCreateCoverageTexture(
-                    flushContext,
-                    interest.Width,
-                    interest.Height,
-                    configuration.MemoryAllocator,
-                    lineCount == 0,
-                    out Texture* coverageTexture,
-                    out coverageView,
-                    out error))
-            {
-                return false;
-            }
-
-            flushContext.TrackTexture(coverageTexture);
-            flushContext.TrackTextureView(coverageView);
-
-            if (lineCount == 0)
-            {
-                return true;
-            }
-
-            int widthInTiles = (int)DivideRoundUp(interest.Width, TileWidth);
-            int heightInTiles = (int)DivideRoundUp(interest.Height, TileHeight);
-            int tileMinX = 0;
-            int tileMinY = 0;
-            int tileMaxX = widthInTiles;
-            int tileMaxY = heightInTiles;
-
-            int tileWidth = tileMaxX - tileMinX;
-            int tileHeight = tileMaxY - tileMinY;
-            if (tileWidth <= 0 || tileHeight <= 0)
-            {
-                return true;
-            }
-
-            int tileCount = checked(tileWidth * tileHeight);
-            uint segCountsCapacity = estimatedSegments == 0 ? 1u : estimatedSegments;
-            uint segmentsCapacity = segCountsCapacity;
-
-            int lineBufferBytes = checked(lineCount * LineStrideBytes);
-            BufferDescriptor lineDescriptor = new()
-            {
-                Usage = BufferUsage.Storage | BufferUsage.CopyDst,
-                Size = (nuint)lineBufferBytes
-            };
-
-            WgpuBuffer* lineBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in lineDescriptor);
-            if (lineBuffer is null)
-            {
-                error = "Failed to create line buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(lineBuffer);
-            if (lineOwner is null)
-            {
-                error = "Missing line buffer allocation.";
-                return false;
-            }
-
-            Span<byte> lineBytes = lineOwner.Memory.Span[..lineBufferBytes];
-            fixed (byte* linePtr = lineBytes)
-            {
-                flushContext.Api.QueueWriteBuffer(
-                    flushContext.Queue,
-                    lineBuffer,
-                    0,
-                    linePtr,
-                    (nuint)lineBufferBytes);
-            }
-
-            Span<byte> pathBytes = stackalloc byte[PathStrideBytes];
-            WritePath(pathBytes, (uint)tileMinX, (uint)tileMinY, (uint)tileMaxX, (uint)tileMaxY);
-
-            BufferDescriptor pathDescriptor = new()
-            {
-                Usage = BufferUsage.Storage | BufferUsage.CopyDst,
-                Size = (nuint)PathStrideBytes
-            };
-
-            WgpuBuffer* pathBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in pathDescriptor);
-            if (pathBuffer is null)
-            {
-                error = "Failed to create path buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(pathBuffer);
-            fixed (byte* pathPtr = pathBytes)
-            {
-                flushContext.Api.QueueWriteBuffer(
-                    flushContext.Queue,
-                    pathBuffer,
-                    0,
-                    pathPtr,
-                    (nuint)PathStrideBytes);
-            }
-
-            int tileBufferBytes = checked(tileCount * TileStrideBytes);
-            BufferDescriptor tileDescriptor = new()
-            {
-                Usage = BufferUsage.Storage | BufferUsage.CopyDst,
-                Size = (nuint)tileBufferBytes
-            };
-
-            WgpuBuffer* tileBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in tileDescriptor);
-            if (tileBuffer is null)
-            {
-                error = "Failed to create tile buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(tileBuffer);
-            using (IMemoryOwner<byte> tileZeroOwner = configuration.MemoryAllocator.Allocate<byte>(tileBufferBytes))
-            {
-                Span<byte> tileZero = tileZeroOwner.Memory.Span[..tileBufferBytes];
-                tileZero.Clear();
-                fixed (byte* tilePtr = tileZero)
-                {
-                    flushContext.Api.QueueWriteBuffer(
-                        flushContext.Queue,
-                        tileBuffer,
-                        0,
-                        tilePtr,
-                        (nuint)tileBufferBytes);
-                }
-            }
-
-            int tileCountsBytes = checked(tileCount * sizeof(uint));
-            BufferDescriptor tileCountsDescriptor = new()
-            {
-                Usage = BufferUsage.Storage | BufferUsage.CopyDst,
-                Size = (nuint)tileCountsBytes
-            };
-
-            WgpuBuffer* tileCountsBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in tileCountsDescriptor);
-            if (tileCountsBuffer is null)
-            {
-                error = "Failed to create tile counts buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(tileCountsBuffer);
-            using (IMemoryOwner<byte> tileCountsZeroOwner = configuration.MemoryAllocator.Allocate<byte>(tileCountsBytes))
-            {
-                Span<byte> tileCountsZero = tileCountsZeroOwner.Memory.Span[..tileCountsBytes];
-                tileCountsZero.Clear();
-                fixed (byte* tileCountsPtr = tileCountsZero)
-                {
-                    flushContext.Api.QueueWriteBuffer(
-                        flushContext.Queue,
-                        tileCountsBuffer,
-                        0,
-                        tileCountsPtr,
-                        (nuint)tileCountsBytes);
-                }
-            }
-
-            int segCountsBytes = checked((int)segCountsCapacity * SegmentCountStrideBytes);
-            BufferDescriptor segCountsDescriptor = new()
-            {
-                Usage = BufferUsage.Storage | BufferUsage.CopyDst,
-                Size = (nuint)segCountsBytes
-            };
-
-            WgpuBuffer* segCountsBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in segCountsDescriptor);
-            if (segCountsBuffer is null)
-            {
-                error = "Failed to create segment counts buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(segCountsBuffer);
-
-            int segmentsBytes = checked((int)segmentsCapacity * SegmentStrideBytes);
-            BufferDescriptor segmentsDescriptor = new()
-            {
-                Usage = BufferUsage.Storage,
-                Size = (nuint)segmentsBytes
-            };
-
-            WgpuBuffer* segmentsBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in segmentsDescriptor);
-            if (segmentsBuffer is null)
-            {
-                error = "Failed to create segments buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(segmentsBuffer);
-
-            RasterConfig config = new()
-            {
-                WidthInTiles = (uint)widthInTiles,
-                HeightInTiles = (uint)heightInTiles,
-                TargetWidth = (uint)interest.Width,
-                TargetHeight = (uint)interest.Height,
-                BaseColor = 0,
-                NDrawObj = 0,
-                NPath = 1,
-                NClip = 0,
-                BinDataStart = 0,
-                PathtagBase = 0,
-                PathdataBase = 0,
-                DrawtagBase = 0,
-                DrawdataBase = 0,
-                TransformBase = 0,
-                StyleBase = 0,
-                LinesSize = (uint)lineCount,
-                BinningSize = 1,
-                TilesSize = (uint)tileCount,
-                SegCountsSize = segCountsCapacity,
-                SegmentsSize = segmentsCapacity,
-                BlendSize = 1,
-                PtclSize = 1
-            };
-
-            BufferDescriptor configDescriptor = new()
-            {
-                Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
-                Size = (nuint)Unsafe.SizeOf<RasterConfig>()
-            };
-
-            WgpuBuffer* configBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in configDescriptor);
-            if (configBuffer is null)
-            {
-                error = "Failed to create config buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(configBuffer);
-            flushContext.Api.QueueWriteBuffer(
-                flushContext.Queue,
-                configBuffer,
-                0,
-                &config,
-                (nuint)Unsafe.SizeOf<RasterConfig>());
-
-            BumpAllocatorsData bumpData = new()
-            {
-                Failed = 0,
-                Binning = 0,
-                Ptcl = 0,
-                Tile = 0,
-                SegCounts = 0,
-                Segments = 0,
-                Blend = 0,
-                Lines = (uint)lineCount
-            };
-
-            BufferDescriptor bumpDescriptor = new()
-            {
-                Usage = BufferUsage.Storage | BufferUsage.CopyDst,
-                Size = (nuint)Unsafe.SizeOf<BumpAllocatorsData>()
-            };
-
-            WgpuBuffer* bumpBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in bumpDescriptor);
-            if (bumpBuffer is null)
-            {
-                error = "Failed to create bump buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(bumpBuffer);
-            flushContext.Api.QueueWriteBuffer(
-                flushContext.Queue,
-                bumpBuffer,
-                0,
-                &bumpData,
-                (nuint)Unsafe.SizeOf<BumpAllocatorsData>());
-
-            IndirectCountData indirectData = default;
-            BufferDescriptor indirectDescriptor = new()
-            {
-                Usage = BufferUsage.Storage | BufferUsage.Indirect | BufferUsage.CopyDst,
-                Size = (nuint)Unsafe.SizeOf<IndirectCountData>()
-            };
-
-            WgpuBuffer* indirectBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in indirectDescriptor);
-            if (indirectBuffer is null)
-            {
-                error = "Failed to create indirect dispatch buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(indirectBuffer);
-            flushContext.Api.QueueWriteBuffer(
-                flushContext.Queue,
-                indirectBuffer,
-                0,
-                &indirectData,
-                (nuint)Unsafe.SizeOf<IndirectCountData>());
-
-            SegmentAllocConfig segmentAllocConfig = new() { TileCount = (uint)tileCount };
-            BufferDescriptor segmentAllocDescriptor = new()
-            {
-                Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
-                Size = (nuint)Unsafe.SizeOf<SegmentAllocConfig>()
-            };
-
-            WgpuBuffer* segmentAllocBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in segmentAllocDescriptor);
-            if (segmentAllocBuffer is null)
-            {
-                error = "Failed to create segment allocation buffer.";
-                return false;
-            }
-
-            flushContext.TrackBuffer(segmentAllocBuffer);
-            flushContext.Api.QueueWriteBuffer(
-                flushContext.Queue,
-                segmentAllocBuffer,
-                0,
-                &segmentAllocConfig,
-                (nuint)Unsafe.SizeOf<SegmentAllocConfig>());
 
             uint fillRule = definition.RasterizerOptions.IntersectionRule == IntersectionRule.EvenOdd ? 1u : 0u;
             uint isAliased = definition.RasterizerOptions.RasterizationMode == RasterizationMode.Aliased ? 1u : 0u;
-            CoverageConfig coverageConfig = new()
+            if ((fillRuleValue.HasValue && fillRuleValue.Value != fillRule) ||
+                (aliasedValue.HasValue && aliasedValue.Value != isAliased))
             {
-                TargetWidth = (uint)interest.Width,
-                TargetHeight = (uint)interest.Height,
-                TileOriginX = (uint)tileMinX,
-                TileOriginY = (uint)tileMinY,
-                TileWidthInTiles = (uint)tileWidth,
-                TileHeightInTiles = (uint)tileHeight,
-                FillRule = fillRule,
-                IsAliased = isAliased
-            };
-
-            BufferDescriptor coverageConfigDescriptor = new()
-            {
-                Usage = BufferUsage.Uniform | BufferUsage.CopyDst,
-                Size = (nuint)Unsafe.SizeOf<CoverageConfig>()
-            };
-
-            WgpuBuffer* coverageConfigBuffer = flushContext.Api.DeviceCreateBuffer(flushContext.Device, in coverageConfigDescriptor);
-            if (coverageConfigBuffer is null)
-            {
-                error = "Failed to create coverage config buffer.";
+                error = "Mixed rasterization modes are not supported in one flush coverage pass.";
                 return false;
             }
 
-            flushContext.TrackBuffer(coverageConfigBuffer);
-            flushContext.Api.QueueWriteBuffer(
-                flushContext.Queue,
-                coverageConfigBuffer,
-                0,
-                &coverageConfig,
-                (nuint)Unsafe.SizeOf<CoverageConfig>());
+            fillRuleValue ??= fillRule;
+            aliasedValue ??= isAliased;
 
-            if (!this.DispatchPathCountSetup(flushContext, bumpBuffer, indirectBuffer, out error))
+            int widthInTiles = (int)DivideRoundUp(interest.Width, TileWidth);
+            int heightInTiles = (int)DivideRoundUp(interest.Height, TileHeight);
+            int originTileX = 0;
+            int originTileY = currentTileY;
+            int originX = originTileX * TileWidth;
+            int originY = originTileY * TileHeight;
+
+            CoverageDefinitionIdentity identity = new(definition);
+            if (!this.coverageGeometryCache.TryGetValue(identity, out CachedCoverageGeometry? geometry))
             {
+                IMemoryOwner<byte>? lineOwner = null;
+                try
+                {
+                    if (!TryBuildLineBuffer(
+                            definition.Path,
+                            in interest,
+                            definition.RasterizerOptions.SamplingOrigin,
+                            configuration.MemoryAllocator,
+                            out lineOwner,
+                            out int lineCount,
+                            out _,
+                            out _,
+                            out _,
+                            out _,
+                            out uint estimatedSegments,
+                            out error))
+                    {
+                        return false;
+                    }
+
+                    geometry = new CachedCoverageGeometry(
+                        lineOwner,
+                        lineCount,
+                        estimatedSegments,
+                        widthInTiles,
+                        heightInTiles,
+                        interest.Width,
+                        interest.Height);
+                    lineOwner = null;
+                    this.coverageGeometryCache[identity] = geometry;
+                }
+                finally
+                {
+                    lineOwner?.Dispose();
+                }
+            }
+
+            if (geometry is null)
+            {
+                error = "Failed to resolve cached coverage geometry.";
                 return false;
             }
 
-            if (!this.DispatchPathCount(
-                    flushContext,
-                    configBuffer,
-                    bumpBuffer,
-                    lineBuffer,
-                    pathBuffer,
-                    tileBuffer,
-                    segCountsBuffer,
-                    indirectBuffer,
-                    out error))
-            {
-                return false;
-            }
+            pathBuilds[i] = new CoveragePathBuild(
+                geometry,
+                originTileX,
+                originTileY,
+                originX,
+                originY);
+            coveragePlacements[i] = new CoveragePlacement(originX, originY, interest.Width, interest.Height);
 
-            if (!this.DispatchBackdrop(
-                    flushContext,
-                    configBuffer,
-                    tileBuffer,
-                    heightInTiles,
-                    out error))
-            {
-                return false;
-            }
+            totalLineCount = checked(totalLineCount + geometry.LineCount);
+            totalEstimatedSegments += geometry.EstimatedSegments;
+            atlasWidthInTiles = Math.Max(atlasWidthInTiles, geometry.WidthInTiles);
+            atlasHeightInTiles = Math.Max(atlasHeightInTiles, originTileY + geometry.HeightInTiles);
+            currentTileY += geometry.HeightInTiles;
+        }
 
-            if (!this.DispatchSegmentAlloc(
-                    flushContext,
-                    bumpBuffer,
-                    tileBuffer,
-                    tileCountsBuffer,
-                    segmentAllocBuffer,
-                    tileCount,
-                    out error))
-            {
-                return false;
-            }
+        totalTileCount = checked(atlasWidthInTiles * atlasHeightInTiles);
 
-            if (!this.DispatchPathTilingSetup(flushContext, bumpBuffer, indirectBuffer, out error))
-            {
-                return false;
-            }
+        int atlasWidth = Math.Max(1, atlasWidthInTiles * TileWidth);
+        int atlasHeight = Math.Max(1, atlasHeightInTiles * TileHeight);
+        if (!TryCreateCoverageTexture(
+                flushContext,
+                atlasWidth,
+                atlasHeight,
+                configuration.MemoryAllocator,
+                totalLineCount == 0,
+                out Texture* coverageTexture,
+                out coverageView,
+                out error))
+        {
+            return false;
+        }
 
-            if (!this.DispatchPathTiling(
-                    flushContext,
-                    bumpBuffer,
-                    segCountsBuffer,
-                    lineBuffer,
-                    pathBuffer,
-                    tileBuffer,
-                    segmentsBuffer,
-                    indirectBuffer,
-                    out error))
-            {
-                return false;
-            }
-
-            if (!this.DispatchCoverageFine(
-                    flushContext,
-                    coverageConfigBuffer,
-                    tileBuffer,
-                    tileCountsBuffer,
-                    segmentsBuffer,
-                    coverageView,
-                    tileWidth,
-                    tileHeight,
-                    out error))
-            {
-                return false;
-            }
-
-            error = null;
+        flushContext.TrackTexture(coverageTexture);
+        flushContext.TrackTextureView(coverageView);
+        if (totalLineCount == 0)
+        {
             return true;
         }
-        finally
+
+        int lineBufferBytes = checked(totalLineCount * LineStrideBytes);
+        using IMemoryOwner<byte> lineUploadOwner = configuration.MemoryAllocator.Allocate<byte>(lineBufferBytes);
+        Span<byte> lineUpload = lineUploadOwner.Memory.Span[..lineBufferBytes];
+        int mergedLineIndex = 0;
+        for (int pathIndex = 0; pathIndex < pathBuilds.Length; pathIndex++)
         {
-            lineOwner?.Dispose();
+            CoveragePathBuild build = pathBuilds[pathIndex];
+            CachedCoverageGeometry geometry = build.Geometry;
+            if (geometry.LineCount == 0 || geometry.LineOwner is null)
+            {
+                continue;
+            }
+
+            ReadOnlySpan<byte> sourceLines = geometry.LineOwner.Memory.Span[..(geometry.LineCount * LineStrideBytes)];
+            for (int lineIndex = 0; lineIndex < geometry.LineCount; lineIndex++)
+            {
+                int sourceOffset = lineIndex * LineStrideBytes;
+                float x0 = ReadFloat(sourceLines, sourceOffset + 8) + build.OriginX;
+                float y0 = ReadFloat(sourceLines, sourceOffset + 12) + build.OriginY;
+                float x1 = ReadFloat(sourceLines, sourceOffset + 16) + build.OriginX;
+                float y1 = ReadFloat(sourceLines, sourceOffset + 20) + build.OriginY;
+                WriteLine(lineUpload, mergedLineIndex, (uint)pathIndex, x0, y0, x1, y1);
+                mergedLineIndex++;
+            }
         }
+
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-lines",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                (nuint)lineBufferBytes,
+                out WgpuBuffer* lineBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        fixed (byte* lineUploadPtr = lineUpload)
+        {
+            flushContext.Api.QueueWriteBuffer(
+                flushContext.Queue,
+                lineBuffer,
+                0,
+                lineUploadPtr,
+                (nuint)lineBufferBytes);
+        }
+
+        int pathBufferBytes = checked(pathBuilds.Length * PathStrideBytes);
+        using IMemoryOwner<byte> pathUploadOwner = configuration.MemoryAllocator.Allocate<byte>(pathBufferBytes);
+        Span<byte> pathUpload = pathUploadOwner.Memory.Span[..pathBufferBytes];
+        int tileBase = 0;
+        for (int i = 0; i < pathBuilds.Length; i++)
+        {
+            CoveragePathBuild build = pathBuilds[i];
+            WritePath(
+                pathUpload.Slice(i * PathStrideBytes, PathStrideBytes),
+                (uint)build.OriginTileX,
+                (uint)build.OriginTileY,
+                (uint)(build.OriginTileX + atlasWidthInTiles),
+                (uint)(build.OriginTileY + build.Geometry.HeightInTiles),
+                (uint)tileBase);
+            tileBase = checked(tileBase + (atlasWidthInTiles * build.Geometry.HeightInTiles));
+        }
+
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-paths",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                (nuint)pathBufferBytes,
+                out WgpuBuffer* pathBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        fixed (byte* pathUploadPtr = pathUpload)
+        {
+            flushContext.Api.QueueWriteBuffer(
+                flushContext.Queue,
+                pathBuffer,
+                0,
+                pathUploadPtr,
+                (nuint)pathBufferBytes);
+        }
+
+        int tileBufferBytes = checked(totalTileCount * TileStrideBytes);
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-tiles",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                (nuint)tileBufferBytes,
+                out WgpuBuffer* tileBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.CommandEncoderClearBuffer(
+            flushContext.CommandEncoder,
+            tileBuffer,
+            0,
+            (nuint)tileBufferBytes);
+
+        int tileCountsBytes = checked(totalTileCount * sizeof(uint));
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-tile-counts",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                (nuint)tileCountsBytes,
+                out WgpuBuffer* tileCountsBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.CommandEncoderClearBuffer(
+            flushContext.CommandEncoder,
+            tileCountsBuffer,
+            0,
+            (nuint)tileCountsBytes);
+
+        if (totalEstimatedSegments > int.MaxValue)
+        {
+            error = "Coverage segment estimate overflow.";
+            return false;
+        }
+
+        uint segCountsCapacity = totalEstimatedSegments == 0 ? 1u : checked((uint)totalEstimatedSegments);
+        uint segmentsCapacity = segCountsCapacity;
+        int segCountsBytes = checked((int)segCountsCapacity * SegmentCountStrideBytes);
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-segment-counts",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                (nuint)segCountsBytes,
+                out WgpuBuffer* segCountsBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.CommandEncoderClearBuffer(
+            flushContext.CommandEncoder,
+            segCountsBuffer,
+            0,
+            (nuint)segCountsBytes);
+
+        int segmentsBytes = checked((int)segmentsCapacity * SegmentStrideBytes);
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-segments",
+                BufferUsage.Storage,
+                (nuint)segmentsBytes,
+                out WgpuBuffer* segmentsBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        RasterConfig config = new()
+        {
+            WidthInTiles = (uint)atlasWidthInTiles,
+            HeightInTiles = (uint)atlasHeightInTiles,
+            TargetWidth = (uint)atlasWidth,
+            TargetHeight = (uint)atlasHeight,
+            BaseColor = 0,
+            NDrawObj = 0,
+            NPath = (uint)pathBuilds.Length,
+            NClip = 0,
+            BinDataStart = 0,
+            PathtagBase = 0,
+            PathdataBase = 0,
+            DrawtagBase = 0,
+            DrawdataBase = 0,
+            TransformBase = 0,
+            StyleBase = 0,
+            LinesSize = (uint)totalLineCount,
+            BinningSize = (uint)pathBuilds.Length,
+            TilesSize = (uint)totalTileCount,
+            SegCountsSize = segCountsCapacity,
+            SegmentsSize = segmentsCapacity,
+            BlendSize = 1,
+            PtclSize = 1
+        };
+
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-raster-config",
+                BufferUsage.Uniform | BufferUsage.CopyDst,
+                (nuint)Unsafe.SizeOf<RasterConfig>(),
+                out WgpuBuffer* configBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.QueueWriteBuffer(flushContext.Queue, configBuffer, 0, &config, (nuint)Unsafe.SizeOf<RasterConfig>());
+
+        BumpAllocatorsData bumpData = new()
+        {
+            Failed = 0,
+            Binning = 0,
+            Ptcl = 0,
+            Tile = 0,
+            SegCounts = 0,
+            Segments = 0,
+            Blend = 0,
+            Lines = (uint)totalLineCount
+        };
+
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-bump",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                (nuint)Unsafe.SizeOf<BumpAllocatorsData>(),
+                out WgpuBuffer* bumpBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.QueueWriteBuffer(flushContext.Queue, bumpBuffer, 0, &bumpData, (nuint)Unsafe.SizeOf<BumpAllocatorsData>());
+
+        IndirectCountData indirectData = default;
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-indirect",
+                BufferUsage.Storage | BufferUsage.Indirect | BufferUsage.CopyDst,
+                (nuint)Unsafe.SizeOf<IndirectCountData>(),
+                out WgpuBuffer* indirectBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.QueueWriteBuffer(flushContext.Queue, indirectBuffer, 0, &indirectData, (nuint)Unsafe.SizeOf<IndirectCountData>());
+
+        SegmentAllocConfig segmentAllocConfig = new() { TileCount = (uint)totalTileCount };
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-segment-alloc",
+                BufferUsage.Uniform | BufferUsage.CopyDst,
+                (nuint)Unsafe.SizeOf<SegmentAllocConfig>(),
+                out WgpuBuffer* segmentAllocBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.QueueWriteBuffer(flushContext.Queue, segmentAllocBuffer, 0, &segmentAllocConfig, (nuint)Unsafe.SizeOf<SegmentAllocConfig>());
+
+        CoverageConfig coverageConfig = new()
+        {
+            TargetWidth = (uint)atlasWidth,
+            TargetHeight = (uint)atlasHeight,
+            TileOriginX = 0,
+            TileOriginY = 0,
+            TileWidthInTiles = (uint)atlasWidthInTiles,
+            TileHeightInTiles = (uint)atlasHeightInTiles,
+            FillRule = fillRuleValue.GetValueOrDefault(0),
+            IsAliased = aliasedValue.GetValueOrDefault(0)
+        };
+
+        if (!TryGetOrCreateCoverageBuffer(
+                flushContext,
+                "coverage-aggregated-coverage-config",
+                BufferUsage.Uniform | BufferUsage.CopyDst,
+                (nuint)Unsafe.SizeOf<CoverageConfig>(),
+                out WgpuBuffer* coverageConfigBuffer,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.QueueWriteBuffer(flushContext.Queue, coverageConfigBuffer, 0, &coverageConfig, (nuint)Unsafe.SizeOf<CoverageConfig>());
+
+        if (!this.DispatchPathCountSetup(flushContext, bumpBuffer, indirectBuffer, out error) ||
+            !this.DispatchPathCount(flushContext, configBuffer, bumpBuffer, lineBuffer, pathBuffer, tileBuffer, segCountsBuffer, indirectBuffer, out error) ||
+            !this.DispatchBackdrop(flushContext, configBuffer, tileBuffer, atlasHeightInTiles, out error) ||
+            !this.DispatchSegmentAlloc(flushContext, bumpBuffer, tileBuffer, tileCountsBuffer, segmentAllocBuffer, totalTileCount, out error) ||
+            !this.DispatchPathTilingSetup(flushContext, bumpBuffer, indirectBuffer, out error) ||
+            !this.DispatchPathTiling(flushContext, bumpBuffer, segCountsBuffer, lineBuffer, pathBuffer, tileBuffer, segmentsBuffer, indirectBuffer, out error) ||
+            !this.DispatchCoverageFine(flushContext, coverageConfigBuffer, tileBuffer, tileCountsBuffer, segmentsBuffer, coverageView, atlasWidthInTiles, atlasHeightInTiles, out error))
+        {
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     private static bool TryGetOrCreateCoverageBuffer(
@@ -935,6 +481,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             out buffer,
             out _,
             out error);
+
+    private void DisposeCoverageResources()
+    {
+        foreach (CachedCoverageGeometry geometry in this.coverageGeometryCache.Values)
+        {
+            geometry.Dispose();
+        }
+
+        this.coverageGeometryCache.Clear();
+    }
 
     private static bool TryBuildLineBuffer(
         IPath path,
@@ -1940,40 +1496,20 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     private readonly struct CoveragePathBuild
     {
         public CoveragePathBuild(
-            IMemoryOwner<byte>? lineOwner,
-            int lineCount,
-            uint estimatedSegments,
-            int widthInTiles,
-            int heightInTiles,
+            CachedCoverageGeometry geometry,
             int originTileX,
             int originTileY,
             int originX,
-            int originY,
-            int coverageWidth,
-            int coverageHeight)
+            int originY)
         {
-            this.LineOwner = lineOwner;
-            this.LineCount = lineCount;
-            this.EstimatedSegments = estimatedSegments;
-            this.WidthInTiles = widthInTiles;
-            this.HeightInTiles = heightInTiles;
+            this.Geometry = geometry;
             this.OriginTileX = originTileX;
             this.OriginTileY = originTileY;
             this.OriginX = originX;
             this.OriginY = originY;
-            this.CoverageWidth = coverageWidth;
-            this.CoverageHeight = coverageHeight;
         }
 
-        public IMemoryOwner<byte>? LineOwner { get; }
-
-        public int LineCount { get; }
-
-        public uint EstimatedSegments { get; }
-
-        public int WidthInTiles { get; }
-
-        public int HeightInTiles { get; }
+        public CachedCoverageGeometry Geometry { get; }
 
         public int OriginTileX { get; }
 
@@ -1982,10 +1518,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public int OriginX { get; }
 
         public int OriginY { get; }
-
-        public int CoverageWidth { get; }
-
-        public int CoverageHeight { get; }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -2058,5 +1590,43 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public uint TileHeightInTiles;
         public uint FillRule;
         public uint IsAliased;
+    }
+
+    private sealed class CachedCoverageGeometry : IDisposable
+    {
+        public CachedCoverageGeometry(
+            IMemoryOwner<byte>? lineOwner,
+            int lineCount,
+            uint estimatedSegments,
+            int widthInTiles,
+            int heightInTiles,
+            int coverageWidth,
+            int coverageHeight)
+        {
+            this.LineOwner = lineOwner;
+            this.LineCount = lineCount;
+            this.EstimatedSegments = estimatedSegments;
+            this.WidthInTiles = widthInTiles;
+            this.HeightInTiles = heightInTiles;
+            this.CoverageWidth = coverageWidth;
+            this.CoverageHeight = coverageHeight;
+        }
+
+        public IMemoryOwner<byte>? LineOwner { get; }
+
+        public int LineCount { get; }
+
+        public uint EstimatedSegments { get; }
+
+        public int WidthInTiles { get; }
+
+        public int HeightInTiles { get; }
+
+        public int CoverageWidth { get; }
+
+        public int CoverageHeight { get; }
+
+        public void Dispose()
+            => this.LineOwner?.Dispose();
     }
 }

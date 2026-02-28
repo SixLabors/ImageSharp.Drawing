@@ -37,10 +37,12 @@ internal static class PreparedCompositeTilePrefixComputeShader
                     break;
                 }
 
+                let tile_count = atomicLoad(&tile_counts[tile_index]);
                 tile_starts[tile_index] = running;
-                running = running + atomicLoad(&tile_counts[tile_index]);
-                tile_index += 1u;
+                running = running + tile_count;
+                tile_index = tile_index + 1u;
             }
+
         }
         """u8,
         0

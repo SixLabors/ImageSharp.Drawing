@@ -103,27 +103,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
     public nuint InstanceBufferWriteOffset { get; internal set; }
 
-    /// <summary>
-    /// Gets or sets the flush-scoped destination pixel buffer used by composition compute shaders.
-    /// This buffer is initialized once per flush from the target texture and reused across composition batches.
-    /// </summary>
-    public WgpuBuffer* CompositeDestinationPixelsBuffer { get; internal set; }
-
-    /// <summary>
-    /// Gets or sets the byte size of <see cref="CompositeDestinationPixelsBuffer"/>.
-    /// </summary>
-    public nuint CompositeDestinationPixelsByteSize { get; internal set; }
-
-    /// <summary>
-    /// Gets or sets the destination buffer width represented by <see cref="CompositeDestinationPixelsBuffer"/>.
-    /// </summary>
-    public int CompositeDestinationWidth { get; internal set; }
-
-    /// <summary>
-    /// Gets or sets the destination buffer height represented by <see cref="CompositeDestinationPixelsBuffer"/>.
-    /// </summary>
-    public int CompositeDestinationHeight { get; internal set; }
-
     public CommandEncoder* CommandEncoder { get; set; }
 
     public RenderPassEncoder* PassEncoder { get; private set; }
@@ -490,10 +469,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ReadbackBuffer = null;
         this.TargetView = null;
         this.TargetTexture = null;
-        this.CompositeDestinationPixelsBuffer = null;
-        this.CompositeDestinationPixelsByteSize = 0;
-        this.CompositeDestinationWidth = 0;
-        this.CompositeDestinationHeight = 0;
         this.ReadbackBytesPerRow = 0;
         this.ReadbackByteCount = 0;
         this.RequiresReadback = false;
