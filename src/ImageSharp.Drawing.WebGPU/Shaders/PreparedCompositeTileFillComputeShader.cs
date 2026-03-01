@@ -3,8 +3,14 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// Expands per-bin command lists into per-tile command indices after prefix sizing.
+/// </summary>
 internal static class PreparedCompositeTileFillComputeShader
 {
+    /// <summary>
+    /// Gets the null-terminated WGSL source for per-tile command index expansion.
+    /// </summary>
     private static readonly byte[] CodeBytes =
     [
         .. """
@@ -108,5 +114,6 @@ internal static class PreparedCompositeTileFillComputeShader
         0
     ];
 
+    /// <summary>Gets the WGSL source for this shader as a null-terminated UTF-8 span.</summary>
     public static ReadOnlySpan<byte> Code => CodeBytes;
 }

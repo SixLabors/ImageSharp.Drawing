@@ -43,7 +43,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private const int CompositeComputeWorkgroupSize = 8;
     private const int CompositeTileWidth = 16;
     private const int CompositeTileHeight = 16;
-    private const int CompositeTileCommandWorkgroupSize = 64;
     private const int CompositeBinTileCountX = 16;
     private const int CompositeBinTileCountY = 16;
     private const int CompositeBinningWorkgroupSize = 256;
@@ -2163,6 +2162,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return signal.Wait(CallbackTimeoutMilliseconds);
     }
 
+    /// <summary>
+    /// Key that identifies a coverage definition for reuse within a flush.
+    /// </summary>
     private readonly struct CoverageDefinitionIdentity : IEquatable<CoverageDefinitionIdentity>
     {
         private readonly int definitionKey;
@@ -2182,6 +2184,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.samplingOrigin = definition.RasterizerOptions.SamplingOrigin;
         }
 
+        /// <summary>
+        /// Determines whether this identity equals the provided coverage identity.
+        /// </summary>
+        /// <param name="other">The identity to compare.</param>
+        /// <returns><see langword="true"/> when the identities describe the same coverage definition; otherwise <see langword="false"/>.</returns>
         public bool Equals(CoverageDefinitionIdentity other)
             => this.definitionKey == other.definitionKey &&
                ReferenceEquals(this.path, other.path) &&
@@ -2190,9 +2197,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                this.rasterizationMode == other.rasterizationMode &&
                this.samplingOrigin == other.samplingOrigin;
 
+        /// <inheritdoc/>
         public override bool Equals(object? obj)
             => obj is CoverageDefinitionIdentity other && this.Equals(other);
 
+        /// <inheritdoc/>
         public override int GetHashCode()
             => HashCode.Combine(
                 this.definitionKey,
@@ -2222,6 +2231,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         public int Height { get; }
     }
 
+    /// <summary>
+    /// Dispatch constants shared across composite compute passes.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct PreparedCompositeDispatchConfig
     {
@@ -2279,6 +2291,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
+    /// <summary>
+    /// Integer bounding box for a prepared composite command in destination-local coordinates.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct PreparedCompositeCommandBbox
     {
@@ -2296,6 +2311,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
+    /// <summary>
+    /// Per-bin header describing the packed command list region.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct PreparedCompositeBinHeader
     {
@@ -2309,6 +2327,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
     }
 
+    /// <summary>
+    /// Bump allocator state for command binning.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct PreparedCompositeBinningBump
     {

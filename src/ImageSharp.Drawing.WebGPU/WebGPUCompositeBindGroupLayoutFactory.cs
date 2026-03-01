@@ -6,7 +6,7 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Creates a bind-group layout for one composite brush pipeline.
+/// Creates a bind group layout for WebGPU composition pipelines.
 /// </summary>
 /// <param name="api">The WebGPU API facade.</param>
 /// <param name="device">The device used to create resources.</param>

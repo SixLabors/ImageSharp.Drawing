@@ -12,8 +12,14 @@ using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// Blend mode selection for render-pipeline-based composition passes.
+/// </summary>
 internal enum CompositePipelineBlendMode
 {
+    /// <summary>
+    /// Uses default blending behavior for the render pipeline variant.
+    /// </summary>
     None = 0
 }
 
@@ -61,16 +67,34 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.DeviceState = deviceState;
     }
 
+    /// <summary>
+    /// Gets the runtime lease that keeps the process-level WebGPU API alive.
+    /// </summary>
     public WebGPURuntime.Lease RuntimeLease { get; }
 
+    /// <summary>
+    /// Gets the WebGPU API facade for this flush.
+    /// </summary>
     public WebGPU Api { get; }
 
+    /// <summary>
+    /// Gets the device used to create and execute GPU resources.
+    /// </summary>
     public Device* Device { get; }
 
+    /// <summary>
+    /// Gets the queue used to submit GPU work.
+    /// </summary>
     public Queue* Queue { get; }
 
+    /// <summary>
+    /// Gets the target bounds for this flush context.
+    /// </summary>
     public Rectangle TargetBounds { get; }
 
+    /// <summary>
+    /// Gets the target texture format for this flush.
+    /// </summary>
     public TextureFormat TextureFormat { get; }
 
     /// <summary>
@@ -78,12 +102,24 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     public MemoryAllocator MemoryAllocator { get; }
 
+    /// <summary>
+    /// Gets device-scoped shared caches and reusable resources.
+    /// </summary>
     public DeviceSharedState DeviceState { get; }
 
+    /// <summary>
+    /// Gets the target texture receiving render/composite output.
+    /// </summary>
     public Texture* TargetTexture { get; private set; }
 
+    /// <summary>
+    /// Gets the texture view used when binding the target texture.
+    /// </summary>
     public TextureView* TargetView { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether CPU readback is required after GPU execution.
+    /// </summary>
     public bool RequiresReadback { get; private set; }
 
     /// <summary>
@@ -91,22 +127,49 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     public bool CanSampleTargetTexture { get; private set; }
 
+    /// <summary>
+    /// Gets the readback buffer used when CPU readback is required.
+    /// </summary>
     public WgpuBuffer* ReadbackBuffer { get; private set; }
 
+    /// <summary>
+    /// Gets the readback row stride in bytes.
+    /// </summary>
     public uint ReadbackBytesPerRow { get; private set; }
 
+    /// <summary>
+    /// Gets the readback buffer byte size.
+    /// </summary>
     public ulong ReadbackByteCount { get; private set; }
 
+    /// <summary>
+    /// Gets the shared instance-data buffer used for parameter uploads.
+    /// </summary>
     public WgpuBuffer* InstanceBuffer { get; private set; }
 
+    /// <summary>
+    /// Gets the instance buffer capacity in bytes.
+    /// </summary>
     public nuint InstanceBufferCapacity { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the current write offset into <see cref="InstanceBuffer"/>.
+    /// </summary>
     public nuint InstanceBufferWriteOffset { get; internal set; }
 
+    /// <summary>
+    /// Gets or sets the active command encoder.
+    /// </summary>
     public CommandEncoder* CommandEncoder { get; set; }
 
+    /// <summary>
+    /// Gets the currently open render pass encoder, if any.
+    /// </summary>
     public RenderPassEncoder* PassEncoder { get; private set; }
 
+    /// <summary>
+    /// Creates a flush context for either a native WebGPU surface or a CPU-backed frame.
+    /// </summary>
     public static WebGPUFlushContext Create<TPixel>(
         ICanvasFrame<TPixel> frame,
         TextureFormat expectedTextureFormat,
@@ -160,6 +223,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
+    /// <summary>
+    /// Creates a flush context intended for fallback upload into a writable native surface.
+    /// </summary>
     public static WebGPUFlushContext CreateUploadContext<TPixel>(ICanvasFrame<TPixel> frame, MemoryAllocator memoryAllocator)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -192,6 +258,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
+    /// <summary>
+    /// Rents a CPU fallback staging buffer for the specified pixel type and bounds.
+    /// </summary>
     public static FallbackStagingLease<TPixel> RentFallbackStaging<TPixel>(MemoryAllocator allocator, in Rectangle bounds)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -202,6 +271,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return ((FallbackStagingEntry<TPixel>)entry).Rent(allocator, in bounds);
     }
 
+    /// <summary>
+    /// Clears all cached CPU fallback staging buffers.
+    /// </summary>
     public static void ClearFallbackStagingCache()
     {
         foreach (IDisposable entry in FallbackStagingCache.Values)
@@ -212,6 +284,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         FallbackStagingCache.Clear();
     }
 
+    /// <summary>
+    /// Clears all cached device-scoped shared state.
+    /// </summary>
     public static void ClearDeviceStateCache()
     {
         foreach (DeviceSharedState state in DeviceStateCache.Values)
@@ -222,6 +297,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         DeviceStateCache.Clear();
     }
 
+    /// <summary>
+    /// Tries to get shared native interop handles for the active WebGPU device and queue.
+    /// </summary>
+    /// <param name="deviceHandle">When this method returns <see langword="true"/>, contains the native device handle.</param>
+    /// <param name="queueHandle">When this method returns <see langword="true"/>, contains the native queue handle.</param>
+    /// <param name="error">When this method returns <see langword="false"/>, contains an error message.</param>
+    /// <returns><see langword="true"/> if shared handles are available; otherwise <see langword="false"/>.</returns>
     public static bool TryGetInteropHandles(out nint deviceHandle, out nint queueHandle, out string? error)
     {
         if (WebGPURuntime.TryGetSharedHandles(out Device* sharedDevice, out Queue* sharedQueue))
@@ -245,6 +327,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Ensures that the instance buffer exists and can hold at least the requested number of bytes.
+    /// </summary>
+    /// <param name="requiredBytes">The required number of bytes for the current flush.</param>
+    /// <param name="minimumCapacityBytes">The minimum allocation size to enforce when creating a new buffer.</param>
+    /// <returns><see langword="true"/> if the buffer is available with sufficient capacity; otherwise <see langword="false"/>.</returns>
     public bool EnsureInstanceBufferCapacity(nuint requiredBytes, nuint minimumCapacityBytes)
     {
         if (this.InstanceBuffer is not null && this.InstanceBufferCapacity >= requiredBytes)
@@ -276,6 +364,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Ensures that a command encoder is available for recording GPU commands.
+    /// </summary>
+    /// <returns><see langword="true"/> if an encoder is available; otherwise <see langword="false"/>.</returns>
     public bool EnsureCommandEncoder()
     {
         if (this.CommandEncoder is not null)
@@ -328,6 +420,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return this.PassEncoder is not null;
     }
 
+    /// <summary>
+    /// Ends and releases the current render pass if one is active.
+    /// </summary>
     public void EndRenderPassIfOpen()
     {
         if (this.PassEncoder is null)
@@ -340,6 +435,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.PassEncoder = null;
     }
 
+    /// <summary>
+    /// Tracks a transient bind group allocated during this flush.
+    /// </summary>
+    /// <param name="bindGroup">The bind group to track.</param>
     public void TrackBindGroup(BindGroup* bindGroup)
     {
         if (bindGroup is not null)
@@ -381,6 +480,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
+    /// <summary>
+    /// Tries to resolve a cached source texture view for an input image.
+    /// </summary>
+    /// <param name="image">The source image key.</param>
+    /// <param name="textureView">When this method returns <see langword="true"/>, contains the cached texture view.</param>
+    /// <returns><see langword="true"/> if a cached texture view exists; otherwise <see langword="false"/>.</returns>
     public bool TryGetCachedSourceTextureView(Image image, out TextureView* textureView)
     {
         if (this.cachedSourceTextureViews.TryGetValue(image, out nint handle) && handle != 0)
@@ -393,9 +498,17 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Caches a source texture view for reuse within the flush.
+    /// </summary>
+    /// <param name="image">The source image key.</param>
+    /// <param name="textureView">The texture view to cache.</param>
     public void CacheSourceTextureView(Image image, TextureView* textureView)
         => this.cachedSourceTextureViews[image] = (nint)textureView;
 
+    /// <summary>
+    /// Releases transient GPU resources owned by this flush context.
+    /// </summary>
     public void Dispose()
     {
         if (this.disposed)
@@ -876,6 +989,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignTo256(uint value) => (value + 255U) & ~255U;
 
+    /// <summary>
+    /// Shared device-scoped caches for pipelines, bind groups, and reusable GPU resources.
+    /// </summary>
     internal sealed class DeviceSharedState : IDisposable
     {
         private readonly ConcurrentDictionary<CpuTargetCacheKey, CpuTargetEntry> cpuTargetCache = new();
@@ -896,12 +1012,29 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         private static ReadOnlySpan<byte> CompositeComputeEntryPoint => "cs_main\0"u8;
 
+        /// <summary>
+        /// Gets the synchronization object used for shared state mutation.
+        /// </summary>
         public object SyncRoot { get; } = new();
 
+        /// <summary>
+        /// Gets the WebGPU API instance used by this shared state.
+        /// </summary>
         public WebGPU Api { get; }
 
+        /// <summary>
+        /// Gets the device associated with this shared state.
+        /// </summary>
         public Device* Device { get; }
 
+        /// <summary>
+        /// Rents CPU-target staging resources for a destination texture shape and format.
+        /// </summary>
+        /// <param name="textureFormat">The destination texture format.</param>
+        /// <param name="width">The destination width.</param>
+        /// <param name="height">The destination height.</param>
+        /// <param name="pixelSizeInBytes">The destination pixel size in bytes.</param>
+        /// <returns>A lease for staging resources.</returns>
         public CpuTargetLease RentCpuTarget(
             TextureFormat textureFormat,
             int width,
@@ -913,6 +1046,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return entry.Rent(this.Api, this.Device, in key);
         }
 
+        /// <summary>
+        /// Gets or creates a graphics pipeline used for composite rendering.
+        /// </summary>
         public bool TryGetOrCreateCompositePipeline(
             string pipelineKey,
             ReadOnlySpan<byte> shaderCode,
@@ -997,6 +1133,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
+        /// <summary>
+        /// Gets or creates a compute pipeline used for composite execution.
+        /// </summary>
         public bool TryGetOrCreateCompositeComputePipeline(
             string pipelineKey,
             ReadOnlySpan<byte> shaderCode,
@@ -1076,6 +1215,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
+        /// <summary>
+        /// Gets or creates a reusable shared buffer for device-scoped operations.
+        /// </summary>
         public bool TryGetOrCreateSharedBuffer(
             string bufferKey,
             BufferUsage usage,
@@ -1150,6 +1292,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
+        /// <summary>
+        /// Releases all cached pipelines, buffers, and CPU-target entries owned by this state.
+        /// </summary>
         public void Dispose()
         {
             if (this.disposed)
@@ -1426,31 +1571,56 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
+        /// <summary>
+        /// Cache key for CPU-target staging resources.
+        /// </summary>
         internal readonly struct CpuTargetCacheKey(
             TextureFormat textureFormat,
             int width,
             int height,
             int pixelSizeInBytes) : IEquatable<CpuTargetCacheKey>
         {
+            /// <summary>
+            /// Gets the texture format for the cached CPU target.
+            /// </summary>
             public TextureFormat TextureFormat { get; } = textureFormat;
 
+            /// <summary>
+            /// Gets the target width.
+            /// </summary>
             public int Width { get; } = width;
 
+            /// <summary>
+            /// Gets the target height.
+            /// </summary>
             public int Height { get; } = height;
 
+            /// <summary>
+            /// Gets the pixel size in bytes.
+            /// </summary>
             public int PixelSizeInBytes { get; } = pixelSizeInBytes;
 
+            /// <summary>
+            /// Determines whether this key equals another CPU target cache key.
+            /// </summary>
+            /// <param name="other">The key to compare.</param>
+            /// <returns><see langword="true"/> if all dimensions and format match; otherwise <see langword="false"/>.</returns>
             public bool Equals(CpuTargetCacheKey other)
                 => this.TextureFormat == other.TextureFormat &&
                    this.Width == other.Width &&
                    this.Height == other.Height &&
                    this.PixelSizeInBytes == other.PixelSizeInBytes;
 
+            /// <inheritdoc/>
             public override bool Equals(object? obj) => obj is CpuTargetCacheKey other && this.Equals(other);
 
+            /// <inheritdoc/>
             public override int GetHashCode() => HashCode.Combine((int)this.TextureFormat, this.Width, this.Height, this.PixelSizeInBytes);
         }
 
+        /// <summary>
+        /// Cache entry that owns the CPU-target staging resources.
+        /// </summary>
         internal sealed class CpuTargetEntry
         {
             private Texture* targetTexture;
@@ -1460,6 +1630,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             private ulong readbackByteCount;
             private int inUse;
 
+            /// <summary>
+            /// Rents staging resources for the specified cache key.
+            /// </summary>
             internal CpuTargetLease Rent(WebGPU api, Device* device, in CpuTargetCacheKey key)
             {
                 if (Interlocked.CompareExchange(ref this.inUse, 1, 0) == 0)
@@ -1509,8 +1682,14 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                     temporaryReadbackByteCount);
             }
 
+            /// <summary>
+            /// Marks this entry as available for reuse.
+            /// </summary>
             internal void Release() => Volatile.Write(ref this.inUse, 0);
 
+            /// <summary>
+            /// Releases all resources currently owned by this entry.
+            /// </summary>
             internal void Dispose(WebGPU api)
             {
                 ReleaseCpuTargetResources(api, this.targetTexture, this.targetView, this.readbackBuffer);
@@ -1649,6 +1828,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
+        /// <summary>
+        /// Lease wrapper for CPU-target staging resources.
+        /// </summary>
         public sealed class CpuTargetLease : IDisposable
         {
             private readonly WebGPU api;
@@ -1676,16 +1858,34 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 this.ReadbackByteCount = readbackByteCount;
             }
 
+            /// <summary>
+            /// Gets the target texture used for CPU staging operations.
+            /// </summary>
             public Texture* TargetTexture { get; }
 
+            /// <summary>
+            /// Gets the texture view of <see cref="TargetTexture"/>.
+            /// </summary>
             public TextureView* TargetView { get; }
 
+            /// <summary>
+            /// Gets the readback buffer used to copy staged pixels to CPU memory.
+            /// </summary>
             public WgpuBuffer* ReadbackBuffer { get; }
 
+            /// <summary>
+            /// Gets the readback row stride in bytes.
+            /// </summary>
             public uint ReadbackBytesPerRow { get; }
 
+            /// <summary>
+            /// Gets the total readback buffer size in bytes.
+            /// </summary>
             public ulong ReadbackByteCount { get; }
 
+            /// <summary>
+            /// Releases leased resources or returns ownership to the shared cache entry.
+            /// </summary>
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref this.disposed, 1) != 0)
@@ -1715,6 +1915,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
         }
 
+        /// <summary>
+        /// Shared render-pipeline infrastructure for compositing variants.
+        /// </summary>
         private sealed class CompositePipelineInfrastructure
         {
             public Dictionary<(TextureFormat TextureFormat, CompositePipelineBlendMode BlendMode), nint> Pipelines { get; } = [];

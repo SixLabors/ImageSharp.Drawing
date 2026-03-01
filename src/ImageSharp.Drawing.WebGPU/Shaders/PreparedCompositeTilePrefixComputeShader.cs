@@ -3,8 +3,14 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// Prefix-sums per-tile command counts into tile starts for the fill pass.
+/// </summary>
 internal static class PreparedCompositeTilePrefixComputeShader
 {
+    /// <summary>
+    /// Gets the null-terminated WGSL source for tile prefix sum calculation.
+    /// </summary>
     private static readonly byte[] CodeBytes =
     [
         .. """
@@ -53,5 +59,6 @@ internal static class PreparedCompositeTilePrefixComputeShader
         0
     ];
 
+    /// <summary>Gets the WGSL source for this shader as a null-terminated UTF-8 span.</summary>
     public static ReadOnlySpan<byte> Code => CodeBytes;
 }

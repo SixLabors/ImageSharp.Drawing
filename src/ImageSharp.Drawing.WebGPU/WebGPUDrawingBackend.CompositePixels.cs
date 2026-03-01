@@ -93,10 +93,19 @@ internal sealed partial class WebGPUDrawingBackend
             this.PixelSizeInBytes = pixelSizeInBytes;
         }
 
+        /// <summary>
+        /// Gets the CLR pixel type registered for this mapping.
+        /// </summary>
         public Type PixelType { get; }
 
+        /// <summary>
+        /// Gets the WebGPU texture format used for this pixel type.
+        /// </summary>
         public TextureFormat TextureFormat { get; }
 
+        /// <summary>
+        /// Gets the unmanaged size of the pixel type in bytes.
+        /// </summary>
         public int PixelSizeInBytes { get; }
 
         /// <summary>

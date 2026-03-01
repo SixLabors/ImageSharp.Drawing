@@ -3,8 +3,14 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// Counts the number of composite commands affecting each tile using bin headers.
+/// </summary>
 internal static class PreparedCompositeTileCountComputeShader
 {
+    /// <summary>
+    /// Gets the null-terminated WGSL source for per-tile command counts.
+    /// </summary>
     private static readonly byte[] CodeBytes =
     [
         .. """
@@ -104,5 +110,6 @@ internal static class PreparedCompositeTileCountComputeShader
         0
     ];
 
+    /// <summary>Gets the WGSL source for this shader as a null-terminated UTF-8 span.</summary>
     public static ReadOnlySpan<byte> Code => CodeBytes;
 }

@@ -4,10 +4,13 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Null-terminated WGSL compute shader for per-row backdrop prefix propagation.
+/// Copies the destination texture into a composition backdrop for read-only sampling.
 /// </summary>
 internal static class BackdropComputeShader
 {
+    /// <summary>
+    /// Gets the null-terminated WGSL source for the backdrop copy pass.
+    /// </summary>
     private static readonly byte[] CodeBytes =
     [
         ..
@@ -110,5 +113,6 @@ internal static class BackdropComputeShader
         0
     ];
 
+    /// <summary>Gets the WGSL source for this shader as a null-terminated UTF-8 span.</summary>
     public static ReadOnlySpan<byte> Code => CodeBytes;
 }

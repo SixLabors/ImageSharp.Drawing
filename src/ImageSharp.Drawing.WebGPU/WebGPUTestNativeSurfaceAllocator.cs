@@ -3,10 +3,8 @@
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
-using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -19,6 +17,9 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
 {
     private const int CallbackTimeoutMilliseconds = 5000;
 
+    /// <summary>
+    /// Tries to allocate a native WebGPU texture + view pair and wrap them in a <see cref="NativeSurface"/>.
+    /// </summary>
     internal static bool TryCreate<TPixel>(
         WebGPUDrawingBackend backend,
         int width,
@@ -115,6 +116,9 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         return true;
     }
 
+    /// <summary>
+    /// Tries to upload CPU pixel data to an existing native WebGPU texture handle.
+    /// </summary>
     internal static bool TryWriteTexture<TPixel>(
         WebGPUDrawingBackend backend,
         nint textureHandle,
@@ -162,6 +166,9 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         }
     }
 
+    /// <summary>
+    /// Tries to read pixels from a native WebGPU texture handle into an <see cref="Image{TPixel}"/>.
+    /// </summary>
     internal static bool TryReadTexture<TPixel>(
         WebGPUDrawingBackend backend,
         nint textureHandle,
@@ -329,6 +336,11 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         }
     }
 
+    /// <summary>
+    /// Releases native texture and texture-view handles allocated for tests.
+    /// </summary>
+    /// <param name="textureHandle">The native texture handle.</param>
+    /// <param name="textureViewHandle">The native texture-view handle.</param>
     internal static void Release(nint textureHandle, nint textureViewHandle)
     {
         if (textureHandle == 0 && textureViewHandle == 0)

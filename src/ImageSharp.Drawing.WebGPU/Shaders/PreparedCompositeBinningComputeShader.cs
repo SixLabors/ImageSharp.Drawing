@@ -3,8 +3,15 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// Bins prepared composite commands into coarse bins for later tile dispatch.
+/// Produces per-bin headers and a compact bin list for the tile count/fill passes.
+/// </summary>
 internal static class PreparedCompositeBinningComputeShader
 {
+    /// <summary>
+    /// Gets the null-terminated WGSL source for command binning.
+    /// </summary>
     private static readonly byte[] CodeBytes =
     [
         .. """
@@ -164,5 +171,6 @@ internal static class PreparedCompositeBinningComputeShader
         0
     ];
 
+    /// <summary>Gets the WGSL source for this shader as a null-terminated UTF-8 span.</summary>
     public static ReadOnlySpan<byte> Code => CodeBytes;
 }

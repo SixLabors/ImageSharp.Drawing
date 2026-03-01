@@ -4,15 +4,18 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Null-terminated WGSL compute shader for path segment counting.
+/// Counts paths per tile to size tile command lists.
 /// </summary>
 internal static class PathCountComputeShader
 {
+    /// <summary>
+    /// Gets the null-terminated WGSL source for the path count pass.
+    /// </summary>
     private static readonly byte[] CodeBytes =
     [
         ..
         """
-        // Path count stage (derived from Vello path_count.wgsl).
+        // Path count stage.
 
         const STAGE_BINNING: u32 = 0x1u;
         const STAGE_TILE_ALLOC: u32 = 0x2u;
@@ -248,9 +251,10 @@ internal static class PathCountComputeShader
                 }
             }
         }
-         
-        """u8
+        """u8,
+        0
     ];
 
+    /// <summary>Gets the WGSL source for this shader as a null-terminated UTF-8 span.</summary>
     public static ReadOnlySpan<byte> Code => CodeBytes;
 }

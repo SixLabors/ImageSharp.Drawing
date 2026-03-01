@@ -1,17 +1,19 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
 using System.Text;
 using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// Composites prepared commands over coverage in tile order to produce the final output.
+/// Shader source is generated per texture format to match sampling/output requirements.
+/// </summary>
 internal static class PreparedCompositeFineComputeShader
 {
     private static readonly object CacheSync = new();
-    private static readonly Dictionary<TextureFormat, byte[]> ShaderCache = new();
+    private static readonly Dictionary<TextureFormat, byte[]> ShaderCache = [];
 
     private static readonly string ShaderTemplate =
         """
@@ -281,6 +283,9 @@ internal static class PreparedCompositeFineComputeShader
         }
         """;
 
+    /// <summary>
+    /// Gets the input sample type required for the fine composite shader variant.
+    /// </summary>
     public static bool TryGetInputSampleType(TextureFormat textureFormat, out TextureSampleType sampleType)
     {
         if (TryGetTraits(textureFormat, out ShaderTraits traits))
@@ -293,18 +298,21 @@ internal static class PreparedCompositeFineComputeShader
         return false;
     }
 
+    /// <summary>
+    /// Gets the null-terminated WGSL source for the fine composite shader variant.
+    /// </summary>
     public static bool TryGetCode(TextureFormat textureFormat, out byte[] code, out string? error)
     {
         if (!TryGetTraits(textureFormat, out ShaderTraits traits))
         {
-            code = Array.Empty<byte>();
+            code = [];
             error = $"Prepared composite fine shader does not support texture format '{textureFormat}'.";
             return false;
         }
 
         lock (CacheSync)
         {
-            if (ShaderCache.TryGetValue(textureFormat, out byte[]? cachedCode) && cachedCode is not null)
+            if (ShaderCache.TryGetValue(textureFormat, out byte[]? cachedCode))
             {
                 code = cachedCode;
                 error = null;
@@ -331,6 +339,9 @@ internal static class PreparedCompositeFineComputeShader
         return true;
     }
 
+    /// <summary>
+    /// Resolves shader traits for the provided texture format.
+    /// </summary>
     private static bool TryGetTraits(TextureFormat textureFormat, out ShaderTraits traits)
     {
         switch (textureFormat)
@@ -394,14 +405,14 @@ internal static class PreparedCompositeFineComputeShader
 
     private static ShaderTraits CreateFloatTraits(string outputFormat)
     {
-        const string DecodeTexel =
+        const string decodeTexel =
             """
             fn decode_texel(texel: vec4<f32>) -> vec4<f32> {
                 return texel;
             }
             """;
 
-        const string EncodeOutput =
+        const string encodeOutput =
             """
             fn encode_output(color: vec4<f32>) -> vec4<f32> {
                 return color;
@@ -412,8 +423,8 @@ internal static class PreparedCompositeFineComputeShader
             outputFormat,
             "f32",
             TextureSampleType.Float,
-            DecodeTexel,
-            EncodeOutput,
+            decodeTexel,
+            encodeOutput,
             "decode_texel(textureLoad(backdrop_texture, vec2<i32>(source_x, source_y), 0))",
             "decode_texel(textureLoad(brush_texture, vec2<i32>(sample_x, sample_y), 0))",
             "textureStore(output_texture, vec2<i32>(output_x_i32, output_y_i32), encode_output(vec4<f32>(rgb, alpha)));");
@@ -421,14 +432,14 @@ internal static class PreparedCompositeFineComputeShader
 
     private static ShaderTraits CreateSnormTraits(string outputFormat)
     {
-        const string DecodeTexel =
+        const string decodeTexel =
             """
             fn decode_texel(texel: vec4<f32>) -> vec4<f32> {
                 return (texel * 0.5) + vec4<f32>(0.5);
             }
             """;
 
-        const string EncodeOutput =
+        const string encodeOutput =
             """
             fn encode_output(color: vec4<f32>) -> vec4<f32> {
                 let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
@@ -440,8 +451,8 @@ internal static class PreparedCompositeFineComputeShader
             outputFormat,
             "f32",
             TextureSampleType.Float,
-            DecodeTexel,
-            EncodeOutput,
+            decodeTexel,
+            encodeOutput,
             "decode_texel(textureLoad(backdrop_texture, vec2<i32>(source_x, source_y), 0))",
             "decode_texel(textureLoad(brush_texture, vec2<i32>(sample_x, sample_y), 0))",
             "textureStore(output_texture, vec2<i32>(output_x_i32, output_y_i32), encode_output(vec4<f32>(rgb, alpha)));");
@@ -454,7 +465,7 @@ internal static class PreparedCompositeFineComputeShader
 fn decode_texel(texel: vec4<u32>) -> vec4<f32> {{
     return vec4<f32>(texel) / UINT_TEXEL_MAX;
 }}";
-        const string EncodeOutput =
+        const string encodeOutput =
             """
             fn encode_output(color: vec4<f32>) -> vec4<u32> {
                 let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
@@ -467,7 +478,7 @@ fn decode_texel(texel: vec4<u32>) -> vec4<f32> {{
             "u32",
             TextureSampleType.Uint,
             decodeTexel,
-            EncodeOutput,
+            encodeOutput,
             "decode_texel(textureLoad(backdrop_texture, vec2<i32>(source_x, source_y), 0))",
             "decode_texel(textureLoad(brush_texture, vec2<i32>(sample_x, sample_y), 0))",
             "textureStore(output_texture, vec2<i32>(output_x_i32, output_y_i32), encode_output(vec4<f32>(rgb, alpha)));");
@@ -483,7 +494,7 @@ const SINT_TEXEL_RANGE: vec4<f32> = SINT_TEXEL_MAX - SINT_TEXEL_MIN;
 fn decode_texel(texel: vec4<i32>) -> vec4<f32> {{
     return (vec4<f32>(texel) - SINT_TEXEL_MIN) / SINT_TEXEL_RANGE;
 }}";
-        const string EncodeOutput =
+        const string encodeOutput =
             """
             fn encode_output(color: vec4<f32>) -> vec4<i32> {
                 let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
@@ -496,7 +507,7 @@ fn decode_texel(texel: vec4<i32>) -> vec4<f32> {{
             "i32",
             TextureSampleType.Sint,
             decodeTexel,
-            EncodeOutput,
+            encodeOutput,
             "decode_texel(textureLoad(backdrop_texture, vec2<i32>(source_x, source_y), 0))",
             "decode_texel(textureLoad(brush_texture, vec2<i32>(sample_x, sample_y), 0))",
             "textureStore(output_texture, vec2<i32>(output_x_i32, output_y_i32), encode_output(vec4<f32>(rgb, alpha)));");

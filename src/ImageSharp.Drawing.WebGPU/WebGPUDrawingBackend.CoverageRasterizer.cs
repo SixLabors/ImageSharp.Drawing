@@ -1,15 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -29,16 +25,33 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     private const int SegmentStrideBytes = 24;
     private const int SegmentAllocWorkgroupSize = 256;
 
-    private readonly Dictionary<CoverageDefinitionIdentity, CachedCoverageGeometry> coverageGeometryCache = new();
+    private readonly Dictionary<CoverageDefinitionIdentity, CachedCoverageGeometry> coverageGeometryCache = [];
     private IMemoryOwner<byte>? cachedCoverageLineUpload;
     private int cachedCoverageLineLength;
     private IMemoryOwner<byte>? cachedCoveragePathUpload;
     private int cachedCoveragePathLength;
 
+    /// <summary>
+    /// Writes bind-group entries and returns the number of populated entries.
+    /// </summary>
     private delegate uint BindGroupEntryWriter(Span<BindGroupEntry> entries);
 
-    private unsafe delegate void ComputePassDispatch(ComputePassEncoder* pass);
+    /// <summary>
+    /// Encapsulates dispatch logic for a compute pass.
+    /// </summary>
+    private delegate void ComputePassDispatch(ComputePassEncoder* pass);
 
+    /// <summary>
+    /// Builds and dispatches the full coverage rasterization pipeline for flattened paths.
+    /// </summary>
+    /// <typeparam name="TPixel">The canvas pixel type.</typeparam>
+    /// <param name="flushContext">The active flush context.</param>
+    /// <param name="definitions">Coverage definitions participating in the current flush.</param>
+    /// <param name="configuration">The current processing configuration.</param>
+    /// <param name="coverageView">Receives the output coverage texture view.</param>
+    /// <param name="coveragePlacements">Receives per-definition atlas placement information.</param>
+    /// <param name="error">Receives an error message when the operation fails.</param>
+    /// <returns><see langword="true"/> when rasterization setup and dispatch succeed; otherwise <see langword="false"/>.</returns>
     private bool TryCreateCoverageTextureFromFlattened<TPixel>(
         WebGPUFlushContext flushContext,
         List<CompositionCoverageDefinition> definitions,
@@ -49,7 +62,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>
     {
         coverageView = null;
-        coveragePlacements = Array.Empty<CoveragePlacement>();
+        coveragePlacements = [];
         error = null;
         if (definitions.Count == 0)
         {
@@ -66,6 +79,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         int currentTileY = 0;
         uint? fillRuleValue = null;
         uint? aliasedValue = null;
+
+        // First pass: validate inputs, resolve/build cached geometry, and pack atlas placements.
         for (int i = 0; i < definitions.Count; i++)
         {
             CompositionCoverageDefinition definition = definitions[i];
@@ -180,6 +195,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return true;
         }
 
+        // Build a merged line buffer with coordinates translated into atlas space.
         int lineBufferBytes = checked(totalLineCount * LineStrideBytes);
         using IMemoryOwner<byte> lineUploadOwner = configuration.MemoryAllocator.Allocate<byte>(lineBufferBytes);
         Span<byte> lineUpload = lineUploadOwner.Memory.Span[..lineBufferBytes];
@@ -228,6 +244,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
+        // Build per-path metadata that maps each path into its tile span inside the atlas.
         int pathBufferBytes = checked(pathBuilds.Length * PathStrideBytes);
         using IMemoryOwner<byte> pathUploadOwner = configuration.MemoryAllocator.Allocate<byte>(pathBufferBytes);
         Span<byte> pathUpload = pathUploadOwner.Memory.Span[..pathBufferBytes];
@@ -458,6 +475,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
         flushContext.Api.QueueWriteBuffer(flushContext.Queue, coverageConfigBuffer, 0, &coverageConfig, (nuint)Unsafe.SizeOf<CoverageConfig>());
 
+        // Dispatch compute stages in pipeline order: count -> backdrop -> alloc -> emit segments -> fine raster.
         if (!this.DispatchPathCountSetup(flushContext, bumpBuffer, indirectBuffer, out error) ||
             !this.DispatchPathCount(flushContext, configBuffer, bumpBuffer, lineBuffer, pathBuffer, tileBuffer, segCountsBuffer, indirectBuffer, out error) ||
             !this.DispatchBackdrop(flushContext, configBuffer, tileBuffer, atlasHeightInTiles, out error) ||
@@ -473,6 +491,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Gets or creates a shared GPU buffer used by the coverage rasterization pipeline.
+    /// </summary>
     private static bool TryGetOrCreateCoverageBuffer(
         WebGPUFlushContext flushContext,
         string bufferKey,
@@ -488,6 +509,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             out _,
             out error);
 
+    /// <summary>
+    /// Uploads only the changed byte range of a coverage buffer payload.
+    /// </summary>
     private bool TryUploadDirtyCoverageRange(
         WebGPUFlushContext flushContext,
         WgpuBuffer* destinationBuffer,
@@ -534,6 +558,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             uploadLength = (lastDifferent - firstDifferent) + 1;
         }
 
+        // Only write the dirty range to reduce queue upload bandwidth on repeated flushes.
         if (uploadLength > 0)
         {
             fixed (byte* sourcePtr = source)
@@ -552,6 +577,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Releases cached coverage resources and clears all CPU-side upload caches.
+    /// </summary>
     private void DisposeCoverageResources()
     {
         foreach (CachedCoverageGeometry geometry in this.coverageGeometryCache.Values)
@@ -568,6 +596,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         this.cachedCoveragePathLength = 0;
     }
 
+    /// <summary>
+    /// Flattens a path into the compact line format consumed by coverage compute shaders.
+    /// </summary>
     private static bool TryBuildLineBuffer(
         IPath path,
         in Rectangle interest,
@@ -699,9 +730,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Writes a single line record using the default path index.
+    /// </summary>
     private static void WriteLine(Span<byte> destination, int lineIndex, float x0, float y0, float x1, float y1)
         => WriteLine(destination, lineIndex, 0u, x0, y0, x1, y1);
 
+    /// <summary>
+    /// Writes a single line record with an explicit path index.
+    /// </summary>
     private static void WriteLine(Span<byte> destination, int lineIndex, uint pathIndex, float x0, float y0, float x1, float y1)
     {
         int offset = lineIndex * LineStrideBytes;
@@ -713,12 +750,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         WriteFloat(destination, offset + 20, y1);
     }
 
+    /// <summary>
+    /// Writes a path bounding record using a default tile base.
+    /// </summary>
     private static void WritePath(Span<byte> destination, uint x0, uint y0, uint x1, uint y1)
         => WritePath(destination, x0, y0, x1, y1, 0u);
 
+    /// <summary>
+    /// Writes a path bounding record with an explicit tile base offset.
+    /// </summary>
     private static void WritePath(Span<byte> destination, uint x0, uint y0, uint x1, uint y1, uint tiles)
     {
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(0, 4), x0);
+        BinaryPrimitives.WriteUInt32LittleEndian(destination[..4], x0);
         BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(4, 4), y0);
         BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(8, 4), x1);
         BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(12, 4), y1);
@@ -728,13 +771,23 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(28, 4), 0u);
     }
 
+    /// <summary>
+    /// Reads a 32-bit floating-point value from a little-endian byte span.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static float ReadFloat(ReadOnlySpan<byte> source, int offset)
         => BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source.Slice(offset, 4)));
 
+    /// <summary>
+    /// Writes a 32-bit floating-point value to a little-endian byte span.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void WriteFloat(Span<byte> destination, int offset, float value)
         => BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(offset, 4), (uint)BitConverter.SingleToInt32Bits(value));
 
+    /// <summary>
+    /// Estimates how many tile segments a line contributes during path tiling.
+    /// </summary>
     private static uint EstimateSegmentCount(float x0, float y0, float x1, float y1)
     {
         float s0x = x0 * TileScale;
@@ -751,6 +804,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return countX + countY;
     }
 
+    /// <summary>
+    /// Computes the number of tiles spanned by two coordinates along one axis.
+    /// </summary>
     private static uint SpanTiles(float a, float b)
     {
         float max = MathF.Max(a, b);
@@ -764,16 +820,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return (uint)span;
     }
 
-    private static int Clamp(int value, int min, int max)
-    {
-        if (value < min)
-        {
-            return min;
-        }
-
-        return value > max ? max : value;
-    }
-
+    /// <summary>
+    /// Creates the coverage output texture and view used by the fine rasterization pass.
+    /// </summary>
     private static bool TryCreateCoverageTexture(
         WebGPUFlushContext flushContext,
         int width,
@@ -860,6 +909,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Dispatches the path-count setup shader that initializes indirect dispatch counts.
+    /// </summary>
     private bool DispatchPathCountSetup(
         WebGPUFlushContext flushContext,
         WgpuBuffer* bumpBuffer,
@@ -879,6 +931,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1),
             out error);
 
+    /// <summary>
+    /// Dispatches the path-count shader that computes per-tile segment counts.
+    /// </summary>
     private bool DispatchPathCount(
         WebGPUFlushContext flushContext,
         WgpuBuffer* configBuffer,
@@ -904,9 +959,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 entries[5] = new BindGroupEntry { Binding = 5, Buffer = segCountsBuffer, Offset = 0, Size = nuint.MaxValue };
                 return 6;
             },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroupsIndirect(pass, indirectBuffer, (nuint)0),
+            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroupsIndirect(pass, indirectBuffer, 0),
             out error);
 
+    /// <summary>
+    /// Dispatches the segment-allocation shader that computes per-tile segment offsets.
+    /// </summary>
     private bool DispatchSegmentAlloc(
         WebGPUFlushContext flushContext,
         WgpuBuffer* bumpBuffer,
@@ -935,6 +993,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             },
             out error);
 
+    /// <summary>
+    /// Dispatches the backdrop prefix shader that accumulates backdrop values across tile rows.
+    /// </summary>
     private bool DispatchBackdrop(
         WebGPUFlushContext flushContext,
         WgpuBuffer* configBuffer,
@@ -952,12 +1013,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileBuffer, Offset = 0, Size = nuint.MaxValue };
                 return 2;
             },
-            (pass) =>
-            {
-                flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)heightInTiles, 1, 1);
-            },
+            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)heightInTiles, 1, 1),
             out error);
 
+    /// <summary>
+    /// Dispatches the path-tiling setup shader that prepares indirect counts for segment emission.
+    /// </summary>
     private bool DispatchPathTilingSetup(
         WebGPUFlushContext flushContext,
         WgpuBuffer* bumpBuffer,
@@ -977,6 +1038,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1),
             out error);
 
+    /// <summary>
+    /// Dispatches the path-tiling shader that emits clipped segments into per-tile storage.
+    /// </summary>
     private bool DispatchPathTiling(
         WebGPUFlushContext flushContext,
         WgpuBuffer* bumpBuffer,
@@ -1002,9 +1066,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 entries[5] = new BindGroupEntry { Binding = 5, Buffer = segmentsBuffer, Offset = 0, Size = nuint.MaxValue };
                 return 6;
             },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroupsIndirect(pass, indirectBuffer, (nuint)0),
+            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroupsIndirect(pass, indirectBuffer, 0),
             out error);
 
+    /// <summary>
+    /// Dispatches the fine coverage shader that rasterizes tile segments into the output texture.
+    /// </summary>
     private bool DispatchCoverageFine(
         WebGPUFlushContext flushContext,
         WgpuBuffer* coverageConfigBuffer,
@@ -1029,12 +1096,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 entries[4] = new BindGroupEntry { Binding = 4, TextureView = coverageView };
                 return 5;
             },
-            (pass) =>
-            {
-                flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)tileWidth, (uint)tileHeight, 1);
-            },
+            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)tileWidth, (uint)tileHeight, 1),
             out error);
 
+    /// <summary>
+    /// Creates and executes a compute pass for a coverage pipeline stage.
+    /// </summary>
     private bool DispatchComputePass(
         WebGPUFlushContext flushContext,
         string pipelineKey,
@@ -1097,6 +1164,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by the path-count setup shader.
+    /// </summary>
     private static bool TryCreatePathCountSetupBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -1144,6 +1214,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by the path-count shader.
+    /// </summary>
     private static bool TryCreatePathCountBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -1181,7 +1254,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)LineStrideBytes
+                MinBindingSize = LineStrideBytes
             }
         };
         entries[3] = new BindGroupLayoutEntry
@@ -1192,7 +1265,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)PathStrideBytes
+                MinBindingSize = PathStrideBytes
             }
         };
         entries[4] = new BindGroupLayoutEntry
@@ -1203,7 +1276,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.Storage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)TileStrideBytes
+                MinBindingSize = TileStrideBytes
             }
         };
         entries[5] = new BindGroupLayoutEntry
@@ -1214,7 +1287,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.Storage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)SegmentCountStrideBytes
+                MinBindingSize = SegmentCountStrideBytes
             }
         };
 
@@ -1235,6 +1308,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by the segment-allocation shader.
+    /// </summary>
     private static bool TryCreateSegmentAllocBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -1261,7 +1337,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.Storage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)TileStrideBytes
+                MinBindingSize = TileStrideBytes
             }
         };
         entries[2] = new BindGroupLayoutEntry
@@ -1304,6 +1380,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by the backdrop prefix shader.
+    /// </summary>
     private static bool TryCreateBackdropBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -1351,6 +1430,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by the path-tiling setup shader.
+    /// </summary>
     private static bool TryCreatePathTilingSetupBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -1398,6 +1480,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by the path-tiling shader.
+    /// </summary>
     private static bool TryCreatePathTilingBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -1424,7 +1509,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)SegmentCountStrideBytes
+                MinBindingSize = SegmentCountStrideBytes
             }
         };
         entries[2] = new BindGroupLayoutEntry
@@ -1435,7 +1520,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)LineStrideBytes
+                MinBindingSize = LineStrideBytes
             }
         };
         entries[3] = new BindGroupLayoutEntry
@@ -1446,7 +1531,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)PathStrideBytes
+                MinBindingSize = PathStrideBytes
             }
         };
         entries[4] = new BindGroupLayoutEntry
@@ -1457,7 +1542,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)TileStrideBytes
+                MinBindingSize = TileStrideBytes
             }
         };
         entries[5] = new BindGroupLayoutEntry
@@ -1468,7 +1553,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.Storage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)SegmentStrideBytes
+                MinBindingSize = SegmentStrideBytes
             }
         };
 
@@ -1489,6 +1574,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout used by the fine coverage shader.
+    /// </summary>
     private static bool TryCreateCoverageFineBindGroupLayout(
         WebGPU api,
         Device* device,
@@ -1515,7 +1603,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)TileStrideBytes
+                MinBindingSize = TileStrideBytes
             }
         };
         entries[2] = new BindGroupLayoutEntry
@@ -1537,7 +1625,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)SegmentStrideBytes
+                MinBindingSize = SegmentStrideBytes
             }
         };
         entries[4] = new BindGroupLayoutEntry
@@ -1569,8 +1657,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         return true;
     }
 
+    /// <summary>
+    /// Flattened path payload used during coverage rasterization.
+    /// </summary>
     private readonly struct CoveragePathBuild
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CoveragePathBuild"/> struct.
+        /// </summary>
         public CoveragePathBuild(
             CachedCoverageGeometry geometry,
             int originTileX,
@@ -1585,17 +1679,35 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             this.OriginY = originY;
         }
 
+        /// <summary>
+        /// Gets the cached geometry payload.
+        /// </summary>
         public CachedCoverageGeometry Geometry { get; }
 
+        /// <summary>
+        /// Gets the atlas origin in tile coordinates on the X axis.
+        /// </summary>
         public int OriginTileX { get; }
 
+        /// <summary>
+        /// Gets the atlas origin in tile coordinates on the Y axis.
+        /// </summary>
         public int OriginTileY { get; }
 
+        /// <summary>
+        /// Gets the atlas origin in pixel coordinates on the X axis.
+        /// </summary>
         public int OriginX { get; }
 
+        /// <summary>
+        /// Gets the atlas origin in pixel coordinates on the Y axis.
+        /// </summary>
         public int OriginY { get; }
     }
 
+    /// <summary>
+    /// Rasterizer dispatch configuration for a coverage pass.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct RasterConfig
     {
@@ -1625,6 +1737,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public uint Pad1;
     }
 
+    /// <summary>
+    /// GPU bump allocator counters for transient coverage buffers.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct BumpAllocatorsData
     {
@@ -1638,6 +1753,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public uint Lines;
     }
 
+    /// <summary>
+    /// Indirect dispatch counts emitted by the coverage setup stage.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct IndirectCountData
     {
@@ -1646,6 +1764,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public uint CountZ;
     }
 
+    /// <summary>
+    /// Segment allocator configuration for coverage path allocation.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct SegmentAllocConfig
     {
@@ -1655,6 +1776,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public uint Pad2;
     }
 
+    /// <summary>
+    /// Coverage pass configuration shared across compute stages.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct CoverageConfig
     {
@@ -1668,8 +1792,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public uint IsAliased;
     }
 
+    /// <summary>
+    /// Cached CPU-side geometry payload reused across coverage flushes.
+    /// </summary>
     private sealed class CachedCoverageGeometry : IDisposable
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CachedCoverageGeometry"/> class.
+        /// </summary>
         public CachedCoverageGeometry(
             IMemoryOwner<byte>? lineOwner,
             int lineCount,
@@ -1688,20 +1818,42 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             this.CoverageHeight = coverageHeight;
         }
 
+        /// <summary>
+        /// Gets the owned line segment buffer for the cached coverage geometry.
+        /// </summary>
         public IMemoryOwner<byte>? LineOwner { get; }
 
+        /// <summary>
+        /// Gets the number of lines stored in <see cref="LineOwner"/>.
+        /// </summary>
         public int LineCount { get; }
 
+        /// <summary>
+        /// Gets the estimated number of segments generated for this geometry.
+        /// </summary>
         public uint EstimatedSegments { get; }
 
+        /// <summary>
+        /// Gets the coverage width in tiles.
+        /// </summary>
         public int WidthInTiles { get; }
 
+        /// <summary>
+        /// Gets the coverage height in tiles.
+        /// </summary>
         public int HeightInTiles { get; }
 
+        /// <summary>
+        /// Gets the coverage texture width in pixels.
+        /// </summary>
         public int CoverageWidth { get; }
 
+        /// <summary>
+        /// Gets the coverage texture height in pixels.
+        /// </summary>
         public int CoverageHeight { get; }
 
+        /// <inheritdoc/>
         public void Dispose()
             => this.LineOwner?.Dispose();
     }

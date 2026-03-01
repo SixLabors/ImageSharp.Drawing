@@ -15,11 +15,14 @@ DrawingCanvasBatcher.Flush()
         -> clip each command to target bounds
         -> group contiguous commands by DefinitionKey
         -> keep prepared destination/source offsets
+     -> compute scene command count + composition bounds
+        -> if no visible commands: return
      -> acquire one WebGPUFlushContext for the scene
      -> ensure command encoder (single encoder reused for the scene)
      -> resolve source backdrop texture view for composition bounds
-        -> source = target view when sampleable
-        -> else copy target region into transient composition texture and sample that
+        -> non-readback path: sample target view directly
+        -> readback path: copy target region into transient source texture and sample that
+     -> allocate transient output texture for composition
      -> build coverage texture from prepared geometry
         -> flatten prepared path geometry
         -> upload line/path/tile/segment buffers
@@ -31,27 +34,27 @@ DrawingCanvasBatcher.Flush()
            5) PathTilingSetup
            6) PathTiling
            7) CoverageFine
-    -> build one flush-scoped composite command stream
-       -> command-parallel tile-pair init (sentinel)
-       -> command-parallel tile-pair emit
-       -> global tile-pair key sort by (tile_index, command_index)
-       -> tile span build (tileStarts/tileCounts/tileCommandIndices)
-     -> run one fine composite dispatch (PreparedCompositeFineComputeShader)
+     -> build one flush-scoped composite command parameter stream from prepared batches
+     -> run composite dispatch sequence:
+        1) PreparedCompositeBinning
+        2) PreparedCompositeTileCount
+        3) PreparedCompositeTilePrefix
+        4) PreparedCompositeTileFill
+        5) PreparedCompositeFine
         -> solid brush uses Color.ToScaledVector4()
         -> image brush samples Image<TPixel> texture directly
         -> writes composed pixels to one transient output texture
      -> copy output texture bounds back into the destination target once
      -> finalize once
-        -> finish encoder
-        -> single queue submit for the flush context
-        -> optional readback for CPU-region targets
+        -> non-readback: finish encoder + single queue submit
+        -> readback: encode texture->buffer copy, finish encoder + single queue submit, map/copy once
      -> on any GPU failure path: scene-scoped fallback (DefaultDrawingBackend)
 ```
 
 ## Context and Resource Lifetime
 
 - `WebGPUFlushContext` is created once per `FlushCompositions` execution.
-- The same command encoder is reused across all batch passes in that flush.
+- The same command encoder is reused across all GPU passes in that flush.
 - Transient textures/buffers/bind-groups are tracked in the flush context and released on dispose.
 - Source image texture views are cached per flush context to avoid duplicate uploads.
 
@@ -60,6 +63,7 @@ DrawingCanvasBatcher.Flush()
 - `FlushCompositions` performs one command-buffer submission (`QueueSubmit`) per scene flush.
 - Destination writeback to the render target is one copy from the fine output texture into composition bounds.
 - No destination storage init/blit pass is used in the active flush path.
+- CPU-region targets perform one additional texture->buffer copy and one map/read after the single submit.
 
 ## Fallback Behavior
 
@@ -74,7 +78,9 @@ Fallback is scene-scoped:
 
 ## Shader Source and Null Terminator
 
-All static WGSL shader sources are stored as null-terminated UTF-8 bytes (`U+0000` terminator at call site requirement), including:
+Static WGSL shaders are stored as null-terminated UTF-8 bytes (`U+0000` terminator required at call site), including:
 
-- coverage pipeline shaders (`PathCountSetup`, `PathCount`, `Backdrop`, `SegmentAlloc`, `PathTilingSetup`, `PathTiling`, `CoverageFine`)
-- composition shaders (`PreparedCompositeTilePairInit`, `PreparedCompositeTileEmit`, `PreparedCompositeTilePairSort`, `PreparedCompositeTileBuild`, `PreparedCompositeFine`)
+- coverage shaders: `PathCountSetup`, `PathCount`, `Backdrop`, `SegmentAlloc`, `PathTilingSetup`, `PathTiling`, `CoverageFine`
+- prepared-composite shaders: `PreparedCompositeBinning`, `PreparedCompositeTileCount`, `PreparedCompositeTilePrefix`, `PreparedCompositeTileFill`
+
+`PreparedCompositeFine` is generated per target texture format and emitted as null-terminated UTF-8 bytes at runtime.
