@@ -30,6 +30,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     private const int SegmentAllocWorkgroupSize = 256;
 
     private readonly Dictionary<CoverageDefinitionIdentity, CachedCoverageGeometry> coverageGeometryCache = new();
+    private IMemoryOwner<byte>? cachedCoverageLineUpload;
+    private int cachedCoverageLineLength;
+    private IMemoryOwner<byte>? cachedCoveragePathUpload;
+    private int cachedCoveragePathLength;
 
     private delegate uint BindGroupEntryWriter(Span<BindGroupEntry> entries);
 
@@ -213,14 +217,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
-        fixed (byte* lineUploadPtr = lineUpload)
-        {
-            flushContext.Api.QueueWriteBuffer(
-                flushContext.Queue,
+        if (!this.TryUploadDirtyCoverageRange(
+                flushContext,
                 lineBuffer,
-                0,
-                lineUploadPtr,
-                (nuint)lineBufferBytes);
+                lineUpload,
+                ref this.cachedCoverageLineUpload,
+                ref this.cachedCoverageLineLength,
+                out error))
+        {
+            return false;
         }
 
         int pathBufferBytes = checked(pathBuilds.Length * PathStrideBytes);
@@ -251,14 +256,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
-        fixed (byte* pathUploadPtr = pathUpload)
-        {
-            flushContext.Api.QueueWriteBuffer(
-                flushContext.Queue,
+        if (!this.TryUploadDirtyCoverageRange(
+                flushContext,
                 pathBuffer,
-                0,
-                pathUploadPtr,
-                (nuint)pathBufferBytes);
+                pathUpload,
+                ref this.cachedCoveragePathUpload,
+                ref this.cachedCoveragePathLength,
+                out error))
+        {
+            return false;
         }
 
         int tileBufferBytes = checked(totalTileCount * TileStrideBytes);
@@ -482,6 +488,70 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             out _,
             out error);
 
+    private bool TryUploadDirtyCoverageRange(
+        WebGPUFlushContext flushContext,
+        WgpuBuffer* destinationBuffer,
+        ReadOnlySpan<byte> source,
+        ref IMemoryOwner<byte>? cachedOwner,
+        ref int cachedLength,
+        out string? error)
+    {
+        error = null;
+        if (source.Length == 0)
+        {
+            cachedLength = 0;
+            return true;
+        }
+
+        if (cachedOwner is null || cachedOwner.Memory.Length < source.Length)
+        {
+            cachedOwner?.Dispose();
+            cachedOwner = flushContext.MemoryAllocator.Allocate<byte>(source.Length);
+            cachedLength = 0;
+        }
+
+        Span<byte> cached = cachedOwner.Memory.Span[..source.Length];
+        int previousLength = cachedLength;
+        int commonLength = Math.Min(previousLength, source.Length);
+
+        int firstDifferent = 0;
+        while (firstDifferent < commonLength && cached[firstDifferent] == source[firstDifferent])
+        {
+            firstDifferent++;
+        }
+
+        int uploadLength = 0;
+        if (firstDifferent < source.Length)
+        {
+            int lastDifferent = source.Length - 1;
+            while (lastDifferent >= firstDifferent &&
+                   lastDifferent < commonLength &&
+                   cached[lastDifferent] == source[lastDifferent])
+            {
+                lastDifferent--;
+            }
+
+            uploadLength = (lastDifferent - firstDifferent) + 1;
+        }
+
+        if (uploadLength > 0)
+        {
+            fixed (byte* sourcePtr = source)
+            {
+                flushContext.Api.QueueWriteBuffer(
+                    flushContext.Queue,
+                    destinationBuffer,
+                    (nuint)firstDifferent,
+                    sourcePtr + firstDifferent,
+                    (nuint)uploadLength);
+            }
+        }
+
+        source.CopyTo(cached);
+        cachedLength = source.Length;
+        return true;
+    }
+
     private void DisposeCoverageResources()
     {
         foreach (CachedCoverageGeometry geometry in this.coverageGeometryCache.Values)
@@ -490,6 +560,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         }
 
         this.coverageGeometryCache.Clear();
+        this.cachedCoverageLineUpload?.Dispose();
+        this.cachedCoverageLineUpload = null;
+        this.cachedCoverageLineLength = 0;
+        this.cachedCoveragePathUpload?.Dispose();
+        this.cachedCoveragePathUpload = null;
+        this.cachedCoveragePathLength = 0;
     }
 
     private static bool TryBuildLineBuffer(

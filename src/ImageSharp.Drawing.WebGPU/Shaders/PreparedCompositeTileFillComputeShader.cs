@@ -3,7 +3,7 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
-internal static class PreparedCompositeTileCountComputeShader
+internal static class PreparedCompositeTileFillComputeShader
 {
     private static readonly byte[] CodeBytes =
     [
@@ -42,8 +42,10 @@ internal static class PreparedCompositeTileCountComputeShader
         @group(0) @binding(0) var<storage, read> command_bboxes: array<CommandBbox>;
         @group(0) @binding(1) var<storage, read> bin_header: array<BinHeader>;
         @group(0) @binding(2) var<storage, read> bin_data: array<u32>;
-        @group(0) @binding(3) var<storage, read_write> tile_counts: array<atomic<u32>>;
-        @group(0) @binding(4) var<uniform> dispatch_config: DispatchConfig;
+        @group(0) @binding(3) var<storage, read> tile_starts: array<u32>;
+        @group(0) @binding(4) var<storage, read_write> tile_counts: array<atomic<u32>>;
+        @group(0) @binding(5) var<storage, read_write> tile_command_indices: array<u32>;
+        @group(0) @binding(6) var<uniform> dispatch_config: DispatchConfig;
 
         const TILE_WIDTH: u32 = 16u;
         const TILE_HEIGHT: u32 = 16u;
@@ -77,7 +79,8 @@ internal static class PreparedCompositeTileCountComputeShader
             let tile_max_y = tile_min_y + i32(TILE_HEIGHT);
             let bin_ix = bin_y * dispatch_config.width_in_bins + bin_x;
 
-            var count = 0u;
+            let start = tile_starts[tile_index];
+            var offset = 0u;
             var part_ix = 0u;
             loop {
                 if (part_ix >= dispatch_config.partition_count) {
@@ -91,14 +94,15 @@ internal static class PreparedCompositeTileCountComputeShader
                     let cmd_index = bin_data[dispatch_config.bin_data_start + base + i];
                     let bbox = command_bboxes[cmd_index];
                     if (bbox.x1 > tile_min_x && bbox.x0 < tile_max_x && bbox.y1 > tile_min_y && bbox.y0 < tile_max_y) {
-                        count = count + 1u;
+                        tile_command_indices[start + offset] = cmd_index;
+                        offset = offset + 1u;
                     }
                 }
 
                 part_ix = part_ix + 1u;
             }
 
-            atomicStore(&tile_counts[tile_index], count);
+            atomicStore(&tile_counts[tile_index], offset);
         }
         """u8,
         0

@@ -32,10 +32,10 @@ DrawingCanvasBatcher.Flush()
            6) PathTiling
            7) CoverageFine
     -> build one flush-scoped composite command stream
-       -> command-parallel tile count
-       -> tile prefix
-       -> command-parallel tile scatter
-       -> per-tile command index sort (ascending command_index)
+       -> command-parallel tile-pair init (sentinel)
+       -> command-parallel tile-pair emit
+       -> global tile-pair key sort by (tile_index, command_index)
+       -> tile span build (tileStarts/tileCounts/tileCommandIndices)
      -> run one fine composite dispatch (PreparedCompositeFineComputeShader)
         -> solid brush uses Color.ToScaledVector4()
         -> image brush samples Image<TPixel> texture directly
@@ -77,4 +77,4 @@ Fallback is scene-scoped:
 All static WGSL shader sources are stored as null-terminated UTF-8 bytes (`U+0000` terminator at call site requirement), including:
 
 - coverage pipeline shaders (`PathCountSetup`, `PathCount`, `Backdrop`, `SegmentAlloc`, `PathTilingSetup`, `PathTiling`, `CoverageFine`)
-- composition shaders (`PreparedCompositeTileCount`, `PreparedCompositeTilePrefix`, `PreparedCompositeTileScatter`, `PreparedCompositeTileSort`, `PreparedCompositeFine`)
+- composition shaders (`PreparedCompositeTilePairInit`, `PreparedCompositeTileEmit`, `PreparedCompositeTilePairSort`, `PreparedCompositeTileBuild`, `PreparedCompositeFine`)

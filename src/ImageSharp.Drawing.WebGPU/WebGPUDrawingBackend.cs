@@ -44,14 +44,23 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     private const int CompositeTileWidth = 16;
     private const int CompositeTileHeight = 16;
     private const int CompositeTileCommandWorkgroupSize = 64;
+    private const int CompositeBinTileCountX = 16;
+    private const int CompositeBinTileCountY = 16;
+    private const int CompositeBinningWorkgroupSize = 256;
+    private const int CompositeBinWidth = CompositeTileWidth * CompositeBinTileCountX;
+    private const int CompositeBinHeight = CompositeTileHeight * CompositeBinTileCountY;
     private const uint PreparedBrushTypeSolid = 0;
     private const uint PreparedBrushTypeImage = 1;
     private const string PreparedCompositeParamsBufferKey = "prepared-composite/params";
+    private const string PreparedCompositeCommandBboxesBufferKey = "prepared-composite/command-bboxes";
     private const string PreparedCompositeTileCountsBufferKey = "prepared-composite/tile-counts";
     private const string PreparedCompositeTileStartsBufferKey = "prepared-composite/tile-starts";
-    private const string PreparedCompositeTileOffsetsBufferKey = "prepared-composite/tile-offsets";
     private const string PreparedCompositeTileIndicesBufferKey = "prepared-composite/tile-indices";
+    private const string PreparedCompositeBinHeaderBufferKey = "prepared-composite/bin-header";
+    private const string PreparedCompositeBinDataBufferKey = "prepared-composite/bin-data";
+    private const string PreparedCompositeBinningBumpBufferKey = "prepared-composite/binning-bump";
     private const string PreparedCompositeDispatchConfigBufferKey = "prepared-composite/dispatch-config";
+    private const int UniformBufferOffsetAlignment = 256;
     private const int CallbackTimeoutMilliseconds = 10_000;
 
     private readonly DefaultDrawingBackend fallbackBackend;
@@ -282,6 +291,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 configuration,
                 target.Bounds,
                 compositionBounds.Value,
+                commandCount,
                 out failure) &&
                 this.TryFinalizeFlush(flushContext, cpuRegion, compositionBounds);
         }
@@ -405,6 +415,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         Configuration configuration,
         Rectangle targetBounds,
         Rectangle compositionBounds,
+        int commandCount,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -435,93 +446,99 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         Texture* outputTexture = flushContext.TargetTexture;
         TextureView* outputTextureView = flushContext.TargetView;
         bool writesDirectlyToTarget = !flushContext.RequiresReadback;
+        bool copyOutputToTarget = !writesDirectlyToTarget;
         int outputOriginX = writesDirectlyToTarget ? targetLocalBounds.X : 0;
         int outputOriginY = writesDirectlyToTarget ? targetLocalBounds.Y : 0;
-        if (!TryCreateCompositionTexture(
-                flushContext,
-                targetLocalBounds.Width,
-                targetLocalBounds.Height,
-                out Texture* sourceTexture,
-                out backdropTextureView,
-                out error))
+        if (writesDirectlyToTarget)
         {
-            return false;
+            backdropTextureView = flushContext.TargetView;
+            sourceOriginX = targetLocalBounds.X;
+            sourceOriginY = targetLocalBounds.Y;
+            if (!TryCreateCompositionTexture(
+                    flushContext,
+                    targetLocalBounds.Width,
+                    targetLocalBounds.Height,
+                    out outputTexture,
+                    out outputTextureView,
+                    out error))
+            {
+                return false;
+            }
+
+            outputOriginX = 0;
+            outputOriginY = 0;
+            copyOutputToTarget = true;
         }
-
-        CopyTextureRegion(
-            flushContext,
-            flushContext.TargetTexture,
-            targetLocalBounds.X,
-            targetLocalBounds.Y,
-            sourceTexture,
-            0,
-            0,
-            targetLocalBounds.Width,
-            targetLocalBounds.Height);
-        sourceOriginX = 0;
-        sourceOriginY = 0;
-
-        if (!writesDirectlyToTarget &&
-            !TryCreateCompositionTexture(
-                flushContext,
-                targetLocalBounds.Width,
-                targetLocalBounds.Height,
-                out outputTexture,
-                out outputTextureView,
-                out error))
+        else
         {
-            return false;
+            if (!TryCreateCompositionTexture(
+                    flushContext,
+                    targetLocalBounds.Width,
+                    targetLocalBounds.Height,
+                    out Texture* sourceTexture,
+                    out backdropTextureView,
+                    out error))
+            {
+                return false;
+            }
+
+            CopyTextureRegion(
+                flushContext,
+                flushContext.TargetTexture,
+                targetLocalBounds.X,
+                targetLocalBounds.Y,
+                sourceTexture,
+                0,
+                0,
+                targetLocalBounds.Width,
+                targetLocalBounds.Height);
+            sourceOriginX = 0;
+            sourceOriginY = 0;
+            if (!TryCreateCompositionTexture(
+                    flushContext,
+                    targetLocalBounds.Width,
+                    targetLocalBounds.Height,
+                    out outputTexture,
+                    out outputTextureView,
+                    out error))
+            {
+                return false;
+            }
+
+            outputOriginX = 0;
+            outputOriginY = 0;
         }
 
         List<CompositionCoverageDefinition> coverageDefinitions = new();
         Dictionary<CoverageDefinitionIdentity, int> coverageDefinitionIndexByKey = new();
-        List<FlushCompositeCommand> flushCommands = new();
+        int[] batchCoverageIndices = new int[preparedBatches.Count];
+        for (int i = 0; i < batchCoverageIndices.Length; i++)
+        {
+            batchCoverageIndices[i] = -1;
+        }
+
         for (int i = 0; i < preparedBatches.Count; i++)
         {
             CompositionBatch batch = preparedBatches[i];
-            if (batch.Commands.Count == 0)
+            IReadOnlyList<PreparedCompositionCommand> commands = batch.Commands;
+            if (commands.Count == 0)
             {
                 continue;
             }
 
-            IReadOnlyList<PreparedCompositionCommand> commands = batch.Commands;
-            bool sawVisibleCommand = false;
-            int coverageDefinitionIndex = -1;
-            for (int commandIndex = 0; commandIndex < commands.Count; commandIndex++)
+            CoverageDefinitionIdentity definitionIdentity = new(batch.Definition);
+            if (!coverageDefinitionIndexByKey.TryGetValue(definitionIdentity, out int coverageDefinitionIndex))
             {
-                PreparedCompositionCommand command = commands[commandIndex];
-                Rectangle clippedDestination = Rectangle.Intersect(command.DestinationRegion, targetLocalBounds);
-                if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
-                {
-                    continue;
-                }
-
-                if (!sawVisibleCommand)
-                {
-                    CoverageDefinitionIdentity definitionIdentity = new(batch.Definition);
-                    if (!coverageDefinitionIndexByKey.TryGetValue(definitionIdentity, out coverageDefinitionIndex))
-                    {
-                        coverageDefinitionIndex = coverageDefinitions.Count;
-                        coverageDefinitions.Add(batch.Definition);
-                        coverageDefinitionIndexByKey.Add(definitionIdentity, coverageDefinitionIndex);
-                    }
-
-                    sawVisibleCommand = true;
-                }
-
-                Point clippedSourceOffset = new(
-                    command.SourceOffset.X + (clippedDestination.X - command.DestinationRegion.X),
-                    command.SourceOffset.Y + (clippedDestination.Y - command.DestinationRegion.Y));
-                flushCommands.Add(new FlushCompositeCommand(coverageDefinitionIndex, command, clippedDestination, clippedSourceOffset));
+                coverageDefinitionIndex = coverageDefinitions.Count;
+                coverageDefinitions.Add(batch.Definition);
+                coverageDefinitionIndexByKey.Add(definitionIdentity, coverageDefinitionIndex);
             }
 
-            if (sawVisibleCommand)
-            {
-                this.TestingComputePathBatchCount++;
-            }
+            batchCoverageIndices[i] = coverageDefinitionIndex;
+            this.TestingComputePathBatchCount++;
         }
 
-        if (flushCommands.Count == 0)
+        if (commandCount == 0)
         {
             error = null;
             return true;
@@ -548,7 +565,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 sourceOriginY,
                 outputOriginX,
                 outputOriginY,
-                flushCommands,
+                preparedBatches,
+                batchCoverageIndices,
+                commandCount,
                 coveragePlacements,
                 coverageView,
                 out error))
@@ -556,7 +575,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
-        if (!writesDirectlyToTarget)
+        if (copyOutputToTarget)
         {
             CopyTextureRegion(
                 flushContext,
@@ -584,14 +603,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         int sourceOriginY,
         int outputOriginX,
         int outputOriginY,
-        IReadOnlyList<FlushCompositeCommand> flushCommands,
+        List<CompositionBatch> preparedBatches,
+        int[] batchCoverageIndices,
+        int commandCount,
         CoveragePlacement[] coveragePlacements,
         TextureView* coverageTextureView,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         error = null;
-        if (flushCommands.Count == 0)
+        if (commandCount == 0)
         {
             return true;
         }
@@ -631,6 +652,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         int tileCountX = checked((int)DivideRoundUp(targetLocalBounds.Width, CompositeTileWidth));
         int tileCountY = checked((int)DivideRoundUp(targetLocalBounds.Height, CompositeTileHeight));
         int tileCount = checked(tileCountX * tileCountY);
+        int widthInBins = checked((int)DivideRoundUp(tileCountX, CompositeBinTileCountX));
+        int heightInBins = checked((int)DivideRoundUp(tileCountY, CompositeBinTileCountY));
+        int binCount = checked(widthInBins * heightInBins);
         if (tileCount == 0)
         {
             return true;
@@ -638,90 +662,109 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         uint parameterSize = (uint)Unsafe.SizeOf<PreparedCompositeParameters>();
         IMemoryOwner<PreparedCompositeParameters> parametersOwner =
-            flushContext.MemoryAllocator.Allocate<PreparedCompositeParameters>(flushCommands.Count);
+            flushContext.MemoryAllocator.Allocate<PreparedCompositeParameters>(commandCount);
+        IMemoryOwner<PreparedCompositeCommandBbox> bboxesOwner =
+            flushContext.MemoryAllocator.Allocate<PreparedCompositeCommandBbox>(commandCount);
         try
         {
-            int flushCommandCount = flushCommands.Count;
-            Span<PreparedCompositeParameters> parameters = parametersOwner.Memory.Span[..flushCommands.Count];
+            int flushCommandCount = commandCount;
+            Span<PreparedCompositeParameters> parameters = parametersOwner.Memory.Span[..commandCount];
+            Span<PreparedCompositeCommandBbox> commandBboxes = bboxesOwner.Memory.Span[..commandCount];
             TextureView* brushTextureView = backdropTextureView;
             nint brushTextureViewHandle = (nint)backdropTextureView;
             bool hasImageTexture = false;
-            uint totalTilePairCount = 0;
+            uint maxTileCommandIndices = 0;
+            uint binningPairCount = 0;
 
-            for (int i = 0; i < flushCommandCount; i++)
+            int commandIndex = 0;
+            for (int batchIndex = 0; batchIndex < preparedBatches.Count; batchIndex++)
             {
-                FlushCompositeCommand flushCommand = flushCommands[i];
-                PreparedCompositionCommand command = flushCommand.Command;
-
-                uint brushType;
-                int brushOriginX = 0;
-                int brushOriginY = 0;
-                int brushRegionX = 0;
-                int brushRegionY = 0;
-                int brushRegionWidth = 1;
-                int brushRegionHeight = 1;
-                Vector4 solidColor = default;
-
-                if (command.Brush is SolidBrush solidBrush)
+                int coverageDefinitionIndex = batchCoverageIndices[batchIndex];
+                if (coverageDefinitionIndex < 0)
                 {
-                    brushType = PreparedBrushTypeSolid;
-                    solidColor = solidBrush.Color.ToScaledVector4();
+                    continue;
                 }
-                else if (command.Brush is ImageBrush imageBrush)
-                {
-                    brushType = PreparedBrushTypeImage;
-                    Image<TPixel> image = (Image<TPixel>)imageBrush.SourceImage;
 
-                    if (!TryGetOrCreateImageTextureView(
-                            flushContext,
-                            image,
-                            flushContext.TextureFormat,
-                            out TextureView* resolvedBrushTextureView,
-                            out error))
+                IReadOnlyList<PreparedCompositionCommand> commands = preparedBatches[batchIndex].Commands;
+                for (int i = 0; i < commands.Count; i++)
+                {
+                    PreparedCompositionCommand command = commands[i];
+
+                    uint brushType;
+                    int brushOriginX = 0;
+                    int brushOriginY = 0;
+                    int brushRegionX = 0;
+                    int brushRegionY = 0;
+                    int brushRegionWidth = 1;
+                    int brushRegionHeight = 1;
+                    Vector4 solidColor = default;
+
+                    if (command.Brush is SolidBrush solidBrush)
                     {
+                        brushType = PreparedBrushTypeSolid;
+                        solidColor = solidBrush.Color.ToScaledVector4();
+                    }
+                    else if (command.Brush is ImageBrush imageBrush)
+                    {
+                        brushType = PreparedBrushTypeImage;
+                        Image<TPixel> image = (Image<TPixel>)imageBrush.SourceImage;
+
+                        if (!TryGetOrCreateImageTextureView(
+                                flushContext,
+                                image,
+                                flushContext.TextureFormat,
+                                out TextureView* resolvedBrushTextureView,
+                                out error))
+                        {
+                            return false;
+                        }
+
+                        if (!hasImageTexture)
+                        {
+                            brushTextureView = resolvedBrushTextureView;
+                            brushTextureViewHandle = (nint)resolvedBrushTextureView;
+                            hasImageTexture = true;
+                        }
+                        else if (brushTextureViewHandle != (nint)resolvedBrushTextureView)
+                        {
+                            error = "Prepared composite flush currently supports one image brush texture per dispatch.";
+                            return false;
+                        }
+
+                        Rectangle sourceRegion = Rectangle.Intersect(image.Bounds, (Rectangle)imageBrush.SourceRegion);
+                        brushRegionX = sourceRegion.X;
+                        brushRegionY = sourceRegion.Y;
+                        brushRegionWidth = sourceRegion.Width;
+                        brushRegionHeight = sourceRegion.Height;
+                        brushOriginX = command.BrushBounds.X + imageBrush.Offset.X - targetBounds.X - targetLocalBounds.X;
+                        brushOriginY = command.BrushBounds.Y + imageBrush.Offset.Y - targetBounds.Y - targetLocalBounds.Y;
+                    }
+                    else
+                    {
+                        error = "Unsupported brush type.";
                         return false;
                     }
 
-                    if (!hasImageTexture)
-                    {
-                        brushTextureView = resolvedBrushTextureView;
-                        brushTextureViewHandle = (nint)resolvedBrushTextureView;
-                        hasImageTexture = true;
-                    }
-                    else if (brushTextureViewHandle != (nint)resolvedBrushTextureView)
-                    {
-                        error = "Prepared composite flush currently supports one image brush texture per dispatch.";
-                        return false;
-                    }
+                    CoveragePlacement coveragePlacement = coveragePlacements[coverageDefinitionIndex];
+                    Rectangle destinationRegion = command.DestinationRegion;
+                    Point sourceOffset = command.SourceOffset;
 
-                    Rectangle sourceRegion = Rectangle.Intersect(image.Bounds, (Rectangle)imageBrush.SourceRegion);
-                    brushRegionX = sourceRegion.X;
-                    brushRegionY = sourceRegion.Y;
-                    brushRegionWidth = sourceRegion.Width;
-                    brushRegionHeight = sourceRegion.Height;
-                    brushOriginX = command.BrushBounds.X + imageBrush.Offset.X - targetBounds.X - targetLocalBounds.X;
-                    brushOriginY = command.BrushBounds.Y + imageBrush.Offset.Y - targetBounds.Y - targetLocalBounds.Y;
-                }
-                else
-                {
-                    error = "Unsupported brush type.";
-                    return false;
-                }
+                    int destinationX = destinationRegion.X - targetLocalBounds.X;
+                    int destinationY = destinationRegion.Y - targetLocalBounds.Y;
+                    int minTileX = destinationX / CompositeTileWidth;
+                    int minTileY = destinationY / CompositeTileHeight;
+                    int maxTileX = (destinationX + destinationRegion.Width - 1) / CompositeTileWidth;
+                    int maxTileY = (destinationY + destinationRegion.Height - 1) / CompositeTileHeight;
+                    uint tileEmitCount = checked((uint)((maxTileX - minTileX + 1) * (maxTileY - minTileY + 1)));
+                    maxTileCommandIndices = checked(maxTileCommandIndices + tileEmitCount);
 
-                CoveragePlacement coveragePlacement = coveragePlacements[flushCommand.CoverageDefinitionIndex];
-                Rectangle destinationRegion = flushCommand.DestinationRegion;
-                Point sourceOffset = flushCommand.SourceOffset;
-
-                int destinationX = destinationRegion.X - targetLocalBounds.X;
-                int destinationY = destinationRegion.Y - targetLocalBounds.Y;
-                int minTileX = destinationX / CompositeTileWidth;
-                int minTileY = destinationY / CompositeTileHeight;
-                int maxTileX = (destinationX + destinationRegion.Width - 1) / CompositeTileWidth;
-                int maxTileY = (destinationY + destinationRegion.Height - 1) / CompositeTileHeight;
-                uint tileEmitCount = checked((uint)((maxTileX - minTileX + 1) * (maxTileY - minTileY + 1)));
-                uint tileEmitOffset = totalTilePairCount;
-                totalTilePairCount = checked(totalTilePairCount + tileEmitCount);
-                PreparedCompositeParameters commandParameters = new(
+                    int minBinX = destinationX / CompositeBinWidth;
+                    int minBinY = destinationY / CompositeBinHeight;
+                    int maxBinX = (destinationX + destinationRegion.Width - 1) / CompositeBinWidth;
+                    int maxBinY = (destinationY + destinationRegion.Height - 1) / CompositeBinHeight;
+                    uint binEmitCount = checked((uint)((maxBinX - minBinX + 1) * (maxBinY - minBinY + 1)));
+                    binningPairCount = checked(binningPairCount + binEmitCount);
+                    PreparedCompositeParameters commandParameters = new(
                     destinationX,
                     destinationY,
                     destinationRegion.Width,
@@ -739,12 +782,17 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     (uint)command.GraphicsOptions.ColorBlendingMode,
                     (uint)command.GraphicsOptions.AlphaCompositionMode,
                     command.GraphicsOptions.BlendPercentage,
-                    solidColor,
-                    tileEmitOffset,
-                    tileEmitCount);
+                    solidColor);
 
-                parameters[i] = commandParameters;
+                    parameters[commandIndex] = commandParameters;
+                    commandBboxes[commandIndex] = new PreparedCompositeCommandBbox(
+                        destinationX,
+                        destinationY,
+                        destinationX + destinationRegion.Width,
+                        destinationY + destinationRegion.Height);
+                    commandIndex++;
             }
+        }
 
             int usedParameterByteCount = checked(flushCommandCount * (int)parameterSize);
             if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
@@ -768,6 +816,84 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     (nuint)usedParameterByteCount);
             }
 
+            int usedCommandBboxByteCount = checked(flushCommandCount * Unsafe.SizeOf<PreparedCompositeCommandBbox>());
+            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                    PreparedCompositeCommandBboxesBufferKey,
+                    BufferUsage.Storage | BufferUsage.CopyDst,
+                    (nuint)usedCommandBboxByteCount,
+                    out WgpuBuffer* commandBboxesBuffer,
+                    out _,
+                    out error))
+            {
+                return false;
+            }
+
+            fixed (PreparedCompositeCommandBbox* usedBboxesPtr = commandBboxes)
+            {
+                flushContext.Api.QueueWriteBuffer(
+                    flushContext.Queue,
+                    commandBboxesBuffer,
+                    0,
+                    usedBboxesPtr,
+                    (nuint)usedCommandBboxByteCount);
+            }
+
+            int partitionCount = (int)DivideRoundUp(flushCommandCount, CompositeBinningWorkgroupSize);
+            uint binningSize = Math.Max(binningPairCount, 1u);
+            int binHeaderCount = checked(partitionCount * CompositeBinningWorkgroupSize);
+            int binHeaderByteCount = checked(binHeaderCount * Unsafe.SizeOf<PreparedCompositeBinHeader>());
+            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                    PreparedCompositeBinHeaderBufferKey,
+                    BufferUsage.Storage | BufferUsage.CopyDst,
+                    (nuint)binHeaderByteCount,
+                    out WgpuBuffer* binHeaderBuffer,
+                    out _,
+                    out error))
+            {
+                return false;
+            }
+
+            nuint binDataByteCount = checked((nuint)binningSize * (nuint)sizeof(uint));
+            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                    PreparedCompositeBinDataBufferKey,
+                    BufferUsage.Storage | BufferUsage.CopyDst,
+                    binDataByteCount,
+                    out WgpuBuffer* binDataBuffer,
+                    out _,
+                    out error))
+            {
+                return false;
+            }
+
+            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                    PreparedCompositeBinningBumpBufferKey,
+                    BufferUsage.Storage | BufferUsage.CopyDst,
+                    (nuint)Unsafe.SizeOf<PreparedCompositeBinningBump>(),
+                    out WgpuBuffer* binningBumpBuffer,
+                    out _,
+                    out error))
+            {
+                return false;
+            }
+
+            flushContext.Api.CommandEncoderClearBuffer(
+                flushContext.CommandEncoder,
+                binningBumpBuffer,
+                0,
+                (nuint)Unsafe.SizeOf<PreparedCompositeBinningBump>());
+
+            int tileStartsByteCount = checked(tileCount * sizeof(uint));
+            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                    PreparedCompositeTileStartsBufferKey,
+                    BufferUsage.Storage | BufferUsage.CopyDst,
+                    (nuint)tileStartsByteCount,
+                    out WgpuBuffer* tileStartsBuffer,
+                    out _,
+                    out error))
+            {
+                return false;
+            }
+
             int tileCountsByteCount = checked(tileCount * sizeof(uint));
             if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
                     PreparedCompositeTileCountsBufferKey,
@@ -782,45 +908,24 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
             flushContext.Api.CommandEncoderClearBuffer(
                 flushContext.CommandEncoder,
+                tileStartsBuffer,
+                0,
+                (nuint)tileStartsByteCount);
+
+            flushContext.Api.CommandEncoderClearBuffer(
+                flushContext.CommandEncoder,
                 tileCountsBuffer,
                 0,
                 (nuint)tileCountsByteCount);
 
-            int tileStartsByteCount = checked(tileCount * sizeof(uint));
-            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
-                    PreparedCompositeTileStartsBufferKey,
-                    BufferUsage.Storage | BufferUsage.CopyDst | BufferUsage.CopySrc,
-                    (nuint)tileStartsByteCount,
-                    out WgpuBuffer* tileStartsBuffer,
-                    out _,
-                    out error))
-            {
-                return false;
-            }
-
-            if (totalTilePairCount == 0)
-            {
-                error = null;
-                return true;
-            }
-
-            nuint tileCommandIndicesByteCount = checked((nuint)totalTilePairCount * (nuint)sizeof(uint));
+            uint tileCommandCapacity = maxTileCommandIndices;
+            nuint usedTileCommandCount = (nuint)Math.Max(tileCommandCapacity, 1u);
+            nuint tileCommandIndicesByteCount = checked(usedTileCommandCount * (nuint)sizeof(uint));
             if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
                     PreparedCompositeTileIndicesBufferKey,
                     BufferUsage.Storage | BufferUsage.CopyDst,
                     tileCommandIndicesByteCount,
                     out WgpuBuffer* tileCommandIndicesBuffer,
-                    out _,
-                    out error))
-            {
-                return false;
-            }
-
-            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
-                    PreparedCompositeTileOffsetsBufferKey,
-                    BufferUsage.Storage | BufferUsage.CopyDst,
-                    (nuint)tileStartsByteCount,
-                    out WgpuBuffer* tileOffsetsBuffer,
                     out _,
                     out error))
             {
@@ -849,7 +954,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 (uint)sourceOriginX,
                 (uint)sourceOriginY,
                 (uint)outputOriginX,
-                (uint)outputOriginY);
+                (uint)outputOriginY,
+                (uint)widthInBins,
+                (uint)heightInBins,
+                (uint)binCount,
+                (uint)partitionCount,
+                binningSize,
+                0u);
             flushContext.Api.QueueWriteBuffer(
                 flushContext.Queue,
                 dispatchConfigBuffer,
@@ -857,57 +968,60 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 &dispatchConfig,
                 dispatchConfigSize);
 
-            if (!this.DispatchPreparedCompositeTileCount(
-                    flushContext,
-                    paramsBuffer,
-                    tileCountsBuffer,
-                    dispatchConfigBuffer,
-                    (uint)flushCommandCount,
-                    out error))
+            if (tileCommandCapacity > 0 && flushCommandCount > 0)
             {
-                return false;
-            }
+                if (!this.DispatchPreparedCompositeBinning(
+                        flushContext,
+                        commandBboxesBuffer,
+                        binHeaderBuffer,
+                        binDataBuffer,
+                        binningBumpBuffer,
+                        dispatchConfigBuffer,
+                        flushCommandCount,
+                        out error))
+                {
+                    return false;
+                }
 
-            if (!this.DispatchPreparedCompositeTilePrefix(
-                    flushContext,
-                    tileCountsBuffer,
-                    tileStartsBuffer,
-                    dispatchConfigBuffer,
-                    out error))
-            {
-                return false;
-            }
+                if (!this.DispatchPreparedCompositeTileCount(
+                        flushContext,
+                        commandBboxesBuffer,
+                        binHeaderBuffer,
+                        binDataBuffer,
+                        tileCountsBuffer,
+                        dispatchConfigBuffer,
+                        widthInBins,
+                        heightInBins,
+                        out error))
+                {
+                    return false;
+                }
 
-            flushContext.Api.CommandEncoderCopyBufferToBuffer(
-                flushContext.CommandEncoder,
-                tileStartsBuffer,
-                0,
-                tileOffsetsBuffer,
-                0,
-                (nuint)tileStartsByteCount);
+                if (!this.DispatchPreparedCompositeTilePrefix(
+                        flushContext,
+                        tileCountsBuffer,
+                        tileStartsBuffer,
+                        dispatchConfigBuffer,
+                        out error))
+                {
+                    return false;
+                }
 
-            if (!this.DispatchPreparedCompositeTileScatter(
-                    flushContext,
-                    paramsBuffer,
-                    tileOffsetsBuffer,
-                    tileCommandIndicesBuffer,
-                    dispatchConfigBuffer,
-                    (uint)flushCommandCount,
-                    out error))
-            {
-                return false;
-            }
-
-            if (!this.DispatchPreparedCompositeTileSort(
-                    flushContext,
-                    tileStartsBuffer,
-                    tileCountsBuffer,
-                    tileCommandIndicesBuffer,
-                    dispatchConfigBuffer,
-                    (uint)tileCount,
-                    out error))
-            {
-                return false;
+                if (!this.DispatchPreparedCompositeTileFill(
+                        flushContext,
+                        commandBboxesBuffer,
+                        binHeaderBuffer,
+                        binDataBuffer,
+                        tileStartsBuffer,
+                        tileCountsBuffer,
+                        tileCommandIndicesBuffer,
+                        dispatchConfigBuffer,
+                        widthInBins,
+                        heightInBins,
+                        out error))
+                {
+                    return false;
+                }
             }
 
             BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[9];
@@ -1009,6 +1123,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         finally
         {
             parametersOwner.Dispose();
+            bboxesOwner.Dispose();
         }
 
         error = null;
@@ -1017,10 +1132,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     private bool DispatchPreparedCompositeTileCount(
         WebGPUFlushContext flushContext,
-        WgpuBuffer* paramsBuffer,
+        WgpuBuffer* commandBboxesBuffer,
+        WgpuBuffer* binHeaderBuffer,
+        WgpuBuffer* binDataBuffer,
         WgpuBuffer* tileCountsBuffer,
         WgpuBuffer* dispatchConfigBuffer,
-        uint commandCount,
+        int widthInBins,
+        int heightInBins,
         out string? error)
         => this.DispatchComputePass(
             flushContext,
@@ -1029,16 +1147,55 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             TryCreatePreparedCompositeTileCountBindGroupLayout,
             (entries) =>
             {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = paramsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
-                return 3;
+                entries[0] = new BindGroupEntry { Binding = 0, Buffer = commandBboxesBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[1] = new BindGroupEntry { Binding = 1, Buffer = binHeaderBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[2] = new BindGroupEntry { Binding = 2, Buffer = binDataBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[3] = new BindGroupEntry { Binding = 3, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[4] = new BindGroupEntry { Binding = 4, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                return 5;
             },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(
-                pass,
-                DivideRoundUp(checked((int)commandCount), CompositeTileCommandWorkgroupSize),
-                1,
-                1),
+            (pass) =>
+            {
+                uint workgroupCountX = (uint)widthInBins;
+                uint workgroupCountY = (uint)heightInBins;
+                if (workgroupCountX > 0 && workgroupCountY > 0)
+                {
+                    flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, workgroupCountX, workgroupCountY, 1);
+                }
+            },
+            out error);
+
+    private bool DispatchPreparedCompositeBinning(
+        WebGPUFlushContext flushContext,
+        WgpuBuffer* commandBboxesBuffer,
+        WgpuBuffer* binHeaderBuffer,
+        WgpuBuffer* binDataBuffer,
+        WgpuBuffer* binningBumpBuffer,
+        WgpuBuffer* dispatchConfigBuffer,
+        int commandCount,
+        out string? error)
+        => this.DispatchComputePass(
+            flushContext,
+            "prepared-composite-binning",
+            PreparedCompositeBinningComputeShader.Code,
+            TryCreatePreparedCompositeBinningBindGroupLayout,
+            (entries) =>
+            {
+                entries[0] = new BindGroupEntry { Binding = 0, Buffer = commandBboxesBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[1] = new BindGroupEntry { Binding = 1, Buffer = binHeaderBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[2] = new BindGroupEntry { Binding = 2, Buffer = binDataBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[3] = new BindGroupEntry { Binding = 3, Buffer = binningBumpBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[4] = new BindGroupEntry { Binding = 4, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                return 5;
+            },
+            (pass) =>
+            {
+                uint workgroupCount = DivideRoundUp(commandCount, CompositeBinningWorkgroupSize);
+                if (workgroupCount > 0)
+                {
+                    flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, workgroupCount, 1, 1);
+                }
+            },
             out error);
 
     private bool DispatchPreparedCompositeTilePrefix(
@@ -1059,67 +1216,46 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 entries[2] = new BindGroupEntry { Binding = 2, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
                 return 3;
             },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(
-                pass,
-                1,
-                1,
-                1),
+            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1),
             out error);
 
-    private bool DispatchPreparedCompositeTileScatter(
+    private bool DispatchPreparedCompositeTileFill(
         WebGPUFlushContext flushContext,
-        WgpuBuffer* paramsBuffer,
-        WgpuBuffer* tileOffsetsBuffer,
-        WgpuBuffer* tileCommandIndicesBuffer,
-        WgpuBuffer* dispatchConfigBuffer,
-        uint commandCount,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "prepared-composite-tile-scatter",
-            PreparedCompositeTileScatterComputeShader.Code,
-            TryCreatePreparedCompositeTileScatterBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = paramsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileOffsetsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = tileCommandIndicesBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[3] = new BindGroupEntry { Binding = 3, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
-                return 4;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(
-                pass,
-                DivideRoundUp(checked((int)commandCount), CompositeTileCommandWorkgroupSize),
-                1,
-                1),
-            out error);
-
-    private bool DispatchPreparedCompositeTileSort(
-        WebGPUFlushContext flushContext,
+        WgpuBuffer* commandBboxesBuffer,
+        WgpuBuffer* binHeaderBuffer,
+        WgpuBuffer* binDataBuffer,
         WgpuBuffer* tileStartsBuffer,
         WgpuBuffer* tileCountsBuffer,
         WgpuBuffer* tileCommandIndicesBuffer,
         WgpuBuffer* dispatchConfigBuffer,
-        uint tileCount,
+        int widthInBins,
+        int heightInBins,
         out string? error)
         => this.DispatchComputePass(
             flushContext,
-            "prepared-composite-tile-sort",
-            PreparedCompositeTileSortComputeShader.Code,
-            TryCreatePreparedCompositeTileSortBindGroupLayout,
+            "prepared-composite-tile-fill",
+            PreparedCompositeTileFillComputeShader.Code,
+            TryCreatePreparedCompositeTileFillBindGroupLayout,
             (entries) =>
             {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = tileCommandIndicesBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[3] = new BindGroupEntry { Binding = 3, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
-                return 4;
+                entries[0] = new BindGroupEntry { Binding = 0, Buffer = commandBboxesBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[1] = new BindGroupEntry { Binding = 1, Buffer = binHeaderBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[2] = new BindGroupEntry { Binding = 2, Buffer = binDataBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[3] = new BindGroupEntry { Binding = 3, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[4] = new BindGroupEntry { Binding = 4, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[5] = new BindGroupEntry { Binding = 5, Buffer = tileCommandIndicesBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[6] = new BindGroupEntry { Binding = 6, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                return 7;
             },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(
-                pass,
-                tileCount,
-                1,
-                1),
+            (pass) =>
+            {
+                uint workgroupCountX = (uint)widthInBins;
+                uint workgroupCountY = (uint)heightInBins;
+                if (workgroupCountX > 0 && workgroupCountY > 0)
+                {
+                    flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, workgroupCountX, workgroupCountY, 1);
+                }
+            },
             out error);
 
     private static bool TryGetOrCreateImageTextureView<TPixel>(
@@ -1324,7 +1460,87 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[3];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[5];
+        entries[0] = new BindGroupLayoutEntry
+        {
+            Binding = 0,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[1] = new BindGroupLayoutEntry
+        {
+            Binding = 1,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[2] = new BindGroupLayoutEntry
+        {
+            Binding = 2,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[3] = new BindGroupLayoutEntry
+        {
+            Binding = 3,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[4] = new BindGroupLayoutEntry
+        {
+            Binding = 4,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Uniform,
+                HasDynamicOffset = false,
+                MinBindingSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
+            }
+        };
+
+        BindGroupLayoutDescriptor descriptor = new()
+        {
+            EntryCount = 5,
+            Entries = entries
+        };
+
+        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
+        if (layout is null)
+        {
+            error = "Failed to create prepared composite tile-count bind group layout.";
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryCreatePreparedCompositeBinningBindGroupLayout(
+        WebGPU api,
+        Device* device,
+        out BindGroupLayout* layout,
+        out string? error)
+    {
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[5];
         entries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
@@ -1353,6 +1569,28 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[3] = new BindGroupLayoutEntry
+        {
+            Binding = 3,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[4] = new BindGroupLayoutEntry
+        {
+            Binding = 4,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
                 Type = BufferBindingType.Uniform,
                 HasDynamicOffset = false,
                 MinBindingSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
@@ -1361,14 +1599,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 3,
+            EntryCount = 5,
             Entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
         if (layout is null)
         {
-            error = "Failed to create prepared composite tile-count bind group layout.";
+            error = "Failed to create prepared composite binning bind group layout.";
             return false;
         }
 
@@ -1389,7 +1627,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.Storage,
+                Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
                 MinBindingSize = 0
             }
@@ -1434,13 +1672,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
-    private static bool TryCreatePreparedCompositeTileScatterBindGroupLayout(
+    private static bool TryCreatePreparedCompositeTileFillBindGroupLayout(
         WebGPU api,
         Device* device,
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[4];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
         entries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
@@ -1458,7 +1696,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.Storage,
+                Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
                 MinBindingSize = 0
             }
@@ -1466,53 +1704,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         entries[2] = new BindGroupLayoutEntry
         {
             Binding = 2,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = 0
-            }
-        };
-        entries[3] = new BindGroupLayoutEntry
-        {
-            Binding = 3,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Uniform,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
-            }
-        };
-
-        BindGroupLayoutDescriptor descriptor = new()
-        {
-            EntryCount = 4,
-            Entries = entries
-        };
-
-        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
-        if (layout is null)
-        {
-            error = "Failed to create prepared composite tile-scatter bind group layout.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    private static bool TryCreatePreparedCompositeTileSortBindGroupLayout(
-        WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
-        out string? error)
-    {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[4];
-        entries[0] = new BindGroupLayoutEntry
-        {
-            Binding = 0,
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
@@ -1521,31 +1712,42 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 MinBindingSize = 0
             }
         };
-        entries[1] = new BindGroupLayoutEntry
-        {
-            Binding = 1,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = 0
-            }
-        };
-        entries[2] = new BindGroupLayoutEntry
-        {
-            Binding = 2,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = 0
-            }
-        };
         entries[3] = new BindGroupLayoutEntry
         {
             Binding = 3,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[4] = new BindGroupLayoutEntry
+        {
+            Binding = 4,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[5] = new BindGroupLayoutEntry
+        {
+            Binding = 5,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[6] = new BindGroupLayoutEntry
+        {
+            Binding = 6,
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
@@ -1557,14 +1759,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 4,
+            EntryCount = 7,
             Entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
         if (layout is null)
         {
-            error = "Failed to create prepared composite tile-sort bind group layout.";
+            error = "Failed to create prepared composite tile-fill bind group layout.";
             return false;
         }
 
@@ -2001,29 +2203,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 (int)this.samplingOrigin);
     }
 
-    private readonly struct FlushCompositeCommand
-    {
-        public FlushCompositeCommand(
-            int coverageDefinitionIndex,
-            in PreparedCompositionCommand command,
-            in Rectangle destinationRegion,
-            in Point sourceOffset)
-        {
-            this.CoverageDefinitionIndex = coverageDefinitionIndex;
-            this.Command = command;
-            this.DestinationRegion = destinationRegion;
-            this.SourceOffset = sourceOffset;
-        }
-
-        public int CoverageDefinitionIndex { get; }
-
-        public PreparedCompositionCommand Command { get; }
-
-        public Rectangle DestinationRegion { get; }
-
-        public Point SourceOffset { get; }
-    }
-
     private readonly struct CoveragePlacement
     {
         public CoveragePlacement(int originX, int originY, int width, int height)
@@ -2056,6 +2235,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         public readonly uint SourceOriginY;
         public readonly uint OutputOriginX;
         public readonly uint OutputOriginY;
+        public readonly uint WidthInBins;
+        public readonly uint HeightInBins;
+        public readonly uint BinCount;
+        public readonly uint PartitionCount;
+        public readonly uint BinningSize;
+        public readonly uint BinDataStart;
 
         public PreparedCompositeDispatchConfig(
             uint targetWidth,
@@ -2067,7 +2252,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             uint sourceOriginX,
             uint sourceOriginY,
             uint outputOriginX,
-            uint outputOriginY)
+            uint outputOriginY,
+            uint widthInBins,
+            uint heightInBins,
+            uint binCount,
+            uint partitionCount,
+            uint binningSize,
+            uint binDataStart)
         {
             this.TargetWidth = targetWidth;
             this.TargetHeight = targetHeight;
@@ -2079,6 +2270,55 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.SourceOriginY = sourceOriginY;
             this.OutputOriginX = outputOriginX;
             this.OutputOriginY = outputOriginY;
+            this.WidthInBins = widthInBins;
+            this.HeightInBins = heightInBins;
+            this.BinCount = binCount;
+            this.PartitionCount = partitionCount;
+            this.BinningSize = binningSize;
+            this.BinDataStart = binDataStart;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct PreparedCompositeCommandBbox
+    {
+        public readonly int X0;
+        public readonly int Y0;
+        public readonly int X1;
+        public readonly int Y1;
+
+        public PreparedCompositeCommandBbox(int x0, int y0, int x1, int y1)
+        {
+            this.X0 = x0;
+            this.Y0 = y0;
+            this.X1 = x1;
+            this.Y1 = y1;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct PreparedCompositeBinHeader
+    {
+        public readonly uint ElementCount;
+        public readonly uint ChunkOffset;
+
+        public PreparedCompositeBinHeader(uint elementCount, uint chunkOffset)
+        {
+            this.ElementCount = elementCount;
+            this.ChunkOffset = chunkOffset;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct PreparedCompositeBinningBump
+    {
+        public readonly uint Failed;
+        public readonly uint Binning;
+
+        public PreparedCompositeBinningBump(uint failed, uint binning)
+        {
+            this.Failed = failed;
+            this.Binning = binning;
         }
     }
 
@@ -2109,8 +2349,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         public readonly uint SolidG;
         public readonly uint SolidB;
         public readonly uint SolidA;
-        public readonly uint TileEmitOffset;
-        public readonly uint TileEmitCount;
 
         public PreparedCompositeParameters(
             int destinationX,
@@ -2130,9 +2368,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             uint colorBlendMode,
             uint alphaCompositionMode,
             float blendPercentage,
-            Vector4 solidColor,
-            uint tileEmitOffset,
-            uint tileEmitCount)
+            Vector4 solidColor)
         {
             this.DestinationX = (uint)destinationX;
             this.DestinationY = (uint)destinationY;
@@ -2155,8 +2391,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.SolidG = FloatToUInt32Bits(solidColor.Y);
             this.SolidB = FloatToUInt32Bits(solidColor.Z);
             this.SolidA = FloatToUInt32Bits(solidColor.W);
-            this.TileEmitOffset = tileEmitOffset;
-            this.TileEmitCount = tileEmitCount;
         }
     }
 }

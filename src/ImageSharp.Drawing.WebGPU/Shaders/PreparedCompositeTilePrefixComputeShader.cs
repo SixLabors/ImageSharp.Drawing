@@ -7,8 +7,7 @@ internal static class PreparedCompositeTilePrefixComputeShader
 {
     private static readonly byte[] CodeBytes =
     [
-        ..
-        """
+        .. """
         struct DispatchConfig {
             target_width: u32,
             target_height: u32,
@@ -16,11 +15,19 @@ internal static class PreparedCompositeTilePrefixComputeShader
             tile_count_y: u32,
             tile_count: u32,
             command_count: u32,
-            pad0: u32,
-            pad1: u32,
+            source_origin_x: u32,
+            source_origin_y: u32,
+            output_origin_x: u32,
+            output_origin_y: u32,
+            width_in_bins: u32,
+            height_in_bins: u32,
+            bin_count: u32,
+            partition_count: u32,
+            binning_size: u32,
+            bin_data_start: u32,
         };
 
-        @group(0) @binding(0) var<storage, read_write> tile_counts: array<atomic<u32>>;
+        @group(0) @binding(0) var<storage, read> tile_counts: array<atomic<u32>>;
         @group(0) @binding(1) var<storage, read_write> tile_starts: array<u32>;
         @group(0) @binding(2) var<uniform> dispatch_config: DispatchConfig;
 
@@ -30,19 +37,17 @@ internal static class PreparedCompositeTilePrefixComputeShader
                 return;
             }
 
-            var running: u32 = 0u;
-            var tile_index: u32 = 0u;
+            var sum = 0u;
+            var tile_index = 0u;
             loop {
                 if (tile_index >= dispatch_config.tile_count) {
                     break;
                 }
-
-                let tile_count = atomicLoad(&tile_counts[tile_index]);
-                tile_starts[tile_index] = running;
-                running = running + tile_count;
+                let count = atomicLoad(&tile_counts[tile_index]);
+                tile_starts[tile_index] = sum;
+                sum = sum + count;
                 tile_index = tile_index + 1u;
             }
-
         }
         """u8,
         0

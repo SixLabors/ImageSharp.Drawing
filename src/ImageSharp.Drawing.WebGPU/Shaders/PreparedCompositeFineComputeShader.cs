@@ -37,8 +37,6 @@ internal static class PreparedCompositeFineComputeShader
             solid_g: u32,
             solid_b: u32,
             solid_a: u32,
-            tile_emit_offset: u32,
-            tile_emit_count: u32,
         };
 
         struct DispatchConfig {
@@ -52,6 +50,12 @@ internal static class PreparedCompositeFineComputeShader
             source_origin_y: u32,
             output_origin_x: u32,
             output_origin_y: u32,
+            width_in_bins: u32,
+            height_in_bins: u32,
+            bin_count: u32,
+            partition_count: u32,
+            binning_size: u32,
+            bin_data_start: u32,
         };
 
         @group(0) @binding(0) var coverage_texture: texture_2d<f32>;

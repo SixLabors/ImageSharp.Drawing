@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 
 [MemoryDiagnoser]
 [WarmupCount(5)]
-[IterationCount(15)]
+[IterationCount(5)]
 public class DrawTextRepeatedGlyphs
 {
     public const int Width = 1200;
