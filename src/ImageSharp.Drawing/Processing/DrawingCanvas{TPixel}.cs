@@ -197,9 +197,11 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Guard.NotNull(brush, nameof(brush));
         Guard.NotNull(options, nameof(options));
 
+        IPath closed = path.AsClosedPath();
+
         IPath transformedPath = options.Transform == Matrix3x2.Identity
-            ? path
-            : path.Transform(options.Transform);
+            ? closed
+            : closed.Transform(options.Transform);
 
         this.FillPathCore(transformedPath, brush, options, RasterizerSamplingOrigin.PixelBoundary);
     }

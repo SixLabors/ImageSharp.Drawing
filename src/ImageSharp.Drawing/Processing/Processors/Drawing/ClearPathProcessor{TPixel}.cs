@@ -39,7 +39,7 @@ internal class ClearPathProcessor<TPixel> : ImageProcessor<TPixel>
         int bottom = (int)MathF.Ceiling(path.Bounds.Bottom);
 
         this.bounds = Rectangle.FromLTRB(left, top, right, bottom);
-        this.path = path.AsClosedPath();
+        this.path = path;
         this.definition = definition;
     }
 
