@@ -44,7 +44,10 @@ public static class ClearExtensions
     /// <param name="brush">The brush.</param>
     /// <returns>The <see cref="IImageProcessingContext"/> to allow chaining of operations.</returns>
     public static IImageProcessingContext Clear(this IImageProcessingContext source, DrawingOptions options, Brush brush)
-        => source.Fill(options.CloneForClearOperation(), brush);
+    {
+        Size size = source.GetCurrentSize();
+        return source.Clear(options, brush, new RectangularPolygon(0, 0, size.Width, size.Height));
+    }
 
     /// <summary>
     /// Clones the path graphic options and applies changes required to force clearing.

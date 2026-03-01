@@ -26,12 +26,15 @@ public class DrawTextRepeatedGlyphs
         }
     };
 
-    private readonly GraphicsOptions clearOptions = new()
+    private readonly DrawingOptions clearOptions = new()
     {
-        Antialias = false,
-        AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-        ColorBlendingMode = PixelColorBlendingMode.Normal,
-        BlendPercentage = 1F
+        GraphicsOptions = new GraphicsOptions
+        {
+            Antialias = false,
+            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
+            ColorBlendingMode = PixelColorBlendingMode.Normal,
+            BlendPercentage = 1F
+        }
     };
 
     private readonly Brush brush = Brushes.Solid(Color.HotPink);

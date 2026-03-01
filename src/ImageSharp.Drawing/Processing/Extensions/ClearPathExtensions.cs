@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
@@ -66,5 +68,5 @@ public static class ClearPathExtensions
         DrawingOptions options,
         Brush brush,
         IPath region)
-        => source.Fill(options.CloneForClearOperation(), brush, region);
+        => source.ApplyProcessor(new ClearPathProcessor(options, brush, region));
 }

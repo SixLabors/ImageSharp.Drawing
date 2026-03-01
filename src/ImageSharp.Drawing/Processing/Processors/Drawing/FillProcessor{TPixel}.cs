@@ -32,6 +32,6 @@ internal class FillProcessor<TPixel> : ImageProcessor<TPixel>
             this.Configuration,
             new Buffer2DRegion<TPixel>(source.PixelBuffer, interest));
 
-        canvas.Fill(this.definition.Brush, this.definition.Options.GraphicsOptions);
+        canvas.Fill(this.definition.Brush, this.definition.Options);
     }
 }

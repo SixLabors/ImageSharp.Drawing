@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Processing.Processors;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
@@ -43,27 +42,5 @@ public class DrawPathProcessor : IImageProcessor
     /// <inheritdoc />
     public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
         where TPixel : unmanaged, IPixel<TPixel>
-    {
-        IPath outline = this.Pen.GeneratePath(this.Path);
-
-        DrawingOptions effectiveOptions = this.Options;
-
-        // Non-normalized stroked output can contain overlaps/self-intersections.
-        // Rasterizing these contours with non-zero winding matches the intended stroke semantics.
-        if (!this.Pen.StrokeOptions.NormalizeOutput &&
-            this.Options.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
-        {
-            ShapeOptions shapeOptions = this.Options.ShapeOptions.DeepClone();
-            shapeOptions.IntersectionRule = IntersectionRule.NonZero;
-
-            effectiveOptions = new DrawingOptions(this.Options.GraphicsOptions, shapeOptions, this.Options.Transform);
-        }
-
-        return new FillPathProcessor(
-            effectiveOptions,
-            this.Pen.StrokeFill,
-            outline,
-            RasterizerSamplingOrigin.PixelCenter)
-            .CreatePixelSpecificProcessor(configuration, source, sourceRectangle);
-    }
+        => new DrawPathProcessor<TPixel>(configuration, this, source, sourceRectangle);
 }

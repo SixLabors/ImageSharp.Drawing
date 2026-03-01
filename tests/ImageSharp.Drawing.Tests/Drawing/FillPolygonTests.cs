@@ -90,8 +90,10 @@ public class FillPolygonTests
         where TPixel : unmanaged, IPixel<TPixel>
     {
         RectangularPolygon polygon = new(25, 25, 50, 50);
-        provider.Configuration.SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)));
-        provider.RunValidatingProcessorTest(c => c.Fill(Color.White, polygon));
+        provider.RunValidatingProcessorTest(
+            c => c
+                .SetDrawingTransform(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))
+                .Fill(Color.White, polygon));
     }
 
     public static TheoryData<bool, IntersectionRule> FillPolygon_Complex_Data { get; } =

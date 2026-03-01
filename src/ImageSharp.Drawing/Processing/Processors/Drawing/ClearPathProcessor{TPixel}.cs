@@ -7,27 +7,27 @@ using SixLabors.ImageSharp.Processing.Processors;
 namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 
 /// <summary>
-/// Uses a brush and a shape to fill the shape with contents of the brush.
+/// Uses a brush and a shape to clear the shape with clear composition semantics.
 /// </summary>
 /// <typeparam name="TPixel">The type of the color.</typeparam>
 /// <seealso cref="ImageProcessor{TPixel}" />
-internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
+internal class ClearPathProcessor<TPixel> : ImageProcessor<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private readonly FillPathProcessor definition;
+    private readonly ClearPathProcessor definition;
     private readonly IPath path;
     private readonly Rectangle bounds;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FillPathProcessor{TPixel}"/> class.
+    /// Initializes a new instance of the <see cref="ClearPathProcessor{TPixel}"/> class.
     /// </summary>
     /// <param name="configuration">The processing configuration.</param>
     /// <param name="definition">The processor definition.</param>
     /// <param name="source">The source image.</param>
     /// <param name="sourceRectangle">The source bounds.</param>
-    public FillPathProcessor(
+    public ClearPathProcessor(
         Configuration configuration,
-        FillPathProcessor definition,
+        ClearPathProcessor definition,
         Image<TPixel> source,
         Rectangle sourceRectangle)
         : base(configuration, source, sourceRectangle)
@@ -49,17 +49,16 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
         Configuration configuration = this.Configuration;
         Brush brush = this.definition.Brush;
 
-        // Align start/end positions.
         Rectangle interest = Rectangle.Intersect(this.bounds, source.Bounds);
         if (interest.Equals(Rectangle.Empty))
         {
-            return; // No effect inside image;
+            return;
         }
 
         using DrawingCanvas<TPixel> canvas = new(
             configuration,
             new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds));
 
-        canvas.FillPath(this.path, brush, this.definition.Options);
+        canvas.ClearPath(this.path, brush, this.definition.Options);
     }
 }

@@ -55,24 +55,5 @@ public class FillPathProcessor : IImageProcessor
     /// <inheritdoc />
     public IImageProcessor<TPixel> CreatePixelSpecificProcessor<TPixel>(Configuration configuration, Image<TPixel> source, Rectangle sourceRectangle)
         where TPixel : unmanaged, IPixel<TPixel>
-    {
-        IPath shape = this.Region.Transform(this.Options.Transform);
-
-        if (this.SamplingOrigin == RasterizerSamplingOrigin.PixelBoundary &&
-            shape is RectangularPolygon rectPoly)
-        {
-            RectangleF rectF = new(rectPoly.Location, rectPoly.Size);
-            Rectangle rect = (Rectangle)rectF;
-            if (!this.Options.GraphicsOptions.Antialias || rectF == rect)
-            {
-                // Cast as in and back are the same or we are using anti-aliasing
-                return new FillProcessor(this.Options, this.Brush)
-                    .CreatePixelSpecificProcessor(configuration, source, rect);
-            }
-        }
-
-        // Clone the definition so we can pass the transformed path.
-        FillPathProcessor definition = new(this.Options, this.Brush, shape, this.SamplingOrigin);
-        return new FillPathProcessor<TPixel>(configuration, definition, source, sourceRectangle);
-    }
+        => new FillPathProcessor<TPixel>(configuration, this, source, sourceRectangle);
 }

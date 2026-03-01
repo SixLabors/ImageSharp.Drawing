@@ -139,43 +139,49 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     }
 
     /// <summary>
+    /// Clears the whole canvas using the given brush and clear-style composition options.
+    /// </summary>
+    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="options">Drawing options used as the source for clear operation settings.</param>
+    public void Clear(Brush brush, DrawingOptions options)
+        => this.Fill(brush, options.CloneForClearOperation());
+
+    /// <summary>
+    /// Clears a local region using the given brush and clear-style composition options.
+    /// </summary>
+    /// <param name="region">Region to clear in local coordinates.</param>
+    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="options">Drawing options used as the source for clear operation settings.</param>
+    public void ClearRegion(Rectangle region, Brush brush, DrawingOptions options)
+        => this.FillRegion(region, brush, options.CloneForClearOperation());
+
+    /// <summary>
+    /// Clears a path region using the given brush and clear-style composition options.
+    /// </summary>
+    /// <param name="path">The path region to clear.</param>
+    /// <param name="brush">Brush used to shade destination pixels during clear.</param>
+    /// <param name="options">Drawing options used as the source for clear operation settings.</param>
+    public void ClearPath(IPath path, Brush brush, DrawingOptions options)
+        => this.FillPath(path, brush, options.CloneForClearOperation());
+
+    /// <summary>
     /// Fills the whole canvas using the given brush.
     /// </summary>
     /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    public void Fill(Brush brush, GraphicsOptions graphicsOptions)
-        => this.FillRegion(this.Bounds, brush, graphicsOptions);
+    /// <param name="options">Drawing options for fill and rasterization behavior.</param>
+    public void Fill(Brush brush, DrawingOptions options)
+        => this.FillRegion(this.Bounds, brush, options);
 
     /// <summary>
     /// Fills a local region using the given brush.
     /// </summary>
     /// <param name="region">Region to fill in local coordinates.</param>
     /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    public void FillRegion(Rectangle region, Brush brush, GraphicsOptions graphicsOptions)
+    /// <param name="options">Drawing options for fill and rasterization behavior.</param>
+    public void FillRegion(Rectangle region, Brush brush, DrawingOptions options)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(brush, nameof(brush));
-        Guard.NotNull(graphicsOptions, nameof(graphicsOptions));
-
-        RasterizationMode rasterizationMode = graphicsOptions.Antialias
-            ? RasterizationMode.Antialiased
-            : RasterizationMode.Aliased;
-
-        RasterizerOptions rasterizerOptions = new(
-            region,
-            IntersectionRule.NonZero,
-            rasterizationMode,
-            RasterizerSamplingOrigin.PixelBoundary);
-
-        RectangularPolygon regionPath = new(region.X, region.Y, region.Width, region.Height);
-        this.batcher.AddComposition(
-            CompositionCommand.Create(
-                regionPath,
-                brush,
-                graphicsOptions,
-                rasterizerOptions,
-                this.targetFrame.Bounds.Location));
+        this.FillPath(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), brush, options);
     }
 
     /// <summary>
@@ -185,56 +191,17 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// <param name="brush">Brush used to shade covered pixels.</param>
     /// <param name="options">Drawing options for fill and rasterization behavior.</param>
     public void FillPath(IPath path, Brush brush, DrawingOptions options)
-        => this.FillPath(path, brush, options, RasterizerSamplingOrigin.PixelBoundary);
-
-    /// <summary>
-    /// Fills a path in local coordinates using an explicit rasterizer sampling origin.
-    /// </summary>
-    /// <param name="path">The path to fill.</param>
-    /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="options">Drawing options for fill and rasterization behavior.</param>
-    /// <param name="samplingOrigin">Sampling origin used by the rasterizer.</param>
-    internal void FillPath(
-        IPath path,
-        Brush brush,
-        DrawingOptions options,
-        RasterizerSamplingOrigin samplingOrigin)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
         Guard.NotNull(brush, nameof(brush));
         Guard.NotNull(options, nameof(options));
 
-        GraphicsOptions graphicsOptions = options.GraphicsOptions;
-        ShapeOptions shapeOptions = options.ShapeOptions;
-        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+        IPath transformedPath = options.Transform == Matrix3x2.Identity
+            ? path
+            : path.Transform(options.Transform);
 
-        RectangleF bounds = path.Bounds;
-        if (samplingOrigin == RasterizerSamplingOrigin.PixelCenter)
-        {
-            // Keep rasterizer interest aligned with center-sampled scan conversion.
-            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
-        }
-
-        Rectangle interest = Rectangle.FromLTRB(
-            (int)MathF.Floor(bounds.Left),
-            (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right),
-            (int)MathF.Ceiling(bounds.Bottom));
-
-        RasterizerOptions rasterizerOptions = new(
-            interest,
-            shapeOptions.IntersectionRule,
-            rasterizationMode,
-            samplingOrigin);
-
-        this.backend.FillPath(
-            this.targetFrame,
-            path,
-            brush,
-            graphicsOptions,
-            rasterizerOptions,
-            this.batcher);
+        this.FillPathCore(transformedPath, brush, options, RasterizerSamplingOrigin.PixelBoundary);
     }
 
     /// <summary>
@@ -250,7 +217,10 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Guard.NotNull(pen, nameof(pen));
         Guard.NotNull(options, nameof(options));
 
-        IPath outline = pen.GeneratePath(path);
+        IPath transformedPath = options.Transform == Matrix3x2.Identity
+            ? path
+            : path.Transform(options.Transform);
+        IPath outline = pen.GeneratePath(transformedPath);
 
         DrawingOptions effectiveOptions = options;
 
@@ -263,7 +233,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             effectiveOptions = new DrawingOptions(options.GraphicsOptions, shapeOptions, options.Transform);
         }
 
-        this.FillPath(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
+        this.FillPathCore(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
     }
 
     /// <summary>
@@ -412,6 +382,44 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         }
     }
 
+    private void FillPathCore(
+        IPath path,
+        Brush brush,
+        DrawingOptions options,
+        RasterizerSamplingOrigin samplingOrigin)
+    {
+        GraphicsOptions graphicsOptions = options.GraphicsOptions;
+        ShapeOptions shapeOptions = options.ShapeOptions;
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+
+        RectangleF bounds = path.Bounds;
+        if (samplingOrigin == RasterizerSamplingOrigin.PixelCenter)
+        {
+            // Keep rasterizer interest aligned with center-sampled scan conversion.
+            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
+        }
+
+        Rectangle interest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right),
+            (int)MathF.Ceiling(bounds.Bottom));
+
+        RasterizerOptions rasterizerOptions = new(
+            interest,
+            shapeOptions.IntersectionRule,
+            rasterizationMode,
+            samplingOrigin);
+
+        this.backend.FillPath(
+            this.targetFrame,
+            path,
+            brush,
+            graphicsOptions,
+            rasterizerOptions,
+            this.batcher);
+    }
+
     /// <summary>
     /// Converts rendered text operations to composition commands and submits them to the batcher.
     /// </summary>
@@ -420,25 +428,22 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     private void DrawTextOperations(List<DrawingOperation> operations, DrawingOptions drawingOptions)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(operations, nameof(operations));
-        Guard.NotNull(drawingOptions, nameof(drawingOptions));
 
-        // Build composition commands and sort by render pass then definition key so that
-        // same-coverage glyph variants are contiguous. Text glyphs within the same render
-        // pass occupy non-overlapping positions, making this reordering visually safe while
-        // maximizing batch sizes in the downstream batcher.
+        // Build composition commands and enforce render-pass ordering while preserving
+        // original emission order inside each pass. This preserves overlapping color-font
+        // layer compositing semantics (for example emoji mouth/teeth layers).
         Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)> definitionKeyCache = [];
-        List<(byte RenderPass, CompositionCommand Command)> entries = new(operations.Count);
+        List<(byte RenderPass, int Sequence, CompositionCommand Command)> entries = new(operations.Count);
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, this.CreateCompositionCommand(operation, drawingOptions, definitionKeyCache)));
+            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(operation, drawingOptions, definitionKeyCache)));
         }
 
         entries.Sort(static (a, b) =>
         {
             int cmp = a.RenderPass.CompareTo(b.RenderPass);
-            return cmp != 0 ? cmp : a.Command.DefinitionKey.CompareTo(b.Command.DefinitionKey);
+            return cmp != 0 ? cmp : a.Sequence.CompareTo(b.Sequence);
         });
 
         for (int i = 0; i < entries.Count; i++)

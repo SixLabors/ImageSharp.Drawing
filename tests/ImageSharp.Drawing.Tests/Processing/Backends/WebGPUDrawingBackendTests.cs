@@ -92,11 +92,14 @@ public class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        GraphicsOptions clearOptions = new()
+        DrawingOptions clearOptions = new()
         {
-            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-            ColorBlendingMode = PixelColorBlendingMode.Normal,
-            BlendPercentage = 1F
+            GraphicsOptions = new GraphicsOptions
+            {
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src,
+                ColorBlendingMode = PixelColorBlendingMode.Normal,
+                BlendPercentage = 1F
+            }
         };
 
         RectangularPolygon polygon = new(36.5F, 26.25F, 312.5F, 188.5F);
@@ -407,12 +410,15 @@ public class WebGPUDrawingBackendTests
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
-        GraphicsOptions clearOptions = new()
+        DrawingOptions clearOptions = new()
         {
-            Antialias = false,
-            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-            ColorBlendingMode = PixelColorBlendingMode.Normal,
-            BlendPercentage = 1F
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src,
+                ColorBlendingMode = PixelColorBlendingMode.Normal,
+                BlendPercentage = 1F
+            }
         };
 
         RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
@@ -457,12 +463,15 @@ public class WebGPUDrawingBackendTests
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
-        GraphicsOptions clearOptions = new()
+        DrawingOptions clearOptions = new()
         {
-            Antialias = false,
-            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-            ColorBlendingMode = PixelColorBlendingMode.Normal,
-            BlendPercentage = 1F
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src,
+                ColorBlendingMode = PixelColorBlendingMode.Normal,
+                BlendPercentage = 1F
+            }
         };
 
         Rectangle region = new(72, 64, 320, 240);
@@ -574,12 +583,15 @@ public class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        GraphicsOptions clearOptions = new()
+        DrawingOptions clearOptions = new()
         {
-            Antialias = false,
-            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-            ColorBlendingMode = PixelColorBlendingMode.Normal,
-            BlendPercentage = 1F
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = false,
+                AlphaCompositionMode = PixelAlphaCompositionMode.Src,
+                ColorBlendingMode = PixelColorBlendingMode.Normal,
+                BlendPercentage = 1F
+            }
         };
 
         const int glyphCount = 200;

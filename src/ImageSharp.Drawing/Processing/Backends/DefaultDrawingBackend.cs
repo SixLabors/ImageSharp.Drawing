@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 
@@ -157,26 +158,9 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
             }
 
             // Iterate by row so we slice the already-rasterized coverage map once per command row.
-            for (int row = 0; row < maxHeight; row++)
-            {
-                for (int i = 0; i < commandCount; i++)
-                {
-                    PreparedCompositionCommand command = commands[i];
-                    if (row >= command.DestinationRegion.Height)
-                    {
-                        continue;
-                    }
-
-                    int destinationX = destinationBounds.X + command.DestinationRegion.X;
-                    int destinationY = destinationBounds.Y + command.DestinationRegion.Y;
-                    int sourceStartX = command.SourceOffset.X;
-                    int sourceStartY = command.SourceOffset.Y;
-
-                    Span<float> rowCoverage = coverageMap.DangerousGetRowSpan(sourceStartY + row);
-                    Span<float> rowSlice = rowCoverage.Slice(sourceStartX, command.DestinationRegion.Width);
-                    applicators[i].Apply(rowSlice, destinationX, destinationY + row);
-                }
-            }
+            // We can do this in parallel since the applicators are thread-safe and each row is independent.
+            RowOperation<TPixel> operation = new(coverageMap, commands, applicators, destinationBounds, maxHeight);
+            ParallelRowIterator.IterateRows(configuration, destinationBounds, in operation);
         }
         finally
         {
@@ -213,5 +197,55 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
             });
 
         return coverage;
+    }
+
+    private readonly struct RowOperation<TPixel> : IRowOperation
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private readonly Buffer2D<float> coverageMap;
+        private readonly IReadOnlyList<PreparedCompositionCommand> commands;
+        private readonly BrushApplicator<TPixel>[] applicators;
+        private readonly Rectangle destinationBounds;
+        private readonly int maxHeight;
+
+        public RowOperation(
+            Buffer2D<float> coverageMap,
+            IReadOnlyList<PreparedCompositionCommand> commands,
+            BrushApplicator<TPixel>[] applicators,
+            Rectangle destinationBounds,
+            int maxHeight)
+        {
+            this.coverageMap = coverageMap;
+            this.commands = commands;
+            this.applicators = applicators;
+            this.destinationBounds = destinationBounds;
+            this.maxHeight = maxHeight;
+        }
+
+        public void Invoke(int y)
+        {
+            if (y >= this.maxHeight)
+            {
+                return;
+            }
+
+            for (int i = 0; i < this.commands.Count; i++)
+            {
+                PreparedCompositionCommand command = this.commands[i];
+                if (y >= command.DestinationRegion.Height)
+                {
+                    continue;
+                }
+
+                int destinationX = this.destinationBounds.X + command.DestinationRegion.X;
+                int destinationY = this.destinationBounds.Y + command.DestinationRegion.Y;
+                int sourceStartX = command.SourceOffset.X;
+                int sourceStartY = command.SourceOffset.Y;
+
+                Span<float> rowCoverage = this.coverageMap.DangerousGetRowSpan(sourceStartY + y);
+                Span<float> rowSlice = rowCoverage.Slice(sourceStartX, command.DestinationRegion.Width);
+                this.applicators[i].Apply(rowSlice, destinationX, destinationY + y);
+            }
+        }
     }
 }
