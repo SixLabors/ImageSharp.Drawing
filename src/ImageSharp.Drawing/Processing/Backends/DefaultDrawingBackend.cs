@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
@@ -8,13 +9,11 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// CPU fallback backend that executes path coverage rasterization and brush composition directly against a CPU region.
+/// CPU backend that executes path coverage rasterization and brush composition directly against a CPU region.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This backend is the correctness baseline for all composition behavior. It is also used as the
-/// fallback path by GPU backends when the target surface, pixel format, or brush command cannot be
-/// executed directly on the GPU.
+/// This backend provides the reference CPU implementation for composition behavior.
 /// </para>
 /// <para>
 /// Flush execution is intentionally split:
@@ -244,7 +243,137 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
 
                 Span<float> rowCoverage = this.coverageMap.DangerousGetRowSpan(sourceStartY + y);
                 Span<float> rowSlice = rowCoverage.Slice(sourceStartX, command.DestinationRegion.Width);
-                this.applicators[i].Apply(rowSlice, destinationX, destinationY + y);
+                ApplyCoverageSpans(this.applicators[i], rowSlice, destinationX, destinationY + y);
+            }
+        }
+
+        /// <summary>
+        /// Applies only contiguous non-zero coverage spans for a scanline.
+        /// </summary>
+        /// <param name="applicator">Brush applicator used to composite pixels.</param>
+        /// <param name="coverage">Scanline coverage values for the current command row.</param>
+        /// <param name="destinationX">Destination x coordinate for the start of <paramref name="coverage"/>.</param>
+        /// <param name="destinationY">Destination y coordinate for the scanline.</param>
+        private static void ApplyCoverageSpans(
+            BrushApplicator<TPixel> applicator,
+            Span<float> coverage,
+            int destinationX,
+            int destinationY)
+        {
+            // Use SIMD path when available and the span is large enough to amortize setup.
+            if (Vector.IsHardwareAccelerated && coverage.Length >= (Vector<float>.Count * 2))
+            {
+                ApplyCoverageSpansSimd(applicator, coverage, destinationX, destinationY);
+                return;
+            }
+
+            ApplyCoverageSpansScalar(applicator, coverage, destinationX, destinationY);
+        }
+
+        /// <summary>
+        /// Applies contiguous non-zero coverage spans using SIMD-accelerated zero/non-zero chunk checks.
+        /// </summary>
+        /// <param name="applicator">Brush applicator used to composite pixels.</param>
+        /// <param name="coverage">Scanline coverage values for the current command row.</param>
+        /// <param name="destinationX">Destination x coordinate for the start of <paramref name="coverage"/>.</param>
+        /// <param name="destinationY">Destination y coordinate for the scanline.</param>
+        private static void ApplyCoverageSpansSimd(
+            BrushApplicator<TPixel> applicator,
+            Span<float> coverage,
+            int destinationX,
+            int destinationY)
+        {
+            int i = 0;
+            int n = coverage.Length;
+            int width = Vector<float>.Count;
+            Vector<float> zero = Vector<float>.Zero;
+
+            while (i < n)
+            {
+                // Phase 1: skip fully-zero SIMD blocks.
+                while (i <= n - width)
+                {
+                    Vector<float> v = new(coverage.Slice(i, width));
+                    if (!Vector.EqualsAll(v, zero))
+                    {
+                        break;
+                    }
+
+                    i += width;
+                }
+
+                while (i < n && coverage[i] == 0F)
+                {
+                    i++;
+                }
+
+                if (i >= n)
+                {
+                    return;
+                }
+
+                int runStart = i;
+
+                // Phase 2: advance across fully non-zero SIMD blocks.
+                while (i <= n - width)
+                {
+                    Vector<float> v = new(coverage.Slice(i, width));
+                    Vector<int> eqZero = Vector.Equals(v, zero);
+                    if (!Vector.EqualsAll(eqZero, Vector<int>.Zero))
+                    {
+                        break;
+                    }
+
+                    i += width;
+                }
+
+                while (i < n && coverage[i] != 0F)
+                {
+                    i++;
+                }
+
+                // Apply exactly one contiguous non-zero run.
+                applicator.Apply(coverage[runStart..i], destinationX + runStart, destinationY);
+            }
+        }
+
+        /// <summary>
+        /// Applies contiguous non-zero coverage spans using a scalar scan.
+        /// </summary>
+        /// <param name="applicator">Brush applicator used to composite pixels.</param>
+        /// <param name="coverage">Scanline coverage values for the current command row.</param>
+        /// <param name="destinationX">Destination x coordinate for the start of <paramref name="coverage"/>.</param>
+        /// <param name="destinationY">Destination y coordinate for the scanline.</param>
+        private static void ApplyCoverageSpansScalar(
+            BrushApplicator<TPixel> applicator,
+            Span<float> coverage,
+            int destinationX,
+            int destinationY)
+        {
+            // Track the start of a contiguous non-zero coverage run.
+            int runStart = -1;
+            for (int i = 0; i < coverage.Length; i++)
+            {
+                if (coverage[i] > 0F)
+                {
+                    // Enter a new run when transitioning from zero to non-zero coverage.
+                    if (runStart < 0)
+                    {
+                        runStart = i;
+                    }
+                }
+                else if (runStart >= 0)
+                {
+                    // Coverage returned to zero: apply the finished run only.
+                    applicator.Apply(coverage[runStart..i], destinationX + runStart, destinationY);
+                    runStart = -1;
+                }
+            }
+
+            if (runStart >= 0)
+            {
+                // Flush trailing run that reaches end-of-scanline.
+                applicator.Apply(coverage[runStart..], destinationX + runStart, destinationY);
             }
         }
     }
