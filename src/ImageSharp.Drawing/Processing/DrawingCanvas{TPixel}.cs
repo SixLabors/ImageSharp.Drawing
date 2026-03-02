@@ -45,14 +45,14 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     private readonly List<Image<TPixel>> pendingImageResources = [];
 
     /// <summary>
-    /// Represents the default state configuration for the drawing canvas.
-    /// </summary>
-    private readonly DrawingCanvasState defaultState;
-
-    /// <summary>
     /// Tracks whether this instance has already been disposed.
     /// </summary>
     private bool isDisposed;
+
+    /// <summary>
+    /// Stack of saved drawing states for Save/Restore operations.
+    /// </summary>
+    private readonly Stack<DrawingCanvasState> savedStates = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class.
@@ -141,7 +141,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.targetFrame = targetFrame;
         this.batcher = batcher;
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
-        this.defaultState = defaultState;
+        this.savedStates.Push(defaultState);
     }
 
     /// <summary>
@@ -150,10 +150,81 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     public Rectangle Bounds { get; }
 
     /// <summary>
-    /// Gets or sets the current state of the drawing canvas within the current scope.
-    /// The value may be <see langword="null"/> if no state is set.
+    /// Gets the number of saved states currently on the canvas stack.
     /// </summary>
-    internal DrawingCanvasState? ScopedState { get; set; }
+    public int SaveCount => this.savedStates.Count;
+
+    /// <summary>
+    /// Saves the current drawing state on the state stack.
+    /// </summary>
+    /// <remarks>
+    /// This operation stores the current <see cref="DrawingCanvasState"/> reference.
+    /// The state is not deep-cloned. If the same <see cref="DrawingOptions"/> instance is
+    /// mutated after <see cref="Save()"/>, those mutations are visible when restoring.
+    /// </remarks>
+    /// <returns>The save count after the state has been pushed.</returns>
+    public int Save()
+    {
+        this.EnsureNotDisposed();
+        this.savedStates.Push(this.ResolveState());
+        return this.savedStates.Count;
+    }
+
+    /// <summary>
+    /// Saves the current drawing state and replaces the active state with the provided options and clip paths.
+    /// </summary>
+    /// <remarks>
+    /// The provided <paramref name="options"/> instance is stored by reference.
+    /// Mutating it after this call mutates the active/restored state behavior.
+    /// </remarks>
+    /// <param name="options">Drawing options for the new active state.</param>
+    /// <param name="clipPaths">Clip paths for the new active state.</param>
+    /// <returns>The save count after the previous state has been pushed.</returns>
+    public int Save(DrawingOptions options, params IPath[] clipPaths)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(clipPaths, nameof(clipPaths));
+
+        _ = this.Save();
+        DrawingCanvasState state = new(options, clipPaths);
+        _ = this.savedStates.Pop();
+        this.savedStates.Push(state);
+        return this.savedStates.Count;
+    }
+
+    /// <summary>
+    /// Restores the most recently saved state.
+    /// </summary>
+    public void Restore()
+    {
+        this.EnsureNotDisposed();
+        if (this.savedStates.Count <= 1)
+        {
+            return;
+        }
+
+        _ = this.savedStates.Pop();
+    }
+
+    /// <summary>
+    /// Restores to a specific save count.
+    /// </summary>
+    /// <remarks>
+    /// State frames above <paramref name="saveCount"/> are discarded,
+    /// and the last discarded frame becomes the current state.
+    /// </remarks>
+    /// <param name="saveCount">The save count to restore to.</param>
+    public void RestoreTo(int saveCount)
+    {
+        this.EnsureNotDisposed();
+        Guard.MustBeBetweenOrEqualTo(saveCount, 1, this.savedStates.Count, nameof(saveCount));
+
+        while (this.savedStates.Count > saveCount)
+        {
+            _ = this.savedStates.Pop();
+        }
+    }
 
     /// <summary>
     /// Creates a child canvas over a subregion in local coordinates.
@@ -166,7 +237,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
         Rectangle clipped = Rectangle.Intersect(this.Bounds, region);
         ICanvasFrame<TPixel> childFrame = new CanvasRegionFrame<TPixel>(this.targetFrame, clipped);
-        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame, this.batcher, this.defaultState);
+        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame, this.batcher, this.ResolveState());
     }
 
     /// <summary>
@@ -177,13 +248,8 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// <returns>The active scoped state that restores to default when disposed.</returns>
     public DrawingCanvasState CreateState(DrawingOptions options, params IPath[] clipPaths)
     {
-        this.EnsureNotDisposed();
-        Guard.NotNull(options, nameof(options));
-        Guard.NotNull(clipPaths, nameof(clipPaths));
-
-        DrawingCanvasState state = new(options, clipPaths, () => this.ScopedState = null);
-        this.ScopedState = state;
-        return state;
+        _ = this.Save(options, clipPaths);
+        return this.ResolveState();
     }
 
     /// <summary>
@@ -606,8 +672,8 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// <summary>
     /// Resolves the currently active drawing state.
     /// </summary>
-    /// <returns>The scoped state when present; otherwise the default state.</returns>
-    private DrawingCanvasState ResolveState() => this.ScopedState ?? this.defaultState;
+    /// <returns>The current state.</returns>
+    private DrawingCanvasState ResolveState() => this.savedStates.Peek();
 
     /// <summary>
     /// Executes an action with a temporary scoped state, restoring the previous scoped state afterwards.
@@ -617,15 +683,15 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// <param name="action">Action to execute.</param>
     private void ExecuteWithTemporaryState(DrawingOptions options, IReadOnlyList<IPath> clipPaths, Action action)
     {
-        DrawingCanvasState? previous = this.ScopedState;
-        this.ScopedState = new DrawingCanvasState(options, clipPaths);
+        int saveCount = this.savedStates.Count;
+        _ = this.Save(options, [.. clipPaths]);
         try
         {
             action();
         }
         finally
         {
-            this.ScopedState = previous;
+            this.RestoreTo(saveCount);
         }
     }
 
