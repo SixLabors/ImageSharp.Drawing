@@ -80,10 +80,7 @@ public class ArcLineSegment : ILineSegment
         }
     }
 
-    private ArcLineSegment(PointF[] linePoints)
-    {
-        this.linePoints = linePoints;
-    }
+    private ArcLineSegment(PointF[] linePoints) => this.linePoints = linePoints;
 
     /// <inheritdoc/>
     public PointF EndPoint => this.linePoints[^1];
@@ -203,7 +200,7 @@ public class ArcLineSegment : ILineSegment
             prev = p2;
         }
 
-        return points.ToArray();
+        return [.. points];
     }
 
     private static void EndpointToCenterArcParams(

@@ -16,17 +16,18 @@ public class DrawingCanvasBatcherTests
     {
         Configuration configuration = new();
         CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(40, 40);
         Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
-        using DrawingCanvas<Rgba32> canvas = new(configuration, backend, new CpuCanvasFrame<Rgba32>(region));
 
         IPath path = new RectangularPolygon(4, 6, 18, 12);
         DrawingOptions options = new();
+        using DrawingCanvas<Rgba32> canvas = new(configuration, new CpuCanvasFrame<Rgba32>(region), options);
         Brush brushA = Brushes.Solid(Color.Red);
         Brush brushB = Brushes.Solid(Color.Blue);
 
-        canvas.FillPath(path, brushA, options);
-        canvas.FillPath(path, brushB, options);
+        canvas.Fill(path, brushA);
+        canvas.Fill(path, brushB);
         canvas.Flush();
 
         Assert.True(backend.HasBatch);
@@ -44,17 +45,18 @@ public class DrawingCanvasBatcherTests
         {
             IsBrushSupported = static brush => brush is SolidBrush
         };
+        configuration.SetDrawingBackend(backend);
 
         using Image<Rgba32> image = new(40, 40);
         Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
-        using DrawingCanvas<Rgba32> canvas = new(configuration, backend, new CpuCanvasFrame<Rgba32>(region));
 
         IPath pathA = new RectangularPolygon(2, 2, 12, 12);
         IPath pathB = new RectangularPolygon(18, 18, 12, 12);
         DrawingOptions options = new();
+        using DrawingCanvas<Rgba32> canvas = new(configuration, new CpuCanvasFrame<Rgba32>(region), options);
 
-        canvas.FillPath(pathA, Brushes.Solid(Color.Red), options);
-        canvas.FillPath(pathB, Brushes.Horizontal(Color.Blue), options);
+        canvas.Fill(pathA, Brushes.Solid(Color.Red));
+        canvas.Fill(pathB, Brushes.Horizontal(Color.Blue));
         canvas.Flush();
 
         Assert.NotEmpty(backend.Batches);

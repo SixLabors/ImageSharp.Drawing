@@ -57,8 +57,9 @@ internal class ClearPathProcessor<TPixel> : ImageProcessor<TPixel>
 
         using DrawingCanvas<TPixel> canvas = new(
             configuration,
-            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds));
+            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds),
+            this.definition.Options);
 
-        canvas.ClearPath(this.path, brush, this.definition.Options);
+        canvas.Clear(this.path, brush);
     }
 }

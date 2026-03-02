@@ -35,8 +35,9 @@ internal class DrawPathProcessor<TPixel> : ImageProcessor<TPixel>
     {
         using DrawingCanvas<TPixel> canvas = new(
             this.Configuration,
-            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds));
+            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds),
+            this.definition.Options);
 
-        canvas.DrawPath(this.definition.Path, this.definition.Pen, this.definition.Options);
+        canvas.Draw(this.definition.Pen, this.definition.Path);
     }
 }

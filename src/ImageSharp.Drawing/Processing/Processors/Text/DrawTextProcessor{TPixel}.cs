@@ -24,12 +24,12 @@ internal class DrawTextProcessor<TPixel> : ImageProcessor<TPixel>
     {
         using DrawingCanvas<TPixel> canvas = new(
             this.Configuration,
-            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds));
+            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds),
+            this.definition.DrawingOptions);
 
         canvas.DrawText(
             this.definition.TextOptions,
             this.definition.Text,
-            this.definition.DrawingOptions,
             this.definition.Brush,
             this.definition.Pen);
     }

@@ -20,21 +20,21 @@ public class DrawingCanvasDrawImageTests
         using Image<TPixel> foreground = provider.GetImage();
         using Image<TPixel> target = new(384, 256);
 
-        using DrawingCanvas<TPixel> canvas = new(
-            provider.Configuration,
-            new Buffer2DRegion<TPixel>(target.Frames.RootFrame.PixelBuffer, target.Bounds));
-
         DrawingOptions options = new()
         {
             Transform = Matrix3x2.CreateRotation(MathF.PI / 4F, new Vector2(192F, 128F))
         };
 
-        canvas.Clear(Brushes.Solid(Color.White), options);
+        using DrawingCanvas<TPixel> canvas = new(
+            provider.Configuration,
+            new Buffer2DRegion<TPixel>(target.Frames.RootFrame.PixelBuffer, target.Bounds),
+            options);
+
+        canvas.Clear(Brushes.Solid(Color.White));
         canvas.DrawImage(
             foreground,
             foreground.Bounds,
             new RectangleF(72, 48, 240, 160),
-            options,
             KnownResamplers.NearestNeighbor);
         canvas.Flush();
 

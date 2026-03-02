@@ -45,6 +45,11 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     private readonly List<Image<TPixel>> pendingImageResources = [];
 
     /// <summary>
+    /// Represents the default state configuration for the drawing canvas.
+    /// </summary>
+    private readonly DrawingCanvasState defaultState;
+
+    /// <summary>
     /// Tracks whether this instance has already been disposed.
     /// </summary>
     private bool isDisposed;
@@ -54,8 +59,14 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="targetRegion">The destination target region.</param>
-    public DrawingCanvas(Configuration configuration, Buffer2DRegion<TPixel> targetRegion)
-        : this(configuration, new CpuCanvasFrame<TPixel>(targetRegion))
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    public DrawingCanvas(
+        Configuration configuration,
+        Buffer2DRegion<TPixel> targetRegion,
+        DrawingOptions options,
+        params IPath[] clipPaths)
+        : this(configuration, new CpuCanvasFrame<TPixel>(targetRegion), options, clipPaths)
     {
     }
 
@@ -64,27 +75,37 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="targetFrame">The destination frame.</param>
-    public DrawingCanvas(Configuration configuration, ICanvasFrame<TPixel> targetFrame)
-        : this(configuration, configuration.GetDrawingBackend(), targetFrame)
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    public DrawingCanvas(
+        Configuration configuration,
+        ICanvasFrame<TPixel> targetFrame,
+        DrawingOptions options,
+        params IPath[] clipPaths)
+        : this(configuration, configuration.GetDrawingBackend(), targetFrame, options, clipPaths)
     {
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class
-    /// with an explicit backend.
+    /// Initializes a new instance of the <see cref="DrawingCanvas{TPixel}"/> class with an explicit backend and initial state.
     /// </summary>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="backend">The drawing backend implementation.</param>
     /// <param name="targetFrame">The destination frame.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
     internal DrawingCanvas(
         Configuration configuration,
         IDrawingBackend backend,
-        ICanvasFrame<TPixel> targetFrame)
+        ICanvasFrame<TPixel> targetFrame,
+        DrawingOptions options,
+        params IPath[] clipPaths)
         : this(
             configuration,
             backend,
             targetFrame,
-            new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame))
+            new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame),
+            new DrawingCanvasState(options, clipPaths))
     {
     }
 
@@ -96,16 +117,19 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// <param name="backend">The drawing backend implementation.</param>
     /// <param name="targetFrame">The destination frame.</param>
     /// <param name="batcher">The command batcher used for deferred composition.</param>
+    /// <param name="defaultState">The default state used when no scoped state is active.</param>
     private DrawingCanvas(
         Configuration configuration,
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame,
-        DrawingCanvasBatcher<TPixel> batcher)
+        DrawingCanvasBatcher<TPixel> batcher,
+        DrawingCanvasState defaultState)
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(backend, nameof(backend));
         Guard.NotNull(targetFrame, nameof(targetFrame));
         Guard.NotNull(batcher, nameof(batcher));
+        Guard.NotNull(defaultState, nameof(defaultState));
 
         if (!targetFrame.TryGetCpuRegion(out _) && !targetFrame.TryGetNativeSurface(out _))
         {
@@ -117,12 +141,19 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.targetFrame = targetFrame;
         this.batcher = batcher;
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
+        this.defaultState = defaultState;
     }
 
     /// <summary>
     /// Gets the local bounds of this canvas.
     /// </summary>
     public Rectangle Bounds { get; }
+
+    /// <summary>
+    /// Gets or sets the current state of the drawing canvas within the current scope.
+    /// The value may be <see langword="null"/> if no state is set.
+    /// </summary>
+    internal DrawingCanvasState? ScopedState { get; set; }
 
     /// <summary>
     /// Creates a child canvas over a subregion in local coordinates.
@@ -135,53 +166,88 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
 
         Rectangle clipped = Rectangle.Intersect(this.Bounds, region);
         ICanvasFrame<TPixel> childFrame = new CanvasRegionFrame<TPixel>(this.targetFrame, clipped);
-        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame, this.batcher);
+        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame, this.batcher, this.defaultState);
+    }
+
+    /// <summary>
+    /// Creates an immutable scoped drawing state and applies it to this canvas until disposed.
+    /// </summary>
+    /// <param name="options">Drawing options for the scoped state.</param>
+    /// <param name="clipPaths">Clip paths associated with the scoped state.</param>
+    /// <returns>The active scoped state that restores to default when disposed.</returns>
+    public DrawingCanvasState CreateState(DrawingOptions options, params IPath[] clipPaths)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(clipPaths, nameof(clipPaths));
+
+        DrawingCanvasState state = new(options, clipPaths, () => this.ScopedState = null);
+        this.ScopedState = state;
+        return state;
     }
 
     /// <summary>
     /// Clears the whole canvas using the given brush and clear-style composition options.
     /// </summary>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    /// <param name="options">Drawing options used as the source for clear operation settings.</param>
-    public void Clear(Brush brush, DrawingOptions options)
-        => this.Fill(brush, options.CloneForClearOperation());
+    public void Clear(Brush brush)
+    {
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions options = state.Options.CloneForClearOperation();
+        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(brush));
+    }
 
     /// <summary>
     /// Clears a local region using the given brush and clear-style composition options.
     /// </summary>
     /// <param name="region">Region to clear in local coordinates.</param>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    /// <param name="options">Drawing options used as the source for clear operation settings.</param>
-    public void ClearRegion(Rectangle region, Brush brush, DrawingOptions options)
-        => this.FillRegion(region, brush, options.CloneForClearOperation());
+    public void Clear(Rectangle region, Brush brush)
+    {
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions options = state.Options.CloneForClearOperation();
+        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(region, brush));
+    }
 
     /// <summary>
     /// Clears a path region using the given brush and clear-style composition options.
     /// </summary>
     /// <param name="path">The path region to clear.</param>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    /// <param name="options">Drawing options used as the source for clear operation settings.</param>
-    public void ClearPath(IPath path, Brush brush, DrawingOptions options)
-        => this.FillPath(path, brush, options.CloneForClearOperation());
+    public void Clear(IPath path, Brush brush)
+    {
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions options = state.Options.CloneForClearOperation();
+        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(path, brush));
+    }
 
     /// <summary>
     /// Fills the whole canvas using the given brush.
     /// </summary>
     /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="options">Drawing options for fill and rasterization behavior.</param>
-    public void Fill(Brush brush, DrawingOptions options)
-        => this.FillRegion(this.Bounds, brush, options);
+    public void Fill(Brush brush)
+        => this.Fill(this.Bounds, brush);
 
     /// <summary>
     /// Fills a local region using the given brush.
     /// </summary>
     /// <param name="region">Region to fill in local coordinates.</param>
     /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="options">Drawing options for fill and rasterization behavior.</param>
-    public void FillRegion(Rectangle region, Brush brush, DrawingOptions options)
+    public void Fill(Rectangle region, Brush brush)
+        => this.Fill(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), brush);
+
+    /// <summary>
+    /// Fills all paths in a collection using the given brush and drawing options.
+    /// </summary>
+    /// <param name="brush">Brush used to shade covered pixels.</param>
+    /// <param name="paths">Path collection to fill.</param>
+    public void Fill(Brush brush, IPathCollection paths)
     {
-        this.EnsureNotDisposed();
-        this.FillPath(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), brush, options);
+        Guard.NotNull(paths, nameof(paths));
+        foreach (IPath path in paths)
+        {
+            this.Fill(path, brush);
+        }
     }
 
     /// <summary>
@@ -189,51 +255,121 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// </summary>
     /// <param name="path">The path to fill.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="options">Drawing options for fill and rasterization behavior.</param>
-    public void FillPath(IPath path, Brush brush, DrawingOptions options)
+    public void Fill(IPath path, Brush brush)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
         Guard.NotNull(brush, nameof(brush));
-        Guard.NotNull(options, nameof(options));
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
 
         IPath closed = path.AsClosedPath();
 
-        IPath transformedPath = options.Transform == Matrix3x2.Identity
+        IPath transformedPath = effectiveOptions.Transform == Matrix3x2.Identity
             ? closed
-            : closed.Transform(options.Transform);
+            : closed.Transform(effectiveOptions.Transform);
 
-        this.FillPathCore(transformedPath, brush, options, RasterizerSamplingOrigin.PixelBoundary);
+        transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
+
+        this.FillPathCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
+    }
+
+    /// <summary>
+    /// Draws an arc outline using the provided pen and drawing options.
+    /// </summary>
+    /// <param name="pen">Pen used to generate the arc outline.</param>
+    /// <param name="center">Arc center point in local coordinates.</param>
+    /// <param name="radius">Arc radii in local coordinates.</param>
+    /// <param name="rotation">Ellipse rotation in degrees.</param>
+    /// <param name="startAngle">Arc start angle in degrees.</param>
+    /// <param name="sweepAngle">Arc sweep angle in degrees.</param>
+    public void DrawArc(Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+        => this.Draw(pen, new Path(new ArcLineSegment(center, radius, rotation, startAngle, sweepAngle)));
+
+    /// <summary>
+    /// Draws a cubic bezier outline using the provided pen and drawing options.
+    /// </summary>
+    /// <param name="pen">Pen used to generate the bezier outline.</param>
+    /// <param name="points">Bezier control points.</param>
+    public void DrawBezier(Pen pen, params PointF[] points)
+    {
+        Guard.NotNull(points, nameof(points));
+        this.Draw(pen, new Path(new CubicBezierLineSegment(points)));
+    }
+
+    /// <summary>
+    /// Draws an ellipse outline using the provided pen and drawing options.
+    /// </summary>
+    /// <param name="pen">Pen used to generate the ellipse outline.</param>
+    /// <param name="center">Ellipse center point in local coordinates.</param>
+    /// <param name="size">Ellipse width and height in local coordinates.</param>
+    public void DrawEllipse(Pen pen, PointF center, SizeF size)
+        => this.Draw(pen, new EllipsePolygon(center, size));
+
+    /// <summary>
+    /// Draws a polyline outline using the provided pen and drawing options.
+    /// </summary>
+    /// <param name="pen">Pen used to generate the line outline.</param>
+    /// <param name="points">Polyline points.</param>
+    public void DrawLine(Pen pen, params PointF[] points)
+    {
+        Guard.NotNull(points, nameof(points));
+        this.Draw(pen, new Path(points));
+    }
+
+    /// <summary>
+    /// Draws a rectangular outline using the provided pen and drawing options.
+    /// </summary>
+    /// <param name="pen">Pen used to generate the rectangle outline.</param>
+    /// <param name="region">Rectangle region to stroke.</param>
+    public void Draw(Pen pen, Rectangle region)
+        => this.Draw(pen, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
+
+    /// <summary>
+    /// Draws all paths in a collection using the provided pen and drawing options.
+    /// </summary>
+    /// <param name="pen">Pen used to generate outlines.</param>
+    /// <param name="paths">Path collection to stroke.</param>
+    public void Draw(Pen pen, IPathCollection paths)
+    {
+        Guard.NotNull(paths, nameof(paths));
+        foreach (IPath path in paths)
+        {
+            this.Draw(pen, path);
+        }
     }
 
     /// <summary>
     /// Draws a path outline in local coordinates using the given pen.
     /// </summary>
-    /// <param name="path">The path to stroke.</param>
     /// <param name="pen">Pen used to generate the outline fill path.</param>
-    /// <param name="options">Drawing options for stroke fill and rasterization behavior.</param>
-    public void DrawPath(IPath path, Pen pen, DrawingOptions options)
+    /// <param name="path">The path to stroke.</param>
+    public void Draw(Pen pen, IPath path)
     {
         this.EnsureNotDisposed();
-        Guard.NotNull(path, nameof(path));
         Guard.NotNull(pen, nameof(pen));
-        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(path, nameof(path));
 
-        IPath transformedPath = options.Transform == Matrix3x2.Identity
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        IPath transformedPath = effectiveOptions.Transform == Matrix3x2.Identity
             ? path
-            : path.Transform(options.Transform);
-        IPath outline = pen.GeneratePath(transformedPath);
+            : path.Transform(effectiveOptions.Transform);
 
-        DrawingOptions effectiveOptions = options;
+        IPath outline = pen.GeneratePath(transformedPath);
 
         // Non-normalized stroke output can self-overlap; non-zero winding preserves stroke semantics.
         if (!pen.StrokeOptions.NormalizeOutput &&
-            options.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
+            effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
         {
-            ShapeOptions shapeOptions = options.ShapeOptions.DeepClone();
+            ShapeOptions shapeOptions = effectiveOptions.ShapeOptions.DeepClone();
             shapeOptions.IntersectionRule = IntersectionRule.NonZero;
-            effectiveOptions = new DrawingOptions(options.GraphicsOptions, shapeOptions, options.Transform);
+            effectiveOptions = new DrawingOptions(effectiveOptions.GraphicsOptions, shapeOptions, effectiveOptions.Transform);
         }
+
+        outline = ApplyClipPaths(outline, effectiveOptions.ShapeOptions, state.ClipPaths);
 
         this.FillPathCore(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
     }
@@ -243,20 +379,20 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// </summary>
     /// <param name="textOptions">The text rendering options.</param>
     /// <param name="text">The text to draw.</param>
-    /// <param name="drawingOptions">Drawing options defining blending and shape behavior.</param>
     /// <param name="brush">Optional brush used to fill glyphs.</param>
     /// <param name="pen">Optional pen used to outline glyphs.</param>
     public void DrawText(
         RichTextOptions textOptions,
         string text,
-        DrawingOptions drawingOptions,
         Brush? brush,
         Pen? pen)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
         Guard.NotNull(text, nameof(text));
-        Guard.NotNull(drawingOptions, nameof(drawingOptions));
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
 
         if (brush is null && pen is null)
         {
@@ -264,11 +400,11 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         }
 
         RichTextOptions configuredOptions = ConfigureTextOptions(textOptions);
-        using RichTextGlyphRenderer textRenderer = new(configuredOptions, drawingOptions, pen, brush);
-        TextRenderer renderer = new(textRenderer);
+        using RichTextGlyphRenderer glyphRenderer = new(configuredOptions, effectiveOptions, pen, brush);
+        TextRenderer renderer = new(glyphRenderer);
         renderer.RenderText(text, configuredOptions);
 
-        this.DrawTextOperations(textRenderer.DrawingOperations, drawingOptions);
+        this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths);
     }
 
     /// <summary>
@@ -277,7 +413,6 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// <param name="image">The source image.</param>
     /// <param name="sourceRect">The source rectangle within <paramref name="image"/>.</param>
     /// <param name="destinationRect">The destination rectangle in local canvas coordinates.</param>
-    /// <param name="drawingOptions">Drawing options defining blend and transform behavior.</param>
     /// <param name="sampler">
     /// Optional resampler used when scaling or transforming the image. Defaults to <see cref="KnownResamplers.Bicubic"/>.
     /// </param>
@@ -285,12 +420,13 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Image<TPixel> image,
         Rectangle sourceRect,
         RectangleF destinationRect,
-        DrawingOptions drawingOptions,
         IResampler? sampler = null)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(image, nameof(image));
-        Guard.NotNull(drawingOptions, nameof(drawingOptions));
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
 
         if (sourceRect.Width <= 0 ||
             sourceRect.Height <= 0 ||
@@ -342,12 +478,12 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
             }
 
             // Phase 2: Apply canvas transform to image content when requested.
-            if (drawingOptions.Transform != Matrix3x2.Identity)
+            if (effectiveOptions.Transform != Matrix3x2.Identity)
             {
                 Image<TPixel> transformed = CreateTransformedDrawImage(
                     brushImage,
                     clippedDestinationRect,
-                    drawingOptions.Transform,
+                    effectiveOptions.Transform,
                     sampler,
                     out renderDestinationRect);
 
@@ -376,7 +512,7 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
                 renderDestinationRect.Width,
                 renderDestinationRect.Height);
 
-            this.FillPath(destinationPath, brush, drawingOptions);
+            this.Fill(destinationPath, brush);
         }
         finally
         {
@@ -384,6 +520,13 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         }
     }
 
+    /// <summary>
+    /// Rasterizes and submits a fill operation to the backend.
+    /// </summary>
+    /// <param name="path">Path to fill.</param>
+    /// <param name="brush">Brush used for shading.</param>
+    /// <param name="options">Effective drawing options.</param>
+    /// <param name="samplingOrigin">Rasterizer sampling origin.</param>
     private void FillPathCore(
         IPath path,
         Brush brush,
@@ -427,7 +570,11 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// </summary>
     /// <param name="operations">Text drawing operations produced by glyph layout/rendering.</param>
     /// <param name="drawingOptions">Drawing options applied to each operation.</param>
-    private void DrawTextOperations(List<DrawingOperation> operations, DrawingOptions drawingOptions)
+    /// <param name="clipPaths">Clip paths resolved from effective canvas state.</param>
+    private void DrawTextOperations(
+        List<DrawingOperation> operations,
+        DrawingOptions drawingOptions,
+        IReadOnlyList<IPath> clipPaths)
     {
         this.EnsureNotDisposed();
 
@@ -439,7 +586,9 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(operation, drawingOptions, definitionKeyCache)));
+            DrawingOperation clippedOperation = operation;
+            clippedOperation.Path = ApplyClipPaths(operation.Path, drawingOptions.ShapeOptions, clipPaths);
+            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(clippedOperation, drawingOptions, definitionKeyCache)));
         }
 
         entries.Sort(static (a, b) =>
@@ -452,6 +601,49 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         {
             this.batcher.AddComposition(entries[i].Command);
         }
+    }
+
+    /// <summary>
+    /// Resolves the currently active drawing state.
+    /// </summary>
+    /// <returns>The scoped state when present; otherwise the default state.</returns>
+    private DrawingCanvasState ResolveState() => this.ScopedState ?? this.defaultState;
+
+    /// <summary>
+    /// Executes an action with a temporary scoped state, restoring the previous scoped state afterwards.
+    /// </summary>
+    /// <param name="options">Temporary drawing options.</param>
+    /// <param name="clipPaths">Temporary clip paths.</param>
+    /// <param name="action">Action to execute.</param>
+    private void ExecuteWithTemporaryState(DrawingOptions options, IReadOnlyList<IPath> clipPaths, Action action)
+    {
+        DrawingCanvasState? previous = this.ScopedState;
+        this.ScopedState = new DrawingCanvasState(options, clipPaths);
+        try
+        {
+            action();
+        }
+        finally
+        {
+            this.ScopedState = previous;
+        }
+    }
+
+    /// <summary>
+    /// Applies all clip paths to a subject path using the provided shape options.
+    /// </summary>
+    /// <param name="subjectPath">Path to clip.</param>
+    /// <param name="shapeOptions">Shape options used for clipping.</param>
+    /// <param name="clipPaths">Clip paths to apply.</param>
+    /// <returns>The clipped path.</returns>
+    private static IPath ApplyClipPaths(IPath subjectPath, ShapeOptions shapeOptions, IReadOnlyList<IPath> clipPaths)
+    {
+        if (clipPaths.Count == 0)
+        {
+            return subjectPath;
+        }
+
+        return subjectPath.Clip(shapeOptions, clipPaths);
     }
 
     /// <summary>

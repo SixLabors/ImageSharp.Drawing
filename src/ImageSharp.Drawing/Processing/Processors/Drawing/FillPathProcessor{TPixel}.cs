@@ -58,8 +58,9 @@ internal class FillPathProcessor<TPixel> : ImageProcessor<TPixel>
 
         using DrawingCanvas<TPixel> canvas = new(
             configuration,
-            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds));
+            new Buffer2DRegion<TPixel>(source.PixelBuffer, source.Bounds),
+            this.definition.Options);
 
-        canvas.FillPath(this.path, brush, this.definition.Options);
+        canvas.Fill(this.path, brush);
     }
 }

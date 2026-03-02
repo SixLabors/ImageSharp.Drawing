@@ -118,8 +118,8 @@ public class DrawTextRepeatedGlyphs
     {
         CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.defaultImage));
         // this.ClearWithDrawingCanvas(this.defaultConfiguration, frame);
-        using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, frame);
-        canvas.DrawText(this.textOptions, this.text, this.drawingOptions, this.brush, pen: null);
+        using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, frame, this.drawingOptions);
+        canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }
 
@@ -128,8 +128,8 @@ public class DrawTextRepeatedGlyphs
     {
         CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.webGpuCpuImage));
         // this.ClearWithDrawingCanvas(this.webGpuConfiguration, frame);
-        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, frame);
-        canvas.DrawText(this.textOptions, this.text, this.drawingOptions, this.brush, pen: null);
+        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, frame, this.drawingOptions);
+        canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }
 
@@ -137,15 +137,15 @@ public class DrawTextRepeatedGlyphs
     public void DrawingCanvasWebGPUBackendNativeSurface()
     {
         // this.ClearWithDrawingCanvas(this.webGpuConfiguration, this.webGpuNativeFrame);
-        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame);
-        canvas.DrawText(this.textOptions, this.text, this.drawingOptions, this.brush, pen: null);
+        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, this.drawingOptions);
+        canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }
 
     private void ClearWithDrawingCanvas(Configuration configuration, ICanvasFrame<Rgba32> target)
     {
-        using DrawingCanvas<Rgba32> canvas = new(configuration, target);
-        canvas.Fill(this.clearBrush, this.clearOptions);
+        using DrawingCanvas<Rgba32> canvas = new(configuration, target, this.clearOptions);
+        canvas.Fill(this.clearBrush);
         canvas.Flush();
     }
 

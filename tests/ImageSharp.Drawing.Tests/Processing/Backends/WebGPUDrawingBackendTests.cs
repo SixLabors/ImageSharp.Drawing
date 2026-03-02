@@ -42,14 +42,14 @@ public class WebGPUDrawingBackendTests
         RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
         Brush brush = Brushes.Solid(Color.Black);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.FillPath(polygon, brush, drawingOptions);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(polygon, brush);
 
         using Image<TPixel> defaultImage = provider.GetImage();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = provider.GetImage();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -57,6 +57,7 @@ public class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
 
@@ -92,16 +93,6 @@ public class WebGPUDrawingBackendTests
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
 
-        DrawingOptions clearOptions = new()
-        {
-            GraphicsOptions = new GraphicsOptions
-            {
-                AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-                ColorBlendingMode = PixelColorBlendingMode.Normal,
-                BlendPercentage = 1F
-            }
-        };
-
         RectangularPolygon polygon = new(36.5F, 26.25F, 312.5F, 188.5F);
         Brush clearBrush = Brushes.Solid(Color.White);
 
@@ -109,22 +100,23 @@ public class WebGPUDrawingBackendTests
         Brush brush = new ImageBrush(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
-            canvas.Fill(clearBrush, clearOptions);
-            canvas.FillPath(polygon, brush, drawingOptions);
+            canvas.Clear(clearBrush);
+            canvas.Fill(polygon, brush);
         }
 
         using Image<TPixel> defaultImage = new(384, 256);
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = new(384, 256);
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             (Action<DrawingCanvas<TPixel>>)DrawAction);
 
         DebugSaveBackendTriplet(provider, "FillPath_ImageBrush", defaultImage, cpuRegionImage, nativeSurfaceImage);
@@ -191,14 +183,14 @@ public class WebGPUDrawingBackendTests
 
         IPath path = pathBuilder.Build();
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.FillPath(path, brush, drawingOptions);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(path, brush);
 
         using Image<TPixel> defaultImage = provider.GetImage();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = provider.GetImage();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -206,6 +198,7 @@ public class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
 
@@ -253,21 +246,22 @@ public class WebGPUDrawingBackendTests
             }
         };
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.FillPath(polygon, brush, drawingOptions);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(polygon, brush);
 
         using Image<TPixel> baseImage = provider.GetImage();
         using Image<TPixel> defaultImage = baseImage.Clone();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = baseImage.Clone();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             baseImage);
 
@@ -308,21 +302,22 @@ public class WebGPUDrawingBackendTests
 
         using Image<TPixel> foreground = provider.GetImage();
         Brush brush = new ImageBrush(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.FillPath(polygon, brush, drawingOptions);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(polygon, brush);
 
         using Image<TPixel> baseImage = provider.GetImage();
         using Image<TPixel> defaultImage = baseImage.Clone();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = baseImage.Clone();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             baseImage);
 
@@ -359,15 +354,14 @@ public class WebGPUDrawingBackendTests
         string text = "Sphinx of black quartz, judge my vow\n0123456789";
         Brush brush = Brushes.Solid(Color.Black);
         Pen pen = Pens.Solid(Color.OrangeRed, 2F);
-        void DrawAction(DrawingCanvas<TPixel> canvas) =>
-            canvas.DrawText(textOptions, text, drawingOptions, brush, pen);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.DrawText(textOptions, text, brush, pen);
 
         using Image<TPixel> defaultImage = provider.GetImage();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = provider.GetImage();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -375,6 +369,7 @@ public class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
 
@@ -410,32 +405,22 @@ public class WebGPUDrawingBackendTests
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
-        DrawingOptions clearOptions = new()
-        {
-            GraphicsOptions = new GraphicsOptions
-            {
-                Antialias = false,
-                AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-                ColorBlendingMode = PixelColorBlendingMode.Normal,
-                BlendPercentage = 1F
-            }
-        };
 
         RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
         Brush brush = Brushes.Solid(Color.Black);
         Brush clearBrush = Brushes.Solid(Color.White);
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
-            canvas.Fill(clearBrush, clearOptions);
-            canvas.FillPath(polygon, brush, drawingOptions);
+            canvas.Clear(clearBrush);
+            canvas.Fill(polygon, brush);
         }
 
         using Image<TPixel> defaultImage = provider.GetImage();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = provider.GetImage();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -443,6 +428,7 @@ public class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
 
@@ -463,34 +449,24 @@ public class WebGPUDrawingBackendTests
         {
             GraphicsOptions = new GraphicsOptions { Antialias = true }
         };
-        DrawingOptions clearOptions = new()
-        {
-            GraphicsOptions = new GraphicsOptions
-            {
-                Antialias = false,
-                AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-                ColorBlendingMode = PixelColorBlendingMode.Normal,
-                BlendPercentage = 1F
-            }
-        };
-
         Rectangle region = new(72, 64, 320, 240);
         RectangularPolygon localPolygon = new(16.25F, 24.5F, 250.5F, 160.75F);
         Brush brush = Brushes.Solid(Color.Black);
         Brush clearBrush = Brushes.Solid(Color.White);
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
-            canvas.Fill(clearBrush, clearOptions);
+            canvas.Clear(clearBrush);
+
             using DrawingCanvas<TPixel> regionCanvas = canvas.CreateRegion(region);
-            regionCanvas.FillPath(localPolygon, brush, drawingOptions);
+            regionCanvas.Fill(localPolygon, brush);
         }
 
         using Image<TPixel> defaultImage = provider.GetImage();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = provider.GetImage();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -498,6 +474,7 @@ public class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
 
@@ -528,15 +505,14 @@ public class WebGPUDrawingBackendTests
 
         string text = new('A', 200);
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas) =>
-            canvas.DrawText(textOptions, text, drawingOptions, brush, pen: null);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.DrawText(textOptions, text, brush, null);
 
         using Image<TPixel> defaultImage = provider.GetImage();
-        RenderWithDefaultBackend(defaultImage, DrawAction);
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
         using Image<TPixel> cpuRegionImage = provider.GetImage();
         using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, DrawAction);
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -544,6 +520,7 @@ public class WebGPUDrawingBackendTests
             defaultImage.Width,
             defaultImage.Height,
             nativeSurfaceBackend,
+            drawingOptions,
             DrawAction,
             nativeSurfaceInitialImage);
 
@@ -599,15 +576,15 @@ public class WebGPUDrawingBackendTests
         Brush drawBrush = Brushes.Solid(Color.HotPink);
         Brush clearBrush = Brushes.Solid(Color.White);
         using Image<TPixel> defaultImage = provider.GetImage();
-        using (DrawingCanvas<TPixel> defaultClearCanvas = new(Configuration.Default, GetFrameRegion(defaultImage)))
+        using (DrawingCanvas<TPixel> defaultClearCanvas = new(Configuration.Default, GetFrameRegion(defaultImage), clearOptions))
         {
-            defaultClearCanvas.Fill(clearBrush, clearOptions);
+            defaultClearCanvas.Fill(clearBrush);
             defaultClearCanvas.Flush();
         }
 
-        using (DrawingCanvas<TPixel> defaultDrawCanvas = new(Configuration.Default, GetFrameRegion(defaultImage)))
+        using (DrawingCanvas<TPixel> defaultDrawCanvas = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
         {
-            defaultDrawCanvas.DrawText(textOptions, text, drawingOptions, drawBrush, pen: null);
+            defaultDrawCanvas.DrawText(textOptions, text, drawBrush, null);
             defaultDrawCanvas.Flush();
         }
 
@@ -616,16 +593,16 @@ public class WebGPUDrawingBackendTests
         Configuration cpuRegionConfiguration = Configuration.Default.Clone();
         cpuRegionConfiguration.SetDrawingBackend(cpuRegionBackend);
 
-        using (DrawingCanvas<TPixel> cpuRegionClearCanvas = new(cpuRegionConfiguration, GetFrameRegion(cpuRegionImage)))
+        using (DrawingCanvas<TPixel> cpuRegionClearCanvas = new(cpuRegionConfiguration, GetFrameRegion(cpuRegionImage), clearOptions))
         {
-            cpuRegionClearCanvas.Fill(clearBrush, clearOptions);
+            cpuRegionClearCanvas.Fill(clearBrush);
             cpuRegionClearCanvas.Flush();
         }
 
         int cpuRegionComputeBatchesBeforeDraw = cpuRegionBackend.TestingComputePathBatchCount;
-        using (DrawingCanvas<TPixel> cpuRegionDrawCanvas = new(cpuRegionConfiguration, GetFrameRegion(cpuRegionImage)))
+        using (DrawingCanvas<TPixel> cpuRegionDrawCanvas = new(cpuRegionConfiguration, GetFrameRegion(cpuRegionImage), drawingOptions))
         {
-            cpuRegionDrawCanvas.DrawText(textOptions, text, drawingOptions, drawBrush, pen: null);
+            cpuRegionDrawCanvas.DrawText(textOptions, text, drawBrush, null);
             cpuRegionDrawCanvas.Flush();
         }
 
@@ -652,17 +629,17 @@ public class WebGPUDrawingBackendTests
             Rectangle targetBounds = defaultImage.Bounds;
 
             using (DrawingCanvas<TPixel> nativeSurfaceClearCanvas =
-                   new(nativeSurfaceConfiguration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface)))
+                   new(nativeSurfaceConfiguration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), clearOptions))
             {
-                nativeSurfaceClearCanvas.Fill(clearBrush, clearOptions);
+                nativeSurfaceClearCanvas.Fill(clearBrush);
                 nativeSurfaceClearCanvas.Flush();
             }
 
             int nativeSurfaceComputeBatchesBeforeDraw = nativeSurfaceBackend.TestingComputePathBatchCount;
             using (DrawingCanvas<TPixel> nativeSurfaceDrawCanvas =
-                   new(nativeSurfaceConfiguration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface)))
+                   new(nativeSurfaceConfiguration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
             {
-                nativeSurfaceDrawCanvas.DrawText(textOptions, text, drawingOptions, drawBrush, pen: null);
+                nativeSurfaceDrawCanvas.DrawText(textOptions, text, drawBrush, null);
                 nativeSurfaceDrawCanvas.Flush();
             }
 
@@ -708,10 +685,10 @@ public class WebGPUDrawingBackendTests
         }
     }
 
-    private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, Action<DrawingCanvas<TPixel>> drawAction)
+    private static void RenderWithDefaultBackend<TPixel>(Image<TPixel> image, DrawingOptions options, Action<DrawingCanvas<TPixel>> drawAction)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using DrawingCanvas<TPixel> canvas = new(Configuration.Default, GetFrameRegion(image));
+        using DrawingCanvas<TPixel> canvas = new(Configuration.Default, GetFrameRegion(image), options);
         drawAction(canvas);
         canvas.Flush();
     }
@@ -719,12 +696,13 @@ public class WebGPUDrawingBackendTests
     private static void RenderWithCpuRegionWebGpuBackend<TPixel>(
         Image<TPixel> image,
         WebGPUDrawingBackend backend,
+        DrawingOptions options,
         Action<DrawingCanvas<TPixel>> drawAction)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Configuration configuration = Configuration.Default.Clone();
         configuration.SetDrawingBackend(backend);
-        using DrawingCanvas<TPixel> canvas = new(configuration, GetFrameRegion(image));
+        using DrawingCanvas<TPixel> canvas = new(configuration, GetFrameRegion(image), options);
         drawAction(canvas);
         canvas.Flush();
     }
@@ -733,6 +711,7 @@ public class WebGPUDrawingBackendTests
         int width,
         int height,
         WebGPUDrawingBackend backend,
+        DrawingOptions options,
         Action<DrawingCanvas<TPixel>> drawAction,
         Image<TPixel>? initialImage = null)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -757,7 +736,7 @@ public class WebGPUDrawingBackendTests
             Rectangle targetBounds = new(0, 0, width, height);
 
             using DrawingCanvas<TPixel> canvas =
-                new(configuration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface));
+                new(configuration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), options);
             if (initialImage is not null)
             {
                 Assert.True(
