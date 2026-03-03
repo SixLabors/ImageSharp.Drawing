@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+#pragma warning disable CA1000 // Do not declare static members on generic types
+
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
@@ -158,6 +160,70 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     public int SaveCount => this.savedStates.Count;
 
     /// <summary>
+    /// Creates a drawing canvas over an existing frame.
+    /// </summary>
+    /// <param name="frame">The frame backing the canvas.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    /// <returns>A drawing canvas targeting <paramref name="frame"/>.</returns>
+    public static DrawingCanvas<TPixel> FromFrame(
+        ImageFrame<TPixel> frame,
+        DrawingOptions options,
+        params IPath[] clipPaths)
+    {
+        Guard.NotNull(frame, nameof(frame));
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(clipPaths, nameof(clipPaths));
+
+        return new DrawingCanvas<TPixel>(
+            frame.Configuration,
+            new Buffer2DRegion<TPixel>(frame.PixelBuffer, frame.Bounds),
+            options,
+            clipPaths);
+    }
+
+    /// <summary>
+    /// Creates a drawing canvas over a specific frame of an image.
+    /// </summary>
+    /// <param name="image">The image containing the frame.</param>
+    /// <param name="frameIndex">The zero-based frame index to target.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    /// <returns>A drawing canvas targeting the selected frame.</returns>
+    public static DrawingCanvas<TPixel> FromImage(
+        Image<TPixel> image,
+        int frameIndex,
+        DrawingOptions options,
+        params IPath[] clipPaths)
+    {
+        Guard.NotNull(image, nameof(image));
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(clipPaths, nameof(clipPaths));
+        Guard.MustBeBetweenOrEqualTo(frameIndex, 0, image.Frames.Count - 1, nameof(frameIndex));
+
+        return FromFrame(image.Frames[frameIndex], options, clipPaths);
+    }
+
+    /// <summary>
+    /// Creates a drawing canvas over the root frame of an image.
+    /// </summary>
+    /// <param name="image">The image whose root frame should be targeted.</param>
+    /// <param name="options">Initial drawing options for this canvas instance.</param>
+    /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
+    /// <returns>A drawing canvas targeting the root frame.</returns>
+    public static DrawingCanvas<TPixel> FromRootFrame(
+        Image<TPixel> image,
+        DrawingOptions options,
+        params IPath[] clipPaths)
+    {
+        Guard.NotNull(image, nameof(image));
+        Guard.NotNull(options, nameof(options));
+        Guard.NotNull(clipPaths, nameof(clipPaths));
+
+        return FromFrame(image.Frames.RootFrame, options, clipPaths);
+    }
+
+    /// <summary>
     /// Saves the current drawing state on the state stack.
     /// </summary>
     /// <remarks>
@@ -308,6 +374,17 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     }
 
     /// <summary>
+    /// Fills a path built by the provided builder using the given brush.
+    /// </summary>
+    /// <param name="pathBuilder">The path builder describing the fill region.</param>
+    /// <param name="brush">Brush used to shade covered pixels.</param>
+    public void Fill(PathBuilder pathBuilder, Brush brush)
+    {
+        Guard.NotNull(pathBuilder, nameof(pathBuilder));
+        this.Fill(pathBuilder.Build(), brush);
+    }
+
+    /// <summary>
     /// Fills a path in local coordinates using the given brush.
     /// </summary>
     /// <param name="path">The path to fill.</param>
@@ -395,6 +472,17 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         {
             this.Draw(pen, path);
         }
+    }
+
+    /// <summary>
+    /// Draws a path outline built by the provided builder using the given pen.
+    /// </summary>
+    /// <param name="pen">Pen used to generate the outline fill path.</param>
+    /// <param name="pathBuilder">The path builder describing the path to stroke.</param>
+    public void Draw(Pen pen, PathBuilder pathBuilder)
+    {
+        Guard.NotNull(pathBuilder, nameof(pathBuilder));
+        this.Draw(pen, pathBuilder.Build());
     }
 
     /// <summary>
