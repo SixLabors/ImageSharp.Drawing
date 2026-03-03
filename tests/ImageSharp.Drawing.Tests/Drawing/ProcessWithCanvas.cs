@@ -4,7 +4,6 @@
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
 
@@ -15,7 +14,7 @@ public class ProcessWithCanvas : BaseImageOperationsExtensionTest
     [Fact]
     public void CanvasActionDefaultOptions()
     {
-        this.operations.ProcessWithCanvas<Rgba32>(canvas => canvas.Clear(Brushes.Solid(Color.Red)));
+        this.operations.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.Red)));
 
         ProcessWithCanvasProcessor processor = this.Verify<ProcessWithCanvasProcessor>();
 
@@ -29,7 +28,7 @@ public class ProcessWithCanvas : BaseImageOperationsExtensionTest
     [Fact]
     public void CanvasActionWithOptions()
     {
-        this.operations.ProcessWithCanvas<Rgba32>(
+        this.operations.ProcessWithCanvas(
             this.nonDefaultOptions,
             canvas => canvas.Clear(Brushes.Solid(Color.Red)));
 

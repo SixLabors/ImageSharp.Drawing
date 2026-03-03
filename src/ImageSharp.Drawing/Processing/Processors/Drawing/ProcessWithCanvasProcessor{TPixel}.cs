@@ -13,7 +13,7 @@ internal sealed class ProcessWithCanvasProcessor<TPixel> : ImageProcessor<TPixel
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private readonly ProcessWithCanvasProcessor definition;
-    private readonly CanvasAction<TPixel> action;
+    private readonly CanvasAction action;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProcessWithCanvasProcessor{TPixel}"/> class.
@@ -30,7 +30,7 @@ internal sealed class ProcessWithCanvasProcessor<TPixel> : ImageProcessor<TPixel
         : base(configuration, source, sourceRectangle)
     {
         this.definition = definition;
-        this.action = (CanvasAction<TPixel>)definition.Action;
+        this.action = definition.Action;
     }
 
     /// <inheritdoc />

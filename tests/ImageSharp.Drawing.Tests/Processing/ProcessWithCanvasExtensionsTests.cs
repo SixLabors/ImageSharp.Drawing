@@ -15,7 +15,7 @@ public class ProcessWithCanvasExtensionsTests
         using Image<Rgba32> image = new(24, 16);
         image.Frames.AddFrame(image.Frames.RootFrame);
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas<Rgba32>(canvas => canvas.Clear(Brushes.Solid(Color.OrangeRed))));
+        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.OrangeRed))));
 
         Assert.Equal(Color.OrangeRed.ToPixel<Rgba32>(), image.Frames.RootFrame[8, 6]);
         Assert.Equal(Color.OrangeRed.ToPixel<Rgba32>(), image.Frames[1][8, 6]);
@@ -26,10 +26,10 @@ public class ProcessWithCanvasExtensionsTests
     {
         using Image<Rgba32> source = new(24, 16);
         source.Frames.AddFrame(source.Frames.RootFrame);
-        source.Mutate(ctx => ctx.ProcessWithCanvas<Rgba32>(canvas => canvas.Clear(Brushes.Solid(Color.White))));
+        source.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.White))));
 
         using Image<Rgba32> clone = source.Clone(
-            ctx => ctx.ProcessWithCanvas<Rgba32>(canvas => canvas.Clear(Brushes.Solid(Color.MediumPurple))));
+            ctx => ctx.ProcessWithCanvas(canvas => canvas.Clear(Brushes.Solid(Color.MediumPurple))));
 
         Assert.Equal(Color.White.ToPixel<Rgba32>(), source.Frames.RootFrame[8, 6]);
         Assert.Equal(Color.White.ToPixel<Rgba32>(), source.Frames[1][8, 6]);
@@ -38,13 +38,28 @@ public class ProcessWithCanvasExtensionsTests
     }
 
     [Fact]
-    public void ProcessWithCanvas_WhenPixelTypeMismatch_Throws()
+    public void ProcessWithCanvas_Mutate_DrawImage_AppliesToAllFrames()
     {
-        using Image<Rgba32> image = new(12, 12);
+        using Image<Rgba32> image = new(24, 16);
+        image.Frames.AddFrame(image.Frames.RootFrame);
 
-        InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
-            () => image.Mutate(ctx => ctx.ProcessWithCanvas<Bgra32>(canvas => canvas.Clear(Brushes.Solid(Color.Black)))));
+        using Image<Bgra32> source = new(8, 8, Color.HotPink.ToPixel<Bgra32>());
 
-        Assert.Contains("expects pixel type", ex.Message);
+        Rectangle sourceRect = new(2, 1, 4, 5);
+        RectangleF destinationRect = new(6, 4, 10, 6);
+
+        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        {
+            canvas.Clear(Brushes.Solid(Color.White));
+            canvas.DrawImage(source, sourceRect, destinationRect);
+        }));
+
+        Rgba32 expectedFill = Color.HotPink.ToPixel<Rgba32>();
+        Rgba32 expectedBackground = Color.White.ToPixel<Rgba32>();
+
+        Assert.Equal(expectedFill, image.Frames.RootFrame[10, 6]);
+        Assert.Equal(expectedFill, image.Frames[1][10, 6]);
+        Assert.Equal(expectedBackground, image.Frames.RootFrame[1, 1]);
+        Assert.Equal(expectedBackground, image.Frames[1][1, 1]);
     }
 }
