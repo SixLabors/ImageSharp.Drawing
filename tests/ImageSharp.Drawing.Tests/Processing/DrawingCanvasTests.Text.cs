@@ -23,7 +23,7 @@ public partial class DrawingCanvasTests
 
         Font font = TestFontUtilities.GetFont(TestFonts.NotoColorEmojiRegular, 100);
         Font fallback = TestFontUtilities.GetFont(TestFonts.OpenSans, 100);
-        const string text = "a\U0001F628 b\U0001F605\r\nc\U0001F972 d\U0001F929";
+        const string text = "a😨 b😅\r\nc🥲 d🤩";
 
         RichTextOptions textOptions = new(font)
         {
