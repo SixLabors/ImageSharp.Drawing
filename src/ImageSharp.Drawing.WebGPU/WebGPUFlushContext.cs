@@ -930,16 +930,16 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         int rowBytes = checked(sourceRegion.Width * pixelSizeInBytes);
         uint alignedRowBytes = AlignTo256((uint)rowBytes);
 
-        if (sourceRegion.Buffer.MemoryGroup.Count == 1)
+        if (sourceRegion.Buffer.DangerousTryGetSingleMemory(out Memory<TPixel> sourceMemory))
         {
-            int sourceStrideBytes = checked(sourceRegion.Buffer.Width * pixelSizeInBytes);
+            int sourceStrideBytes = checked(sourceRegion.Buffer.RowStride * pixelSizeInBytes);
             long directByteCount = ((long)sourceStrideBytes * (sourceRegion.Height - 1)) + rowBytes;
             long packedByteCountEstimate = (long)alignedRowBytes * sourceRegion.Height;
 
             // Only use the direct path when the stride satisfies WebGPU's alignment requirement.
             if ((uint)sourceStrideBytes == alignedRowBytes && directByteCount <= packedByteCountEstimate * 2)
             {
-                int startPixelIndex = checked((sourceRegion.Rectangle.Y * sourceRegion.Buffer.Width) + sourceRegion.Rectangle.X);
+                int startPixelIndex = checked((sourceRegion.Rectangle.Y * sourceRegion.Buffer.RowStride) + sourceRegion.Rectangle.X);
                 int startByteOffset = checked(startPixelIndex * pixelSizeInBytes);
                 int uploadByteCount = checked((int)directByteCount);
                 nuint uploadByteCountNuint = checked((nuint)uploadByteCount);
@@ -951,7 +951,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                     RowsPerImage = (uint)sourceRegion.Height
                 };
 
-                Memory<TPixel> sourceMemory = sourceRegion.Buffer.MemoryGroup[0];
                 Span<byte> sourceBytes = MemoryMarshal.AsBytes(sourceMemory.Span).Slice(startByteOffset, uploadByteCount);
                 fixed (byte* uploadPtr = sourceBytes)
                 {

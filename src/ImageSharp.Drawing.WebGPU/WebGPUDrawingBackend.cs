@@ -2018,12 +2018,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         try
         {
             ReadOnlySpan<byte> sourceData = new(mappedData, readbackByteCount);
-            int destinationStrideBytes = checked(destinationRegion.Buffer.Width * Unsafe.SizeOf<TPixel>());
+            int destinationStrideBytes = checked(destinationRegion.Buffer.RowStride * Unsafe.SizeOf<TPixel>());
 
             // Fast path for contiguous full-width rows.
             if (copyBounds.X == 0 &&
                 copyBounds.Width == destinationRegion.Width &&
-                TryGetSingleMemory(destinationRegion.Buffer, out Memory<TPixel> contiguousDestination))
+                destinationRegion.Buffer.DangerousTryGetSingleMemory(out Memory<TPixel> contiguousDestination))
             {
                 Span<byte> destinationBytes = MemoryMarshal.AsBytes(contiguousDestination.Span);
                 int destinationStart = checked((destinationRegion.Rectangle.Y + copyBounds.Y) * destinationStrideBytes);
@@ -2122,31 +2122,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-    /// <summary>
-    /// Returns whether the 2D buffer is backed by a single contiguous memory segment.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsSingleMemory<T>(Buffer2D<T> buffer)
-        where T : struct
-        => buffer.MemoryGroup.Count == 1;
-
-    /// <summary>
-    /// Returns the single contiguous memory segment of the provided buffer when available.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool TryGetSingleMemory<T>(Buffer2D<T> buffer, out Memory<T> memory)
-        where T : struct
-    {
-        if (!IsSingleMemory(buffer))
-        {
-            memory = default;
-            return false;
-        }
-
-        memory = buffer.MemoryGroup[0];
-        return true;
-    }
 
     /// <summary>
     /// Waits for a GPU callback signal, polling the device when the WGPU extension is available.

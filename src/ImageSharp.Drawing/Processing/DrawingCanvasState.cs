@@ -6,14 +6,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <summary>
 /// Immutable drawing state snapshot used by <see cref="DrawingCanvas{TPixel}"/>.
 /// </summary>
-public sealed class DrawingCanvasState
+internal sealed class DrawingCanvasState
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="DrawingCanvasState"/> class.
     /// </summary>
     /// <param name="options">Drawing options for this state.</param>
     /// <param name="clipPaths">Clip paths for this state.</param>
-    internal DrawingCanvasState(DrawingOptions options, IReadOnlyList<IPath> clipPaths)
+    public DrawingCanvasState(DrawingOptions options, IReadOnlyList<IPath> clipPaths)
     {
         this.Options = options;
         this.ClipPaths = clipPaths;

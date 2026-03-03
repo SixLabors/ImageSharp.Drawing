@@ -161,9 +161,9 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
     /// Saves the current drawing state on the state stack.
     /// </summary>
     /// <remarks>
-    /// This operation stores the current <see cref="DrawingCanvasState"/> reference.
-    /// The state is not deep-cloned. If the same <see cref="DrawingOptions"/> instance is
-    /// mutated after <see cref="Save()"/>, those mutations are visible when restoring.
+    /// This operation stores the current canvas state by reference.
+    /// If the same <see cref="DrawingOptions"/> instance is mutated after
+    /// <see cref="Save()"/>, those mutations are visible when restoring.
     /// </remarks>
     /// <returns>The save count after the state has been pushed.</returns>
     public int Save()
@@ -241,18 +241,6 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         Rectangle clipped = Rectangle.Intersect(this.Bounds, region);
         ICanvasFrame<TPixel> childFrame = new CanvasRegionFrame<TPixel>(this.targetFrame, clipped);
         return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame, this.batcher, this.ResolveState());
-    }
-
-    /// <summary>
-    /// Creates an immutable scoped drawing state and applies it to this canvas until disposed.
-    /// </summary>
-    /// <param name="options">Drawing options for the scoped state.</param>
-    /// <param name="clipPaths">Clip paths associated with the scoped state.</param>
-    /// <returns>The active scoped state that restores to default when disposed.</returns>
-    public DrawingCanvasState CreateState(DrawingOptions options, params IPath[] clipPaths)
-    {
-        _ = this.Save(options, clipPaths);
-        return this.ResolveState();
     }
 
     /// <summary>

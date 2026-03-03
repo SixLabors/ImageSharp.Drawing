@@ -13,6 +13,7 @@
     <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
     <Configurations>Debug;Release</Configurations>
     <IsTrimmable>true</IsTrimmable>
+
   </PropertyGroup>
 
   <PropertyGroup>
@@ -25,7 +26,7 @@
     <Nullable>enable</Nullable>
     <WarningsAsErrors>Nullable</WarningsAsErrors>
   </PropertyGroup>
-  
+
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
       <PropertyGroup>
@@ -43,16 +44,17 @@
     <!-- Temp: Just while our backends are internal-->
     <InternalsVisibleTo Include="SixLabors.ImageSharp.Drawing.WebGPU" Key="$(SixLaborsPublicKey)" />
   </ItemGroup>
-  
+
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.18" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.71" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.72" />
     <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.0-alpha.0.52" />
   </ItemGroup>
 
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
+
 </Project>
