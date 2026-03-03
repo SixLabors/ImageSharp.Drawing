@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
@@ -140,6 +141,8 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         this.backend = backend;
         this.targetFrame = targetFrame;
         this.batcher = batcher;
+
+        // Canvas coordinates are local to the current frame; origin stays at (0,0).
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
         this.savedStates.Push(defaultState);
     }
@@ -471,6 +474,132 @@ public sealed class DrawingCanvas<TPixel> : IDisposable
         renderer.RenderText(text, configuredOptions);
 
         this.DrawTextOperations(glyphRenderer.DrawingOperations, effectiveOptions, state.ClipPaths);
+    }
+
+    /// <summary>
+    /// Measures the advance box of the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <returns>The measured advance as a rectangle in px units.</returns>
+    public RectangleF MeasureTextAdvance(RichTextOptions textOptions, string text)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
+        return RectangleF.FromLTRB(0, 0, advance.Width, advance.Height);
+    }
+
+    /// <summary>
+    /// Measures the tight bounds of the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <returns>The measured bounds rectangle in px units.</returns>
+    public RectangleF MeasureTextBounds(RichTextOptions textOptions, string text)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        FontRectangle bounds = TextMeasurer.MeasureBounds(text, textOptions);
+        return RectangleF.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
+    }
+
+    /// <summary>
+    /// Measures the size of the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <returns>The measured size as a rectangle in px units.</returns>
+    public RectangleF MeasureTextSize(RichTextOptions textOptions, string text)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        FontRectangle size = TextMeasurer.MeasureSize(text, textOptions);
+        return RectangleF.FromLTRB(0, 0, size.Width, size.Height);
+    }
+
+    /// <summary>
+    /// Tries to measure per-character advances for the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <param name="advances">Receives per-character advance metrics in px units.</param>
+    /// <returns><see langword="true"/> if all character advances were measured; otherwise <see langword="false"/>.</returns>
+    public bool TryMeasureCharacterAdvances(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> advances)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        return TextMeasurer.TryMeasureCharacterAdvances(text, textOptions, out advances);
+    }
+
+    /// <summary>
+    /// Tries to measure per-character bounds for the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <param name="bounds">Receives per-character bounds in px units.</param>
+    /// <returns><see langword="true"/> if all character bounds were measured; otherwise <see langword="false"/>.</returns>
+    public bool TryMeasureCharacterBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        return TextMeasurer.TryMeasureCharacterBounds(text, textOptions, out bounds);
+    }
+
+    /// <summary>
+    /// Tries to measure per-character sizes for the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <param name="sizes">Receives per-character sizes in px units.</param>
+    /// <returns><see langword="true"/> if all character sizes were measured; otherwise <see langword="false"/>.</returns>
+    public bool TryMeasureCharacterSizes(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> sizes)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        return TextMeasurer.TryMeasureCharacterSizes(text, textOptions, out sizes);
+    }
+
+    /// <summary>
+    /// Counts the rendered text lines for the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <returns>The number of rendered lines.</returns>
+    public int CountTextLines(RichTextOptions textOptions, string text)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        return TextMeasurer.CountLines(text, textOptions);
+    }
+
+    /// <summary>
+    /// Gets line metrics for the specified text.
+    /// </summary>
+    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <returns>An array of line metrics in px units.</returns>
+    public LineMetrics[] GetTextLineMetrics(RichTextOptions textOptions, string text)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        return TextMeasurer.GetLineMetrics(text, textOptions);
     }
 
     /// <summary>
