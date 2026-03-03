@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.Fonts;
+using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -193,6 +194,22 @@ public interface IDrawingCanvas : IDisposable
         string text,
         Brush? brush,
         Pen? pen);
+
+    /// <summary>
+    /// Draws layered glyph geometry using a monochrome projection.
+    /// </summary>
+    /// <remarks>
+    /// For painted glyph layers, the implementation uses a coverage/compactness heuristic
+    /// to keep one dominant background-like layer as outline-only to preserve interior definition.
+    /// All non-painted layers are filled.
+    /// </remarks>
+    /// <param name="brush">Brush used to fill glyph layers.</param>
+    /// <param name="pen">Pen used to outline dominant painted layers.</param>
+    /// <param name="glyphs">Layered glyph geometry to draw.</param>
+    public void DrawGlyphs(
+        Brush brush,
+        Pen pen,
+        IReadOnlyList<GlyphPathCollection> glyphs);
 
     /// <summary>
     /// Measures the advance box of the specified text.

@@ -439,9 +439,11 @@ internal class BaseGlyphBuilder : IGlyphRenderer
         this.CurrentPaths.Add(path);
         if (this.graphemeBuilder is not null)
         {
+            // Decorations are emitted as independent paths; each layer must point
+            // at the path index appended for this specific decoration.
             this.graphemeBuilder.AddPath(path);
             this.graphemeBuilder.AddLayer(
-                startIndex: this.layerStartIndex,
+                startIndex: this.graphemePathCount,
                 count: 1,
                 paint: this.currentLayerPaint,
                 fillRule: FillRule.NonZero,

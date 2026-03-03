@@ -3,13 +3,54 @@
 
 using System.Numerics;
 using SixLabors.Fonts;
+using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
 public partial class DrawingCanvasTests
 {
+    [Theory]
+    [WithSolidFilledImages(492, 360, nameof(Color.White), PixelTypes.Rgba32, ColorFontSupport.ColrV1)]
+    [WithSolidFilledImages(492, 360, nameof(Color.White), PixelTypes.Rgba32, ColorFontSupport.Svg)]
+    public void DrawGlyphs_EmojiFont_MatchesReference<TPixel>(TestImageProvider<TPixel> provider, ColorFontSupport support)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        Font font = TestFontUtilities.GetFont(TestFonts.NotoColorEmojiRegular, 100);
+        Font fallback = TestFontUtilities.GetFont(TestFonts.OpenSans, 100);
+        const string text = "a\U0001F628 b\U0001F605\r\nc\U0001F972 d\U0001F929";
+
+        RichTextOptions textOptions = new(font)
+        {
+            ColorFontSupport = support,
+            LineSpacing = 1.8F,
+            FallbackFontFamilies = [fallback.Family],
+            TextRuns =
+            [
+                new RichTextRun
+                {
+                    Start = 0,
+                    End = text.GetGraphemeCount(),
+                    TextDecorations = TextDecorations.Strikeout | TextDecorations.Underline | TextDecorations.Overline
+                }
+            ]
+        };
+
+        IReadOnlyList<GlyphPathCollection> glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
+
+        canvas.Clear(Brushes.Solid(Color.White));
+        canvas.DrawGlyphs(Brushes.Solid(Color.Black), Pens.Solid(Color.Black, 2F), glyphs);
+        canvas.Flush();
+
+        target.DebugSave(provider, $"{support}-draw-glyphs", appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(provider, $"{support}-draw-glyphs", appendSourceFileOrDescription: false);
+    }
+
     [Theory]
     [WithBlankImage(760, 320, PixelTypes.Rgba32)]
     public void DrawText_Multiline_WithLineMetricsGuides_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)

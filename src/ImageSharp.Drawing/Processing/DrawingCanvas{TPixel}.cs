@@ -450,6 +450,76 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
+    public void DrawGlyphs(
+        Brush brush,
+        Pen pen,
+        IReadOnlyList<GlyphPathCollection> glyphs)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(brush, nameof(brush));
+        Guard.NotNull(pen, nameof(pen));
+        Guard.NotNull(glyphs, nameof(glyphs));
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions baseOptions = state.Options;
+        IReadOnlyList<IPath> clipPaths = state.ClipPaths;
+
+        for (int glyphIndex = 0; glyphIndex < glyphs.Count; glyphIndex++)
+        {
+            GlyphPathCollection glyph = glyphs[glyphIndex];
+            if (glyph.LayerCount == 0)
+            {
+                continue;
+            }
+
+            if (glyph.LayerCount == 1)
+            {
+                this.Fill(brush, glyph.Paths);
+                continue;
+            }
+
+            float glyphArea = glyph.Bounds.Width * glyph.Bounds.Height;
+            for (int layerIndex = 0; layerIndex < glyph.LayerCount; layerIndex++)
+            {
+                GlyphLayerInfo layer = glyph.Layers[layerIndex];
+                if (layer.Count == 0)
+                {
+                    continue;
+                }
+
+                PathCollection layerPaths = glyph.GetLayerPaths(layerIndex);
+                DrawingOptions layerOptions = baseOptions.CloneOrReturnForRules(
+                    layer.IntersectionRule,
+                    layer.PixelAlphaCompositionMode,
+                    layer.PixelColorBlendingMode);
+
+                bool shouldFill;
+                if (layer.Kind is GlyphLayerKind.Decoration or GlyphLayerKind.Glyph)
+                {
+                    shouldFill = true;
+                }
+                else
+                {
+                    float layerArea = layerPaths.ComputeArea();
+                    shouldFill = layerArea > 0F && glyphArea > 0F && (layerArea / glyphArea) < 0.50F;
+                }
+
+                this.ExecuteWithTemporaryState(layerOptions, clipPaths, () =>
+                {
+                    if (shouldFill)
+                    {
+                        this.Fill(brush, layerPaths);
+                    }
+                    else
+                    {
+                        this.Draw(pen, layerPaths);
+                    }
+                });
+            }
+        }
+    }
+
+    /// <inheritdoc />
     public RectangleF MeasureTextAdvance(RichTextOptions textOptions, string text)
     {
         this.EnsureNotDisposed();
