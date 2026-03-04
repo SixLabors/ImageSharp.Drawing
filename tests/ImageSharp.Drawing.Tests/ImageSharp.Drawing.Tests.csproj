@@ -60,4 +60,13 @@
     <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
   </ItemGroup>
 
+  <!--Get the tests to run in CI.-->
+  <!--https://github.com/dotnet/Silk.NET/issues/2465-->
+  <Target Name="CopyNativeLibraries" AfterTargets="Build">
+    <ItemGroup>
+      <NativeLibs Include="@(RuntimeTargetsCopyLocalItems)" Condition="'%(RuntimeTargetsCopyLocalItems.AssetType)' == 'native'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeLibs)" DestinationFolder="$(OutputPath)" />
+  </Target>
+  
 </Project>
