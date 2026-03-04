@@ -4,6 +4,7 @@
 #pragma warning disable xUnit1004 // Test methods should not be skipped
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Linq;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -13,10 +14,9 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SkiaSharp;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
+namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
-[GroupOutput("Drawing")]
-public class DrawingRobustnessTests
+public partial class ProcessWithDrawingCanvasTests
 {
     [Theory(Skip = "For local testing")]
     [WithSolidFilledImages(32, 32, "Black", PixelTypes.Rgba32)]
@@ -41,7 +41,7 @@ public class DrawingRobustnessTests
     private static void CompareToSkiaResultsImpl(TestImageProvider<Rgba32> provider, IPath shape)
     {
         using Image<Rgba32> image = provider.GetImage();
-        image.Mutate(c => c.Fill(Color.White, shape));
+        image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(shape, Brushes.Solid(Color.White))));
         image.DebugSave(provider, "ImageSharp", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
 
         using SKBitmap bitmap = new(new SKImageInfo(image.Width, image.Height));
@@ -88,12 +88,17 @@ public class DrawingRobustnessTests
         using Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
         {
-            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0 },
+            GraphicsOptions = new GraphicsOptions { Antialias = aa > 0 },
         };
-        foreach (PointF[] loop in points)
+
+        image.Mutate(c => c.ProcessWithCanvas(options, canvas =>
         {
-            image.Mutate(c => c.DrawLine(options, Color.White, 1.0f, loop));
-        }
+            Pen pen = Pens.Solid(Color.White, 1.0F);
+            foreach (PointF[] loop in points)
+            {
+                canvas.DrawLine(pen, loop);
+            }
+        }));
 
         string details = $"_{System.IO.Path.GetFileName(geoJsonFile)}_{sx}x{sy}_aa{aa}";
 
@@ -124,17 +129,21 @@ public class DrawingRobustnessTests
         Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
         {
-            GraphicsOptions = new GraphicsOptions() { Antialias = aa },
+            GraphicsOptions = new GraphicsOptions { Antialias = aa },
         };
         Random rnd = new(42);
         byte[] rgb = new byte[3];
-        foreach (PointF[] loop in points)
-        {
-            rnd.NextBytes(rgb);
 
-            Color color = Color.FromPixel(new Rgb24(rgb[0], rgb[1], rgb[2]));
-            image.Mutate(c => c.FillPolygon(options, color, loop));
-        }
+        image.Mutate(c => c.ProcessWithCanvas(options, canvas =>
+        {
+            foreach (PointF[] loop in points)
+            {
+                rnd.NextBytes(rgb);
+
+                Color color = Color.FromPixel(new Rgb24(rgb[0], rgb[1], rgb[2]));
+                canvas.Fill(new Polygon(new LinearLineSegment(loop)), Brushes.Solid(color));
+            }
+        }));
 
         return image;
     }
@@ -156,10 +165,14 @@ public class DrawingRobustnessTests
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
-        foreach (PointF[] loop in points)
+        image.Mutate(c => c.ProcessWithCanvas(canvas =>
         {
-            image.Mutate(c => c.DrawLine(Color.White, 1.0f, loop));
-        }
+            Pen pen = Pens.Solid(Color.White, 1.0F);
+            foreach (PointF[] loop in points)
+            {
+                canvas.DrawLine(pen, loop);
+            }
+        }));
 
         // Strict comparer, because the image is sparse:
         ImageComparer comparer = ImageComparer.TolerantPercentage(0.0001F);
@@ -186,13 +199,17 @@ public class DrawingRobustnessTests
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
-        var pen = new SolidPen(new SolidBrush(Color.White), 1.0f);
-        foreach (PointF[] loop in points)
+        SolidPen pen = new(new SolidBrush(Color.White), 1.0f);
+
+        image.Mutate(c => c.ProcessWithCanvas(canvas =>
         {
-            IPath outline = pen.GeneratePath(new Path(loop).Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
-            outline = outline.Transform(Matrix3x2.CreateScale(scale, scale));
-            image.Mutate(c => c.Fill(pen.StrokeFill, outline));
-        }
+            foreach (PointF[] loop in points)
+            {
+                IPath outline = pen.GeneratePath(new Path(loop).Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
+                outline = outline.Transform(Matrix3x2.CreateScale(scale, scale));
+                canvas.Fill(outline, pen.StrokeFill);
+            }
+        }));
 
         // Strict comparer, because the image is sparse:
         ImageComparer comparer = ImageComparer.TolerantPercentage(0.0001F);
@@ -273,14 +290,14 @@ public class DrawingRobustnessTests
 
         using Image<Rgba32> image = provider.GetImage();
 
-        image.Mutate(
-            c =>
+        image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        {
+            Pen pen = Pens.Solid(Color.White, thickness);
+            foreach (PointF[] loop in points)
             {
-                foreach (PointF[] loop in points)
-                {
-                    c.DrawPolygon(Color.White, thickness, loop);
-                }
-            });
+                canvas.Draw(pen, new Polygon(new LinearLineSegment(loop)));
+            }
+        }));
 
         image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }
@@ -313,7 +330,7 @@ public class DrawingRobustnessTests
         image.Mutate(c =>
         {
             c.SetRasterizer(DefaultRasterizer.Instance);
-            c.Draw(Color.White, thickness, path);
+            c.ProcessWithCanvas(canvas => canvas.Draw(Pens.Solid(Color.White, thickness), path));
         });
 
         image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
@@ -325,18 +342,18 @@ public class DrawingRobustnessTests
     {
         List<PointF[]> points = CreateStarPolygon(1001, 100F);
         Matrix3x2 transform = Matrix3x2.CreateTranslation(250, 250);
+        DrawingOptions options = new() { Transform = transform };
 
         using Image<Rgba32> image = provider.GetImage();
 
-        image.Mutate(
-            c =>
+        image.Mutate(c => c.ProcessWithCanvas(options, canvas =>
+        {
+            Pen pen = Pens.Solid(Color.White, thickness);
+            foreach (PointF[] loop in points)
             {
-                foreach (PointF[] loop in points)
-                {
-                    c.SetDrawingTransform(transform);
-                    c.DrawPolygon(Color.White, thickness, loop);
-                }
-            });
+                canvas.Draw(pen, new Polygon(new LinearLineSegment(loop)));
+            }
+        }));
 
         image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }
