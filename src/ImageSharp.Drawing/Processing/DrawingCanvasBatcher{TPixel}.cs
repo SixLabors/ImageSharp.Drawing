@@ -66,7 +66,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         try
         {
-            CompositionScene scene = new(this.commands.ToArray());
+            CompositionScene scene = new(this.commands);
             this.backend.FlushCompositions(this.configuration, this.targetFrame, scene);
         }
         finally

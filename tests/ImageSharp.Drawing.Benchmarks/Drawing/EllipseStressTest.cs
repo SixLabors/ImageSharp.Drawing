@@ -23,24 +23,23 @@ public class EllipseStressTest
 
     [Benchmark]
     public void DrawImageSharp()
-    {
-        for (int i = 0; i < 20_000; i++)
-        {
-            Color brushColor = Color.FromPixel(new Rgba32((byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255)));
-            Color penColor = Color.FromPixel(new Rgba32((byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255)));
-
-            float r = this.Rand(20f) + 1f;
-            float x = this.Rand(this.width);
-            float y = this.Rand(this.height);
-            EllipsePolygon ellipse = new(new PointF(x, y), r);
-            this.image.Mutate(
-                m => m.ProcessWithCanvas(canvas =>
+        => this.image.Mutate(
+            m => m.ProcessWithCanvas(canvas =>
+            {
+                for (int i = 0; i < 20_000; i++)
                 {
+                    Color brushColor = Color.FromPixel(new Rgba32((byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255)));
+                    Color penColor = Color.FromPixel(new Rgba32((byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255), (byte)this.Rand(255)));
+
+                    float r = this.Rand(20f) + 1f;
+                    float x = this.Rand(this.width);
+                    float y = this.Rand(this.height);
+                    EllipsePolygon ellipse = new(new PointF(x, y), r);
+
                     canvas.Fill(ellipse, Brushes.Solid(brushColor));
                     canvas.Draw(Pens.Solid(penColor, this.Rand(5)), ellipse);
-                }));
-        }
-    }
+                }
+            }));
 
     [GlobalCleanup]
     public void Cleanup()

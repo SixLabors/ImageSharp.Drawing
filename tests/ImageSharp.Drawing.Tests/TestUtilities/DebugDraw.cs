@@ -32,7 +32,11 @@ internal class DebugDraw
         gridSize *= scale;
 
         using Image img = new Image<Rgba32>((int)(bounds.Right + (2 * gridSize)), (int)(bounds.Bottom + (2 * gridSize)));
-        img.Mutate(ctx => DrawGrid(ctx.Fill(TestBrush, path), bounds, gridSize));
+        img.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        {
+            canvas.Fill(path, TestBrush);
+            DrawGrid(canvas, bounds, gridSize);
+        }));
 
         string outDir = TestEnvironment.CreateOutputDirectory(this.outputDir);
         string outFile = System.IO.Path.Combine(outDir, testMethod + ".png");
@@ -41,18 +45,18 @@ internal class DebugDraw
 
     private static PointF P(float x, float y) => new(x, y);
 
-    private static void DrawGrid(IImageProcessingContext ctx, RectangleF rect, float gridSize)
+    private static void DrawGrid(IDrawingCanvas canvas, RectangleF rect, float gridSize)
     {
         for (float x = rect.Left; x <= rect.Right; x += gridSize)
         {
             PointF[] line = [P(x, rect.Top), P(x, rect.Bottom)];
-            ctx.DrawLine(GridPen, line);
+            canvas.DrawLine(GridPen, line);
         }
 
         for (float y = rect.Top; y <= rect.Bottom; y += gridSize)
         {
             PointF[] line = [P(rect.Left, y), P(rect.Right, y)];
-            ctx.DrawLine(GridPen, line);
+            canvas.DrawLine(GridPen, line);
         }
     }
 }

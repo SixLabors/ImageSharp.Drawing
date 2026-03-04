@@ -584,7 +584,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                 image.Mutate(ctx =>
                 {
-                    ctx.Fill(Color.Red);
+                    ctx.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.Red)));
 
                     DrawingOptions glossOptions = new()
                     {

@@ -32,7 +32,7 @@ public class SkiaCoverageDrawingBackendTests
         Pen pen = Pens.Solid(Color.OrangeRed, 2F);
 
         using Image<Rgba32> defaultImage = provider.GetImage();
-        defaultImage.Mutate(ctx => ctx.DrawText(drawingOptions, textOptions, text, brush, pen));
+        defaultImage.Mutate(ctx => ctx.ProcessWithCanvas(drawingOptions, canvas => canvas.DrawText(textOptions, text, brush, pen)));
         defaultImage.DebugSave(
             provider,
             "DefaultBackend_DrawText",
@@ -42,7 +42,7 @@ public class SkiaCoverageDrawingBackendTests
         using Image<Rgba32> skiaBackendImage = provider.GetImage();
         using SkiaCoverageDrawingBackend backend = new();
         skiaBackendImage.Configuration.SetDrawingBackend(backend);
-        skiaBackendImage.Mutate(ctx => ctx.DrawText(drawingOptions, textOptions, text, brush, pen));
+        skiaBackendImage.Mutate(ctx => ctx.ProcessWithCanvas(drawingOptions, canvas => canvas.DrawText(textOptions, text, brush, pen)));
 
         skiaBackendImage.DebugSave(
             provider,
@@ -82,7 +82,7 @@ public class SkiaCoverageDrawingBackendTests
         using SkiaCoverageDrawingBackend backend = new();
         image.Configuration.SetDrawingBackend(backend);
 
-        image.Mutate(ctx => ctx.DrawText(drawingOptions, textOptions, text, brush, pen: null));
+        image.Mutate(ctx => ctx.ProcessWithCanvas(drawingOptions, canvas => canvas.DrawText(textOptions, text, brush, pen: null)));
 
         image.DebugSave(
             provider,
