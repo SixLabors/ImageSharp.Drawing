@@ -4,17 +4,16 @@
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
+namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
-[GroupOutput("Drawing")]
-public class RecolorImageTests
+public partial class ProcessWithDrawingCanvasTests
 {
     [Theory]
     [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Rgba32, "Yellow", "Pink", 0.2f)]
     [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Bgra32, "Yellow", "Pink", 0.5f)]
     [WithTestPatternImage(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.2f)]
     [WithTestPatternImage(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.6f)]
-    public void Recolor<TPixel>(TestImageProvider<TPixel> provider, string sourceColorName, string targetColorName, float threshold)
+    public void RecolorImage<TPixel>(TestImageProvider<TPixel> provider, string sourceColorName, string targetColorName, float threshold)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color sourceColor = TestUtils.GetColorByName(sourceColorName);
@@ -22,13 +21,13 @@ public class RecolorImageTests
         RecolorBrush brush = new(sourceColor, targetColor, threshold);
 
         FormattableString testInfo = $"{sourceColorName}-{targetColorName}-{threshold}";
-        provider.RunValidatingProcessorTest(x => x.Fill(brush), testInfo);
+        provider.RunValidatingProcessorTest(x => x.ProcessWithCanvas(canvas => canvas.Fill(brush)), testInfo);
     }
 
     [Theory]
     [WithFile(TestImages.Png.CalliphoraPartial, PixelTypes.Bgra32, "Yellow", "Pink", 0.5f)]
     [WithTestPatternImage(100, 100, PixelTypes.Rgba32, "Red", "Blue", 0.2f)]
-    public void Recolor_InBox<TPixel>(TestImageProvider<TPixel> provider, string sourceColorName, string targetColorName, float threshold)
+    public void RecolorImage_InBox<TPixel>(TestImageProvider<TPixel> provider, string sourceColorName, string targetColorName, float threshold)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color sourceColor = TestUtils.GetColorByName(sourceColorName);
@@ -37,12 +36,12 @@ public class RecolorImageTests
 
         FormattableString testInfo = $"{sourceColorName}-{targetColorName}-{threshold}";
         provider.RunValidatingProcessorTest(
-            x =>
+            x => x.ProcessWithCanvas(canvas =>
             {
-                Size size = x.GetCurrentSize();
-                Rectangle rectangle = new(0, (size.Height / 2) - (size.Height / 4), size.Width, size.Height / 2);
-                x.Fill(brush, rectangle);
-            },
+                Rectangle bounds = canvas.Bounds;
+                Rectangle region = new(0, (bounds.Height / 2) - (bounds.Height / 4), bounds.Width, bounds.Height / 2);
+                canvas.Fill(region, brush);
+            }),
             testInfo);
     }
 }
