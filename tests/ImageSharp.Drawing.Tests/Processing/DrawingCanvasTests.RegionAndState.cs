@@ -62,7 +62,7 @@ public partial class DrawingCanvasTests
         target.DebugSave(provider, appendSourceFileOrDescription: false);
 
         ImageComparer tolerantComparer = ImageComparer.TolerantPercentage(0.0003F);
-        target.CompareToReferenceOutput(provider, tolerantComparer, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(tolerantComparer, provider, appendSourceFileOrDescription: false);
     }
 
     [Theory]
