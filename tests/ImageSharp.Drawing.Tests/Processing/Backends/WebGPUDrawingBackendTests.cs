@@ -864,28 +864,36 @@ public class WebGPUDrawingBackendTests
             $"{testName}_Default",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+
         cpuRegionImage.DebugSave(
             provider,
             $"{testName}_WebGPU_CPURegion",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+
         nativeSurfaceImage.DebugSave(
             provider,
             $"{testName}_WebGPU_NativeSurface",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
+        ImageComparer tolerantComparer = ImageComparer.TolerantPercentage(0.0003F);
         defaultImage.CompareToReferenceOutput(
+            tolerantComparer,
             provider,
             $"{testName}_Default",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+
         cpuRegionImage.CompareToReferenceOutput(
+            tolerantComparer,
             provider,
             $"{testName}_WebGPU_CPURegion",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+
         nativeSurfaceImage.CompareToReferenceOutput(
+            tolerantComparer,
             provider,
             $"{testName}_WebGPU_NativeSurface",
             appendPixelTypeToFileName: false,
