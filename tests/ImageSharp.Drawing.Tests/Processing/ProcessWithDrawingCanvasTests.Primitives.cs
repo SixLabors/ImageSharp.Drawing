@@ -65,6 +65,54 @@ public partial class ProcessWithDrawingCanvasTests
     }
 
     [Theory]
+    [WithBlankImage(500, 500, PixelTypes.Rgba32)]
+    public void SolidBezierFilledBezier<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        PointF[] simplePath =
+        [
+            new Vector2(10, 400),
+            new Vector2(30, 10),
+            new Vector2(240, 30),
+            new Vector2(300, 400)
+        ];
+
+        Polygon polygon = new(new CubicBezierLineSegment(simplePath));
+        SolidBrush brush = Brushes.Solid(Color.HotPink);
+
+        provider.RunValidatingProcessorTest(
+            ctx => ctx.ProcessWithCanvas(canvas =>
+            {
+                canvas.Clear(Brushes.Solid(Color.Blue));
+                canvas.Fill(polygon, brush);
+            }));
+    }
+
+    [Theory]
+    [WithBlankImage(500, 500, PixelTypes.Rgba32)]
+    public void SolidBezierOverlayByFilledPolygonOpacity<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        PointF[] simplePath =
+        [
+            new Vector2(10, 400),
+            new Vector2(30, 10),
+            new Vector2(240, 30),
+            new Vector2(300, 400)
+        ];
+
+        Polygon polygon = new(new CubicBezierLineSegment(simplePath));
+        SolidBrush brush = Brushes.Solid(Color.HotPink.WithAlpha(150 / 255F));
+
+        provider.RunValidatingProcessorTest(
+            ctx => ctx.ProcessWithCanvas(canvas =>
+            {
+                canvas.Clear(Brushes.Solid(Color.Blue));
+                canvas.Fill(polygon, brush);
+            }));
+    }
+
+    [Theory]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1F, 2.5F, true)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 0.6F, 10F, true)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1F, 5F, false)]
