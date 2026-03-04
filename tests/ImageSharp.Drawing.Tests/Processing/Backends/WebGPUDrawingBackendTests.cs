@@ -874,6 +874,22 @@ public class WebGPUDrawingBackendTests
             $"{testName}_WebGPU_NativeSurface",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
+
+        defaultImage.CompareToReferenceOutput(
+            provider,
+            $"{testName}_Default",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+        cpuRegionImage.CompareToReferenceOutput(
+            provider,
+            $"{testName}_WebGPU_CPURegion",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+        nativeSurfaceImage.CompareToReferenceOutput(
+            provider,
+            $"{testName}_WebGPU_NativeSurface",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     private static void AssertBackendTripletSimilarity<TPixel>(
