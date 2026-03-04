@@ -1,6 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+#if !OS_Linux
+// WebGPU is failing in our CI environment in Ubuntu with
+// WebGPU adapter request failed with status 'Unavailable'
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -970,3 +973,4 @@ public class WebGPUDrawingBackendTests
         where TPixel : unmanaged, IPixel<TPixel>
         => new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
 }
+#endif
