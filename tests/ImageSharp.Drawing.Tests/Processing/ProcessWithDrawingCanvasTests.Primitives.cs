@@ -289,6 +289,59 @@ public partial class ProcessWithDrawingCanvasTests
     }
 
     [Theory]
+    [WithSolidFilledImages(300, 400, "Blue", PixelTypes.Rgba32, false, false)]
+    [WithSolidFilledImages(300, 400, "Blue", PixelTypes.Rgba32, true, false)]
+    [WithSolidFilledImages(300, 400, "Blue", PixelTypes.Rgba32, false, true)]
+    public void FillComplexPolygon_SolidFill<TPixel>(TestImageProvider<TPixel> provider, bool overlap, bool transparent)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Polygon simplePath = new(new LinearLineSegment(
+            new Vector2(10, 10),
+            new Vector2(200, 150),
+            new Vector2(50, 300)));
+
+        Polygon hole1 = new(new LinearLineSegment(
+            new Vector2(37, 85),
+            overlap ? new Vector2(130, 40) : new Vector2(93, 85),
+            new Vector2(65, 137)));
+
+        IPath clipped = simplePath.Clip(hole1);
+
+        Color color = Color.HotPink;
+        if (transparent)
+        {
+            color = color.WithAlpha(150 / 255F);
+        }
+
+        string testDetails = string.Empty;
+        if (overlap)
+        {
+            testDetails += "_Overlap";
+        }
+
+        if (transparent)
+        {
+            testDetails += "_Transparent";
+        }
+
+        DrawingOptions options = new();
+
+        using Image<TPixel> image = provider.GetImage();
+        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(clipped, Brushes.Solid(color))));
+        image.DebugSave(
+            provider,
+            testDetails,
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+        image.CompareToReferenceOutput(
+            ImageComparer.TolerantPercentage(0.001F),
+            provider,
+            testDetails,
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1F, 2.5F, true)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 0.6F, 10F, true)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1F, 5F, false)]
