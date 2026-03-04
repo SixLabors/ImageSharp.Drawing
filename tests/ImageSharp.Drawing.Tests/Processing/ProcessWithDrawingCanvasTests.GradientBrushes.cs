@@ -15,6 +15,38 @@ public partial class ProcessWithDrawingCanvasTests
     private static readonly ImageComparer EllipticGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01F);
     private static readonly ImageComparer LinearGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01F);
     private static readonly ImageComparer RadialGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01F);
+    private static readonly ImageComparer SweepGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01F);
+
+    [Theory]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 0F, 360F)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 90F, 450F)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 180F, 540F)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 270F, 630F)]
+    public void FillSweepGradientBrush_RendersFullSweep_Every90Degrees<TPixel>(
+        TestImageProvider<TPixel> provider,
+        float start,
+        float end)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => provider.VerifyOperation(
+            SweepGradientTolerantComparer,
+            image =>
+            {
+                SweepGradientBrush brush = new(
+                    new Point(100, 100),
+                    start,
+                    end,
+                    GradientRepetitionMode.None,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(0.25F, Color.Yellow),
+                    new ColorStop(0.5F, Color.Green),
+                    new ColorStop(0.75F, Color.Blue),
+                    new ColorStop(1, Color.Red));
+
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+            },
+            $"start({start},end{end})",
+            false,
+            false);
 
     [Theory]
     [WithBlankImage(200, 200, PixelTypes.Rgba32)]
