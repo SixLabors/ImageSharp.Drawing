@@ -4,6 +4,7 @@
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -487,6 +488,44 @@ public class WebGPUDrawingBackendTests
     }
 
     [Theory]
+    [WithBlankImage(220, 160, PixelTypes.Rgba32)]
+    public void Process_WithWebGPUBackend_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+        IPath blurPath = CreateBlurEllipsePath();
+        IPath pixelatePath = CreatePixelateTrianglePath();
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            DrawProcessScenario(canvas);
+            canvas.Process(blurPath, ctx => ctx.GaussianBlur(6F));
+            canvas.Process(pixelatePath, ctx => ctx.Pixelate(10));
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            (Action<DrawingCanvas<TPixel>>)DrawAction);
+
+        DebugSaveBackendTriplet(provider, "Process", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+    }
+
+    [Theory]
     [WithBasicTestPatternImages(420, 220, PixelTypes.Rgba32)]
     public void DrawText_WithRepeatedGlyphs_UsesCoverageCache<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -693,6 +732,47 @@ public class WebGPUDrawingBackendTests
         canvas.Flush();
     }
 
+    private static EllipsePolygon CreateBlurEllipsePath()
+        => new(new PointF(55, 40), new SizeF(110, 80));
+
+    private static void DrawProcessScenario<TPixel>(DrawingCanvas<TPixel> canvas)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        canvas.Clear(Brushes.Solid(Color.White));
+
+        canvas.Draw(Pens.Solid(Color.DimGray, 3), new Rectangle(10, 10, 220, 140));
+        canvas.DrawEllipse(Pens.Solid(Color.CornflowerBlue, 6), new PointF(120, 80), new SizeF(110, 70));
+        canvas.DrawArc(
+            Pens.Solid(Color.ForestGreen, 4),
+            new PointF(120, 80),
+            new SizeF(90, 46),
+            rotation: 15,
+            startAngle: -25,
+            sweepAngle: 220);
+        canvas.DrawLine(
+            Pens.Solid(Color.OrangeRed, 5),
+            new PointF(18, 140),
+            new PointF(76, 28),
+            new PointF(166, 126),
+            new PointF(222, 20));
+        canvas.DrawBezier(
+            Pens.Solid(Color.MediumVioletRed, 4),
+            new PointF(20, 80),
+            new PointF(70, 18),
+            new PointF(168, 144),
+            new PointF(220, 78));
+    }
+
+    private static IPath CreatePixelateTrianglePath()
+    {
+        PathBuilder pathBuilder = new();
+        pathBuilder.AddLine(110, 80, 220, 80);
+        pathBuilder.AddLine(220, 80, 165, 160);
+        pathBuilder.AddLine(165, 160, 110, 80);
+        pathBuilder.CloseAllFigures();
+        return pathBuilder.Build();
+    }
+
     private static void RenderWithCpuRegionWebGpuBackend<TPixel>(
         Image<TPixel> image,
         WebGPUDrawingBackend backend,
@@ -713,7 +793,7 @@ public class WebGPUDrawingBackendTests
         WebGPUDrawingBackend backend,
         DrawingOptions options,
         Action<DrawingCanvas<TPixel>> drawAction,
-        Image<TPixel>? initialImage = null)
+        Image<TPixel> initialImage = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Assert.True(
@@ -865,30 +945,4 @@ public class WebGPUDrawingBackendTests
     private static Buffer2DRegion<TPixel> GetFrameRegion<TPixel>(Image<TPixel> image)
         where TPixel : unmanaged, IPixel<TPixel>
         => new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
-
-    private sealed class NativeSurfaceOnlyFrame<TPixel> : ICanvasFrame<TPixel>
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly NativeSurface surface;
-
-        public NativeSurfaceOnlyFrame(Rectangle bounds, NativeSurface surface)
-        {
-            this.Bounds = bounds;
-            this.surface = surface;
-        }
-
-        public Rectangle Bounds { get; }
-
-        public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
-        {
-            region = default;
-            return false;
-        }
-
-        public bool TryGetNativeSurface(out NativeSurface surface)
-        {
-            surface = this.surface;
-            return true;
-        }
-    }
 }

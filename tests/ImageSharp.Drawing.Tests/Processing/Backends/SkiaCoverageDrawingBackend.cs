@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
@@ -97,6 +98,17 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
                 this.ReleaseCoverage(coverageHandle);
             }
         }
+    }
+
+    public bool TryReadRegion<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        Rectangle sourceRectangle,
+        [NotNullWhen(true)] out Image<TPixel>? image)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        image = null;
+        return false;
     }
 
     public DrawingCoverageHandle PrepareCoverage(

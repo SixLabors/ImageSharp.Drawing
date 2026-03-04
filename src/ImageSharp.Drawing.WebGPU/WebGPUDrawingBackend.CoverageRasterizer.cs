@@ -537,37 +537,76 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         Span<byte> cached = cachedOwner.Memory.Span[..source.Length];
         int previousLength = cachedLength;
         int commonLength = Math.Min(previousLength, source.Length);
+        int commonAlignedLength = commonLength & ~0x3;
+        ReadOnlySpan<uint> sourceWords = MemoryMarshal.Cast<byte, uint>(source[..commonAlignedLength]);
+        ReadOnlySpan<uint> cachedWords = MemoryMarshal.Cast<byte, uint>(cached[..commonAlignedLength]);
 
-        int firstDifferent = 0;
+        // Scan forward in 32-bit words first, then finish any remaining tail bytes.
+        int firstDifferentWord = 0;
+        while (firstDifferentWord < sourceWords.Length && cachedWords[firstDifferentWord] == sourceWords[firstDifferentWord])
+        {
+            firstDifferentWord++;
+        }
+
+        int firstDifferent = firstDifferentWord * sizeof(uint);
         while (firstDifferent < commonLength && cached[firstDifferent] == source[firstDifferent])
         {
             firstDifferent++;
         }
 
-        int uploadLength = 0;
+        // No upload needed when the source payload matches the cached upload exactly.
         if (firstDifferent < source.Length)
         {
+            // Trim unchanged suffix in reverse. Start with bytes above the aligned word boundary,
+            // then continue with 32-bit word comparisons.
             int lastDifferent = source.Length - 1;
-            while (lastDifferent >= firstDifferent &&
-                   lastDifferent < commonLength &&
-                   cached[lastDifferent] == source[lastDifferent])
+            if (lastDifferent < commonLength)
             {
-                lastDifferent--;
+                while (lastDifferent >= firstDifferent &&
+                       lastDifferent >= commonAlignedLength &&
+                       cached[lastDifferent] == source[lastDifferent])
+                {
+                    lastDifferent--;
+                }
+
+                int firstWordIndex = firstDifferent / sizeof(uint);
+                int lastWordIndex = Math.Min(lastDifferent / sizeof(uint), sourceWords.Length - 1);
+                while (lastWordIndex >= firstWordIndex && cachedWords[lastWordIndex] == sourceWords[lastWordIndex])
+                {
+                    lastWordIndex--;
+                }
+
+                if (lastWordIndex >= firstWordIndex)
+                {
+                    // End on the containing word boundary; this may include up to 3 unchanged bytes.
+                    lastDifferent = Math.Min(lastDifferent, (lastWordIndex * sizeof(uint)) + (sizeof(uint) - 1));
+                }
             }
 
-            uploadLength = (lastDifferent - firstDifferent) + 1;
-        }
+            int uploadLength = (lastDifferent - firstDifferent) + 1;
 
-        // Only write the dirty range to reduce queue upload bandwidth on repeated flushes.
-        if (uploadLength > 0)
-        {
+            // Only write the dirty range to reduce queue upload bandwidth on repeated flushes.
+            // QueueWriteBuffer requires 4-byte aligned offsets and sizes.
+            // firstDifferent/uploadLength come from byte-wise diffing, so they can land
+            // in the middle of a 32-bit value. Expand the upload window to 4-byte bounds.
+            // `& ~0x3` clears the lower 2 bits (align down to previous multiple of 4).
+            int uploadOffset = firstDifferent & ~0x3;
+
+            int uploadEnd = firstDifferent + uploadLength;
+
+            // `(x + 3) & ~0x3` rounds up to the next multiple of 4.
+            // Clamp afterwards so the rounded end never exceeds source length.
+            uploadEnd = (uploadEnd + 3) & ~0x3;
+            uploadEnd = Math.Min(uploadEnd, source.Length);
+            uploadLength = uploadEnd - uploadOffset;
+
             fixed (byte* sourcePtr = source)
             {
                 flushContext.Api.QueueWriteBuffer(
                     flushContext.Queue,
                     destinationBuffer,
-                    (nuint)firstDifferent,
-                    sourcePtr + firstDifferent,
+                    (nuint)uploadOffset,
+                    sourcePtr + uploadOffset,
                     (nuint)uploadLength);
             }
         }

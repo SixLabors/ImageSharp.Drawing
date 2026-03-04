@@ -3,6 +3,7 @@
 
 #pragma warning disable CA1000 // Do not declare static members on generic types
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
@@ -41,6 +42,11 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// Command batcher used to defer and submit composition commands.
     /// </summary>
     private readonly DrawingCanvasBatcher<TPixel> batcher;
+
+    /// <summary>
+    /// Optional CPU shadow fallback used when target readback is unavailable.
+    /// </summary>
+    private readonly ShadowFallbackState? shadowFallback;
 
     /// <summary>
     /// Temporary image resources that must stay alive until queued commands are flushed.
@@ -108,7 +114,8 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             backend,
             targetFrame,
             new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame),
-            new DrawingCanvasState(options, clipPaths))
+            new DrawingCanvasState(options, clipPaths),
+            CreateShadowFallbackIfNeeded(configuration, targetFrame))
     {
     }
 
@@ -121,12 +128,16 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="targetFrame">The destination frame.</param>
     /// <param name="batcher">The command batcher used for deferred composition.</param>
     /// <param name="defaultState">The default state used when no scoped state is active.</param>
+    /// <param name="shadowFallback">Optional shared shadow fallback state.</param>
+    /// <param name="addShadowReference">Whether to increment the shared shadow fallback reference count.</param>
     private DrawingCanvas(
         Configuration configuration,
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame,
         DrawingCanvasBatcher<TPixel> batcher,
-        DrawingCanvasState defaultState)
+        DrawingCanvasState defaultState,
+        ShadowFallbackState? shadowFallback = null,
+        bool addShadowReference = false)
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(backend, nameof(backend));
@@ -143,6 +154,13 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         this.backend = backend;
         this.targetFrame = targetFrame;
         this.batcher = batcher;
+        this.shadowFallback = shadowFallback;
+        if (addShadowReference)
+        {
+            this.shadowFallback?.AddReference();
+        }
+
+        this.batcher.SetMirror(this.shadowFallback?.Batcher);
 
         // Canvas coordinates are local to the current frame; origin stays at (0,0).
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
@@ -272,7 +290,14 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         Rectangle clipped = Rectangle.Intersect(this.Bounds, region);
         ICanvasFrame<TPixel> childFrame = new CanvasRegionFrame<TPixel>(this.targetFrame, clipped);
-        return new DrawingCanvas<TPixel>(this.configuration, this.backend, childFrame, this.batcher, this.ResolveState());
+        return new DrawingCanvas<TPixel>(
+            this.configuration,
+            this.backend,
+            childFrame,
+            this.batcher,
+            this.ResolveState(),
+            this.shadowFallback,
+            addShadowReference: true);
     }
 
     /// <inheritdoc />
@@ -346,6 +371,62 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
 
+        this.FillPathCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
+    }
+
+    /// <inheritdoc />
+    public void Process(Rectangle region, Action<IImageProcessingContext> operation)
+        => this.Process(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), operation);
+
+    /// <inheritdoc />
+    public void Process(PathBuilder pathBuilder, Action<IImageProcessingContext> operation)
+    {
+        Guard.NotNull(pathBuilder, nameof(pathBuilder));
+        this.Process(pathBuilder.Build(), operation);
+    }
+
+    /// <inheritdoc />
+    public void Process(IPath path, Action<IImageProcessingContext> operation)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(path, nameof(path));
+        Guard.NotNull(operation, nameof(operation));
+
+        // This operation samples the current destination state. Flush queued commands first
+        // so readback observes strict draw-order semantics.
+        this.Flush();
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        IPath closed = path.AsClosedPath();
+        IPath transformedPath = effectiveOptions.Transform == Matrix3x2.Identity
+            ? closed
+            : closed.Transform(effectiveOptions.Transform);
+        transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
+
+        Rectangle sourceRect = ToConservativeBounds(transformedPath.Bounds);
+        sourceRect = Rectangle.Intersect(this.Bounds, sourceRect);
+        if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+        {
+            return;
+        }
+
+        // Defensive guard: built-in backends should provide either direct readback (CPU/backed surface)
+        // or shadow fallback, but custom/inconsistent backend+target combinations can still fail both paths.
+        if (!this.TryCreateProcessSourceImage(sourceRect, out Image<TPixel>? sourceImage))
+        {
+            throw new NotSupportedException("Canvas process operations require either CPU pixels, backend readback support, or shadow fallback.");
+        }
+
+        sourceImage.Mutate(operation);
+
+        Point brushOffset = new(
+            sourceRect.X - (int)MathF.Floor(transformedPath.Bounds.Left),
+            sourceRect.Y - (int)MathF.Floor(transformedPath.Bounds.Top));
+        ImageBrush brush = new(sourceImage, sourceImage.Bounds, brushOffset);
+
+        this.pendingImageResources.Add(sourceImage);
         this.FillPathCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
     }
 
@@ -861,6 +942,29 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <summary>
+    /// Attempts to create a source image for process-in-path operations.
+    /// </summary>
+    /// <param name="sourceRect">Source rectangle in local canvas coordinates.</param>
+    /// <param name="sourceImage">The readback image when available.</param>
+    /// <returns><see langword="true"/> when source pixels were resolved.</returns>
+    private bool TryCreateProcessSourceImage(Rectangle sourceRect, [NotNullWhen(true)] out Image<TPixel>? sourceImage)
+    {
+        if (this.backend.TryReadRegion(this.configuration, this.targetFrame, sourceRect, out sourceImage))
+        {
+            return true;
+        }
+
+        if (this.shadowFallback is not null)
+        {
+            sourceImage = this.shadowFallback.CloneRegion(sourceRect, this.configuration);
+            return true;
+        }
+
+        sourceImage = null;
+        return false;
+    }
+
+    /// <summary>
     /// Applies all clip paths to a subject path using the provided shape options.
     /// </summary>
     /// <param name="subjectPath">Path to clip.</param>
@@ -887,6 +991,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         }
         finally
         {
+            this.shadowFallback?.Flush();
             this.DisposePendingImageResources();
         }
     }
@@ -905,8 +1010,16 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         }
         finally
         {
-            this.DisposePendingImageResources();
-            this.isDisposed = true;
+            try
+            {
+                this.shadowFallback?.Flush();
+            }
+            finally
+            {
+                this.DisposePendingImageResources();
+                this.shadowFallback?.Release();
+                this.isDisposed = true;
+            }
         }
     }
 
@@ -1014,6 +1127,42 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             destinationOffset,
             definitionKeyCache);
     }
+
+    /// <summary>
+    /// Clones a rectangle from a CPU region into a new image.
+    /// </summary>
+    /// <param name="sourceRect">The source rectangle in local region coordinates.</param>
+    /// <param name="sourceRegion">The source CPU region.</param>
+    /// <param name="configuration">The processing configuration.</param>
+    /// <returns>A newly allocated image containing copied pixels from <paramref name="sourceRect"/>.</returns>
+    private static Image<TPixel> CloneRegionFromBuffer(
+        Rectangle sourceRect,
+        Buffer2DRegion<TPixel> sourceRegion,
+        Configuration configuration)
+    {
+        Image<TPixel> image = new(configuration, sourceRect.Width, sourceRect.Height);
+        Buffer2D<TPixel> destination = image.Frames.RootFrame.PixelBuffer;
+        for (int y = 0; y < sourceRect.Height; y++)
+        {
+            sourceRegion.DangerousGetRowSpan(sourceRect.Y + y)
+                .Slice(sourceRect.X, sourceRect.Width)
+                .CopyTo(destination.DangerousGetRowSpan(y));
+        }
+
+        return image;
+    }
+
+    /// <summary>
+    /// Converts floating bounds to a conservative integer rectangle using floor/ceiling.
+    /// </summary>
+    /// <param name="bounds">The floating bounds to convert.</param>
+    /// <returns>A rectangle covering the full floating bounds extent.</returns>
+    private static Rectangle ToConservativeBounds(RectangleF bounds)
+        => Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right),
+            (int)MathF.Ceiling(bounds.Bottom));
 
     /// <summary>
     /// Creates resize options used for image drawing operations.
@@ -1166,5 +1315,70 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         }
 
         this.pendingImageResources.Clear();
+    }
+
+    /// <summary>
+    /// Creates a shadow fallback state for non-CPU frame targets.
+    /// </summary>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="targetFrame">The canvas target frame.</param>
+    /// <returns>A shadow fallback state when needed; otherwise <see langword="null"/>.</returns>
+    private static ShadowFallbackState? CreateShadowFallbackIfNeeded(
+        Configuration configuration,
+        ICanvasFrame<TPixel> targetFrame)
+    {
+        bool hasCpuRegion = targetFrame.TryGetCpuRegion(out _);
+        bool hasNativeSurface = targetFrame.TryGetNativeSurface(out _);
+        if (hasCpuRegion || !hasNativeSurface)
+        {
+            return null;
+        }
+
+        Image<TPixel> shadowImage = new(configuration, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
+        Buffer2DRegion<TPixel> shadowRegion = new(shadowImage.Frames.RootFrame.PixelBuffer, targetFrame.Bounds);
+        ICanvasFrame<TPixel> shadowFrame = new CpuCanvasFrame<TPixel>(shadowRegion);
+        DrawingCanvasBatcher<TPixel> shadowBatcher = new(configuration, DefaultDrawingBackend.Instance, shadowFrame);
+        return new ShadowFallbackState(shadowImage, shadowBatcher);
+    }
+
+    /// <summary>
+    /// Shared CPU shadow fallback state.
+    /// </summary>
+    private sealed class ShadowFallbackState
+    {
+        private int referenceCount = 1;
+
+        public ShadowFallbackState(Image<TPixel> image, DrawingCanvasBatcher<TPixel> batcher)
+        {
+            this.Image = image;
+            this.Batcher = batcher;
+        }
+
+        public Image<TPixel> Image { get; }
+
+        public DrawingCanvasBatcher<TPixel> Batcher { get; }
+
+        public void AddReference()
+            => this.referenceCount++;
+
+        public void Release()
+        {
+            this.referenceCount--;
+            if (this.referenceCount > 0)
+            {
+                return;
+            }
+
+            this.Image.Dispose();
+        }
+
+        public void Flush()
+            => this.Batcher.FlushCompositions();
+
+        public Image<TPixel> CloneRegion(Rectangle sourceRect, Configuration configuration)
+        {
+            Buffer2DRegion<TPixel> sourceRegion = new(this.Image.Frames.RootFrame.PixelBuffer, this.Image.Bounds);
+            return CloneRegionFromBuffer(sourceRect, sourceRegion, configuration);
+        }
     }
 }

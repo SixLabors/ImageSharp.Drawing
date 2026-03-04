@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
@@ -130,6 +131,17 @@ public class RasterizerDefaultsExtensionsTests
             CompositionScene compositionScene)
             where TPixel : unmanaged, IPixel<TPixel>
         {
+        }
+
+        public bool TryReadRegion<TPixel>(
+            Configuration configuration,
+            ICanvasFrame<TPixel> target,
+            Rectangle sourceRectangle,
+            [NotNullWhen(true)] out Image<TPixel>? image)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            image = null;
+            return false;
         }
     }
 }

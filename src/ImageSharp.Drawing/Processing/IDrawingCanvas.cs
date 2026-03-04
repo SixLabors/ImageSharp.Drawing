@@ -3,6 +3,7 @@
 
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Text;
+using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -120,6 +121,30 @@ public interface IDrawingCanvas : IDisposable
     /// <param name="path">The path to fill.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
     public void Fill(IPath path, Brush brush);
+
+    /// <summary>
+    /// Applies an image-processing operation to a local region.
+    /// </summary>
+    /// <param name="region">The local region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    public void Process(Rectangle region, Action<IImageProcessingContext> operation);
+
+    /// <summary>
+    /// Applies an image-processing operation to a region described by a path builder.
+    /// </summary>
+    /// <param name="pathBuilder">The path builder describing the region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    public void Process(PathBuilder pathBuilder, Action<IImageProcessingContext> operation);
+
+    /// <summary>
+    /// Applies an image-processing operation to a path region.
+    /// </summary>
+    /// <remarks>
+    /// The operation is constrained to the path bounds and then composited back using an <see cref="ImageBrush"/>.
+    /// </remarks>
+    /// <param name="path">The path region to process.</param>
+    /// <param name="operation">The image-processing operation to apply to the region.</param>
+    public void Process(IPath path, Action<IImageProcessingContext> operation);
 
     /// <summary>
     /// Draws an arc outline using the provided pen and drawing options.

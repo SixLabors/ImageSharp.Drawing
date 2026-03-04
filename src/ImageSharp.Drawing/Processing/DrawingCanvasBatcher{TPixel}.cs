@@ -21,6 +21,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     private readonly IDrawingBackend backend;
     private readonly ICanvasFrame<TPixel> targetFrame;
     private readonly List<CompositionCommand> commands = [];
+    private DrawingCanvasBatcher<TPixel>? mirrorBatcher;
 
     internal DrawingCanvasBatcher(
         Configuration configuration,
@@ -37,7 +38,17 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// </summary>
     /// <param name="composition">The command to queue.</param>
     public void AddComposition(in CompositionCommand composition)
-        => this.commands.Add(composition);
+    {
+        this.commands.Add(composition);
+        this.mirrorBatcher?.commands.Add(composition);
+    }
+
+    /// <summary>
+    /// Sets an optional mirror batcher that receives the same queued commands.
+    /// </summary>
+    /// <param name="mirrorBatcher">The mirror batcher, or <see langword="null"/> to disable mirroring.</param>
+    public void SetMirror(DrawingCanvasBatcher<TPixel>? mirrorBatcher)
+        => this.mirrorBatcher = mirrorBatcher;
 
     /// <summary>
     /// Flushes queued commands to the backend as one scene packet, preserving submission order.

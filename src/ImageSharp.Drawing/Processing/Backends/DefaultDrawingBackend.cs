@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
@@ -105,6 +106,47 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
     }
 
+    /// <inheritdoc />
+    public bool TryReadRegion<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        Rectangle sourceRectangle,
+        [NotNullWhen(true)] out Image<TPixel>? image)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Guard.NotNull(configuration, nameof(configuration));
+
+        // CPU backend readback is available only when the target exposes CPU pixels.
+        if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> sourceRegion))
+        {
+            image = null;
+            return false;
+        }
+
+        // Clamp the request to the target region to avoid out-of-range row slicing.
+        Rectangle clipped = Rectangle.Intersect(
+            new Rectangle(0, 0, sourceRegion.Width, sourceRegion.Height),
+            sourceRectangle);
+
+        if (clipped.Width <= 0 || clipped.Height <= 0)
+        {
+            image = null;
+            return false;
+        }
+
+        // Build a tightly packed temporary image for downstream processing operations.
+        image = new(configuration, clipped.Width, clipped.Height);
+        Buffer2D<TPixel> destination = image.Frames.RootFrame.PixelBuffer;
+        for (int y = 0; y < clipped.Height; y++)
+        {
+            sourceRegion.DangerousGetRowSpan(clipped.Y + y)
+                .Slice(clipped.X, clipped.Width)
+                .CopyTo(destination.DangerousGetRowSpan(y));
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Executes one prepared batch on the CPU.
     /// </summary>
@@ -129,7 +171,11 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
             return;
         }
 
-        _ = target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame);
+        if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationFrame))
+        {
+            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets.");
+        }
+
         CompositionCoverageDefinition definition = compositionBatch.Definition;
         using Buffer2D<float> coverageMap = this.CreateCoverageMap(definition, configuration.MemoryAllocator);
 
