@@ -167,7 +167,11 @@ public abstract class DrawPolygon
     // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
     [Benchmark]
     public void ImageSharpCombinedPathsScanlineRasterizer()
-        => this.image.Mutate(c => c.SetRasterizer(ScanlineRasterizer.Instance).Draw(this.isPen, this.imageSharpPath));
+        => this.image.Mutate(c =>
+        {
+            c.SetRasterizer(ScanlineRasterizer.Instance);
+            c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath));
+        });
 
     [Benchmark]
     public void ImageSharpSeparatePathsScanlineRasterizer()
@@ -176,31 +180,34 @@ public abstract class DrawPolygon
             {
                 // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
                 c.SetRasterizer(ScanlineRasterizer.Instance);
-                foreach (PointF[] loop in this.points)
+                c.ProcessWithCanvas(canvas =>
                 {
-                    c.DrawPolygon(Color.White, this.Thickness, loop);
-                }
+                    foreach (PointF[] loop in this.points)
+                    {
+                        canvas.Draw(Processing.Pens.Solid(Color.White, this.Thickness), new Polygon(loop));
+                    }
+                });
             });
 
     // Tiled is now the framework default rasterizer path.
     [Benchmark]
     public void ImageSharpCombinedPathsTiled()
-        => this.image.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
+        => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
     [Benchmark(Description = "ImageSharp Combined Paths WebGPU Backend")]
     public void ImageSharpCombinedPathsWebGPUBackend()
-        => this.webGpuImage.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
+        => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
     [Benchmark]
     public void ImageSharpSeparatePathsTiled()
         => this.image.Mutate(
-            c =>
-            {
-                foreach (PointF[] loop in this.points)
+            c => c.ProcessWithCanvas(canvas =>
                 {
-                    c.DrawPolygon(Color.White, this.Thickness, loop);
-                }
-            });
+                    foreach (PointF[] loop in this.points)
+                    {
+                        canvas.Draw(Processing.Pens.Solid(Color.White, this.Thickness), new Polygon(loop));
+                    }
+                }));
 
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
@@ -210,10 +217,12 @@ public abstract class DrawPolygon
     public IPath ImageSharpStrokeAndClip() => this.isPen.GeneratePath(this.imageSharpPath);
 
     [Benchmark]
-    public void FillPolygon() => this.image.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
+    public void FillPolygon()
+        => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(this.strokedImageSharpPath, Processing.Brushes.Solid(Color.White))));
 
     [Benchmark]
-    public void FillPolygonWebGPUBackend() => this.webGpuImage.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
+    public void FillPolygonWebGPUBackend()
+        => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(this.strokedImageSharpPath, Processing.Brushes.Solid(Color.White))));
 }
 
 public class DrawPolygonAll : DrawPolygon
@@ -239,7 +248,7 @@ public class DrawPolygonMediumThin : DrawPolygon
 
         Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
                               * Matrix3x2.CreateScale(60, 60);
-        return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
+        return [.. PolygonFactory.GetGeoJsonPoints(state, transform)];
     }
 }
 

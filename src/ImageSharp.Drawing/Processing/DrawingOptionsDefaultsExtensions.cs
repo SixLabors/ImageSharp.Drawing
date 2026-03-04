@@ -71,4 +71,19 @@ public static class DrawingOptionsDefaultsExtensions
 
         return Matrix3x2.Identity;
     }
+
+    /// <summary>
+    /// Clones the path graphic options and applies changes required to force clearing.
+    /// </summary>
+    /// <param name="drawingOptions">The drawing options to clone</param>
+    /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
+    public static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
+    {
+        GraphicsOptions options = drawingOptions.GraphicsOptions.DeepClone();
+        options.ColorBlendingMode = PixelColorBlendingMode.Normal;
+        options.AlphaCompositionMode = PixelAlphaCompositionMode.Src;
+        options.BlendPercentage = 1F;
+
+        return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.Transform);
+    }
 }

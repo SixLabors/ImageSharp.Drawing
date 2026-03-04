@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
 using SixLabors.ImageSharp.Drawing.Tests.Processing;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;

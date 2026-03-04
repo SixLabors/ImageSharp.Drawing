@@ -36,9 +36,7 @@ public abstract class FillPolygon
     protected abstract int Height { get; }
 
     protected virtual PointF[][] GetPoints(FeatureCollection features)
-        => features.Features
-        .SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60)))
-        .ToArray();
+        => [.. features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60)))];
 
     [GlobalSetup]
     public void Setup()
@@ -48,9 +46,9 @@ public abstract class FillPolygon
         FeatureCollection featureCollection = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
 
         this.points = this.GetPoints(featureCollection);
-        this.polygons = this.points.Select(pts => new Polygon(new LinearLineSegment(pts))).ToArray();
+        this.polygons = [.. this.points.Select(pts => new Polygon(new LinearLineSegment(pts)))];
 
-        this.sdPoints = this.points.Select(pts => pts.Select(p => new SDPointF(p.X, p.Y)).ToArray()).ToArray();
+        this.sdPoints = [.. this.points.Select(pts => pts.Select(p => new SDPointF(p.X, p.Y)).ToArray())];
 
         this.skPaths = [];
         foreach (PointF[] ptArr in this.points.Where(pts => pts.Length > 2))
@@ -102,13 +100,13 @@ public abstract class FillPolygon
 
     [Benchmark]
     public void ImageSharp()
-        => this.image.Mutate(c =>
+        => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
         {
             foreach (Polygon polygon in this.polygons)
             {
-                c.Fill(Color.White, polygon);
+                canvas.Fill(polygon, Processing.Brushes.Solid(Color.White));
             }
-        });
+        }));
 
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
@@ -146,7 +144,7 @@ public class FillPolygonMedium : FillPolygon
 
         Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
                               * Matrix3x2.CreateScale(60, 60);
-        return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
+        return [.. PolygonFactory.GetGeoJsonPoints(state, transform)];
     }
 
     // ** 11/13/2020 @ Anton's PC ***
@@ -176,6 +174,6 @@ public class FillPolygonSmall : FillPolygon
 
         Matrix3x2 transform = Matrix3x2.CreateTranslation(-60, -40)
                               * Matrix3x2.CreateScale(60, 60);
-        return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
+        return [.. PolygonFactory.GetGeoJsonPoints(state, transform)];
     }
 }

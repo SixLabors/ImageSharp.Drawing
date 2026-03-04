@@ -34,9 +34,11 @@ public class EllipseStressTest
             float y = this.Rand(this.height);
             EllipsePolygon ellipse = new(new PointF(x, y), r);
             this.image.Mutate(
-                m =>
-                m.Fill(Brushes.Solid(brushColor), ellipse)
-                .Draw(Pens.Solid(penColor, this.Rand(5)), ellipse));
+                m => m.ProcessWithCanvas(canvas =>
+                {
+                    canvas.Fill(ellipse, Brushes.Solid(brushColor));
+                    canvas.Draw(Pens.Solid(penColor, this.Rand(5)), ellipse);
+                }));
         }
     }
 
@@ -49,5 +51,5 @@ public class EllipseStressTest
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private float Rand(float x)
-        => ((float)(((this.random.Next() << 15) | this.random.Next()) & 0x3FFFFFFF) % 1000000) * x / 1000000f;
+        => Math.Max(0.5f, ((float)(((this.random.Next() << 15) | this.random.Next()) & 0x3FFFFFFF) % 1000000) * x / 1000000f);
 }

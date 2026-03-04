@@ -3,7 +3,6 @@
 
 using System.Drawing;
 using System.Drawing.Drawing2D;
-using System.Numerics;
 using BenchmarkDotNet.Attributes;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
@@ -34,7 +33,8 @@ public class FillRectangle
     {
         using (Image<Rgba32> image = new(800, 800))
         {
-            image.Mutate(x => x.Fill(Color.HotPink, new Rectangle(10, 10, 190, 140)));
+            image.Mutate(x => x.ProcessWithCanvas(
+                canvas => canvas.Fill(new Rectangle(10, 10, 190, 140), Processing.Brushes.Solid(Color.HotPink))));
 
             return new Size(image.Width, image.Height);
         }
@@ -45,12 +45,16 @@ public class FillRectangle
     {
         using (Image<Rgba32> image = new(800, 800))
         {
-            image.Mutate(x => x.FillPolygon(
-                Color.HotPink,
-                new Vector2(10, 10),
-                new Vector2(200, 10),
-                new Vector2(200, 150),
-                new Vector2(10, 150)));
+            image.Mutate(x => x.ProcessWithCanvas(
+                canvas => canvas.Fill(
+                    new Polygon(
+                    [
+                        new PointF(10, 10),
+                        new PointF(200, 10),
+                        new PointF(200, 150),
+                        new PointF(10, 150)
+                    ]),
+                    Processing.Brushes.Solid(Color.HotPink))));
 
             return new Size(image.Width, image.Height);
         }

@@ -3,7 +3,7 @@
 
 using SixLabors.ImageSharp.Processing.Processors;
 
-namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
 /// Defines a processor that executes a canvas callback for each image frame.

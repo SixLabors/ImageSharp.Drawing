@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
+namespace SixLabors.ImageSharp.Drawing.Processing;
 
 internal enum DrawingOperationKind : byte
 {

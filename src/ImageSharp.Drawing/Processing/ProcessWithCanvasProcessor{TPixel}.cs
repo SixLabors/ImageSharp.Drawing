@@ -3,7 +3,7 @@
 
 using SixLabors.ImageSharp.Processing.Processors;
 
-namespace SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
 /// Executes a per-frame canvas callback for a specific pixel type.

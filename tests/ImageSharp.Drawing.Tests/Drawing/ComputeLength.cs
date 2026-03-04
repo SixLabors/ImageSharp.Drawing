@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths;
+namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
 
 public class ComputeLength
 {

@@ -26,19 +26,7 @@ public class DrawTextRepeatedGlyphs
         }
     };
 
-    private readonly DrawingOptions clearOptions = new()
-    {
-        GraphicsOptions = new GraphicsOptions
-        {
-            Antialias = false,
-            AlphaCompositionMode = PixelAlphaCompositionMode.Src,
-            ColorBlendingMode = PixelColorBlendingMode.Normal,
-            BlendPercentage = 1F
-        }
-    };
-
     private readonly Brush brush = Brushes.Solid(Color.HotPink);
-    private readonly Brush clearBrush = Brushes.Solid(Color.Transparent);
 
     private Configuration defaultConfiguration;
     private Image<Rgba32> defaultImage;
@@ -117,7 +105,7 @@ public class DrawTextRepeatedGlyphs
     public void DrawingCanvasDefaultBackend()
     {
         CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.defaultImage));
-        // this.ClearWithDrawingCanvas(this.defaultConfiguration, frame);
+
         using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, frame, this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
@@ -127,7 +115,7 @@ public class DrawTextRepeatedGlyphs
     public void DrawingCanvasWebGPUBackendCpuRegion()
     {
         CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.webGpuCpuImage));
-        // this.ClearWithDrawingCanvas(this.webGpuConfiguration, frame);
+
         using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, frame, this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
@@ -136,16 +124,8 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Description = "DrawingCanvas WebGPU Backend (NativeSurface)")]
     public void DrawingCanvasWebGPUBackendNativeSurface()
     {
-        // this.ClearWithDrawingCanvas(this.webGpuConfiguration, this.webGpuNativeFrame);
         using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
-        canvas.Flush();
-    }
-
-    private void ClearWithDrawingCanvas(Configuration configuration, ICanvasFrame<Rgba32> target)
-    {
-        using DrawingCanvas<Rgba32> canvas = new(configuration, target, this.clearOptions);
-        canvas.Fill(this.clearBrush);
         canvas.Flush();
     }
 
