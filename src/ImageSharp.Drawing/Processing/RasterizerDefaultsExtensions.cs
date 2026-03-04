@@ -2,12 +2,11 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Adds extensions that allow configuring the path rasterizer implementation.
+/// Adds extensions that allow configuring the drawing backend implementation.
 /// </summary>
 internal static class RasterizerDefaultsExtensions
 {
@@ -22,11 +21,6 @@ internal static class RasterizerDefaultsExtensions
         Guard.NotNull(backend, nameof(backend));
         context.Properties[typeof(IDrawingBackend)] = backend;
 
-        if (backend is DefaultDrawingBackend defaultBackend)
-        {
-            context.Properties[typeof(IRasterizer)] = defaultBackend.PrimaryRasterizer;
-        }
-
         return context;
     }
 
@@ -39,11 +33,6 @@ internal static class RasterizerDefaultsExtensions
     {
         Guard.NotNull(backend, nameof(backend));
         configuration.Properties[typeof(IDrawingBackend)] = backend;
-
-        if (backend is DefaultDrawingBackend defaultBackend)
-        {
-            configuration.Properties[typeof(IRasterizer)] = defaultBackend.PrimaryRasterizer;
-        }
     }
 
     /// <summary>
@@ -57,12 +46,6 @@ internal static class RasterizerDefaultsExtensions
             backend is IDrawingBackend configured)
         {
             return configured;
-        }
-
-        if (context.Properties.TryGetValue(typeof(IRasterizer), out object? rasterizer) &&
-            rasterizer is IRasterizer configuredRasterizer)
-        {
-            return DefaultDrawingBackend.Create(configuredRasterizer);
         }
 
         return context.Configuration.GetDrawingBackend();
@@ -81,90 +64,8 @@ internal static class RasterizerDefaultsExtensions
             return configured;
         }
 
-        if (configuration.Properties.TryGetValue(typeof(IRasterizer), out object? rasterizer) &&
-            rasterizer is IRasterizer configuredRasterizer)
-        {
-            IDrawingBackend rasterizerBackend = DefaultDrawingBackend.Create(configuredRasterizer);
-            configuration.Properties[typeof(IDrawingBackend)] = rasterizerBackend;
-            return rasterizerBackend;
-        }
-
         IDrawingBackend defaultBackend = DefaultDrawingBackend.Instance;
         configuration.Properties[typeof(IDrawingBackend)] = defaultBackend;
         return defaultBackend;
-    }
-
-    /// <summary>
-    /// Sets the rasterizer against the source image processing context.
-    /// </summary>
-    /// <param name="context">The image processing context to store the rasterizer against.</param>
-    /// <param name="rasterizer">The rasterizer to use.</param>
-    /// <returns>The passed in <paramref name="context"/> to allow chaining.</returns>
-    internal static IImageProcessingContext SetRasterizer(this IImageProcessingContext context, IRasterizer rasterizer)
-    {
-        Guard.NotNull(rasterizer, nameof(rasterizer));
-        context.Properties[typeof(IRasterizer)] = rasterizer;
-        context.Properties[typeof(IDrawingBackend)] = DefaultDrawingBackend.Create(rasterizer);
-        return context;
-    }
-
-    /// <summary>
-    /// Sets the default rasterizer against the configuration.
-    /// </summary>
-    /// <param name="configuration">The configuration to store the rasterizer against.</param>
-    /// <param name="rasterizer">The rasterizer to use.</param>
-    internal static void SetRasterizer(this Configuration configuration, IRasterizer rasterizer)
-    {
-        Guard.NotNull(rasterizer, nameof(rasterizer));
-        configuration.Properties[typeof(IRasterizer)] = rasterizer;
-        configuration.Properties[typeof(IDrawingBackend)] = DefaultDrawingBackend.Create(rasterizer);
-    }
-
-    /// <summary>
-    /// Gets the rasterizer from the source image processing context.
-    /// </summary>
-    /// <param name="context">The image processing context to retrieve the rasterizer from.</param>
-    /// <returns>The configured rasterizer.</returns>
-    internal static IRasterizer GetRasterizer(this IImageProcessingContext context)
-    {
-        if (context.Properties.TryGetValue(typeof(IRasterizer), out object? rasterizer) &&
-            rasterizer is IRasterizer configured)
-        {
-            return configured;
-        }
-
-        if (context.Properties.TryGetValue(typeof(IDrawingBackend), out object? backend) &&
-            backend is DefaultDrawingBackend defaultBackend)
-        {
-            return defaultBackend.PrimaryRasterizer;
-        }
-
-        // Do not cache config fallback in the context so changes on configuration reflow.
-        return context.Configuration.GetRasterizer();
-    }
-
-    /// <summary>
-    /// Gets the default rasterizer from the configuration.
-    /// </summary>
-    /// <param name="configuration">The configuration to retrieve the rasterizer from.</param>
-    /// <returns>The configured rasterizer.</returns>
-    internal static IRasterizer GetRasterizer(this Configuration configuration)
-    {
-        if (configuration.Properties.TryGetValue(typeof(IRasterizer), out object? rasterizer) &&
-            rasterizer is IRasterizer configured)
-        {
-            return configured;
-        }
-
-        if (configuration.Properties.TryGetValue(typeof(IDrawingBackend), out object? backend) &&
-            backend is DefaultDrawingBackend defaultBackend)
-        {
-            return defaultBackend.PrimaryRasterizer;
-        }
-
-        IRasterizer defaultRasterizer = DefaultRasterizer.Instance;
-        configuration.Properties[typeof(IRasterizer)] = defaultRasterizer;
-        configuration.Properties[typeof(IDrawingBackend)] = DefaultDrawingBackend.Instance;
-        return defaultRasterizer;
     }
 }

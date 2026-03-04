@@ -5,7 +5,7 @@ using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes.Scan;
 
-public class SharpBlazeRasterizerTests
+public class DefaultRasterizerRegressionTests
 {
     [Fact]
     public void EmitsCoverageForSubpixelThinRectangle()
@@ -74,7 +74,7 @@ public class SharpBlazeRasterizerTests
         Assert.Contains("too large", exception.Message);
     }
 
-    private static float[] Rasterize(IRasterizer rasterizer, IPath path, in RasterizerOptions options)
+    private static float[] Rasterize(DefaultRasterizer rasterizer, IPath path, in RasterizerOptions options)
     {
         int width = options.Interest.Width;
         int height = options.Interest.Height;

@@ -13,14 +13,16 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 /// area/cover scanning and chooses an internal execution strategy (parallel row-tiles when
 /// profitable, sequential fallback otherwise).
 /// </remarks>
-internal sealed class DefaultRasterizer : IRasterizer
+internal sealed class DefaultRasterizer
 {
     /// <summary>
     /// Gets the singleton default rasterizer instance.
     /// </summary>
     public static DefaultRasterizer Instance { get; } = new();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Rasterizes the path into scanline coverage.
+    /// </summary>
     public void Rasterize<TState>(
         IPath path,
         in RasterizerOptions options,

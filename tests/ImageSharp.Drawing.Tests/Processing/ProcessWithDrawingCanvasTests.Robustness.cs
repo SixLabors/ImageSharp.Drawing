@@ -8,7 +8,6 @@ using System.Linq;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -327,11 +326,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         using Image<Rgba32> image = provider.GetImage();
 
-        image.Mutate(c =>
-        {
-            c.SetRasterizer(DefaultRasterizer.Instance);
-            c.ProcessWithCanvas(canvas => canvas.Draw(Pens.Solid(Color.White, thickness), path));
-        });
+        image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(Pens.Solid(Color.White, thickness), path)));
 
         image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }

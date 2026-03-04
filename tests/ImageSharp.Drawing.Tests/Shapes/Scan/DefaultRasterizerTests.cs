@@ -56,7 +56,19 @@ public class DefaultRasterizerTests
         AssertCoverageEqual(expected, actual);
     }
 
-    private static float[] Rasterize(IRasterizer rasterizer, IPath path, in RasterizerOptions options)
+    private static float[] Rasterize(DefaultRasterizer rasterizer, IPath path, in RasterizerOptions options)
+    {
+        int width = options.Interest.Width;
+        int height = options.Interest.Height;
+        float[] coverage = new float[width * height];
+        CaptureState state = new(coverage, width, options.Interest.Top);
+
+        rasterizer.Rasterize(path, options, Configuration.Default.MemoryAllocator, ref state, CaptureScanline);
+
+        return coverage;
+    }
+
+    private static float[] Rasterize(ScanlineRasterizer rasterizer, IPath path, in RasterizerOptions options)
     {
         int width = options.Interest.Width;
         int height = options.Interest.Height;

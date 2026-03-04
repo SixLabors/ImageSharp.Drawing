@@ -37,35 +37,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed class DefaultDrawingBackend : IDrawingBackend
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="DefaultDrawingBackend"/> class.
-    /// </summary>
-    /// <param name="primaryRasterizer">Rasterizer used for coverage generation.</param>
-    private DefaultDrawingBackend(IRasterizer primaryRasterizer)
-    {
-        Guard.NotNull(primaryRasterizer, nameof(primaryRasterizer));
-        this.PrimaryRasterizer = primaryRasterizer;
-    }
-
-    /// <summary>
     /// Gets the default backend instance.
     /// </summary>
-    public static DefaultDrawingBackend Instance { get; } = new(DefaultRasterizer.Instance);
-
-    /// <summary>
-    /// Gets the primary rasterizer used by this backend.
-    /// </summary>
-    public IRasterizer PrimaryRasterizer { get; }
-
-    /// <summary>
-    /// Creates a backend that uses the given rasterizer as the primary implementation.
-    /// </summary>
-    /// <param name="rasterizer">Primary rasterizer.</param>
-    /// <returns>A backend instance.</returns>
-    public static DefaultDrawingBackend Create(IRasterizer rasterizer)
-    {
-        Guard.NotNull(rasterizer, nameof(rasterizer));
-        return ReferenceEquals(rasterizer, DefaultRasterizer.Instance) ? Instance : new DefaultDrawingBackend(rasterizer);
-    }
+    public static DefaultDrawingBackend Instance { get; } = new();
 
     /// <inheritdoc />
     public bool IsCompositionBrushSupported<TPixel>(Brush brush)
@@ -201,7 +175,7 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
                 applicators,
                 destinationBounds,
                 definition.RasterizerOptions.Interest.Top);
-            this.PrimaryRasterizer.Rasterize(
+            DefaultRasterizer.Instance.Rasterize(
                 definition.Path,
                 definition.RasterizerOptions,
                 configuration.MemoryAllocator,

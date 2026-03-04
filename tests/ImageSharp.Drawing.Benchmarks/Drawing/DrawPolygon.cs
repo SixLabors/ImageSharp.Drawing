@@ -9,7 +9,6 @@ using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -164,34 +163,8 @@ public abstract class DrawPolygon
     public void SystemDrawing()
         => this.sdGraphics.DrawPath(this.sdPen, this.sdPath);
 
-    // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
     [Benchmark]
-    public void ImageSharpCombinedPathsScanlineRasterizer()
-        => this.image.Mutate(c =>
-        {
-            c.SetRasterizer(ScanlineRasterizer.Instance);
-            c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath));
-        });
-
-    [Benchmark]
-    public void ImageSharpSeparatePathsScanlineRasterizer()
-        => this.image.Mutate(
-            c =>
-            {
-                // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
-                c.SetRasterizer(ScanlineRasterizer.Instance);
-                c.ProcessWithCanvas(canvas =>
-                {
-                    foreach (PointF[] loop in this.points)
-                    {
-                        canvas.Draw(Processing.Pens.Solid(Color.White, this.Thickness), new Polygon(loop));
-                    }
-                });
-            });
-
-    // Tiled is now the framework default rasterizer path.
-    [Benchmark]
-    public void ImageSharpCombinedPathsTiled()
+    public void ImageSharpCombinedPaths()
         => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
     [Benchmark(Description = "ImageSharp Combined Paths WebGPU Backend")]
@@ -199,7 +172,7 @@ public abstract class DrawPolygon
         => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
     [Benchmark]
-    public void ImageSharpSeparatePathsTiled()
+    public void ImageSharpSeparatePaths()
         => this.image.Mutate(
             c => c.ProcessWithCanvas(canvas =>
                 {

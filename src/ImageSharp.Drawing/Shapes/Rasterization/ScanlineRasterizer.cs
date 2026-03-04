@@ -13,14 +13,16 @@ namespace SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 /// It is retained as a compact fallback/reference implementation and as an explicit
 /// non-tiled option for profiling and comparison.
 /// </remarks>
-internal sealed class ScanlineRasterizer : IRasterizer
+internal sealed class ScanlineRasterizer
 {
     /// <summary>
     /// Gets the singleton scanline rasterizer instance.
     /// </summary>
     public static ScanlineRasterizer Instance { get; } = new();
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Rasterizes the path into scanline coverage using the sequential scanner path.
+    /// </summary>
     public void Rasterize<TState>(
         IPath path,
         in RasterizerOptions options,
