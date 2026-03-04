@@ -240,7 +240,8 @@ public sealed class PathGradientBrush : Brush
         {
             get
             {
-                Vector2 point = new(x, y);
+                // Match other gradient brushes by evaluating at pixel centers.
+                Vector2 point = new(x + 0.5F, y + 0.5F);
 
                 if (point == this.center)
                 {
@@ -345,7 +346,7 @@ public sealed class PathGradientBrush : Brush
             Vector2 ip = default;
             Vector2 closestIntersection = default;
             Edge? closestEdge = null;
-            const float minDistance = float.MaxValue;
+            float minDistance = float.MaxValue;
             foreach (Edge edge in this.edges)
             {
                 if (!edge.Intersect(start, end, ref ip))
@@ -353,9 +354,10 @@ public sealed class PathGradientBrush : Brush
                     continue;
                 }
 
-                float d = Vector2.DistanceSquared(start, end);
+                float d = Vector2.DistanceSquared(start, ip);
                 if (d < minDistance)
                 {
+                    minDistance = d;
                     closestEdge = edge;
                     closestIntersection = ip;
                 }

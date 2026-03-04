@@ -6,19 +6,18 @@ using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
+namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
-[GroupOutput("Drawing/GradientBrushes")]
-public class FillPathGradientBrushTests
+public partial class ProcessWithDrawingCanvasTests
 {
-    private static readonly ImageComparer TolerantComparer = ImageComparer.TolerantPercentage(0.01f);
+    private static readonly ImageComparer PathGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01f);
 
     [Theory]
     [WithBlankImage(10, 10, PixelTypes.Rgba32)]
-    public void FillRectangleWithDifferentColors<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushFillRectangleWithDifferentColors<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
-            TolerantComparer,
+            PathGradientTolerantComparer,
             image =>
             {
                 PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
@@ -26,16 +25,16 @@ public class FillPathGradientBrushTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(x => x.Fill(brush));
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
     [Theory]
     [WithBlankImage(20, 20, PixelTypes.Rgba32)]
-    public void FillTriangleWithDifferentColors<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushFillTriangleWithDifferentColors<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
-            TolerantComparer,
+            PathGradientTolerantComparer,
             image =>
             {
                 PointF[] points = [new(10, 0), new(20, 20), new(0, 20)];
@@ -43,13 +42,13 @@ public class FillPathGradientBrushTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(x => x.Fill(brush));
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
     [Theory]
     [WithBlankImage(20, 20, PixelTypes.HalfSingle)]
-    public void FillTriangleWithGreyscale<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushFillTriangleWithGreyscale<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
             ImageComparer.TolerantPercentage(0.02f),
@@ -65,16 +64,16 @@ public class FillPathGradientBrushTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(x => x.Fill(brush));
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
     [Theory]
     [WithBlankImage(20, 20, PixelTypes.Rgba32)]
-    public void FillTriangleWithDifferentColorsCenter<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushFillTriangleWithDifferentColorsCenter<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
-            TolerantComparer,
+            PathGradientTolerantComparer,
             image =>
             {
                 PointF[] points = [new(10, 0), new(20, 20), new(0, 20)];
@@ -82,34 +81,32 @@ public class FillPathGradientBrushTests
 
                 PathGradientBrush brush = new(points, colors, Color.White);
 
-                image.Mutate(x => x.Fill(brush));
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
     [Theory]
     [WithBlankImage(10, 10, PixelTypes.Rgba32)]
-    public void FillRectangleWithSingleColor<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushFillRectangleWithSingleColor<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using (Image<TPixel> image = provider.GetImage())
-        {
-            PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
-            Color[] colors = [Color.Red];
+        using Image<TPixel> image = provider.GetImage();
 
-            PathGradientBrush brush = new(points, colors);
+        PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
+        Color[] colors = [Color.Red];
 
-            image.Mutate(x => x.Fill(brush));
+        PathGradientBrush brush = new(points, colors);
 
-            image.ComparePixelBufferTo(Color.Red);
-        }
+        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        image.ComparePixelBufferTo(Color.Red);
     }
 
     [Theory]
     [WithBlankImage(10, 10, PixelTypes.Rgba32)]
-    public void ShouldRotateTheColorsWhenThereAreMorePoints<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushShouldRotateTheColorsWhenThereAreMorePoints<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
-            TolerantComparer,
+            PathGradientTolerantComparer,
             image =>
             {
                 PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
@@ -117,16 +114,16 @@ public class FillPathGradientBrushTests
 
                 PathGradientBrush brush = new(points, colors);
 
-                image.Mutate(x => x.Fill(brush));
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
     [Theory]
     [WithBlankImage(10, 10, PixelTypes.Rgba32)]
-    public void FillWithCustomCenterColor<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushFillWithCustomCenterColor<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
-            TolerantComparer,
+            PathGradientTolerantComparer,
             image =>
             {
                 PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
@@ -134,12 +131,12 @@ public class FillPathGradientBrushTests
 
                 PathGradientBrush brush = new(points, colors, Color.White);
 
-                image.Mutate(x => x.Fill(brush));
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
                 image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
             });
 
     [Fact]
-    public void ShouldThrowArgumentNullExceptionWhenLinesAreNull()
+    public void FillPathGradientBrushShouldThrowArgumentNullExceptionWhenLinesAreNull()
     {
         Color[] colors = [Color.Black, Color.Red, Color.Yellow, Color.Green];
 
@@ -149,7 +146,7 @@ public class FillPathGradientBrushTests
     }
 
     [Fact]
-    public void ShouldThrowArgumentOutOfRangeExceptionWhenLessThan3PointsAreGiven()
+    public void FillPathGradientBrushShouldThrowArgumentOutOfRangeExceptionWhenLessThan3PointsAreGiven()
     {
         PointF[] points = [new(0, 0), new(10, 0)];
         Color[] colors = [Color.Black, Color.Red, Color.Yellow, Color.Green];
@@ -160,7 +157,7 @@ public class FillPathGradientBrushTests
     }
 
     [Fact]
-    public void ShouldThrowArgumentNullExceptionWhenColorsAreNull()
+    public void FillPathGradientBrushShouldThrowArgumentNullExceptionWhenColorsAreNull()
     {
         PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
 
@@ -170,10 +167,9 @@ public class FillPathGradientBrushTests
     }
 
     [Fact]
-    public void ShouldThrowArgumentOutOfRangeExceptionWhenEmptyColorArrayIsGiven()
+    public void FillPathGradientBrushShouldThrowArgumentOutOfRangeExceptionWhenEmptyColorArrayIsGiven()
     {
         PointF[] points = [new(0, 0), new(10, 0), new(10, 10), new(0, 10)];
-
         Color[] colors = [];
 
         PathGradientBrush Create() => new(points, colors, Color.White);
@@ -183,7 +179,7 @@ public class FillPathGradientBrushTests
 
     [Theory]
     [WithBlankImage(100, 100, PixelTypes.Rgba32)]
-    public void FillComplex<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillPathGradientBrushFillComplex<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
         => provider.VerifyOperation(
             new TolerantImageComparer(0.2f),
@@ -198,8 +194,7 @@ public class FillPathGradientBrushTests
                 ];
 
                 PathGradientBrush brush = new(points, colors, Color.White);
-
-                image.Mutate(x => x.Fill(brush));
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
             },
             appendSourceFileOrDescription: false,
             appendPixelTypeToFileName: false);
