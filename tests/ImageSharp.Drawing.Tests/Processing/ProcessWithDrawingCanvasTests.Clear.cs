@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -17,7 +16,7 @@ public partial class ProcessWithDrawingCanvasTests
     [WithBlankImage(16, 7, PixelTypes.Rgba32)]
     [WithBlankImage(33, 32, PixelTypes.Rgba32)]
     [WithBlankImage(400, 500, PixelTypes.Rgba32)]
-    public void DoesNotDependOnSize<TPixel>(TestImageProvider<TPixel> provider)
+    public void Clear_DoesNotDependOnSize<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> image = provider.GetImage();
@@ -32,7 +31,7 @@ public partial class ProcessWithDrawingCanvasTests
 
     [Theory]
     [WithBlankImage(16, 16, PixelTypes.Rgba32 | PixelTypes.Argb32 | PixelTypes.RgbaVector)]
-    public void DoesNotDependOnSinglePixelType<TPixel>(TestImageProvider<TPixel> provider)
+    public void Clear_DoesNotDependOnSinglePixelType<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> image = provider.GetImage();
@@ -48,7 +47,7 @@ public partial class ProcessWithDrawingCanvasTests
     [Theory]
     [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, "Blue")]
     [WithSolidFilledImages(16, 16, "Yellow", PixelTypes.Rgba32, "Khaki")]
-    public void WhenColorIsOpaque_OverridePreviousColor<TPixel>(
+    public void Clear_WhenColorIsOpaque_OverridePreviousColor<TPixel>(
         TestImageProvider<TPixel> provider,
         string newColorName)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -70,7 +69,7 @@ public partial class ProcessWithDrawingCanvasTests
     [Theory]
     [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, "Blue")]
     [WithSolidFilledImages(16, 16, "Yellow", PixelTypes.Rgba32, "Khaki")]
-    public void ClearAlwaysOverridesPreviousColor<TPixel>(
+    public void Clear_AlwaysOverridesPreviousColor<TPixel>(
         TestImageProvider<TPixel> provider,
         string newColorName)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -92,7 +91,7 @@ public partial class ProcessWithDrawingCanvasTests
     [Theory]
     [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, 5, 7, 3, 8)]
     [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, 8, 5, 6, 4)]
-    public void FillRegion<TPixel>(TestImageProvider<TPixel> provider, int x0, int y0, int w, int h)
+    public void Clear_Region<TPixel>(TestImageProvider<TPixel> provider, int x0, int y0, int w, int h)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> image = provider.GetImage();
@@ -110,7 +109,7 @@ public partial class ProcessWithDrawingCanvasTests
     [Theory]
     [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, 5, 7, 3, 8)]
     [WithSolidFilledImages(16, 16, "Red", PixelTypes.Rgba32, 8, 5, 6, 4)]
-    public void FillRegion_WorksOnWrappedMemoryImage<TPixel>(
+    public void Clear_Region_WorksOnWrappedMemoryImage<TPixel>(
         TestImageProvider<TPixel> provider,
         int x0,
         int y0,
