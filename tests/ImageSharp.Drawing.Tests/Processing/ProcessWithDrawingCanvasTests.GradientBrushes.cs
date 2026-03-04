@@ -14,6 +14,58 @@ public partial class ProcessWithDrawingCanvasTests
 {
     private static readonly ImageComparer EllipticGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01F);
     private static readonly ImageComparer LinearGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01F);
+    private static readonly ImageComparer RadialGradientTolerantComparer = ImageComparer.TolerantPercentage(0.01F);
+
+    [Theory]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32)]
+    public void FillRadialGradientBrushWithEqualColorsReturnsUnicolorImage<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> image = provider.GetImage();
+        Color red = Color.Red;
+
+        RadialGradientBrush brush =
+            new(
+                new Point(0, 0),
+                100,
+                GradientRepetitionMode.None,
+                new ColorStop(0, red),
+                new ColorStop(1, red));
+
+        image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+        image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+
+        // No reference image needed: the whole output should be a single color.
+        image.ComparePixelBufferTo(red);
+    }
+
+    [Theory]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 100, 100)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 0, 0)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 100, 0)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, 0, 100)]
+    [WithBlankImage(200, 200, PixelTypes.Rgba32, -40, 100)]
+    public void FillRadialGradientBrushWithDifferentCentersReturnsImage<TPixel>(
+        TestImageProvider<TPixel> provider,
+        int centerX,
+        int centerY)
+        where TPixel : unmanaged, IPixel<TPixel>
+        => provider.VerifyOperation(
+            RadialGradientTolerantComparer,
+            image =>
+            {
+                RadialGradientBrush brush = new(
+                    new Point(centerX, centerY),
+                    image.Width / 2F,
+                    GradientRepetitionMode.None,
+                    new ColorStop(0, Color.Red),
+                    new ColorStop(1, Color.Yellow));
+
+                image.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
+            },
+            $"center({centerX},{centerY})",
+            false,
+            false);
 
     [Theory]
     [WithBlankImage(10, 10, PixelTypes.Rgba32)]
