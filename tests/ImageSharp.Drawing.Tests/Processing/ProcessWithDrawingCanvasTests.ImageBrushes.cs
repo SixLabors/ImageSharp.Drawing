@@ -1,45 +1,42 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Drawing;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
-// ReSharper disable InconsistentNaming
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing;
+namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
-[GroupOutput("Drawing")]
-public class FillImageBrushTests
+public partial class ProcessWithDrawingCanvasTests
 {
     [Fact]
-    public void DoesNotDisposeImage()
+    public void FillImageBrushDoesNotDisposeImage()
     {
-        using (Image<Rgba32> src = new(5, 5))
+        using (Image<Rgba32> source = new(5, 5))
         {
-            ImageBrush brush = new(src);
-            using (Image<Rgba32> dest = new(10, 10))
+            ImageBrush brush = new(source);
+            using (Image<Rgba32> destination = new(10, 10))
             {
-                dest.Mutate(c => c.Fill(brush, new Rectangle(0, 0, 10, 10)));
-                dest.Mutate(c => c.Fill(brush, new Rectangle(0, 0, 10, 10)));
+                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(new Rectangle(0, 0, 10, 10), brush)));
+                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(new Rectangle(0, 0, 10, 10), brush)));
             }
         }
     }
 
     [Theory]
     [WithTestPatternImage(200, 200, PixelTypes.Rgba32 | PixelTypes.Bgra32)]
-    public void UseBrushOfDifferentPixelType<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillImageBrushUseBrushOfDifferentPixelType<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
         using Image<TPixel> background = provider.GetImage();
         using Image overlay = provider.PixelType == PixelTypes.Rgba32
-                                   ? Image.Load<Bgra32>(data)
-                                   : Image.Load<Rgba32>(data);
+                                  ? Image.Load<Bgra32>(data)
+                                  : Image.Load<Rgba32>(data);
 
         ImageBrush brush = new(overlay);
-        background.Mutate(c => c.Fill(brush));
+        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -47,17 +44,17 @@ public class FillImageBrushTests
 
     [Theory]
     [WithTestPatternImage(200, 200, PixelTypes.Rgba32)]
-    public void CanDrawLandscapeImage<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillImageBrushCanDrawLandscapeImage<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
         using Image<TPixel> background = provider.GetImage();
         using Image overlay = Image.Load<Rgba32>(data);
 
-        overlay.Mutate(c => c.Crop(new Rectangle(0, 0, 125, 90)));
+        overlay.Mutate(ctx => ctx.Crop(new Rectangle(0, 0, 125, 90)));
 
         ImageBrush brush = new(overlay);
-        background.Mutate(c => c.Fill(brush));
+        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -65,17 +62,17 @@ public class FillImageBrushTests
 
     [Theory]
     [WithTestPatternImage(200, 200, PixelTypes.Rgba32)]
-    public void CanDrawPortraitImage<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillImageBrushCanDrawPortraitImage<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
         using Image<TPixel> background = provider.GetImage();
         using Image overlay = Image.Load<Rgba32>(data);
 
-        overlay.Mutate(c => c.Crop(new Rectangle(0, 0, 90, 125)));
+        overlay.Mutate(ctx => ctx.Crop(new Rectangle(0, 0, 90, 125)));
 
         ImageBrush brush = new(overlay);
-        background.Mutate(c => c.Fill(brush));
+        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -83,7 +80,7 @@ public class FillImageBrushTests
 
     [Theory]
     [WithTestPatternImage(400, 400, PixelTypes.Rgba32)]
-    public void CanOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillImageBrushCanOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
@@ -91,8 +88,11 @@ public class FillImageBrushTests
         using Image overlay = Image.Load<Rgba32>(data);
 
         ImageBrush brush = new(overlay);
-        background.Mutate(c => c.Fill(brush, new RectangularPolygon(0, 0, 400, 200)));
-        background.Mutate(c => c.Fill(brush, new RectangularPolygon(-100, 200, 500, 200)));
+        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        {
+            canvas.Fill(new Rectangle(0, 0, 400, 200), brush);
+            canvas.Fill(new Rectangle(-100, 200, 500, 200), brush);
+        }));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -100,7 +100,7 @@ public class FillImageBrushTests
 
     [Theory]
     [WithTestPatternImage(400, 400, PixelTypes.Rgba32)]
-    public void CanOffsetViaBrushImage<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillImageBrushCanOffsetViaBrushImage<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
@@ -109,8 +109,12 @@ public class FillImageBrushTests
 
         ImageBrush brush = new(overlay);
         ImageBrush brushOffset = new(overlay, new Point(100, 0));
-        background.Mutate(c => c.Fill(brush, new RectangularPolygon(0, 0, 400, 200)));
-        background.Mutate(c => c.Fill(brushOffset, new RectangularPolygon(0, 200, 400, 200)));
+
+        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+        {
+            canvas.Fill(new Rectangle(0, 0, 400, 200), brush);
+            canvas.Fill(new Rectangle(0, 200, 400, 200), brushOffset);
+        }));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -118,8 +122,8 @@ public class FillImageBrushTests
 
     [Theory]
     [WithSolidFilledImages(1000, 1000, "White", PixelTypes.Rgba32)]
-    public void CanDrawOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
-    where TPixel : unmanaged, IPixel<TPixel>
+    public void FillImageBrushCanDrawOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
         using Image<TPixel> background = provider.GetImage();
@@ -127,10 +131,10 @@ public class FillImageBrushTests
         using Image templateImage = Image.Load<Rgba32>(data);
         using Image finalTexture = BuildMultiRowTexture(templateImage);
 
-        finalTexture.Mutate(c => c.Resize(100, 200));
+        finalTexture.Mutate(ctx => ctx.Resize(100, 200));
 
         ImageBrush brush = new(finalTexture);
-        background.Mutate(c => c.Fill(brush));
+        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
@@ -139,7 +143,7 @@ public class FillImageBrushTests
         {
             int halfWidth = sourceTexture.Width / 2;
 
-            Image final = sourceTexture.Clone(x => x.Resize(new ResizeOptions
+            Image final = sourceTexture.Clone(ctx => ctx.Resize(new ResizeOptions
             {
                 Size = new Size(templateImage.Width, templateImage.Height * 2),
                 Position = AnchorPositionMode.TopLeft,
@@ -153,52 +157,55 @@ public class FillImageBrushTests
 
     [Theory]
     [WithSolidFilledImages(1000, 1000, "White", PixelTypes.Rgba32)]
-    public void CanDrawNegativeOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
+    public void FillImageBrushCanDrawNegativeOffsetImage<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         byte[] data = TestFile.Create(TestImages.Png.Ducky).Bytes;
         using Image<TPixel> background = provider.GetImage();
         using Image overlay = Image.Load<Rgba32>(data);
 
-        overlay.Mutate(c => c.Resize(100, 100));
+        overlay.Mutate(ctx => ctx.Resize(100, 100));
 
         ImageBrush halfBrush = new(overlay, new RectangleF(50, 0, 50, 100));
         ImageBrush fullBrush = new(overlay);
-        background.Mutate(c => DrawFull(c, new Size(100, 100), fullBrush, halfBrush, background.Width, background.Height));
+
+        background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
+            FillImageBrushDrawFull(canvas, new Size(100, 100), fullBrush, halfBrush, background.Width, background.Height)));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
         background.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
 
-    private static void DrawFull(IImageProcessingContext ctx, Size size, ImageBrush brush, ImageBrush halfBrush, int width, int height)
+    private static void FillImageBrushDrawFull(
+        IDrawingCanvas canvas,
+        Size size,
+        ImageBrush brush,
+        ImageBrush halfBrush,
+        int width,
+        int height)
     {
-        int j = 0;
-        while (j < height)
+        int y = 0;
+        while (y < height)
         {
-            bool half = false;
-            int limitWidth = width;
-            int i = 0;
-            if ((j / size.Height) % 2 != 0)
-            {
-                half = true;
-            }
-
-            while (i < limitWidth)
+            bool half = (y / size.Height) % 2 != 0;
+            int x = 0;
+            while (x < width)
             {
                 if (half)
                 {
-                    ctx.Fill(halfBrush, new RectangleF(i, j, size.Width / 2f, size.Height));
-                    i += (int)(size.Width / 2f);
+                    int halfWidth = size.Width / 2;
+                    canvas.Fill(new Rectangle(x, y, halfWidth, size.Height), halfBrush);
+                    x += halfWidth;
                     half = false;
                 }
                 else
                 {
-                    ctx.Fill(brush, new RectangleF(new PointF(i, j), size));
-                    i += size.Width;
+                    canvas.Fill(new Rectangle(x, y, size.Width, size.Height), brush);
+                    x += size.Width;
                 }
             }
 
-            j += size.Height;
+            y += size.Height;
         }
     }
 }
