@@ -32,7 +32,8 @@ public class Issue_46
         float textX = ((imageSize - rect.Width) * 0.5F) + rect.Left;
         float textY = ((imageSize - rect.Height) * 0.5F) + (rect.Top * 0.25F);
 
-        image.Mutate(x => x.DrawText(iconText, font, Color.Black, new PointF(textX, textY)));
+        RichTextOptions textOptions = new(font) { Origin = new PointF(textX, textY) };
+        image.Mutate(x => x.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, iconText, Brushes.Solid(Color.Black), pen: null)));
         image.Save(TestFontUtilities.GetPath("e96.png"));
     }
 
