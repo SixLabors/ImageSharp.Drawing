@@ -10,13 +10,10 @@ using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
-using Xunit.Abstractions;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Text;
+namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
-[GroupOutput("Drawing/Text")]
-[ValidateDisposedMemoryAllocations]
-public class DrawTextOnImageTests
+public partial class ProcessWithDrawingCanvasTests
 {
     private const string AB = "AB\nAB";
 
@@ -25,11 +22,6 @@ public class DrawTextOnImageTests
     private static readonly ImageComparer TextDrawingComparer = ImageComparer.TolerantPercentage(1e-2f);
 
     private static readonly ImageComparer OutlinedTextDrawingComparer = ImageComparer.TolerantPercentage(0.0069F);
-
-    public DrawTextOnImageTests(ITestOutputHelper output)
-        => this.Output = output;
-
-    private ITestOutputHelper Output { get; }
 
     [Theory]
     [WithSolidFilledImages(1276, 336, "White", PixelTypes.Rgba32, ColorFontSupport.ColrV0)]
@@ -57,7 +49,7 @@ public class DrawTextOnImageTests
                   Origin = new PointF(img.Width / 2, img.Height / 2)
               };
 
-              img.Mutate(i => i.DrawText(textOptions, text, color));
+              img.Mutate(i => i.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(color), pen: null)));
           },
           $"ColorFontsEnabled-{colorFontSupport == ColorFontSupport.ColrV0}");
     }
@@ -89,7 +81,7 @@ public class DrawTextOnImageTests
                   Origin = new PointF(img.Width / 2, img.Height / 2)
               };
 
-              img.Mutate(i => i.DrawText(textOptions, text, color));
+              img.Mutate(i => i.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(color), pen: null)));
           });
     }
 
@@ -120,7 +112,7 @@ public class DrawTextOnImageTests
             Origin = new PointF(img.Width / 2, img.Height / 2)
         };
 
-        img.Mutate(i => i.DrawText(textOptions, text, color));
+        img.Mutate(i => i.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(color), pen: null)));
     }
 
     [Theory]
@@ -134,7 +126,11 @@ public class DrawTextOnImageTests
         PointF point = new(100, 100);
 
         using Image<TPixel> img = provider.GetImage();
-        img.Mutate(ctx => ctx.DrawText(text, font, color, point));
+        img.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.DrawText(
+            CreateTextOptionsAt(font, point),
+            text,
+            Brushes.Solid(color),
+            pen: null)));
     }
 
     [Theory]
@@ -146,7 +142,11 @@ public class DrawTextOnImageTests
         Color color = Color.Black;
 
         using Image<TPixel> img = provider.GetImage();
-        img.Mutate(ctx => ctx.DrawText(TestText, font, Color.Black, new PointF(-50, 2)));
+        img.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.DrawText(
+            CreateTextOptionsAt(font, new PointF(-50, 2)),
+            TestText,
+            Brushes.Solid(Color.Black),
+            pen: null)));
 
         Assert.Equal(Color.White.ToPixel<TPixel>(), img[173, 2]);
     }
@@ -169,7 +169,11 @@ public class DrawTextOnImageTests
         Font font = CreateFont(fontName, fontSize);
 
         provider.RunValidatingProcessorTest(
-            c => c.DrawText(text, font, Color.Black, new PointF(x, y)),
+            c => c.ProcessWithCanvas(canvas => canvas.DrawText(
+                CreateTextOptionsAt(font, new PointF(x, y)),
+                text,
+                Brushes.Solid(Color.Black),
+                pen: null)),
             $"{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -204,10 +208,15 @@ public class DrawTextOnImageTests
             Origin = new PointF(x, y)
         };
 
+        Matrix3x2 transform = Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY));
+        DrawingOptions drawingOptions = new() { Transform = transform };
+
         provider.RunValidatingProcessorTest(
-            x => x
-            .SetDrawingTransform(Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY)))
-            .DrawText(textOptions, text, Color.Black),
+            ctx => ctx.ProcessWithCanvas(drawingOptions, canvas => canvas.DrawText(
+                textOptions,
+                text,
+                Brushes.Solid(Color.Black),
+                pen: null)),
             $"F({fontName})-S({fontSize})-A({angle})-{ToTestOutputDisplayText(text)}-({x},{y})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -244,10 +253,15 @@ public class DrawTextOnImageTests
             Origin = new PointF(x, y)
         };
 
+        Matrix3x2 transform = Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY));
+        DrawingOptions drawingOptions = new() { Transform = transform };
+
         provider.RunValidatingProcessorTest(
-            x => x
-            .SetDrawingTransform(Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY)))
-            .DrawText(textOptions, text, Color.Black),
+            ctx => ctx.ProcessWithCanvas(drawingOptions, canvas => canvas.DrawText(
+                textOptions,
+                text,
+                Brushes.Solid(Color.Black),
+                pen: null)),
             $"F({fontName})-S({fontSize})-A({angleX},{angleY})-{ToTestOutputDisplayText(text)}-({x},{y})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -283,7 +297,11 @@ public class DrawTextOnImageTests
 
         provider.VerifyOperation(
             comparer,
-            img => img.Mutate(c => c.DrawText(sb.ToString(), font, Color.Black, new PointF(10, 1))),
+            img => img.Mutate(c => c.ProcessWithCanvas(canvas => canvas.DrawText(
+                CreateTextOptionsAt(font, new PointF(10, 1)),
+                sb.ToString(),
+                Brushes.Solid(Color.Black),
+                pen: null))),
             false,
             false);
     }
@@ -333,7 +351,11 @@ public class DrawTextOnImageTests
 
         provider.VerifyOperation(
             comparer,
-            img => img.Mutate(c => c.DrawText(textOptions, sb.ToString(), color)),
+            img => img.Mutate(c => c.ProcessWithCanvas(canvas => canvas.DrawText(
+                textOptions,
+                sb.ToString(),
+                Brushes.Solid(color),
+                pen: null))),
             $"linespacing_{lineSpacing}_linecount_{lineCount}_wrap_{wrap}",
             false,
             false);
@@ -357,7 +379,11 @@ public class DrawTextOnImageTests
 
         provider.VerifyOperation(
             OutlinedTextDrawingComparer,
-            img => img.Mutate(c => c.DrawText(text, new Font(font, fontSize), Pens.Solid(color, 1), new PointF(x, y))),
+            img => img.Mutate(c => c.ProcessWithCanvas(canvas => canvas.DrawText(
+                CreateTextOptionsAt(new Font(font, fontSize), new PointF(x, y)),
+                text,
+                brush: null,
+                pen: Pens.Solid(color, 1)))),
             $"pen_{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: true);
@@ -381,7 +407,11 @@ public class DrawTextOnImageTests
 
         provider.VerifyOperation(
             OutlinedTextDrawingComparer,
-            img => img.Mutate(c => c.DrawText(text, new Font(font, fontSize), Pens.DashDot(color, 3), new PointF(x, y))),
+            img => img.Mutate(c => c.ProcessWithCanvas(canvas => canvas.DrawText(
+                CreateTextOptionsAt(new Font(font, fontSize), new PointF(x, y)),
+                text,
+                brush: null,
+                pen: Pens.DashDot(color, 3)))),
             $"pen_{fontName}-{fontSize}-{ToTestOutputDisplayText(text)}-({x},{y})",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: true);
@@ -411,7 +441,7 @@ public class DrawTextOnImageTests
         ImageComparer comparer = ImageComparer.TolerantPercentage(0.2f);
 
         provider.RunValidatingProcessorTest(
-            x => x.DrawText(textOptions, text, Color.Black),
+            x => x.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null)),
             details,
             comparer,
             appendPixelTypeToFileName: false,
@@ -430,11 +460,11 @@ public class DrawTextOnImageTests
         Assert.NotEqual(FontRectangle.Empty, textSize);
 
         using Image<Rgba32> image = new(Configuration.Default, (int)textSize.Width + 20, (int)textSize.Height + 20);
-        image.Mutate(x => x.DrawText(
+        image.Mutate(x => x.ProcessWithCanvas(canvas => canvas.DrawText(
+            CreateTextOptionsAt(font, Vector2.Zero),
             text,
-            font,
-            Color.Black,
-            Vector2.Zero));
+            Brushes.Solid(Color.Black),
+            pen: null)));
     }
 
     [Theory]
@@ -455,8 +485,13 @@ public class DrawTextOnImageTests
         FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
         Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(advance.X, advance.Y, advance.Width, advance.Height)));
 
+        DrawingOptions drawingOptions = new() { Transform = transform };
         provider.RunValidatingProcessorTest(
-            x => x.SetDrawingTransform(transform).DrawText(textOptions, text, Color.Black),
+            x => x.ProcessWithCanvas(drawingOptions, canvas => canvas.DrawText(
+                textOptions,
+                text,
+                Brushes.Solid(Color.Black),
+                pen: null)),
             $"F({fontName})-S({fontSize})-A({angle})-{ToTestOutputDisplayText(text)})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -482,9 +517,13 @@ public class DrawTextOnImageTests
         FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
         Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(advance.X, advance.Y, advance.Width, advance.Height)));
 
+        DrawingOptions drawingOptions = new() { Transform = transform };
         provider.RunValidatingProcessorTest(
-            x => x.SetDrawingTransform(transform)
-            .DrawText(textOptions, text, Pens.Solid(Color.Black, strokeWidth)),
+            x => x.ProcessWithCanvas(drawingOptions, canvas => canvas.DrawText(
+                textOptions,
+                text,
+                brush: null,
+                pen: Pens.Solid(Color.Black, strokeWidth))),
             $"F({fontName})-S({fontSize})-A({angle})-STR({strokeWidth})-{ToTestOutputDisplayText(text)})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -556,7 +595,7 @@ public class DrawTextOnImageTests
             ]
         };
         provider.RunValidatingProcessorTest(
-            x => x.DrawText(textOptions, text, Color.White),
+            x => x.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.White), pen: null)),
             $"RichText-F({fontSize})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -584,7 +623,7 @@ public class DrawTextOnImageTests
             ]
         };
         provider.RunValidatingProcessorTest(
-            x => x.DrawText(textOptions, text, Color.White),
+            x => x.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.White), pen: null)),
             $"RichText-Arabic-F({fontSize})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -633,7 +672,7 @@ public class DrawTextOnImageTests
         };
 
         provider.RunValidatingProcessorTest(
-            x => x.DrawText(textOptions, text, Color.White),
+            x => x.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.White), pen: null)),
             $"RichText-Rainbow-F({fontSize})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -670,7 +709,7 @@ public class DrawTextOnImageTests
         };
 
         provider.RunValidatingProcessorTest(
-            x => x.DrawText(textOptions, text, Color.White),
+            x => x.ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.White), pen: null)),
             $"RichText-Path-({exampleImageKey})",
             TextDrawingComparer,
             appendPixelTypeToFileName: false,
@@ -701,7 +740,12 @@ public class DrawTextOnImageTests
         IPathCollection glyphs = TextBuilder.GeneratePaths(text, path, textOptions);
 
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
+            c => c.ProcessWithCanvas(canvas =>
+            {
+                canvas.Fill(Brushes.Solid(Color.White));
+                canvas.Draw(Pens.Solid(Color.Red, 1), path);
+                canvas.Fill(Brushes.Solid(Color.Black), glyphs);
+            }),
             new { type = exampleImageKey },
             comparer: ImageComparer.TolerantPercentage(0.0025f));
     }
@@ -728,7 +772,12 @@ public class DrawTextOnImageTests
         IPathCollection glyphs = TextBuilder.GeneratePaths(text, path, textOptions);
 
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).Draw(Color.Red, 1, path).Fill(Color.Black, glyphs),
+            c => c.ProcessWithCanvas(canvas =>
+            {
+                canvas.Fill(Brushes.Solid(Color.White));
+                canvas.Draw(Pens.Solid(Color.Red, 1), path);
+                canvas.Fill(Brushes.Solid(Color.Black), glyphs);
+            }),
             new { type = exampleImageKey },
             comparer: ImageComparer.TolerantPercentage(0.002f));
     }
@@ -775,10 +824,12 @@ public class DrawTextOnImageTests
 
                       IPathCollection tb = TextBuilder.GeneratePaths(text, path, to);
 
-                      img.Mutate(
-                          i => i.DrawLine(new SolidPen(Color.Red, 30), pathLine)
-                                .DrawText(rto, text, Color.Black)
-                                .Fill(Brushes.ForwardDiagonal(Color.HotPink), tb));
+                      img.Mutate(i => i.ProcessWithCanvas(canvas =>
+                      {
+                          canvas.DrawLine(new SolidPen(Color.Red, 30), pathLine);
+                          canvas.DrawText(rto, text, Brushes.Solid(Color.Black), pen: null);
+                          canvas.Fill(Brushes.ForwardDiagonal(Color.HotPink), tb);
+                      }));
                   }
               }
           });
@@ -806,7 +857,11 @@ public class DrawTextOnImageTests
         IReadOnlyList<GlyphPathCollection> glyphs = TextBuilder.GenerateGlyphs(text, textOptions);
 
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).Fill(Color.Black, glyphs),
+            c => c.ProcessWithCanvas(canvas =>
+            {
+                canvas.Fill(Brushes.Solid(Color.White));
+                canvas.DrawGlyphs(Brushes.Solid(Color.Black), Pens.Solid(Color.Black, 1F), glyphs);
+            }),
             comparer: ImageComparer.TolerantPercentage(0.002f));
     }
 
@@ -833,7 +888,11 @@ public class DrawTextOnImageTests
         DrawingOptions options = new() { ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero } };
 
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).Fill(options, Color.Black, glyphs),
+            c =>
+            {
+                c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.White)));
+                c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.Black), glyphs));
+            },
             comparer: ImageComparer.TolerantPercentage(0.002f));
     }
 
@@ -858,7 +917,11 @@ public class DrawTextOnImageTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+            c => c.ProcessWithCanvas(canvas =>
+            {
+                canvas.Fill(Brushes.Solid(Color.White));
+                canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
+            }),
             comparer: ImageComparer.TolerantPercentage(0.002f));
     }
 
@@ -879,7 +942,11 @@ public class DrawTextOnImageTests
             };
 
             provider.RunValidatingProcessorTest(
-                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                c => c.ProcessWithCanvas(canvas =>
+                {
+                    canvas.Fill(Brushes.Solid(Color.White));
+                    canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
+                }),
                 comparer: ImageComparer.TolerantPercentage(0.002f));
         }
     }
@@ -903,7 +970,11 @@ public class DrawTextOnImageTests
         };
 
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+            c => c.ProcessWithCanvas(canvas =>
+            {
+                canvas.Fill(Brushes.Solid(Color.White));
+                canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
+            }),
             comparer: ImageComparer.TolerantPercentage(0.002f));
     }
 
@@ -925,7 +996,11 @@ public class DrawTextOnImageTests
             };
 
             provider.RunValidatingProcessorTest(
-                c => c.Fill(Color.White).DrawText(textOptions, text, Brushes.Solid(Color.Black)),
+                c => c.ProcessWithCanvas(canvas =>
+                {
+                    canvas.Fill(Brushes.Solid(Color.White));
+                    canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
+                }),
                 comparer: ImageComparer.TolerantPercentage(0.002f));
         }
     }
@@ -961,10 +1036,16 @@ public class DrawTextOnImageTests
                     new ColorStop(0.5f, Color.Yellow),
                     new ColorStop(1f, Color.Blue));
 
-                img.Mutate(m => m.DrawText(options, txt, brush));
+                img.Mutate(m => m.ProcessWithCanvas(canvas => canvas.DrawText(options, txt, brush, pen: null)));
             },
             false,
             false);
+
+    private static RichTextOptions CreateTextOptionsAt(Font font, PointF origin)
+        => new(font) { Origin = origin };
+
+    private static RichTextOptions CreateTextOptionsAt(Font font, Vector2 origin)
+        => new(font) { Origin = new PointF(origin.X, origin.Y) };
 
     private static string Repeat(string str, int times) => string.Concat(Enumerable.Repeat(str, times));
 

@@ -50,7 +50,7 @@
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.18" />
+    <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.19" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.72" />
     <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.0-alpha.0.52" />
   </ItemGroup>
