@@ -29,7 +29,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <item>
 /// <description>
 /// <see cref="FlushPreparedBatch{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionBatch)"/>
-/// rasterizes one shared coverage map per batch and applies brushes in original command order.
+/// rasterizes shared coverage scanlines per batch and applies brushes in original command order.
 /// </description>
 /// </item>
 /// </list>
@@ -177,15 +177,12 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
 
         CompositionCoverageDefinition definition = compositionBatch.Definition;
-        using Buffer2D<float> coverageMap = this.CreateCoverageMap(definition, configuration.MemoryAllocator);
-
         Rectangle destinationBounds = destinationFrame.Rectangle;
         IReadOnlyList<PreparedCompositionCommand> commands = compositionBatch.Commands;
         int commandCount = commands.Count;
         BrushApplicator<TPixel>[] applicators = new BrushApplicator<TPixel>[commandCount];
         try
         {
-            int maxHeight = 0;
             for (int i = 0; i < commandCount; i++)
             {
                 PreparedCompositionCommand command = commands[i];
@@ -195,17 +192,22 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
                     command.GraphicsOptions,
                     commandRegion,
                     command.BrushBounds);
-
-                if (command.DestinationRegion.Height > maxHeight)
-                {
-                    maxHeight = command.DestinationRegion.Height;
-                }
             }
 
-            // Iterate by row so we slice the already-rasterized coverage map once per command row.
-            // We can do this in parallel since the applicators are thread-safe and each row is independent.
-            RowOperation<TPixel> operation = new(coverageMap, commands, applicators, destinationBounds, maxHeight);
-            ParallelRowIterator.IterateRows(configuration, destinationBounds, in operation);
+            // Stream composition directly from rasterizer scanlines so we do not allocate
+            // and then re-read an intermediate coverage map.
+            RowOperation<TPixel> operation = new(
+                commands,
+                applicators,
+                destinationBounds,
+                definition.RasterizerOptions.Interest.Top);
+            this.PrimaryRasterizer.Rasterize(
+                definition.Path,
+                definition.RasterizerOptions,
+                configuration.MemoryAllocator,
+                ref operation,
+                static (int y, Span<float> scanline, ref RowOperation<TPixel> callbackState) =>
+                    callbackState.InvokeScanline(y, scanline));
         }
         finally
         {
@@ -216,80 +218,43 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         }
     }
 
-    /// <summary>
-    /// Rasterizes one batch coverage map into a dense floating-point buffer.
-    /// </summary>
-    /// <param name="definition">The path and rasterizer options shared by every command in the batch.</param>
-    /// <param name="allocator">The allocator used for temporary coverage storage.</param>
-    /// <returns>The populated coverage map for the batch interest region.</returns>
-    private Buffer2D<float> CreateCoverageMap(
-        in CompositionCoverageDefinition definition,
-        MemoryAllocator allocator)
-    {
-        Size size = definition.RasterizerOptions.Interest.Size;
-        Buffer2D<float> coverage = allocator.Allocate2D<float>(size, AllocationOptions.Clean);
-
-        (Buffer2D<float> Buffer, int DestinationTop) state = (coverage, definition.RasterizerOptions.Interest.Top);
-        this.PrimaryRasterizer.Rasterize(
-            definition.Path,
-            definition.RasterizerOptions,
-            allocator,
-            ref state,
-            static (int y, Span<float> scanline, ref (Buffer2D<float> Buffer, int DestinationTop) callbackState) =>
-            {
-                int row = y - callbackState.DestinationTop;
-                scanline.CopyTo(callbackState.Buffer.DangerousGetRowSpan(row));
-            });
-
-        return coverage;
-    }
-
-    private readonly struct RowOperation<TPixel> : IRowOperation
+    private readonly struct RowOperation<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        private readonly Buffer2D<float> coverageMap;
         private readonly IReadOnlyList<PreparedCompositionCommand> commands;
         private readonly BrushApplicator<TPixel>[] applicators;
         private readonly Rectangle destinationBounds;
-        private readonly int maxHeight;
+        private readonly int coverageTop;
 
         public RowOperation(
-            Buffer2D<float> coverageMap,
             IReadOnlyList<PreparedCompositionCommand> commands,
             BrushApplicator<TPixel>[] applicators,
             Rectangle destinationBounds,
-            int maxHeight)
+            int coverageTop)
         {
-            this.coverageMap = coverageMap;
             this.commands = commands;
             this.applicators = applicators;
             this.destinationBounds = destinationBounds;
-            this.maxHeight = maxHeight;
+            this.coverageTop = coverageTop;
         }
 
-        public void Invoke(int y)
+        public void InvokeScanline(int y, Span<float> scanline)
         {
-            if (y >= this.maxHeight)
-            {
-                return;
-            }
-
+            int sourceY = y - this.coverageTop;
             for (int i = 0; i < this.commands.Count; i++)
             {
                 PreparedCompositionCommand command = this.commands[i];
-                if (y >= command.DestinationRegion.Height)
+                int commandY = sourceY - command.SourceOffset.Y;
+                if ((uint)commandY >= (uint)command.DestinationRegion.Height)
                 {
                     continue;
                 }
 
                 int destinationX = this.destinationBounds.X + command.DestinationRegion.X;
-                int destinationY = this.destinationBounds.Y + command.DestinationRegion.Y;
+                int destinationY = this.destinationBounds.Y + command.DestinationRegion.Y + commandY;
                 int sourceStartX = command.SourceOffset.X;
-                int sourceStartY = command.SourceOffset.Y;
-
-                Span<float> rowCoverage = this.coverageMap.DangerousGetRowSpan(sourceStartY + y);
-                Span<float> rowSlice = rowCoverage.Slice(sourceStartX, command.DestinationRegion.Width);
-                ApplyCoverageSpans(this.applicators[i], rowSlice, destinationX, destinationY + y);
+                Span<float> rowSlice = scanline.Slice(sourceStartX, command.DestinationRegion.Width);
+                ApplyCoverageSpans(this.applicators[i], rowSlice, destinationX, destinationY);
             }
         }
 
