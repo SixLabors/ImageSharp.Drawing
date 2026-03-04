@@ -5,9 +5,9 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 
-namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
+namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
-public class SvgPath
+public partial class ProcessWithDrawingCanvasTests
 {
     [Theory]
     [WithBlankImage(110, 70, PixelTypes.Rgba32, "M20,30 L40,5 L60,30 L80, 55 L100, 30", "zag")]
@@ -17,14 +17,18 @@ public class SvgPath
     [WithBlankImage(500, 400, PixelTypes.Rgba32, "M275,175 v-150 a150,150 0 0,0 -150,150 z", "pie_big")]
     [WithBlankImage(100, 100, PixelTypes.Rgba32, "M50,50 L50,20 L80,50 z M40,60 L40,90 L10,60 z", "arrows")]
     [WithBlankImage(500, 400, PixelTypes.Rgba32, "M 10 315 L 110 215 A 30 50 0 0 1 162.55 162.45 L 172.55 152.45 A 30 50 -45 0 1 215.1 109.9 L 315 10", "chopped_oval")]
-    public void RenderSvgPath<TPixel>(TestImageProvider<TPixel> provider, string svgPath, string exampleImageKey)
+    public void SvgPathRenderSvgPath<TPixel>(TestImageProvider<TPixel> provider, string svgPath, string exampleImageKey)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         bool parsed = Path.TryParseSvgPath(svgPath, out IPath path);
         Assert.True(parsed);
 
         provider.RunValidatingProcessorTest(
-            c => c.Fill(Color.White).Draw(Color.Red, 5, path),
+            c => c.ProcessWithCanvas(canvas =>
+            {
+                canvas.Fill(Brushes.Solid(Color.White));
+                canvas.Draw(Pens.Solid(Color.Red, 5), path);
+            }),
             new { type = exampleImageKey },
             comparer: ImageComparer.TolerantPercentage(0.0035F)); // NET 472 x86 requires higher percentage
     }
