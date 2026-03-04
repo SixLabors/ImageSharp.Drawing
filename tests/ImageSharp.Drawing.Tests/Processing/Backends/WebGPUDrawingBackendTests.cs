@@ -1,9 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#if !OS_Linux
+#if !ENV_CI
 // WebGPU is failing in our CI environment in Ubuntu with
 // WebGPU adapter request failed with status 'Unavailable'
+// It's also failing in Windows CI with "Test host process crashed : Fatal error.0xC0000005"
+// TODO: Ask the Silk.NET team for help.
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
