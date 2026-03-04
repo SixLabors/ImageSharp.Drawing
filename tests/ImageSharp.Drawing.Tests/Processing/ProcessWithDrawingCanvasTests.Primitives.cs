@@ -4,6 +4,7 @@
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -49,6 +50,199 @@ public partial class ProcessWithDrawingCanvasTests
             provider,
             testDetails,
             appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1F, 2.5F, true)]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 0.6F, 10F, true)]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1F, 5F, false)]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Bgr24, "Yellow", 1F, 10F, true)]
+    public void DrawLines_Simple<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        SolidPen pen = new(color, thickness);
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 1F, true)]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 5F, true)]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 1F, false)]
+    [WithSolidFilledImages(30, 30, "White", PixelTypes.Rgba32, 5F, false)]
+    public void DrawLinesInvalidPoints<TPixel>(TestImageProvider<TPixel> provider, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        SolidPen pen = new(Color.Black, thickness);
+        PointF[] path = [new Vector2(15F, 15F), new Vector2(15F, 15F)];
+        DrawingOptions options = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = antialias }
+        };
+
+        string aa = antialias ? string.Empty : "_NoAntialias";
+        FormattableString outputDetails = $"T({thickness}){aa}";
+
+        using Image<TPixel> image = provider.GetImage();
+        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.DrawLine(pen, path)));
+        image.DebugSave(provider, outputDetails, appendSourceFileOrDescription: false);
+        image.CompareToReferenceOutput(
+            ImageComparer.TolerantPercentage(0.001F),
+            provider,
+            outputDetails,
+            appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "White", 1F, 5F, false)]
+    public void DrawLines_Dash<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        Pen pen = Pens.Dash(color, thickness);
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "LightGreen", 1F, 5F, false)]
+    public void DrawLines_Dot<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        Pen pen = Pens.Dot(color, thickness);
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1F, 5F, false)]
+    public void DrawLines_DashDot<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        Pen pen = Pens.DashDot(color, thickness);
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Black", 1F, 5F, false)]
+    public void DrawLines_DashDotDot<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        Pen pen = Pens.DashDotDot(color, thickness);
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1F, 5F, true)]
+    public void DrawLines_EndCapRound<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        PatternPen pen = new(new PenOptions(color, thickness, [3F, 3F])
+        {
+            StrokeOptions = new StrokeOptions { LineCap = LineCap.Round },
+        });
+
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1F, 5F, true)]
+    public void DrawLines_EndCapButt<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        PatternPen pen = new(new PenOptions(color, thickness, [3F, 3F])
+        {
+            StrokeOptions = new StrokeOptions { LineCap = LineCap.Butt },
+        });
+
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1F, 5F, true)]
+    public void DrawLines_EndCapSquare<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        PatternPen pen = new(new PenOptions(color, thickness, [3F, 3F])
+        {
+            StrokeOptions = new StrokeOptions { LineCap = LineCap.Square },
+        });
+
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1F, 10F, true)]
+    public void DrawLines_JointStyleRound<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        SolidPen pen = new(new PenOptions(color, thickness)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Round },
+        });
+
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1F, 10F, true)]
+    public void DrawLines_JointStyleSquare<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        SolidPen pen = new(new PenOptions(color, thickness)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Bevel },
+        });
+
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    [Theory]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, "Yellow", 1F, 10F, true)]
+    public void DrawLines_JointStyleMiter<TPixel>(TestImageProvider<TPixel> provider, string colorName, float alpha, float thickness, bool antialias)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Color color = TestUtils.GetColorByName(colorName).WithAlpha(alpha);
+        SolidPen pen = new(new PenOptions(color, thickness)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter },
+        });
+
+        DrawLinesImpl(provider, colorName, alpha, thickness, antialias, pen);
+    }
+
+    private static void DrawLinesImpl<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string colorName,
+        float alpha,
+        float thickness,
+        bool antialias,
+        Pen pen)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        PointF[] simplePath = [new Vector2(10, 10), new Vector2(200, 150), new Vector2(50, 300)];
+        DrawingOptions options = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = antialias }
+        };
+
+        string aa = antialias ? string.Empty : "_NoAntialias";
+        FormattableString outputDetails = $"{colorName}_A({alpha})_T({thickness}){aa}";
+
+        using Image<TPixel> image = provider.GetImage();
+        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.DrawLine(pen, simplePath)));
+        image.DebugSave(provider, outputDetails, appendSourceFileOrDescription: false);
+        image.CompareToReferenceOutput(
+            ImageComparer.TolerantPercentage(0.001F),
+            provider,
+            outputDetails,
             appendSourceFileOrDescription: false);
     }
 }
