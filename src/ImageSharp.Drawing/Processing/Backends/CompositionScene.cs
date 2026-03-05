@@ -9,9 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed class CompositionScene
 {
     public CompositionScene(IReadOnlyList<CompositionCommand> commands)
-    {
-        this.Commands = commands;
-    }
+        => this.Commands = commands;
 
     /// <summary>
     /// Gets normalized composition commands in submission order.
