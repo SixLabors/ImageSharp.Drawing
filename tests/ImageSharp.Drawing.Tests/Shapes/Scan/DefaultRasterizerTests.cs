@@ -34,8 +34,8 @@ public class DefaultRasterizerTests
         Rectangle interest = Rectangle.Ceiling(path.Bounds);
         RasterizerOptions options = new(interest, rule);
 
-        float[] expected = Rasterize(ScanlineRasterizer.Instance, path, options);
-        float[] actual = Rasterize(DefaultRasterizer.Instance, path, options);
+        float[] expected = RasterizeSequential(path, options);
+        float[] actual = Rasterize(path, options);
 
         AssertCoverageEqual(expected, actual);
     }
@@ -50,40 +50,44 @@ public class DefaultRasterizerTests
             IntersectionRule.NonZero,
             samplingOrigin: RasterizerSamplingOrigin.PixelCenter);
 
-        float[] expected = Rasterize(ScanlineRasterizer.Instance, path, options);
-        float[] actual = Rasterize(DefaultRasterizer.Instance, path, options);
+        float[] expected = RasterizeSequential(path, options);
+        float[] actual = Rasterize(path, options);
 
         AssertCoverageEqual(expected, actual);
     }
 
-    private static float[] Rasterize(DefaultRasterizer rasterizer, IPath path, in RasterizerOptions options)
+    private static float[] Rasterize(IPath path, in RasterizerOptions options)
     {
         int width = options.Interest.Width;
         int height = options.Interest.Height;
         float[] coverage = new float[width * height];
-        CaptureState state = new(coverage, width, options.Interest.Top);
-
-        rasterizer.Rasterize(path, options, Configuration.Default.MemoryAllocator, ref state, CaptureScanline);
+        int top = options.Interest.Top;
+        DefaultRasterizer.RasterizeRows(path, options, Configuration.Default.MemoryAllocator, CaptureRow);
 
         return coverage;
+
+        void CaptureRow(int y, int startX, Span<float> rowCoverage)
+        {
+            int row = y - top;
+            rowCoverage.CopyTo(coverage.AsSpan((row * width) + startX, rowCoverage.Length));
+        }
     }
 
-    private static float[] Rasterize(ScanlineRasterizer rasterizer, IPath path, in RasterizerOptions options)
+    private static float[] RasterizeSequential(IPath path, in RasterizerOptions options)
     {
         int width = options.Interest.Width;
         int height = options.Interest.Height;
         float[] coverage = new float[width * height];
-        CaptureState state = new(coverage, width, options.Interest.Top);
-
-        rasterizer.Rasterize(path, options, Configuration.Default.MemoryAllocator, ref state, CaptureScanline);
+        int top = options.Interest.Top;
+        DefaultRasterizer.RasterizeRowsSequential(path, options, Configuration.Default.MemoryAllocator, CaptureRow);
 
         return coverage;
-    }
 
-    private static void CaptureScanline(int y, Span<float> scanline, ref CaptureState state)
-    {
-        int row = y - state.Top;
-        scanline.CopyTo(state.Coverage.AsSpan(row * state.Width, state.Width));
+        void CaptureRow(int y, int startX, Span<float> rowCoverage)
+        {
+            int row = y - top;
+            rowCoverage.CopyTo(coverage.AsSpan((row * width) + startX, rowCoverage.Length));
+        }
     }
 
     private static void AssertCoverageEqual(ReadOnlySpan<float> expected, ReadOnlySpan<float> actual)
@@ -93,21 +97,5 @@ public class DefaultRasterizerTests
         {
             Assert.Equal(expected[i], actual[i], 6);
         }
-    }
-
-    private readonly struct CaptureState
-    {
-        public CaptureState(float[] coverage, int width, int top)
-        {
-            this.Coverage = coverage;
-            this.Width = width;
-            this.Top = top;
-        }
-
-        public float[] Coverage { get; }
-
-        public int Width { get; }
-
-        public int Top { get; }
     }
 }

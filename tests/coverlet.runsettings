@@ -7,8 +7,8 @@
                     <Format>lcov</Format>
                     <Include>[SixLabors.*]*</Include>
                     <Exclude>
-                       <!-- Exclude everthing inside the namesapce "Clipper2Lib" --> 
-                       <Function>^Clipper2Lib\..*</Function> 
+                       <!-- Exclude everything inside the namespace "SixLabors.ImageSharp.Drawing.WebGPU" --> 
+                       <Function>^SixLabors.ImageSharp.Drawing.WebGPU\..*</Function> 
                     </Exclude>  
                     <UseSourceLink>true</UseSourceLink>
                 </Configuration>

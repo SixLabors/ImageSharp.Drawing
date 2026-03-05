@@ -1,7 +1,7 @@
-# Polygon Scanner (Fixed-Point, Tiled + Banded Fallback)
+# DefaultRasterizer (Fixed-Point, Tiled + Banded Fallback)
 
-This document describes the current `PolygonScanner` implementation in
-`src/ImageSharp.Drawing/Shapes/Rasterization/PolygonScanner.cs`.
+This document describes the current `DefaultRasterizer` implementation in
+`src/ImageSharp.Drawing/Shapes/Rasterization/DefaultRasterizer.cs`.
 
 The scanner is a fixed-point, area/cover rasterizer inspired by Blaze-style
 scan conversion.

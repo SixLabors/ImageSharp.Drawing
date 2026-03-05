@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.CompilerServices;
+
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
@@ -18,14 +20,16 @@ internal static class CompositionScenePlanner
         IReadOnlyList<CompositionCommand> commands,
         in Rectangle targetBounds)
     {
-        List<CompositionBatch> batches = [];
+        int commandCount = commands.Count;
+        List<CompositionBatch> batches = new(EstimateBatchCapacity(commandCount));
         int index = 0;
-        while (index < commands.Count)
+        while (index < commandCount)
         {
             CompositionCommand definitionCommand = commands[index];
             int definitionKey = definitionCommand.DefinitionKey;
-            List<PreparedCompositionCommand> preparedCommands = [];
-            for (; index < commands.Count; index++)
+            int remainingCount = commandCount - index;
+            List<PreparedCompositionCommand> preparedCommands = new(EstimatePreparedCommandCapacity(remainingCount));
+            for (; index < commandCount; index++)
             {
                 CompositionCommand command = commands[index];
                 if (command.DefinitionKey != definitionKey)
@@ -54,6 +58,55 @@ internal static class CompositionScenePlanner
         }
 
         return batches;
+    }
+
+    /// <summary>
+    /// Estimates initial capacity for the outer batch list from total scene command count.
+    /// </summary>
+    /// <param name="commandCount">Total number of scene commands.</param>
+    /// <returns>Suggested initial capacity for the batch list.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int EstimateBatchCapacity(int commandCount)
+    {
+        // Typical scenes reuse coverage definitions, so batch count is usually
+        // meaningfully lower than command count.
+        if (commandCount <= 8)
+        {
+            return commandCount;
+        }
+
+        if (commandCount <= 128)
+        {
+            return commandCount / 2;
+        }
+
+        return commandCount / 4;
+    }
+
+    /// <summary>
+    /// Estimates initial capacity for one contiguous prepared-command run.
+    /// </summary>
+    /// <param name="remainingCount">Commands remaining from the current scan index.</param>
+    /// <returns>Suggested initial capacity for the current prepared-command list.</returns>
+    /// <remarks>
+    /// This estimate is intentionally capped for large tails because the list is
+    /// allocated per run during scanning rather than once per scene.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int EstimatePreparedCommandCapacity(int remainingCount)
+    {
+        // Most adjacent commands share a definition in small-medium scenes.
+        if (remainingCount <= 16)
+        {
+            return remainingCount;
+        }
+
+        if (remainingCount <= 128)
+        {
+            return remainingCount / 2;
+        }
+
+        return 64;
     }
 
     /// <summary>

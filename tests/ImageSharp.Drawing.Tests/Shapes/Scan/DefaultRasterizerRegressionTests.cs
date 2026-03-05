@@ -12,12 +12,31 @@ public class DefaultRasterizerRegressionTests
     {
         RectangularPolygon path = new(0.3F, 0.2F, 0.7F, 1.423F);
         RasterizerOptions options = new(new Rectangle(0, 0, 12, 20), IntersectionRule.EvenOdd);
-        CaptureState state = new(new float[options.Interest.Width * options.Interest.Height], options.Interest.Width, options.Interest.Top);
+        float[] coverage = new float[options.Interest.Width * options.Interest.Height];
+        int width = options.Interest.Width;
+        int top = options.Interest.Top;
+        int dirtyRows = 0;
+        float maxCoverage = 0F;
 
-        DefaultRasterizer.Instance.Rasterize(path, options, Configuration.Default.MemoryAllocator, ref state, CaptureScanline);
+        DefaultRasterizer.RasterizeRows(path, options, Configuration.Default.MemoryAllocator, CaptureRow);
 
-        Assert.True(state.DirtyRows > 0);
-        Assert.True(state.MaxCoverage > 0F);
+        Assert.True(dirtyRows > 0);
+        Assert.True(maxCoverage > 0F);
+
+        void CaptureRow(int y, int startX, Span<float> rowCoverage)
+        {
+            int row = y - top;
+            rowCoverage.CopyTo(coverage.AsSpan((row * width) + startX, rowCoverage.Length));
+            dirtyRows++;
+
+            for (int i = 0; i < rowCoverage.Length; i++)
+            {
+                if (rowCoverage[i] > maxCoverage)
+                {
+                    maxCoverage = rowCoverage[i];
+                }
+            }
+        }
     }
 
     [Fact]
@@ -26,7 +45,7 @@ public class DefaultRasterizerRegressionTests
         RectangularPolygon path = new(0.25F, 0.25F, 1F, 1F);
         RasterizerOptions options = new(new Rectangle(0, 0, 2, 2), IntersectionRule.NonZero);
 
-        float[] coverage = Rasterize(DefaultRasterizer.Instance, path, options);
+        float[] coverage = Rasterize(path, options);
         float[] expected =
         [
             0.5625F, 0.1875F,
@@ -45,7 +64,7 @@ public class DefaultRasterizerRegressionTests
         RectangularPolygon path = new(0.25F, 0.25F, 1F, 1F);
         RasterizerOptions options = new(new Rectangle(0, 0, 2, 2), IntersectionRule.NonZero, RasterizationMode.Aliased);
 
-        float[] coverage = Rasterize(DefaultRasterizer.Instance, path, options);
+        float[] coverage = Rasterize(path, options);
         float[] expected =
         [
             1F, 0F,
@@ -60,69 +79,31 @@ public class DefaultRasterizerRegressionTests
     {
         RectangularPolygon path = new(0F, 0F, 1F, 1F);
         RasterizerOptions options = new(new Rectangle(0, 0, (int.MaxValue / 2) + 1, 1), IntersectionRule.NonZero);
-        NoopState state = default;
 
         void Rasterize() =>
-            DefaultRasterizer.Instance.Rasterize(
+            DefaultRasterizer.RasterizeRows(
                 path,
                 options,
                 Configuration.Default.MemoryAllocator,
-                ref state,
-                static (int y, Span<float> scanline, ref NoopState localState) => { });
+                static (int y, int startX, Span<float> coverage) => { });
 
         ImageProcessingException exception = Assert.Throws<ImageProcessingException>(Rasterize);
         Assert.Contains("too large", exception.Message);
     }
 
-    private static float[] Rasterize(DefaultRasterizer rasterizer, IPath path, in RasterizerOptions options)
+    private static float[] Rasterize(IPath path, in RasterizerOptions options)
     {
         int width = options.Interest.Width;
         int height = options.Interest.Height;
         float[] coverage = new float[width * height];
-        CaptureState state = new(coverage, width, options.Interest.Top);
-
-        rasterizer.Rasterize(path, options, Configuration.Default.MemoryAllocator, ref state, CaptureScanline);
+        int top = options.Interest.Top;
+        DefaultRasterizer.RasterizeRows(path, options, Configuration.Default.MemoryAllocator, CaptureRow);
         return coverage;
-    }
 
-    private static void CaptureScanline(int y, Span<float> scanline, ref CaptureState state)
-    {
-        int row = y - state.Top;
-        scanline.CopyTo(state.Coverage.AsSpan(row * state.Width, state.Width));
-        state.DirtyRows++;
-
-        for (int i = 0; i < scanline.Length; i++)
+        void CaptureRow(int y, int startX, Span<float> rowCoverage)
         {
-            if (scanline[i] > state.MaxCoverage)
-            {
-                state.MaxCoverage = scanline[i];
-            }
+            int row = y - top;
+            rowCoverage.CopyTo(coverage.AsSpan((row * width) + startX, rowCoverage.Length));
         }
-    }
-
-    private struct CaptureState
-    {
-        public CaptureState(float[] coverage, int width, int top)
-        {
-            this.Coverage = coverage;
-            this.Width = width;
-            this.Top = top;
-            this.DirtyRows = 0;
-            this.MaxCoverage = 0F;
-        }
-
-        public float[] Coverage { get; }
-
-        public int Width { get; }
-
-        public int Top { get; }
-
-        public int DirtyRows { get; set; }
-
-        public float MaxCoverage { get; set; }
-    }
-
-    private struct NoopState
-    {
     }
 }

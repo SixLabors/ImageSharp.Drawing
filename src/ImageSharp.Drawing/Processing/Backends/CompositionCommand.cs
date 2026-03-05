@@ -116,64 +116,23 @@ internal readonly struct CompositionCommand
     }
 
     /// <summary>
-    /// Computes a coverage definition key from path geometry and rasterization state.
+    /// Computes a coverage definition key from path identity and rasterization state.
     /// </summary>
     /// <param name="path">Path to rasterize.</param>
     /// <param name="rasterizerOptions">Rasterizer options used for coverage generation.</param>
-    /// <param name="definitionKeyCache">Optional scoped cache keyed by path identity to avoid repeated path flattening.</param>
+    /// <param name="definitionKeyCache">Unused. Retained for API compatibility.</param>
     /// <returns>A stable key for coverage-equivalent commands.</returns>
     public static int ComputeCoverageDefinitionKey(
         IPath path,
         in RasterizerOptions rasterizerOptions,
         Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
     {
-        // Fast path: when the caller provides a cache and the same IPath object is
-        // reused (e.g. cached glyph sub-pixel variants), skip the expensive
-        // Flatten + point-hash and return the cached key.
-        if (definitionKeyCache is not null)
-        {
-            int pathIdentity = RuntimeHelpers.GetHashCode(path);
-            int rasterState = HashCode.Combine(
-                rasterizerOptions.Interest.Size,
-                (int)rasterizerOptions.IntersectionRule,
-                (int)rasterizerOptions.RasterizationMode,
-                (int)rasterizerOptions.SamplingOrigin);
-            int cacheProbe = HashCode.Combine(pathIdentity, rasterState);
-
-            if (definitionKeyCache.TryGetValue(cacheProbe, out (IPath Path, int RasterState, int DefinitionKey) cached) &&
-                ReferenceEquals(cached.Path, path) &&
-                cached.RasterState == rasterState)
-            {
-                return cached.DefinitionKey;
-            }
-
-            int definitionKey = ComputeCoverageDefinitionKeySlow(path, in rasterizerOptions);
-            definitionKeyCache[cacheProbe] = (path, rasterState, definitionKey);
-            return definitionKey;
-        }
-
-        return ComputeCoverageDefinitionKeySlow(path, in rasterizerOptions);
-    }
-
-    private static int ComputeCoverageDefinitionKeySlow(IPath path, in RasterizerOptions rasterizerOptions)
-    {
-        HashCode hash = default;
-        foreach (ISimplePath simplePath in path.Flatten())
-        {
-            ReadOnlySpan<PointF> points = simplePath.Points.Span;
-            hash.Add(simplePath.IsClosed);
-            hash.Add(points.Length);
-            for (int i = 0; i < points.Length; i++)
-            {
-                hash.Add(points[i].X);
-                hash.Add(points[i].Y);
-            }
-        }
-
-        hash.Add(rasterizerOptions.Interest.Size);
-        hash.Add((int)rasterizerOptions.IntersectionRule);
-        hash.Add((int)rasterizerOptions.RasterizationMode);
-        hash.Add((int)rasterizerOptions.SamplingOrigin);
-        return hash.ToHashCode();
+        int pathIdentity = RuntimeHelpers.GetHashCode(path);
+        int rasterState = HashCode.Combine(
+            rasterizerOptions.Interest.Size,
+            (int)rasterizerOptions.IntersectionRule,
+            (int)rasterizerOptions.RasterizationMode,
+            (int)rasterizerOptions.SamplingOrigin);
+        return HashCode.Combine(pathIdentity, rasterState);
     }
 }
