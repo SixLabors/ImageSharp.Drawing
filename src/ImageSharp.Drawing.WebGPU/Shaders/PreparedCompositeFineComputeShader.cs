@@ -200,19 +200,21 @@ internal static class PreparedCompositeFineComputeShader
 
         @compute @workgroup_size(8, 8, 1)
         fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-            let tile_index = global_id.z;
+            let tile_x = global_id.z;
+            let tile_y = global_id.y / 16u;
+            let tile_index = tile_y * dispatch_config.tile_count_x + tile_x;
             if (tile_index >= dispatch_config.tile_count) {
                 return;
             }
 
-            if (global_id.x >= 16u || global_id.y >= 16u) {
+            let pixel_x = global_id.x;
+            let pixel_y = global_id.y % 16u;
+            if (pixel_x >= 16u || pixel_y >= 16u) {
                 return;
             }
 
-            let tile_x = tile_index % dispatch_config.tile_count_x;
-            let tile_y = tile_index / dispatch_config.tile_count_x;
-            let dest_x = (tile_x * 16u) + global_id.x;
-            let dest_y = (tile_y * 16u) + global_id.y;
+            let dest_x = (tile_x * 16u) + pixel_x;
+            let dest_y = (tile_y * 16u) + pixel_y;
 
             if (dest_x >= dispatch_config.target_width || dest_y >= dispatch_config.target_height) {
                 return;

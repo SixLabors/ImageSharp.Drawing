@@ -1108,8 +1108,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 flushContext.Api.ComputePassEncoderDispatchWorkgroups(
                     passEncoder,
                     DivideRoundUp(CompositeTileWidth, CompositeComputeWorkgroupSize),
-                    DivideRoundUp(CompositeTileHeight, CompositeComputeWorkgroupSize),
-                    (uint)tileCount);
+                    DivideRoundUp(CompositeTileHeight, CompositeComputeWorkgroupSize) * (uint)tileCountY,
+                    (uint)tileCountX);
             }
             finally
             {
