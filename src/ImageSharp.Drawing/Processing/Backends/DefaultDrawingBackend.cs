@@ -71,9 +71,20 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
             compositionScene.Commands,
             target.Bounds);
 
-        for (int i = 0; i < preparedBatches.Count; i++)
+        // A single reusable scratch is maintained across the batch loop so sequential-path
+        // commands (single-tile or multi-band) avoid repeated pool allocation round-trips.
+        // The parallel multi-tile path creates its own per-worker scratch and ignores this one.
+        DefaultRasterizer.WorkerScratch? reusableScratch = null;
+        try
         {
-            this.FlushPreparedBatch(configuration, target, preparedBatches[i]);
+            for (int i = 0; i < preparedBatches.Count; i++)
+            {
+                this.FlushPreparedBatch(configuration, target, preparedBatches[i], ref reusableScratch);
+            }
+        }
+        finally
+        {
+            reusableScratch?.Dispose();
         }
     }
 
@@ -137,6 +148,18 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
         CompositionBatch compositionBatch)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        DefaultRasterizer.WorkerScratch? noScratch = null;
+        this.FlushPreparedBatch(configuration, target, compositionBatch, ref noScratch);
+        noScratch?.Dispose();
+    }
+
+    private void FlushPreparedBatch<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        CompositionBatch compositionBatch,
+        ref DefaultRasterizer.WorkerScratch? reusableScratch)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
         if (compositionBatch.Commands.Count == 0)
         {
             return;
@@ -177,7 +200,8 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
                 definition.Path,
                 definition.RasterizerOptions,
                 configuration.MemoryAllocator,
-                operation.InvokeCoverageRow);
+                operation.InvokeCoverageRow,
+                ref reusableScratch);
         }
         finally
         {
