@@ -437,74 +437,25 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
+        // Use the target texture directly as the backdrop source.
+        // This avoids an extra texture allocation and target→source copy.
         TextureView* backdropTextureView = flushContext.TargetView;
         int sourceOriginX = targetLocalBounds.X;
         int sourceOriginY = targetLocalBounds.Y;
-        Texture* outputTexture = flushContext.TargetTexture;
-        TextureView* outputTextureView = flushContext.TargetView;
-        bool writesDirectlyToTarget = !flushContext.RequiresReadback;
-        bool copyOutputToTarget = !writesDirectlyToTarget;
-        int outputOriginX = writesDirectlyToTarget ? targetLocalBounds.X : 0;
-        int outputOriginY = writesDirectlyToTarget ? targetLocalBounds.Y : 0;
-        if (writesDirectlyToTarget)
-        {
-            backdropTextureView = flushContext.TargetView;
-            sourceOriginX = targetLocalBounds.X;
-            sourceOriginY = targetLocalBounds.Y;
-            if (!TryCreateCompositionTexture(
-                    flushContext,
-                    targetLocalBounds.Width,
-                    targetLocalBounds.Height,
-                    out outputTexture,
-                    out outputTextureView,
-                    out error))
-            {
-                return false;
-            }
 
-            outputOriginX = 0;
-            outputOriginY = 0;
-            copyOutputToTarget = true;
-        }
-        else
-        {
-            if (!TryCreateCompositionTexture(
-                    flushContext,
-                    targetLocalBounds.Width,
-                    targetLocalBounds.Height,
-                    out Texture* sourceTexture,
-                    out backdropTextureView,
-                    out error))
-            {
-                return false;
-            }
-
-            CopyTextureRegion(
+        if (!TryCreateCompositionTexture(
                 flushContext,
-                flushContext.TargetTexture,
-                targetLocalBounds.X,
-                targetLocalBounds.Y,
-                sourceTexture,
-                0,
-                0,
                 targetLocalBounds.Width,
-                targetLocalBounds.Height);
-            sourceOriginX = 0;
-            sourceOriginY = 0;
-            if (!TryCreateCompositionTexture(
-                    flushContext,
-                    targetLocalBounds.Width,
-                    targetLocalBounds.Height,
-                    out outputTexture,
-                    out outputTextureView,
-                    out error))
-            {
-                return false;
-            }
-
-            outputOriginX = 0;
-            outputOriginY = 0;
+                targetLocalBounds.Height,
+                out Texture* outputTexture,
+                out TextureView* outputTextureView,
+                out error))
+        {
+            return false;
         }
+
+        int outputOriginX = 0;
+        int outputOriginY = 0;
 
         List<CompositionCoverageDefinition> coverageDefinitions = [];
         Dictionary<CoverageDefinitionIdentity, int> coverageDefinitionIndexByKey = [];
@@ -572,8 +523,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return false;
         }
 
-        if (copyOutputToTarget)
+        if (flushContext.RequiresReadback)
         {
+            // CPU target: read back directly from the output texture at (0,0)
+            // instead of copying output→target and then reading from target.
+            flushContext.ReadbackSourceOverride = outputTexture;
+        }
+        else
+        {
+            // Native GPU surface: copy composited output back into the target.
             CopyTextureRegion(
                 flushContext,
                 outputTexture,
@@ -1960,11 +1918,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         uint copyBytesPerRow = checked((uint)copyBounds.Width * (uint)Unsafe.SizeOf<TPixel>());
         copyBytesPerRow = (copyBytesPerRow + 255U) & ~255U;
 
+        // When ReadbackSourceOverride is set, the output texture already contains the
+        // composited result at (0,0), so we read from there instead of the target texture.
+        bool useOverride = flushContext.ReadbackSourceOverride is not null;
+        Texture* readbackTexture = useOverride ? flushContext.ReadbackSourceOverride : flushContext.TargetTexture;
+        uint readbackOriginX = useOverride ? 0 : (uint)copyBounds.X;
+        uint readbackOriginY = useOverride ? 0 : (uint)copyBounds.Y;
+
         ImageCopyTexture source = new()
         {
-            Texture = flushContext.TargetTexture,
+            Texture = readbackTexture,
             MipLevel = 0,
-            Origin = new Origin3D((uint)copyBounds.X, (uint)copyBounds.Y, 0),
+            Origin = new Origin3D(readbackOriginX, readbackOriginY, 0),
             Aspect = TextureAspect.All
         };
 

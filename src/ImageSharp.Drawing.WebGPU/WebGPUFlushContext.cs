@@ -123,6 +123,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public bool RequiresReadback { get; private set; }
 
     /// <summary>
+    /// Gets or sets an optional override texture to read back from instead of <see cref="TargetTexture"/>.
+    /// When set, readback copies from this texture at origin (0,0) rather than from the target
+    /// at composition bounds, eliminating an intermediate texture-to-texture copy.
+    /// </summary>
+    public Texture* ReadbackSourceOverride { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether the current target texture can be sampled in a compute shader.
     /// </summary>
     public bool CanSampleTargetTexture { get; private set; }
