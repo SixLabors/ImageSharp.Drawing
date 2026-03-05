@@ -7,8 +7,6 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
@@ -508,8 +506,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             outputOriginY = 0;
         }
 
-        List<CompositionCoverageDefinition> coverageDefinitions = new();
-        Dictionary<CoverageDefinitionIdentity, int> coverageDefinitionIndexByKey = new();
+        List<CompositionCoverageDefinition> coverageDefinitions = [];
+        Dictionary<CoverageDefinitionIdentity, int> coverageDefinitionIndexByKey = [];
         int[] batchCoverageIndices = new int[preparedBatches.Count];
         for (int i = 0; i < batchCoverageIndices.Length; i++)
         {
@@ -628,7 +626,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         }
 
         string pipelineKey = $"prepared-composite-fine/{flushContext.TextureFormat}";
-        WebGPUCompositeBindGroupLayoutFactory layoutFactory = (WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
+        bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
             => TryCreatePreparedCompositeFineBindGroupLayout(
                 api,
                 device,
@@ -640,7 +638,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
                 pipelineKey,
                 shaderCode,
-                layoutFactory,
+                LayoutFactory,
                 out BindGroupLayout* bindGroupLayout,
                 out ComputePipeline* pipeline,
                 out error))
@@ -790,8 +788,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                         destinationX + destinationRegion.Width,
                         destinationY + destinationRegion.Height);
                     commandIndex++;
+                }
             }
-        }
 
             int usedParameterByteCount = checked(flushCommandCount * (int)parameterSize);
             if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
@@ -852,7 +850,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 return false;
             }
 
-            nuint binDataByteCount = checked((nuint)binningSize * (nuint)sizeof(uint));
+            nuint binDataByteCount = checked(binningSize * (nuint)sizeof(uint));
             if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
                     PreparedCompositeBinDataBufferKey,
                     BufferUsage.Storage | BufferUsage.CopyDst,
@@ -918,8 +916,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 (nuint)tileCountsByteCount);
 
             uint tileCommandCapacity = maxTileCommandIndices;
-            nuint usedTileCommandCount = (nuint)Math.Max(tileCommandCapacity, 1u);
-            nuint tileCommandIndicesByteCount = checked(usedTileCommandCount * (nuint)sizeof(uint));
+            nuint usedTileCommandCount = Math.Max(tileCommandCapacity, 1u);
+            nuint tileCommandIndicesByteCount = checked(usedTileCommandCount * sizeof(uint));
             if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
                     PreparedCompositeTileIndicesBufferKey,
                     BufferUsage.Storage | BufferUsage.CopyDst,
@@ -1874,7 +1872,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint FloatToUInt32Bits(float value)
-        => unchecked((uint)System.BitConverter.SingleToInt32Bits(value));
+        => unchecked((uint)BitConverter.SingleToInt32Bits(value));
 
     /// <summary>
     /// Finalizes one flush by submitting command buffers and optionally reading results back to CPU memory.

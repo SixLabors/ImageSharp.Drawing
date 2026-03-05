@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 

@@ -6,7 +6,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SkiaSharp;

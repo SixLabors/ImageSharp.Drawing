@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -162,7 +162,7 @@ public sealed class PatternBrush : Brush
 
             for (int i = 0; i < scanline.Length; i++)
             {
-                amounts[i] = NumericUtilities.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
+                amounts[i] = Math.Clamp(scanline[i] * this.Options.BlendPercentage, 0, 1F);
 
                 int patternX = (x + i) % this.pattern.Columns;
                 overlays[i] = this.pattern[patternY, patternX];

@@ -4,7 +4,6 @@
 using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -112,7 +111,7 @@ public class DrawingCanvasBatcherTests
                 return;
             }
 
-            this.LastBatch = batches[batches.Count - 1];
+            this.LastBatch = batches[^1];
             this.HasBatch = true;
             this.Batches.AddRange(batches);
         }
@@ -121,7 +120,7 @@ public class DrawingCanvasBatcherTests
             Configuration configuration,
             ICanvasFrame<TPixel> target,
             Rectangle sourceRectangle,
-            [NotNullWhen(true)] out Image<TPixel>? image)
+            [NotNullWhen(true)] out Image<TPixel> image)
             where TPixel : unmanaged, IPixel<TPixel>
         {
             image = null;

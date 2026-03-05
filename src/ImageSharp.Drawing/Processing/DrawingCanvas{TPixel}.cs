@@ -9,7 +9,6 @@ using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;

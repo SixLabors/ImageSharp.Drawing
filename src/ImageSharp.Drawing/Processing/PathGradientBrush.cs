@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -157,7 +157,7 @@ public sealed class PathGradientBrush : Brush
             Vector2 start,
             Vector2 end,
             ref Vector2 ip) =>
-            Utilities.Intersect.LineSegmentToLineSegmentIgnoreCollinear(start, end, this.Start, this.End, ref ip);
+            PolygonUtilities.LineSegmentToLineSegmentIgnoreCollinear(start, end, this.Start, this.End, ref ip);
 
         public Vector4 ColorAt(float distance)
         {
