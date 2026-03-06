@@ -330,10 +330,11 @@ internal static class DefaultRasterizer
         }
 
         int tileCount = (height + tileHeight - 1) / tileHeight;
-        if (tileCount == 1)
+        if (tileCount == 1 || edgeCount <= 64)
         {
-            // Tiny workload fast path: avoid bucket construction and worker scheduling
-            // when everything fits in a single tile.
+            // Small-geometry fast path: for paths with few edges (e.g. a stroked line
+            // producing ~6-10 edges), iterating all edges against all rows is far cheaper
+            // than the allocation overhead of band sorting + Parallel.For scheduling.
             RasterizeSingleTileDirect(
                 edgeMemory.Span[..edgeCount],
                 width,
