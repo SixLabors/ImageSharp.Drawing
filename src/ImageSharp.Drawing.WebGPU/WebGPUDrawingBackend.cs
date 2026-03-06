@@ -38,7 +38,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </remarks>
 internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
-    private const int CompositeComputeWorkgroupSize = 8;
     private const int CompositeTileWidth = 16;
     private const int CompositeTileHeight = 16;
     private const int CompositeBinTileCountX = 16;
@@ -492,12 +491,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return true;
         }
 
-        if (!this.TryCreateCoverageTextureFromFlattened<TPixel>(
+        if (!this.TryCreateEdgeBuffer<TPixel>(
                 flushContext,
                 coverageDefinitions,
                 configuration,
-                out TextureView* coverageView,
-                out CoveragePlacement[] coveragePlacements,
+                out WgpuBuffer* edgeBuffer,
+                out nuint edgeBufferSize,
+                out EdgePlacement[] edgePlacements,
+                out int totalEdgeCount,
+                out int totalCsrEntries,
+                out int totalCsrIndices,
                 out error))
         {
             return false;
@@ -516,8 +519,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 preparedBatches,
                 batchCoverageIndices,
                 commandCount,
-                coveragePlacements,
-                coverageView,
+                edgePlacements,
+                edgeBuffer,
+                edgeBufferSize,
+                totalEdgeCount,
+                totalCsrEntries,
+                totalCsrIndices,
                 out error))
         {
             return false;
@@ -561,8 +568,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         List<CompositionBatch> preparedBatches,
         int[] batchCoverageIndices,
         int commandCount,
-        CoveragePlacement[] coveragePlacements,
-        TextureView* coverageTextureView,
+        EdgePlacement[] edgePlacements,
+        WgpuBuffer* edgeBuffer,
+        nuint edgeBufferSize,
+        int totalEdgeCount,
+        int totalCsrEntries,
+        int totalCsrIndices,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -700,12 +711,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                         return false;
                     }
 
-                    CoveragePlacement coveragePlacement = coveragePlacements[coverageDefinitionIndex];
+                    EdgePlacement edgePlacement = edgePlacements[coverageDefinitionIndex];
                     Rectangle destinationRegion = command.DestinationRegion;
                     Point sourceOffset = command.SourceOffset;
 
                     int destinationX = destinationRegion.X - targetLocalBounds.X;
                     int destinationY = destinationRegion.Y - targetLocalBounds.Y;
+
+                    // Edge origin: transforms target-local pixel to edge-local space.
+                    // edge_local = pixel - edge_origin, where edge_origin = destination - sourceOffset.
+                    int edgeOriginX = destinationX - sourceOffset.X;
+                    int edgeOriginY = destinationY - sourceOffset.Y;
+
                     int minTileX = destinationX / CompositeTileWidth;
                     int minTileY = destinationY / CompositeTileHeight;
                     int maxTileX = (destinationX + destinationRegion.Width - 1) / CompositeTileWidth;
@@ -724,9 +741,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     destinationY,
                     destinationRegion.Width,
                     destinationRegion.Height,
-                    sourceOffset.X + coveragePlacement.OriginX,
-                    sourceOffset.Y + coveragePlacement.OriginY,
-                    targetLocalBounds.Width,
+                    edgePlacement.EdgeStart,
+                    edgePlacement.FillRule,
+                    edgeOriginX,
+                    edgeOriginY,
+                    edgePlacement.CsrOffsetsStart,
+                    edgePlacement.CsrBandCount,
                     brushType,
                     brushOriginX,
                     brushOriginY,
@@ -923,54 +943,184 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 &dispatchConfig,
                 dispatchConfigSize);
 
-            if (tileCommandCapacity > 0 && flushCommandCount > 0)
+            // Build CSR (Compressed Sparse Row) edge bucketing on GPU.
+            int csrEntries = Math.Max(totalCsrEntries, 1);
+            int csrIndices = Math.Max(totalCsrIndices, 1);
+            nuint csrBandCountsByteCount = checked((nuint)(csrEntries * sizeof(uint)));
+            nuint csrOffsetsByteCount = csrBandCountsByteCount;
+            nuint csrWriteCursorsByteCount = csrBandCountsByteCount;
+            nuint csrIndicesByteCount = checked((nuint)(csrIndices * sizeof(uint)));
+
+            if (!TryGetOrCreateCoverageBuffer(flushContext, "csr-band-counts", BufferUsage.Storage | BufferUsage.CopyDst, csrBandCountsByteCount, out WgpuBuffer* csrBandCountsBuffer, out error) ||
+                !TryGetOrCreateCoverageBuffer(flushContext, "csr-offsets", BufferUsage.Storage | BufferUsage.CopyDst, csrOffsetsByteCount, out WgpuBuffer* csrOffsetsBuffer, out error) ||
+                !TryGetOrCreateCoverageBuffer(flushContext, "csr-write-cursors", BufferUsage.Storage | BufferUsage.CopyDst, csrWriteCursorsByteCount, out WgpuBuffer* csrWriteCursorsBuffer, out error) ||
+                !TryGetOrCreateCoverageBuffer(flushContext, "csr-indices", BufferUsage.Storage | BufferUsage.CopyDst, csrIndicesByteCount, out WgpuBuffer* csrIndicesBuffer, out error))
             {
-                if (!this.DispatchPreparedCompositeBinning(
-                        flushContext,
-                        commandBboxesBuffer,
-                        binHeaderBuffer,
-                        binDataBuffer,
-                        binningBumpBuffer,
-                        dispatchConfigBuffer,
-                        flushCommandCount,
+                return false;
+            }
+
+            if (totalEdgeCount > 0 && totalCsrEntries > 0)
+            {
+                // CSR config uniform.
+                nuint csrConfigSize = (nuint)Unsafe.SizeOf<CsrConfig>();
+                if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                        "csr-config",
+                        BufferUsage.Uniform | BufferUsage.CopyDst,
+                        csrConfigSize,
+                        out WgpuBuffer* csrConfigBuffer,
+                        out _,
                         out error))
                 {
                     return false;
                 }
 
-                if (!this.DispatchPreparedCompositeTileCount(
+                CsrConfig csrConfig = new((uint)totalEdgeCount);
+                flushContext.Api.QueueWriteBuffer(flushContext.Queue, csrConfigBuffer, 0, &csrConfig, csrConfigSize);
+
+                // Clear band counts before the count dispatch.
+                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrBandCountsBuffer, 0, csrBandCountsByteCount);
+
+                // Dispatch CSR count: each thread processes one edge, atomicAdd to band_counts.
+                uint csrDispatchCount = DivideRoundUp(totalEdgeCount, CsrWorkgroupSize);
+                if (!this.DispatchComputePass(
                         flushContext,
-                        commandBboxesBuffer,
-                        binHeaderBuffer,
-                        binDataBuffer,
-                        tileCountsBuffer,
-                        dispatchConfigBuffer,
-                        widthInBins,
-                        heightInBins,
+                        "csr-count",
+                        CsrCountComputeShader.Code,
+                        TryCreateCsrCountBindGroupLayout,
+                        (entries) =>
+                        {
+                            entries[0] = new BindGroupEntry { Binding = 0, Buffer = edgeBuffer, Offset = 0, Size = edgeBufferSize };
+                            entries[1] = new BindGroupEntry { Binding = 1, Buffer = csrBandCountsBuffer, Offset = 0, Size = csrBandCountsByteCount };
+                            entries[2] = new BindGroupEntry { Binding = 2, Buffer = csrConfigBuffer, Offset = 0, Size = csrConfigSize };
+                            return 3;
+                        },
+                        (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, csrDispatchCount, 1, 1),
                         out error))
                 {
                     return false;
                 }
 
+                // CSR prefix sum: exclusive prefix sum over band_counts → csr_offsets.
+                // Reuse the existing tile prefix infrastructure by providing a dispatch config
+                // with tile_count = totalCsrEntries.
+                nuint csrPrefixConfigSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>();
+                if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                        "csr-prefix-dispatch-config",
+                        BufferUsage.Uniform | BufferUsage.CopyDst,
+                        csrPrefixConfigSize,
+                        out WgpuBuffer* csrPrefixDispatchConfigBuffer,
+                        out _,
+                        out error))
+                {
+                    return false;
+                }
+
+                PreparedCompositeDispatchConfig csrPrefixConfig = new(0, 0, 0, 0, (uint)totalCsrEntries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                flushContext.Api.QueueWriteBuffer(flushContext.Queue, csrPrefixDispatchConfigBuffer, 0, &csrPrefixConfig, csrPrefixConfigSize);
+
+                // Dispatch tile prefix sum using band_counts as input and csr_offsets as output.
                 if (!this.DispatchPreparedCompositeTilePrefix(
                         flushContext,
-                        tileCountsBuffer,
-                        tileStartsBuffer,
-                        dispatchConfigBuffer,
+                        csrBandCountsBuffer,
+                        csrOffsetsBuffer,
+                        csrPrefixDispatchConfigBuffer,
+                        totalCsrEntries,
                         out error))
                 {
                     return false;
                 }
 
-                if (!this.DispatchPreparedCompositeTileFill(
+                // Clear write cursors before scatter.
+                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrWriteCursorsBuffer, 0, csrWriteCursorsByteCount);
+
+                // Dispatch CSR scatter: each thread processes one edge, scatters into csr_indices.
+                if (!this.DispatchComputePass(
+                        flushContext,
+                        "csr-scatter",
+                        CsrScatterComputeShader.Code,
+                        TryCreateCsrScatterBindGroupLayout,
+                        (entries) =>
+                        {
+                            entries[0] = new BindGroupEntry { Binding = 0, Buffer = edgeBuffer, Offset = 0, Size = edgeBufferSize };
+                            entries[1] = new BindGroupEntry { Binding = 1, Buffer = csrOffsetsBuffer, Offset = 0, Size = csrOffsetsByteCount };
+                            entries[2] = new BindGroupEntry { Binding = 2, Buffer = csrWriteCursorsBuffer, Offset = 0, Size = csrWriteCursorsByteCount };
+                            entries[3] = new BindGroupEntry { Binding = 3, Buffer = csrIndicesBuffer, Offset = 0, Size = csrIndicesByteCount };
+                            entries[4] = new BindGroupEntry { Binding = 4, Buffer = csrConfigBuffer, Offset = 0, Size = csrConfigSize };
+                            return 5;
+                        },
+                        (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, csrDispatchCount, 1, 1),
+                        out error))
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                // No edges: clear CSR buffers.
+                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrBandCountsBuffer, 0, csrBandCountsByteCount);
+                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrOffsetsBuffer, 0, csrOffsetsByteCount);
+                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrIndicesBuffer, 0, csrIndicesByteCount);
+            }
+
+            if (tileCommandCapacity > 0 && flushCommandCount > 0)
+            {
+                // Pass 1: Binning + tile count share a compute pass.
+                {
+                    ComputePassDescriptor setupPassDescriptor = default;
+                    ComputePassEncoder* pass = flushContext.Api.CommandEncoderBeginComputePass(
+                        flushContext.CommandEncoder, in setupPassDescriptor);
+                    if (pass is null)
+                    {
+                        error = "Failed to begin binning/tile-count compute pass.";
+                        return false;
+                    }
+
+                    try
+                    {
+                        if (!this.DispatchPreparedCompositeBinningInto(
+                                flushContext,
+                                pass,
+                                commandBboxesBuffer,
+                                binHeaderBuffer,
+                                binDataBuffer,
+                                binningBumpBuffer,
+                                dispatchConfigBuffer,
+                                flushCommandCount,
+                                out error) ||
+                            !this.DispatchPreparedCompositeTileCountInto(
+                                flushContext,
+                                pass,
+                                commandBboxesBuffer,
+                                binHeaderBuffer,
+                                binDataBuffer,
+                                tileCountsBuffer,
+                                dispatchConfigBuffer,
+                                widthInBins,
+                                heightInBins,
+                                out error))
+                        {
+                            return false;
+                        }
+                    }
+                    finally
+                    {
+                        flushContext.Api.ComputePassEncoderEnd(pass);
+                        flushContext.Api.ComputePassEncoderRelease(pass);
+                    }
+                }
+
+                // Tile prefix sum needs a buffer clear between passes, then
+                // prefix phases + tile fill share a second compute pass.
+                if (!this.DispatchPreparedCompositeTilePrefixAndTileFill(
                         flushContext,
                         commandBboxesBuffer,
                         binHeaderBuffer,
                         binDataBuffer,
-                        tileStartsBuffer,
                         tileCountsBuffer,
+                        tileStartsBuffer,
                         tileCommandIndicesBuffer,
                         dispatchConfigBuffer,
+                        tileCount,
                         widthInBins,
                         heightInBins,
                         out error))
@@ -979,11 +1129,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 }
             }
 
-            BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[9];
+            // Fine composite dispatch with CSR buffers.
+            BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[11];
             bindGroupEntries[0] = new BindGroupEntry
             {
                 Binding = 0,
-                TextureView = coverageTextureView
+                Buffer = edgeBuffer,
+                Offset = 0,
+                Size = edgeBufferSize
             };
             bindGroupEntries[1] = new BindGroupEntry
             {
@@ -1035,11 +1188,25 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 Offset = 0,
                 Size = dispatchConfigSize
             };
+            bindGroupEntries[9] = new BindGroupEntry
+            {
+                Binding = 9,
+                Buffer = csrOffsetsBuffer,
+                Offset = 0,
+                Size = csrOffsetsByteCount
+            };
+            bindGroupEntries[10] = new BindGroupEntry
+            {
+                Binding = 10,
+                Buffer = csrIndicesBuffer,
+                Offset = 0,
+                Size = csrIndicesByteCount
+            };
 
             BindGroupDescriptor bindGroupDescriptor = new()
             {
                 Layout = bindGroupLayout,
-                EntryCount = 9,
+                EntryCount = 11,
                 Entries = bindGroupEntries
             };
 
@@ -1065,9 +1232,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
                 flushContext.Api.ComputePassEncoderDispatchWorkgroups(
                     passEncoder,
-                    DivideRoundUp(CompositeTileWidth, CompositeComputeWorkgroupSize),
-                    DivideRoundUp(CompositeTileHeight, CompositeComputeWorkgroupSize) * (uint)tileCountY,
-                    (uint)tileCountX);
+                    (uint)tileCountX,
+                    (uint)tileCountY,
+                    1);
             }
             finally
             {
@@ -1158,21 +1325,113 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         WgpuBuffer* tileCountsBuffer,
         WgpuBuffer* tileStartsBuffer,
         WgpuBuffer* dispatchConfigBuffer,
+        int tileCount,
         out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "prepared-composite-tile-prefix",
-            PreparedCompositeTilePrefixComputeShader.Code,
-            TryCreatePreparedCompositeTilePrefixBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
-                return 3;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1),
-            out error);
+    {
+        const int tilesPerWorkgroup = PreparedCompositeTilePrefixLocalComputeShader.TilesPerWorkgroup;
+        int blockCount = checked((int)DivideRoundUp(tileCount, tilesPerWorkgroup));
+
+        // Allocate block_sums buffer for inter-workgroup prefix propagation.
+        nuint blockSumsSize = checked((nuint)(Math.Max(blockCount, 1) * sizeof(uint)));
+        if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                "prepared-composite-tile-prefix-block-sums",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                blockSumsSize,
+                out WgpuBuffer* blockSumsBuffer,
+                out _,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.CommandEncoderClearBuffer(
+            flushContext.CommandEncoder,
+            blockSumsBuffer,
+            0,
+            blockSumsSize);
+
+        // Phase 1: Local prefix sum per workgroup + store block totals.
+        if (!this.DispatchComputePass(
+                flushContext,
+                "prepared-composite-tile-prefix-local",
+                PreparedCompositeTilePrefixLocalComputeShader.Code,
+                TryCreatePreparedCompositeTilePrefixLocalBindGroupLayout,
+                (entries) =>
+                {
+                    entries[0] = new BindGroupEntry { Binding = 0, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
+                    entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
+                    entries[2] = new BindGroupEntry { Binding = 2, Buffer = blockSumsBuffer, Offset = 0, Size = blockSumsSize };
+                    entries[3] = new BindGroupEntry { Binding = 3, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                    return 4;
+                },
+                (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)blockCount, 1, 1),
+                out error))
+        {
+            return false;
+        }
+
+        if (blockCount <= 1)
+        {
+            // Single workgroup — no cross-block propagation needed.
+            return true;
+        }
+
+        // Phase 2: Prefix sum over block_sums (single workgroup handles all blocks).
+        uint blockCountValue = (uint)blockCount;
+        nuint prefixConfigSize = sizeof(uint);
+
+        // We need a small uniform buffer for the block count.
+        if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                "prepared-composite-tile-prefix-block-config",
+                BufferUsage.Uniform | BufferUsage.CopyDst,
+                prefixConfigSize,
+                out WgpuBuffer* prefixConfigBuffer,
+                out _,
+                out error))
+        {
+            return false;
+        }
+
+        flushContext.Api.QueueWriteBuffer(flushContext.Queue, prefixConfigBuffer, 0, &blockCountValue, prefixConfigSize);
+
+        if (!this.DispatchComputePass(
+                flushContext,
+                "prepared-composite-tile-prefix-block-scan",
+                PreparedCompositeTilePrefixBlockScanComputeShader.Code,
+                TryCreatePreparedCompositeTilePrefixBlockScanBindGroupLayout,
+                (entries) =>
+                {
+                    entries[0] = new BindGroupEntry { Binding = 0, Buffer = blockSumsBuffer, Offset = 0, Size = blockSumsSize };
+                    entries[1] = new BindGroupEntry { Binding = 1, Buffer = prefixConfigBuffer, Offset = 0, Size = prefixConfigSize };
+                    return 2;
+                },
+                (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1),
+                out error))
+        {
+            return false;
+        }
+
+        // Phase 3: Propagate block prefixes to tile_starts.
+        if (!this.DispatchComputePass(
+                flushContext,
+                "prepared-composite-tile-prefix-propagate",
+                PreparedCompositeTilePrefixPropagateComputeShader.Code,
+                TryCreatePreparedCompositeTilePrefixPropagateBindGroupLayout,
+                (entries) =>
+                {
+                    entries[0] = new BindGroupEntry { Binding = 0, Buffer = blockSumsBuffer, Offset = 0, Size = blockSumsSize };
+                    entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
+                    entries[2] = new BindGroupEntry { Binding = 2, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                    return 3;
+                },
+                (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)blockCount, 1, 1),
+                out error))
+        {
+            return false;
+        }
+
+        return true;
+    }
 
     private bool DispatchPreparedCompositeTileFill(
         WebGPUFlushContext flushContext,
@@ -1212,6 +1471,251 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 }
             },
             out error);
+
+    private bool DispatchPreparedCompositeBinningInto(
+        WebGPUFlushContext flushContext,
+        ComputePassEncoder* passEncoder,
+        WgpuBuffer* commandBboxesBuffer,
+        WgpuBuffer* binHeaderBuffer,
+        WgpuBuffer* binDataBuffer,
+        WgpuBuffer* binningBumpBuffer,
+        WgpuBuffer* dispatchConfigBuffer,
+        int commandCount,
+        out string? error)
+        => this.DispatchIntoComputePass(
+            flushContext,
+            passEncoder,
+            "prepared-composite-binning",
+            PreparedCompositeBinningComputeShader.Code,
+            TryCreatePreparedCompositeBinningBindGroupLayout,
+            (entries) =>
+            {
+                entries[0] = new BindGroupEntry { Binding = 0, Buffer = commandBboxesBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[1] = new BindGroupEntry { Binding = 1, Buffer = binHeaderBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[2] = new BindGroupEntry { Binding = 2, Buffer = binDataBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[3] = new BindGroupEntry { Binding = 3, Buffer = binningBumpBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[4] = new BindGroupEntry { Binding = 4, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                return 5;
+            },
+            (pass) =>
+            {
+                uint workgroupCount = DivideRoundUp(commandCount, CompositeBinningWorkgroupSize);
+                if (workgroupCount > 0)
+                {
+                    flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, workgroupCount, 1, 1);
+                }
+            },
+            out error);
+
+    private bool DispatchPreparedCompositeTileCountInto(
+        WebGPUFlushContext flushContext,
+        ComputePassEncoder* passEncoder,
+        WgpuBuffer* commandBboxesBuffer,
+        WgpuBuffer* binHeaderBuffer,
+        WgpuBuffer* binDataBuffer,
+        WgpuBuffer* tileCountsBuffer,
+        WgpuBuffer* dispatchConfigBuffer,
+        int widthInBins,
+        int heightInBins,
+        out string? error)
+        => this.DispatchIntoComputePass(
+            flushContext,
+            passEncoder,
+            "prepared-composite-tile-count",
+            PreparedCompositeTileCountComputeShader.Code,
+            TryCreatePreparedCompositeTileCountBindGroupLayout,
+            (entries) =>
+            {
+                entries[0] = new BindGroupEntry { Binding = 0, Buffer = commandBboxesBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[1] = new BindGroupEntry { Binding = 1, Buffer = binHeaderBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[2] = new BindGroupEntry { Binding = 2, Buffer = binDataBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[3] = new BindGroupEntry { Binding = 3, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
+                entries[4] = new BindGroupEntry { Binding = 4, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                return 5;
+            },
+            (pass) =>
+            {
+                uint workgroupCountX = (uint)widthInBins;
+                uint workgroupCountY = (uint)heightInBins;
+                if (workgroupCountX > 0 && workgroupCountY > 0)
+                {
+                    flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, workgroupCountX, workgroupCountY, 1);
+                }
+            },
+            out error);
+
+    private bool DispatchPreparedCompositeTilePrefixAndTileFill(
+        WebGPUFlushContext flushContext,
+        WgpuBuffer* commandBboxesBuffer,
+        WgpuBuffer* binHeaderBuffer,
+        WgpuBuffer* binDataBuffer,
+        WgpuBuffer* tileCountsBuffer,
+        WgpuBuffer* tileStartsBuffer,
+        WgpuBuffer* tileCommandIndicesBuffer,
+        WgpuBuffer* dispatchConfigBuffer,
+        int tileCount,
+        int widthInBins,
+        int heightInBins,
+        out string? error)
+    {
+        const int tilesPerWorkgroup = PreparedCompositeTilePrefixLocalComputeShader.TilesPerWorkgroup;
+        int blockCount = checked((int)DivideRoundUp(tileCount, tilesPerWorkgroup));
+
+        // Allocate block_sums buffer for inter-workgroup prefix propagation.
+        nuint blockSumsSize = checked((nuint)(Math.Max(blockCount, 1) * sizeof(uint)));
+        if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                "prepared-composite-tile-prefix-block-sums",
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                blockSumsSize,
+                out WgpuBuffer* blockSumsBuffer,
+                out _,
+                out error))
+        {
+            return false;
+        }
+
+        // ClearBuffer must happen outside a compute pass.
+        flushContext.Api.CommandEncoderClearBuffer(
+            flushContext.CommandEncoder,
+            blockSumsBuffer,
+            0,
+            blockSumsSize);
+
+        // Prepare prefix config buffer (needed for multi-block case).
+        WgpuBuffer* prefixConfigBuffer = null;
+        nuint prefixConfigSize = sizeof(uint);
+        if (blockCount > 1)
+        {
+            uint blockCountValue = (uint)blockCount;
+            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                    "prepared-composite-tile-prefix-block-config",
+                    BufferUsage.Uniform | BufferUsage.CopyDst,
+                    prefixConfigSize,
+                    out prefixConfigBuffer,
+                    out _,
+                    out error))
+            {
+                return false;
+            }
+
+            flushContext.Api.QueueWriteBuffer(flushContext.Queue, prefixConfigBuffer, 0, &blockCountValue, prefixConfigSize);
+        }
+
+        // All prefix phases + tile fill share a single compute pass.
+        ComputePassDescriptor prefixPassDescriptor = default;
+        ComputePassEncoder* pass = flushContext.Api.CommandEncoderBeginComputePass(
+            flushContext.CommandEncoder, in prefixPassDescriptor);
+        if (pass is null)
+        {
+            error = "Failed to begin prefix/tile-fill compute pass.";
+            return false;
+        }
+
+        try
+        {
+            // Phase 1: Local prefix sum per workgroup + store block totals.
+            if (!this.DispatchIntoComputePass(
+                    flushContext,
+                    pass,
+                    "prepared-composite-tile-prefix-local",
+                    PreparedCompositeTilePrefixLocalComputeShader.Code,
+                    TryCreatePreparedCompositeTilePrefixLocalBindGroupLayout,
+                    (entries) =>
+                    {
+                        entries[0] = new BindGroupEntry { Binding = 0, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[2] = new BindGroupEntry { Binding = 2, Buffer = blockSumsBuffer, Offset = 0, Size = blockSumsSize };
+                        entries[3] = new BindGroupEntry { Binding = 3, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                        return 4;
+                    },
+                    (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, (uint)blockCount, 1, 1),
+                    out error))
+            {
+                return false;
+            }
+
+            if (blockCount > 1)
+            {
+                // Phase 2: Prefix sum over block_sums.
+                if (!this.DispatchIntoComputePass(
+                        flushContext,
+                        pass,
+                        "prepared-composite-tile-prefix-block-scan",
+                        PreparedCompositeTilePrefixBlockScanComputeShader.Code,
+                        TryCreatePreparedCompositeTilePrefixBlockScanBindGroupLayout,
+                        (entries) =>
+                        {
+                            entries[0] = new BindGroupEntry { Binding = 0, Buffer = blockSumsBuffer, Offset = 0, Size = blockSumsSize };
+                            entries[1] = new BindGroupEntry { Binding = 1, Buffer = prefixConfigBuffer, Offset = 0, Size = prefixConfigSize };
+                            return 2;
+                        },
+                        (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, 1, 1, 1),
+                        out error))
+                {
+                    return false;
+                }
+
+                // Phase 3: Propagate block prefixes to tile_starts.
+                if (!this.DispatchIntoComputePass(
+                        flushContext,
+                        pass,
+                        "prepared-composite-tile-prefix-propagate",
+                        PreparedCompositeTilePrefixPropagateComputeShader.Code,
+                        TryCreatePreparedCompositeTilePrefixPropagateBindGroupLayout,
+                        (entries) =>
+                        {
+                            entries[0] = new BindGroupEntry { Binding = 0, Buffer = blockSumsBuffer, Offset = 0, Size = blockSumsSize };
+                            entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
+                            entries[2] = new BindGroupEntry { Binding = 2, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                            return 3;
+                        },
+                        (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, (uint)blockCount, 1, 1),
+                        out error))
+                {
+                    return false;
+                }
+            }
+
+            // Tile fill dispatched into the same pass.
+            if (!this.DispatchIntoComputePass(
+                    flushContext,
+                    pass,
+                    "prepared-composite-tile-fill",
+                    PreparedCompositeTileFillComputeShader.Code,
+                    TryCreatePreparedCompositeTileFillBindGroupLayout,
+                    (entries) =>
+                    {
+                        entries[0] = new BindGroupEntry { Binding = 0, Buffer = commandBboxesBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[1] = new BindGroupEntry { Binding = 1, Buffer = binHeaderBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[2] = new BindGroupEntry { Binding = 2, Buffer = binDataBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[3] = new BindGroupEntry { Binding = 3, Buffer = tileStartsBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[4] = new BindGroupEntry { Binding = 4, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[5] = new BindGroupEntry { Binding = 5, Buffer = tileCommandIndicesBuffer, Offset = 0, Size = nuint.MaxValue };
+                        entries[6] = new BindGroupEntry { Binding = 6, Buffer = dispatchConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>() };
+                        return 7;
+                    },
+                    (p) =>
+                    {
+                        uint workgroupCountX = (uint)widthInBins;
+                        uint workgroupCountY = (uint)heightInBins;
+                        if (workgroupCountX > 0 && workgroupCountY > 0)
+                        {
+                            flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, workgroupCountX, workgroupCountY, 1);
+                        }
+                    },
+                    out error))
+            {
+                return false;
+            }
+
+            return true;
+        }
+        finally
+        {
+            flushContext.Api.ComputePassEncoderEnd(pass);
+            flushContext.Api.ComputePassEncoderRelease(pass);
+        }
+    }
 
     private static bool TryGetOrCreateImageTextureView<TPixel>(
         WebGPUFlushContext flushContext,
@@ -1291,16 +1795,16 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[9];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[11];
         entries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
             Visibility = ShaderStage.Compute,
-            Texture = new TextureBindingLayout
+            Buffer = new BufferBindingLayout
             {
-                SampleType = TextureSampleType.UnfilterableFloat,
-                ViewDimension = TextureViewDimension.Dimension2D,
-                Multisampled = false
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
             }
         };
         entries[1] = new BindGroupLayoutEntry
@@ -1391,10 +1895,32 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 MinBindingSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
             }
         };
+        entries[9] = new BindGroupLayoutEntry
+        {
+            Binding = 9,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[10] = new BindGroupLayoutEntry
+        {
+            Binding = 10,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 9,
+            EntryCount = 11,
             Entries = entries
         };
 
@@ -1569,7 +2095,123 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         return true;
     }
 
-    private static bool TryCreatePreparedCompositeTilePrefixBindGroupLayout(
+    private static bool TryCreatePreparedCompositeTilePrefixLocalBindGroupLayout(
+        WebGPU api,
+        Device* device,
+        out BindGroupLayout* layout,
+        out string? error)
+    {
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[4];
+        entries[0] = new BindGroupLayoutEntry
+        {
+            Binding = 0,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[1] = new BindGroupLayoutEntry
+        {
+            Binding = 1,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[2] = new BindGroupLayoutEntry
+        {
+            Binding = 2,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[3] = new BindGroupLayoutEntry
+        {
+            Binding = 3,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Uniform,
+                HasDynamicOffset = false,
+                MinBindingSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>()
+            }
+        };
+
+        BindGroupLayoutDescriptor descriptor = new()
+        {
+            EntryCount = 4,
+            Entries = entries
+        };
+
+        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
+        if (layout is null)
+        {
+            error = "Failed to create prepared composite tile-prefix-local bind group layout.";
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryCreatePreparedCompositeTilePrefixBlockScanBindGroupLayout(
+        WebGPU api,
+        Device* device,
+        out BindGroupLayout* layout,
+        out string? error)
+    {
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
+        entries[0] = new BindGroupLayoutEntry
+        {
+            Binding = 0,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[1] = new BindGroupLayoutEntry
+        {
+            Binding = 1,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Uniform,
+                HasDynamicOffset = false,
+                MinBindingSize = sizeof(uint)
+            }
+        };
+
+        BindGroupLayoutDescriptor descriptor = new()
+        {
+            EntryCount = 2,
+            Entries = entries
+        };
+
+        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
+        if (layout is null)
+        {
+            error = "Failed to create prepared composite tile-prefix-block-scan bind group layout.";
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryCreatePreparedCompositeTilePrefixPropagateBindGroupLayout(
         WebGPU api,
         Device* device,
         out BindGroupLayout* layout,
@@ -1619,7 +2261,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
         if (layout is null)
         {
-            error = "Failed to create prepared composite tile-prefix bind group layout.";
+            error = "Failed to create prepared composite tile-prefix-propagate bind group layout.";
             return false;
         }
 
@@ -2150,23 +2792,26 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 (int)this.samplingOrigin);
     }
 
-    private readonly struct CoveragePlacement
+    private readonly struct EdgePlacement
     {
-        public CoveragePlacement(int originX, int originY, int width, int height)
+        public EdgePlacement(uint edgeStart, uint edgeCount, uint fillRule, uint csrOffsetsStart, uint csrBandCount)
         {
-            this.OriginX = originX;
-            this.OriginY = originY;
-            this.Width = width;
-            this.Height = height;
+            this.EdgeStart = edgeStart;
+            this.EdgeCount = edgeCount;
+            this.FillRule = fillRule;
+            this.CsrOffsetsStart = csrOffsetsStart;
+            this.CsrBandCount = csrBandCount;
         }
 
-        public int OriginX { get; }
+        public uint EdgeStart { get; }
 
-        public int OriginY { get; }
+        public uint EdgeCount { get; }
 
-        public int Width { get; }
+        public uint FillRule { get; }
 
-        public int Height { get; }
+        public uint CsrOffsetsStart { get; }
+
+        public uint CsrBandCount { get; }
     }
 
     /// <summary>
@@ -2283,6 +2928,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     /// <summary>
     /// Prepared composite command parameters consumed by <see cref="PreparedCompositeFineComputeShader"/>.
+    /// Layout matches the WGSL <c>Params</c> struct exactly (24 u32 fields = 96 bytes).
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct PreparedCompositeParameters
@@ -2291,9 +2937,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         public readonly uint DestinationY;
         public readonly uint DestinationWidth;
         public readonly uint DestinationHeight;
-        public readonly uint CoverageOffsetX;
-        public readonly uint CoverageOffsetY;
-        public readonly uint TargetWidth;
+        public readonly uint EdgeStart;
+        public readonly uint FillRuleValue;
+        public readonly uint EdgeOriginX;
+        public readonly uint EdgeOriginY;
+        public readonly uint CsrOffsetsStart;
+        public readonly uint CsrBandCount;
         public readonly uint BrushType;
         public readonly uint BrushOriginX;
         public readonly uint BrushOriginY;
@@ -2314,9 +2963,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             int destinationY,
             int destinationWidth,
             int destinationHeight,
-            int coverageOffsetX,
-            int coverageOffsetY,
-            int targetWidth,
+            uint edgeStart,
+            uint fillRuleValue,
+            int edgeOriginX,
+            int edgeOriginY,
+            uint csrOffsetsStart,
+            uint csrBandCount,
             uint brushType,
             int brushOriginX,
             int brushOriginY,
@@ -2333,9 +2985,12 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.DestinationY = (uint)destinationY;
             this.DestinationWidth = (uint)destinationWidth;
             this.DestinationHeight = (uint)destinationHeight;
-            this.CoverageOffsetX = (uint)coverageOffsetX;
-            this.CoverageOffsetY = (uint)coverageOffsetY;
-            this.TargetWidth = (uint)targetWidth;
+            this.EdgeStart = edgeStart;
+            this.FillRuleValue = fillRuleValue;
+            this.EdgeOriginX = unchecked((uint)edgeOriginX);
+            this.EdgeOriginY = unchecked((uint)edgeOriginY);
+            this.CsrOffsetsStart = csrOffsetsStart;
+            this.CsrBandCount = csrBandCount;
             this.BrushType = brushType;
             this.BrushOriginX = (uint)brushOriginX;
             this.BrushOriginY = (uint)brushOriginY;

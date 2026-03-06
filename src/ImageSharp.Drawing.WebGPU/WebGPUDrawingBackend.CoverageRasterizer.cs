@@ -3,7 +3,6 @@
 
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.Memory;
@@ -14,21 +13,15 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 internal sealed unsafe partial class WebGPUDrawingBackend
 {
-    private const int TileWidth = 16;
     private const int TileHeight = 16;
-    private const float TileScale = 1F / TileWidth;
-    private const int LineStrideBytes = 24;
-    private const int PathStrideBytes = 32;
-    private const int TileStrideBytes = 8;
-    private const int SegmentCountStrideBytes = 8;
-    private const int SegmentStrideBytes = 24;
-    private const int SegmentAllocWorkgroupSize = 256;
+    private const int EdgeStrideBytes = 32;
+    private const int FixedShift = 8;
+    private const int FixedOne = 1 << FixedShift;
+    private const int CsrWorkgroupSize = 256;
 
     private readonly Dictionary<CoverageDefinitionIdentity, CachedCoverageGeometry> coverageGeometryCache = [];
     private IMemoryOwner<byte>? cachedCoverageLineUpload;
     private int cachedCoverageLineLength;
-    private IMemoryOwner<byte>? cachedCoveragePathUpload;
-    private int cachedCoveragePathLength;
 
     /// <summary>
     /// Writes bind-group entries and returns the number of populated entries.
@@ -41,45 +34,40 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     private delegate void ComputePassDispatch(ComputePassEncoder* pass);
 
     /// <summary>
-    /// Builds and dispatches the full coverage rasterization pipeline for flattened paths.
+    /// Builds flattened fixed-point edge geometry for all coverage definitions and uploads to a GPU buffer.
+    /// Each edge is in 24.8 fixed-point format with min_row/max_row and CSR metadata.
     /// </summary>
-    /// <typeparam name="TPixel">The canvas pixel type.</typeparam>
-    /// <param name="flushContext">The active flush context.</param>
-    /// <param name="definitions">Coverage definitions participating in the current flush.</param>
-    /// <param name="configuration">The current processing configuration.</param>
-    /// <param name="coverageView">Receives the output coverage texture view.</param>
-    /// <param name="coveragePlacements">Receives per-definition atlas placement information.</param>
-    /// <param name="error">Receives an error message when the operation fails.</param>
-    /// <returns><see langword="true"/> when rasterization setup and dispatch succeed; otherwise <see langword="false"/>.</returns>
-    private bool TryCreateCoverageTextureFromFlattened<TPixel>(
+    private bool TryCreateEdgeBuffer<TPixel>(
         WebGPUFlushContext flushContext,
         List<CompositionCoverageDefinition> definitions,
         Configuration configuration,
-        out TextureView* coverageView,
-        out CoveragePlacement[] coveragePlacements,
+        out WgpuBuffer* edgeBuffer,
+        out nuint edgeBufferSize,
+        out EdgePlacement[] edgePlacements,
+        out int totalEdgeCount,
+        out int totalCsrEntries,
+        out int totalCsrIndices,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        coverageView = null;
-        coveragePlacements = [];
+        edgeBuffer = null;
+        edgeBufferSize = 0;
+        edgePlacements = [];
+        totalEdgeCount = 0;
+        totalCsrEntries = 0;
+        totalCsrIndices = 0;
         error = null;
         if (definitions.Count == 0)
         {
             return true;
         }
 
-        CoveragePathBuild[] pathBuilds = new CoveragePathBuild[definitions.Count];
-        coveragePlacements = new CoveragePlacement[definitions.Count];
-        int totalLineCount = 0;
-        int totalTileCount = 0;
-        ulong totalEstimatedSegments = 0;
-        int atlasWidthInTiles = 0;
-        int atlasHeightInTiles = 0;
-        int currentTileY = 0;
-        uint? fillRuleValue = null;
-        uint? aliasedValue = null;
+        edgePlacements = new EdgePlacement[definitions.Count];
+        int runningEdgeStart = 0;
+        int runningCsrOffset = 0;
 
-        // First pass: validate inputs, resolve/build cached geometry, and pack atlas placements.
+        // First pass: resolve/build cached geometry and compute edge placements.
+        CachedCoverageGeometry?[] geometries = new CachedCoverageGeometry?[definitions.Count];
         for (int i = 0; i < definitions.Count; i++)
         {
             CompositionCoverageDefinition definition = definitions[i];
@@ -91,62 +79,26 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             }
 
             uint fillRule = definition.RasterizerOptions.IntersectionRule == IntersectionRule.EvenOdd ? 1u : 0u;
-            uint isAliased = definition.RasterizerOptions.RasterizationMode == RasterizationMode.Aliased ? 1u : 0u;
-            if ((fillRuleValue.HasValue && fillRuleValue.Value != fillRule) ||
-                (aliasedValue.HasValue && aliasedValue.Value != isAliased))
-            {
-                error = "Mixed rasterization modes are not supported in one flush coverage pass.";
-                return false;
-            }
-
-            fillRuleValue ??= fillRule;
-            aliasedValue ??= isAliased;
-
-            int widthInTiles = (int)DivideRoundUp(interest.Width, TileWidth);
-            int heightInTiles = (int)DivideRoundUp(interest.Height, TileHeight);
-            int originTileX = 0;
-            int originTileY = currentTileY;
-            int originX = originTileX * TileWidth;
-            int originY = originTileY * TileHeight;
+            int bandCount = (int)DivideRoundUp(interest.Height, TileHeight);
 
             CoverageDefinitionIdentity identity = new(definition);
             if (!this.coverageGeometryCache.TryGetValue(identity, out CachedCoverageGeometry? geometry))
             {
-                IMemoryOwner<byte>? lineOwner = null;
-                try
+                if (!TryBuildFixedPointEdges(
+                        definition.Path,
+                        in interest,
+                        definition.RasterizerOptions.SamplingOrigin,
+                        configuration.MemoryAllocator,
+                        out IMemoryOwner<byte>? edgeOwner,
+                        out int edgeCount,
+                        out int bandOverlaps,
+                        out error))
                 {
-                    if (!TryBuildLineBuffer(
-                            definition.Path,
-                            in interest,
-                            definition.RasterizerOptions.SamplingOrigin,
-                            configuration.MemoryAllocator,
-                            out lineOwner,
-                            out int lineCount,
-                            out _,
-                            out _,
-                            out _,
-                            out _,
-                            out uint estimatedSegments,
-                            out error))
-                    {
-                        return false;
-                    }
+                    return false;
+                }
 
-                    geometry = new CachedCoverageGeometry(
-                        lineOwner,
-                        lineCount,
-                        estimatedSegments,
-                        widthInTiles,
-                        heightInTiles,
-                        interest.Width,
-                        interest.Height);
-                    lineOwner = null;
-                    this.coverageGeometryCache[identity] = geometry;
-                }
-                finally
-                {
-                    lineOwner?.Dispose();
-                }
+                geometry = new CachedCoverageGeometry(edgeOwner, edgeCount, bandCount, bandOverlaps);
+                this.coverageGeometryCache[identity] = geometry;
             }
 
             if (geometry is null)
@@ -155,78 +107,82 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 return false;
             }
 
-            pathBuilds[i] = new CoveragePathBuild(
-                geometry,
-                originTileX,
-                originTileY,
-                originX,
-                originY);
-            coveragePlacements[i] = new CoveragePlacement(originX, originY, interest.Width, interest.Height);
+            geometries[i] = geometry;
 
-            totalLineCount = checked(totalLineCount + geometry.LineCount);
-            totalEstimatedSegments += geometry.EstimatedSegments;
-            atlasWidthInTiles = Math.Max(atlasWidthInTiles, geometry.WidthInTiles);
-            atlasHeightInTiles = Math.Max(atlasHeightInTiles, originTileY + geometry.HeightInTiles);
-            currentTileY += geometry.HeightInTiles;
+            // bandCount + 1 entries in CSR offsets (the +1 is the sentinel for the last band's end).
+            int csrEntriesForDef = bandCount + 1;
+            edgePlacements[i] = new EdgePlacement(
+                (uint)runningEdgeStart,
+                (uint)geometry.EdgeCount,
+                fillRule,
+                (uint)runningCsrOffset,
+                (uint)bandCount);
+
+            runningEdgeStart += geometry.EdgeCount;
+            runningCsrOffset += csrEntriesForDef;
+            totalCsrIndices += geometry.TotalBandOverlaps;
         }
 
-        totalTileCount = checked(atlasWidthInTiles * atlasHeightInTiles);
+        totalEdgeCount = runningEdgeStart;
+        totalCsrEntries = runningCsrOffset;
 
-        int atlasWidth = Math.Max(1, atlasWidthInTiles * TileWidth);
-        int atlasHeight = Math.Max(1, atlasHeightInTiles * TileHeight);
-        if (!TryCreateCoverageTexture(
-                flushContext,
-                atlasWidth,
-                atlasHeight,
-                configuration.MemoryAllocator,
-                totalLineCount == 0,
-                out Texture* coverageTexture,
-                out coverageView,
-                out error))
+        if (totalEdgeCount == 0)
         {
-            return false;
-        }
+            // Provide a minimal buffer so the bind group is valid.
+            edgeBufferSize = EdgeStrideBytes;
+            if (!TryGetOrCreateCoverageBuffer(
+                    flushContext,
+                    "coverage-aggregated-edges",
+                    BufferUsage.Storage | BufferUsage.CopyDst,
+                    edgeBufferSize,
+                    out edgeBuffer,
+                    out error))
+            {
+                return false;
+            }
 
-        flushContext.TrackTexture(coverageTexture);
-        flushContext.TrackTextureView(coverageView);
-        if (totalLineCount == 0)
-        {
             return true;
         }
 
-        // Build a merged line buffer with coordinates translated into atlas space.
-        int lineBufferBytes = checked(totalLineCount * LineStrideBytes);
-        using IMemoryOwner<byte> lineUploadOwner = configuration.MemoryAllocator.Allocate<byte>(lineBufferBytes);
-        Span<byte> lineUpload = lineUploadOwner.Memory.Span[..lineBufferBytes];
-        int mergedLineIndex = 0;
-        for (int pathIndex = 0; pathIndex < pathBuilds.Length; pathIndex++)
+        // Build merged edge buffer with CSR metadata.
+        int edgeBufferBytes = checked(totalEdgeCount * EdgeStrideBytes);
+        edgeBufferSize = (nuint)edgeBufferBytes;
+        using IMemoryOwner<byte> edgeUploadOwner = configuration.MemoryAllocator.Allocate<byte>(edgeBufferBytes);
+        Span<byte> edgeUpload = edgeUploadOwner.Memory.Span[..edgeBufferBytes];
+
+        int mergedEdgeIndex = 0;
+        for (int defIndex = 0; defIndex < geometries.Length; defIndex++)
         {
-            CoveragePathBuild build = pathBuilds[pathIndex];
-            CachedCoverageGeometry geometry = build.Geometry;
-            if (geometry.LineCount == 0 || geometry.LineOwner is null)
+            CachedCoverageGeometry? geometry = geometries[defIndex];
+            if (geometry is null || geometry.EdgeCount == 0 || geometry.EdgeOwner is null)
             {
                 continue;
             }
 
-            ReadOnlySpan<byte> sourceLines = geometry.LineOwner.Memory.Span[..(geometry.LineCount * LineStrideBytes)];
-            for (int lineIndex = 0; lineIndex < geometry.LineCount; lineIndex++)
+            EdgePlacement placement = edgePlacements[defIndex];
+            ReadOnlySpan<byte> sourceEdges = geometry.EdgeOwner.Memory.Span[..(geometry.EdgeCount * EdgeStrideBytes)];
+
+            for (int edgeIndex = 0; edgeIndex < geometry.EdgeCount; edgeIndex++)
             {
-                int sourceOffset = lineIndex * LineStrideBytes;
-                float x0 = ReadFloat(sourceLines, sourceOffset + 8) + build.OriginX;
-                float y0 = ReadFloat(sourceLines, sourceOffset + 12) + build.OriginY;
-                float x1 = ReadFloat(sourceLines, sourceOffset + 16) + build.OriginX;
-                float y1 = ReadFloat(sourceLines, sourceOffset + 20) + build.OriginY;
-                WriteLine(lineUpload, mergedLineIndex, (uint)pathIndex, x0, y0, x1, y1);
-                mergedLineIndex++;
+                int srcOffset = edgeIndex * EdgeStrideBytes;
+                int dstOffset = mergedEdgeIndex * EdgeStrideBytes;
+
+                // Copy x0, y0, x1, y1, min_row, max_row (24 bytes).
+                sourceEdges.Slice(srcOffset, 24).CopyTo(edgeUpload.Slice(dstOffset, 24));
+
+                // Set csr_band_offset and definition_edge_start.
+                BinaryPrimitives.WriteUInt32LittleEndian(edgeUpload.Slice(dstOffset + 24, 4), placement.CsrOffsetsStart);
+                BinaryPrimitives.WriteUInt32LittleEndian(edgeUpload.Slice(dstOffset + 28, 4), placement.EdgeStart);
+                mergedEdgeIndex++;
             }
         }
 
         if (!TryGetOrCreateCoverageBuffer(
                 flushContext,
-                "coverage-aggregated-lines",
+                "coverage-aggregated-edges",
                 BufferUsage.Storage | BufferUsage.CopyDst,
-                (nuint)lineBufferBytes,
-                out WgpuBuffer* lineBuffer,
+                (nuint)edgeBufferBytes,
+                out edgeBuffer,
                 out error))
         {
             return false;
@@ -234,254 +190,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
         if (!this.TryUploadDirtyCoverageRange(
                 flushContext,
-                lineBuffer,
-                lineUpload,
+                edgeBuffer,
+                edgeUpload,
                 ref this.cachedCoverageLineUpload,
                 ref this.cachedCoverageLineLength,
                 out error))
-        {
-            return false;
-        }
-
-        // Build per-path metadata that maps each path into its tile span inside the atlas.
-        int pathBufferBytes = checked(pathBuilds.Length * PathStrideBytes);
-        using IMemoryOwner<byte> pathUploadOwner = configuration.MemoryAllocator.Allocate<byte>(pathBufferBytes);
-        Span<byte> pathUpload = pathUploadOwner.Memory.Span[..pathBufferBytes];
-        int tileBase = 0;
-        for (int i = 0; i < pathBuilds.Length; i++)
-        {
-            CoveragePathBuild build = pathBuilds[i];
-            WritePath(
-                pathUpload.Slice(i * PathStrideBytes, PathStrideBytes),
-                (uint)build.OriginTileX,
-                (uint)build.OriginTileY,
-                (uint)(build.OriginTileX + atlasWidthInTiles),
-                (uint)(build.OriginTileY + build.Geometry.HeightInTiles),
-                (uint)tileBase);
-            tileBase = checked(tileBase + (atlasWidthInTiles * build.Geometry.HeightInTiles));
-        }
-
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-paths",
-                BufferUsage.Storage | BufferUsage.CopyDst,
-                (nuint)pathBufferBytes,
-                out WgpuBuffer* pathBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        if (!this.TryUploadDirtyCoverageRange(
-                flushContext,
-                pathBuffer,
-                pathUpload,
-                ref this.cachedCoveragePathUpload,
-                ref this.cachedCoveragePathLength,
-                out error))
-        {
-            return false;
-        }
-
-        int tileBufferBytes = checked(totalTileCount * TileStrideBytes);
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-tiles",
-                BufferUsage.Storage | BufferUsage.CopyDst,
-                (nuint)tileBufferBytes,
-                out WgpuBuffer* tileBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.CommandEncoderClearBuffer(
-            flushContext.CommandEncoder,
-            tileBuffer,
-            0,
-            (nuint)tileBufferBytes);
-
-        int tileCountsBytes = checked(totalTileCount * sizeof(uint));
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-tile-counts",
-                BufferUsage.Storage | BufferUsage.CopyDst,
-                (nuint)tileCountsBytes,
-                out WgpuBuffer* tileCountsBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.CommandEncoderClearBuffer(
-            flushContext.CommandEncoder,
-            tileCountsBuffer,
-            0,
-            (nuint)tileCountsBytes);
-
-        if (totalEstimatedSegments > int.MaxValue)
-        {
-            error = "Coverage segment estimate overflow.";
-            return false;
-        }
-
-        uint segCountsCapacity = totalEstimatedSegments == 0 ? 1u : checked((uint)totalEstimatedSegments);
-        uint segmentsCapacity = segCountsCapacity;
-        int segCountsBytes = checked((int)segCountsCapacity * SegmentCountStrideBytes);
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-segment-counts",
-                BufferUsage.Storage | BufferUsage.CopyDst,
-                (nuint)segCountsBytes,
-                out WgpuBuffer* segCountsBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.CommandEncoderClearBuffer(
-            flushContext.CommandEncoder,
-            segCountsBuffer,
-            0,
-            (nuint)segCountsBytes);
-
-        int segmentsBytes = checked((int)segmentsCapacity * SegmentStrideBytes);
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-segments",
-                BufferUsage.Storage,
-                (nuint)segmentsBytes,
-                out WgpuBuffer* segmentsBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        RasterConfig config = new()
-        {
-            WidthInTiles = (uint)atlasWidthInTiles,
-            HeightInTiles = (uint)atlasHeightInTiles,
-            TargetWidth = (uint)atlasWidth,
-            TargetHeight = (uint)atlasHeight,
-            BaseColor = 0,
-            NDrawObj = 0,
-            NPath = (uint)pathBuilds.Length,
-            NClip = 0,
-            BinDataStart = 0,
-            PathtagBase = 0,
-            PathdataBase = 0,
-            DrawtagBase = 0,
-            DrawdataBase = 0,
-            TransformBase = 0,
-            StyleBase = 0,
-            LinesSize = (uint)totalLineCount,
-            BinningSize = (uint)pathBuilds.Length,
-            TilesSize = (uint)totalTileCount,
-            SegCountsSize = segCountsCapacity,
-            SegmentsSize = segmentsCapacity,
-            BlendSize = 1,
-            PtclSize = 1
-        };
-
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-raster-config",
-                BufferUsage.Uniform | BufferUsage.CopyDst,
-                (nuint)Unsafe.SizeOf<RasterConfig>(),
-                out WgpuBuffer* configBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.QueueWriteBuffer(flushContext.Queue, configBuffer, 0, &config, (nuint)Unsafe.SizeOf<RasterConfig>());
-
-        BumpAllocatorsData bumpData = new()
-        {
-            Failed = 0,
-            Binning = 0,
-            Ptcl = 0,
-            Tile = 0,
-            SegCounts = 0,
-            Segments = 0,
-            Blend = 0,
-            Lines = (uint)totalLineCount
-        };
-
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-bump",
-                BufferUsage.Storage | BufferUsage.CopyDst,
-                (nuint)Unsafe.SizeOf<BumpAllocatorsData>(),
-                out WgpuBuffer* bumpBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.QueueWriteBuffer(flushContext.Queue, bumpBuffer, 0, &bumpData, (nuint)Unsafe.SizeOf<BumpAllocatorsData>());
-
-        IndirectCountData indirectData = default;
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-indirect",
-                BufferUsage.Storage | BufferUsage.Indirect | BufferUsage.CopyDst,
-                (nuint)Unsafe.SizeOf<IndirectCountData>(),
-                out WgpuBuffer* indirectBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.QueueWriteBuffer(flushContext.Queue, indirectBuffer, 0, &indirectData, (nuint)Unsafe.SizeOf<IndirectCountData>());
-
-        SegmentAllocConfig segmentAllocConfig = new() { TileCount = (uint)totalTileCount };
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-segment-alloc",
-                BufferUsage.Uniform | BufferUsage.CopyDst,
-                (nuint)Unsafe.SizeOf<SegmentAllocConfig>(),
-                out WgpuBuffer* segmentAllocBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.QueueWriteBuffer(flushContext.Queue, segmentAllocBuffer, 0, &segmentAllocConfig, (nuint)Unsafe.SizeOf<SegmentAllocConfig>());
-
-        CoverageConfig coverageConfig = new()
-        {
-            TargetWidth = (uint)atlasWidth,
-            TargetHeight = (uint)atlasHeight,
-            TileOriginX = 0,
-            TileOriginY = 0,
-            TileWidthInTiles = (uint)atlasWidthInTiles,
-            TileHeightInTiles = (uint)atlasHeightInTiles,
-            FillRule = fillRuleValue.GetValueOrDefault(0),
-            IsAliased = aliasedValue.GetValueOrDefault(0)
-        };
-
-        if (!TryGetOrCreateCoverageBuffer(
-                flushContext,
-                "coverage-aggregated-coverage-config",
-                BufferUsage.Uniform | BufferUsage.CopyDst,
-                (nuint)Unsafe.SizeOf<CoverageConfig>(),
-                out WgpuBuffer* coverageConfigBuffer,
-                out error))
-        {
-            return false;
-        }
-
-        flushContext.Api.QueueWriteBuffer(flushContext.Queue, coverageConfigBuffer, 0, &coverageConfig, (nuint)Unsafe.SizeOf<CoverageConfig>());
-
-        // Dispatch compute stages in pipeline order: count -> backdrop -> alloc -> emit segments -> fine raster.
-        if (!this.DispatchPathCountSetup(flushContext, bumpBuffer, indirectBuffer, out error) ||
-            !this.DispatchPathCount(flushContext, configBuffer, bumpBuffer, lineBuffer, pathBuffer, tileBuffer, segCountsBuffer, indirectBuffer, out error) ||
-            !this.DispatchBackdrop(flushContext, configBuffer, tileBuffer, atlasHeightInTiles, out error) ||
-            !this.DispatchSegmentAlloc(flushContext, bumpBuffer, tileBuffer, tileCountsBuffer, segmentAllocBuffer, totalTileCount, out error) ||
-            !this.DispatchPathTilingSetup(flushContext, bumpBuffer, indirectBuffer, out error) ||
-            !this.DispatchPathTiling(flushContext, bumpBuffer, segCountsBuffer, lineBuffer, pathBuffer, tileBuffer, segmentsBuffer, indirectBuffer, out error) ||
-            !this.DispatchCoverageFine(flushContext, coverageConfigBuffer, tileBuffer, tileCountsBuffer, segmentsBuffer, coverageView, atlasWidthInTiles, atlasHeightInTiles, out error))
         {
             return false;
         }
@@ -540,7 +253,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         ReadOnlySpan<uint> sourceWords = MemoryMarshal.Cast<byte, uint>(source[..commonAlignedLength]);
         ReadOnlySpan<uint> cachedWords = MemoryMarshal.Cast<byte, uint>(cached[..commonAlignedLength]);
 
-        // Scan forward in 32-bit words first, then finish any remaining tail bytes.
         int firstDifferentWord = 0;
         while (firstDifferentWord < sourceWords.Length && cachedWords[firstDifferentWord] == sourceWords[firstDifferentWord])
         {
@@ -553,11 +265,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             firstDifferent++;
         }
 
-        // No upload needed when the source payload matches the cached upload exactly.
         if (firstDifferent < source.Length)
         {
-            // Trim unchanged suffix in reverse. Start with bytes above the aligned word boundary,
-            // then continue with 32-bit word comparisons.
             int lastDifferent = source.Length - 1;
             if (lastDifferent < commonLength)
             {
@@ -577,27 +286,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
                 if (lastWordIndex >= firstWordIndex)
                 {
-                    // End on the containing word boundary; this may include up to 3 unchanged bytes.
                     lastDifferent = Math.Min(lastDifferent, (lastWordIndex * sizeof(uint)) + (sizeof(uint) - 1));
                 }
             }
 
-            int uploadLength = (lastDifferent - firstDifferent) + 1;
-
-            // Only write the dirty range to reduce queue upload bandwidth on repeated flushes.
-            // QueueWriteBuffer requires 4-byte aligned offsets and sizes.
-            // firstDifferent/uploadLength come from byte-wise diffing, so they can land
-            // in the middle of a 32-bit value. Expand the upload window to 4-byte bounds.
-            // `& ~0x3` clears the lower 2 bits (align down to previous multiple of 4).
             int uploadOffset = firstDifferent & ~0x3;
-
-            int uploadEnd = firstDifferent + uploadLength;
-
-            // `(x + 3) & ~0x3` rounds up to the next multiple of 4.
-            // Clamp afterwards so the rounded end never exceeds source length.
+            int uploadEnd = firstDifferent + (lastDifferent - firstDifferent) + 1;
             uploadEnd = (uploadEnd + 3) & ~0x3;
             uploadEnd = Math.Min(uploadEnd, source.Length);
-            uploadLength = uploadEnd - uploadOffset;
+            int uploadLength = uploadEnd - uploadOffset;
 
             fixed (byte* sourcePtr = source)
             {
@@ -629,46 +326,38 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         this.cachedCoverageLineUpload?.Dispose();
         this.cachedCoverageLineUpload = null;
         this.cachedCoverageLineLength = 0;
-        this.cachedCoveragePathUpload?.Dispose();
-        this.cachedCoveragePathUpload = null;
-        this.cachedCoveragePathLength = 0;
     }
 
     /// <summary>
-    /// Flattens a path into the compact line format consumed by coverage compute shaders.
+    /// Flattens a path into fixed-point (24.8) edge format for GPU rasterization.
+    /// Each edge record is 32 bytes: x0, y0, x1, y1, min_row, max_row, 0, 0.
     /// </summary>
-    private static bool TryBuildLineBuffer(
+    private static bool TryBuildFixedPointEdges(
         IPath path,
         in Rectangle interest,
         RasterizerSamplingOrigin samplingOrigin,
         MemoryAllocator allocator,
-        out IMemoryOwner<byte>? lineOwner,
-        out int lineCount,
-        out float minX,
-        out float minY,
-        out float maxX,
-        out float maxY,
-        out uint estimatedSegments,
+        out IMemoryOwner<byte>? edgeOwner,
+        out int edgeCount,
+        out int totalBandOverlaps,
         out string? error)
     {
         error = null;
-        lineOwner = null;
-        lineCount = 0;
-        estimatedSegments = 0;
-        minX = float.PositiveInfinity;
-        minY = float.PositiveInfinity;
-        maxX = float.NegativeInfinity;
-        maxY = float.NegativeInfinity;
+        edgeOwner = null;
+        edgeCount = 0;
+        totalBandOverlaps = 0;
         bool samplePixelCenter = samplingOrigin == RasterizerSamplingOrigin.PixelCenter;
         float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
         float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
 
+        // First pass: count valid edges.
         List<ISimplePath> simplePaths = [];
         foreach (ISimplePath simplePath in path.Flatten())
         {
             simplePaths.Add(simplePath);
         }
 
+        int maxEdgeCount = 0;
         for (int i = 0; i < simplePaths.Count; i++)
         {
             ReadOnlySpan<PointF> points = simplePaths[i].Points.Span;
@@ -677,57 +366,26 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 continue;
             }
 
-            for (int j = 0; j < points.Length; j++)
+            int segmentCount = simplePaths[i].IsClosed ? points.Length : points.Length - 1;
+            if (segmentCount > 0)
             {
-                float x = (points[j].X - interest.X) + samplingOffsetX;
-                float y = (points[j].Y - interest.Y) + samplingOffsetY;
-                if (x < minX)
-                {
-                    minX = x;
-                }
-
-                if (y < minY)
-                {
-                    minY = y;
-                }
-
-                if (x > maxX)
-                {
-                    maxX = x;
-                }
-
-                if (y > maxY)
-                {
-                    maxY = y;
-                }
+                maxEdgeCount += segmentCount;
             }
-
-            int contourSegmentCount = simplePaths[i].IsClosed
-                ? points.Length
-                : points.Length - 1;
-            if (contourSegmentCount <= 0)
-            {
-                continue;
-            }
-
-            lineCount += contourSegmentCount;
         }
 
-        if (lineCount == 0)
+        if (maxEdgeCount == 0)
         {
-            minX = 0;
-            minY = 0;
-            maxX = 0;
-            maxY = 0;
             return true;
         }
 
-        int lineBufferBytes = checked(lineCount * LineStrideBytes);
-        lineOwner = allocator.Allocate<byte>(lineBufferBytes);
-        Span<byte> lineBytes = lineOwner.Memory.Span[..lineBufferBytes];
-        lineBytes.Clear();
+        int height = interest.Height;
+        int bufferBytes = checked(maxEdgeCount * EdgeStrideBytes);
+        IMemoryOwner<byte> tempOwner = allocator.Allocate<byte>(bufferBytes);
+        Span<byte> edgeBytes = tempOwner.Memory.Span[..bufferBytes];
+        edgeBytes.Clear();
 
-        int lineIndex = 0;
+        int validEdgeCount = 0;
+        int bandOverlaps = 0;
         for (int i = 0; i < simplePaths.Count; i++)
         {
             ReadOnlySpan<PointF> points = simplePaths[i].Points.Span;
@@ -737,9 +395,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             }
 
             bool contourClosed = simplePaths[i].IsClosed;
-            int segmentCount = contourClosed
-                ? points.Length
-                : points.Length - 1;
+            int segmentCount = contourClosed ? points.Length : points.Length - 1;
             if (segmentCount <= 0)
             {
                 continue;
@@ -755,393 +411,104 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 }
 
                 PointF p1 = points[nextIndex];
-                float x0 = (p0.X - interest.X) + samplingOffsetX;
-                float y0 = (p0.Y - interest.Y) + samplingOffsetY;
-                float x1 = (p1.X - interest.X) + samplingOffsetX;
-                float y1 = (p1.Y - interest.Y) + samplingOffsetY;
-                WriteLine(lineBytes, lineIndex, x0, y0, x1, y1);
-                estimatedSegments += EstimateSegmentCount(x0, y0, x1, y1);
-                lineIndex++;
+                float fx0 = (p0.X - interest.X) + samplingOffsetX;
+                float fy0 = (p0.Y - interest.Y) + samplingOffsetY;
+                float fx1 = (p1.X - interest.X) + samplingOffsetX;
+                float fy1 = (p1.Y - interest.Y) + samplingOffsetY;
+
+                // Convert to 24.8 fixed-point.
+                int x0 = (int)MathF.Round(fx0 * FixedOne);
+                int y0 = (int)MathF.Round(fy0 * FixedOne);
+                int x1 = (int)MathF.Round(fx1 * FixedOne);
+                int y1 = (int)MathF.Round(fy1 * FixedOne);
+
+                // Skip horizontal edges (no coverage contribution).
+                if (y0 == y1)
+                {
+                    continue;
+                }
+
+                // Compute min/max row (pixel coordinates), clamped to interest.
+                int yMinFixed = Math.Min(y0, y1);
+                int yMaxFixed = Math.Max(y0, y1);
+                int minRow = Math.Max(0, yMinFixed >> FixedShift);
+                int maxRow = Math.Min(height - 1, (yMaxFixed - 1) >> FixedShift);
+
+                if (minRow > maxRow)
+                {
+                    continue;
+                }
+
+                // Write edge record (32 bytes).
+                int offset = validEdgeCount * EdgeStrideBytes;
+                BinaryPrimitives.WriteInt32LittleEndian(edgeBytes.Slice(offset, 4), x0);
+                BinaryPrimitives.WriteInt32LittleEndian(edgeBytes.Slice(offset + 4, 4), y0);
+                BinaryPrimitives.WriteInt32LittleEndian(edgeBytes.Slice(offset + 8, 4), x1);
+                BinaryPrimitives.WriteInt32LittleEndian(edgeBytes.Slice(offset + 12, 4), y1);
+                BinaryPrimitives.WriteInt32LittleEndian(edgeBytes.Slice(offset + 16, 4), minRow);
+                BinaryPrimitives.WriteInt32LittleEndian(edgeBytes.Slice(offset + 20, 4), maxRow);
+                int minBand = minRow / TileHeight;
+                int maxBand = maxRow / TileHeight;
+                bandOverlaps += maxBand - minBand + 1;
+                validEdgeCount++;
             }
         }
 
+        edgeCount = validEdgeCount;
+        totalBandOverlaps = bandOverlaps;
+
+        if (validEdgeCount == 0)
+        {
+            tempOwner.Dispose();
+            return true;
+        }
+
+        edgeOwner = tempOwner;
         return true;
     }
-
-    /// <summary>
-    /// Writes a single line record using the default path index.
-    /// </summary>
-    private static void WriteLine(Span<byte> destination, int lineIndex, float x0, float y0, float x1, float y1)
-        => WriteLine(destination, lineIndex, 0u, x0, y0, x1, y1);
-
-    /// <summary>
-    /// Writes a single line record with an explicit path index.
-    /// </summary>
-    private static void WriteLine(Span<byte> destination, int lineIndex, uint pathIndex, float x0, float y0, float x1, float y1)
-    {
-        int offset = lineIndex * LineStrideBytes;
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(offset, 4), pathIndex);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(offset + 4, 4), 0u);
-        WriteFloat(destination, offset + 8, x0);
-        WriteFloat(destination, offset + 12, y0);
-        WriteFloat(destination, offset + 16, x1);
-        WriteFloat(destination, offset + 20, y1);
-    }
-
-    /// <summary>
-    /// Writes a path bounding record using a default tile base.
-    /// </summary>
-    private static void WritePath(Span<byte> destination, uint x0, uint y0, uint x1, uint y1)
-        => WritePath(destination, x0, y0, x1, y1, 0u);
-
-    /// <summary>
-    /// Writes a path bounding record with an explicit tile base offset.
-    /// </summary>
-    private static void WritePath(Span<byte> destination, uint x0, uint y0, uint x1, uint y1, uint tiles)
-    {
-        BinaryPrimitives.WriteUInt32LittleEndian(destination[..4], x0);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(4, 4), y0);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(8, 4), x1);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(12, 4), y1);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(16, 4), tiles);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(20, 4), 0u);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(24, 4), 0u);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(28, 4), 0u);
-    }
-
-    /// <summary>
-    /// Reads a 32-bit floating-point value from a little-endian byte span.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static float ReadFloat(ReadOnlySpan<byte> source, int offset)
-        => BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(source.Slice(offset, 4)));
-
-    /// <summary>
-    /// Writes a 32-bit floating-point value to a little-endian byte span.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void WriteFloat(Span<byte> destination, int offset, float value)
-        => BinaryPrimitives.WriteUInt32LittleEndian(destination.Slice(offset, 4), (uint)BitConverter.SingleToInt32Bits(value));
-
-    /// <summary>
-    /// Estimates how many tile segments a line contributes during path tiling.
-    /// </summary>
-    private static uint EstimateSegmentCount(float x0, float y0, float x1, float y1)
-    {
-        float s0x = x0 * TileScale;
-        float s0y = y0 * TileScale;
-        float s1x = x1 * TileScale;
-        float s1y = y1 * TileScale;
-        uint countX = SpanTiles(s0x, s1x);
-        uint countY = SpanTiles(s0y, s1y);
-        if (countX > 0)
-        {
-            countX -= 1;
-        }
-
-        return countX + countY;
-    }
-
-    /// <summary>
-    /// Computes the number of tiles spanned by two coordinates along one axis.
-    /// </summary>
-    private static uint SpanTiles(float a, float b)
-    {
-        float max = MathF.Max(a, b);
-        float min = MathF.Min(a, b);
-        float span = MathF.Ceiling(max) - MathF.Floor(min);
-        if (span < 1F)
-        {
-            span = 1F;
-        }
-
-        return (uint)span;
-    }
-
-    /// <summary>
-    /// Creates the coverage output texture and view used by the fine rasterization pass.
-    /// </summary>
-    private static bool TryCreateCoverageTexture(
-        WebGPUFlushContext flushContext,
-        int width,
-        int height,
-        MemoryAllocator allocator,
-        bool clearOnCreate,
-        out Texture* coverageTexture,
-        out TextureView* coverageView,
-        out string? error)
-    {
-        TextureDescriptor descriptor = new()
-        {
-            Usage = TextureUsage.TextureBinding | TextureUsage.StorageBinding | TextureUsage.CopyDst,
-            Dimension = TextureDimension.Dimension2D,
-            Size = new Extent3D((uint)width, (uint)height, 1),
-            Format = TextureFormat.R32float,
-            MipLevelCount = 1,
-            SampleCount = 1
-        };
-
-        coverageTexture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in descriptor);
-        if (coverageTexture is null)
-        {
-            coverageView = null;
-            error = "Failed to create coverage texture.";
-            return false;
-        }
-
-        TextureViewDescriptor viewDescriptor = new()
-        {
-            Format = descriptor.Format,
-            Dimension = TextureViewDimension.Dimension2D,
-            BaseMipLevel = 0,
-            MipLevelCount = 1,
-            BaseArrayLayer = 0,
-            ArrayLayerCount = 1,
-            Aspect = TextureAspect.All
-        };
-
-        coverageView = flushContext.Api.TextureCreateView(coverageTexture, in viewDescriptor);
-        if (coverageView is null)
-        {
-            flushContext.Api.TextureRelease(coverageTexture);
-            error = "Failed to create coverage texture view.";
-            return false;
-        }
-
-        if (clearOnCreate)
-        {
-            int rowBytes = checked(width * sizeof(float));
-            int byteCount = checked(rowBytes * height);
-            using IMemoryOwner<byte> zeroOwner = allocator.Allocate<byte>(byteCount);
-            Span<byte> zeroData = zeroOwner.Memory.Span[..byteCount];
-            zeroData.Clear();
-            ImageCopyTexture destination = new()
-            {
-                Texture = coverageTexture,
-                MipLevel = 0,
-                Origin = new Origin3D(0, 0, 0),
-                Aspect = TextureAspect.All
-            };
-
-            Extent3D writeSize = new((uint)width, (uint)height, 1);
-            TextureDataLayout layout = new()
-            {
-                Offset = 0,
-                BytesPerRow = (uint)rowBytes,
-                RowsPerImage = (uint)height
-            };
-
-            fixed (byte* zeroPtr = zeroData)
-            {
-                flushContext.Api.QueueWriteTexture(
-                    flushContext.Queue,
-                    in destination,
-                    zeroPtr,
-                    (nuint)byteCount,
-                    in layout,
-                    in writeSize);
-            }
-        }
-
-        error = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Dispatches the path-count setup shader that initializes indirect dispatch counts.
-    /// </summary>
-    private bool DispatchPathCountSetup(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* bumpBuffer,
-        WgpuBuffer* indirectBuffer,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "path-count-setup",
-            PathCountSetupComputeShader.Code,
-            TryCreatePathCountSetupBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = bumpBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = indirectBuffer, Offset = 0, Size = nuint.MaxValue };
-                return 2;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1),
-            out error);
-
-    /// <summary>
-    /// Dispatches the path-count shader that computes per-tile segment counts.
-    /// </summary>
-    private bool DispatchPathCount(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* configBuffer,
-        WgpuBuffer* bumpBuffer,
-        WgpuBuffer* lineBuffer,
-        WgpuBuffer* pathBuffer,
-        WgpuBuffer* tileBuffer,
-        WgpuBuffer* segCountsBuffer,
-        WgpuBuffer* indirectBuffer,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "path-count",
-            PathCountComputeShader.Code,
-            TryCreatePathCountBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = configBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<RasterConfig>() };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = bumpBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = lineBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[3] = new BindGroupEntry { Binding = 3, Buffer = pathBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[4] = new BindGroupEntry { Binding = 4, Buffer = tileBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[5] = new BindGroupEntry { Binding = 5, Buffer = segCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                return 6;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroupsIndirect(pass, indirectBuffer, 0),
-            out error);
-
-    /// <summary>
-    /// Dispatches the segment-allocation shader that computes per-tile segment offsets.
-    /// </summary>
-    private bool DispatchSegmentAlloc(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* bumpBuffer,
-        WgpuBuffer* tileBuffer,
-        WgpuBuffer* tileCountsBuffer,
-        WgpuBuffer* segmentAllocBuffer,
-        int tileCount,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "segment-alloc",
-            SegmentAllocComputeShader.Code,
-            TryCreateSegmentAllocBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = bumpBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[3] = new BindGroupEntry { Binding = 3, Buffer = segmentAllocBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<SegmentAllocConfig>() };
-                return 4;
-            },
-            (pass) =>
-            {
-                uint dispatchX = DivideRoundUp(tileCount, SegmentAllocWorkgroupSize);
-                flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, dispatchX, 1, 1);
-            },
-            out error);
-
-    /// <summary>
-    /// Dispatches the backdrop prefix shader that accumulates backdrop values across tile rows.
-    /// </summary>
-    private bool DispatchBackdrop(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* configBuffer,
-        WgpuBuffer* tileBuffer,
-        int heightInTiles,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "backdrop",
-            BackdropComputeShader.Code,
-            TryCreateBackdropBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = configBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<RasterConfig>() };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileBuffer, Offset = 0, Size = nuint.MaxValue };
-                return 2;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)heightInTiles, 1, 1),
-            out error);
-
-    /// <summary>
-    /// Dispatches the path-tiling setup shader that prepares indirect counts for segment emission.
-    /// </summary>
-    private bool DispatchPathTilingSetup(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* bumpBuffer,
-        WgpuBuffer* indirectBuffer,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "path-tiling-setup",
-            PathTilingSetupComputeShader.Code,
-            TryCreatePathTilingSetupBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = bumpBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = indirectBuffer, Offset = 0, Size = nuint.MaxValue };
-                return 2;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, 1, 1, 1),
-            out error);
-
-    /// <summary>
-    /// Dispatches the path-tiling shader that emits clipped segments into per-tile storage.
-    /// </summary>
-    private bool DispatchPathTiling(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* bumpBuffer,
-        WgpuBuffer* segCountsBuffer,
-        WgpuBuffer* lineBuffer,
-        WgpuBuffer* pathBuffer,
-        WgpuBuffer* tileBuffer,
-        WgpuBuffer* segmentsBuffer,
-        WgpuBuffer* indirectBuffer,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "path-tiling",
-            PathTilingComputeShader.Code,
-            TryCreatePathTilingBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = bumpBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = segCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = lineBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[3] = new BindGroupEntry { Binding = 3, Buffer = pathBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[4] = new BindGroupEntry { Binding = 4, Buffer = tileBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[5] = new BindGroupEntry { Binding = 5, Buffer = segmentsBuffer, Offset = 0, Size = nuint.MaxValue };
-                return 6;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroupsIndirect(pass, indirectBuffer, 0),
-            out error);
-
-    /// <summary>
-    /// Dispatches the fine coverage shader that rasterizes tile segments into the output texture.
-    /// </summary>
-    private bool DispatchCoverageFine(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* coverageConfigBuffer,
-        WgpuBuffer* tileBuffer,
-        WgpuBuffer* tileCountsBuffer,
-        WgpuBuffer* segmentsBuffer,
-        TextureView* coverageView,
-        int tileWidth,
-        int tileHeight,
-        out string? error)
-        => this.DispatchComputePass(
-            flushContext,
-            "coverage-fine",
-            CoverageFineComputeShader.Code,
-            TryCreateCoverageFineBindGroupLayout,
-            (entries) =>
-            {
-                entries[0] = new BindGroupEntry { Binding = 0, Buffer = coverageConfigBuffer, Offset = 0, Size = (nuint)Unsafe.SizeOf<CoverageConfig>() };
-                entries[1] = new BindGroupEntry { Binding = 1, Buffer = tileBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[2] = new BindGroupEntry { Binding = 2, Buffer = tileCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[3] = new BindGroupEntry { Binding = 3, Buffer = segmentsBuffer, Offset = 0, Size = nuint.MaxValue };
-                entries[4] = new BindGroupEntry { Binding = 4, TextureView = coverageView };
-                return 5;
-            },
-            (pass) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(pass, (uint)tileWidth, (uint)tileHeight, 1),
-            out error);
 
     /// <summary>
     /// Creates and executes a compute pass for a coverage pipeline stage.
     /// </summary>
     private bool DispatchComputePass(
         WebGPUFlushContext flushContext,
+        string pipelineKey,
+        ReadOnlySpan<byte> shaderCode,
+        WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
+        BindGroupEntryWriter entryWriter,
+        ComputePassDispatch dispatch,
+        out string? error)
+    {
+        ComputePassDescriptor passDescriptor = default;
+        ComputePassEncoder* passEncoder = flushContext.Api.CommandEncoderBeginComputePass(flushContext.CommandEncoder, in passDescriptor);
+        if (passEncoder is null)
+        {
+            error = $"Failed to begin compute pass for pipeline '{pipelineKey}'.";
+            return false;
+        }
+
+        try
+        {
+            return this.DispatchIntoComputePass(
+                flushContext,
+                passEncoder,
+                pipelineKey,
+                shaderCode,
+                bindGroupLayoutFactory,
+                entryWriter,
+                dispatch,
+                out error);
+        }
+        finally
+        {
+            flushContext.Api.ComputePassEncoderEnd(passEncoder);
+            flushContext.Api.ComputePassEncoderRelease(passEncoder);
+        }
+    }
+
+    private bool DispatchIntoComputePass(
+        WebGPUFlushContext flushContext,
+        ComputePassEncoder* passEncoder,
         string pipelineKey,
         ReadOnlySpan<byte> shaderCode,
         WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
@@ -1178,265 +545,33 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         }
 
         flushContext.TrackBindGroup(bindGroup);
-        ComputePassDescriptor passDescriptor = default;
-        ComputePassEncoder* passEncoder = flushContext.Api.CommandEncoderBeginComputePass(flushContext.CommandEncoder, in passDescriptor);
-        if (passEncoder is null)
-        {
-            error = $"Failed to begin compute pass for pipeline '{pipelineKey}'.";
-            return false;
-        }
-
-        try
-        {
-            flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
-            flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
-            dispatch(passEncoder);
-        }
-        finally
-        {
-            flushContext.Api.ComputePassEncoderEnd(passEncoder);
-            flushContext.Api.ComputePassEncoderRelease(passEncoder);
-        }
+        flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
+        flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
+        dispatch(passEncoder);
 
         error = null;
         return true;
     }
 
     /// <summary>
-    /// Creates the bind-group layout used by the path-count setup shader.
+    /// Creates the bind-group layout used by the CSR count shader.
     /// </summary>
-    private static bool TryCreatePathCountSetupBindGroupLayout(
+    private static bool TryCreateCsrCountBindGroupLayout(
         WebGPU api,
         Device* device,
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[3];
         entries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<BumpAllocatorsData>()
-            }
-        };
-        entries[1] = new BindGroupLayoutEntry
-        {
-            Binding = 1,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<IndirectCountData>()
-            }
-        };
-
-        BindGroupLayoutDescriptor descriptor = new()
-        {
-            EntryCount = 2,
-            Entries = entries
-        };
-
-        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
-        if (layout is null)
-        {
-            error = "Failed to create path count setup bind group layout.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Creates the bind-group layout used by the path-count shader.
-    /// </summary>
-    private static bool TryCreatePathCountBindGroupLayout(
-        WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
-        out string? error)
-    {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[6];
-        entries[0] = new BindGroupLayoutEntry
-        {
-            Binding = 0,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Uniform,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<RasterConfig>()
-            }
-        };
-        entries[1] = new BindGroupLayoutEntry
-        {
-            Binding = 1,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<BumpAllocatorsData>()
-            }
-        };
-        entries[2] = new BindGroupLayoutEntry
-        {
-            Binding = 2,
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = LineStrideBytes
-            }
-        };
-        entries[3] = new BindGroupLayoutEntry
-        {
-            Binding = 3,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.ReadOnlyStorage,
-                HasDynamicOffset = false,
-                MinBindingSize = PathStrideBytes
-            }
-        };
-        entries[4] = new BindGroupLayoutEntry
-        {
-            Binding = 4,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = TileStrideBytes
-            }
-        };
-        entries[5] = new BindGroupLayoutEntry
-        {
-            Binding = 5,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = SegmentCountStrideBytes
-            }
-        };
-
-        BindGroupLayoutDescriptor descriptor = new()
-        {
-            EntryCount = 6,
-            Entries = entries
-        };
-
-        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
-        if (layout is null)
-        {
-            error = "Failed to create path count bind group layout.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Creates the bind-group layout used by the segment-allocation shader.
-    /// </summary>
-    private static bool TryCreateSegmentAllocBindGroupLayout(
-        WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
-        out string? error)
-    {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[4];
-        entries[0] = new BindGroupLayoutEntry
-        {
-            Binding = 0,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<BumpAllocatorsData>()
-            }
-        };
-        entries[1] = new BindGroupLayoutEntry
-        {
-            Binding = 1,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = TileStrideBytes
-            }
-        };
-        entries[2] = new BindGroupLayoutEntry
-        {
-            Binding = 2,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = sizeof(uint)
-            }
-        };
-        entries[3] = new BindGroupLayoutEntry
-        {
-            Binding = 3,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Uniform,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<SegmentAllocConfig>()
-            }
-        };
-
-        BindGroupLayoutDescriptor descriptor = new()
-        {
-            EntryCount = 4,
-            Entries = entries
-        };
-
-        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
-        if (layout is null)
-        {
-            error = "Failed to create segment allocation bind group layout.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Creates the bind-group layout used by the backdrop prefix shader.
-    /// </summary>
-    private static bool TryCreateBackdropBindGroupLayout(
-        WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
-        out string? error)
-    {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
-        entries[0] = new BindGroupLayoutEntry
-        {
-            Binding = 0,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Uniform,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<RasterConfig>()
+                MinBindingSize = 0
             }
         };
         entries[1] = new BindGroupLayoutEntry
@@ -1450,161 +585,28 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 MinBindingSize = 0
             }
         };
-
-        BindGroupLayoutDescriptor descriptor = new()
-        {
-            EntryCount = 2,
-            Entries = entries
-        };
-
-        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
-        if (layout is null)
-        {
-            error = "Failed to create backdrop bind group layout.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Creates the bind-group layout used by the path-tiling setup shader.
-    /// </summary>
-    private static bool TryCreatePathTilingSetupBindGroupLayout(
-        WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
-        out string? error)
-    {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
-        entries[0] = new BindGroupLayoutEntry
-        {
-            Binding = 0,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<BumpAllocatorsData>()
-            }
-        };
-        entries[1] = new BindGroupLayoutEntry
-        {
-            Binding = 1,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<IndirectCountData>()
-            }
-        };
-
-        BindGroupLayoutDescriptor descriptor = new()
-        {
-            EntryCount = 2,
-            Entries = entries
-        };
-
-        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
-        if (layout is null)
-        {
-            error = "Failed to create path tiling setup bind group layout.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    /// <summary>
-    /// Creates the bind-group layout used by the path-tiling shader.
-    /// </summary>
-    private static bool TryCreatePathTilingBindGroupLayout(
-        WebGPU api,
-        Device* device,
-        out BindGroupLayout* layout,
-        out string? error)
-    {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[6];
-        entries[0] = new BindGroupLayoutEntry
-        {
-            Binding = 0,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<BumpAllocatorsData>()
-            }
-        };
-        entries[1] = new BindGroupLayoutEntry
-        {
-            Binding = 1,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.ReadOnlyStorage,
-                HasDynamicOffset = false,
-                MinBindingSize = SegmentCountStrideBytes
-            }
-        };
         entries[2] = new BindGroupLayoutEntry
         {
             Binding = 2,
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.ReadOnlyStorage,
+                Type = BufferBindingType.Uniform,
                 HasDynamicOffset = false,
-                MinBindingSize = LineStrideBytes
-            }
-        };
-        entries[3] = new BindGroupLayoutEntry
-        {
-            Binding = 3,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.ReadOnlyStorage,
-                HasDynamicOffset = false,
-                MinBindingSize = PathStrideBytes
-            }
-        };
-        entries[4] = new BindGroupLayoutEntry
-        {
-            Binding = 4,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.ReadOnlyStorage,
-                HasDynamicOffset = false,
-                MinBindingSize = TileStrideBytes
-            }
-        };
-        entries[5] = new BindGroupLayoutEntry
-        {
-            Binding = 5,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.Storage,
-                HasDynamicOffset = false,
-                MinBindingSize = SegmentStrideBytes
+                MinBindingSize = sizeof(uint)
             }
         };
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 6,
+            EntryCount = 3,
             Entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
         if (layout is null)
         {
-            error = "Failed to create path tiling bind group layout.";
+            error = "Failed to create CSR count bind group layout.";
             return false;
         }
 
@@ -1613,9 +615,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     }
 
     /// <summary>
-    /// Creates the bind-group layout used by the fine coverage shader.
+    /// Creates the bind-group layout used by the CSR scatter shader.
     /// </summary>
-    private static bool TryCreateCoverageFineBindGroupLayout(
+    private static bool TryCreateCsrScatterBindGroupLayout(
         WebGPU api,
         Device* device,
         out BindGroupLayout* layout,
@@ -1628,9 +630,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.Uniform,
+                Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = (nuint)Unsafe.SizeOf<CoverageConfig>()
+                MinBindingSize = 0
             }
         };
         entries[1] = new BindGroupLayoutEntry
@@ -1641,7 +643,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             {
                 Type = BufferBindingType.ReadOnlyStorage,
                 HasDynamicOffset = false,
-                MinBindingSize = TileStrideBytes
+                MinBindingSize = 0
             }
         };
         entries[2] = new BindGroupLayoutEntry
@@ -1650,9 +652,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.ReadOnlyStorage,
+                Type = BufferBindingType.Storage,
                 HasDynamicOffset = false,
-                MinBindingSize = sizeof(uint)
+                MinBindingSize = 0
             }
         };
         entries[3] = new BindGroupLayoutEntry
@@ -1661,20 +663,20 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             Visibility = ShaderStage.Compute,
             Buffer = new BufferBindingLayout
             {
-                Type = BufferBindingType.ReadOnlyStorage,
+                Type = BufferBindingType.Storage,
                 HasDynamicOffset = false,
-                MinBindingSize = SegmentStrideBytes
+                MinBindingSize = 0
             }
         };
         entries[4] = new BindGroupLayoutEntry
         {
             Binding = 4,
             Visibility = ShaderStage.Compute,
-            StorageTexture = new StorageTextureBindingLayout
+            Buffer = new BufferBindingLayout
             {
-                Access = StorageTextureAccess.WriteOnly,
-                Format = TextureFormat.R32float,
-                ViewDimension = TextureViewDimension.Dimension2D
+                Type = BufferBindingType.Uniform,
+                HasDynamicOffset = false,
+                MinBindingSize = sizeof(uint)
             }
         };
 
@@ -1687,7 +689,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
         if (layout is null)
         {
-            error = "Failed to create coverage fine bind group layout.";
+            error = "Failed to create CSR scatter bind group layout.";
             return false;
         }
 
@@ -1696,138 +698,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     }
 
     /// <summary>
-    /// Flattened path payload used during coverage rasterization.
-    /// </summary>
-    private readonly struct CoveragePathBuild
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CoveragePathBuild"/> struct.
-        /// </summary>
-        public CoveragePathBuild(
-            CachedCoverageGeometry geometry,
-            int originTileX,
-            int originTileY,
-            int originX,
-            int originY)
-        {
-            this.Geometry = geometry;
-            this.OriginTileX = originTileX;
-            this.OriginTileY = originTileY;
-            this.OriginX = originX;
-            this.OriginY = originY;
-        }
-
-        /// <summary>
-        /// Gets the cached geometry payload.
-        /// </summary>
-        public CachedCoverageGeometry Geometry { get; }
-
-        /// <summary>
-        /// Gets the atlas origin in tile coordinates on the X axis.
-        /// </summary>
-        public int OriginTileX { get; }
-
-        /// <summary>
-        /// Gets the atlas origin in tile coordinates on the Y axis.
-        /// </summary>
-        public int OriginTileY { get; }
-
-        /// <summary>
-        /// Gets the atlas origin in pixel coordinates on the X axis.
-        /// </summary>
-        public int OriginX { get; }
-
-        /// <summary>
-        /// Gets the atlas origin in pixel coordinates on the Y axis.
-        /// </summary>
-        public int OriginY { get; }
-    }
-
-    /// <summary>
-    /// Rasterizer dispatch configuration for a coverage pass.
+    /// CSR configuration uniform passed to count and scatter shaders.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
-    private struct RasterConfig
+    private readonly struct CsrConfig
     {
-        public uint WidthInTiles;
-        public uint HeightInTiles;
-        public uint TargetWidth;
-        public uint TargetHeight;
-        public uint BaseColor;
-        public uint NDrawObj;
-        public uint NPath;
-        public uint NClip;
-        public uint BinDataStart;
-        public uint PathtagBase;
-        public uint PathdataBase;
-        public uint DrawtagBase;
-        public uint DrawdataBase;
-        public uint TransformBase;
-        public uint StyleBase;
-        public uint LinesSize;
-        public uint BinningSize;
-        public uint TilesSize;
-        public uint SegCountsSize;
-        public uint SegmentsSize;
-        public uint BlendSize;
-        public uint PtclSize;
-        public uint Pad0;
-        public uint Pad1;
-    }
+        public readonly uint TotalEdgeCount;
 
-    /// <summary>
-    /// GPU bump allocator counters for transient coverage buffers.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BumpAllocatorsData
-    {
-        public uint Failed;
-        public uint Binning;
-        public uint Ptcl;
-        public uint Tile;
-        public uint SegCounts;
-        public uint Segments;
-        public uint Blend;
-        public uint Lines;
-    }
-
-    /// <summary>
-    /// Indirect dispatch counts emitted by the coverage setup stage.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IndirectCountData
-    {
-        public uint CountX;
-        public uint CountY;
-        public uint CountZ;
-    }
-
-    /// <summary>
-    /// Segment allocator configuration for coverage path allocation.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SegmentAllocConfig
-    {
-        public uint TileCount;
-        public uint Pad0;
-        public uint Pad1;
-        public uint Pad2;
-    }
-
-    /// <summary>
-    /// Coverage pass configuration shared across compute stages.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct CoverageConfig
-    {
-        public uint TargetWidth;
-        public uint TargetHeight;
-        public uint TileOriginX;
-        public uint TileOriginY;
-        public uint TileWidthInTiles;
-        public uint TileHeightInTiles;
-        public uint FillRule;
-        public uint IsAliased;
+        public CsrConfig(uint totalEdgeCount)
+            => this.TotalEdgeCount = totalEdgeCount;
     }
 
     /// <summary>
@@ -1835,64 +714,40 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     /// </summary>
     private sealed class CachedCoverageGeometry : IDisposable
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="CachedCoverageGeometry"/> class.
-        /// </summary>
         public CachedCoverageGeometry(
-            IMemoryOwner<byte>? lineOwner,
-            int lineCount,
-            uint estimatedSegments,
-            int widthInTiles,
-            int heightInTiles,
-            int coverageWidth,
-            int coverageHeight)
+            IMemoryOwner<byte>? edgeOwner,
+            int edgeCount,
+            int bandCount,
+            int totalBandOverlaps)
         {
-            this.LineOwner = lineOwner;
-            this.LineCount = lineCount;
-            this.EstimatedSegments = estimatedSegments;
-            this.WidthInTiles = widthInTiles;
-            this.HeightInTiles = heightInTiles;
-            this.CoverageWidth = coverageWidth;
-            this.CoverageHeight = coverageHeight;
+            this.EdgeOwner = edgeOwner;
+            this.EdgeCount = edgeCount;
+            this.BandCount = bandCount;
+            this.TotalBandOverlaps = totalBandOverlaps;
         }
 
         /// <summary>
-        /// Gets the owned line segment buffer for the cached coverage geometry.
+        /// Gets the owned fixed-point edge buffer.
         /// </summary>
-        public IMemoryOwner<byte>? LineOwner { get; }
+        public IMemoryOwner<byte>? EdgeOwner { get; }
 
         /// <summary>
-        /// Gets the number of lines stored in <see cref="LineOwner"/>.
+        /// Gets the number of edges stored in <see cref="EdgeOwner"/>.
         /// </summary>
-        public int LineCount { get; }
+        public int EdgeCount { get; }
 
         /// <summary>
-        /// Gets the estimated number of segments generated for this geometry.
+        /// Gets the number of 16-row CSR bands for this geometry.
         /// </summary>
-        public uint EstimatedSegments { get; }
+        public int BandCount { get; }
 
         /// <summary>
-        /// Gets the coverage width in tiles.
+        /// Gets the total number of edge-band overlaps (for CSR indices sizing).
         /// </summary>
-        public int WidthInTiles { get; }
-
-        /// <summary>
-        /// Gets the coverage height in tiles.
-        /// </summary>
-        public int HeightInTiles { get; }
-
-        /// <summary>
-        /// Gets the coverage texture width in pixels.
-        /// </summary>
-        public int CoverageWidth { get; }
-
-        /// <summary>
-        /// Gets the coverage texture height in pixels.
-        /// </summary>
-        public int CoverageHeight { get; }
+        public int TotalBandOverlaps { get; }
 
         /// <inheritdoc/>
         public void Dispose()
-            => this.LineOwner?.Dispose();
+            => this.EdgeOwner?.Dispose();
     }
 }

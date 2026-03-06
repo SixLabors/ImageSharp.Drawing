@@ -941,7 +941,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         {
             int sourceStrideBytes = checked(sourceRegion.Buffer.RowStride * pixelSizeInBytes);
             long directByteCount = ((long)sourceStrideBytes * (sourceRegion.Height - 1)) + rowBytes;
-            long packedByteCountEstimate = (long)alignedRowBytes * sourceRegion.Height;
+            long packedByteCountEstimate = alignedRowBytes * sourceRegion.Height;
 
             // Only use the direct path when the stride satisfies WebGPU's alignment requirement.
             if ((uint)sourceStrideBytes == alignedRowBytes && directByteCount <= packedByteCountEstimate * 2)
@@ -976,7 +976,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         for (int y = 0; y < sourceRegion.Height; y++)
         {
             ReadOnlySpan<TPixel> sourceRow = sourceRegion.DangerousGetRowSpan(y);
-            MemoryMarshal.AsBytes(sourceRow).Slice(0, rowBytes).CopyTo(packedData.Slice(y * alignedRowBytesInt, rowBytes));
+            MemoryMarshal.AsBytes(sourceRow)[..rowBytes].CopyTo(packedData.Slice(y * alignedRowBytesInt, rowBytes));
         }
 
         TextureDataLayout packedLayout = new()

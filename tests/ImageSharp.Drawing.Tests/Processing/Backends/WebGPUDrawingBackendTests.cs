@@ -395,11 +395,11 @@ public class WebGPUDrawingBackendTests
 
         AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.2F);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
-        AssertBackendTripletSimilarityInRegion(defaultImage, cpuRegionImage, nativeSurfaceImage, textRegion, 0.03F);
+        AssertBackendTripletSimilarityInRegion(defaultImage, cpuRegionImage, nativeSurfaceImage, textRegion, 0.01F);
     }
 
     [Theory]
@@ -527,7 +527,7 @@ public class WebGPUDrawingBackendTests
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
     }
 
     [Theory]
@@ -905,6 +905,33 @@ public class WebGPUDrawingBackendTests
             appendSourceFileOrDescription: false);
     }
 
+    private static void DebugSaveBackendTripletNoRef<TPixel>(
+        TestImageProvider<TPixel> provider,
+        string testName,
+        Image<TPixel> defaultImage,
+        Image<TPixel> cpuRegionImage,
+        Image<TPixel> nativeSurfaceImage)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        defaultImage.DebugSave(
+            provider,
+            $"{testName}_Default",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
+        cpuRegionImage.DebugSave(
+            provider,
+            $"{testName}_WebGPU_CPURegion",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+
+        nativeSurfaceImage.DebugSave(
+            provider,
+            $"{testName}_WebGPU_NativeSurface",
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
     private static void AssertBackendTripletSimilarity<TPixel>(
         Image<TPixel> defaultImage,
         Image<TPixel> cpuRegionImage,
@@ -969,6 +996,326 @@ public class WebGPUDrawingBackendTests
         Assert.Equal(
             0,
             backend.TestingFallbackCompositeCoverageCallCount);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32)]
+    public void DrawPath_Stroke_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        PathBuilder pb = new();
+        pb.AddLine(new PointF(30, 50), new PointF(370, 250));
+        pb.AddLine(new PointF(370, 250), new PointF(200, 20));
+        pb.CloseFigure();
+        IPath path = pb.Build();
+        Pen pen = Pens.Solid(Color.DarkBlue, 4F);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTripletNoRef(provider, "DrawPath_Stroke", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
+    public void FillPath_MultipleSeparatePaths_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        Brush brush = Brushes.Solid(Color.Black);
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                float x = 20 + (i * 24);
+                float y = 20 + (i * 22);
+                canvas.Fill(new RectangularPolygon(x, y, 80, 60), brush);
+            }
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTripletNoRef(provider, "FillPath_MultipleSeparate", defaultImage, cpuRegionImage, nativeSurfaceImage);
+
+        Assert.True(cpuRegionBackend.TestingPrepareCoverageCallCount >= 20);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
+    public void FillPath_EvenOddRule_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true },
+            ShapeOptions = new ShapeOptions
+            {
+                IntersectionRule = IntersectionRule.EvenOdd
+            }
+        };
+
+        PathBuilder pathBuilder = new();
+        pathBuilder.StartFigure();
+        pathBuilder.AddLines(
+        [
+            new PointF(16, 16),
+            new PointF(240, 16),
+            new PointF(240, 240),
+            new PointF(16, 240)
+        ]);
+        pathBuilder.CloseFigure();
+
+        // Inner contour with same winding — EvenOdd should create a hole.
+        pathBuilder.StartFigure();
+        pathBuilder.AddLines(
+        [
+            new PointF(80, 80),
+            new PointF(176, 80),
+            new PointF(176, 176),
+            new PointF(80, 176)
+        ]);
+        pathBuilder.CloseFigure();
+
+        IPath path = pathBuilder.Build();
+        Brush brush = Brushes.Solid(Color.Black);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(path, brush);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTripletNoRef(provider, "FillPath_EvenOdd", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+
+        // EvenOdd with same winding inner contour should create a hole at center.
+        Assert.Equal(defaultImage[128, 128], cpuRegionImage[128, 128]);
+        Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(800, 600, "White", PixelTypes.Rgba32)]
+    public void FillPath_LargeTileCount_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        // Large polygon spanning most of the image to exercise many tiles.
+        Brush brush = Brushes.Solid(Color.Black);
+        EllipsePolygon ellipse = new(new PointF(400, 300), new SizeF(700, 500));
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(ellipse, brush);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTripletNoRef(provider, "FillPath_LargeTileCount", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(300, 200, "White", PixelTypes.Rgba32)]
+    public void MultipleFlushes_OnSameBackend_ProduceCorrectResults<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        Brush redBrush = Brushes.Solid(Color.Red);
+        Brush blueBrush = Brushes.Solid(Color.Blue);
+        RectangularPolygon rect1 = new(20, 20, 120, 80);
+        RectangularPolygon rect2 = new(160, 100, 120, 80);
+
+        // Default backend: two separate flushes
+        using Image<TPixel> defaultImage = provider.GetImage();
+        using (DrawingCanvas<TPixel> canvas1 = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
+        {
+            canvas1.Fill(rect1, redBrush);
+            canvas1.Flush();
+        }
+
+        using (DrawingCanvas<TPixel> canvas2 = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
+        {
+            canvas2.Fill(rect2, blueBrush);
+            canvas2.Flush();
+        }
+
+        // WebGPU backend: two separate flushes reusing the same backend
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        Configuration cpuConfig = Configuration.Default.Clone();
+        cpuConfig.SetDrawingBackend(cpuRegionBackend);
+
+        using (DrawingCanvas<TPixel> canvas1 = new(cpuConfig, GetFrameRegion(cpuRegionImage), drawingOptions))
+        {
+            canvas1.Fill(rect1, redBrush);
+            canvas1.Flush();
+        }
+
+        using (DrawingCanvas<TPixel> canvas2 = new(cpuConfig, GetFrameRegion(cpuRegionImage), drawingOptions))
+        {
+            canvas2.Fill(rect2, blueBrush);
+            canvas2.Flush();
+        }
+
+        // Native surface: two separate flushes reusing same backend
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        Assert.True(
+            WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
+                nativeSurfaceBackend,
+                defaultImage.Width,
+                defaultImage.Height,
+                isSrgb: false,
+                isPremultipliedAlpha: false,
+                out NativeSurface nativeSurface,
+                out nint textureHandle,
+                out nint textureViewHandle,
+                out string createError),
+            createError);
+
+        try
+        {
+            Configuration nativeConfig = Configuration.Default.Clone();
+            nativeConfig.SetDrawingBackend(nativeSurfaceBackend);
+            Rectangle targetBounds = defaultImage.Bounds;
+
+            // Upload initial white content
+            using Image<TPixel> initialImage = provider.GetImage();
+            Assert.True(
+                WebGPUTestNativeSurfaceAllocator.TryWriteTexture(
+                    nativeSurfaceBackend,
+                    textureHandle,
+                    defaultImage.Width,
+                    defaultImage.Height,
+                    initialImage,
+                    out string uploadError),
+                uploadError);
+
+            using (DrawingCanvas<TPixel> canvas1 =
+                   new(nativeConfig, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
+            {
+                canvas1.Fill(rect1, redBrush);
+                canvas1.Flush();
+            }
+
+            using (DrawingCanvas<TPixel> canvas2 =
+                   new(nativeConfig, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
+            {
+                canvas2.Fill(rect2, blueBrush);
+                canvas2.Flush();
+            }
+
+            Assert.True(
+                WebGPUTestNativeSurfaceAllocator.TryReadTexture(
+                    nativeSurfaceBackend,
+                    textureHandle,
+                    defaultImage.Width,
+                    defaultImage.Height,
+                    out Image<TPixel> nativeSurfaceImage,
+                    out string readError),
+                readError);
+
+            using (nativeSurfaceImage)
+            {
+                DebugSaveBackendTripletNoRef(provider, "MultipleFlushes", defaultImage, cpuRegionImage, nativeSurfaceImage);
+                AssertCoverageExecutionAccounting(cpuRegionBackend);
+                AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+                AssertGpuPathWhenRequired(cpuRegionBackend);
+                AssertGpuPathWhenRequired(nativeSurfaceBackend);
+                AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+            }
+        }
+        finally
+        {
+            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+        }
     }
 
     private static Buffer2DRegion<TPixel> GetFrameRegion<TPixel>(Image<TPixel> image)
