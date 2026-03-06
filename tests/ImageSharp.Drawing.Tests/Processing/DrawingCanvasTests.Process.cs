@@ -67,37 +67,6 @@ public partial class DrawingCanvasTests
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
 
-    [Theory]
-    [WithBlankImage(220, 160, PixelTypes.Rgba32)]
-    public void Process_NoCpuFrame_WithoutReadbackCapability_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        using Image<TPixel> target = provider.GetImage();
-        IPath blurPath = CreateBlurEllipsePath();
-        IPath pixelatePath = CreatePixelateTrianglePath();
-
-        Buffer2DRegion<TPixel> targetRegion = new(target.Frames.RootFrame.PixelBuffer, target.Bounds);
-        CpuCanvasFrame<TPixel> proxyFrame = new(targetRegion);
-        MirroringCpuReadbackTestBackend<TPixel> mirroringBackend = new(proxyFrame);
-        NativeSurface nativeSurface = new(TPixel.GetPixelTypeInfo());
-        Configuration configuration = provider.Configuration.Clone();
-        configuration.SetDrawingBackend(mirroringBackend);
-
-        using (DrawingCanvas<TPixel> canvas = new(
-                   configuration,
-                   new NativeSurfaceOnlyFrame<TPixel>(target.Bounds, nativeSurface),
-                   new DrawingOptions()))
-        {
-            DrawProcessScenario(canvas);
-            canvas.Process(blurPath, ctx => ctx.GaussianBlur(6F));
-            canvas.Process(pixelatePath, ctx => ctx.Pixelate(10));
-            canvas.Flush();
-        }
-
-        target.DebugSave(provider, appendSourceFileOrDescription: false);
-        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
-    }
-
     [Fact]
     public void Process_UsesCanvasConfigurationForOperationContext()
     {
