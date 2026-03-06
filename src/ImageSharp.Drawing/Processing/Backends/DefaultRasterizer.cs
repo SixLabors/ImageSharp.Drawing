@@ -33,10 +33,6 @@ internal static class DefaultRasterizer
     // Higher counts increased scheduling overhead for medium geometry workloads.
     private const int MaxParallelWorkerCount = 12;
 
-    // Minimum number of edge indices in a bucket before sorting for cache locality.
-    // Below this threshold the sort overhead exceeds the benefit of sequential edge access.
-    private const int EdgeIndexSortThreshold = 32;
-
     private const int FixedShift = 8;
     private const int FixedOne = 1 << FixedShift;
     private static readonly int WordBitCount = nint.Size * 8;
@@ -247,22 +243,22 @@ internal static class DefaultRasterizer
             return;
         }
 
-        if (!TryBuildEdgeBuckets(
+        if (!TryBuildBandSortedEdges(
             edges,
             bandCount,
             bandHeight,
             allocator,
-            out IMemoryOwner<int> bandOffsetsOwner,
-            out IMemoryOwner<int> bandEdgeReferencesOwner))
+            out IMemoryOwner<EdgeData> sortedEdgesOwner,
+            out IMemoryOwner<int> bandOffsetsOwner))
         {
             ThrowInterestBoundsTooLarge();
         }
 
+        using (sortedEdgesOwner)
         using (bandOffsetsOwner)
-        using (bandEdgeReferencesOwner)
         {
+            Span<EdgeData> sortedEdges = sortedEdgesOwner.Memory.Span;
             Span<int> bandOffsets = bandOffsetsOwner.Memory.Span;
-            Span<int> bandEdgeReferences = bandEdgeReferencesOwner.Memory.Span;
 
             // Reuse the caller-provided scratch when dimensions match; create a new one otherwise.
             if (reusableScratch == null || !reusableScratch.CanReuse(wordsPerRow, coverStrideInt, width, bandHeight))
@@ -285,15 +281,7 @@ internal static class DefaultRasterizer
                 }
 
                 Context context = scratch.CreateContext(currentBandHeight, intersectionRule, rasterizationMode);
-                Span<int> bandEdges = bandEdgeReferences.Slice(start, length);
-                if (length >= EdgeIndexSortThreshold)
-                {
-                    // Sorting edge indices into ascending order improves cache locality when
-                    // accessing the shared edges array: sequential indices → sequential reads.
-                    bandEdges.Sort();
-                }
-
-                context.RasterizeEdgeTable(edges, bandEdges, bandTop);
+                context.RasterizeEdgeTable(sortedEdges.Slice(start, length), bandTop);
                 context.EmitCoverageRows(interestTop + bandTop, scratch.Scanline, rowHandler);
                 context.ResetTouchedRows();
             }
@@ -367,22 +355,22 @@ internal static class DefaultRasterizer
             return false;
         }
 
-        if (!TryBuildEdgeBuckets(
+        if (!TryBuildBandSortedEdges(
             edgeMemory.Span[..edgeCount],
             tileCount,
             tileHeight,
             allocator,
-            out IMemoryOwner<int> tileOffsetsOwner,
-            out IMemoryOwner<int> tileEdgeReferencesOwner))
+            out IMemoryOwner<EdgeData> sortedEdgesOwner,
+            out IMemoryOwner<int> tileOffsetsOwner))
         {
             return false;
         }
 
+        using (sortedEdgesOwner)
         using (tileOffsetsOwner)
-        using (tileEdgeReferencesOwner)
         {
+            Memory<EdgeData> sortedEdgesMemory = sortedEdgesOwner.Memory;
             Memory<int> tileOffsetsMemory = tileOffsetsOwner.Memory;
-            Memory<int> tileEdgeReferencesMemory = tileEdgeReferencesOwner.Memory;
 
             ParallelOptions parallelOptions = new()
             {
@@ -402,22 +390,15 @@ internal static class DefaultRasterizer
                     int bandTop = tile * tileHeight;
                     try
                     {
-                        ReadOnlySpan<EdgeData> edges = edgeMemory.Span[..edgeCount];
                         Span<int> tileOffsets = tileOffsetsMemory.Span;
-                        Span<int> tileEdgeReferences = tileEdgeReferencesMemory.Span;
                         int bandHeight = Math.Min(tileHeight, height - bandTop);
                         int start = tileOffsets[tile];
                         int length = tileOffsets[tile + 1] - start;
                         if (length > 0)
                         {
-                            Span<int> tileEdges = tileEdgeReferences.Slice(start, length);
-                            if (length >= EdgeIndexSortThreshold)
-                            {
-                                tileEdges.Sort();
-                            }
-
+                            ReadOnlySpan<EdgeData> tileEdges = sortedEdgesMemory.Span.Slice(start, length);
                             context = worker.CreateContext(bandHeight, intersectionRule, rasterizationMode);
-                            context.RasterizeEdgeTable(edges, tileEdges, bandTop);
+                            context.RasterizeEdgeTable(tileEdges, bandTop);
                             hasCoverage = true;
                             context.EmitCoverageRows(interestTop + bandTop, worker.Scanline, rowHandler);
                         }
@@ -487,44 +468,32 @@ internal static class DefaultRasterizer
     }
 
     /// <summary>
-    /// Builds a CSR (Compressed Sparse Row) edge-to-bucket index mapping.
-    /// Each edge is recorded in every bucket whose row range it overlaps.
+    /// Builds a band-sorted edge buffer where edges are duplicated into each band they touch.
+    /// Band offsets provide direct indexing — no per-band edge index array is needed.
     /// </summary>
-    /// <param name="edges">The prebuilt edge table.</param>
-    /// <param name="bucketCount">Total number of buckets.</param>
-    /// <param name="bucketHeight">Rows per bucket.</param>
-    /// <param name="allocator">Temporary buffer allocator.</param>
-    /// <param name="offsetsOwner">
-    /// On success, receives an owned buffer of length <paramref name="bucketCount"/> + 1 containing
-    /// the CSR row offsets (prefix sums). Caller is responsible for disposal.
-    /// </param>
-    /// <param name="referencesOwner">
-    /// On success, receives an owned buffer containing edge index references. Caller is responsible for disposal.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> on success;
-    /// <see langword="false"/> if the total reference count would overflow <see cref="int.MaxValue"/>.
-    /// </returns>
-    private static bool TryBuildEdgeBuckets(
+    private static bool TryBuildBandSortedEdges(
         ReadOnlySpan<EdgeData> edges,
         int bucketCount,
         int bucketHeight,
         MemoryAllocator allocator,
-        out IMemoryOwner<int> offsetsOwner,
-        out IMemoryOwner<int> referencesOwner)
+        out IMemoryOwner<EdgeData> sortedEdgesOwner,
+        out IMemoryOwner<int> offsetsOwner)
     {
         using IMemoryOwner<int> countsOwner = allocator.Allocate<int>(bucketCount, AllocationOptions.Clean);
         Span<int> counts = countsOwner.Memory.Span;
         long totalRefs = 0;
         for (int i = 0; i < edges.Length; i++)
         {
-            int startBucket = edges[i].MinRow / bucketHeight;
-            int endBucket = edges[i].MaxRow / bucketHeight;
+            ref readonly EdgeData edge = ref edges[i];
+            int minRow = Math.Min(edge.Y0, edge.Y1) >> FixedShift;
+            int maxRow = (Math.Max(edge.Y0, edge.Y1) - 1) >> FixedShift;
+            int startBucket = minRow / bucketHeight;
+            int endBucket = maxRow / bucketHeight;
             totalRefs += (endBucket - startBucket) + 1;
             if (totalRefs > int.MaxValue)
             {
+                sortedEdgesOwner = null!;
                 offsetsOwner = null!;
-                referencesOwner = null!;
                 return false;
             }
 
@@ -534,7 +503,7 @@ internal static class DefaultRasterizer
             }
         }
 
-        int totalReferences = (int)totalRefs;
+        int totalEdges = (int)totalRefs;
         offsetsOwner = allocator.Allocate<int>(bucketCount + 1);
         Span<int> offsets = offsetsOwner.Memory.Span;
         int offset = 0;
@@ -549,15 +518,18 @@ internal static class DefaultRasterizer
         Span<int> writeCursor = writeCursorOwner.Memory.Span;
         offsets[..bucketCount].CopyTo(writeCursor);
 
-        referencesOwner = allocator.Allocate<int>(totalReferences);
-        Span<int> references = referencesOwner.Memory.Span;
-        for (int edgeIndex = 0; edgeIndex < edges.Length; edgeIndex++)
+        sortedEdgesOwner = allocator.Allocate<EdgeData>(totalEdges);
+        Span<EdgeData> sorted = sortedEdgesOwner.Memory.Span;
+        for (int i = 0; i < edges.Length; i++)
         {
-            int startBucket = edges[edgeIndex].MinRow / bucketHeight;
-            int endBucket = edges[edgeIndex].MaxRow / bucketHeight;
+            ref readonly EdgeData edge = ref edges[i];
+            int minRow = Math.Min(edge.Y0, edge.Y1) >> FixedShift;
+            int maxRow = (Math.Max(edge.Y0, edge.Y1) - 1) >> FixedShift;
+            int startBucket = minRow / bucketHeight;
+            int endBucket = maxRow / bucketHeight;
             for (int b = startBucket; b <= endBucket; b++)
             {
-                references[writeCursor[b]++] = edgeIndex;
+                sorted[writeCursor[b]++] = edge;
             }
         }
 
@@ -617,8 +589,7 @@ internal static class DefaultRasterizer
                     continue;
                 }
 
-                ComputeEdgeRowBounds(fy0, fy1, out int minRow, out int maxRow);
-                destination[count++] = new EdgeData(fx0, fy0, fx1, fy1, minRow, maxRow);
+                destination[count++] = new EdgeData(fx0, fy0, fx1, fy1);
             }
         }
 
@@ -676,33 +647,6 @@ internal static class DefaultRasterizer
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int FloatToFixed24Dot8(float value) => (int)MathF.Round(value * FixedOne);
-
-    /// <summary>
-    /// Computes the inclusive row range affected by a clipped non-horizontal edge.
-    /// </summary>
-    /// <param name="y0">Edge start Y in 24.8 fixed-point.</param>
-    /// <param name="y1">Edge end Y in 24.8 fixed-point.</param>
-    /// <param name="minRow">First affected integer scan row.</param>
-    /// <param name="maxRow">Last affected integer scan row.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ComputeEdgeRowBounds(int y0, int y1, out int minRow, out int maxRow)
-    {
-        int y0Row = y0 >> FixedShift;
-        int y1Row = y1 >> FixedShift;
-
-        // First touched row is floor(min(y0, y1)).
-        minRow = y0Row < y1Row ? y0Row : y1Row;
-
-        int y0Fraction = y0 & (FixedOne - 1);
-        int y1Fraction = y1 & (FixedOne - 1);
-
-        // Last touched row is ceil(max(y)) - 1:
-        // - when fractional part is non-zero, row is unchanged;
-        // - when exactly on a row boundary, subtract 1 (edge ownership rule).
-        int y0Candidate = y0Row - (((y0Fraction - 1) >> 31) & 1);
-        int y1Candidate = y1Row - (((y1Fraction - 1) >> 31) & 1);
-        maxRow = y0Candidate > y1Candidate ? y0Candidate : y1Candidate;
-    }
 
     /// <summary>
     /// Clips a fixed-point segment against vertical bounds.
@@ -1029,50 +973,9 @@ internal static class DefaultRasterizer
                 int y1 = edge.Y1;
 
                 // Fast-path: edge is fully within this band — no clipping needed.
-                // MinRow >= bandTop guarantees min(y0,y1) >= bandTopFixed.
-                // MaxRow < bandTop + height guarantees max(y0,y1) < bandBottomFixed.
-                if (edge.MinRow >= bandTop && edge.MaxRow < bandTop + this.height)
-                {
-                    this.RasterizeLine(x0, y0 - bandTopFixed, x1, y1 - bandTopFixed);
-                    continue;
-                }
-
-                if (!ClipToVerticalBoundsFixed(ref x0, ref y0, ref x1, ref y1, bandTopFixed, bandBottomFixed))
-                {
-                    continue;
-                }
-
-                // Convert global scanner Y to band-local Y after clipping.
-                y0 -= bandTopFixed;
-                y1 -= bandTopFixed;
-
-                this.RasterizeLine(x0, y0, x1, y1);
-            }
-        }
-
-        /// <summary>
-        /// Rasterizes a subset of prebuilt edges that intersect this context's vertical range.
-        /// </summary>
-        /// <param name="edges">Shared edge table.</param>
-        /// <param name="edgeIndices">Indices into <paramref name="edges"/> for this band/tile.</param>
-        /// <param name="bandTop">Top row of this context in global scanner-local coordinates.</param>
-        public void RasterizeEdgeTable(ReadOnlySpan<EdgeData> edges, ReadOnlySpan<int> edgeIndices, int bandTop)
-        {
-            int bandTopFixed = bandTop * FixedOne;
-            int bandBottomFixed = bandTopFixed + (this.height * FixedOne);
-
-            for (int i = 0; i < edgeIndices.Length; i++)
-            {
-                EdgeData edge = edges[edgeIndices[i]];
-                int x0 = edge.X0;
-                int y0 = edge.Y0;
-                int x1 = edge.X1;
-                int y1 = edge.Y1;
-
-                // Fast-path: edge is fully within this band — no clipping needed.
-                // MinRow >= bandTop guarantees min(y0,y1) >= bandTopFixed.
-                // MaxRow < bandTop + height guarantees max(y0,y1) < bandBottomFixed.
-                if (edge.MinRow >= bandTop && edge.MaxRow < bandTop + this.height)
+                int minY = Math.Min(y0, y1);
+                int maxY = Math.Max(y0, y1);
+                if (minY >= bandTopFixed && maxY <= bandBottomFixed)
                 {
                     this.RasterizeLine(x0, y0 - bandTopFixed, x1, y1 - bandTopFixed);
                     continue;
@@ -2111,11 +2014,12 @@ internal static class DefaultRasterizer
     }
 
     /// <summary>
-    /// Immutable scanner-local edge record with precomputed affected-row bounds.
+    /// Immutable scanner-local edge record (16 bytes).
     /// </summary>
     /// <remarks>
     /// All coordinates are stored as signed 24.8 fixed-point integers for predictable hot-path
-    /// access without per-read unpacking.
+    /// access without per-read unpacking. Row bounds are computed inline from Y coordinates
+    /// where needed.
     /// </remarks>
     internal readonly struct EdgeData
     {
@@ -2140,26 +2044,14 @@ internal static class DefaultRasterizer
         public readonly int Y1;
 
         /// <summary>
-        /// Gets the first scanner row affected by this edge.
-        /// </summary>
-        public readonly int MinRow;
-
-        /// <summary>
-        /// Gets the last scanner row affected by this edge.
-        /// </summary>
-        public readonly int MaxRow;
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="EdgeData"/> struct.
         /// </summary>
-        public EdgeData(int x0, int y0, int x1, int y1, int minRow, int maxRow)
+        public EdgeData(int x0, int y0, int x1, int y1)
         {
             this.X0 = x0;
             this.Y0 = y0;
             this.X1 = x1;
             this.Y1 = y1;
-            this.MinRow = minRow;
-            this.MaxRow = maxRow;
         }
     }
 

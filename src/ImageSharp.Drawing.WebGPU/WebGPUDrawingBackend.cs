@@ -497,12 +497,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 out nuint edgeBufferSize,
                 out EdgePlacement[] edgePlacements,
                 out int totalEdgeCount,
-                out int totalCsrEntries,
-                out int totalCsrIndices,
-                out WgpuBuffer* csrOffsetsBuffer,
-                out nuint csrOffsetsBufferSize,
-                out WgpuBuffer* csrIndicesBuffer,
-                out nuint csrIndicesBufferSize,
+                out int totalBandOffsetEntries,
+                out WgpuBuffer* bandOffsetsBuffer,
+                out nuint bandOffsetsBufferSize,
                 out error))
         {
             return false;
@@ -524,10 +521,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 edgePlacements,
                 edgeBuffer,
                 edgeBufferSize,
-                csrOffsetsBuffer,
-                csrOffsetsBufferSize,
-                csrIndicesBuffer,
-                csrIndicesBufferSize,
+                bandOffsetsBuffer,
+                bandOffsetsBufferSize,
                 out error))
         {
             return false;
@@ -574,10 +569,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         EdgePlacement[] edgePlacements,
         WgpuBuffer* edgeBuffer,
         nuint edgeBufferSize,
-        WgpuBuffer* csrOffsetsBuffer,
-        nuint csrOffsetsBufferSize,
-        WgpuBuffer* csrIndicesBuffer,
-        nuint csrIndicesBufferSize,
+        WgpuBuffer* bandOffsetsBuffer,
+        nuint bandOffsetsBufferSize,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -805,14 +798,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 &dispatchConfig,
                 dispatchConfigSize);
 
-            // CSR offsets and indices are pre-computed on CPU and uploaded directly.
-            // This eliminates the 5-dispatch GPU CSR pipeline (count → prefix-local →
-            // prefix-block-scan → prefix-propagate → scatter).
-            nuint csrOffsetsByteCount = csrOffsetsBufferSize;
-            nuint csrIndicesByteCount = csrIndicesBufferSize;
-
-            // Fine composite dispatch with CSR buffers.
-            BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[8];
+            // Band offsets are pre-computed on CPU and uploaded directly.
+            // Edges are pre-split at band boundaries, eliminating CSR index indirection.
+            BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[7];
             bindGroupEntries[0] = new BindGroupEntry
             {
                 Binding = 0,
@@ -852,22 +840,15 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             bindGroupEntries[6] = new BindGroupEntry
             {
                 Binding = 6,
-                Buffer = csrOffsetsBuffer,
+                Buffer = bandOffsetsBuffer,
                 Offset = 0,
-                Size = csrOffsetsByteCount
-            };
-            bindGroupEntries[7] = new BindGroupEntry
-            {
-                Binding = 7,
-                Buffer = csrIndicesBuffer,
-                Offset = 0,
-                Size = csrIndicesByteCount
+                Size = bandOffsetsBufferSize
             };
 
             BindGroupDescriptor bindGroupDescriptor = new()
             {
                 Layout = bindGroupLayout,
-                EntryCount = 8,
+                EntryCount = 7,
                 Entries = bindGroupEntries
             };
 
@@ -990,7 +971,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[8];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
         entries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
@@ -1068,21 +1049,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 MinBindingSize = 0
             }
         };
-        entries[7] = new BindGroupLayoutEntry
-        {
-            Binding = 7,
-            Visibility = ShaderStage.Compute,
-            Buffer = new BufferBindingLayout
-            {
-                Type = BufferBindingType.ReadOnlyStorage,
-                HasDynamicOffset = false,
-                MinBindingSize = 0
-            }
-        };
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 8,
+            EntryCount = 7,
             Entries = entries
         };
 

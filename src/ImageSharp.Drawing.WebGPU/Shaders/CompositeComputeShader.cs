@@ -24,10 +24,6 @@ internal static class CompositeComputeShader
             y0: i32,
             x1: i32,
             y1: i32,
-            min_row: i32,
-            max_row: i32,
-            csr_band_offset: u32,
-            definition_edge_start: u32,
         }
 
         struct Params {
@@ -82,8 +78,7 @@ internal static class CompositeComputeShader
         @group(0) @binding(3) var output_texture: texture_storage_2d<__OUTPUT_FORMAT__, write>;
         @group(0) @binding(4) var<storage, read> commands: array<Params>;
         @group(0) @binding(5) var<uniform> dispatch_config: DispatchConfig;
-        @group(0) @binding(6) var<storage, read> csr_offsets: array<u32>;
-        @group(0) @binding(7) var<storage, read> csr_indices: array<u32>;
+        @group(0) @binding(6) var<storage, read> band_offsets: array<u32>;
 
         // Workgroup shared memory for per-tile coverage accumulation.
         // Layout: 16 rows x 16 columns. Index = row * 16 + col.
@@ -859,35 +854,24 @@ internal static class CompositeComputeShader
 
                 // Determine this tile's position in coverage-local space.
                 let band_top = tile_min_y - command.edge_origin_y;
-                let band_bottom = band_top + 16;
                 let band_left_fixed = (tile_min_x - command.edge_origin_x) << FIXED_SHIFT;
 
-                // CSR band lookup: which 16-row bands overlap this tile?
+                // Band lookup: when edge_origin_y is 16-aligned the tile maps to one band;
+                // otherwise it can overlap two bands.
                 var first_band = band_top / 16;
                 if band_top < 0 && (band_top % 16) != 0 {
                     first_band -= 1;
                 }
                 first_band = max(first_band, 0);
-                var last_band = (band_bottom - 1) / 16;
-                if band_bottom - 1 < 0 && ((band_bottom - 1) % 16) != 0 {
-                    last_band -= 1;
-                }
-                last_band = min(last_band, i32(command.csr_band_count) - 1);
+                let last_band = min((band_top + 15) / 16, i32(command.csr_band_count) - 1);
 
-                // Early exit: skip if no CSR bands have edges for this tile (uniform).
                 if first_band > last_band {
                     continue;
                 }
-                var tile_has_edges = false;
-                for (var b = first_band; b <= last_band; b++) {
-                    let s = csr_offsets[command.csr_offsets_start + u32(b)];
-                    let e = csr_offsets[command.csr_offsets_start + u32(b) + 1u];
-                    if e > s {
-                        tile_has_edges = true;
-                        break;
-                    }
-                }
-                if !tile_has_edges {
+
+                let edge_range_start = band_offsets[command.csr_offsets_start + u32(first_band)];
+                let edge_range_end = band_offsets[command.csr_offsets_start + u32(last_band) + 1u];
+                if edge_range_start == edge_range_end {
                     continue;
                 }
 
@@ -899,37 +883,33 @@ internal static class CompositeComputeShader
                 }
                 workgroupBarrier();
 
-                // Cooperatively rasterize edges from the relevant CSR bands.
+                // Cooperatively rasterize edges from each overlapping band.
                 let tile_top_fixed = band_top << FIXED_SHIFT;
                 let tile_bottom_fixed = tile_top_fixed + (i32(16) << FIXED_SHIFT);
                 let tile_right_fixed = band_left_fixed + (i32(16) << FIXED_SHIFT);
+
                 for (var band = first_band; band <= last_band; band++) {
-                    let csr_start = csr_offsets[command.csr_offsets_start + u32(band)];
-                    let csr_end = csr_offsets[command.csr_offsets_start + u32(band) + 1u];
-                    let band_edge_count = csr_end - csr_start;
-                    let csr_band_top_fixed = (band * 16) << FIXED_SHIFT;
+                    let b_start = band_offsets[command.csr_offsets_start + u32(band)];
+                    let b_end = band_offsets[command.csr_offsets_start + u32(band) + 1u];
+                    let b_count = b_end - b_start;
+
+                    let csr_band_top_fixed = band * (i32(16) << FIXED_SHIFT);
                     let csr_band_bottom_fixed = csr_band_top_fixed + (i32(16) << FIXED_SHIFT);
                     let clip_top = max(tile_top_fixed, csr_band_top_fixed);
                     let clip_bottom = min(tile_bottom_fixed, csr_band_bottom_fixed);
+
                     var ei = thread_id;
                     loop {
-                        if ei >= band_edge_count {
+                        if ei >= b_count {
                             break;
                         }
-                        let edge_local_idx = csr_indices[csr_start + ei];
-                        let edge = edges[command.edge_start + edge_local_idx];
-
-                        // X-range spatial filter: skip edges that cannot affect this tile.
+                        let edge = edges[command.edge_start + b_start + ei];
                         if min(edge.x0, edge.x1) >= tile_right_fixed {
-                            // Edge entirely right of tile: no contribution.
                         } else if max(edge.x0, edge.x1) < band_left_fixed {
-                            // Edge entirely left of tile: only affects start_cover.
                             accumulate_start_cover(edge.y0, edge.y1, clip_top, clip_bottom, tile_top_fixed);
                         } else {
-                            // Edge overlaps tile: full rasterization.
                             rasterize_edge(edge, band_top, band_left_fixed, clip_top, clip_bottom);
                         }
-
                         ei += 256u;
                     }
                 }
