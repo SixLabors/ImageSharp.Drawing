@@ -4,6 +4,7 @@
 using System.Buffers;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
@@ -87,26 +88,27 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             int bandCount = (int)DivideRoundUp(interest.Height, TileHeight);
 
             if (!TryBuildFixedPointEdges(
+                    flushContext.MemoryAllocator,
                     definition.Path,
                     in interest,
                     definition.RasterizerOptions.SamplingOrigin,
-                    out GpuEdge[]? defEdges,
+                    out IMemoryOwner<GpuEdge>? defEdgeOwner,
                     out int edgeCount,
                     out int bandOverlaps,
                     out uint[]? defCsrOffsets,
                     out uint[]? defCsrIndices,
                     out error))
             {
-                // Return any already-built geometry arrays on failure.
+                // Dispose any already-built geometry on failure.
                 for (int j = 0; j < i; j++)
                 {
-                    ReturnEdgeArray(geometries[j].Edges);
+                    geometries[j].EdgeOwner?.Dispose();
                 }
 
                 return false;
             }
 
-            geometries[i] = new DefinitionGeometry(defEdges, edgeCount, bandCount, bandOverlaps, defCsrOffsets, defCsrIndices);
+            geometries[i] = new DefinitionGeometry(defEdgeOwner, edgeCount, bandCount, bandOverlaps, defCsrOffsets, defCsrIndices);
 
             int csrEntriesForDef = bandCount + 1;
             edgePlacements[i] = new EdgePlacement(
@@ -153,15 +155,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         int edgeBufferBytes = checked(totalEdgeCount * EdgeStrideBytes);
         edgeBufferSize = (nuint)edgeBufferBytes;
 
-        GpuEdge[]? mergedEdges;
-        bool mergedFromPool;
-        if (geometries.Length == 1 && geometries[0].Edges is not null)
+        IMemoryOwner<GpuEdge>? mergedEdgeOwner;
+        if (geometries.Length == 1 && geometries[0].EdgeOwner is not null)
         {
-            // Single definition: stamp metadata directly into source array.
-            mergedEdges = geometries[0].Edges;
-            mergedFromPool = true;
+            // Single definition: stamp metadata directly into source buffer.
+            mergedEdgeOwner = geometries[0].EdgeOwner!;
             EdgePlacement placement = edgePlacements[0];
-            Span<GpuEdge> span = mergedEdges.AsSpan(0, totalEdgeCount);
+            Span<GpuEdge> span = mergedEdgeOwner.Memory.Span[..totalEdgeCount];
             for (int i = 0; i < span.Length; i++)
             {
                 span[i].CsrBandOffset = placement.CsrOffsetsStart;
@@ -170,21 +170,20 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         }
         else
         {
-            // Multiple definitions: merge into a new array.
-            mergedEdges = ArrayPool<GpuEdge>.Shared.Rent(totalEdgeCount);
-            mergedFromPool = true;
+            // Multiple definitions: merge into a new buffer.
+            mergedEdgeOwner = flushContext.MemoryAllocator.Allocate<GpuEdge>(totalEdgeCount);
             int mergedEdgeIndex = 0;
             for (int defIndex = 0; defIndex < geometries.Length; defIndex++)
             {
                 ref DefinitionGeometry geometry = ref geometries[defIndex];
-                if (geometry.EdgeCount == 0 || geometry.Edges is null)
+                if (geometry.EdgeCount == 0 || geometry.EdgeOwner is null)
                 {
                     continue;
                 }
 
                 EdgePlacement placement = edgePlacements[defIndex];
-                ReadOnlySpan<GpuEdge> source = geometry.Edges.AsSpan(0, geometry.EdgeCount);
-                Span<GpuEdge> dest = mergedEdges.AsSpan(mergedEdgeIndex, geometry.EdgeCount);
+                ReadOnlySpan<GpuEdge> source = geometry.EdgeOwner.Memory.Span[..geometry.EdgeCount];
+                Span<GpuEdge> dest = mergedEdgeOwner.Memory.Span.Slice(mergedEdgeIndex, geometry.EdgeCount);
                 source.CopyTo(dest);
 
                 for (int i = 0; i < dest.Length; i++)
@@ -197,8 +196,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             }
         }
 
-        // Reinterpret typed array as bytes for GPU upload.
-        Span<byte> edgeUpload = MemoryMarshal.AsBytes(mergedEdges.AsSpan(0, totalEdgeCount));
+        // Reinterpret typed buffer as bytes for GPU upload.
+        Span<byte> edgeUpload = MemoryMarshal.AsBytes(mergedEdgeOwner.Memory.Span[..totalEdgeCount]);
 
         if (!TryGetOrCreateCoverageBuffer(
                 flushContext,
@@ -208,7 +207,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 out edgeBuffer,
                 out error))
         {
-            ReturnGeometries(geometries, mergedEdges, mergedFromPool);
+            DisposeGeometries(geometries, mergedEdgeOwner);
             return false;
         }
 
@@ -220,7 +219,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                 ref this.cachedCoverageLineLength,
                 out error))
         {
-            ReturnGeometries(geometries, mergedEdges, mergedFromPool);
+            DisposeGeometries(geometries, mergedEdgeOwner);
             return false;
         }
 
@@ -233,7 +232,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         if (!TryGetOrCreateCoverageBuffer(flushContext, "csr-offsets", BufferUsage.Storage | BufferUsage.CopyDst, csrOffsetsBufferSize, out csrOffsetsBuffer, out error) ||
             !TryGetOrCreateCoverageBuffer(flushContext, "csr-indices", BufferUsage.Storage | BufferUsage.CopyDst, csrIndicesBufferSize, out csrIndicesBuffer, out error))
         {
-            ReturnGeometries(geometries, mergedEdges, mergedFromPool);
+            DisposeGeometries(geometries, mergedEdgeOwner);
             return false;
         }
 
@@ -295,7 +294,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrIndicesBuffer, 0, csrIndicesBufferSize);
         }
 
-        ReturnGeometries(geometries, mergedEdges, mergedFromPool);
+        DisposeGeometries(geometries, mergedEdgeOwner);
 
         error = null;
         return true;
@@ -363,46 +362,49 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             firstDifferent++;
         }
 
-        if (firstDifferent < source.Length)
+        if (firstDifferent >= source.Length)
         {
-            int lastDifferent = source.Length - 1;
-            if (lastDifferent < commonLength)
+            // Data is identical to cache — skip upload and copy.
+            return true;
+        }
+
+        int lastDifferent = source.Length - 1;
+        if (lastDifferent < commonLength)
+        {
+            while (lastDifferent >= firstDifferent &&
+                   lastDifferent >= commonAlignedLength &&
+                   cached[lastDifferent] == source[lastDifferent])
             {
-                while (lastDifferent >= firstDifferent &&
-                       lastDifferent >= commonAlignedLength &&
-                       cached[lastDifferent] == source[lastDifferent])
-                {
-                    lastDifferent--;
-                }
-
-                int firstWordIndex = firstDifferent / sizeof(uint);
-                int lastWordIndex = Math.Min(lastDifferent / sizeof(uint), sourceWords.Length - 1);
-                while (lastWordIndex >= firstWordIndex && cachedWords[lastWordIndex] == sourceWords[lastWordIndex])
-                {
-                    lastWordIndex--;
-                }
-
-                if (lastWordIndex >= firstWordIndex)
-                {
-                    lastDifferent = Math.Min(lastDifferent, (lastWordIndex * sizeof(uint)) + (sizeof(uint) - 1));
-                }
+                lastDifferent--;
             }
 
-            int uploadOffset = firstDifferent & ~0x3;
-            int uploadEnd = firstDifferent + (lastDifferent - firstDifferent) + 1;
-            uploadEnd = (uploadEnd + 3) & ~0x3;
-            uploadEnd = Math.Min(uploadEnd, source.Length);
-            int uploadLength = uploadEnd - uploadOffset;
-
-            fixed (byte* sourcePtr = source)
+            int firstWordIndex = firstDifferent / sizeof(uint);
+            int lastWordIndex = Math.Min(lastDifferent / sizeof(uint), sourceWords.Length - 1);
+            while (lastWordIndex >= firstWordIndex && cachedWords[lastWordIndex] == sourceWords[lastWordIndex])
             {
-                flushContext.Api.QueueWriteBuffer(
-                    flushContext.Queue,
-                    destinationBuffer,
-                    (nuint)uploadOffset,
-                    sourcePtr + uploadOffset,
-                    (nuint)uploadLength);
+                lastWordIndex--;
             }
+
+            if (lastWordIndex >= firstWordIndex)
+            {
+                lastDifferent = Math.Min(lastDifferent, (lastWordIndex * sizeof(uint)) + (sizeof(uint) - 1));
+            }
+        }
+
+        int uploadOffset = firstDifferent & ~0x3;
+        int uploadEnd = firstDifferent + (lastDifferent - firstDifferent) + 1;
+        uploadEnd = (uploadEnd + 3) & ~0x3;
+        uploadEnd = Math.Min(uploadEnd, source.Length);
+        int uploadLength = uploadEnd - uploadOffset;
+
+        fixed (byte* sourcePtr = source)
+        {
+            flushContext.Api.QueueWriteBuffer(
+                flushContext.Queue,
+                destinationBuffer,
+                (nuint)uploadOffset,
+                sourcePtr + uploadOffset,
+                (nuint)uploadLength);
         }
 
         source.CopyTo(cached);
@@ -411,36 +413,22 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     }
 
     /// <summary>
-    /// Returns all pooled edge arrays from geometry entries.
+    /// Disposes all edge memory owners from geometry entries and the merged owner.
     /// </summary>
-    private static void ReturnGeometries(DefinitionGeometry[] geometries, GpuEdge[]? mergedEdges, bool mergedFromPool)
+    private static void DisposeGeometries(DefinitionGeometry[] geometries, IMemoryOwner<GpuEdge>? mergedEdgeOwner)
     {
         for (int i = 0; i < geometries.Length; i++)
         {
-            // For single-definition, Edges == mergedEdges; only return once.
-            if (geometries[i].Edges is not null && geometries[i].Edges != mergedEdges)
+            // For single-definition, EdgeOwner == mergedEdgeOwner; only dispose once.
+            if (geometries[i].EdgeOwner is not null && geometries[i].EdgeOwner != mergedEdgeOwner)
             {
-                ArrayPool<GpuEdge>.Shared.Return(geometries[i].Edges!);
+                geometries[i].EdgeOwner!.Dispose();
             }
 
-            geometries[i].Edges = null;
+            geometries[i].EdgeOwner = null;
         }
 
-        if (mergedFromPool && mergedEdges is not null)
-        {
-            ArrayPool<GpuEdge>.Shared.Return(mergedEdges);
-        }
-    }
-
-    /// <summary>
-    /// Returns a single edge array to the pool.
-    /// </summary>
-    private static void ReturnEdgeArray(GpuEdge[]? edges)
-    {
-        if (edges is not null)
-        {
-            ArrayPool<GpuEdge>.Shared.Return(edges);
-        }
+        mergedEdgeOwner?.Dispose();
     }
 
     private void DisposeCoverageResources()
@@ -455,10 +443,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     /// Each edge record is 32 bytes: x0, y0, x1, y1, min_row, max_row, 0, 0.
     /// </summary>
     private static bool TryBuildFixedPointEdges(
+        MemoryAllocator allocator,
         IPath path,
         in Rectangle interest,
         RasterizerSamplingOrigin samplingOrigin,
-        out GpuEdge[]? edges,
+        out IMemoryOwner<GpuEdge>? edgeOwner,
         out int edgeCount,
         out int totalBandOverlaps,
         out uint[]? csrOffsets,
@@ -466,7 +455,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         out string? error)
     {
         error = null;
-        edges = null;
+        edgeOwner = null;
         edgeCount = 0;
         totalBandOverlaps = 0;
         csrOffsets = null;
@@ -477,8 +466,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         int height = interest.Height;
 
         // Single-pass: flatten path and write edges directly as typed structs.
-        // Use a pooled array that grows as needed.
-        GpuEdge[] edgeArray = ArrayPool<GpuEdge>.Shared.Rent(1024);
+        IMemoryOwner<GpuEdge> currentOwner = allocator.Allocate<GpuEdge>(1024);
         int validEdgeCount = 0;
         int bandOverlaps = 0;
 
@@ -529,16 +517,18 @@ internal sealed unsafe partial class WebGPUDrawingBackend
                     continue;
                 }
 
-                // Grow array if needed.
-                if (validEdgeCount == edgeArray.Length)
+                // Grow buffer if needed.
+                Span<GpuEdge> edgeSpan = currentOwner.Memory.Span;
+                if (validEdgeCount == edgeSpan.Length)
                 {
-                    GpuEdge[] newArray = ArrayPool<GpuEdge>.Shared.Rent(edgeArray.Length * 2);
-                    edgeArray.AsSpan(0, validEdgeCount).CopyTo(newArray);
-                    ArrayPool<GpuEdge>.Shared.Return(edgeArray);
-                    edgeArray = newArray;
+                    IMemoryOwner<GpuEdge> newOwner = allocator.Allocate<GpuEdge>(edgeSpan.Length * 2);
+                    edgeSpan.CopyTo(newOwner.Memory.Span);
+                    currentOwner.Dispose();
+                    currentOwner = newOwner;
+                    edgeSpan = currentOwner.Memory.Span;
                 }
 
-                edgeArray[validEdgeCount] = new GpuEdge
+                edgeSpan[validEdgeCount] = new GpuEdge
                 {
                     X0 = x0,
                     Y0 = y0,
@@ -557,18 +547,19 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
         if (validEdgeCount == 0)
         {
-            ArrayPool<GpuEdge>.Shared.Return(edgeArray);
+            currentOwner.Dispose();
             return true;
         }
 
         // Build CSR offsets and indices directly from struct fields.
+        Span<GpuEdge> edges = currentOwner.Memory.Span;
         int bandCount = (int)DivideRoundUp(height, TileHeight);
         uint[] offsets = new uint[bandCount + 1];
 
         // Count edges per band.
         for (int edgeIdx = 0; edgeIdx < validEdgeCount; edgeIdx++)
         {
-            ref GpuEdge edge = ref edgeArray[edgeIdx];
+            ref GpuEdge edge = ref edges[edgeIdx];
             int minBand = edge.MinRow / TileHeight;
             int maxBand = edge.MaxRow / TileHeight;
             for (int b = minBand; b <= maxBand; b++)
@@ -591,7 +582,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         uint[] writeCursors = new uint[bandCount];
         for (int edgeIdx = 0; edgeIdx < validEdgeCount; edgeIdx++)
         {
-            ref GpuEdge edge = ref edgeArray[edgeIdx];
+            ref GpuEdge edge = ref edges[edgeIdx];
             int minBand = edge.MinRow / TileHeight;
             int maxBand = edge.MaxRow / TileHeight;
             for (int b = minBand; b <= maxBand; b++)
@@ -604,7 +595,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
 
         csrOffsets = offsets;
         csrIndices = indices;
-        edges = edgeArray;
+        edgeOwner = currentOwner;
         return true;
     }
 
@@ -872,7 +863,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
     [StructLayout(LayoutKind.Auto)]
     private struct DefinitionGeometry
     {
-        public GpuEdge[]? Edges;
+        public IMemoryOwner<GpuEdge>? EdgeOwner;
         public int EdgeCount;
         public int BandCount;
         public int TotalBandOverlaps;
@@ -880,14 +871,14 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         public uint[]? CsrIndices;
 
         public DefinitionGeometry(
-            GpuEdge[]? edges,
+            IMemoryOwner<GpuEdge>? edgeOwner,
             int edgeCount,
             int bandCount,
             int totalBandOverlaps,
             uint[]? csrOffsets,
             uint[]? csrIndices)
         {
-            this.Edges = edges;
+            this.EdgeOwner = edgeOwner;
             this.EdgeCount = edgeCount;
             this.BandCount = bandCount;
             this.TotalBandOverlaps = totalBandOverlaps;
