@@ -177,6 +177,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         CompositionScene compositionScene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+#if DEBUG_TIMING
+        long tMethodStart = Stopwatch.GetTimestamp();
+#endif
         this.ThrowIfDisposed();
         if (compositionScene.Commands.Count == 0)
         {
@@ -256,7 +259,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         bool gpuReady = false;
         string? failure = null;
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
-        using WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
+
+        WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
             target,
             textureFormat,
             pixelSizeInBytes,
@@ -269,20 +273,26 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.TestingPrepareCoverageCallCount += commandCount;
             this.TestingReleaseCoverageCallCount += commandCount;
 
-            gpuSuccess = this.TryRenderPreparedFlush<TPixel>(
+            bool renderOk = this.TryRenderPreparedFlush<TPixel>(
                 flushContext,
                 preparedBatches,
                 configuration,
                 target.Bounds,
                 compositionBounds.Value,
                 commandCount,
-                out failure) &&
-                this.TryFinalizeFlush(flushContext, cpuRegion, compositionBounds);
+                out failure);
+            bool finalizeOk = renderOk && this.TryFinalizeFlush(flushContext, cpuRegion, compositionBounds);
+            gpuSuccess = finalizeOk;
         }
         catch (Exception ex)
         {
             failure = ex.Message;
             gpuSuccess = false;
+        }
+        finally
+        {
+            flushContext.Dispose();
+            this.DisposeCoverageResources();
         }
 
         this.TestingGPUInitializationAttempted = true;
@@ -489,6 +499,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 out int totalEdgeCount,
                 out int totalCsrEntries,
                 out int totalCsrIndices,
+                out WgpuBuffer* csrOffsetsBuffer,
+                out nuint csrOffsetsBufferSize,
+                out WgpuBuffer* csrIndicesBuffer,
+                out nuint csrIndicesBufferSize,
                 out error))
         {
             return false;
@@ -510,9 +524,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 edgePlacements,
                 edgeBuffer,
                 edgeBufferSize,
-                totalEdgeCount,
-                totalCsrEntries,
-                totalCsrIndices,
+                csrOffsetsBuffer,
+                csrOffsetsBufferSize,
+                csrIndicesBuffer,
+                csrIndicesBufferSize,
                 out error))
         {
             return false;
@@ -559,9 +574,10 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         EdgePlacement[] edgePlacements,
         WgpuBuffer* edgeBuffer,
         nuint edgeBufferSize,
-        int totalEdgeCount,
-        int totalCsrEntries,
-        int totalCsrIndices,
+        WgpuBuffer* csrOffsetsBuffer,
+        nuint csrOffsetsBufferSize,
+        WgpuBuffer* csrIndicesBuffer,
+        nuint csrIndicesBufferSize,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -789,226 +805,11 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 &dispatchConfig,
                 dispatchConfigSize);
 
-            // Build CSR (Compressed Sparse Row) edge bucketing on GPU.
-            int csrEntries = Math.Max(totalCsrEntries, 1);
-            int csrIndices = Math.Max(totalCsrIndices, 1);
-            nuint csrBandCountsByteCount = checked((nuint)(csrEntries * sizeof(uint)));
-            nuint csrOffsetsByteCount = csrBandCountsByteCount;
-            nuint csrWriteCursorsByteCount = csrBandCountsByteCount;
-            nuint csrIndicesByteCount = checked((nuint)(csrIndices * sizeof(uint)));
-
-            if (!TryGetOrCreateCoverageBuffer(flushContext, "csr-band-counts", BufferUsage.Storage | BufferUsage.CopyDst, csrBandCountsByteCount, out WgpuBuffer* csrBandCountsBuffer, out error) ||
-                !TryGetOrCreateCoverageBuffer(flushContext, "csr-offsets", BufferUsage.Storage | BufferUsage.CopyDst, csrOffsetsByteCount, out WgpuBuffer* csrOffsetsBuffer, out error) ||
-                !TryGetOrCreateCoverageBuffer(flushContext, "csr-write-cursors", BufferUsage.Storage | BufferUsage.CopyDst, csrWriteCursorsByteCount, out WgpuBuffer* csrWriteCursorsBuffer, out error) ||
-                !TryGetOrCreateCoverageBuffer(flushContext, "csr-indices", BufferUsage.Storage | BufferUsage.CopyDst, csrIndicesByteCount, out WgpuBuffer* csrIndicesBuffer, out error))
-            {
-                return false;
-            }
-
-            if (totalEdgeCount > 0 && totalCsrEntries > 0)
-            {
-                // CSR config uniform.
-                nuint csrConfigSize = (nuint)Unsafe.SizeOf<CsrConfig>();
-                if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
-                        "csr-config",
-                        BufferUsage.Uniform | BufferUsage.CopyDst,
-                        csrConfigSize,
-                        out WgpuBuffer* csrConfigBuffer,
-                        out _,
-                        out error))
-                {
-                    return false;
-                }
-
-                CsrConfig csrConfig = new((uint)totalEdgeCount);
-                flushContext.Api.QueueWriteBuffer(flushContext.Queue, csrConfigBuffer, 0, &csrConfig, csrConfigSize);
-
-                // CSR prefix sum config.
-                const int tilesPerWorkgroup = CsrPrefixLocalComputeShader.TilesPerWorkgroup;
-                int csrBlockCount = checked((int)DivideRoundUp(totalCsrEntries, tilesPerWorkgroup));
-
-                nuint csrBlockSumsSize = checked((nuint)(Math.Max(csrBlockCount, 1) * sizeof(uint)));
-                if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
-                        "csr-prefix-block-sums",
-                        BufferUsage.Storage | BufferUsage.CopyDst,
-                        csrBlockSumsSize,
-                        out WgpuBuffer* csrBlockSumsBuffer,
-                        out _,
-                        out error))
-                {
-                    return false;
-                }
-
-                nuint csrPrefixConfigSize = (nuint)Unsafe.SizeOf<PreparedCompositeDispatchConfig>();
-                if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
-                        "csr-prefix-dispatch-config",
-                        BufferUsage.Uniform | BufferUsage.CopyDst,
-                        csrPrefixConfigSize,
-                        out WgpuBuffer* csrPrefixDispatchConfigBuffer,
-                        out _,
-                        out error))
-                {
-                    return false;
-                }
-
-                PreparedCompositeDispatchConfig csrPrefixConfig = new(0, 0, 0, 0, (uint)totalCsrEntries, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-                flushContext.Api.QueueWriteBuffer(flushContext.Queue, csrPrefixDispatchConfigBuffer, 0, &csrPrefixConfig, csrPrefixConfigSize);
-
-                WgpuBuffer* csrPrefixBlockConfigBuffer = null;
-                nuint csrPrefixBlockConfigSize = sizeof(uint);
-                if (csrBlockCount > 1)
-                {
-                    uint csrBlockCountValue = (uint)csrBlockCount;
-                    if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
-                            "csr-prefix-block-config",
-                            BufferUsage.Uniform | BufferUsage.CopyDst,
-                            csrPrefixBlockConfigSize,
-                            out csrPrefixBlockConfigBuffer,
-                            out _,
-                            out error))
-                    {
-                        return false;
-                    }
-
-                    flushContext.Api.QueueWriteBuffer(flushContext.Queue, csrPrefixBlockConfigBuffer, 0, &csrBlockCountValue, csrPrefixBlockConfigSize);
-                }
-
-                // All clears before the single CSR compute pass.
-                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrBandCountsBuffer, 0, csrBandCountsByteCount);
-                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrBlockSumsBuffer, 0, csrBlockSumsSize);
-                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrWriteCursorsBuffer, 0, csrWriteCursorsByteCount);
-
-                // Single compute pass: CSR count → prefix sum (3 phases) → scatter.
-                uint csrDispatchCount = DivideRoundUp(totalEdgeCount, CsrWorkgroupSize);
-                ComputePassDescriptor csrPassDescriptor = default;
-                ComputePassEncoder* csrPass = flushContext.Api.CommandEncoderBeginComputePass(
-                    flushContext.CommandEncoder, in csrPassDescriptor);
-                if (csrPass is null)
-                {
-                    error = "Failed to begin CSR compute pass.";
-                    return false;
-                }
-
-                try
-                {
-                    // CSR count: each thread processes one edge, atomicAdd to band_counts.
-                    if (!this.DispatchIntoComputePass(
-                            flushContext,
-                            csrPass,
-                            "csr-count",
-                            CsrCountComputeShader.Code,
-                            TryCreateCsrCountBindGroupLayout,
-                            (entries) =>
-                            {
-                                entries[0] = new BindGroupEntry { Binding = 0, Buffer = edgeBuffer, Offset = 0, Size = edgeBufferSize };
-                                entries[1] = new BindGroupEntry { Binding = 1, Buffer = csrBandCountsBuffer, Offset = 0, Size = csrBandCountsByteCount };
-                                entries[2] = new BindGroupEntry { Binding = 2, Buffer = csrConfigBuffer, Offset = 0, Size = csrConfigSize };
-                                return 3;
-                            },
-                            (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, csrDispatchCount, 1, 1),
-                            out error))
-                    {
-                        return false;
-                    }
-
-                    // CSR prefix local: per-workgroup prefix sum over band_counts → csr_offsets.
-                    if (!this.DispatchIntoComputePass(
-                            flushContext,
-                            csrPass,
-                            "csr-prefix-local",
-                            CsrPrefixLocalComputeShader.Code,
-                            TryCreateCsrPrefixLocalBindGroupLayout,
-                            (entries) =>
-                            {
-                                entries[0] = new BindGroupEntry { Binding = 0, Buffer = csrBandCountsBuffer, Offset = 0, Size = nuint.MaxValue };
-                                entries[1] = new BindGroupEntry { Binding = 1, Buffer = csrOffsetsBuffer, Offset = 0, Size = nuint.MaxValue };
-                                entries[2] = new BindGroupEntry { Binding = 2, Buffer = csrBlockSumsBuffer, Offset = 0, Size = csrBlockSumsSize };
-                                entries[3] = new BindGroupEntry { Binding = 3, Buffer = csrPrefixDispatchConfigBuffer, Offset = 0, Size = csrPrefixConfigSize };
-                                return 4;
-                            },
-                            (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, (uint)csrBlockCount, 1, 1),
-                            out error))
-                    {
-                        return false;
-                    }
-
-                    if (csrBlockCount > 1)
-                    {
-                        // CSR prefix block scan.
-                        if (!this.DispatchIntoComputePass(
-                                flushContext,
-                                csrPass,
-                                "csr-prefix-block-scan",
-                                CsrPrefixBlockScanComputeShader.Code,
-                                TryCreateCsrPrefixBlockScanBindGroupLayout,
-                                (entries) =>
-                                {
-                                    entries[0] = new BindGroupEntry { Binding = 0, Buffer = csrBlockSumsBuffer, Offset = 0, Size = csrBlockSumsSize };
-                                    entries[1] = new BindGroupEntry { Binding = 1, Buffer = csrPrefixBlockConfigBuffer, Offset = 0, Size = csrPrefixBlockConfigSize };
-                                    return 2;
-                                },
-                                (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, 1, 1, 1),
-                                out error))
-                        {
-                            return false;
-                        }
-
-                        // CSR prefix propagate.
-                        if (!this.DispatchIntoComputePass(
-                                flushContext,
-                                csrPass,
-                                "csr-prefix-propagate",
-                                CsrPrefixPropagateComputeShader.Code,
-                                TryCreateCsrPrefixPropagateBindGroupLayout,
-                                (entries) =>
-                                {
-                                    entries[0] = new BindGroupEntry { Binding = 0, Buffer = csrBlockSumsBuffer, Offset = 0, Size = csrBlockSumsSize };
-                                    entries[1] = new BindGroupEntry { Binding = 1, Buffer = csrOffsetsBuffer, Offset = 0, Size = nuint.MaxValue };
-                                    entries[2] = new BindGroupEntry { Binding = 2, Buffer = csrPrefixDispatchConfigBuffer, Offset = 0, Size = csrPrefixConfigSize };
-                                    return 3;
-                                },
-                                (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, (uint)csrBlockCount, 1, 1),
-                                out error))
-                        {
-                            return false;
-                        }
-                    }
-
-                    // CSR scatter: each thread processes one edge, scatters into csr_indices.
-                    if (!this.DispatchIntoComputePass(
-                            flushContext,
-                            csrPass,
-                            "csr-scatter",
-                            CsrScatterComputeShader.Code,
-                            TryCreateCsrScatterBindGroupLayout,
-                            (entries) =>
-                            {
-                                entries[0] = new BindGroupEntry { Binding = 0, Buffer = edgeBuffer, Offset = 0, Size = edgeBufferSize };
-                                entries[1] = new BindGroupEntry { Binding = 1, Buffer = csrOffsetsBuffer, Offset = 0, Size = csrOffsetsByteCount };
-                                entries[2] = new BindGroupEntry { Binding = 2, Buffer = csrWriteCursorsBuffer, Offset = 0, Size = csrWriteCursorsByteCount };
-                                entries[3] = new BindGroupEntry { Binding = 3, Buffer = csrIndicesBuffer, Offset = 0, Size = csrIndicesByteCount };
-                                entries[4] = new BindGroupEntry { Binding = 4, Buffer = csrConfigBuffer, Offset = 0, Size = csrConfigSize };
-                                return 5;
-                            },
-                            (p) => flushContext.Api.ComputePassEncoderDispatchWorkgroups(p, csrDispatchCount, 1, 1),
-                            out error))
-                    {
-                        return false;
-                    }
-                }
-                finally
-                {
-                    flushContext.Api.ComputePassEncoderEnd(csrPass);
-                    flushContext.Api.ComputePassEncoderRelease(csrPass);
-                }
-            }
-            else
-            {
-                // No edges: clear CSR buffers.
-                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrBandCountsBuffer, 0, csrBandCountsByteCount);
-                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrOffsetsBuffer, 0, csrOffsetsByteCount);
-                flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, csrIndicesBuffer, 0, csrIndicesByteCount);
-            }
+            // CSR offsets and indices are pre-computed on CPU and uploaded directly.
+            // This eliminates the 5-dispatch GPU CSR pipeline (count → prefix-local →
+            // prefix-block-scan → prefix-propagate → scatter).
+            nuint csrOffsetsByteCount = csrOffsetsBufferSize;
+            nuint csrIndicesByteCount = csrIndicesBufferSize;
 
             // Fine composite dispatch with CSR buffers.
             BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[8];
