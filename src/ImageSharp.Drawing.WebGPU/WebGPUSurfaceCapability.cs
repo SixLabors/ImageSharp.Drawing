@@ -6,12 +6,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Native WebGPU surface capability attached to <see cref="NativeSurface"/>.
 /// </summary>
+/// <remarks>
+/// The <see cref="Device"/> handle must remain valid for the lifetime of any
+/// <see cref="IDrawingBackend"/> that processes frames using this capability.
+/// The backend caches per-device GPU resources (pipelines, buffers) that reference
+/// the device internally. Ensure the device is not released while any backend
+/// instance may still reference it.
+/// </remarks>
 public sealed class WebGPUSurfaceCapability
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSurfaceCapability"/> class.
     /// </summary>
-    /// <param name="device">Opaque <c>WGPUDevice*</c> handle.</param>
+    /// <param name="device">Opaque <c>WGPUDevice*</c> handle. Must remain valid for the lifetime of any backend that uses this capability.</param>
     /// <param name="queue">Opaque <c>WGPUQueue*</c> handle.</param>
     /// <param name="targetTexture">Opaque <c>WGPUTexture*</c> handle for the current frame when writable upload is supported.</param>
     /// <param name="targetTextureView">Opaque <c>WGPUTextureView*</c> handle for the current frame.</param>
