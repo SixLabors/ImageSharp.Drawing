@@ -4,11 +4,11 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Phase 3 of the parallel tile prefix sum: each workgroup adds its
-/// block prefix from block_sums to all tile_starts in its range.
+/// Phase 3 of the parallel CSR prefix sum: each workgroup adds its
+/// block prefix from block_sums to all CSR offsets in its range.
 /// Workgroup 0 is skipped (its prefix is 0).
 /// </summary>
-internal static class PreparedCompositeTilePrefixPropagateComputeShader
+internal static class CsrPrefixPropagateComputeShader
 {
     private static readonly byte[] CodeBytes =
     [

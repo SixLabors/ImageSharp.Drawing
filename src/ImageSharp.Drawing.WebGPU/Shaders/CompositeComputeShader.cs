@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <see cref="DefaultRasterizer"/>, operating per-tile with workgroup shared memory.
 /// Shader source is generated per texture format to match sampling/output requirements.
 /// </summary>
-internal static class PreparedCompositeFineComputeShader
+internal static class CompositeComputeShader
 {
     private static readonly object CacheSync = new();
     private static readonly Dictionary<TextureFormat, byte[]> ShaderCache = [];
@@ -81,12 +81,9 @@ internal static class PreparedCompositeFineComputeShader
         @group(0) @binding(2) var brush_texture: texture_2d<__BACKDROP_TEXEL_TYPE__>;
         @group(0) @binding(3) var output_texture: texture_storage_2d<__OUTPUT_FORMAT__, write>;
         @group(0) @binding(4) var<storage, read> commands: array<Params>;
-        @group(0) @binding(5) var<storage, read> tile_starts: array<u32>;
-        @group(0) @binding(6) var<storage, read_write> tile_counts: array<atomic<u32>>;
-        @group(0) @binding(7) var<storage, read> tile_command_indices: array<u32>;
-        @group(0) @binding(8) var<uniform> dispatch_config: DispatchConfig;
-        @group(0) @binding(9) var<storage, read> csr_offsets: array<u32>;
-        @group(0) @binding(10) var<storage, read> csr_indices: array<u32>;
+        @group(0) @binding(5) var<uniform> dispatch_config: DispatchConfig;
+        @group(0) @binding(6) var<storage, read> csr_offsets: array<u32>;
+        @group(0) @binding(7) var<storage, read> csr_indices: array<u32>;
 
         // Workgroup shared memory for per-tile coverage accumulation.
         // Layout: 16 rows x 16 columns. Index = row * 16 + col.
@@ -798,26 +795,27 @@ internal static class PreparedCompositeFineComputeShader
 
             let dest_x_i32 = i32(dest_x);
             let dest_y_i32 = i32(dest_y);
+            let tile_min_x = i32(tile_x * 16u);
+            let tile_min_y = i32(tile_y * 16u);
+            let tile_max_x = tile_min_x + 16;
+            let tile_max_y = tile_min_y + 16;
 
-            let tile_command_start = tile_starts[tile_index];
-            let tile_command_count = atomicLoad(&tile_counts[tile_index]);
-
-            for (var tile_cmd_offset = 0u; tile_cmd_offset < tile_command_count; tile_cmd_offset++) {
-                let command_index = tile_command_indices[tile_command_start + tile_cmd_offset];
+            for (var command_index = 0u; command_index < dispatch_config.command_count; command_index++) {
                 let command = commands[command_index];
 
-                // Clear shared coverage memory.
-                atomicStore(&tile_cover[thread_id], 0);
-                atomicStore(&tile_area[thread_id], 0);
-                if px == 0u {
-                    atomicStore(&tile_start_cover[py], 0);
+                // Tile vs command bounding box check (uniform across workgroup).
+                let cmd_min_x = bitcast<i32>(command.destination_x);
+                let cmd_min_y = bitcast<i32>(command.destination_y);
+                let cmd_max_x = cmd_min_x + i32(command.destination_width);
+                let cmd_max_y = cmd_min_y + i32(command.destination_height);
+                if tile_max_x <= cmd_min_x || tile_min_x >= cmd_max_x || tile_max_y <= cmd_min_y || tile_min_y >= cmd_max_y {
+                    continue;
                 }
-                workgroupBarrier();
 
                 // Determine this tile's position in coverage-local space.
-                let band_top = i32(tile_y * 16u) - command.edge_origin_y;
+                let band_top = tile_min_y - command.edge_origin_y;
                 let band_bottom = band_top + 16;
-                let band_left_fixed = (i32(tile_x * 16u) - command.edge_origin_x) << FIXED_SHIFT;
+                let band_left_fixed = (tile_min_x - command.edge_origin_x) << FIXED_SHIFT;
 
                 // CSR band lookup: which 16-row bands overlap this tile?
                 var first_band = band_top / 16;
@@ -831,6 +829,31 @@ internal static class PreparedCompositeFineComputeShader
                 }
                 last_band = min(last_band, i32(command.csr_band_count) - 1);
 
+                // Early exit: skip if no CSR bands have edges for this tile (uniform).
+                if first_band > last_band {
+                    continue;
+                }
+                var tile_has_edges = false;
+                for (var b = first_band; b <= last_band; b++) {
+                    let s = csr_offsets[command.csr_offsets_start + u32(b)];
+                    let e = csr_offsets[command.csr_offsets_start + u32(b) + 1u];
+                    if e > s {
+                        tile_has_edges = true;
+                        break;
+                    }
+                }
+                if !tile_has_edges {
+                    continue;
+                }
+
+                // Clear shared coverage memory.
+                atomicStore(&tile_cover[thread_id], 0);
+                atomicStore(&tile_area[thread_id], 0);
+                if px == 0u {
+                    atomicStore(&tile_start_cover[py], 0);
+                }
+                workgroupBarrier();
+
                 // Cooperatively rasterize edges from the relevant CSR bands.
                 let tile_top_fixed = band_top << FIXED_SHIFT;
                 let tile_bottom_fixed = tile_top_fixed + (i32(16) << FIXED_SHIFT);
@@ -838,8 +861,6 @@ internal static class PreparedCompositeFineComputeShader
                     let csr_start = csr_offsets[command.csr_offsets_start + u32(band)];
                     let csr_end = csr_offsets[command.csr_offsets_start + u32(band) + 1u];
                     let band_edge_count = csr_end - csr_start;
-                    // Clip to intersection of tile window and CSR band window
-                    // to avoid double-counting edges that span multiple CSR bands.
                     let csr_band_top_fixed = (band * 16) << FIXED_SHIFT;
                     let csr_band_bottom_fixed = csr_band_top_fixed + (i32(16) << FIXED_SHIFT);
                     let clip_top = max(tile_top_fixed, csr_band_top_fixed);
@@ -859,12 +880,7 @@ internal static class PreparedCompositeFineComputeShader
 
                 // Compute coverage and compose for this pixel.
                 if in_bounds {
-                    let cmd_min_x = bitcast<i32>(command.destination_x);
-                    let cmd_min_y = bitcast<i32>(command.destination_y);
-                    let cmd_max_x = cmd_min_x + i32(command.destination_width);
-                    let cmd_max_y = cmd_min_y + i32(command.destination_height);
                     if dest_x_i32 >= cmd_min_x && dest_x_i32 < cmd_max_x && dest_y_i32 >= cmd_min_y && dest_y_i32 < cmd_max_y {
-                        // Prefix sum of cover deltas for this row.
                         var cover = atomicLoad(&tile_start_cover[py]);
                         for (var col = 0u; col < px; col++) {
                             cover += atomicLoad(&tile_cover[py * 16u + col]);

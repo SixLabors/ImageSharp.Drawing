@@ -4,11 +4,11 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Phase 1 of the parallel tile prefix sum: each workgroup computes a local
-/// exclusive prefix sum over 256 tile counts, writes per-tile starts, and
+/// Phase 1 of the parallel CSR prefix sum: each workgroup computes a local
+/// exclusive prefix sum over 256 band counts, writes per-band offsets, and
 /// stores the workgroup total into a block_sums buffer.
 /// </summary>
-internal static class PreparedCompositeTilePrefixLocalComputeShader
+internal static class CsrPrefixLocalComputeShader
 {
     /// <summary>
     /// The number of tiles processed by each workgroup.

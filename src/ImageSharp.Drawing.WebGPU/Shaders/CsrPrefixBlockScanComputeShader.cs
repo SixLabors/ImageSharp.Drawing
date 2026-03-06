@@ -4,11 +4,11 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Phase 2 of the parallel tile prefix sum: a single workgroup performs an
+/// Phase 2 of the parallel CSR prefix sum: a single workgroup performs an
 /// in-place exclusive prefix sum over the block_sums array from phase 1.
-/// Supports up to 65536 blocks (256 * 256 = 16M tiles).
+/// Supports up to 65536 blocks (256 * 256 = 16M bands).
 /// </summary>
-internal static class PreparedCompositeTilePrefixBlockScanComputeShader
+internal static class CsrPrefixBlockScanComputeShader
 {
     private static readonly byte[] CodeBytes =
     [
