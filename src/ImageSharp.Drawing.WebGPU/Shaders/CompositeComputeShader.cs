@@ -709,6 +709,51 @@ internal static class CompositeComputeShader
             return ClippedEdge(rx0, ry0, rx1, ry1, 1);
         }
 
+        fn accumulate_start_cover(ey0: i32, ey1: i32, clip_top: i32, clip_bottom: i32, tile_top_fixed: i32) {
+            // Fast path for edges entirely left of the tile.
+            // Only start_cover is affected (no area). The total cover delta per row
+            // is the signed height of the edge within that row, which telescopes
+            // across columns. This avoids the full column-walking overhead.
+            var cy0 = clamp(ey0, clip_top, clip_bottom);
+            var cy1 = clamp(ey1, clip_top, clip_bottom);
+            if cy0 == cy1 { return; }
+
+            let ly0 = cy0 - tile_top_fixed;
+            let ly1 = cy1 - tile_top_fixed;
+
+            if ly0 < ly1 {
+                // Downward.
+                let row0 = ly0 >> FIXED_SHIFT;
+                let row1 = (ly1 - 1) >> FIXED_SHIFT;
+                let fy0 = ly0 - (row0 << FIXED_SHIFT);
+                let fy1 = ly1 - (row1 << FIXED_SHIFT);
+                if row0 == row1 {
+                    atomicAdd(&tile_start_cover[row0], fy0 - fy1);
+                    return;
+                }
+                atomicAdd(&tile_start_cover[row0], fy0 - FIXED_ONE);
+                for (var r = row0 + 1; r < row1; r++) {
+                    atomicAdd(&tile_start_cover[r], -FIXED_ONE);
+                }
+                atomicAdd(&tile_start_cover[row1], -fy1);
+            } else {
+                // Upward.
+                let row0 = (ly0 - 1) >> FIXED_SHIFT;
+                let row1 = ly1 >> FIXED_SHIFT;
+                let fy0 = ly0 - (row0 << FIXED_SHIFT);
+                let fy1 = ly1 - (row1 << FIXED_SHIFT);
+                if row0 == row1 {
+                    atomicAdd(&tile_start_cover[row0], fy0 - fy1);
+                    return;
+                }
+                atomicAdd(&tile_start_cover[row0], fy0);
+                for (var r = row0 - 1; r > row1; r--) {
+                    atomicAdd(&tile_start_cover[r], FIXED_ONE);
+                }
+                atomicAdd(&tile_start_cover[row1], FIXED_ONE - fy1);
+            }
+        }
+
         fn rasterize_edge(edge: Edge, band_top: i32, band_left_fixed: i32, clip_top_fixed: i32, clip_bottom_fixed: i32) {
             let band_top_fixed = band_top << FIXED_SHIFT;
             let ex0 = edge.x0 - band_left_fixed;
@@ -857,6 +902,7 @@ internal static class CompositeComputeShader
                 // Cooperatively rasterize edges from the relevant CSR bands.
                 let tile_top_fixed = band_top << FIXED_SHIFT;
                 let tile_bottom_fixed = tile_top_fixed + (i32(16) << FIXED_SHIFT);
+                let tile_right_fixed = band_left_fixed + (i32(16) << FIXED_SHIFT);
                 for (var band = first_band; band <= last_band; band++) {
                     let csr_start = csr_offsets[command.csr_offsets_start + u32(band)];
                     let csr_end = csr_offsets[command.csr_offsets_start + u32(band) + 1u];
@@ -872,7 +918,18 @@ internal static class CompositeComputeShader
                         }
                         let edge_local_idx = csr_indices[csr_start + ei];
                         let edge = edges[command.edge_start + edge_local_idx];
-                        rasterize_edge(edge, band_top, band_left_fixed, clip_top, clip_bottom);
+
+                        // X-range spatial filter: skip edges that cannot affect this tile.
+                        if min(edge.x0, edge.x1) >= tile_right_fixed {
+                            // Edge entirely right of tile: no contribution.
+                        } else if max(edge.x0, edge.x1) < band_left_fixed {
+                            // Edge entirely left of tile: only affects start_cover.
+                            accumulate_start_cover(edge.y0, edge.y1, clip_top, clip_bottom, tile_top_fixed);
+                        } else {
+                            // Edge overlaps tile: full rasterization.
+                            rasterize_edge(edge, band_top, band_left_fixed, clip_top, clip_bottom);
+                        }
+
                         ei += 256u;
                     }
                 }
