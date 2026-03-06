@@ -111,6 +111,15 @@ public class PathBuilder
     }
 
     /// <summary>
+    /// Moves to current point to the supplied vector.
+    /// </summary>
+    /// <param name="x">The x-coordinate.</param>
+    /// <param name="y">The y-coordinate.</param>
+    /// <returns>The <see cref="PathBuilder"/></returns>
+    public PathBuilder MoveTo(float x, float y)
+        => this.MoveTo(new PointF(x, y));
+
+    /// <summary>
     /// Draws the line connecting the current the current point to the new point.
     /// </summary>
     /// <param name="point">The point.</param>

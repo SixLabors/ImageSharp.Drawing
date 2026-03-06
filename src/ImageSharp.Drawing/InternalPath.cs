@@ -225,16 +225,47 @@ internal class InternalPath
     {
         List<PointF> simplified = new(segments.Count);
 
+        // Track indices where collinear direction reversals represent user-intended
+        // geometry: interior points of multi-point linear segments, and junction
+        // points between two linear segments (e.g. PathBuilder LineTo → LineTo).
+        // Reversals at all other indices (flattened curves, curve junctions) are
+        // artifacts and should be removed normally.
+        HashSet<int>? linearReversalIndices = null;
+        ILineSegment? prevSeg = null;
+
         foreach (ILineSegment seg in segments)
         {
+            int start = simplified.Count;
             ReadOnlyMemory<PointF> points = seg.Flatten();
             simplified.AddRange(points.Span);
+
+            if (seg is LinearLineSegment)
+            {
+                // Interior points of a multi-point linear segment (e.g. DrawLine with 3+ points).
+                if (points.Length > 2)
+                {
+                    linearReversalIndices ??= [];
+                    for (int i = start + 1; i < start + points.Length - 1; i++)
+                    {
+                        _ = linearReversalIndices.Add(i);
+                    }
+                }
+
+                // Junction between two linear segments (e.g. PathBuilder LineTo → LineTo).
+                if (prevSeg is LinearLineSegment && start > 0)
+                {
+                    linearReversalIndices ??= [];
+                    _ = linearReversalIndices.Add(start);
+                }
+            }
+
+            prevSeg = seg;
         }
 
-        return Simplify(CollectionsMarshal.AsSpan(simplified), isClosed, removeCloseAndCollinear);
+        return Simplify(CollectionsMarshal.AsSpan(simplified), isClosed, removeCloseAndCollinear, linearReversalIndices);
     }
 
-    private static PointData[] Simplify(ReadOnlySpan<PointF> points, bool isClosed, bool removeCloseAndCollinear)
+    private static PointData[] Simplify(ReadOnlySpan<PointF> points, bool isClosed, bool removeCloseAndCollinear, HashSet<int>? linearReversalIndices = null)
     {
         int polyCorners = points.Length;
         if (polyCorners == 0)
@@ -294,9 +325,27 @@ internal class InternalPath
         {
             int next = WrapArrayIndex(i + 1, polyCorners);
             PointOrientation or = CalculateOrientation(lastPoint, points[i], points[next]);
-            if (or == PointOrientation.Collinear && next != 0)
+            if (removeCloseAndCollinear && or == PointOrientation.Collinear && next != 0)
             {
-                continue;
+                // Preserve collinear points that represent a direction reversal (U-turn)
+                // within a single segment. E.g. (10,10)→(90,10)→(20,10): the middle point
+                // is collinear but the stroker needs to see the reversal.
+                // Don't preserve reversals at segment boundaries — these arise from joining
+                // different path segments (e.g. arc-to-arc) and are not user-intended.
+                bool preserve = false;
+                if (linearReversalIndices == null || linearReversalIndices.Contains(i))
+                {
+                    Vector2 incoming = (Vector2)points[i] - lastPoint;
+                    Vector2 outgoing = (Vector2)points[next] - (Vector2)points[i];
+                    float inLen = incoming.Length();
+                    float outLen = outgoing.Length();
+                    preserve = inLen > Epsilon && outLen > Epsilon && Vector2.Dot(incoming, outgoing) < 0;
+                }
+
+                if (!preserve)
+                {
+                    continue;
+                }
             }
 
             results.Add(
