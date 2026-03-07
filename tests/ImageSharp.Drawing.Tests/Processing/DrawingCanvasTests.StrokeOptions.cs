@@ -20,15 +20,9 @@ public partial class DrawingCanvasTests
         IPath leftPath = CreateBowTiePath(new RectangleF(28, 34, 128, 152));
         IPath rightPath = CreateBowTiePath(new RectangleF(204, 34, 128, 152));
 
-        SolidPen nonNormalizedPen = new(Color.CornflowerBlue.WithAlpha(0.88F), 24F);
-        nonNormalizedPen.StrokeOptions.NormalizeOutput = false;
-        nonNormalizedPen.StrokeOptions.LineJoin = LineJoin.Round;
-        nonNormalizedPen.StrokeOptions.LineCap = LineCap.Round;
-
-        SolidPen normalizedPen = new(Color.CornflowerBlue.WithAlpha(0.88F), 24F);
-        normalizedPen.StrokeOptions.NormalizeOutput = true;
-        normalizedPen.StrokeOptions.LineJoin = LineJoin.Round;
-        normalizedPen.StrokeOptions.LineCap = LineCap.Round;
+        SolidPen pen = new(Color.CornflowerBlue.WithAlpha(0.88F), 24F);
+        pen.StrokeOptions.LineJoin = LineJoin.Round;
+        pen.StrokeOptions.LineCap = LineCap.Round;
 
         DrawingOptions evenOddOptions = new()
         {
@@ -39,8 +33,8 @@ public partial class DrawingCanvasTests
         canvas.Fill(new Rectangle(12, 12, 336, 196), Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)));
 
         _ = canvas.Save(evenOddOptions);
-        canvas.Draw(nonNormalizedPen, leftPath);
-        canvas.Draw(normalizedPen, rightPath);
+        canvas.Draw(pen, leftPath);
+        canvas.Draw(pen, rightPath);
         canvas.Restore();
 
         canvas.Draw(Pens.Solid(Color.DarkSlateGray, 2F), leftPath);

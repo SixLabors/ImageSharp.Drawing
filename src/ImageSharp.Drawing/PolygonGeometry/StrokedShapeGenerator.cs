@@ -146,7 +146,6 @@ internal static class StrokedShapeGenerator
             ArcDetailScale = options.ArcDetailScale,
             MiterLimit = options.MiterLimit,
             InnerMiterLimit = options.InnerMiterLimit,
-            NormalizeOutput = options.NormalizeOutput,
             LineJoin = options.LineJoin switch
             {
                 LineJoin.MiterRound => PolygonClipper.LineJoin.MiterRound,

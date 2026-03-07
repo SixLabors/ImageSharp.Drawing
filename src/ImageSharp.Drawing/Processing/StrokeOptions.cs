@@ -9,16 +9,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 public sealed class StrokeOptions : IEquatable<StrokeOptions?>
 {
     /// <summary>
-    /// Gets or sets a value indicating whether stroked contours should be normalized by
-    /// resolving self-intersections and overlaps before returning.
-    /// </summary>
-    /// <remarks>
-    /// Defaults to <see langword="false"/> for maximum throughput.
-    /// When disabled, callers should rasterize with a non-zero winding fill rule.
-    /// </remarks>
-    public bool NormalizeOutput { get; set; }
-
-    /// <summary>
     /// Gets or sets the miter limit used to clamp outer miter joins.
     /// </summary>
     public double MiterLimit { get; set; } = 4D;
@@ -56,7 +46,6 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     /// <inheritdoc/>
     public bool Equals(StrokeOptions? other)
         => other is not null &&
-           this.NormalizeOutput == other.NormalizeOutput &&
            this.MiterLimit == other.MiterLimit &&
            this.InnerMiterLimit == other.InnerMiterLimit &&
            this.ArcDetailScale == other.ArcDetailScale &&
@@ -67,7 +56,6 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     /// <inheritdoc/>
     public override int GetHashCode()
         => HashCode.Combine(
-            this.NormalizeOutput,
             this.MiterLimit,
             this.InnerMiterLimit,
             this.ArcDetailScale,

@@ -469,9 +469,8 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         IPath outline = pen.GeneratePath(transformedPath);
 
-        // Non-normalized stroke output can self-overlap; non-zero winding preserves stroke semantics.
-        if (!pen.StrokeOptions.NormalizeOutput &&
-            effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
+        // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
+        if (effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
         {
             ShapeOptions shapeOptions = effectiveOptions.ShapeOptions.DeepClone();
             shapeOptions.IntersectionRule = IntersectionRule.NonZero;
@@ -1038,9 +1037,8 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             compositionPath = pen.GeneratePath(operation.Path);
             samplingOrigin = RasterizerSamplingOrigin.PixelCenter;
 
-            // Keep draw semantics aligned with DrawPath: non-normalized stroke output
-            // requires non-zero winding to preserve stroke interior behavior.
-            if (!pen.StrokeOptions.NormalizeOutput && intersectionRule != IntersectionRule.NonZero)
+            // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
+            if (intersectionRule != IntersectionRule.NonZero)
             {
                 intersectionRule = IntersectionRule.NonZero;
             }

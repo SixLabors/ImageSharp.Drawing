@@ -208,19 +208,7 @@ public abstract class DrawPolygon
     }
 
     [Benchmark]
-    public IPath ImageSharpStrokeAndClipCombined() => this.isPen.GeneratePath(this.imageSharpPath);
-
-    [Benchmark]
-    public IPath ImageSharpStrokeAndClipSeparate()
-    {
-        IPath path = Path.Empty;
-        foreach (PointF[] loop in this.points)
-        {
-            path = this.isPen.GeneratePath(new Polygon(loop));
-        }
-
-        return path;
-    }
+    public IPath ImageSharpStroke() => this.isPen.GeneratePath(this.imageSharpPath);
 
     [Benchmark]
     public void FillPolygon()
