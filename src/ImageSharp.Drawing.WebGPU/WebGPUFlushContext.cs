@@ -759,8 +759,43 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         using PfnRequestDeviceCallback callbackPtr = PfnRequestDeviceCallback.From(Callback);
-        DeviceDescriptor descriptor = default;
-        api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
+
+        // This path creates a device internally when the caller has not provided
+        // shared handles via WebGPURuntime.SetSharedHandles(). This happens when
+        // the WebGPU backend is used with a CPU-backed ICanvasFrame (e.g. Image<TPixel>)
+        // rather than a native surface — the backend still accelerates composition on
+        // the GPU but must provision its own device since no external context exists.
+        //
+        // Request optional storage features that are available on this adapter.
+        // The compute compositor needs storage binding on the transient output texture,
+        // and some formats (e.g. Bgra8Unorm) require explicit device features.
+        Span<FeatureName> requestedFeatures = stackalloc FeatureName[1];
+        int requestedCount = 0;
+        if (api.AdapterHasFeature(adapter, FeatureName.Bgra8UnormStorage))
+        {
+            requestedFeatures[requestedCount++] = FeatureName.Bgra8UnormStorage;
+        }
+
+        DeviceDescriptor descriptor;
+        if (requestedCount > 0)
+        {
+            fixed (FeatureName* featuresPtr = requestedFeatures)
+            {
+                descriptor = new DeviceDescriptor
+                {
+                    RequiredFeatureCount = (uint)requestedCount,
+                    RequiredFeatures = featuresPtr,
+                };
+
+                api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
+            }
+        }
+        else
+        {
+            descriptor = default;
+            api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
+        }
+
         if (!WaitForSignal(callbackReady))
         {
             device = null;

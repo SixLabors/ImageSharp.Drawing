@@ -58,6 +58,11 @@ internal static unsafe class WebGPURuntime
     private static nint sharedQueueHandle;
 
     /// <summary>
+    /// Set of device features available on the shared device.
+    /// </summary>
+    private static HashSet<FeatureName>? deviceFeatures;
+
+    /// <summary>
     /// Number of currently active runtime leases.
     /// </summary>
     private static int leaseCount;
@@ -99,16 +104,49 @@ internal static unsafe class WebGPURuntime
     }
 
     /// <summary>
-    /// Sets shared GPU handles for active backend execution.
+    /// Sets shared GPU handles and device features for active backend execution.
     /// </summary>
     /// <param name="deviceHandle">Opaque device handle.</param>
     /// <param name="queueHandle">Opaque queue handle.</param>
-    internal static void SetSharedHandles(nint deviceHandle, nint queueHandle)
+    /// <param name="features">Device features available on the shared device.</param>
+    internal static void SetSharedHandles(nint deviceHandle, nint queueHandle, HashSet<FeatureName>? features)
     {
         lock (Sync)
         {
             sharedDeviceHandle = deviceHandle;
             sharedQueueHandle = queueHandle;
+            deviceFeatures = features;
+        }
+    }
+
+    /// <summary>
+    /// Sets shared GPU handles for active backend execution.
+    /// Device features are queried automatically from the device.
+    /// </summary>
+    /// <param name="deviceHandle">Opaque device handle.</param>
+    /// <param name="queueHandle">Opaque queue handle.</param>
+    internal static void SetSharedHandles(nint deviceHandle, nint queueHandle)
+    {
+        // Ensure the API loader is initialized so we can enumerate device features.
+        using Lease lease = Acquire();
+        lock (Sync)
+        {
+            sharedDeviceHandle = deviceHandle;
+            sharedQueueHandle = queueHandle;
+            deviceFeatures = EnumerateDeviceFeatures((Device*)deviceHandle);
+        }
+    }
+
+    /// <summary>
+    /// Returns whether the shared device has the specified feature.
+    /// </summary>
+    /// <param name="feature">The feature to check.</param>
+    /// <returns><see langword="true"/> when the device has the feature; otherwise <see langword="false"/>.</returns>
+    internal static bool HasDeviceFeature(FeatureName feature)
+    {
+        lock (Sync)
+        {
+            return deviceFeatures is not null && deviceFeatures.Contains(feature);
         }
     }
 
@@ -121,6 +159,7 @@ internal static unsafe class WebGPURuntime
         {
             sharedDeviceHandle = 0;
             sharedQueueHandle = 0;
+            deviceFeatures = null;
         }
     }
 
@@ -215,6 +254,7 @@ internal static unsafe class WebGPURuntime
     {
         sharedDeviceHandle = 0;
         sharedQueueHandle = 0;
+        deviceFeatures = null;
 
         try
         {
@@ -241,6 +281,36 @@ internal static unsafe class WebGPURuntime
         {
             api = null;
         }
+    }
+
+    /// <summary>
+    /// Enumerates features on a device.
+    /// </summary>
+    /// <param name="device">The device to query.</param>
+    /// <returns>A set of features supported by the device.</returns>
+    private static HashSet<FeatureName>? EnumerateDeviceFeatures(Device* device)
+    {
+        if (api is null || device is null)
+        {
+            return null;
+        }
+
+        int count = (int)api.DeviceEnumerateFeatures(device, (FeatureName*)null);
+        if (count <= 0)
+        {
+            return [];
+        }
+
+        FeatureName* features = stackalloc FeatureName[count];
+        api.DeviceEnumerateFeatures(device, features);
+
+        HashSet<FeatureName> result = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            result.Add(features[i]);
+        }
+
+        return result;
     }
 
     /// <summary>

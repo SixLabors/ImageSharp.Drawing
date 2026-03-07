@@ -111,7 +111,7 @@ public static class Program
         })];
 
         ComplexPolygon complex = new(polys);
-        complex.SaveImage("letter", "a.png");
+        complex.SaveImage("Letter", "a.png");
     }
 
     private static void DrawSerializedOPenSansLetterShape_o()
@@ -129,7 +129,7 @@ public static class Program
         })];
 
         ComplexPolygon complex = new(polys);
-        complex.SaveImage("letter", "o.png");
+        complex.SaveImage("Letter", "o.png");
     }
 
     private static void DrawOval()
@@ -157,7 +157,7 @@ public static class Program
         sb.AddLine(new Vector2(25, 30), new Vector2(15, 30));
         sb.CloseFigure();
 
-        sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"paths.png");
+        sb.Build().Translate(0, 10).Scale(10).SaveImage("Drawing", $"paths.png");
     }
 
     private static void OutputDrawnShapeHourGlass()
@@ -174,7 +174,7 @@ public static class Program
         sb.AddLine(new Vector2(15, 30), new Vector2(25, 30));
         sb.CloseFigure();
 
-        sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"HourGlass.png");
+        sb.Build().Translate(0, 10).Scale(10).SaveImage("Drawing", $"HourGlass.png");
     }
 
     private static void OutputStarOutline(int points, float inner = 10, float outer = 20, float width = 5, LineJoin jointStyle = LineJoin.Miter)
