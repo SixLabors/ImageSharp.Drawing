@@ -26,22 +26,6 @@ internal sealed class SkiaCoverageDrawingBackend : IDrawingBackend, IDisposable
 
     public int LiveCoverageCount => this.preparedCoverage.Count;
 
-    public void FillPath<TPixel>(
-        ICanvasFrame<TPixel> target,
-        IPath path,
-        Brush brush,
-        GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions,
-        DrawingCanvasBatcher<TPixel> batcher)
-        where TPixel : unmanaged, IPixel<TPixel>
-        => batcher.AddComposition(
-            CompositionCommand.Create(
-                path,
-                brush,
-                graphicsOptions,
-                rasterizerOptions,
-                target.Bounds.Location));
-
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,

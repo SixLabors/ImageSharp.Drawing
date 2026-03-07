@@ -143,26 +143,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     }
 
     /// <inheritdoc />
-    public void FillPath<TPixel>(
-        ICanvasFrame<TPixel> target,
-        IPath path,
-        Brush brush,
-        GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions,
-        DrawingCanvasBatcher<TPixel> batcher)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        this.ThrowIfDisposed();
-        batcher.AddComposition(
-            CompositionCommand.Create(
-                path,
-                brush,
-                graphicsOptions,
-                rasterizerOptions,
-                target.Bounds.Location));
-    }
-
-    /// <inheritdoc />
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,

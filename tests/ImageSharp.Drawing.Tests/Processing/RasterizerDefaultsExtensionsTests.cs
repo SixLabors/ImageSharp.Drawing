@@ -47,17 +47,6 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public void FillPath<TPixel>(
-            ICanvasFrame<TPixel> target,
-            IPath path,
-            Brush brush,
-            GraphicsOptions graphicsOptions,
-            in RasterizerOptions rasterizerOptions,
-            DrawingCanvasBatcher<TPixel> batcher)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-        }
-
         public void FlushCompositions<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,

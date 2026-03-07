@@ -151,17 +151,6 @@ public partial class DrawingCanvasTests
 
         public Configuration? LastReadbackConfiguration { get; private set; }
 
-        public void FillPath<TTargetPixel>(
-            ICanvasFrame<TTargetPixel> target,
-            IPath path,
-            Brush brush,
-            GraphicsOptions graphicsOptions,
-            in RasterizerOptions rasterizerOptions,
-            DrawingCanvasBatcher<TTargetPixel> batcher)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-            => batcher.AddComposition(
-                CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions, target.Bounds.Location));
-
         public void FlushCompositions<TTargetPixel>(
             Configuration configuration,
             ICanvasFrame<TTargetPixel> target,

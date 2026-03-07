@@ -15,25 +15,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal interface IDrawingBackend
 {
     /// <summary>
-    /// Fills a path into a destination target region.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel format.</typeparam>
-    /// <param name="target">Destination frame.</param>
-    /// <param name="path">Path in target-local coordinates.</param>
-    /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    /// <param name="rasterizerOptions">Rasterizer options in target-local coordinates.</param>
-    /// <param name="batcher">Batcher used to queue normalized composition commands.</param>
-    public void FillPath<TPixel>(
-        ICanvasFrame<TPixel> target,
-        IPath path,
-        Brush brush,
-        GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions,
-        DrawingCanvasBatcher<TPixel> batcher)
-        where TPixel : unmanaged, IPixel<TPixel>;
-
-    /// <summary>
     /// Flushes queued composition operations for the target.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>

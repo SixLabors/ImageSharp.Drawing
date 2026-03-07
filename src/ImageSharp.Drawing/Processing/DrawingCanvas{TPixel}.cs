@@ -351,7 +351,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
 
-        this.FillPathCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
+        this.PrepareCompositionCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
     }
 
     /// <inheritdoc />
@@ -407,7 +407,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         ImageBrush brush = new(sourceImage, sourceImage.Bounds, brushOffset);
 
         this.pendingImageResources.Add(sourceImage);
-        this.FillPathCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
+        this.PrepareCompositionCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
     }
 
     /// <inheritdoc />
@@ -480,7 +480,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         outline = ApplyClipPaths(outline, effectiveOptions.ShapeOptions, state.ClipPaths);
 
-        this.FillPathCore(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
+        this.PrepareCompositionCore(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
     }
 
     /// <inheritdoc />
@@ -813,13 +813,13 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <summary>
-    /// Rasterizes and submits a fill operation to the backend.
+    /// Prepares a path fill composition command and enqueues it in the batcher.
     /// </summary>
     /// <param name="path">Path to fill.</param>
     /// <param name="brush">Brush used for shading.</param>
     /// <param name="options">Effective drawing options.</param>
     /// <param name="samplingOrigin">Rasterizer sampling origin.</param>
-    private void FillPathCore(
+    private void PrepareCompositionCore(
         IPath path,
         Brush brush,
         DrawingOptions options,
@@ -849,13 +849,13 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             samplingOrigin,
             graphicsOptions.AntialiasThreshold);
 
-        this.backend.FillPath(
-            this.targetFrame,
-            path,
-            brush,
-            graphicsOptions,
-            rasterizerOptions,
-            this.batcher);
+        this.batcher.AddComposition(
+            CompositionCommand.Create(
+                path,
+                brush,
+                graphicsOptions,
+                rasterizerOptions,
+                this.targetFrame.Bounds.Location));
     }
 
     /// <summary>

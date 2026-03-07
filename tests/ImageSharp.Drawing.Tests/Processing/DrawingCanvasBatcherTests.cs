@@ -55,17 +55,6 @@ public class DrawingCanvasBatcherTests
                     0.5f)),
             Array.Empty<PreparedCompositionCommand>());
 
-        public void FillPath<TPixel>(
-            ICanvasFrame<TPixel> target,
-            IPath path,
-            Brush brush,
-            GraphicsOptions graphicsOptions,
-            in RasterizerOptions rasterizerOptions,
-            DrawingCanvasBatcher<TPixel> batcher)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => batcher.AddComposition(
-                CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions, target.Bounds.Location));
-
         public void FlushCompositions<TPixel>(
             Configuration configuration,
             ICanvasFrame<TPixel> target,
