@@ -154,8 +154,42 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         }
 
         CompositionCoverageDefinition definition = compositionBatch.Definition;
+
+        // When the definition carries stroke metadata, expand the centerline
+        // path into a filled outline before rasterization.
+        IPath rasterPath = definition.Path;
+        RasterizerOptions rasterizerOptions = definition.RasterizerOptions;
+
+        if (definition.IsStroke)
+        {
+            rasterPath = definition.StrokePattern.Length > 0
+                ? rasterPath.GenerateOutline(definition.StrokeWidth, definition.StrokePattern.Span, definition.StrokeOptions!)
+                : rasterPath.GenerateOutline(definition.StrokeWidth, definition.StrokeOptions!);
+
+            // Compute the exact interest from the actual stroke outline bounds
+            // so band boundaries and coverage values match the old canvas-side path.
+            RectangleF outlineBounds = rasterPath.Bounds;
+            outlineBounds = new RectangleF(outlineBounds.X + 0.5F, outlineBounds.Y + 0.5F, outlineBounds.Width, outlineBounds.Height);
+            Rectangle interest = Rectangle.FromLTRB(
+                (int)MathF.Floor(outlineBounds.Left),
+                (int)MathF.Floor(outlineBounds.Top),
+                (int)MathF.Ceiling(outlineBounds.Right),
+                (int)MathF.Ceiling(outlineBounds.Bottom));
+
+            rasterizerOptions = new RasterizerOptions(
+                interest,
+                rasterizerOptions.IntersectionRule,
+                rasterizerOptions.RasterizationMode,
+                rasterizerOptions.SamplingOrigin,
+                rasterizerOptions.AntialiasThreshold);
+
+            // Re-prepare commands with the actual outline interest so destination
+            // regions and source offsets are aligned with the rasterizer.
+            CompositionScenePlanner.ReprepareBatchCommands(compositionBatch.Commands, target.Bounds, interest);
+        }
+
         Rectangle destinationBounds = destinationFrame.Rectangle;
-        IReadOnlyList<PreparedCompositionCommand> commands = compositionBatch.Commands;
+        List<PreparedCompositionCommand> commands = compositionBatch.Commands;
         int commandCount = commands.Count;
         BrushApplicator<TPixel>[] applicators = new BrushApplicator<TPixel>[commandCount];
         try
@@ -177,11 +211,11 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
                 commands,
                 applicators,
                 destinationBounds,
-                definition.RasterizerOptions.Interest.Top);
+                rasterizerOptions.Interest.Top);
 
             DefaultRasterizer.RasterizeRows(
-                definition.Path,
-                definition.RasterizerOptions,
+                rasterPath,
+                rasterizerOptions,
                 configuration.MemoryAllocator,
                 operation.InvokeCoverageRow,
                 ref reusableScratch);
@@ -198,13 +232,13 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
     private readonly struct RowOperation<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        private readonly IReadOnlyList<PreparedCompositionCommand> commands;
+        private readonly List<PreparedCompositionCommand> commands;
         private readonly BrushApplicator<TPixel>[] applicators;
         private readonly Rectangle destinationBounds;
         private readonly int coverageTop;
 
         public RowOperation(
-            IReadOnlyList<PreparedCompositionCommand> commands,
+            List<PreparedCompositionCommand> commands,
             BrushApplicator<TPixel>[] applicators,
             Rectangle destinationBounds,
             int coverageTop)

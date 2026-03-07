@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -52,7 +53,11 @@ public static class CompositionScenePlanner
                 new(
                     definitionKey,
                     definitionCommand.Path,
-                    definitionCommand.RasterizerOptions);
+                    definitionCommand.RasterizerOptions,
+                    definitionCommand.DestinationOffset,
+                    definitionCommand.StrokeOptions,
+                    definitionCommand.StrokeWidth,
+                    definitionCommand.StrokePattern);
 
             batches.Add(new CompositionBatch(definition, preparedCommands));
         }
@@ -110,6 +115,63 @@ public static class CompositionScenePlanner
     }
 
     /// <summary>
+    /// Re-prepares batch commands after stroke expansion so destination regions
+    /// and source offsets match the actual outline interest.
+    /// </summary>
+    /// <param name="commands">The prepared commands to update in place.</param>
+    /// <param name="targetBounds">Target frame bounds in absolute coordinates.</param>
+    /// <param name="interest">The actual interest rect computed from the expanded outline.</param>
+    public static void ReprepareBatchCommands(
+        List<PreparedCompositionCommand> commands,
+        Rectangle targetBounds,
+        Rectangle interest)
+    {
+        Span<PreparedCompositionCommand> span = CollectionsMarshal.AsSpan(commands);
+        int writeIndex = 0;
+        for (int i = 0; i < span.Length; i++)
+        {
+            ref PreparedCompositionCommand cmd = ref span[i];
+
+            Rectangle commandDestination = new(
+                cmd.DestinationOffset.X + interest.X,
+                cmd.DestinationOffset.Y + interest.Y,
+                interest.Width,
+                interest.Height);
+
+            Rectangle clippedDestination = Rectangle.Intersect(targetBounds, commandDestination);
+            if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
+            {
+                continue;
+            }
+
+            Rectangle destinationLocalRegion = new(
+                clippedDestination.X - targetBounds.X,
+                clippedDestination.Y - targetBounds.Y,
+                clippedDestination.Width,
+                clippedDestination.Height);
+
+            Point sourceOffset = new(
+                clippedDestination.X - commandDestination.X,
+                clippedDestination.Y - commandDestination.Y);
+
+            cmd.DestinationRegion = destinationLocalRegion;
+            cmd.SourceOffset = sourceOffset;
+
+            if (writeIndex != i)
+            {
+                span[writeIndex] = span[i];
+            }
+
+            writeIndex++;
+        }
+
+        if (writeIndex < commands.Count)
+        {
+            commands.RemoveRange(writeIndex, commands.Count - writeIndex);
+        }
+    }
+
+    /// <summary>
     /// Clips one scene command to target bounds and computes coverage source offset mapping.
     /// </summary>
     /// <param name="command">The source command.</param>
@@ -150,7 +212,8 @@ public static class CompositionScenePlanner
             sourceOffset,
             command.Brush,
             command.BrushBounds,
-            command.GraphicsOptions);
+            command.GraphicsOptions,
+            command.DestinationOffset);
 
         return true;
     }

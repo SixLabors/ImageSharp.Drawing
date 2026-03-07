@@ -3,7 +3,6 @@
 
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Text;
-using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;

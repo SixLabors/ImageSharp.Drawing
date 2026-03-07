@@ -163,7 +163,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         for (int batchIndex = 0; batchIndex < preparedBatches.Count; batchIndex++)
         {
             CompositionBatch batch = preparedBatches[batchIndex];
-            IReadOnlyList<PreparedCompositionCommand> commands = batch.Commands;
+            List<PreparedCompositionCommand> commands = batch.Commands;
             for (int i = 0; i < commands.Count; i++)
             {
                 Rectangle destination = Rectangle.Intersect(commands[i].DestinationRegion, targetExtent);
@@ -240,9 +240,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 target.Bounds,
                 compositionBounds.Value,
                 commandCount,
+                out Rectangle effectiveBounds,
                 out failure);
 
-            bool finalizeOk = renderOk && this.TryFinalizeFlush(flushContext, cpuRegion, compositionBounds);
+            bool finalizeOk = renderOk && this.TryFinalizeFlush(flushContext, cpuRegion, effectiveBounds);
 
             gpuSuccess = finalizeOk;
         }
@@ -372,9 +373,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         Rectangle targetBounds,
         Rectangle compositionBounds,
         int commandCount,
+        out Rectangle effectiveCompositionBounds,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        effectiveCompositionBounds = compositionBounds;
         Rectangle targetLocalBounds = Rectangle.Intersect(
             new Rectangle(0, 0, flushContext.TargetBounds.Width, flushContext.TargetBounds.Height),
             compositionBounds);
@@ -427,7 +430,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         for (int i = 0; i < preparedBatches.Count; i++)
         {
             CompositionBatch batch = preparedBatches[i];
-            IReadOnlyList<PreparedCompositionCommand> commands = batch.Commands;
+            List<PreparedCompositionCommand> commands = batch.Commands;
             if (commands.Count == 0)
             {
                 continue;
@@ -449,6 +452,96 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         {
             error = null;
             return true;
+        }
+
+        // Prepare stroke definitions for GPU distance-field evaluation.
+        // Instead of expanding to a filled outline on the CPU, we compute
+        // the interest rectangle from the centerline bounds inflated by
+        // half the stroke width and pass the centerline edges to the GPU.
+        // For dashed strokes, we pre-split the path into dash segments
+        // on the CPU (cheap) while keeping the actual stroke coverage on GPU.
+        for (int i = 0; i < coverageDefinitions.Count; i++)
+        {
+            CompositionCoverageDefinition definition = coverageDefinitions[i];
+            if (!definition.IsStroke)
+            {
+                continue;
+            }
+
+            IPath strokePath = definition.Path;
+
+            // For dashed strokes, split the path into dash segments.
+            // This reuses the outline generation with a minimal width to
+            // produce the dash-split centerline path, but instead we use
+            // the dedicated dash splitting API.
+            if (definition.StrokePattern.Length > 0)
+            {
+                // For dashed strokes, split the path into dash segments on the CPU
+                // so the GPU evaluates solid strokes on each dash segment.
+                strokePath = DashPathSplitter.SplitDashes(strokePath, definition.StrokeWidth, definition.StrokePattern.Span);
+            }
+
+            float halfWidth = definition.StrokeWidth * 0.5f;
+            float maxExtent = halfWidth * Math.Max((float)(definition.StrokeOptions?.MiterLimit ?? 4.0), 1.0f);
+
+            RectangleF pathBounds = strokePath.Bounds;
+            pathBounds = new RectangleF(
+                pathBounds.X + 0.5F - maxExtent,
+                pathBounds.Y + 0.5F - maxExtent,
+                pathBounds.Width + (maxExtent * 2),
+                pathBounds.Height + (maxExtent * 2));
+
+            Rectangle interest = Rectangle.FromLTRB(
+                (int)MathF.Floor(pathBounds.Left),
+                (int)MathF.Floor(pathBounds.Top),
+                (int)MathF.Ceiling(pathBounds.Right),
+                (int)MathF.Ceiling(pathBounds.Bottom));
+
+            RasterizerOptions opts = definition.RasterizerOptions;
+            coverageDefinitions[i] = new CompositionCoverageDefinition(
+                definition.DefinitionKey,
+                strokePath,
+                new RasterizerOptions(interest, opts.IntersectionRule, opts.RasterizationMode, opts.SamplingOrigin, opts.AntialiasThreshold),
+                definition.DestinationOffset,
+                definition.StrokeOptions,
+                definition.StrokeWidth,
+                definition.StrokePattern);
+
+            // Re-prepare all batches that reference this coverage definition.
+            for (int b = 0; b < preparedBatches.Count; b++)
+            {
+                if (batchCoverageIndices[b] == i)
+                {
+                    CompositionScenePlanner.ReprepareBatchCommands(
+                        preparedBatches[b].Commands,
+                        targetBounds,
+                        interest);
+                }
+            }
+        }
+
+        // Recompute effective composition bounds from updated command destinations
+        // after stroke re-preparation tightened the interest rectangles.
+        Rectangle targetExtent = new(0, 0, flushContext.TargetBounds.Width, flushContext.TargetBounds.Height);
+        Rectangle? tightBounds = null;
+        for (int batchIndex = 0; batchIndex < preparedBatches.Count; batchIndex++)
+        {
+            List<PreparedCompositionCommand> cmds = preparedBatches[batchIndex].Commands;
+            for (int i = 0; i < cmds.Count; i++)
+            {
+                Rectangle destination = Rectangle.Intersect(cmds[i].DestinationRegion, targetExtent);
+                if (destination.Width > 0 && destination.Height > 0)
+                {
+                    tightBounds = tightBounds.HasValue
+                        ? Rectangle.Union(tightBounds.Value, destination)
+                        : destination;
+                }
+            }
+        }
+
+        if (tightBounds.HasValue)
+        {
+            effectiveCompositionBounds = tightBounds.Value;
         }
 
         if (!this.TryCreateEdgeBuffer<TPixel>(
@@ -602,7 +695,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     continue;
                 }
 
-                IReadOnlyList<PreparedCompositionCommand> commands = preparedBatches[batchIndex].Commands;
+                List<PreparedCompositionCommand> commands = preparedBatches[batchIndex].Commands;
                 for (int i = 0; i < commands.Count; i++)
                 {
                     PreparedCompositionCommand command = commands[i];
@@ -697,7 +790,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     command.GraphicsOptions.BlendPercentage,
                     solidColor,
                     command.GraphicsOptions.Antialias ? 0u : 1u,
-                    command.GraphicsOptions.AntialiasThreshold);
+                    command.GraphicsOptions.AntialiasThreshold,
+                    edgePlacement.IsStroke ? 1u : 0u,
+                    edgePlacement.StrokeWidth * 0.5f,
+                    edgePlacement.StrokeLineCap,
+                    edgePlacement.StrokeLineJoin,
+                    edgePlacement.StrokeMiterLimit);
 
                     parameters[commandIndex] = commandParameters;
                     commandIndex++;
@@ -1632,13 +1730,28 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
     private readonly struct EdgePlacement
     {
-        public EdgePlacement(uint edgeStart, uint edgeCount, uint fillRule, uint csrOffsetsStart, uint csrBandCount)
+        public EdgePlacement(
+            uint edgeStart,
+            uint edgeCount,
+            uint fillRule,
+            uint csrOffsetsStart,
+            uint csrBandCount,
+            bool isStroke = false,
+            float strokeWidth = 0f,
+            uint strokeLineCap = 0,
+            uint strokeLineJoin = 0,
+            float strokeMiterLimit = 0f)
         {
             this.EdgeStart = edgeStart;
             this.EdgeCount = edgeCount;
             this.FillRule = fillRule;
             this.CsrOffsetsStart = csrOffsetsStart;
             this.CsrBandCount = csrBandCount;
+            this.IsStroke = isStroke;
+            this.StrokeWidth = strokeWidth;
+            this.StrokeLineCap = strokeLineCap;
+            this.StrokeLineJoin = strokeLineJoin;
+            this.StrokeMiterLimit = strokeMiterLimit;
         }
 
         public uint EdgeStart { get; }
@@ -1650,6 +1763,16 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         public uint CsrOffsetsStart { get; }
 
         public uint CsrBandCount { get; }
+
+        public bool IsStroke { get; }
+
+        public float StrokeWidth { get; }
+
+        public uint StrokeLineCap { get; }
+
+        public uint StrokeLineJoin { get; }
+
+        public float StrokeMiterLimit { get; }
     }
 
     /// <summary>
@@ -1745,6 +1868,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         public readonly uint SolidA;
         public readonly uint RasterizationMode;
         public readonly uint AntialiasThreshold;
+        public readonly uint StrokeMode;
+        public readonly uint StrokeHalfWidth;
+        public readonly uint StrokeLineCap;
+        public readonly uint StrokeLineJoin;
+        public readonly uint StrokeMiterLimit;
+        public readonly uint StrokePad0;
 
         public PreparedCompositeParameters(
             int destinationX,
@@ -1769,7 +1898,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             float blendPercentage,
             Vector4 solidColor,
             uint rasterizationMode,
-            float antialiasThreshold)
+            float antialiasThreshold,
+            uint strokeMode = 0,
+            float strokeHalfWidth = 0f,
+            uint strokeLineCap = 0,
+            uint strokeLineJoin = 0,
+            float strokeMiterLimit = 0f)
         {
             this.DestinationX = (uint)destinationX;
             this.DestinationY = (uint)destinationY;
@@ -1797,6 +1931,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             this.SolidA = FloatToUInt32Bits(solidColor.W);
             this.RasterizationMode = rasterizationMode;
             this.AntialiasThreshold = FloatToUInt32Bits(antialiasThreshold);
+            this.StrokeMode = strokeMode;
+            this.StrokeHalfWidth = FloatToUInt32Bits(strokeHalfWidth);
+            this.StrokeLineCap = strokeLineCap;
+            this.StrokeLineJoin = strokeLineJoin;
+            this.StrokeMiterLimit = FloatToUInt32Bits(strokeMiterLimit);
+            this.StrokePad0 = 0;
         }
     }
 }

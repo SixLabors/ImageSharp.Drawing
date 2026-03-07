@@ -80,7 +80,7 @@ public abstract class Pen : IEquatable<Pen>
     public float StrokeWidth { get; }
 
     /// <inheritdoc cref="PenOptions.StrokePattern"/>
-    public ReadOnlySpan<float> StrokePattern => this.pattern;
+    public ReadOnlyMemory<float> StrokePattern => this.pattern;
 
     /// <inheritdoc cref="PenOptions.StrokeOptions"/>
     public StrokeOptions StrokeOptions { get; }
@@ -107,7 +107,7 @@ public abstract class Pen : IEquatable<Pen>
         && this.StrokeWidth == other.StrokeWidth
         && this.StrokeFill.Equals(other.StrokeFill)
         && this.StrokeOptions.Equals(other.StrokeOptions)
-        && this.StrokePattern.SequenceEqual(other.StrokePattern);
+        && this.StrokePattern.Span.SequenceEqual(other.StrokePattern.Span);
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => this.Equals(obj as Pen);

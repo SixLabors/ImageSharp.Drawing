@@ -18,7 +18,7 @@ public sealed class CompositionBatch
     /// <param name="compositionBounds">Optional destination-local bounds touched by this batch.</param>
     public CompositionBatch(
         in CompositionCoverageDefinition definition,
-        IReadOnlyList<PreparedCompositionCommand> commands,
+        List<PreparedCompositionCommand> commands,
         int flushId = 0,
         bool isFinalBatchInFlush = true,
         Rectangle? compositionBounds = null)
@@ -38,7 +38,7 @@ public sealed class CompositionBatch
     /// <summary>
     /// Gets normalized composition commands in original draw order.
     /// </summary>
-    public IReadOnlyList<PreparedCompositionCommand> Commands { get; }
+    public List<PreparedCompositionCommand> Commands { get; }
 
     /// <summary>
     /// Gets the batcher flush identifier shared by all batches emitted from one canvas flush call.

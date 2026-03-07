@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics.CodeAnalysis;
+using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Memory;
@@ -37,6 +38,94 @@ public class DrawingCanvasBatcherTests
         Assert.Same(brushB, backend.LastBatch.Commands[1].Brush);
     }
 
+    [Fact]
+    public void Flush_SamePathDifferentBrushes_Stroke_UsesSingleBatch()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(40, 40);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+        IPath path = new RectangularPolygon(4, 6, 18, 12);
+        DrawingOptions options = new();
+        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
+        Pen penA = Pens.Solid(Color.Red, 2F);
+        Pen penB = Pens.Solid(Color.Blue, 2F);
+
+        canvas.Draw(penA, path);
+        canvas.Draw(penB, path);
+        canvas.Flush();
+
+        Assert.Single(backend.Batches);
+        Assert.True(backend.LastBatch.Definition.IsStroke);
+        Assert.Equal(2, backend.LastBatch.Commands.Count);
+    }
+
+    [Fact]
+    public void Flush_SamePathReusedMultipleTimes_BatchesCommands()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(100, 100);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+        // Use the same path reference 10 times with different brushes.
+        IPath path = new RectangularPolygon(10, 10, 40, 40);
+        DrawingOptions options = new();
+        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
+
+        for (int i = 0; i < 10; i++)
+        {
+            canvas.Fill(path, Brushes.Solid(Color.FromPixel(new Rgba32((byte)i, 0, 0, 255))));
+        }
+
+        canvas.Flush();
+
+        // All 10 commands share the same path reference → single batch.
+        Assert.Single(backend.Batches);
+        Assert.Equal(10, backend.Batches[0].Commands.Count);
+    }
+
+    [Fact]
+    public void Flush_RepeatedGlyphs_ReusesCoverageDefinitions()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(420, 220);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 48);
+        RichTextOptions textOptions = new(font)
+        {
+            Origin = new PointF(8, 8),
+            WrappingLength = 400
+        };
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        string text = new('A', 200);
+        Brush brush = Brushes.Solid(Color.Black);
+
+        using DrawingCanvas<Rgba32> canvas = new(configuration, region, drawingOptions);
+        canvas.DrawText(textOptions, text, brush, pen: null);
+        canvas.Flush();
+
+        int totalCommands = backend.Batches.Sum(b => b.Commands.Count);
+        Assert.True(totalCommands > 0);
+
+        // The glyph renderer caches paths within 1/8th pixel sub-pixel offset,
+        // so 200 identical glyphs reuse coverage definitions across sub-pixel variants.
+        Assert.True(
+            backend.Batches.Count < 200,
+            $"Expected coverage reuse but got {backend.Batches.Count} batches for 200 glyphs.");
+    }
+
     private sealed class CapturingBackend : IDrawingBackend
     {
         public List<CompositionBatch> Batches { get; } = [];
@@ -53,7 +142,7 @@ public class DrawingCanvasBatcherTests
                     RasterizationMode.Aliased,
                     RasterizerSamplingOrigin.PixelBoundary,
                     0.5f)),
-            Array.Empty<PreparedCompositionCommand>());
+            []);
 
         public void FlushCompositions<TPixel>(
             Configuration configuration,

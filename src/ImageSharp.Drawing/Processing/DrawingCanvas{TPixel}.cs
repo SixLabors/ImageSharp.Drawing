@@ -467,8 +467,6 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             ? path
             : path.Transform(effectiveOptions.Transform);
 
-        IPath outline = pen.GeneratePath(transformedPath);
-
         // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
         if (effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
         {
@@ -477,9 +475,23 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             effectiveOptions = new DrawingOptions(effectiveOptions.GraphicsOptions, shapeOptions, effectiveOptions.Transform);
         }
 
-        outline = ApplyClipPaths(outline, effectiveOptions.ShapeOptions, state.ClipPaths);
+        // When clip paths are active we must expand the stroke here so the clip
+        // boolean operation can be applied to the expanded outline geometry.
+        if (state.ClipPaths.Count > 0)
+        {
+            IPath outline = pen.GeneratePath(transformedPath);
+            outline = ApplyClipPaths(outline, effectiveOptions.ShapeOptions, state.ClipPaths);
+            this.PrepareCompositionCore(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
+            return;
+        }
 
-        this.PrepareCompositionCore(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
+        this.PrepareStrokeCompositionCore(
+            transformedPath,
+            pen.StrokeFill,
+            pen.StrokeWidth,
+            pen.StrokeOptions,
+            pen.StrokePattern,
+            effectiveOptions);
     }
 
     /// <inheritdoc />
@@ -858,6 +870,64 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <summary>
+    /// Prepares a stroke composition command with the original centerline path and enqueues it.
+    /// The backend is responsible for stroke expansion or SDF evaluation.
+    /// </summary>
+    /// <param name="path">Original centerline path in target-local coordinates.</param>
+    /// <param name="brush">Brush used for shading.</param>
+    /// <param name="strokeWidth">Stroke width in pixels.</param>
+    /// <param name="strokeOptions">Stroke geometry options.</param>
+    /// <param name="strokePattern">Optional dash pattern.</param>
+    /// <param name="options">Effective drawing options.</param>
+    private void PrepareStrokeCompositionCore(
+        IPath path,
+        Brush brush,
+        float strokeWidth,
+        StrokeOptions strokeOptions,
+        ReadOnlyMemory<float> strokePattern,
+        DrawingOptions options)
+    {
+        GraphicsOptions graphicsOptions = options.GraphicsOptions;
+        ShapeOptions shapeOptions = options.ShapeOptions;
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+
+        // Inflate path bounds by the maximum possible stroke extent.
+        // The miter limit caps the tip extension; the base half-width is always present.
+        float halfWidth = strokeWidth / 2f;
+        float maxExtent = halfWidth * (float)Math.Max(strokeOptions.MiterLimit, 1D);
+        RectangleF bounds = path.Bounds;
+        bounds = new RectangleF(
+            bounds.X - maxExtent + 0.5F,
+            bounds.Y - maxExtent + 0.5F,
+            bounds.Width + (maxExtent * 2f),
+            bounds.Height + (maxExtent * 2f));
+
+        Rectangle interest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right),
+            (int)MathF.Ceiling(bounds.Bottom));
+
+        RasterizerOptions rasterizerOptions = new(
+            interest,
+            shapeOptions.IntersectionRule,
+            rasterizationMode,
+            RasterizerSamplingOrigin.PixelCenter,
+            graphicsOptions.AntialiasThreshold);
+
+        this.batcher.AddComposition(
+            CompositionCommand.CreateStroke(
+                path,
+                brush,
+                graphicsOptions,
+                rasterizerOptions,
+                strokeOptions,
+                strokeWidth,
+                strokePattern,
+                this.targetFrame.Bounds.Location));
+    }
+
+    /// <summary>
     /// Converts rendered text operations to composition commands and submits them to the batcher.
     /// </summary>
     /// <param name="operations">Text drawing operations produced by glyph layout/rendering.</param>
@@ -1028,61 +1098,83 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
                 operation.PixelAlphaCompositionMode,
                 operation.PixelColorBlendingMode);
 
-        IPath compositionPath;
-        RasterizerSamplingOrigin samplingOrigin;
-        IntersectionRule intersectionRule = operation.IntersectionRule;
-        if (operation.Kind == DrawingOperationKind.Draw)
-        {
-            Pen pen = operation.Pen!;
-            compositionPath = pen.GeneratePath(operation.Path);
-            samplingOrigin = RasterizerSamplingOrigin.PixelCenter;
-
-            // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
-            if (intersectionRule != IntersectionRule.NonZero)
-            {
-                intersectionRule = IntersectionRule.NonZero;
-            }
-        }
-        else
-        {
-            compositionPath = operation.Path;
-            samplingOrigin = RasterizerSamplingOrigin.PixelBoundary;
-        }
-
-        RectangleF bounds = compositionPath.Bounds;
-        if (samplingOrigin == RasterizerSamplingOrigin.PixelCenter)
-        {
-            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
-        }
-
-        Rectangle interest = Rectangle.FromLTRB(
-            (int)MathF.Floor(bounds.Left),
-            (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right),
-            (int)MathF.Ceiling(bounds.Bottom));
-
         RasterizationMode rasterizationMode = graphicsOptions.Antialias
             ? RasterizationMode.Antialiased
             : RasterizationMode.Aliased;
-
-        RasterizerOptions rasterizerOptions = new(
-            interest,
-            intersectionRule,
-            rasterizationMode,
-            samplingOrigin,
-            graphicsOptions.AntialiasThreshold);
 
         Point destinationOffset = new(
             this.targetFrame.Bounds.X + operation.RenderLocation.X,
             this.targetFrame.Bounds.Y + operation.RenderLocation.Y);
 
-        return CompositionCommand.Create(
-            compositionPath,
-            compositeBrush,
-            graphicsOptions,
-            rasterizerOptions,
-            destinationOffset,
-            definitionKeyCache);
+        if (operation.Kind == DrawingOperationKind.Draw)
+        {
+            Pen pen = operation.Pen!;
+            IPath path = operation.Path;
+
+            // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
+            IntersectionRule intersectionRule = operation.IntersectionRule != IntersectionRule.NonZero
+                ? IntersectionRule.NonZero
+                : operation.IntersectionRule;
+
+            float halfWidth = pen.StrokeWidth / 2f;
+            float maxExtent = halfWidth * (float)Math.Max(pen.StrokeOptions.MiterLimit, 1D);
+            RectangleF bounds = path.Bounds;
+            bounds = new RectangleF(
+                bounds.X - maxExtent + 0.5F,
+                bounds.Y - maxExtent + 0.5F,
+                bounds.Width + (maxExtent * 2f),
+                bounds.Height + (maxExtent * 2f));
+
+            Rectangle interest = Rectangle.FromLTRB(
+                (int)MathF.Floor(bounds.Left),
+                (int)MathF.Floor(bounds.Top),
+                (int)MathF.Ceiling(bounds.Right),
+                (int)MathF.Ceiling(bounds.Bottom));
+
+            RasterizerOptions rasterizerOptions = new(
+                interest,
+                intersectionRule,
+                rasterizationMode,
+                RasterizerSamplingOrigin.PixelCenter,
+                graphicsOptions.AntialiasThreshold);
+
+            return CompositionCommand.CreateStroke(
+                path,
+                compositeBrush,
+                graphicsOptions,
+                rasterizerOptions,
+                pen.StrokeOptions,
+                pen.StrokeWidth,
+                pen.StrokePattern,
+                destinationOffset,
+                definitionKeyCache);
+        }
+        else
+        {
+            IPath compositionPath = operation.Path;
+            RectangleF bounds = compositionPath.Bounds;
+
+            Rectangle interest = Rectangle.FromLTRB(
+                (int)MathF.Floor(bounds.Left),
+                (int)MathF.Floor(bounds.Top),
+                (int)MathF.Ceiling(bounds.Right),
+                (int)MathF.Ceiling(bounds.Bottom));
+
+            RasterizerOptions rasterizerOptions = new(
+                interest,
+                operation.IntersectionRule,
+                rasterizationMode,
+                RasterizerSamplingOrigin.PixelBoundary,
+                graphicsOptions.AntialiasThreshold);
+
+            return CompositionCommand.Create(
+                compositionPath,
+                compositeBrush,
+                graphicsOptions,
+                rasterizerOptions,
+                destinationOffset,
+                definitionKeyCache);
+        }
     }
 
     /// <summary>
