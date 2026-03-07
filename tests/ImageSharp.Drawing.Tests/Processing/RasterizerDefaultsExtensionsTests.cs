@@ -47,10 +47,6 @@ public class RasterizerDefaultsExtensionsTests
 
     private sealed class RecordingDrawingBackend : IDrawingBackend
     {
-        public bool IsCompositionBrushSupported<TPixel>(Brush brush)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => true;
-
         public void FillPath<TPixel>(
             ICanvasFrame<TPixel> target,
             IPath path,

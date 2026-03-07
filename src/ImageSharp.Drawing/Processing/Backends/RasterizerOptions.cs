@@ -47,16 +47,19 @@ internal readonly struct RasterizerOptions
     /// <param name="intersectionRule">Polygon intersection rule.</param>
     /// <param name="rasterizationMode">Rasterization coverage mode.</param>
     /// <param name="samplingOrigin">Sampling origin alignment.</param>
+    /// <param name="antialiasThreshold">Coverage threshold for aliased mode (0–1).</param>
     public RasterizerOptions(
         Rectangle interest,
         IntersectionRule intersectionRule,
-        RasterizationMode rasterizationMode = RasterizationMode.Antialiased,
-        RasterizerSamplingOrigin samplingOrigin = RasterizerSamplingOrigin.PixelBoundary)
+        RasterizationMode rasterizationMode,
+        RasterizerSamplingOrigin samplingOrigin,
+        float antialiasThreshold)
     {
         this.Interest = interest;
         this.IntersectionRule = intersectionRule;
         this.RasterizationMode = rasterizationMode;
         this.SamplingOrigin = samplingOrigin;
+        this.AntialiasThreshold = antialiasThreshold;
     }
 
     /// <summary>
@@ -80,10 +83,16 @@ internal readonly struct RasterizerOptions
     public RasterizerSamplingOrigin SamplingOrigin { get; }
 
     /// <summary>
+    /// Gets the coverage threshold used when <see cref="RasterizationMode"/> is <see cref="RasterizationMode.Aliased"/>.
+    /// Pixels with coverage above this value are rendered as fully opaque; pixels below are discarded.
+    /// </summary>
+    public float AntialiasThreshold { get; }
+
+    /// <summary>
     /// Creates a copy of the current options with a different interest rectangle.
     /// </summary>
     /// <param name="interest">The replacement interest rectangle.</param>
     /// <returns>A new <see cref="RasterizerOptions"/> value.</returns>
     public RasterizerOptions WithInterest(Rectangle interest)
-        => new(interest, this.IntersectionRule, this.RasterizationMode, this.SamplingOrigin);
+        => new(interest, this.IntersectionRule, this.RasterizationMode, this.SamplingOrigin, this.AntialiasThreshold);
 }

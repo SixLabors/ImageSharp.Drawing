@@ -51,6 +51,8 @@ internal static class CompositeComputeShader
             solid_g: u32,
             solid_b: u32,
             solid_a: u32,
+            rasterization_mode: u32,
+            antialias_threshold: u32,
         };
 
         struct DispatchConfig {
@@ -766,7 +768,7 @@ internal static class CompositeComputeShader
             rasterize_line(clipped.x0, clipped.y0 - band_top_fixed, clipped.x1, clipped.y1 - band_top_fixed);
         }
 
-        fn area_to_coverage(area_val: i32, fill_rule: u32) -> f32 {
+        fn area_to_coverage(area_val: i32, fill_rule: u32, rasterization_mode: u32, antialias_threshold: f32) -> f32 {
             let signed_area = area_val >> AREA_SHIFT;
             var abs_area: i32;
             if signed_area < 0 {
@@ -792,6 +794,14 @@ internal static class CompositeComputeShader
                     coverage = 1.0;
                 } else {
                     coverage = f32(wrapped) * COV_SCALE;
+                }
+            }
+            // Aliased mode: snap to binary coverage using threshold
+            if rasterization_mode == 1u {
+                if coverage >= antialias_threshold {
+                    coverage = 1.0;
+                } else {
+                    coverage = 0.0;
                 }
             }
             return coverage;
@@ -923,7 +933,7 @@ internal static class CompositeComputeShader
                             cover += atomicLoad(&tile_cover[py * 16u + col]);
                         }
                         let area_val = atomicLoad(&tile_area[py * 16u + px]) + (cover << AREA_SHIFT);
-                        let coverage_value = area_to_coverage(area_val, command.fill_rule_value);
+                        let coverage_value = area_to_coverage(area_val, command.fill_rule_value, command.rasterization_mode, u32_to_f32(command.antialias_threshold));
 
                         if coverage_value > 0.0 {
                             let blend_percentage = u32_to_f32(command.blend_percentage);

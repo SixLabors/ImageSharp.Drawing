@@ -846,7 +846,8 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             interest,
             shapeOptions.IntersectionRule,
             rasterizationMode,
-            samplingOrigin);
+            samplingOrigin,
+            graphicsOptions.AntialiasThreshold);
 
         this.backend.FillPath(
             this.targetFrame,
@@ -1070,7 +1071,8 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             interest,
             intersectionRule,
             rasterizationMode,
-            samplingOrigin);
+            samplingOrigin,
+            graphicsOptions.AntialiasThreshold);
 
         Point destinationOffset = new(
             this.targetFrame.Bounds.X + operation.RenderLocation.X,

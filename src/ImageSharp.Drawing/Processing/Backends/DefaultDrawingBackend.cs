@@ -39,11 +39,6 @@ internal sealed class DefaultDrawingBackend : IDrawingBackend
     public static DefaultDrawingBackend Instance { get; } = new();
 
     /// <inheritdoc />
-    public bool IsCompositionBrushSupported<TPixel>(Brush brush)
-        where TPixel : unmanaged, IPixel<TPixel>
-        => true;
-
-    /// <inheritdoc />
     public void FillPath<TPixel>(
         ICanvasFrame<TPixel> target,
         IPath path,

@@ -37,36 +37,8 @@ public class DrawingCanvasBatcherTests
         Assert.Same(brushB, backend.LastBatch.Commands[1].Brush);
     }
 
-    [Fact]
-    public void Flush_WhenAnyBrushUnsupported_DisablesSharedFlushId()
-    {
-        Configuration configuration = new();
-        CapturingBackend backend = new()
-        {
-            IsBrushSupported = static brush => brush is SolidBrush
-        };
-        configuration.SetDrawingBackend(backend);
-
-        using Image<Rgba32> image = new(40, 40);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
-
-        IPath pathA = new RectangularPolygon(2, 2, 12, 12);
-        IPath pathB = new RectangularPolygon(18, 18, 12, 12);
-        DrawingOptions options = new();
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
-
-        canvas.Fill(pathA, Brushes.Solid(Color.Red));
-        canvas.Fill(pathB, Brushes.Horizontal(Color.Blue));
-        canvas.Flush();
-
-        Assert.NotEmpty(backend.Batches);
-        Assert.All(backend.Batches, static batch => Assert.Equal(0, batch.FlushId));
-    }
-
     private sealed class CapturingBackend : IDrawingBackend
     {
-        public Func<Brush, bool> IsBrushSupported { get; init; } = static _ => true;
-
         public List<CompositionBatch> Batches { get; } = [];
 
         public bool HasBatch { get; private set; }
@@ -79,7 +51,8 @@ public class DrawingCanvasBatcherTests
                     Rectangle.Empty,
                     IntersectionRule.NonZero,
                     RasterizationMode.Aliased,
-                    RasterizerSamplingOrigin.PixelBoundary)),
+                    RasterizerSamplingOrigin.PixelBoundary,
+                    0.5f)),
             Array.Empty<PreparedCompositionCommand>());
 
         public void FillPath<TPixel>(
@@ -92,10 +65,6 @@ public class DrawingCanvasBatcherTests
             where TPixel : unmanaged, IPixel<TPixel>
             => batcher.AddComposition(
                 CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions, target.Bounds.Location));
-
-        public bool IsCompositionBrushSupported<TPixel>(Brush brush)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => this.IsBrushSupported(brush);
 
         public void FlushCompositions<TPixel>(
             Configuration configuration,

@@ -15,7 +15,7 @@ public class DefaultRasterizerRegressionTests
     public void EmitsCoverageForSubpixelThinRectangle()
     {
         RectangularPolygon path = new(0.3F, 0.2F, 0.7F, 1.423F);
-        RasterizerOptions options = new(new Rectangle(0, 0, 12, 20), IntersectionRule.EvenOdd);
+        RasterizerOptions options = new(new Rectangle(0, 0, 12, 20), IntersectionRule.EvenOdd, RasterizationMode.Antialiased, RasterizerSamplingOrigin.PixelBoundary, 0.5f);
         float[] coverage = new float[options.Interest.Width * options.Interest.Height];
         int width = options.Interest.Width;
         int top = options.Interest.Top;
@@ -47,7 +47,7 @@ public class DefaultRasterizerRegressionTests
     public void RasterizesFractionalRectangleCoverageDeterministically()
     {
         RectangularPolygon path = new(0.25F, 0.25F, 1F, 1F);
-        RasterizerOptions options = new(new Rectangle(0, 0, 2, 2), IntersectionRule.NonZero);
+        RasterizerOptions options = new(new Rectangle(0, 0, 2, 2), IntersectionRule.NonZero, RasterizationMode.Antialiased, RasterizerSamplingOrigin.PixelBoundary, 0.5f);
 
         float[] coverage = Rasterize(path, options);
         float[] expected =
@@ -66,7 +66,7 @@ public class DefaultRasterizerRegressionTests
     public void AliasedMode_EmitsBinaryCoverage()
     {
         RectangularPolygon path = new(0.25F, 0.25F, 1F, 1F);
-        RasterizerOptions options = new(new Rectangle(0, 0, 2, 2), IntersectionRule.NonZero, RasterizationMode.Aliased);
+        RasterizerOptions options = new(new Rectangle(0, 0, 2, 2), IntersectionRule.NonZero, RasterizationMode.Aliased, RasterizerSamplingOrigin.PixelBoundary, 0.5f);
 
         float[] coverage = Rasterize(path, options);
         float[] expected =
@@ -82,7 +82,7 @@ public class DefaultRasterizerRegressionTests
     public void ThrowsForInterestTooWideForCoverStrideMath()
     {
         RectangularPolygon path = new(0F, 0F, 1F, 1F);
-        RasterizerOptions options = new(new Rectangle(0, 0, (int.MaxValue / 2) + 1, 1), IntersectionRule.NonZero);
+        RasterizerOptions options = new(new Rectangle(0, 0, (int.MaxValue / 2) + 1, 1), IntersectionRule.NonZero, RasterizationMode.Antialiased, RasterizerSamplingOrigin.PixelBoundary, 0.5f);
 
         void Rasterize() =>
             DefaultRasterizer.RasterizeRows(

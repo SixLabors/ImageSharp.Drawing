@@ -182,6 +182,7 @@ internal static class DefaultRasterizer
                 maxBandRows,
                 options.IntersectionRule,
                 options.RasterizationMode,
+                options.AntialiasThreshold,
                 allocator,
                 rowHandler,
                 ref reusableScratch))
@@ -199,6 +200,7 @@ internal static class DefaultRasterizer
             maxBandRows,
             options.IntersectionRule,
             options.RasterizationMode,
+            options.AntialiasThreshold,
             allocator,
             rowHandler,
             ref reusableScratch);
@@ -216,6 +218,9 @@ internal static class DefaultRasterizer
     /// <param name="maxBandRows">Maximum rows per reusable scratch band.</param>
     /// <param name="intersectionRule">Fill rule.</param>
     /// <param name="rasterizationMode">Coverage mode (AA or aliased).</param>
+    /// <param name="antialiasThreshold">
+    /// Antialiasing threshold in [0, 1] when <paramref name="rasterizationMode"/> is AA.
+    /// </param>
     /// <param name="allocator">Temporary buffer allocator.</param>
     /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
     /// <param name="reusableScratch">
@@ -232,6 +237,7 @@ internal static class DefaultRasterizer
         int maxBandRows,
         IntersectionRule intersectionRule,
         RasterizationMode rasterizationMode,
+        float antialiasThreshold,
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler,
         ref WorkerScratch? reusableScratch)
@@ -280,7 +286,7 @@ internal static class DefaultRasterizer
                     continue;
                 }
 
-                Context context = scratch.CreateContext(currentBandHeight, intersectionRule, rasterizationMode);
+                Context context = scratch.CreateContext(currentBandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
                 context.RasterizeEdgeTable(sortedEdges.Slice(start, length), bandTop);
                 context.EmitCoverageRows(interestTop + bandTop, scratch.Scanline, rowHandler);
                 context.ResetTouchedRows();
@@ -301,6 +307,9 @@ internal static class DefaultRasterizer
     /// <param name="maxBandRows">Maximum rows per worker scratch context.</param>
     /// <param name="intersectionRule">Fill rule.</param>
     /// <param name="rasterizationMode">Coverage mode (AA or aliased).</param>
+    /// <param name="antialiasThreshold">
+    /// Antialiasing threshold in [0, 1] when <paramref name="rasterizationMode"/> is AA.
+    /// </param>
     /// <param name="allocator">Temporary buffer allocator.</param>
     /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
     /// <param name="reusableScratch">Caller-managed scratch. Reused when compatible; replaced and updated in place otherwise.</param>
@@ -319,6 +328,7 @@ internal static class DefaultRasterizer
         int maxBandRows,
         IntersectionRule intersectionRule,
         RasterizationMode rasterizationMode,
+        float antialiasThreshold,
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler,
         ref WorkerScratch? reusableScratch)
@@ -344,6 +354,7 @@ internal static class DefaultRasterizer
                 coverStride,
                 intersectionRule,
                 rasterizationMode,
+                antialiasThreshold,
                 allocator,
                 rowHandler,
                 ref reusableScratch);
@@ -398,7 +409,7 @@ internal static class DefaultRasterizer
                         if (length > 0)
                         {
                             ReadOnlySpan<EdgeData> tileEdges = sortedEdgesMemory.Span.Slice(start, length);
-                            context = worker.CreateContext(bandHeight, intersectionRule, rasterizationMode);
+                            context = worker.CreateContext(bandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
                             context.RasterizeEdgeTable(tileEdges, bandTop);
                             hasCoverage = true;
                             context.EmitCoverageRows(interestTop + bandTop, worker.Scanline, rowHandler);
@@ -435,6 +446,9 @@ internal static class DefaultRasterizer
     /// <param name="coverStride">Cover-area stride in ints.</param>
     /// <param name="intersectionRule">Fill rule.</param>
     /// <param name="rasterizationMode">Coverage mode (AA or aliased).</param>
+    /// <param name="antialiasThreshold">
+    /// Antialiasing threshold in [0, 1] when <paramref name="rasterizationMode"/> is AA.
+    /// </param>
     /// <param name="allocator">Temporary buffer allocator.</param>
     /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
     /// <param name="reusableScratch">
@@ -450,6 +464,7 @@ internal static class DefaultRasterizer
         int coverStride,
         IntersectionRule intersectionRule,
         RasterizationMode rasterizationMode,
+        float antialiasThreshold,
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler,
         ref WorkerScratch? reusableScratch)
@@ -462,7 +477,7 @@ internal static class DefaultRasterizer
         }
 
         WorkerScratch scratch = reusableScratch;
-        Context context = scratch.CreateContext(height, intersectionRule, rasterizationMode);
+        Context context = scratch.CreateContext(height, intersectionRule, rasterizationMode, antialiasThreshold);
         context.RasterizeEdgeTable(edges, bandTop: 0);
         context.EmitCoverageRows(interestTop, scratch.Scanline, rowHandler);
         context.ResetTouchedRows();
@@ -865,6 +880,7 @@ internal static class DefaultRasterizer
         private readonly int coverStride;
         private readonly IntersectionRule intersectionRule;
         private readonly RasterizationMode rasterizationMode;
+        private readonly float antialiasThreshold;
         private int touchedRowCount;
 
         /// <summary>
@@ -884,7 +900,8 @@ internal static class DefaultRasterizer
             int wordsPerRow,
             int coverStride,
             IntersectionRule intersectionRule,
-            RasterizationMode rasterizationMode)
+            RasterizationMode rasterizationMode,
+            float antialiasThreshold)
         {
             this.bitVectors = bitVectors;
             this.coverArea = coverArea;
@@ -900,6 +917,7 @@ internal static class DefaultRasterizer
             this.coverStride = coverStride;
             this.intersectionRule = intersectionRule;
             this.rasterizationMode = rasterizationMode;
+            this.antialiasThreshold = antialiasThreshold;
             this.touchedRowCount = 0;
         }
 
@@ -1252,8 +1270,9 @@ internal static class DefaultRasterizer
 
             if (this.rasterizationMode == RasterizationMode.Aliased)
             {
-                // Aliased mode quantizes final coverage to hard 0/1 per pixel.
-                return coverage >= 0.5F ? 1F : 0F;
+                // Aliased mode quantizes final coverage to hard 0/1 per pixel
+                // using the configurable threshold from GraphicsOptions.AntialiasThreshold.
+                return coverage >= this.antialiasThreshold ? 1F : 0F;
             }
 
             return coverage;
@@ -2156,7 +2175,7 @@ internal static class DefaultRasterizer
         /// <summary>
         /// Creates a context view over this scratch for the requested band height.
         /// </summary>
-        public Context CreateContext(int bandHeight, IntersectionRule intersectionRule, RasterizationMode rasterizationMode)
+        public Context CreateContext(int bandHeight, IntersectionRule intersectionRule, RasterizationMode rasterizationMode, float antialiasThreshold)
         {
             if ((uint)bandHeight > (uint)this.tileCapacity)
             {
@@ -2179,7 +2198,8 @@ internal static class DefaultRasterizer
                 this.wordsPerRow,
                 this.coverStride,
                 intersectionRule,
-                rasterizationMode);
+                rasterizationMode,
+                antialiasThreshold);
         }
 
         /// <summary>

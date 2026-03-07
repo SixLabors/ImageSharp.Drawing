@@ -32,7 +32,7 @@ public class DefaultRasterizerTests
             .Transform(Matrix3x2.CreateScale(200F));
 
         Rectangle interest = Rectangle.Ceiling(path.Bounds);
-        RasterizerOptions options = new(interest, rule);
+        RasterizerOptions options = new(interest, rule, RasterizationMode.Antialiased, RasterizerSamplingOrigin.PixelBoundary, 0.5f);
 
         float[] expected = RasterizeSequential(path, options);
         float[] actual = Rasterize(path, options);
@@ -48,7 +48,9 @@ public class DefaultRasterizerTests
         RasterizerOptions options = new(
             interest,
             IntersectionRule.NonZero,
-            samplingOrigin: RasterizerSamplingOrigin.PixelCenter);
+            RasterizationMode.Antialiased,
+            RasterizerSamplingOrigin.PixelCenter,
+            0.5f);
 
         float[] expected = RasterizeSequential(path, options);
         float[] actual = Rasterize(path, options);

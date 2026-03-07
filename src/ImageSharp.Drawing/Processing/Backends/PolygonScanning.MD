@@ -162,6 +162,22 @@ coverage = min(wrapped, 256) / 256
 
 This is done in `AreaToCoverage(int area)`.
 
+### Aliased Thresholding
+
+When `RasterizationMode` is `Aliased`, the continuous coverage value computed
+above is snapped to binary using `AntialiasThreshold`:
+
+```
+if coverage >= antialiasThreshold:
+    coverage = 1.0
+else:
+    coverage = 0.0
+```
+
+Lower threshold values (e.g. 0.1) preserve more edge pixels and thin features;
+higher values (e.g. 0.9) produce a tighter, more conservative fill. The default
+threshold is 0.5.
+
 ## Why This Handles Self Intersections
 
 The scanner does not require geometric boolean normalization first.
@@ -183,7 +199,10 @@ rasterization time.
 
 - `RasterizerOptions.RasterizationMode` controls whether scanner output is:
   - `Antialiased`: continuous coverage in `[0, 1]`
-  - `Aliased`: binary coverage (`0` or `1`), thresholded in the scanner
+  - `Aliased`: binary coverage (`0` or `1`), thresholded in the scanner using `AntialiasThreshold`
+- `RasterizerOptions.AntialiasThreshold` (0–1, default 0.5): the coverage cutoff
+  used in `Aliased` mode. Pixels with coverage at or above this value become fully
+  opaque; pixels below are discarded. Ignored in `Antialiased` mode.
 - `RasterizerSamplingOrigin` affects both X and Y sample alignment (`PixelBoundary` vs `PixelCenter`).
 
 ## Data Flow Diagram (Row-Level)

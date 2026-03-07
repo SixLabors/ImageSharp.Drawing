@@ -163,14 +163,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     }
 
     /// <inheritdoc />
-    public bool IsCompositionBrushSupported<TPixel>(Brush brush)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        this.ThrowIfDisposed();
-        return IsSupportedCompositionBrush(brush);
-    }
-
-    /// <inheritdoc />
     public void FlushCompositions<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
@@ -733,7 +725,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                     (uint)command.GraphicsOptions.ColorBlendingMode,
                     (uint)command.GraphicsOptions.AlphaCompositionMode,
                     command.GraphicsOptions.BlendPercentage,
-                    solidColor);
+                    solidColor,
+                    command.GraphicsOptions.Antialias ? 0u : 1u,
+                    command.GraphicsOptions.AntialiasThreshold);
 
                     parameters[commandIndex] = commandParameters;
                     commandIndex++;
@@ -1623,6 +1617,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         private readonly IntersectionRule intersectionRule;
         private readonly RasterizationMode rasterizationMode;
         private readonly RasterizerSamplingOrigin samplingOrigin;
+        private readonly float antialiasThreshold;
 
         public CoverageDefinitionIdentity(in CompositionCoverageDefinition definition)
         {
@@ -1632,6 +1627,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.intersectionRule = definition.RasterizerOptions.IntersectionRule;
             this.rasterizationMode = definition.RasterizerOptions.RasterizationMode;
             this.samplingOrigin = definition.RasterizerOptions.SamplingOrigin;
+            this.antialiasThreshold = definition.RasterizerOptions.AntialiasThreshold;
         }
 
         /// <summary>
@@ -1645,7 +1641,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                this.interest.Equals(other.interest) &&
                this.intersectionRule == other.intersectionRule &&
                this.rasterizationMode == other.rasterizationMode &&
-               this.samplingOrigin == other.samplingOrigin;
+               this.samplingOrigin == other.samplingOrigin &&
+               this.antialiasThreshold == other.antialiasThreshold;
 
         /// <inheritdoc/>
         public override bool Equals(object? obj)
@@ -1659,7 +1656,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 this.interest,
                 (int)this.intersectionRule,
                 (int)this.rasterizationMode,
-                (int)this.samplingOrigin);
+                (int)this.samplingOrigin,
+                this.antialiasThreshold);
     }
 
     private readonly struct EdgePlacement
@@ -1746,7 +1744,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
 
     /// <summary>
     /// Prepared composite command parameters consumed by <see cref="CompositeComputeShader"/>.
-    /// Layout matches the WGSL <c>Params</c> struct exactly (24 u32 fields = 96 bytes).
+    /// Layout matches the WGSL <c>Params</c> struct exactly (26 u32 fields = 104 bytes).
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct PreparedCompositeParameters
@@ -1775,6 +1773,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         public readonly uint SolidG;
         public readonly uint SolidB;
         public readonly uint SolidA;
+        public readonly uint RasterizationMode;
+        public readonly uint AntialiasThreshold;
 
         public PreparedCompositeParameters(
             int destinationX,
@@ -1797,7 +1797,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             uint colorBlendMode,
             uint alphaCompositionMode,
             float blendPercentage,
-            Vector4 solidColor)
+            Vector4 solidColor,
+            uint rasterizationMode,
+            float antialiasThreshold)
         {
             this.DestinationX = (uint)destinationX;
             this.DestinationY = (uint)destinationY;
@@ -1823,6 +1825,8 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             this.SolidG = FloatToUInt32Bits(solidColor.Y);
             this.SolidB = FloatToUInt32Bits(solidColor.Z);
             this.SolidA = FloatToUInt32Bits(solidColor.W);
+            this.RasterizationMode = rasterizationMode;
+            this.AntialiasThreshold = FloatToUInt32Bits(antialiasThreshold);
         }
     }
 }

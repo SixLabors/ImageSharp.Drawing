@@ -465,7 +465,7 @@ public class PathBuilder
     /// <summary>
     /// Clears all drawn paths, Leaving any applied transforms.
     /// </summary>
-    [MemberNotNull(nameof(this.currentFigure))]
+    [MemberNotNull(nameof(currentFigure))]
     public void Clear()
     {
         this.currentFigure = new Figure();
@@ -485,7 +485,7 @@ public class PathBuilder
 
         public IPath Build()
             => this.IsClosed
-            ? new Polygon(this.segments.ToArray(), true)
+            ? new Polygon([.. this.segments], true)
             : new Path(this.segments.ToArray());
     }
 }

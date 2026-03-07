@@ -90,6 +90,46 @@ public class WebGPUDrawingBackendTests
     }
 
     [Theory]
+    [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
+    public void FillPath_AliasedWithThreshold_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false, AntialiasThreshold = 0.25F }
+        };
+
+        EllipsePolygon ellipse = new(256, 256, 200, 150);
+        Brush brush = Brushes.Solid(Color.Black);
+
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(ellipse, brush);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTripletNoRef(provider, "FillPath_AliasedThreshold", defaultImage, cpuRegionImage, nativeSurfaceImage);
+
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+    }
+
+    [Theory]
     [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithImageBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>

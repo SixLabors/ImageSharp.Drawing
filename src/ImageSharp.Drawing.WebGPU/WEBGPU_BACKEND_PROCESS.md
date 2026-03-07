@@ -23,6 +23,7 @@ DrawingCanvasBatcher.Flush()
         -> use target texture view directly as backdrop source (no copy)
         -> allocate transient output texture for composition bounds
         -> deduplicate coverage definitions across batches via CoverageDefinitionIdentity
+           (keyed by path, interest, intersection rule, rasterization mode, sampling origin, antialias threshold)
         -> TryCreateEdgeBuffer (CPU-side edge preparation)
            -> for each unique coverage definition:
               -> path.Flatten() to iterate flattened vertices
@@ -52,6 +53,7 @@ DrawingCanvasBatcher.Flush()
                     -> X-range spatial filter: edges left of tile only update start_cover
                     -> barrier, then each thread accumulates its coverage from shared memory
                     -> applies fill rule (non-zero or even-odd)
+                    -> if aliased mode: snaps coverage to binary using antialias threshold
                     -> samples brush (solid color or image texture)
                     -> composes pixel using Porter-Duff alpha composition + color blend mode
                  -> writes final pixel to output texture
@@ -87,7 +89,7 @@ Each edge is a 32-byte `GpuEdge` struct (sequential layout):
 
 ### Command Parameters
 
-Each `PreparedCompositeParameters` struct contains destination rectangle, edge placement (start, fill rule, CSR offsets start, band count), brush configuration, blend/composition mode, and blend percentage.
+Each `PreparedCompositeParameters` struct (26 × u32 = 104 bytes) contains destination rectangle, edge placement (start, fill rule, CSR offsets start, band count), brush configuration, blend/composition mode, blend percentage, rasterization mode (0 = antialiased, 1 = aliased), and antialias threshold (float as u32 bitcast).
 
 ### Dispatch Config
 

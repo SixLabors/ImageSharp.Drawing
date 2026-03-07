@@ -39,6 +39,14 @@ public class GraphicsOptionsTests
     }
 
     [Fact]
+    public void DefaultGraphicsOptionsAntialiasThreshold()
+    {
+        const float expected = 0.5F;
+        Assert.Equal(expected, this.newGraphicsOptions.AntialiasThreshold);
+        Assert.Equal(expected, this.cloneGraphicsOptions.AntialiasThreshold);
+    }
+
+    [Fact]
     public void DefaultGraphicsOptionsAlphaCompositionMode()
     {
         const PixelAlphaCompositionMode expected = PixelAlphaCompositionMode.SrcOver;
@@ -53,6 +61,7 @@ public class GraphicsOptionsTests
         {
             AlphaCompositionMode = PixelAlphaCompositionMode.DestAtop,
             Antialias = false,
+            AntialiasThreshold = .25F,
             BlendPercentage = .25F,
             ColorBlendingMode = PixelColorBlendingMode.HardLight,
         };
@@ -70,6 +79,7 @@ public class GraphicsOptionsTests
 
         actual.AlphaCompositionMode = PixelAlphaCompositionMode.DestAtop;
         actual.Antialias = false;
+        actual.AntialiasThreshold = .25F;
         actual.BlendPercentage = .25F;
         actual.ColorBlendingMode = PixelColorBlendingMode.HardLight;
 

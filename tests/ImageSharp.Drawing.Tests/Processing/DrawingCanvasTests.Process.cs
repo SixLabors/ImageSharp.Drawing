@@ -162,10 +162,6 @@ public partial class DrawingCanvasTests
             => batcher.AddComposition(
                 CompositionCommand.Create(path, brush, graphicsOptions, rasterizerOptions, target.Bounds.Location));
 
-        public bool IsCompositionBrushSupported<TTargetPixel>(Brush brush)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-            => true;
-
         public void FlushCompositions<TTargetPixel>(
             Configuration configuration,
             ICanvasFrame<TTargetPixel> target,
