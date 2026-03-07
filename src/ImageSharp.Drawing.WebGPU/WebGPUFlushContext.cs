@@ -30,9 +30,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 {
     private static readonly ConcurrentDictionary<Type, IDisposable> FallbackStagingCache = new();
     private static readonly ConcurrentDictionary<nint, DeviceSharedState> DeviceStateCache = new();
-    private static readonly object SharedHandleSync = new();
-    private const int CallbackTimeoutMilliseconds = 10_000;
-
     private bool disposed;
     private bool ownsTargetTexture;
     private bool ownsTargetView;
@@ -130,11 +127,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public Texture* ReadbackSourceOverride { get; set; }
 
     /// <summary>
-    /// Gets a value indicating whether the current target texture can be sampled in a compute shader.
-    /// </summary>
-    public bool CanSampleTargetTexture { get; private set; }
-
-    /// <summary>
     /// Gets the readback buffer used when CPU readback is required.
     /// </summary>
     public WgpuBuffer* ReadbackBuffer { get; private set; }
@@ -177,9 +169,20 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// <summary>
     /// Creates a flush context for either a native WebGPU surface or a CPU-backed frame.
     /// </summary>
-    public static WebGPUFlushContext Create<TPixel>(
+    /// <param name="frame">The target frame.</param>
+    /// <param name="expectedTextureFormat">The expected GPU texture format.</param>
+    /// <param name="requiredFeature">
+    /// A device feature required by the pixel type for storage binding, or
+    /// <see cref="FeatureName.Undefined"/> when no special feature is needed.
+    /// </param>
+    /// <param name="pixelSizeInBytes">The unmanaged pixel size in bytes.</param>
+    /// <param name="memoryAllocator">The memory allocator for staging buffers.</param>
+    /// <param name="initialUploadBounds">Optional initial upload region for CPU targets.</param>
+    /// <returns>The flush context, or <see langword="null"/> if the device lacks <paramref name="requiredFeature"/>.</returns>
+    public static WebGPUFlushContext? Create<TPixel>(
         ICanvasFrame<TPixel> frame,
         TextureFormat expectedTextureFormat,
+        FeatureName requiredFeature,
         int pixelSizeInBytes,
         MemoryAllocator memoryAllocator,
         Rectangle? initialUploadBounds = null)
@@ -203,6 +206,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
                 bounds = new Rectangle(0, 0, nativeCapability.Width, nativeCapability.Height);
                 deviceState = GetOrCreateDeviceState(lease.Api, device);
+
+                if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
+                {
+                    lease.Dispose();
+                    return null;
+                }
+
                 context = new WebGPUFlushContext(lease, device, queue, in bounds, textureFormat, memoryAllocator, deviceState);
                 context.InitializeNativeTarget(nativeCapability);
                 return context;
@@ -213,12 +223,19 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 throw new NotSupportedException("Frame does not expose a GPU-native surface or CPU region.");
             }
 
-            if (!TryGetOrCreateSharedHandles(lease.Api, out device, out queue, out string? error))
+            if (!WebGPURuntime.TryGetOrCreateDevice(out device, out queue, out string? error))
             {
-                throw new InvalidOperationException(error ?? "WebGPU shared handles are unavailable.");
+                throw new InvalidOperationException(error ?? "WebGPU device auto-provisioning failed.");
             }
 
             deviceState = GetOrCreateDeviceState(lease.Api, device);
+
+            if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
+            {
+                lease.Dispose();
+                return null;
+            }
+
             context = new WebGPUFlushContext(lease, device, queue, in bounds, expectedTextureFormat, memoryAllocator, deviceState);
             context.InitializeCpuTarget(cpuRegion, pixelSizeInBytes, initialUploadBounds);
             return context;
@@ -302,36 +319,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         DeviceStateCache.Clear();
-    }
-
-    /// <summary>
-    /// Tries to get shared native interop handles for the active WebGPU device and queue.
-    /// </summary>
-    /// <param name="deviceHandle">When this method returns <see langword="true"/>, contains the native device handle.</param>
-    /// <param name="queueHandle">When this method returns <see langword="true"/>, contains the native queue handle.</param>
-    /// <param name="error">When this method returns <see langword="false"/>, contains an error message.</param>
-    /// <returns><see langword="true"/> if shared handles are available; otherwise <see langword="false"/>.</returns>
-    public static bool TryGetInteropHandles(out nint deviceHandle, out nint queueHandle, out string? error)
-    {
-        if (WebGPURuntime.TryGetSharedHandles(out Device* sharedDevice, out Queue* sharedQueue))
-        {
-            deviceHandle = (nint)sharedDevice;
-            queueHandle = (nint)sharedQueue;
-            error = null;
-            return true;
-        }
-
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-        if (TryGetOrCreateSharedHandles(lease.Api, out Device* device, out Queue* queue, out error))
-        {
-            deviceHandle = (nint)device;
-            queueHandle = (nint)queue;
-            return true;
-        }
-
-        deviceHandle = 0;
-        queueHandle = 0;
-        return false;
     }
 
     /// <summary>
@@ -592,7 +579,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ReadbackBytesPerRow = 0;
         this.ReadbackByteCount = 0;
         this.RequiresReadback = false;
-        this.CanSampleTargetTexture = false;
         this.ownsReadbackBuffer = false;
         this.ownsTargetView = false;
         this.ownsTargetTexture = false;
@@ -601,7 +587,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.disposed = true;
     }
 
-    private static DeviceSharedState GetOrCreateDeviceState(WebGPU api, Device* device)
+    internal static DeviceSharedState GetOrCreateDeviceState(WebGPU api, Device* device)
     {
         nint cacheKey = (nint)device;
         if (DeviceStateCache.TryGetValue(cacheKey, out DeviceSharedState? existing))
@@ -619,211 +605,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return winner;
     }
 
-    private static bool TryGetOrCreateSharedHandles(
-        WebGPU api,
-        out Device* device,
-        out Queue* queue,
-        out string? error)
-    {
-        if (WebGPURuntime.TryGetSharedHandles(out device, out queue))
-        {
-            error = null;
-            return true;
-        }
-
-        lock (SharedHandleSync)
-        {
-            if (WebGPURuntime.TryGetSharedHandles(out device, out queue))
-            {
-                error = null;
-                return true;
-            }
-
-            Instance* instance = api.CreateInstance((InstanceDescriptor*)null);
-            if (instance is null)
-            {
-                error = "WebGPU.CreateInstance returned null.";
-                device = null;
-                queue = null;
-                return false;
-            }
-
-            Adapter* adapter = null;
-            Device* requestedDevice = null;
-            Queue* requestedQueue = null;
-            bool initialized = false;
-            try
-            {
-                if (!TryRequestAdapter(api, instance, out adapter, out error))
-                {
-                    device = null;
-                    queue = null;
-                    return false;
-                }
-
-                if (!TryRequestDevice(api, adapter, out requestedDevice, out error))
-                {
-                    device = null;
-                    queue = null;
-                    return false;
-                }
-
-                requestedQueue = api.DeviceGetQueue(requestedDevice);
-                if (requestedQueue is null)
-                {
-                    error = "WebGPU.DeviceGetQueue returned null.";
-                    device = null;
-                    queue = null;
-                    return false;
-                }
-
-                WebGPURuntime.SetSharedHandles((nint)requestedDevice, (nint)requestedQueue);
-                device = requestedDevice;
-                queue = requestedQueue;
-                error = null;
-                initialized = true;
-                return true;
-            }
-            finally
-            {
-                if (adapter is not null)
-                {
-                    api.AdapterRelease(adapter);
-                }
-
-                api.InstanceRelease(instance);
-
-                if (!initialized)
-                {
-                    if (requestedQueue is not null)
-                    {
-                        api.QueueRelease(requestedQueue);
-                    }
-
-                    if (requestedDevice is not null)
-                    {
-                        api.DeviceRelease(requestedDevice);
-                    }
-                }
-            }
-        }
-    }
-
-    private static bool TryRequestAdapter(WebGPU api, Instance* instance, out Adapter* adapter, out string? error)
-    {
-        RequestAdapterStatus callbackStatus = RequestAdapterStatus.Unknown;
-        Adapter* callbackAdapter = null;
-        using ManualResetEventSlim callbackReady = new(false);
-        void Callback(RequestAdapterStatus status, Adapter* adapterPtr, byte* message, void* userData)
-        {
-            callbackStatus = status;
-            callbackAdapter = adapterPtr;
-            callbackReady.Set();
-        }
-
-        using PfnRequestAdapterCallback callbackPtr = PfnRequestAdapterCallback.From(Callback);
-        RequestAdapterOptions options = new()
-        {
-            PowerPreference = PowerPreference.HighPerformance
-        };
-
-        api.InstanceRequestAdapter(instance, in options, callbackPtr, null);
-        if (!WaitForSignal(callbackReady))
-        {
-            adapter = null;
-            error = "Timed out while waiting for WebGPU adapter request callback.";
-            return false;
-        }
-
-        adapter = callbackAdapter;
-        if (callbackStatus != RequestAdapterStatus.Success || callbackAdapter is null)
-        {
-            error = $"WebGPU adapter request failed with status '{callbackStatus}'.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    private static bool TryRequestDevice(WebGPU api, Adapter* adapter, out Device* device, out string? error)
-    {
-        RequestDeviceStatus callbackStatus = RequestDeviceStatus.Unknown;
-        Device* callbackDevice = null;
-        using ManualResetEventSlim callbackReady = new(false);
-        void Callback(RequestDeviceStatus status, Device* devicePtr, byte* message, void* userData)
-        {
-            callbackStatus = status;
-            callbackDevice = devicePtr;
-            callbackReady.Set();
-        }
-
-        using PfnRequestDeviceCallback callbackPtr = PfnRequestDeviceCallback.From(Callback);
-
-        // This path creates a device internally when the caller has not provided
-        // shared handles via WebGPURuntime.SetSharedHandles(). This happens when
-        // the WebGPU backend is used with a CPU-backed ICanvasFrame (e.g. Image<TPixel>)
-        // rather than a native surface — the backend still accelerates composition on
-        // the GPU but must provision its own device since no external context exists.
-        //
-        // Request optional storage features that are available on this adapter.
-        // The compute compositor needs storage binding on the transient output texture,
-        // and some formats (e.g. Bgra8Unorm) require explicit device features.
-        Span<FeatureName> requestedFeatures = stackalloc FeatureName[1];
-        int requestedCount = 0;
-        if (api.AdapterHasFeature(adapter, FeatureName.Bgra8UnormStorage))
-        {
-            requestedFeatures[requestedCount++] = FeatureName.Bgra8UnormStorage;
-        }
-
-        DeviceDescriptor descriptor;
-        if (requestedCount > 0)
-        {
-            fixed (FeatureName* featuresPtr = requestedFeatures)
-            {
-                descriptor = new DeviceDescriptor
-                {
-                    RequiredFeatureCount = (uint)requestedCount,
-                    RequiredFeatures = featuresPtr,
-                };
-
-                api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
-            }
-        }
-        else
-        {
-            descriptor = default;
-            api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
-        }
-
-        if (!WaitForSignal(callbackReady))
-        {
-            device = null;
-            error = "Timed out while waiting for WebGPU device request callback.";
-            return false;
-        }
-
-        device = callbackDevice;
-        if (callbackStatus != RequestDeviceStatus.Success || callbackDevice is null)
-        {
-            error = $"WebGPU device request failed with status '{callbackStatus}'.";
-            return false;
-        }
-
-        error = null;
-        return true;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool WaitForSignal(ManualResetEventSlim signal)
-        => signal.Wait(CallbackTimeoutMilliseconds);
-
     private void InitializeNativeTarget(WebGPUSurfaceCapability capability)
     {
         this.TargetTexture = (Texture*)capability.TargetTexture;
         this.TargetView = (TextureView*)capability.TargetTextureView;
         this.RequiresReadback = false;
-        this.CanSampleTargetTexture = capability.SupportsTextureSampling;
         this.ReadbackBuffer = null;
         this.ReadbackBytesPerRow = 0;
         this.ReadbackByteCount = 0;
@@ -878,7 +664,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ReadbackBytesPerRow = readbackRowBytes;
         this.ReadbackByteCount = readbackByteCount;
         this.RequiresReadback = true;
-        this.CanSampleTargetTexture = true;
         this.ownsTargetTexture = false;
         this.ownsTargetView = false;
         this.ownsReadbackBuffer = false;
@@ -1039,12 +824,14 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
+        private readonly HashSet<FeatureName> deviceFeatures;
         private bool disposed;
 
         internal DeviceSharedState(WebGPU api, Device* device)
         {
             this.Api = api;
             this.Device = device;
+            this.deviceFeatures = EnumerateDeviceFeatures(api, device);
         }
 
         private static ReadOnlySpan<byte> CompositeVertexEntryPoint => "vs_main\0"u8;
@@ -1067,6 +854,39 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         /// Gets the device associated with this shared state.
         /// </summary>
         public Device* Device { get; }
+
+        /// <summary>
+        /// Returns whether the device has the specified feature.
+        /// </summary>
+        /// <param name="feature">The feature to check.</param>
+        /// <returns><see langword="true"/> when the device has the feature; otherwise <see langword="false"/>.</returns>
+        public bool HasFeature(FeatureName feature)
+            => this.deviceFeatures.Contains(feature);
+
+        private static HashSet<FeatureName> EnumerateDeviceFeatures(WebGPU api, Device* device)
+        {
+            if (device is null)
+            {
+                return [];
+            }
+
+            int count = (int)api.DeviceEnumerateFeatures(device, (FeatureName*)null);
+            if (count <= 0)
+            {
+                return [];
+            }
+
+            FeatureName* features = stackalloc FeatureName[count];
+            api.DeviceEnumerateFeatures(device, features);
+
+            HashSet<FeatureName> result = new(count);
+            for (int i = 0; i < count; i++)
+            {
+                result.Add(features[i]);
+            }
+
+            return result;
+        }
 
         /// <summary>
         /// Rents CPU-target staging resources for a destination texture shape and format.

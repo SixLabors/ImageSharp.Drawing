@@ -9,7 +9,6 @@
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -695,11 +694,8 @@ public class WebGPUDrawingBackendTests
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         Assert.True(
             WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
-                nativeSurfaceBackend,
                 defaultImage.Width,
                 defaultImage.Height,
-                isSrgb: false,
-                isPremultipliedAlpha: false,
                 out NativeSurface nativeSurface,
                 out nint textureHandle,
                 out nint textureViewHandle,
@@ -713,7 +709,7 @@ public class WebGPUDrawingBackendTests
             Rectangle targetBounds = defaultImage.Bounds;
 
             using (DrawingCanvas<TPixel> nativeSurfaceClearCanvas =
-                   new(nativeSurfaceConfiguration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), clearOptions))
+                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), clearOptions))
             {
                 nativeSurfaceClearCanvas.Fill(clearBrush);
                 nativeSurfaceClearCanvas.Flush();
@@ -721,7 +717,7 @@ public class WebGPUDrawingBackendTests
 
             int nativeSurfaceComputeBatchesBeforeDraw = nativeSurfaceBackend.TestingComputePathBatchCount;
             using (DrawingCanvas<TPixel> nativeSurfaceDrawCanvas =
-                   new(nativeSurfaceConfiguration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
+                   new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
             {
                 nativeSurfaceDrawCanvas.DrawText(textOptions, text, drawBrush, null);
                 nativeSurfaceDrawCanvas.Flush();
@@ -732,7 +728,6 @@ public class WebGPUDrawingBackendTests
 
             Assert.True(
                 WebGPUTestNativeSurfaceAllocator.TryReadTexture(
-                    nativeSurfaceBackend,
                     textureHandle,
                     defaultImage.Width,
                     defaultImage.Height,
@@ -843,11 +838,8 @@ public class WebGPUDrawingBackendTests
     {
         Assert.True(
             WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
-                backend,
                 width,
                 height,
-                isSrgb: false,
-                isPremultipliedAlpha: false,
                 out NativeSurface nativeSurface,
                 out nint textureHandle,
                 out nint textureViewHandle,
@@ -861,12 +853,11 @@ public class WebGPUDrawingBackendTests
             Rectangle targetBounds = new(0, 0, width, height);
 
             using DrawingCanvas<TPixel> canvas =
-                new(configuration, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), options);
+                new(configuration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), options);
             if (initialImage is not null)
             {
                 Assert.True(
                     WebGPUTestNativeSurfaceAllocator.TryWriteTexture(
-                        backend,
                         textureHandle,
                         width,
                         height,
@@ -880,7 +871,6 @@ public class WebGPUDrawingBackendTests
 
             Assert.True(
                 WebGPUTestNativeSurfaceAllocator.TryReadTexture(
-                    backend,
                     textureHandle,
                     width,
                     height,
@@ -1289,11 +1279,8 @@ public class WebGPUDrawingBackendTests
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         Assert.True(
             WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
-                nativeSurfaceBackend,
                 defaultImage.Width,
                 defaultImage.Height,
-                isSrgb: false,
-                isPremultipliedAlpha: false,
                 out NativeSurface nativeSurface,
                 out nint textureHandle,
                 out nint textureViewHandle,
@@ -1310,7 +1297,6 @@ public class WebGPUDrawingBackendTests
             using Image<TPixel> initialImage = provider.GetImage();
             Assert.True(
                 WebGPUTestNativeSurfaceAllocator.TryWriteTexture(
-                    nativeSurfaceBackend,
                     textureHandle,
                     defaultImage.Width,
                     defaultImage.Height,
@@ -1319,14 +1305,14 @@ public class WebGPUDrawingBackendTests
                 uploadError);
 
             using (DrawingCanvas<TPixel> canvas1 =
-                   new(nativeConfig, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
+                   new(nativeConfig, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
             {
                 canvas1.Fill(rect1, redBrush);
                 canvas1.Flush();
             }
 
             using (DrawingCanvas<TPixel> canvas2 =
-                   new(nativeConfig, new NativeSurfaceOnlyFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
+                   new(nativeConfig, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
             {
                 canvas2.Fill(rect2, blueBrush);
                 canvas2.Flush();
@@ -1334,7 +1320,6 @@ public class WebGPUDrawingBackendTests
 
             Assert.True(
                 WebGPUTestNativeSurfaceAllocator.TryReadTexture(
-                    nativeSurfaceBackend,
                     textureHandle,
                     defaultImage.Width,
                     defaultImage.Height,

@@ -43,7 +43,7 @@ public partial class DrawingCanvasTests
         IPath pixelatePath = CreatePixelateTrianglePath();
 
         Buffer2DRegion<TPixel> targetRegion = new(target.Frames.RootFrame.PixelBuffer, target.Bounds);
-        CpuCanvasFrame<TPixel> proxyFrame = new(targetRegion);
+        MemoryCanvasFrame<TPixel> proxyFrame = new(targetRegion);
         MirroringCpuReadbackTestBackend<TPixel> mirroringBackend = new(proxyFrame, target);
 
         NativeSurface nativeSurface = new(TPixel.GetPixelTypeInfo());
@@ -52,7 +52,7 @@ public partial class DrawingCanvasTests
 
         using (DrawingCanvas<TPixel> canvas = new(
                    configuration,
-                   new NativeSurfaceOnlyFrame<TPixel>(target.Bounds, nativeSurface),
+                   new NativeCanvasFrame<TPixel>(target.Bounds, nativeSurface),
                    new DrawingOptions()))
         {
             DrawProcessScenario(canvas);

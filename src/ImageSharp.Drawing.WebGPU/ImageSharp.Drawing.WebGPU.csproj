@@ -67,6 +67,8 @@
     <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
   </ItemGroup>
 
+  <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
+
   <ItemGroup>
     <ProjectReference Include="..\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
   </ItemGroup>

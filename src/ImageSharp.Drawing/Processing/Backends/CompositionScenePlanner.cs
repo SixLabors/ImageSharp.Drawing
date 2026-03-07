@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Converts scene command streams into backend-ready prepared batches.
 /// </summary>
-internal static class CompositionScenePlanner
+public static class CompositionScenePlanner
 {
     /// <summary>
     /// Creates contiguous prepared batches grouped by coverage definition key.

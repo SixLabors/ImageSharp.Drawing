@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// <summary>
 /// Adds extensions that allow configuring the drawing backend implementation.
 /// </summary>
-internal static class RasterizerDefaultsExtensions
+public static class RasterizerDefaultsExtensions
 {
     /// <summary>
     /// Sets the drawing backend against the source image processing context.
@@ -29,7 +29,7 @@ internal static class RasterizerDefaultsExtensions
     /// </summary>
     /// <param name="configuration">The configuration to store the backend against.</param>
     /// <param name="backend">The backend to use.</param>
-    internal static void SetDrawingBackend(this Configuration configuration, IDrawingBackend backend)
+    public static void SetDrawingBackend(this Configuration configuration, IDrawingBackend backend)
     {
         Guard.NotNull(backend, nameof(backend));
         configuration.Properties[typeof(IDrawingBackend)] = backend;

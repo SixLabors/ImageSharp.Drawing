@@ -63,11 +63,20 @@ public class ImageBrush : Brush
         this.Offset = offset;
     }
 
-    internal Image SourceImage { get; }
+    /// <summary>
+    /// Gets the source image used by this brush.
+    /// </summary>
+    public Image SourceImage { get; }
 
-    internal RectangleF SourceRegion { get; }
+    /// <summary>
+    /// Gets the source region within the image.
+    /// </summary>
+    public RectangleF SourceRegion { get; }
 
-    internal Point Offset { get; }
+    /// <summary>
+    /// Gets the offset applied to the brush origin.
+    /// </summary>
+    public Point Offset { get; }
 
     /// <inheritdoc />
     public override bool Equals(Brush? other)

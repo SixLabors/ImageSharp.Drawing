@@ -6,7 +6,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Describes whether rasterizers should emit continuous coverage or binary aliased coverage.
 /// </summary>
-internal enum RasterizationMode
+public enum RasterizationMode
 {
     /// <summary>
     /// Emit continuous coverage in the range [0, 1].
@@ -22,7 +22,7 @@ internal enum RasterizationMode
 /// <summary>
 /// Describes where sample coverage is aligned relative to destination pixels.
 /// </summary>
-internal enum RasterizerSamplingOrigin
+public enum RasterizerSamplingOrigin
 {
     /// <summary>
     /// Samples are aligned to pixel boundaries.
@@ -38,7 +38,7 @@ internal enum RasterizerSamplingOrigin
 /// <summary>
 /// Immutable options used by rasterizers when scan-converting vector geometry.
 /// </summary>
-internal readonly struct RasterizerOptions
+public readonly struct RasterizerOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RasterizerOptions"/> struct.

@@ -21,12 +21,11 @@ public static class WebGPUNativeSurfaceFactory
     /// <param name="targetFormat">Texture format identifier.</param>
     /// <param name="width">Surface width in pixels.</param>
     /// <param name="height">Surface height in pixels.</param>
-    /// <param name="isSrgb">Whether the surface is sRGB encoded.</param>
-    /// <param name="isPremultipliedAlpha">Whether surface alpha is premultiplied.</param>
-    /// <param name="supportsTextureSampling">
-    /// Whether <paramref name="targetTextureHandle"/> supports texture sampling.
-    /// </param>
     /// <returns>A configured <see cref="NativeSurface"/> instance.</returns>
+    /// <remarks>
+    /// The target texture must have been created with the <c>TEXTURE_BINDING</c> usage flag.
+    /// The backend reads the target texture for Porter-Duff backdrop sampling.
+    /// </remarks>
     public static NativeSurface Create<TPixel>(
         nint deviceHandle,
         nint queueHandle,
@@ -34,10 +33,7 @@ public static class WebGPUNativeSurfaceFactory
         nint targetTextureViewHandle,
         WebGPUTextureFormatId targetFormat,
         int width,
-        int height,
-        bool isSrgb,
-        bool isPremultipliedAlpha,
-        bool supportsTextureSampling)
+        int height)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         ValidateCommon(
@@ -57,10 +53,7 @@ public static class WebGPUNativeSurfaceFactory
             targetTextureViewHandle,
             targetFormat,
             width,
-            height,
-            isSrgb,
-            isPremultipliedAlpha,
-            supportsTextureSampling));
+            height));
         return nativeSurface;
     }
 

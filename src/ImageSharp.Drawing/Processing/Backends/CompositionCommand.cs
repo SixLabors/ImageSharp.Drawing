@@ -8,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// One normalized composition command queued by <see cref="DrawingCanvasBatcher{TPixel}"/>.
 /// </summary>
-internal readonly struct CompositionCommand
+public readonly struct CompositionCommand
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CompositionCommand"/> struct.

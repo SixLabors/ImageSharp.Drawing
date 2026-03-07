@@ -17,7 +17,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Only formats that support <c>storage</c> texture binding (required by the compute compositor)
 /// are included. Formats that lack storage support are omitted and fall back to the CPU backend.
 /// </remarks>
-internal sealed partial class WebGPUDrawingBackend
+public sealed partial class WebGPUDrawingBackend
 {
     /// <summary>
     /// Builds the static registration table that maps <see cref="IPixel{TSelf}"/> implementations to
@@ -27,9 +27,6 @@ internal sealed partial class WebGPUDrawingBackend
     private static Dictionary<Type, CompositePixelRegistration> CreateCompositePixelHandlers() =>
 
         // Only formats with native or feature-gated storage binding support.
-        // Non-storable formats (R8Unorm, RG8Unorm, RG8Snorm, R16Float, RG16Float,
-        // RG16Sint, Rgb10A2Unorm, R16Uint, RG16Uint) are omitted — they cannot be
-        // used as compute shader write targets and fall back to DefaultDrawingBackend.
         new()
         {
             [typeof(Byte4)] = CompositePixelRegistration.Create<Byte4>(TextureFormat.Rgba8Uint),
@@ -47,13 +44,12 @@ internal sealed partial class WebGPUDrawingBackend
         };
 
     /// <summary>
-    /// Resolves the WebGPU texture format identifier for <typeparamref name="TPixel"/> when supported
-    /// by the current device.
+    /// Resolves the WebGPU texture format identifier for <typeparamref name="TPixel"/>.
     /// </summary>
     /// <typeparam name="TPixel">The requested pixel type.</typeparam>
     /// <param name="formatId">Receives the mapped texture format identifier on success.</param>
     /// <returns>
-    /// <see langword="true"/> when the pixel type is supported for GPU composition; otherwise <see langword="false"/>.
+    /// <see langword="true"/> when the pixel type has a registered GPU format mapping; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId)
@@ -65,14 +61,36 @@ internal sealed partial class WebGPUDrawingBackend
             return false;
         }
 
-        if (registration.RequiredFeature != FeatureName.Undefined
-            && !WebGPURuntime.HasDeviceFeature(registration.RequiredFeature))
+        formatId = WebGPUTextureFormatMapper.FromSilk(registration.TextureFormat);
+        return true;
+    }
+
+    /// <summary>
+    /// Resolves the WebGPU texture format identifier and any required device feature
+    /// for <typeparamref name="TPixel"/>.
+    /// </summary>
+    /// <typeparam name="TPixel">The requested pixel type.</typeparam>
+    /// <param name="formatId">Receives the mapped texture format identifier on success.</param>
+    /// <param name="requiredFeature">
+    /// Receives the device feature required for storage binding, or
+    /// <see cref="FeatureName.Undefined"/> when no special feature is needed.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> when the pixel type has a registered GPU format mapping; otherwise <see langword="false"/>.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static bool TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (!CompositePixelHandlers.TryGetValue(typeof(TPixel), out CompositePixelRegistration registration))
         {
             formatId = default;
+            requiredFeature = FeatureName.Undefined;
             return false;
         }
 
         formatId = WebGPUTextureFormatMapper.FromSilk(registration.TextureFormat);
+        requiredFeature = registration.RequiredFeature;
         return true;
     }
 

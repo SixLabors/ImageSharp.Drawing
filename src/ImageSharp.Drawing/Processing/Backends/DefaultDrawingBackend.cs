@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </item>
 /// </list>
 /// </remarks>
-internal sealed class DefaultDrawingBackend : IDrawingBackend
+public sealed class DefaultDrawingBackend : IDrawingBackend
 {
     /// <summary>
     /// Gets the default backend instance.

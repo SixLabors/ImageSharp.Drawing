@@ -11,8 +11,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This type owns the process-level Silk <see cref="WebGPU"/> API loader and its
-/// optional <see cref="Wgpu"/> extension.
+/// This type owns the process-level Silk <see cref="WebGPU"/> API loader, its
+/// optional <see cref="Wgpu"/> extension, and a lazily provisioned default
+/// device/queue pair used by the GPU backend when no native surface is available.
 /// </para>
 /// <para>
 /// Backends acquire access by taking a <see cref="Lease"/> via <see cref="Acquire"/>.
@@ -48,19 +49,14 @@ internal static unsafe class WebGPURuntime
     private static Wgpu? wgpuExtension;
 
     /// <summary>
-    /// Shared device handle used by active backends in the current process.
+    /// Lazily provisioned device handle for CPU-backed frames.
     /// </summary>
-    private static nint sharedDeviceHandle;
+    private static nint autoDeviceHandle;
 
     /// <summary>
-    /// Shared queue handle used by active backends in the current process.
+    /// Lazily provisioned queue handle for CPU-backed frames.
     /// </summary>
-    private static nint sharedQueueHandle;
-
-    /// <summary>
-    /// Set of device features available on the shared device.
-    /// </summary>
-    private static HashSet<FeatureName>? deviceFeatures;
+    private static nint autoQueueHandle;
 
     /// <summary>
     /// Number of currently active runtime leases.
@@ -71,6 +67,11 @@ internal static unsafe class WebGPURuntime
     /// Tracks whether the process-exit hook has been installed.
     /// </summary>
     private static bool processExitHooked;
+
+    /// <summary>
+    /// Timeout for asynchronous WebGPU callbacks.
+    /// </summary>
+    private const int CallbackTimeoutMilliseconds = 10_000;
 
     /// <summary>
     /// Acquires a runtime lease for WebGPU access.
@@ -104,85 +105,107 @@ internal static unsafe class WebGPURuntime
     }
 
     /// <summary>
-    /// Sets shared GPU handles and device features for active backend execution.
+    /// Lazily provisions and caches a default device/queue pair for CPU-backed frames.
+    /// Returns cached handles on subsequent calls.
     /// </summary>
-    /// <param name="deviceHandle">Opaque device handle.</param>
-    /// <param name="queueHandle">Opaque queue handle.</param>
-    /// <param name="features">Device features available on the shared device.</param>
-    internal static void SetSharedHandles(nint deviceHandle, nint queueHandle, HashSet<FeatureName>? features)
-    {
-        lock (Sync)
-        {
-            sharedDeviceHandle = deviceHandle;
-            sharedQueueHandle = queueHandle;
-            deviceFeatures = features;
-        }
-    }
-
-    /// <summary>
-    /// Sets shared GPU handles for active backend execution.
-    /// Device features are queried automatically from the device.
-    /// </summary>
-    /// <param name="deviceHandle">Opaque device handle.</param>
-    /// <param name="queueHandle">Opaque queue handle.</param>
-    internal static void SetSharedHandles(nint deviceHandle, nint queueHandle)
-    {
-        // Ensure the API loader is initialized so we can enumerate device features.
-        using Lease lease = Acquire();
-        lock (Sync)
-        {
-            sharedDeviceHandle = deviceHandle;
-            sharedQueueHandle = queueHandle;
-            deviceFeatures = EnumerateDeviceFeatures((Device*)deviceHandle);
-        }
-    }
-
-    /// <summary>
-    /// Returns whether the shared device has the specified feature.
-    /// </summary>
-    /// <param name="feature">The feature to check.</param>
-    /// <returns><see langword="true"/> when the device has the feature; otherwise <see langword="false"/>.</returns>
-    internal static bool HasDeviceFeature(FeatureName feature)
-    {
-        lock (Sync)
-        {
-            return deviceFeatures is not null && deviceFeatures.Contains(feature);
-        }
-    }
-
-    /// <summary>
-    /// Clears shared GPU handles.
-    /// </summary>
-    internal static void ClearSharedHandles()
-    {
-        lock (Sync)
-        {
-            sharedDeviceHandle = 0;
-            sharedQueueHandle = 0;
-            deviceFeatures = null;
-        }
-    }
-
-    /// <summary>
-    /// Attempts to get shared GPU handles.
-    /// </summary>
-    /// <param name="device">Receives the shared device pointer.</param>
-    /// <param name="queue">Receives the shared queue pointer.</param>
+    /// <param name="device">Receives the device pointer on success.</param>
+    /// <param name="queue">Receives the queue pointer on success.</param>
+    /// <param name="error">Receives an error message on failure.</param>
     /// <returns><see langword="true"/> when handles are available; otherwise <see langword="false"/>.</returns>
-    internal static bool TryGetSharedHandles(out Device* device, out Queue* queue)
+    internal static bool TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? error)
     {
         lock (Sync)
         {
-            if (sharedDeviceHandle == 0 || sharedQueueHandle == 0)
+            // Fast path: return cached handles.
+            if (autoDeviceHandle != 0 && autoQueueHandle != 0)
+            {
+                device = (Device*)autoDeviceHandle;
+                queue = (Queue*)autoQueueHandle;
+                error = null;
+                return true;
+            }
+
+            if (api is null)
             {
                 device = null;
                 queue = null;
+                error = "WebGPU API is not initialized. Call Acquire() first.";
                 return false;
             }
 
-            device = (Device*)sharedDeviceHandle;
-            queue = (Queue*)sharedQueueHandle;
-            return true;
+            // Provision: instance → adapter → device → queue.
+            // The instance and adapter are transient; only the device and queue are cached.
+            Instance* instance = api.CreateInstance((InstanceDescriptor*)null);
+            if (instance is null)
+            {
+                device = null;
+                queue = null;
+                error = "WebGPU.CreateInstance returned null.";
+                return false;
+            }
+
+            Adapter* adapter = null;
+            Device* requestedDevice = null;
+            Queue* requestedQueue = null;
+            bool initialized = false;
+            try
+            {
+                if (!TryRequestAdapter(api, instance, out adapter, out error))
+                {
+                    device = null;
+                    queue = null;
+                    return false;
+                }
+
+                if (!TryRequestDevice(api, adapter, out requestedDevice, out error))
+                {
+                    device = null;
+                    queue = null;
+                    return false;
+                }
+
+                requestedQueue = api.DeviceGetQueue(requestedDevice);
+                if (requestedQueue is null)
+                {
+                    device = null;
+                    queue = null;
+                    error = "WebGPU.DeviceGetQueue returned null.";
+                    return false;
+                }
+
+                // Cache for subsequent calls.
+                autoDeviceHandle = (nint)requestedDevice;
+                autoQueueHandle = (nint)requestedQueue;
+                device = requestedDevice;
+                queue = requestedQueue;
+                error = null;
+                initialized = true;
+                return true;
+            }
+            finally
+            {
+                // Always release transient handles.
+                if (adapter is not null)
+                {
+                    api.AdapterRelease(adapter);
+                }
+
+                api.InstanceRelease(instance);
+
+                // On failure, release any partially provisioned handles.
+                if (!initialized)
+                {
+                    if (requestedQueue is not null)
+                    {
+                        api.QueueRelease(requestedQueue);
+                    }
+
+                    if (requestedDevice is not null)
+                    {
+                        api.DeviceRelease(requestedDevice);
+                    }
+                }
+            }
         }
     }
 
@@ -252,9 +275,8 @@ internal static unsafe class WebGPURuntime
     /// </remarks>
     private static void DisposeRuntimeCore()
     {
-        sharedDeviceHandle = 0;
-        sharedQueueHandle = 0;
-        deviceFeatures = null;
+        autoDeviceHandle = 0;
+        autoQueueHandle = 0;
 
         try
         {
@@ -283,34 +305,104 @@ internal static unsafe class WebGPURuntime
         }
     }
 
-    /// <summary>
-    /// Enumerates features on a device.
-    /// </summary>
-    /// <param name="device">The device to query.</param>
-    /// <returns>A set of features supported by the device.</returns>
-    private static HashSet<FeatureName>? EnumerateDeviceFeatures(Device* device)
+    private static bool TryRequestAdapter(WebGPU api, Instance* instance, out Adapter* adapter, out string? error)
     {
-        if (api is null || device is null)
+        RequestAdapterStatus callbackStatus = RequestAdapterStatus.Unknown;
+        Adapter* callbackAdapter = null;
+        using ManualResetEventSlim callbackReady = new(false);
+        void Callback(RequestAdapterStatus status, Adapter* adapterPtr, byte* message, void* userData)
         {
-            return null;
+            callbackStatus = status;
+            callbackAdapter = adapterPtr;
+            callbackReady.Set();
         }
 
-        int count = (int)api.DeviceEnumerateFeatures(device, (FeatureName*)null);
-        if (count <= 0)
+        using PfnRequestAdapterCallback callbackPtr = PfnRequestAdapterCallback.From(Callback);
+        RequestAdapterOptions options = new()
         {
-            return [];
+            PowerPreference = PowerPreference.HighPerformance
+        };
+
+        api.InstanceRequestAdapter(instance, in options, callbackPtr, null);
+        if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
+        {
+            adapter = null;
+            error = "Timed out while waiting for WebGPU adapter request callback.";
+            return false;
         }
 
-        FeatureName* features = stackalloc FeatureName[count];
-        api.DeviceEnumerateFeatures(device, features);
-
-        HashSet<FeatureName> result = new(count);
-        for (int i = 0; i < count; i++)
+        adapter = callbackAdapter;
+        if (callbackStatus != RequestAdapterStatus.Success || callbackAdapter is null)
         {
-            result.Add(features[i]);
+            error = $"WebGPU adapter request failed with status '{callbackStatus}'.";
+            return false;
         }
 
-        return result;
+        error = null;
+        return true;
+    }
+
+    private static bool TryRequestDevice(WebGPU api, Adapter* adapter, out Device* device, out string? error)
+    {
+        RequestDeviceStatus callbackStatus = RequestDeviceStatus.Unknown;
+        Device* callbackDevice = null;
+        using ManualResetEventSlim callbackReady = new(false);
+        void Callback(RequestDeviceStatus status, Device* devicePtr, byte* message, void* userData)
+        {
+            callbackStatus = status;
+            callbackDevice = devicePtr;
+            callbackReady.Set();
+        }
+
+        using PfnRequestDeviceCallback callbackPtr = PfnRequestDeviceCallback.From(Callback);
+
+        // Auto-provision a device when no native surface provides one.
+        // Request optional storage features that are available on this adapter.
+        // The compute compositor needs storage binding on the transient output texture,
+        // and some formats (e.g. Bgra8Unorm) require explicit device features.
+        Span<FeatureName> requestedFeatures = stackalloc FeatureName[1];
+        int requestedCount = 0;
+        if (api.AdapterHasFeature(adapter, FeatureName.Bgra8UnormStorage))
+        {
+            requestedFeatures[requestedCount++] = FeatureName.Bgra8UnormStorage;
+        }
+
+        DeviceDescriptor descriptor;
+        if (requestedCount > 0)
+        {
+            fixed (FeatureName* featuresPtr = requestedFeatures)
+            {
+                descriptor = new DeviceDescriptor
+                {
+                    RequiredFeatureCount = (uint)requestedCount,
+                    RequiredFeatures = featuresPtr,
+                };
+
+                api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
+            }
+        }
+        else
+        {
+            descriptor = default;
+            api.AdapterRequestDevice(adapter, in descriptor, callbackPtr, null);
+        }
+
+        if (!callbackReady.Wait(CallbackTimeoutMilliseconds))
+        {
+            device = null;
+            error = "Timed out while waiting for WebGPU device request callback.";
+            return false;
+        }
+
+        device = callbackDevice;
+        if (callbackStatus != RequestDeviceStatus.Success || callbackDevice is null)
+        {
+            error = $"WebGPU device request failed with status '{callbackStatus}'.";
+            return false;
+        }
+
+        error = null;
+        return true;
     }
 
     /// <summary>

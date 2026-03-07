@@ -6,13 +6,9 @@ using System.Diagnostics.CodeAnalysis;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Internal drawing backend abstraction used by processors.
+/// Drawing backend abstraction used by processors.
 /// </summary>
-/// <remarks>
-/// This boundary allows processor logic to stay stable while the implementation evolves
-/// (for example: alternate CPU rasterizers or eventual non-CPU backends).
-/// </remarks>
-internal interface IDrawingBackend
+public interface IDrawingBackend
 {
     /// <summary>
     /// Flushes queued composition operations for the target.

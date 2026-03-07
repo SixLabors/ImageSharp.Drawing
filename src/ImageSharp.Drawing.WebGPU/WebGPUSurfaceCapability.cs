@@ -25,11 +25,6 @@ public sealed class WebGPUSurfaceCapability
     /// <param name="targetFormat">Native render target texture format identifier.</param>
     /// <param name="width">Surface width in pixels.</param>
     /// <param name="height">Surface height in pixels.</param>
-    /// <param name="isSrgb">Whether the target format is sRGB encoded.</param>
-    /// <param name="isPremultipliedAlpha">Whether alpha is premultiplied in the target surface.</param>
-    /// <param name="supportsTextureSampling">
-    /// Whether <paramref name="targetTexture"/> can be sampled as a texture binding.
-    /// </param>
     public WebGPUSurfaceCapability(
         nint device,
         nint queue,
@@ -37,10 +32,7 @@ public sealed class WebGPUSurfaceCapability
         nint targetTextureView,
         WebGPUTextureFormatId targetFormat,
         int width,
-        int height,
-        bool isSrgb,
-        bool isPremultipliedAlpha,
-        bool supportsTextureSampling)
+        int height)
     {
         this.Device = device;
         this.Queue = queue;
@@ -49,9 +41,6 @@ public sealed class WebGPUSurfaceCapability
         this.TargetFormat = targetFormat;
         this.Width = width;
         this.Height = height;
-        this.IsSrgb = isSrgb;
-        this.IsPremultipliedAlpha = isPremultipliedAlpha;
-        this.SupportsTextureSampling = supportsTextureSampling;
     }
 
     /// <summary>
@@ -88,19 +77,4 @@ public sealed class WebGPUSurfaceCapability
     /// Gets the surface height in pixels.
     /// </summary>
     public int Height { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the target format is sRGB encoded.
-    /// </summary>
-    public bool IsSrgb { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the target uses premultiplied alpha.
-    /// </summary>
-    public bool IsPremultipliedAlpha { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the target texture supports texture sampling.
-    /// </summary>
-    public bool SupportsTextureSampling { get; }
 }

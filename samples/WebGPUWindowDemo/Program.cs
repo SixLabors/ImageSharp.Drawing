@@ -12,7 +12,6 @@ using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Text;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using Color = SixLabors.ImageSharp.Color;
 using Rectangle = SixLabors.ImageSharp.Rectangle;
@@ -59,7 +58,7 @@ public static unsafe class Program
     // Scrolling text state — glyph geometry is built once at startup via TextBuilder
     // and translated vertically each frame. Only glyphs whose bounds intersect the
     // visible viewport are submitted for rasterization.
-    private static IPathCollection scrollPaths = null!;
+    private static IPathCollection scrollPaths;
     private static float scrollOffset;
     private static float scrollTextHeight;
     private const string ScrollText =
@@ -155,10 +154,6 @@ public static unsafe class Program
         queue = wgpu.DeviceGetQueue(device);
 
         Console.WriteLine($"Device: 0x{(nuint)device:X}, Queue: 0x{(nuint)queue:X}");
-
-        // Register shared handles so the drawing backend uses our device rather than
-        // provisioning its own.
-        WebGPURuntime.SetSharedHandles((nint)device, (nint)queue);
 
         // Query surface capabilities and configure the swap chain.
         wgpu.SurfaceGetCapabilities(surface, adapter, ref surfaceCapabilities);
@@ -292,14 +287,11 @@ public static unsafe class Program
                 (nint)textureView,
                 WebGPUTextureFormatId.Bgra8Unorm,
                 w,
-                h,
-                isSrgb: false,
-                isPremultipliedAlpha: false,
-                supportsTextureSampling: true);
+                h);
 
-            // NativeSurfaceOnlyFrame exposes only the GPU surface (no CPU region),
+            // NativeCanvasFrame exposes only the GPU surface (no CPU region),
             // so the backend always takes the GPU composition path.
-            NativeSurfaceOnlyFrame<Bgra32> frame = new(new Rectangle(0, 0, w, h), nativeSurface);
+            NativeCanvasFrame<Bgra32> frame = new(new Rectangle(0, 0, w, h), nativeSurface);
 
             // Create a drawing canvas targeting the swap chain frame.
             using DrawingCanvas<Bgra32> canvas = new(drawingConfiguration, frame, new DrawingOptions());
@@ -389,15 +381,12 @@ public static unsafe class Program
     private static void OnClosing()
     {
         backend.Dispose();
-        WebGPURuntime.ClearSharedHandles();
 
         wgpu.DeviceRelease(device);
         wgpu.AdapterRelease(adapter);
         wgpu.SurfaceRelease(surface);
         wgpu.InstanceRelease(instance);
         wgpu.Dispose();
-
-        WebGPURuntime.Shutdown();
     }
 
     /// <summary>WebGPU device-lost callback — logs the reason to the console.</summary>
@@ -407,37 +396,6 @@ public static unsafe class Program
     /// <summary>WebGPU uncaptured error callback — logs validation errors to the console.</summary>
     private static void UncapturedError(ErrorType type, byte* message, void* userData)
         => Console.WriteLine($"WebGPU {type}: {SilkMarshal.PtrToString((nint)message)}");
-
-    /// <summary>
-    /// Wraps a <see cref="NativeSurface"/> as an <see cref="ICanvasFrame{TPixel}"/> that
-    /// exposes only the GPU surface. <see cref="TryGetCpuRegion"/> returns false, ensuring
-    /// the drawing backend always takes the native GPU composition path.
-    /// </summary>
-    private sealed class NativeSurfaceOnlyFrame<TPixel> : ICanvasFrame<TPixel>
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly NativeSurface nativeSurface;
-
-        public NativeSurfaceOnlyFrame(Rectangle bounds, NativeSurface nativeSurface)
-        {
-            this.Bounds = bounds;
-            this.nativeSurface = nativeSurface;
-        }
-
-        public Rectangle Bounds { get; }
-
-        public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
-        {
-            region = default;
-            return false;
-        }
-
-        public bool TryGetNativeSurface(out NativeSurface surface)
-        {
-            surface = this.nativeSurface;
-            return true;
-        }
-    }
 
     /// <summary>
     /// A simple bouncing ball with position, velocity, radius, and color.

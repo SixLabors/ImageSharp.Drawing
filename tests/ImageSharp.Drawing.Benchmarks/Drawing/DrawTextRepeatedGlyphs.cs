@@ -33,7 +33,7 @@ public class DrawTextRepeatedGlyphs
     private Image<Rgba32> webGpuCpuImage;
     private WebGPUDrawingBackend webGpuBackend;
     private Configuration webGpuConfiguration;
-    private NativeSurfaceOnlyFrame<Rgba32> webGpuNativeFrame;
+    private NativeCanvasFrame<Rgba32> webGpuNativeFrame;
     private nint webGpuNativeTextureHandle;
     private nint webGpuNativeTextureViewHandle;
     private RichTextOptions textOptions;
@@ -67,21 +67,18 @@ public class DrawTextRepeatedGlyphs
         this.webGpuCpuImage = new Image<Rgba32>(this.webGpuConfiguration, Width, Height);
 
         if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
-                this.webGpuBackend,
                 Width,
                 Height,
-                isSrgb: false,
-                isPremultipliedAlpha: false,
                 out NativeSurface nativeSurface,
                 out this.webGpuNativeTextureHandle,
                 out this.webGpuNativeTextureViewHandle,
                 out string nativeSurfaceError))
         {
             throw new InvalidOperationException(
-                $"Unable to create benchmark native WebGPU target. GPUReady={this.webGpuBackend.TestingIsGPUReady}, Error='{(nativeSurfaceError.Length > 0 ? nativeSurfaceError : this.webGpuBackend.TestingLastGPUInitializationFailure ?? "<none>")}'.");
+                $"Unable to create benchmark native WebGPU target. Error='{nativeSurfaceError}'.");
         }
 
-        this.webGpuNativeFrame = new NativeSurfaceOnlyFrame<Rgba32>(
+        this.webGpuNativeFrame = new NativeCanvasFrame<Rgba32>(
             new Rectangle(0, 0, Width, Height),
             nativeSurface);
 
@@ -104,7 +101,7 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Baseline = true, Description = "DrawingCanvas Default Backend")]
     public void DrawingCanvasDefaultBackend()
     {
-        CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.defaultImage));
+        MemoryCanvasFrame<Rgba32> frame = new(GetFrameRegion(this.defaultImage));
 
         using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, frame, this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
@@ -114,7 +111,7 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Description = "DrawingCanvas WebGPU Backend (CPURegion)")]
     public void DrawingCanvasWebGPUBackendCpuRegion()
     {
-        CpuRegionOnlyFrame<Rgba32> frame = new(GetFrameRegion(this.webGpuCpuImage));
+        MemoryCanvasFrame<Rgba32> frame = new(GetFrameRegion(this.webGpuCpuImage));
 
         using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, frame, this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
@@ -131,52 +128,4 @@ public class DrawTextRepeatedGlyphs
 
     private static Buffer2DRegion<Rgba32> GetFrameRegion(Image<Rgba32> image)
         => new(image.Frames.RootFrame.PixelBuffer, new Rectangle(0, 0, image.Width, image.Height));
-
-    private sealed class CpuRegionOnlyFrame<TPixel> : ICanvasFrame<TPixel>
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly Buffer2DRegion<TPixel> region;
-
-        public CpuRegionOnlyFrame(Buffer2DRegion<TPixel> region) => this.region = region;
-
-        public Rectangle Bounds => this.region.Rectangle;
-
-        public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
-        {
-            region = this.region;
-            return true;
-        }
-
-        public bool TryGetNativeSurface(out NativeSurface surface)
-        {
-            surface = default;
-            return false;
-        }
-    }
-
-    private sealed class NativeSurfaceOnlyFrame<TPixel> : ICanvasFrame<TPixel>
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly NativeSurface surface;
-
-        public NativeSurfaceOnlyFrame(Rectangle bounds, NativeSurface surface)
-        {
-            this.Bounds = bounds;
-            this.surface = surface;
-        }
-
-        public Rectangle Bounds { get; }
-
-        public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
-        {
-            region = default;
-            return false;
-        }
-
-        public bool TryGetNativeSurface(out NativeSurface surface)
-        {
-            surface = this.surface;
-            return true;
-        }
-    }
 }

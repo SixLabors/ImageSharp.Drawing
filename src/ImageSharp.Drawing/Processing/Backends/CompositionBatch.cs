@@ -6,8 +6,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// Prepared composition data emitted by <see cref="DrawingCanvasBatcher{TPixel}"/> and consumed by backends.
 /// </summary>
-internal sealed class CompositionBatch
+public sealed class CompositionBatch
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CompositionBatch"/> class.
+    /// </summary>
+    /// <param name="definition">The coverage definition for this batch.</param>
+    /// <param name="commands">Prepared composition commands in draw order.</param>
+    /// <param name="flushId">The flush identifier shared by all batches in one flush call.</param>
+    /// <param name="isFinalBatchInFlush">Whether this is the last batch for the current flush.</param>
+    /// <param name="compositionBounds">Optional destination-local bounds touched by this batch.</param>
     public CompositionBatch(
         in CompositionCoverageDefinition definition,
         IReadOnlyList<PreparedCompositionCommand> commands,

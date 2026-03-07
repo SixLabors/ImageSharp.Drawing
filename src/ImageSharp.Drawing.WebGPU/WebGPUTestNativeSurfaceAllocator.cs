@@ -21,27 +21,15 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
     /// Tries to allocate a native WebGPU texture + view pair and wrap them in a <see cref="NativeSurface"/>.
     /// </summary>
     internal static bool TryCreate<TPixel>(
-        WebGPUDrawingBackend backend,
         int width,
         int height,
-        bool isSrgb,
-        bool isPremultipliedAlpha,
         out NativeSurface surface,
         out nint textureHandle,
         out nint textureViewHandle,
         out string error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (!backend.TryGetInteropHandles(out nint deviceHandle, out nint queueHandle))
-        {
-            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
-            textureHandle = 0;
-            textureViewHandle = 0;
-            error = "WebGPU backend is not initialized.";
-            return false;
-        }
-
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId))
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
         {
             surface = new NativeSurface(TPixel.GetPixelTypeInfo());
             textureHandle = 0;
@@ -50,13 +38,29 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             return false;
         }
 
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
-
-        // Lease.Dispose only decrements the runtime ref-count; it does not dispose the shared WebGPU API.
         using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         WebGPU api = lease.Api;
-        Device* device = (Device*)deviceHandle;
 
+        if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? deviceError))
+        {
+            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
+            textureHandle = 0;
+            textureViewHandle = 0;
+            error = deviceError ?? "WebGPU device auto-provisioning failed.";
+            return false;
+        }
+
+        if (requiredFeature != FeatureName.Undefined
+            && !WebGPUFlushContext.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
+        {
+            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
+            textureHandle = 0;
+            textureViewHandle = 0;
+            error = $"Device does not support required feature '{requiredFeature}' for pixel type '{typeof(TPixel).Name}'.";
+            return false;
+        }
+
+        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
         TextureDescriptor targetTextureDescriptor = new()
         {
             Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding,
@@ -99,6 +103,8 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             return false;
         }
 
+        nint deviceHandle = (nint)device;
+        nint queueHandle = (nint)queue;
         textureHandle = (nint)targetTexture;
         textureViewHandle = (nint)targetView;
         surface = WebGPUNativeSurfaceFactory.Create<TPixel>(
@@ -108,10 +114,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             textureViewHandle,
             formatId,
             width,
-            height,
-            isSrgb,
-            isPremultipliedAlpha,
-            supportsTextureSampling: true);
+            height);
         error = string.Empty;
         return true;
     }
@@ -120,7 +123,6 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
     /// Tries to upload CPU pixel data to an existing native WebGPU texture handle.
     /// </summary>
     internal static bool TryWriteTexture<TPixel>(
-        WebGPUDrawingBackend backend,
         nint textureHandle,
         int width,
         int height,
@@ -140,19 +142,19 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             return false;
         }
 
-        if (!backend.TryGetInteropHandles(out _, out nint queueHandle))
+        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        if (!WebGPURuntime.TryGetOrCreateDevice(out _, out Queue* queue, out string? deviceError))
         {
-            error = backend.TestingLastGPUInitializationFailure ?? "WebGPU backend is not initialized.";
+            error = deviceError ?? "WebGPU device auto-provisioning failed.";
             return false;
         }
 
         try
         {
-            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
             Buffer2DRegion<TPixel> sourceRegion = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
             WebGPUFlushContext.UploadTextureFromRegion(
                 lease.Api,
-                (Queue*)queueHandle,
+                queue,
                 (Texture*)textureHandle,
                 sourceRegion,
                 Configuration.Default.MemoryAllocator);
@@ -170,7 +172,6 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
     /// Tries to read pixels from a native WebGPU texture handle into an <see cref="Image{TPixel}"/>.
     /// </summary>
     internal static bool TryReadTexture<TPixel>(
-        WebGPUDrawingBackend backend,
         nint textureHandle,
         int width,
         int height,
@@ -191,17 +192,14 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             return false;
         }
 
-        if (!backend.TryGetInteropHandles(out nint deviceHandle, out nint queueHandle))
+        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? deviceError))
         {
-            error = backend.TestingLastGPUInitializationFailure ?? "WebGPU backend is not initialized.";
+            error = deviceError ?? "WebGPU device auto-provisioning failed.";
             return false;
         }
 
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         WebGPU api = lease.Api;
-        Device* device = (Device*)deviceHandle;
-        Queue* queue = (Queue*)queueHandle;
-
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
         int packedRowBytes = checked(width * pixelSizeInBytes);
         int readbackRowBytes = Align(packedRowBytes, 256);

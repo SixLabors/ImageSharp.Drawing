@@ -69,7 +69,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         Buffer2DRegion<TPixel> targetRegion,
         DrawingOptions options,
         params IPath[] clipPaths)
-        : this(configuration, new CpuCanvasFrame<TPixel>(targetRegion), options, clipPaths)
+        : this(configuration, new MemoryCanvasFrame<TPixel>(targetRegion), options, clipPaths)
     {
     }
 

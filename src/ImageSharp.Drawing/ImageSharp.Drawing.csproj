@@ -41,11 +41,6 @@
   </Choose>
 
   <ItemGroup>
-    <!-- Temp: Just while our backends are internal-->
-    <InternalsVisibleTo Include="SixLabors.ImageSharp.Drawing.WebGPU" Key="$(SixLaborsPublicKey)" />
-  </ItemGroup>
-
-  <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>

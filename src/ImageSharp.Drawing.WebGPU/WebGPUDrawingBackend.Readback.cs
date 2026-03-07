@@ -11,7 +11,10 @@ using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
-internal sealed unsafe partial class WebGPUDrawingBackend
+/// <content>
+/// GPU readback helpers.
+/// </content>
+public sealed unsafe partial class WebGPUDrawingBackend
 {
     private const int ReadbackCallbackTimeoutMilliseconds = 5000;
 
@@ -46,7 +49,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat) ||
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat, out FeatureName requiredFeature) ||
             expectedFormat != capability.TargetFormat)
         {
             return false;
@@ -68,6 +71,13 @@ internal sealed unsafe partial class WebGPUDrawingBackend
         using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         WebGPU api = lease.Api;
         Device* device = (Device*)capability.Device;
+
+        if (requiredFeature != FeatureName.Undefined
+            && !WebGPUFlushContext.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
+        {
+            return false;
+        }
+
         Queue* queue = (Queue*)capability.Queue;
 
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();

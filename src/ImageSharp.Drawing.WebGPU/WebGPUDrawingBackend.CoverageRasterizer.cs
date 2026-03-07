@@ -10,7 +10,10 @@ using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
-internal sealed unsafe partial class WebGPUDrawingBackend
+/// <content>
+/// Coverage rasterization helpers.
+/// </content>
+public sealed unsafe partial class WebGPUDrawingBackend
 {
     private const int TileHeight = 16;
     private const int EdgeStrideBytes = 16;

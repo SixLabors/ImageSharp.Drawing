@@ -32,11 +32,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 ///   -> Blit once and optionally read back to CPU region
 ///   -> On failure: delegate scene to DefaultDrawingBackend
 /// </code>
-/// <para>
-/// See src/ImageSharp.Drawing.WebGPU/WEBGPU_BACKEND_PROCESS.md for a full process walkthrough.
-/// </para>
 /// </remarks>
-internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
+public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
     private const int CompositeTileWidth = 16;
     private const int CompositeTileHeight = 16;
@@ -119,29 +116,6 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
     /// </summary>
     internal int TestingComputePathBatchCount { get; private set; }
 
-    /// <summary>
-    /// Attempts to expose native WebGPU device and queue handles for interop.
-    /// </summary>
-    /// <param name="deviceHandle">Receives the device pointer when available.</param>
-    /// <param name="queueHandle">Receives the queue pointer when available.</param>
-    /// <returns><see langword="true"/> when both handles are available; otherwise <see langword="false"/>.</returns>
-    internal bool TryGetInteropHandles(out nint deviceHandle, out nint queueHandle)
-    {
-        this.ThrowIfDisposed();
-        if (WebGPUFlushContext.TryGetInteropHandles(out deviceHandle, out queueHandle, out string? error))
-        {
-            this.TestingGPUInitializationAttempted = true;
-            this.TestingIsGPUReady = true;
-            this.TestingLastGPUInitializationFailure = null;
-            return true;
-        }
-
-        this.TestingGPUInitializationAttempted = true;
-        this.TestingIsGPUReady = false;
-        this.TestingLastGPUInitializationFailure = error;
-        return false;
-    }
-
     /// <inheritdoc />
     public void FlushCompositions<TPixel>(
         Configuration configuration,
@@ -158,7 +132,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             return;
         }
 
-        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId) ||
+        if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature) ||
             !AreAllCompositionBrushesSupported<TPixel>(compositionScene.Commands))
         {
             int fallbackCommandCount = compositionScene.Commands.Count;
@@ -232,12 +206,26 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
         string? failure = null;
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
 
-        WebGPUFlushContext flushContext = WebGPUFlushContext.Create(
+        WebGPUFlushContext? flushContext = WebGPUFlushContext.Create(
             target,
             textureFormat,
+            requiredFeature,
             pixelSizeInBytes,
             configuration.MemoryAllocator,
             compositionBounds);
+
+        if (flushContext is null)
+        {
+            this.TestingFallbackPrepareCoverageCallCount += commandCount;
+            this.TestingFallbackCompositeCoverageCallCount += commandCount;
+            this.FlushCompositionsFallback(
+                configuration,
+                target,
+                compositionScene,
+                target.TryGetCpuRegion(out Buffer2DRegion<TPixel> _),
+                compositionBounds);
+            return;
+        }
 
         try
         {
@@ -253,7 +241,9 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
                 compositionBounds.Value,
                 commandCount,
                 out failure);
+
             bool finalizeOk = renderOk && this.TryFinalizeFlush(flushContext, cpuRegion, compositionBounds);
+
             gpuSuccess = finalizeOk;
         }
         catch (Exception ex)
@@ -345,7 +335,7 @@ internal sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDi
             WebGPUFlushContext.RentFallbackStaging<TPixel>(configuration.MemoryAllocator, in targetBounds);
 
         Buffer2DRegion<TPixel> stagingRegion = stagingLease.Region;
-        ICanvasFrame<TPixel> stagingFrame = new CpuCanvasFrame<TPixel>(stagingRegion);
+        ICanvasFrame<TPixel> stagingFrame = new MemoryCanvasFrame<TPixel>(stagingRegion);
         this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
 
         using WebGPUFlushContext uploadContext = WebGPUFlushContext.CreateUploadContext(target, configuration.MemoryAllocator);

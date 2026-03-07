@@ -41,6 +41,9 @@ public abstract class DrawPolygon
     private IPath strokedImageSharpPath;
     private WebGPUDrawingBackend webGpuBackend;
     private Configuration webGpuConfiguration;
+    private NativeCanvasFrame<Rgba32> webGpuNativeFrame;
+    private nint webGpuNativeTextureHandle;
+    private nint webGpuNativeTextureViewHandle;
 
     protected abstract int Width { get; }
 
@@ -49,7 +52,7 @@ public abstract class DrawPolygon
     protected abstract float Thickness { get; }
 
     protected virtual PointF[][] GetPoints(FeatureCollection features) =>
-        features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60))).ToArray();
+        [.. features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60)))];
 
     [GlobalSetup]
     public void Setup()
@@ -115,6 +118,22 @@ public abstract class DrawPolygon
         this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
         this.webGpuImage = new Image<Rgba32>(this.webGpuConfiguration, this.Width, this.Height);
 
+        if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
+                this.Width,
+                this.Height,
+                out NativeSurface nativeSurface,
+                out this.webGpuNativeTextureHandle,
+                out this.webGpuNativeTextureViewHandle,
+                out string nativeSurfaceError))
+        {
+            throw new InvalidOperationException(
+                $"Unable to create benchmark native WebGPU target. Error='{nativeSurfaceError}'.");
+        }
+
+        this.webGpuNativeFrame = new NativeCanvasFrame<Rgba32>(
+            new Rectangle(0, 0, this.Width, this.Height),
+            nativeSurface);
+
         this.sdBitmap = new Bitmap(this.Width, this.Height);
         this.sdGraphics = Graphics.FromImage(this.sdBitmap);
         this.sdGraphics.InterpolationMode = InterpolationMode.Default;
@@ -156,38 +175,52 @@ public abstract class DrawPolygon
 
         this.image.Dispose();
         this.webGpuImage.Dispose();
+        WebGPUTestNativeSurfaceAllocator.Release(
+            this.webGpuNativeTextureHandle,
+            this.webGpuNativeTextureViewHandle);
+        this.webGpuNativeTextureHandle = 0;
+        this.webGpuNativeTextureViewHandle = 0;
         this.webGpuBackend.Dispose();
     }
-
-    [Benchmark]
-    public void SystemDrawing()
-        => this.sdGraphics.DrawPath(this.sdPen, this.sdPath);
-
-    [Benchmark]
-    public void ImageSharpCombinedPaths()
-        => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
-
-    [Benchmark(Description = "ImageSharp Combined Paths WebGPU Backend")]
-    public void ImageSharpCombinedPathsWebGPUBackend()
-        => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
-
-    [Benchmark]
-    public void ImageSharpSeparatePaths()
-        => this.image.Mutate(
-            c => c.ProcessWithCanvas(canvas =>
-                {
-                    foreach (PointF[] loop in this.points)
-                    {
-                        canvas.Draw(Processing.Pens.Solid(Color.White, this.Thickness), new Polygon(loop));
-                    }
-                }));
 
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
         => this.skSurface.Canvas.DrawPath(this.skPath, this.skPaint);
 
     [Benchmark]
-    public IPath ImageSharpStrokeAndClip() => this.isPen.GeneratePath(this.imageSharpPath);
+    public void SystemDrawing()
+        => this.sdGraphics.DrawPath(this.sdPen, this.sdPath);
+
+    [Benchmark]
+    public void ImageSharp()
+        => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
+
+    [Benchmark(Description = "ImageSharp Combined Paths WebGPU Backend")]
+    public void ImageSharpCombinedPathsWebGPUBackend()
+        => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
+
+    [Benchmark(Description = "ImageSharp Combined Paths WebGPU NativeSurface")]
+    public void ImageSharpCombinedPathsWebGPUNativeSurface()
+    {
+        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, new DrawingOptions());
+        canvas.Draw(this.isPen, this.imageSharpPath);
+        canvas.Flush();
+    }
+
+    [Benchmark]
+    public IPath ImageSharpStrokeAndClipCombined() => this.isPen.GeneratePath(this.imageSharpPath);
+
+    [Benchmark]
+    public IPath ImageSharpStrokeAndClipSeparate()
+    {
+        IPath path = Path.Empty;
+        foreach (PointF[] loop in this.points)
+        {
+            path = this.isPen.GeneratePath(new Polygon(loop));
+        }
+
+        return path;
+    }
 
     [Benchmark]
     public void FillPolygon()

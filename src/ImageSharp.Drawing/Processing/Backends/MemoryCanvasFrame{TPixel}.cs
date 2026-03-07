@@ -7,33 +7,38 @@ using SixLabors.ImageSharp.Memory;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Canvas frame adapter over a CPU <see cref="Buffer2DRegion{T}"/>.
+/// Canvas frame adapter over a <see cref="Buffer2DRegion{T}"/>.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
-internal sealed class CpuCanvasFrame<TPixel> : ICanvasFrame<TPixel>
+public sealed class MemoryCanvasFrame<TPixel> : ICanvasFrame<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private readonly Buffer2DRegion<TPixel> region;
-    private readonly NativeSurface? nativeSurface;
 
-    public CpuCanvasFrame(Buffer2DRegion<TPixel> region, NativeSurface? nativeSurface = null)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MemoryCanvasFrame{TPixel}"/> class.
+    /// </summary>
+    /// <param name="region">The pixel buffer region backing this frame.</param>
+    public MemoryCanvasFrame(Buffer2DRegion<TPixel> region)
     {
         Guard.NotNull(region.Buffer, nameof(region));
         this.region = region;
-        this.nativeSurface = nativeSurface;
     }
 
+    /// <inheritdoc />
     public Rectangle Bounds => this.region.Rectangle;
 
-    public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> cpuRegion)
+    /// <inheritdoc />
+    public bool TryGetCpuRegion(out Buffer2DRegion<TPixel> region)
     {
-        cpuRegion = this.region;
+        region = this.region;
         return true;
     }
 
+    /// <inheritdoc />
     public bool TryGetNativeSurface([NotNullWhen(true)] out NativeSurface? surface)
     {
-        surface = this.nativeSurface;
-        return surface is not null;
+        surface = null;
+        return false;
     }
 }
