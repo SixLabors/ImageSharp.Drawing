@@ -195,28 +195,17 @@ public abstract class DrawPolygon
     public void ImageSharp()
         => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
-    [Benchmark(Description = "ImageSharp Combined Paths WebGPU Backend")]
-    public void ImageSharpCombinedPathsWebGPUBackend()
+    [Benchmark]
+    public void ImageSharpCWebGPUMemoryBuffer()
         => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
-    [Benchmark(Description = "ImageSharp Combined Paths WebGPU NativeSurface")]
-    public void ImageSharpCombinedPathsWebGPUNativeSurface()
+    [Benchmark]
+    public void ImageSharpWebGPUNativeSurface()
     {
         using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, new DrawingOptions());
         canvas.Draw(this.isPen, this.imageSharpPath);
         canvas.Flush();
     }
-
-    [Benchmark]
-    public IPath ImageSharpStroke() => this.isPen.GeneratePath(this.imageSharpPath);
-
-    [Benchmark]
-    public void FillPolygon()
-        => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(this.strokedImageSharpPath, Processing.Brushes.Solid(Color.White))));
-
-    [Benchmark]
-    public void FillPolygonWebGPUBackend()
-        => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(this.strokedImageSharpPath, Processing.Brushes.Solid(Color.White))));
 }
 
 public class DrawPolygonAll : DrawPolygon
