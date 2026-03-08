@@ -17,6 +17,8 @@ https://github.com/aurimasg/blaze (MIT-Licensed)
 
 ## High-Level Pipeline
 
+### Fill Path (`RasterizeRows`)
+
 ```
 IPath
   |
@@ -42,6 +44,65 @@ Choose execution mode:
          +--> Convert accumulators to coverage scanlines
          +--> Invoke rasterizer callback per dirty row
 ```
+
+### Stroke Path (`RasterizeStrokeRows`)
+
+Stroke rasterization fuses stroke expansion with coverage rasterization so that
+each parallel band only expands the centerline edges that overlap it. This avoids
+the cost of a serial full-path `GenerateOutline()` call and eliminates the
+intermediate `IPath` allocation for the expanded outline.
+
+For dashed strokes, `DashPathSplitter` splits the centerline into dash segments
+on the CPU before passing the result through the same per-band stroke expansion
+pipeline.
+
+```
+IPath (centerline)
+  |
+  +--> [if dashed] DashPathSplitter.SplitDashes(path, strokeWidth, pattern)
+  |
+  v
+path.Flatten() -> List<ISimplePath> (preserving open/closed state)
+  |
+  v
+BuildStrokeEdgeTable(contours) -> StrokeEdgeData[]
+  |  For each contour:
+  |    - Closed: N side edges + N join descriptors = 2N descriptors
+  |    - Open:   (N-1) side edges + (N-2) joins + 2 caps = 2N-1 descriptors
+  |  Each descriptor carries StrokeEdgeFlags (None/Join/CapStart/CapEnd)
+  |
+  v
+TryBuildBandSortedStrokeEdges(edges, expansion)
+  |  Band-sort with Y expansion = halfWidth * max(miterLimit, 1)
+  |  to ensure join/cap geometry reaches all overlapping bands
+  |
+  v
+Choose execution mode:
+  |
+  +--> Parallel row-tiles
+  |      |
+  |      +--> Per tile: ExpandStrokeEdges -> EmitOutlineEdge -> RasterizeLine
+  |      +--> EmitCoverageRows -> ordered emit via output buffer
+  |
+  +--> Sequential band loop
+         |
+         +--> Per band: ExpandStrokeEdges -> EmitOutlineEdge -> RasterizeLine
+         +--> EmitCoverageRows -> direct callback
+```
+
+#### Stroke Edge Expansion (`ExpandStrokeEdges`)
+
+Each `StrokeEdgeData` descriptor is expanded into outline edges based on its
+`StrokeEdgeFlags`, mirroring the GPU `StrokeExpandComputeShader`:
+
+| Flag | Expansion | Outline edges |
+|------|-----------|---------------|
+| `None` (side) | Two edges offset by stroke normal | 2 |
+| `Join` | Inner bevel + outer join (miter/round/bevel) | 2-N (round scales with width) |
+| `CapStart`/`CapEnd` | Cap geometry (butt/square/round) | 1-N (round scales with width) |
+
+Outline edges are converted from float to 24.8 fixed-point, clipped to band
+bounds, and fed directly to `RasterizeLine` — no intermediate edge buffer.
 
 ## Coordinate System and Precision
 

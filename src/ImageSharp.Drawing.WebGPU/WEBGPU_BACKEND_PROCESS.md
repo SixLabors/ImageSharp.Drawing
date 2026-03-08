@@ -67,6 +67,30 @@ DrawingCanvasBatcher.Flush()
      -> on any GPU failure: scene-scoped fallback (DefaultDrawingBackend)
 ```
 
+## Stroke Processing
+
+For stroke definitions (`CompositionCoverageDefinition.IsStroke`), the backend
+performs stroke expansion on the GPU using `StrokeExpandComputeShader`:
+
+1. **Dash splitting** (CPU): If the definition has a dash pattern, `DashPathSplitter.SplitDashes()`
+   (shared with `DefaultDrawingBackend` in the core project) segments the centerline into
+   open dash sub-paths before edge building.
+
+2. **Centerline edge building** (CPU): `path.Flatten()` produces contour vertices.
+   Centerline edges are built as `GpuEdge` structs with `StrokeEdgeFlags` indicating
+   the edge type (`None` for side edges, `Join`, `CapStart`, `CapEnd`). Join edges
+   carry adjacent vertex coordinates in `AdjX`/`AdjY`. Centerline edges are band-sorted
+   with Y expansion of `halfWidth * max(miterLimit, 1)`.
+
+3. **GPU stroke expansion**: One `StrokeExpandCommand` per band dispatches the compute
+   shader. Each thread expands one centerline edge into outline edges written to
+   per-band output slots via atomic counters. Output buffer size is computed by
+   `ComputeOutlineEdgesPerCenterline()` which accounts for join/cap type and arc
+   step count for round joins/caps.
+
+4. **Rasterization**: The generated outline edges are band-sorted and rasterized
+   by the composite shader's fill path (same fixed-point scanline rasterizer).
+
 ## GPU Buffer Layout
 
 ### Edge Buffer (`coverage-aggregated-edges`)
@@ -77,10 +101,8 @@ Each edge is a 32-byte `GpuEdge` struct (sequential layout):
 |---|---|---|
 | X0, Y0 | i32 | Start point in 24.8 fixed-point |
 | X1, Y1 | i32 | End point in 24.8 fixed-point |
-| MinRow | i32 | First pixel row touched (clamped to interest) |
-| MaxRow | i32 | Last pixel row touched (clamped to interest) |
-| CsrBandOffset | u32 | Start index into CSR offsets for this definition |
-| DefinitionEdgeStart | u32 | Edge index offset for this definition in merged buffer |
+| Flags | StrokeEdgeFlags | Stroke edge type (None/Join/CapStart/CapEnd) |
+| AdjX, AdjY | i32 | Auxiliary coords (join adjacent vertex) |
 
 ### CSR Buffers
 
@@ -149,4 +171,10 @@ Coverage rasterization and compositing are fused into a single compute dispatch.
 
 Edge preparation (path flattening, fixed-point conversion, CSR construction) runs on the CPU. The `path.Flatten()` cost is shared with the CPU rasterizer pipeline. CSR construction is three passes over the edge set: count, prefix sum, scatter.
 
-For the benchmark workload (7200x4800 US states GeoJSON polygon, 2px stroke, ~262K edges), NativeSurface performance is at parity with the CPU rasterizer (~28ms).
+Both the CPU and GPU backends use per-band parallel stroke expansion — the CPU
+via `DefaultRasterizer.RasterizeStrokeRows` and the GPU via
+`StrokeExpandComputeShader`. Both share the same `StrokeEdgeFlags` enum and
+`DashPathSplitter` (in the core project). The CPU backend fuses stroke expansion
+directly into the rasterizer's band loop, while the GPU backend uses a separate
+compute dispatch that writes outline edges into pre-allocated per-band output
+slots sized by `ComputeOutlineEdgesPerCenterline()`.
