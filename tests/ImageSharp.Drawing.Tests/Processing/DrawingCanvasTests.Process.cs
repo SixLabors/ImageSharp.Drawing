@@ -193,5 +193,12 @@ public partial class DrawingCanvasTests
             image = cropped.CloneAs<TTargetPixel>();
             return true;
         }
+
+        public void ReleaseFrameResources<TTargetPixel>(
+            Configuration configuration,
+            ICanvasFrame<TTargetPixel> target)
+            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
+        {
+        }
     }
 }

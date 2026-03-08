@@ -72,6 +72,15 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
     }
 
     /// <inheritdoc />
+    public void ReleaseFrameResources<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // No cached resources to release for CPU-only backend.
+    }
+
+    /// <inheritdoc />
     public bool TryReadRegion<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,

@@ -237,7 +237,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
 
             context = new WebGPUFlushContext(lease, device, queue, in bounds, expectedTextureFormat, memoryAllocator, deviceState);
-            context.InitializeCpuTarget(cpuRegion, pixelSizeInBytes, initialUploadBounds);
+            nint targetIdentity = (nint)RuntimeHelpers.GetHashCode(frame);
+            context.InitializeCpuTarget(cpuRegion, pixelSizeInBytes, targetIdentity, initialUploadBounds);
             return context;
         }
         catch
@@ -306,6 +307,18 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         FallbackStagingCache.Clear();
+    }
+
+    /// <summary>
+    /// Releases all cached CPU target resources associated with the specified target identity.
+    /// </summary>
+    /// <param name="targetIdentity">The target frame identity whose cached resources should be released.</param>
+    public static void ReleaseCpuTargetEntries(nint targetIdentity)
+    {
+        foreach (DeviceSharedState state in DeviceStateCache.Values)
+        {
+            state.ReleaseCpuTargetEntries(targetIdentity);
+        }
     }
 
     /// <summary>
@@ -621,6 +634,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private void InitializeCpuTarget<TPixel>(
         Buffer2DRegion<TPixel> cpuRegion,
         int pixelSizeInBytes,
+        nint targetIdentity,
         Rectangle? initialUploadBounds)
         where TPixel : unmanaged
     {
@@ -630,7 +644,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             this.TextureFormat,
             width,
             height,
-            pixelSizeInBytes);
+            pixelSizeInBytes,
+            targetIdentity);
         Texture* targetTexture = lease.TargetTexture;
         TextureView* targetView = lease.TargetView;
         WgpuBuffer* readbackBuffer = lease.ReadbackBuffer;
@@ -894,16 +909,34 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         /// <param name="width">The destination width.</param>
         /// <param name="height">The destination height.</param>
         /// <param name="pixelSizeInBytes">The destination pixel size in bytes.</param>
+        /// <param name="targetIdentity">Identity of the target frame to prevent cache collisions.</param>
         /// <returns>A lease for staging resources.</returns>
         public CpuTargetLease RentCpuTarget(
             TextureFormat textureFormat,
             int width,
             int height,
-            int pixelSizeInBytes)
+            int pixelSizeInBytes,
+            nint targetIdentity)
         {
-            CpuTargetCacheKey key = new(textureFormat, width, height, pixelSizeInBytes);
+            CpuTargetCacheKey key = new(textureFormat, width, height, pixelSizeInBytes, targetIdentity);
             CpuTargetEntry entry = this.cpuTargetCache.GetOrAdd(key, static _ => new CpuTargetEntry());
             return entry.Rent(this.Api, this.Device, in key);
+        }
+
+        /// <summary>
+        /// Releases and removes all CPU target cache entries matching the specified target identity.
+        /// </summary>
+        /// <param name="targetIdentity">The target frame identity whose entries should be released.</param>
+        public void ReleaseCpuTargetEntries(nint targetIdentity)
+        {
+            foreach (KeyValuePair<CpuTargetCacheKey, CpuTargetEntry> pair in this.cpuTargetCache)
+            {
+                if (pair.Key.TargetIdentity == targetIdentity &&
+                    this.cpuTargetCache.TryRemove(pair.Key, out CpuTargetEntry? entry))
+                {
+                    entry.Dispose(this.Api);
+                }
+            }
         }
 
         /// <summary>
@@ -1438,7 +1471,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             TextureFormat textureFormat,
             int width,
             int height,
-            int pixelSizeInBytes) : IEquatable<CpuTargetCacheKey>
+            int pixelSizeInBytes,
+            nint targetIdentity) : IEquatable<CpuTargetCacheKey>
         {
             /// <summary>
             /// Gets the texture format for the cached CPU target.
@@ -1461,21 +1495,28 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             public int PixelSizeInBytes { get; } = pixelSizeInBytes;
 
             /// <summary>
+            /// Gets the identity of the target frame to prevent different targets
+            /// with the same dimensions from sharing GPU texture content.
+            /// </summary>
+            public nint TargetIdentity { get; } = targetIdentity;
+
+            /// <summary>
             /// Determines whether this key equals another CPU target cache key.
             /// </summary>
             /// <param name="other">The key to compare.</param>
-            /// <returns><see langword="true"/> if all dimensions and format match; otherwise <see langword="false"/>.</returns>
+            /// <returns><see langword="true"/> if all fields match; otherwise <see langword="false"/>.</returns>
             public bool Equals(CpuTargetCacheKey other)
                 => this.TextureFormat == other.TextureFormat &&
                    this.Width == other.Width &&
                    this.Height == other.Height &&
-                   this.PixelSizeInBytes == other.PixelSizeInBytes;
+                   this.PixelSizeInBytes == other.PixelSizeInBytes &&
+                   this.TargetIdentity == other.TargetIdentity;
 
             /// <inheritdoc/>
             public override bool Equals(object? obj) => obj is CpuTargetCacheKey other && this.Equals(other);
 
             /// <inheritdoc/>
-            public override int GetHashCode() => HashCode.Combine((int)this.TextureFormat, this.Width, this.Height, this.PixelSizeInBytes);
+            public override int GetHashCode() => HashCode.Combine((int)this.TextureFormat, this.Width, this.Height, this.PixelSizeInBytes, this.TargetIdentity);
         }
 
         /// <summary>

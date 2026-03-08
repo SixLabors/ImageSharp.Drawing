@@ -40,4 +40,15 @@ public interface IDrawingBackend
         Rectangle sourceRectangle,
         [NotNullWhen(true)] out Image<TPixel>? image)
         where TPixel : unmanaged, IPixel<TPixel>;
+
+    /// <summary>
+    /// Releases any backend resources cached against the specified target frame.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">Active processing configuration.</param>
+    /// <param name="target">The target frame whose resources should be released.</param>
+    public void ReleaseFrameResources<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target)
+        where TPixel : unmanaged, IPixel<TPixel>;
 }

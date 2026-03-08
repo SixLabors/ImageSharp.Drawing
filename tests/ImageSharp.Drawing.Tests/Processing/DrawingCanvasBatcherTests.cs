@@ -173,5 +173,12 @@ public class DrawingCanvasBatcherTests
             image = null;
             return false;
         }
+
+        public void ReleaseFrameResources<TPixel>(
+            Configuration configuration,
+            ICanvasFrame<TPixel> target)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+        }
     }
 }

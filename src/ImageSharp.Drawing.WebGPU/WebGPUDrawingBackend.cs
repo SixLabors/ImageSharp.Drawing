@@ -300,6 +300,16 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             compositionBounds);
     }
 
+    /// <inheritdoc />
+    public void ReleaseFrameResources<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        nint targetIdentity = (nint)RuntimeHelpers.GetHashCode(target);
+        WebGPUFlushContext.ReleaseCpuTargetEntries(targetIdentity);
+    }
+
     /// <summary>
     /// Checks whether all scene commands are directly composable by WebGPU.
     /// </summary>
