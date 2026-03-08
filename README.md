@@ -11,15 +11,10 @@ SixLabors.ImageSharp.Drawing
 [![Build Status](https://img.shields.io/github/actions/workflow/status/SixLabors/ImageSharp.Drawing/build-and-test.yml?branch=main)](https://github.com/SixLabors/ImageSharp.Drawing/actions)
 [![Code coverage](https://codecov.io/gh/SixLabors/ImageSharp.Drawing/branch/main/graph/badge.svg)](https://codecov.io/gh/SixLabors/ImageSharp.Drawing)
 [![License: Six Labors Split](https://img.shields.io/badge/license-Six%20Labors%20Split-%23e30183)](https://github.com/SixLabors/ImageSharp.Drawing/blob/main/LICENSE)
-[![Twitter](https://img.shields.io/twitter/url/http/shields.io.svg?style=flat&logo=twitter)](https://twitter.com/intent/tweet?hashtags=imagesharp,dotnet,oss&text=ImageSharp.+A+new+cross-platform+2D+graphics+API+in+C%23&url=https%3a%2f%2fgithub.com%2fSixLabors%2fImageSharp&via=sixlabors)
 
 </div>
 
-### **ImageSharp.Drawing** provides extensions to ImageSharp containing powerful, Cross-Platform 2D polygon manipulation and drawing APIs.
-
-Designed to democratize image processing, ImageSharp.Drawing brings you an incredibly powerful yet beautifully simple API.
-
-Built against [.NET 8](https://docs.microsoft.com/en-us/dotnet/standard/net-standard), ImageSharp.Drawing can be used in device, cloud, and embedded/IoT scenarios. 
+**ImageSharp.Drawing** is a cross-platform 2D drawing library built on top of [ImageSharp](https://github.com/SixLabors/ImageSharp). It provides path construction, polygon manipulation, fills, strokes, gradient brushes, pattern brushes, and text rendering. Built against [.NET 8](https://docs.microsoft.com/en-us/dotnet/standard/net-standard).
   
 ## License
   

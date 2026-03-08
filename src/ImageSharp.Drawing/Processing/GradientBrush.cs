@@ -18,18 +18,25 @@ public abstract class GradientBrush : Brush
     protected GradientBrush(GradientRepetitionMode repetitionMode, params ColorStop[] colorStops)
     {
         this.RepetitionMode = repetitionMode;
-        this.ColorStops = colorStops;
+
+        InsertionSort(colorStops, (a, b) => a.Ratio.CompareTo(b.Ratio));
+        this.ColorStopsArray = colorStops;
     }
 
     /// <summary>
     /// Gets how the colors are repeated beyond the interval [0..1].
     /// </summary>
-    protected GradientRepetitionMode RepetitionMode { get; }
+    public GradientRepetitionMode RepetitionMode { get; }
 
     /// <summary>
-    /// Gets the list of color stops for this gradient.
+    /// Gets the color stops for this gradient.
     /// </summary>
-    protected ColorStop[] ColorStops { get; }
+    public ReadOnlySpan<ColorStop> ColorStops => this.ColorStopsArray;
+
+    /// <summary>
+    /// Gets the color stops array for use by derived applicators.
+    /// </summary>
+    protected ColorStop[] ColorStopsArray { get; }
 
     /// <inheritdoc />
     public override bool Equals(Brush? other)
@@ -37,7 +44,7 @@ public abstract class GradientBrush : Brush
         if (other is GradientBrush brush)
         {
             return this.RepetitionMode == brush.RepetitionMode
-                && this.ColorStops?.SequenceEqual(brush.ColorStops) == true;
+                && this.ColorStopsArray?.SequenceEqual(brush.ColorStopsArray) == true;
         }
 
         return false;
@@ -45,7 +52,29 @@ public abstract class GradientBrush : Brush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.RepetitionMode, this.ColorStops);
+        => HashCode.Combine(this.RepetitionMode, this.ColorStopsArray);
+
+    /// <summary>
+    /// Sorts the collection in place using a stable insertion sort.
+    /// <see cref="Array.Sort{T}(T[], Comparison{T})"/> is not stable and can reorder
+    /// equal-ratio color stops, producing non-deterministic gradient results.
+    /// </summary>
+    private static void InsertionSort<T>(T[] collection, Comparison<T> comparison)
+    {
+        int count = collection.Length;
+        for (int j = 1; j < count; j++)
+        {
+            T key = collection[j];
+
+            int i = j - 1;
+            for (; i >= 0 && comparison(collection[i], key) > 0; i--)
+            {
+                collection[i + 1] = collection[i];
+            }
+
+            collection[i + 1] = key;
+        }
+    }
 
     /// <summary>
     /// Base class for gradient brush applicators
@@ -85,9 +114,6 @@ public abstract class GradientBrush : Brush
             : base(configuration, options, targetRegion)
         {
             this.colorStops = colorStops;
-
-            // Ensure the color-stop order is correct.
-            InsertionSort(this.colorStops, (x, y) => x.Ratio.CompareTo(y.Ratio));
             this.repetitionMode = repetitionMode;
             this.scanlineWidth = targetRegion.Width;
             this.allocator = configuration.MemoryAllocator;
@@ -228,30 +254,6 @@ public abstract class GradientBrush : Brush
             }
 
             return (localGradientFrom, localGradientTo);
-        }
-
-        /// <summary>
-        /// Provides a stable sorting algorithm for the given array.
-        /// <see cref="Array.Sort(Array, System.Collections.IComparer?)"/> is not stable.
-        /// </summary>
-        /// <typeparam name="T">The type of element to sort.</typeparam>
-        /// <param name="collection">The array to sort.</param>
-        /// <param name="comparison">The comparison delegate.</param>
-        private static void InsertionSort<T>(T[] collection, Comparison<T> comparison)
-        {
-            int count = collection.Length;
-            for (int j = 1; j < count; j++)
-            {
-                T key = collection[j];
-
-                int i = j - 1;
-                for (; i >= 0 && comparison(collection[i], key) > 0; i--)
-                {
-                    collection[i + 1] = collection[i];
-                }
-
-                collection[i + 1] = key;
-            }
         }
     }
 }

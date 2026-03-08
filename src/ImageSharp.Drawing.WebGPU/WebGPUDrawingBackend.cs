@@ -37,10 +37,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 {
     private const int CompositeTileWidth = 16;
     private const int CompositeTileHeight = 16;
-    private const uint PreparedBrushTypeSolid = 0;
-    private const uint PreparedBrushTypeImage = 1;
+
     private const string PreparedCompositeParamsBufferKey = "prepared-composite/params";
     private const string PreparedCompositeDispatchConfigBufferKey = "prepared-composite/dispatch-config";
+    private const string PreparedCompositeColorStopsBufferKey = "prepared-composite/color-stops";
     private const string StrokeExpandPipelineKey = "stroke-expand";
     private const string StrokeExpandCommandsBufferKey = "stroke-expand/commands";
     private const string StrokeExpandConfigBufferKey = "stroke-expand/config";
@@ -58,6 +58,22 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// </summary>
     public WebGPUDrawingBackend()
         => this.fallbackBackend = DefaultDrawingBackend.Instance;
+
+    /// <summary>
+    /// GPU brush type identifiers. Values match the WGSL <c>brush_type</c> field constants.
+    /// </summary>
+    private enum PreparedBrushType : uint
+    {
+        Solid = 0,
+        Image = 1,
+        LinearGradient = 2,
+        RadialGradient = 3,
+        RadialGradientTwoCircle = 4,
+        EllipticGradient = 5,
+        SweepGradient = 6,
+        Pattern = 7,
+        Recolor = 8,
+    }
 
     /// <summary>
     /// Gets the testing-only diagnostic counter for total coverage preparation requests.
@@ -307,7 +323,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// Checks whether the brush type is supported by the WebGPU composition path.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsSupportedCompositionBrush(Brush brush) => brush is SolidBrush or ImageBrush;
+    private static bool IsSupportedCompositionBrush(Brush brush)
+        => brush is SolidBrush
+            or ImageBrush
+            or LinearGradientBrush
+            or RadialGradientBrush
+            or EllipticGradientBrush
+            or SweepGradientBrush
+            or PatternBrush
+            or RecolorBrush;
 
     /// <summary>
     /// Executes the scene on the CPU fallback backend.
@@ -698,6 +722,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         uint parameterSize = (uint)Unsafe.SizeOf<PreparedCompositeParameters>();
         IMemoryOwner<PreparedCompositeParameters> parametersOwner =
             flushContext.MemoryAllocator.Allocate<PreparedCompositeParameters>(commandCount);
+        List<float> colorStopsList = [];
         try
         {
             int flushCommandCount = commandCount;
@@ -720,7 +745,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 {
                     PreparedCompositionCommand command = commands[i];
 
-                    uint brushType;
+                    PreparedBrushType brushType;
                     int brushOriginX = 0;
                     int brushOriginY = 0;
                     int brushRegionX = 0;
@@ -728,15 +753,17 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     int brushRegionWidth = 1;
                     int brushRegionHeight = 1;
                     Vector4 solidColor = default;
+                    uint gp4 = 0, gp5 = 0, gp6 = 0, gp7 = 0;
+                    uint stopsOffset = 0, stopCount = 0;
 
                     if (command.Brush is SolidBrush solidBrush)
                     {
-                        brushType = PreparedBrushTypeSolid;
+                        brushType = PreparedBrushType.Solid;
                         solidColor = solidBrush.Color.ToScaledVector4();
                     }
                     else if (command.Brush is ImageBrush imageBrush)
                     {
-                        brushType = PreparedBrushTypeImage;
+                        brushType = PreparedBrushType.Image;
                         Image<TPixel> image = (Image<TPixel>)imageBrush.SourceImage;
 
                         if (!TryGetOrCreateImageTextureView(
@@ -769,6 +796,77 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         brushOriginX = command.BrushBounds.X + imageBrush.Offset.X - targetBounds.X - targetLocalBounds.X;
                         brushOriginY = command.BrushBounds.Y + imageBrush.Offset.Y - targetBounds.Y - targetLocalBounds.Y;
                     }
+                    else if (command.Brush is LinearGradientBrush linearBrush)
+                    {
+                        brushType = PreparedBrushType.LinearGradient;
+                        PointF start = linearBrush.StartPoint;
+                        PointF end = linearBrush.EndPoint;
+
+                        solidColor = new Vector4(start.X, start.Y, end.X, end.Y);
+                        gp4 = (uint)linearBrush.RepetitionMode;
+                        PackColorStops(linearBrush.ColorStops, colorStopsList, out stopsOffset, out stopCount);
+                    }
+                    else if (command.Brush is RadialGradientBrush radialBrush)
+                    {
+                        if (radialBrush.IsTwoCircle)
+                        {
+                            brushType = PreparedBrushType.RadialGradientTwoCircle;
+
+                            // Pass raw brush properties; shader computes derived values.
+                            solidColor = new Vector4(radialBrush.Center0.X, radialBrush.Center0.Y, radialBrush.Center1!.Value.X, radialBrush.Center1.Value.Y);
+                            gp4 = FloatToUInt32Bits(radialBrush.Radius0);
+                            gp5 = FloatToUInt32Bits(radialBrush.Radius1!.Value);
+                            gp6 = (uint)radialBrush.RepetitionMode;
+                        }
+                        else
+                        {
+                            brushType = PreparedBrushType.RadialGradient;
+
+                            // Pass raw brush properties; shader computes derived values.
+                            solidColor = new Vector4(radialBrush.Center0.X, radialBrush.Center0.Y, radialBrush.Radius0, 0f);
+                            gp4 = (uint)radialBrush.RepetitionMode;
+                        }
+
+                        PackColorStops(radialBrush.ColorStops, colorStopsList, out stopsOffset, out stopCount);
+                    }
+                    else if (command.Brush is EllipticGradientBrush ellipticBrush)
+                    {
+                        brushType = PreparedBrushType.EllipticGradient;
+
+                        // Pass raw brush properties; shader computes rotation and radii.
+                        solidColor = new Vector4(ellipticBrush.Center.X, ellipticBrush.Center.Y, ellipticBrush.ReferenceAxisEnd.X, ellipticBrush.ReferenceAxisEnd.Y);
+                        gp4 = FloatToUInt32Bits(ellipticBrush.AxisRatio);
+                        gp5 = (uint)ellipticBrush.RepetitionMode;
+                        PackColorStops(ellipticBrush.ColorStops, colorStopsList, out stopsOffset, out stopCount);
+                    }
+                    else if (command.Brush is SweepGradientBrush sweepBrush)
+                    {
+                        brushType = PreparedBrushType.SweepGradient;
+
+                        // Pass raw brush properties; shader computes radians and sweep.
+                        solidColor = new Vector4(sweepBrush.Center.X, sweepBrush.Center.Y, sweepBrush.StartAngleDegrees, sweepBrush.EndAngleDegrees);
+                        gp4 = (uint)sweepBrush.RepetitionMode;
+                        PackColorStops(sweepBrush.ColorStops, colorStopsList, out stopsOffset, out stopCount);
+                    }
+                    else if (command.Brush is PatternBrush patternBrush)
+                    {
+                        brushType = PreparedBrushType.Pattern;
+                        DenseMatrix<Color> pattern = patternBrush.Pattern;
+                        solidColor = new Vector4(pattern.Columns, pattern.Rows, 0f, 0f);
+                        PackPatternColors(pattern, colorStopsList, out stopsOffset);
+                    }
+                    else if (command.Brush is RecolorBrush recolorBrush)
+                    {
+                        brushType = PreparedBrushType.Recolor;
+                        Vector4 src = recolorBrush.SourceColor.ToScaledVector4();
+                        Vector4 tgt = recolorBrush.TargetColor.ToScaledVector4();
+                        solidColor = src;
+                        gp4 = FloatToUInt32Bits(tgt.X);
+                        gp5 = FloatToUInt32Bits(tgt.Y);
+                        gp6 = FloatToUInt32Bits(tgt.Z);
+                        gp7 = FloatToUInt32Bits(tgt.W);
+                        stopsOffset = FloatToUInt32Bits(recolorBrush.Threshold);
+                    }
                     else
                     {
                         error = "Unsupported brush type.";
@@ -788,29 +886,35 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     int edgeOriginY = destinationY - sourceOffset.Y;
 
                     PreparedCompositeParameters commandParameters = new(
-                    destinationX,
-                    destinationY,
-                    destinationRegion.Width,
-                    destinationRegion.Height,
-                    edgePlacement.EdgeStart,
-                    edgePlacement.FillRule,
-                    edgeOriginX,
-                    edgeOriginY,
-                    edgePlacement.CsrOffsetsStart,
-                    edgePlacement.CsrBandCount,
-                    brushType,
-                    brushOriginX,
-                    brushOriginY,
-                    brushRegionX,
-                    brushRegionY,
-                    brushRegionWidth,
-                    brushRegionHeight,
-                    (uint)command.GraphicsOptions.ColorBlendingMode,
-                    (uint)command.GraphicsOptions.AlphaCompositionMode,
-                    command.GraphicsOptions.BlendPercentage,
-                    solidColor,
-                    command.GraphicsOptions.Antialias ? 0u : 1u,
-                    command.GraphicsOptions.AntialiasThreshold);
+                        destinationX,
+                        destinationY,
+                        destinationRegion.Width,
+                        destinationRegion.Height,
+                        edgePlacement.EdgeStart,
+                        edgePlacement.FillRule,
+                        edgeOriginX,
+                        edgeOriginY,
+                        edgePlacement.CsrOffsetsStart,
+                        edgePlacement.CsrBandCount,
+                        brushType,
+                        brushOriginX,
+                        brushOriginY,
+                        brushRegionX,
+                        brushRegionY,
+                        brushRegionWidth,
+                        brushRegionHeight,
+                        (uint)command.GraphicsOptions.ColorBlendingMode,
+                        (uint)command.GraphicsOptions.AlphaCompositionMode,
+                        command.GraphicsOptions.BlendPercentage,
+                        solidColor,
+                        command.GraphicsOptions.Antialias ? 0u : 1u,
+                        command.GraphicsOptions.AntialiasThreshold,
+                        gp4,
+                        gp5,
+                        gp6,
+                        gp7,
+                        stopsOffset,
+                        stopCount);
 
                     parameters[commandIndex] = commandParameters;
                     commandIndex++;
@@ -875,9 +979,38 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 &dispatchConfig,
                 dispatchConfigSize);
 
+            // Color stops / pattern buffer (binding 7).
+            nuint colorStopsBufferSize = colorStopsList.Count > 0
+                ? (nuint)(colorStopsList.Count * sizeof(float))
+                : 20; // minimum 1 ColorStop (5 × f32 = 20 bytes)
+            if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                    PreparedCompositeColorStopsBufferKey,
+                    BufferUsage.Storage | BufferUsage.CopyDst,
+                    colorStopsBufferSize,
+                    out WgpuBuffer* colorStopsBuffer,
+                    out _,
+                    out error))
+            {
+                return false;
+            }
+
+            if (colorStopsList.Count > 0)
+            {
+                Span<float> stopsSpan = CollectionsMarshal.AsSpan(colorStopsList);
+                fixed (float* stopsPtr = stopsSpan)
+                {
+                    flushContext.Api.QueueWriteBuffer(
+                        flushContext.Queue,
+                        colorStopsBuffer,
+                        0,
+                        stopsPtr,
+                        (nuint)(stopsSpan.Length * sizeof(float)));
+                }
+            }
+
             // Band offsets are pre-computed on CPU and uploaded directly.
             // Edges are pre-split at band boundaries, eliminating CSR index indirection.
-            BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[7];
+            BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[8];
             bindGroupEntries[0] = new BindGroupEntry
             {
                 Binding = 0,
@@ -921,11 +1054,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 Offset = 0,
                 Size = bandOffsetsBufferSize
             };
+            bindGroupEntries[7] = new BindGroupEntry
+            {
+                Binding = 7,
+                Buffer = colorStopsBuffer,
+                Offset = 0,
+                Size = colorStopsBufferSize
+            };
 
             BindGroupDescriptor bindGroupDescriptor = new()
             {
                 Layout = bindGroupLayout,
-                EntryCount = 7,
+                EntryCount = 8,
                 Entries = bindGroupEntries
             };
 
@@ -991,7 +1131,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         List<StrokeExpandCommand> commands = expandInfo.Commands!;
 
         // Create or get the pipeline.
-        bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
+        static bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
             => TryCreateStrokeExpandBindGroupLayout(api, device, out layout, out layoutError);
 
         if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
@@ -1296,7 +1436,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[7];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[8];
         entries[0] = new BindGroupLayoutEntry
         {
             Binding = 0,
@@ -1374,10 +1514,21 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 MinBindingSize = 0
             }
         };
+        entries[7] = new BindGroupLayoutEntry
+        {
+            Binding = 7,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 7,
+            EntryCount = 8,
             Entries = entries
         };
 
@@ -1668,6 +1819,52 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint FloatToUInt32Bits(float value)
         => unchecked((uint)BitConverter.SingleToInt32Bits(value));
+
+    /// <summary>
+    /// Packs color stops into the shared float list for GPU upload.
+    /// Each stop is 5 floats: ratio, R, G, B, A (matching the WGSL <c>ColorStop</c> struct).
+    /// </summary>
+    private static void PackColorStops(
+        ReadOnlySpan<ColorStop> stops,
+        List<float> buffer,
+        out uint offset,
+        out uint count)
+    {
+        offset = (uint)(buffer.Count / 5);
+        count = (uint)stops.Length;
+        for (int i = 0; i < stops.Length; i++)
+        {
+            ColorStop stop = stops[i];
+            Vector4 color = stop.Color.ToScaledVector4();
+            buffer.Add(stop.Ratio);
+            buffer.Add(color.X);
+            buffer.Add(color.Y);
+            buffer.Add(color.Z);
+            buffer.Add(color.W);
+        }
+    }
+
+    /// <summary>
+    /// Packs pattern colors into the shared float list for GPU upload.
+    /// Each cell is 5 floats: ratio (0), R, G, B, A (reusing the <c>ColorStop</c> layout).
+    /// </summary>
+    private static void PackPatternColors(
+        DenseMatrix<Color> pattern,
+        List<float> buffer,
+        out uint offset)
+    {
+        offset = (uint)(buffer.Count / 5);
+        ReadOnlySpan<Color> data = pattern.Data;
+        for (int i = 0; i < data.Length; i++)
+        {
+            Vector4 color = data[i].ToScaledVector4();
+            buffer.Add(0f); // ratio unused
+            buffer.Add(color.X);
+            buffer.Add(color.Y);
+            buffer.Add(color.Z);
+            buffer.Add(color.W);
+        }
+    }
 
     /// <summary>
     /// Finalizes one flush by submitting command buffers and optionally reading results back to CPU memory.
@@ -2080,7 +2277,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
     /// <summary>
     /// Prepared composite command parameters consumed by <see cref="CompositeComputeShader"/>.
-    /// Layout matches the WGSL <c>Params</c> struct exactly (26 u32 fields = 104 bytes).
+    /// Layout matches the WGSL <c>Params</c> struct exactly (32 u32 fields = 128 bytes).
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private readonly struct PreparedCompositeParameters
@@ -2105,14 +2302,39 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         public readonly uint ColorBlendMode;
         public readonly uint AlphaCompositionMode;
         public readonly uint BlendPercentage;
-        public readonly uint SolidR;
-        public readonly uint SolidG;
-        public readonly uint SolidB;
-        public readonly uint SolidA;
+
+        /// <summary>General-purpose brush param 0. For solid brush: R. For gradients: see plan.</summary>
+        public readonly uint Gp0;
+
+        /// <summary>General-purpose brush param 1. For solid brush: G.</summary>
+        public readonly uint Gp1;
+
+        /// <summary>General-purpose brush param 2. For solid brush: B.</summary>
+        public readonly uint Gp2;
+
+        /// <summary>General-purpose brush param 3. For solid brush: A.</summary>
+        public readonly uint Gp3;
+
         public readonly uint RasterizationMode;
         public readonly uint AntialiasThreshold;
-        public readonly uint Pad0;
-        public readonly uint Pad1;
+
+        /// <summary>General-purpose brush param 4.</summary>
+        public readonly uint Gp4;
+
+        /// <summary>General-purpose brush param 5.</summary>
+        public readonly uint Gp5;
+
+        /// <summary>General-purpose brush param 6.</summary>
+        public readonly uint Gp6;
+
+        /// <summary>General-purpose brush param 7.</summary>
+        public readonly uint Gp7;
+
+        /// <summary>Index into the color stop / pattern buffer.</summary>
+        public readonly uint StopsOffset;
+
+        /// <summary>Number of color stops for gradient commands.</summary>
+        public readonly uint StopCount;
 
         public PreparedCompositeParameters(
             int destinationX,
@@ -2125,7 +2347,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             int edgeOriginY,
             uint csrOffsetsStart,
             uint csrBandCount,
-            uint brushType,
+            PreparedBrushType brushType,
             int brushOriginX,
             int brushOriginY,
             int brushRegionX,
@@ -2137,7 +2359,13 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             float blendPercentage,
             Vector4 solidColor,
             uint rasterizationMode,
-            float antialiasThreshold)
+            float antialiasThreshold,
+            uint gp4 = 0,
+            uint gp5 = 0,
+            uint gp6 = 0,
+            uint gp7 = 0,
+            uint stopsOffset = 0,
+            uint stopCount = 0)
         {
             this.DestinationX = (uint)destinationX;
             this.DestinationY = (uint)destinationY;
@@ -2149,7 +2377,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             this.EdgeOriginY = unchecked((uint)edgeOriginY);
             this.CsrOffsetsStart = csrOffsetsStart;
             this.CsrBandCount = csrBandCount;
-            this.BrushType = brushType;
+            this.BrushType = (uint)brushType;
             this.BrushOriginX = (uint)brushOriginX;
             this.BrushOriginY = (uint)brushOriginY;
             this.BrushRegionX = (uint)brushRegionX;
@@ -2159,14 +2387,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             this.ColorBlendMode = colorBlendMode;
             this.AlphaCompositionMode = alphaCompositionMode;
             this.BlendPercentage = FloatToUInt32Bits(blendPercentage);
-            this.SolidR = FloatToUInt32Bits(solidColor.X);
-            this.SolidG = FloatToUInt32Bits(solidColor.Y);
-            this.SolidB = FloatToUInt32Bits(solidColor.Z);
-            this.SolidA = FloatToUInt32Bits(solidColor.W);
+            this.Gp0 = FloatToUInt32Bits(solidColor.X);
+            this.Gp1 = FloatToUInt32Bits(solidColor.Y);
+            this.Gp2 = FloatToUInt32Bits(solidColor.Z);
+            this.Gp3 = FloatToUInt32Bits(solidColor.W);
             this.RasterizationMode = rasterizationMode;
             this.AntialiasThreshold = FloatToUInt32Bits(antialiasThreshold);
-            this.Pad0 = 0;
-            this.Pad1 = 0;
+            this.Gp4 = gp4;
+            this.Gp5 = gp5;
+            this.Gp6 = gp6;
+            this.Gp7 = gp7;
+            this.StopsOffset = stopsOffset;
+            this.StopCount = stopCount;
         }
     }
 }

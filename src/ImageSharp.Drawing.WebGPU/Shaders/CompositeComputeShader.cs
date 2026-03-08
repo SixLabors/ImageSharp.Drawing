@@ -50,14 +50,18 @@ internal static class CompositeComputeShader
             color_blend_mode: u32,
             alpha_composition_mode: u32,
             blend_percentage: u32,
-            solid_r: u32,
-            solid_g: u32,
-            solid_b: u32,
-            solid_a: u32,
+            gp0: u32,
+            gp1: u32,
+            gp2: u32,
+            gp3: u32,
             rasterization_mode: u32,
             antialias_threshold: u32,
-            pad0: u32,
-            pad1: u32,
+            gp4: u32,
+            gp5: u32,
+            gp6: u32,
+            gp7: u32,
+            stops_offset: u32,
+            stop_count: u32,
         };
 
         struct DispatchConfig {
@@ -87,6 +91,16 @@ internal static class CompositeComputeShader
         @group(0) @binding(5) var<uniform> dispatch_config: DispatchConfig;
         @group(0) @binding(6) var<storage, read> band_offsets: array<u32>;
 
+        struct ColorStop {
+            ratio: f32,
+            r: f32,
+            g: f32,
+            b: f32,
+            a: f32,
+        };
+
+        @group(0) @binding(7) var<storage, read> color_stops: array<ColorStop>;
+
         // Workgroup shared memory for per-tile coverage accumulation.
         // Layout: 16 rows x 16 columns. Index = row * 16 + col.
         var<workgroup> tile_cover: array<atomic<i32>, 256>;
@@ -101,8 +115,206 @@ internal static class CompositeComputeShader
         const EO_MASK: i32 = 511;
         const EO_PERIOD: i32 = 512;
 
+        // Brush type constants. Must match PreparedBrushType in WebGPUDrawingBackend.cs.
+        const BRUSH_SOLID: u32 = 0u;
+        const BRUSH_IMAGE: u32 = 1u;
+        const BRUSH_LINEAR_GRADIENT: u32 = 2u;
+        const BRUSH_RADIAL_GRADIENT: u32 = 3u;
+        const BRUSH_RADIAL_GRADIENT_TWO_CIRCLE: u32 = 4u;
+        const BRUSH_ELLIPTIC_GRADIENT: u32 = 5u;
+        const BRUSH_SWEEP_GRADIENT: u32 = 6u;
+        const BRUSH_PATTERN: u32 = 7u;
+        const BRUSH_RECOLOR: u32 = 8u;
+
         fn u32_to_f32(bits: u32) -> f32 {
             return bitcast<f32>(bits);
+        }
+
+        // Exact copy of C# GradientBrushApplicator.this[x, y] color sampling.
+        // Combines repetition mode + GetGradientSegment + lerp into one function.
+        // Returns vec4(0) with alpha=0 for DontFill outside [0,1].
+        fn sample_brush_gradient(raw_t: f32, mode: u32, offset: u32, count: u32) -> vec4<f32> {
+            if count == 0u { return vec4<f32>(0.0); }
+
+            var t = raw_t;
+
+            // C# switch (this.repetitionMode)
+            if mode == 1u {
+                // Repeat: positionOnCompleteGradient %= 1;
+                t = t % 1.0;
+            } else if mode == 2u {
+                // Reflect: positionOnCompleteGradient %= 2;
+                // if (positionOnCompleteGradient > 1) { positionOnCompleteGradient = 2 - positionOnCompleteGradient; }
+                t = t % 2.0;
+                if t > 1.0 { t = 2.0 - t; }
+            } else if mode == 3u {
+                // DontFill: if (positionOnCompleteGradient is > 1 or < 0) { return Transparent; }
+                if t < 0.0 || t > 1.0 { return vec4<f32>(0.0); }
+            }
+            // mode 0 (None): do nothing
+
+            if count == 1u {
+                let s = color_stops[offset];
+                return vec4<f32>(s.r, s.g, s.b, s.a);
+            }
+
+            // C# GetGradientSegment
+            // ColorStop localGradientFrom = this.colorStops[0];
+            // ColorStop localGradientTo = default;
+            // foreach (ColorStop colorStop in this.colorStops)
+            // {
+            //     localGradientTo = colorStop;
+            //     if (colorStop.Ratio > positionOnCompleteGradient) { break; }
+            //     localGradientFrom = localGradientTo;
+            // }
+            var from_idx = 0u;
+            var to_idx = 0u;
+            for (var i = 0u; i < count; i++) {
+                to_idx = i;
+                if color_stops[offset + i].ratio > t {
+                    break;
+                }
+                from_idx = i;
+            }
+
+            let from_stop = color_stops[offset + from_idx];
+            let to_stop = color_stops[offset + to_idx];
+
+            // C#: if (from.Color.Equals(to.Color)) { return from.Color.ToPixel<TPixel>(); }
+            let from_color = vec4<f32>(from_stop.r, from_stop.g, from_stop.b, from_stop.a);
+            let to_color = vec4<f32>(to_stop.r, to_stop.g, to_stop.b, to_stop.a);
+            if all(from_color == to_color) {
+                return from_color;
+            }
+
+            // C#: float onLocalGradient = (positionOnCompleteGradient - from.Ratio) / (to.Ratio - from.Ratio);
+            let range = to_stop.ratio - from_stop.ratio;
+            let local_t = (t - from_stop.ratio) / range;
+
+            // C#: Vector4.Lerp(from.Color.ToScaledVector4(), to.Color.ToScaledVector4(), onLocalGradient)
+            return mix(from_color, to_color, local_t);
+        }
+
+        // Linear gradient: project pixel onto gradient axis.
+        fn linear_gradient_t(x: f32, y: f32, cmd: Params) -> f32 {
+            let start_x = u32_to_f32(cmd.gp0);
+            let start_y = u32_to_f32(cmd.gp1);
+            let end_x = u32_to_f32(cmd.gp2);
+            let end_y = u32_to_f32(cmd.gp3);
+            let along_x = end_x - start_x;
+            let along_y = end_y - start_y;
+            let along_sq = along_x * along_x + along_y * along_y;
+            if along_sq < 1e-12 { return 0.0; }
+            let dx = x - start_x;
+            let dy = y - start_y;
+            return (dx * along_x + dy * along_y) / along_sq;
+        }
+
+        // Single-circle radial gradient.
+        // gp0=cx, gp1=cy, gp2=radius, gp3=repetition_mode
+        fn radial_gradient_t(x: f32, y: f32, cmd: Params) -> f32 {
+            let cx = u32_to_f32(cmd.gp0);
+            let cy = u32_to_f32(cmd.gp1);
+            let radius = u32_to_f32(cmd.gp2);
+            if radius < 1e-20 { return 0.0; }
+            return length(vec2<f32>(x - cx, y - cy)) / radius;
+        }
+
+        // Two-circle radial gradient.
+        // gp0=c0.x, gp1=c0.y, gp2=c1.x, gp3=c1.y, gp4=r0, gp5=r1
+        fn radial_gradient_two_t(x: f32, y: f32, cmd: Params) -> f32 {
+            let c0x = u32_to_f32(cmd.gp0);
+            let c0y = u32_to_f32(cmd.gp1);
+            let c1x = u32_to_f32(cmd.gp2);
+            let c1y = u32_to_f32(cmd.gp3);
+            let r0 = u32_to_f32(cmd.gp4);
+            let r1 = u32_to_f32(cmd.gp5);
+
+            let dx_c = c1x - c0x;
+            let dy_c = c1y - c0y;
+            let dr = r1 - r0;
+            let dd = dx_c * dx_c + dy_c * dy_c;
+            let denom = dd - dr * dr;
+
+            let qx = x - c0x;
+            let qy = y - c0y;
+
+            // Concentric case (centers equal) or degenerate (denom == 0).
+            if dd < 1e-10 || abs(denom) < 1e-10 {
+                let dist = length(vec2<f32>(qx, qy));
+                let abs_dr = max(abs(dr), 1e-20);
+                return (dist - r0) / abs_dr;
+            }
+
+            // General case: t = (q·d - r0*dr) / denom.
+            let num = qx * dx_c + qy * dy_c - r0 * dr;
+            return num / denom;
+        }
+
+        // Elliptic gradient. Computes rotation and radii from raw brush properties.
+        // gp0=center.x, gp1=center.y, gp2=refEnd.x, gp3=refEnd.y, gp4=axisRatio
+        fn elliptic_gradient_t(x: f32, y: f32, cmd: Params) -> f32 {
+            let cx = u32_to_f32(cmd.gp0);
+            let cy = u32_to_f32(cmd.gp1);
+            let ref_x = u32_to_f32(cmd.gp2);
+            let ref_y = u32_to_f32(cmd.gp3);
+            let axis_ratio = u32_to_f32(cmd.gp4);
+
+            let ref_dx = ref_x - cx;
+            let ref_dy = ref_y - cy;
+            let rotation = atan2(ref_dy, ref_dx);
+            let cos_r = cos(rotation);
+            let sin_r = sin(rotation);
+            let rx_sq = ref_dx * ref_dx + ref_dy * ref_dy;
+            let ry_sq = rx_sq * axis_ratio * axis_ratio;
+
+            let px = x - cx;
+            let py = y - cy;
+            let rotated_x = px * cos_r - py * sin_r;
+            let rotated_y = px * sin_r + py * cos_r;
+
+            if rx_sq < 1e-20 { return 0.0; }
+            if ry_sq < 1e-20 { return 0.0; }
+            return rotated_x * rotated_x / rx_sq + rotated_y * rotated_y / ry_sq;
+        }
+
+        // Sweep (angular) gradient. Computes radians and sweep from raw degrees.
+        // gp0=center.x, gp1=center.y, gp2=startAngleDegrees, gp3=endAngleDegrees
+        fn sweep_gradient_t(x: f32, y: f32, cmd: Params) -> f32 {
+            let cx = u32_to_f32(cmd.gp0);
+            let cy = u32_to_f32(cmd.gp1);
+            let start_deg = u32_to_f32(cmd.gp2);
+            let end_deg = u32_to_f32(cmd.gp3);
+
+            let start_rad = start_deg * 0.017453292;  // PI / 180
+            let end_rad = end_deg * 0.017453292;
+
+            // Compute sweep, normalizing to (0, 2PI].
+            var sweep = (end_rad - start_rad) % 6.283185307;
+            if sweep <= 0.0 { sweep += 6.283185307; }
+            if abs(sweep) < 1e-6 { sweep = 6.283185307; }
+            let is_full = abs(sweep - 6.283185307) < 1e-6;
+            let inv_sweep = 1.0 / sweep;
+
+            let dx = x - cx;
+            let dy = y - cy;
+
+            // atan2(-dy, dx) gives clockwise angles in y-down space.
+            var angle = atan2(-dy, dx);
+            if angle < 0.0 { angle += 6.283185307; }
+
+            // Rotate basis by 180 degrees.
+            angle += 3.141592653;
+            if angle >= 6.283185307 { angle -= 6.283185307; }
+
+            // Phase measured clockwise from start.
+            var phase = angle - start_rad;
+            if phase < 0.0 { phase += 6.283185307; }
+
+            if is_full {
+                return phase / 6.283185307;
+            }
+            return phase * inv_sweep;
         }
 
         __DECODE_TEXEL_FUNCTION__
@@ -952,12 +1164,12 @@ internal static class CompositeComputeShader
                         let effective_coverage = coverage_value * blend_percentage;
 
                         var brush = vec4<f32>(
-                            u32_to_f32(command.solid_r),
-                            u32_to_f32(command.solid_g),
-                            u32_to_f32(command.solid_b),
-                            u32_to_f32(command.solid_a));
+                            u32_to_f32(command.gp0),
+                            u32_to_f32(command.gp1),
+                            u32_to_f32(command.gp2),
+                            u32_to_f32(command.gp3));
 
-                        if command.brush_type == 1u {
+                        if command.brush_type == BRUSH_IMAGE {
                             let origin_x = bitcast<i32>(command.brush_origin_x);
                             let origin_y = bitcast<i32>(command.brush_origin_y);
                             let region_x = i32(command.brush_region_x);
@@ -967,6 +1179,65 @@ internal static class CompositeComputeShader
                             let sample_x = positive_mod(dest_x_i32 - origin_x, region_w) + region_x;
                             let sample_y = positive_mod(dest_y_i32 - origin_y, region_h) + region_y;
                             brush = __LOAD_BRUSH__;
+                        } else if command.brush_type == BRUSH_LINEAR_GRADIENT {
+                            let px = f32(source_x) + 0.5;
+                            let py = f32(source_y) + 0.5;
+                            let raw_t = linear_gradient_t(px, py, command);
+                            brush = sample_brush_gradient(raw_t, command.gp4, command.stops_offset, command.stop_count);
+                        } else if command.brush_type == BRUSH_RADIAL_GRADIENT {
+                            let px = f32(source_x) + 0.5;
+                            let py = f32(source_y) + 0.5;
+                            let raw_t = radial_gradient_t(px, py, command);
+                            brush = sample_brush_gradient(raw_t, command.gp4, command.stops_offset, command.stop_count);
+                        } else if command.brush_type == BRUSH_RADIAL_GRADIENT_TWO_CIRCLE {
+                            let px = f32(source_x) + 0.5;
+                            let py = f32(source_y) + 0.5;
+                            let raw_t = radial_gradient_two_t(px, py, command);
+                            brush = sample_brush_gradient(raw_t, command.gp6, command.stops_offset, command.stop_count);
+                        } else if command.brush_type == BRUSH_ELLIPTIC_GRADIENT {
+                            let px = f32(source_x) + 0.5;
+                            let py = f32(source_y) + 0.5;
+                            let raw_t = elliptic_gradient_t(px, py, command);
+                            brush = sample_brush_gradient(raw_t, command.gp5, command.stops_offset, command.stop_count);
+                        } else if command.brush_type == BRUSH_SWEEP_GRADIENT {
+                            let px = f32(source_x) + 0.5;
+                            let py = f32(source_y) + 0.5;
+                            let raw_t = sweep_gradient_t(px, py, command);
+                            brush = sample_brush_gradient(raw_t, command.gp4, command.stops_offset, command.stop_count);
+                        } else if command.brush_type == BRUSH_PATTERN {
+                            let pw = u32_to_f32(command.gp0);
+                            let ph = u32_to_f32(command.gp1);
+                            let ox = u32_to_f32(command.gp2);
+                            let oy = u32_to_f32(command.gp3);
+                            let fx = f32(source_x) - ox;
+                            let fy = f32(source_y) - oy;
+                            let pw_i = i32(pw);
+                            let ph_i = i32(ph);
+                            let pxi = ((i32(fx) % pw_i) + pw_i) % pw_i;
+                            let pyi = ((i32(fy) % ph_i) + ph_i) % ph_i;
+                            let idx = command.stops_offset + u32(pyi) * u32(pw_i) + u32(pxi);
+                            let c = color_stops[idx];
+                            brush = vec4<f32>(c.r, c.g, c.b, c.a);
+                        } else if command.brush_type == BRUSH_RECOLOR {
+                            let src_r = u32_to_f32(command.gp0);
+                            let src_g = u32_to_f32(command.gp1);
+                            let src_b = u32_to_f32(command.gp2);
+                            let src_a = u32_to_f32(command.gp3);
+                            let tgt_r = u32_to_f32(command.gp4);
+                            let tgt_g = u32_to_f32(command.gp5);
+                            let tgt_b = u32_to_f32(command.gp6);
+                            let tgt_a = u32_to_f32(command.gp7);
+                            let threshold = bitcast<f32>(command.stops_offset);
+                            let dr = destination.r - src_r;
+                            let dg = destination.g - src_g;
+                            let db = destination.b - src_b;
+                            let da = destination.a - src_a;
+                            let dist_sq = dr * dr + dg * dg + db * db + da * da;
+                            if dist_sq <= threshold * threshold {
+                                brush = vec4<f32>(tgt_r, tgt_g, tgt_b, tgt_a);
+                            } else {
+                                brush = destination;
+                            }
                         }
 
                         let src = vec4<f32>(brush.rgb, brush.a * effective_coverage);

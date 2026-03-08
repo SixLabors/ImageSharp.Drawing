@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Numerics;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -14,12 +13,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 public sealed class EllipticGradientBrush : GradientBrush
 {
-    private readonly PointF center;
-
-    private readonly PointF referenceAxisEnd;
-
-    private readonly float axisRatio;
-
     /// <inheritdoc cref="GradientBrush" />
     /// <param name="center">The center of the elliptical gradient and 0 for the color stops.</param>
     /// <param name="referenceAxisEnd">The end point of the reference axis of the ellipse.</param>
@@ -38,10 +31,25 @@ public sealed class EllipticGradientBrush : GradientBrush
         params ColorStop[] colorStops)
         : base(repetitionMode, colorStops)
     {
-        this.center = center;
-        this.referenceAxisEnd = referenceAxisEnd;
-        this.axisRatio = axisRatio;
+        this.Center = center;
+        this.ReferenceAxisEnd = referenceAxisEnd;
+        this.AxisRatio = axisRatio;
     }
+
+    /// <summary>
+    /// Gets the center of the ellipse.
+    /// </summary>
+    public PointF Center { get; }
+
+    /// <summary>
+    /// Gets the end point of the reference axis.
+    /// </summary>
+    public PointF ReferenceAxisEnd { get; }
+
+    /// <summary>
+    /// Gets the ratio of the secondary axis to the primary axis.
+    /// </summary>
+    public float AxisRatio { get; }
 
     /// <inheritdoc />
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
@@ -49,79 +57,58 @@ public sealed class EllipticGradientBrush : GradientBrush
         GraphicsOptions options,
         Buffer2DRegion<TPixel> targetRegion,
         RectangleF region) =>
-        new RadialGradientBrushApplicator<TPixel>(
+        new EllipticGradientBrushApplicator<TPixel>(
             configuration,
             options,
             targetRegion,
-            this.center,
-            this.referenceAxisEnd,
-            this.axisRatio,
-            this.ColorStops,
+            this,
+            this.ColorStopsArray,
             this.RepetitionMode);
 
     /// <inheritdoc />
-    private sealed class RadialGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
+    private sealed class EllipticGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly PointF center;
-
-        private readonly PointF referenceAxisEnd;
-
-        private readonly float axisRatio;
-
-        private readonly double rotation;
-
-        private readonly float referenceRadius;
-
-        private readonly float secondRadius;
 
         private readonly float cosRotation;
 
         private readonly float sinRotation;
 
-        private readonly float secondRadiusSquared;
-
         private readonly float referenceRadiusSquared;
 
+        private readonly float secondRadiusSquared;
+
         /// <summary>
-        /// Initializes a new instance of the <see cref="RadialGradientBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="EllipticGradientBrushApplicator{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="targetRegion">The destination pixel region.</param>
-        /// <param name="center">Center of the ellipse.</param>
-        /// <param name="referenceAxisEnd">Point on one angular points of the ellipse.</param>
-        /// <param name="axisRatio">
-        /// Ratio of the axis length's. Used to determine the length of the second axis,
-        /// the first is defined by <see cref="center"/> and <see cref="referenceAxisEnd"/>.</param>
+        /// <param name="brush">The elliptic gradient brush.</param>
         /// <param name="colorStops">Definition of colors.</param>
         /// <param name="repetitionMode">Defines how the gradient colors are repeated.</param>
-        public RadialGradientBrushApplicator(
+        public EllipticGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
             Buffer2DRegion<TPixel> targetRegion,
-            PointF center,
-            PointF referenceAxisEnd,
-            float axisRatio,
+            EllipticGradientBrush brush,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
             : base(configuration, options, targetRegion, colorStops, repetitionMode)
         {
-            this.center = center;
-            this.referenceAxisEnd = referenceAxisEnd;
-            this.axisRatio = axisRatio;
-            this.rotation = AngleBetween(
-                this.center,
-                new PointF(this.center.X + 1, this.center.Y),
-                this.referenceAxisEnd);
-            this.referenceRadius = DistanceBetween(this.center, this.referenceAxisEnd);
-            this.secondRadius = this.referenceRadius * this.axisRatio;
+            this.center = brush.Center;
 
-            this.referenceRadiusSquared = this.referenceRadius * this.referenceRadius;
-            this.secondRadiusSquared = this.secondRadius * this.secondRadius;
+            float refDx = brush.ReferenceAxisEnd.X - brush.Center.X;
+            float refDy = brush.ReferenceAxisEnd.Y - brush.Center.Y;
+            float rotation = MathF.Atan2(refDy, refDx);
+            float referenceRadius = MathF.Sqrt((refDx * refDx) + (refDy * refDy));
+            float secondRadius = referenceRadius * brush.AxisRatio;
 
-            this.sinRotation = (float)Math.Sin(this.rotation);
-            this.cosRotation = (float)Math.Cos(this.rotation);
+            this.referenceRadiusSquared = referenceRadius * referenceRadius;
+            this.secondRadiusSquared = secondRadius * secondRadius;
+            this.sinRotation = MathF.Sin(rotation);
+            this.cosRotation = MathF.Cos(rotation);
         }
 
         /// <inheritdoc />
@@ -138,14 +125,5 @@ public sealed class EllipticGradientBrush : GradientBrush
 
             return (xSquared / this.referenceRadiusSquared) + (ySquared / this.secondRadiusSquared);
         }
-
-        private static float AngleBetween(PointF junction, PointF a, PointF b)
-        {
-            PointF vA = a - junction;
-            PointF vB = b - junction;
-            return MathF.Atan2(vB.Y, vB.X) - MathF.Atan2(vA.Y, vA.X);
-        }
-
-        private static float DistanceBetween(PointF p1, PointF p2) => Vector2.Distance(p1, p2);
     }
 }

@@ -84,6 +84,11 @@ public sealed class PatternBrush : Brush
         this.patternVector = brush.patternVector;
     }
 
+    /// <summary>
+    /// Gets the pattern color matrix.
+    /// </summary>
+    public DenseMatrix<Color> Pattern => this.pattern;
+
     /// <inheritdoc />
     public override bool Equals(Brush? other)
     {

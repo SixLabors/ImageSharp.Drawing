@@ -54,7 +54,7 @@ DrawingCanvasBatcher.Flush()
                     -> barrier, then each thread accumulates its coverage from shared memory
                     -> applies fill rule (non-zero or even-odd)
                     -> if aliased mode: snaps coverage to binary using antialias threshold
-                    -> samples brush (solid color or image texture)
+                    -> samples brush (see Brush Types below)
                     -> composes pixel using Porter-Duff alpha composition + color blend mode
                  -> writes final pixel to output texture
         -> destination writeback:
@@ -106,16 +106,36 @@ Each edge is a 32-byte `GpuEdge` struct (sequential layout):
 
 ### CSR Buffers
 
-- `csr-offsets`: `array<u32>` — per-band prefix sum. `offsets[band]..offsets[band+1]` gives the range of edge indices for that 16-row band.
-- `csr-indices`: `array<u32>` — edge indices within each band, ordered by band.
+- `csr-offsets`: `array<u32>` - per-band prefix sum. `offsets[band]..offsets[band+1]` gives the range of edge indices for that 16-row band.
+- `csr-indices`: `array<u32>` - edge indices within each band, ordered by band.
 
 ### Command Parameters
 
-Each `PreparedCompositeParameters` struct (26 × u32 = 104 bytes) contains destination rectangle, edge placement (start, fill rule, CSR offsets start, band count), brush configuration, blend/composition mode, blend percentage, rasterization mode (0 = antialiased, 1 = aliased), and antialias threshold (float as u32 bitcast).
+Each `PreparedCompositeParameters` struct (32 × u32 = 128 bytes) contains destination rectangle, edge placement (start, fill rule, CSR offsets start, band count), brush type and configuration (gp0–gp7), blend/composition mode, blend percentage, rasterization mode (0 = antialiased, 1 = aliased), antialias threshold (float as u32 bitcast), and color stop buffer references (stops_offset, stop_count).
 
 ### Dispatch Config
 
 `PreparedCompositeDispatchConfig` contains target dimensions, tile counts, source/output origins, and command count.
+
+## Brush Types
+
+All brush types are handled natively on the GPU. The backend passes raw brush properties via gp0–gp7 fields; derived values (trig, distances, etc.) are computed per-pixel in the shader.
+
+| Constant | Type | gp fields |
+|---|---|---|
+| `BRUSH_SOLID` (0) | Solid color | gp0–3 = RGBA |
+| `BRUSH_IMAGE` (1) | Image texture | brush_origin/region fields + texture binding |
+| `BRUSH_LINEAR_GRADIENT` (2) | Linear gradient | gp0–3 = start.xy, end.xy; gp4 = repetition mode |
+| `BRUSH_RADIAL_GRADIENT` (3) | Radial (single circle) | gp0–1 = center; gp2 = radius; gp4 = repetition mode |
+| `BRUSH_RADIAL_GRADIENT_TWO_CIRCLE` (4) | Radial (two circle) | gp0–3 = c0.xy, c1.xy; gp4–5 = r0, r1; gp6 = repetition mode |
+| `BRUSH_ELLIPTIC_GRADIENT` (5) | Elliptic gradient | gp0–3 = center.xy, refEnd.xy; gp4 = axis ratio; gp5 = repetition mode |
+| `BRUSH_SWEEP_GRADIENT` (6) | Sweep gradient | gp0–3 = center.xy, startAngleDeg, endAngleDeg; gp4 = repetition mode |
+| `BRUSH_PATTERN` (7) | Pattern | gp0–1 = width, height; gp2–3 = origin; cells packed in color stops buffer |
+| `BRUSH_RECOLOR` (8) | Recolor | gp0–3 = source RGBA; gp4–7 = target RGBA; stops_offset = threshold |
+
+Gradient color stops are packed into a shared storage buffer (binding 7). Each stop is 5 × f32 (ratio, R, G, B, A). The `stops_offset` and `stop_count` fields in the command parameters index into this buffer. Color stop interpolation in the shader is an exact copy of the C# `GradientBrushApplicator.GetGradientSegment` + lerp logic - including unclamped `t` values, stable sort order, and per-mode repetition semantics.
+
+Color stops are sorted by ratio in the `GradientBrush` constructor using a stable insertion sort to preserve the order of equal-ratio stops.
 
 ## Shader Bindings (CompositeComputeShader)
 
@@ -127,8 +147,8 @@ Each `PreparedCompositeParameters` struct (26 × u32 = 104 bytes) contains desti
 | 3 | `texture_storage_2d, write` | Output texture |
 | 4 | `storage, read` | Command parameters (`array<Params>`) |
 | 5 | `uniform` | Dispatch config |
-| 6 | `storage, read` | CSR offsets (`array<u32>`) |
-| 7 | `storage, read` | CSR indices (`array<u32>`) |
+| 6 | `storage, read` | Band offsets (`array<u32>`) |
+| 7 | `storage, read` | Color stops / pattern buffer (`array<ColorStop>`) |
 
 ## Context and Resource Lifetime
 
@@ -150,7 +170,7 @@ Each `PreparedCompositeParameters` struct (26 × u32 = 104 bytes) contains desti
 
 Fallback is scene-scoped and triggered when:
 - The pixel format has no supported WebGPU texture format mapping.
-- Any command uses an unsupported brush type (only `SolidBrush` and `ImageBrush` are GPU-composable).
+- Any command uses an unsupported brush type (`PathGradientBrush` is not GPU-composable; all other brush types are supported).
 - Any GPU operation fails during the flush.
 
 Fallback path:
@@ -171,7 +191,7 @@ Coverage rasterization and compositing are fused into a single compute dispatch.
 
 Edge preparation (path flattening, fixed-point conversion, CSR construction) runs on the CPU. The `path.Flatten()` cost is shared with the CPU rasterizer pipeline. CSR construction is three passes over the edge set: count, prefix sum, scatter.
 
-Both the CPU and GPU backends use per-band parallel stroke expansion — the CPU
+Both the CPU and GPU backends use per-band parallel stroke expansion - the CPU
 via `DefaultRasterizer.RasterizeStrokeRows` and the GPU via
 `StrokeExpandComputeShader`. Both share the same `StrokeEdgeFlags` enum and
 `DashPathSplitter` (in the core project). The CPU backend fuses stroke expansion

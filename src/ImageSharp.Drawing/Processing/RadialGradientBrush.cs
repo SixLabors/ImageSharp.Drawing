@@ -62,6 +62,31 @@ public sealed class RadialGradientBrush : GradientBrush
         this.radius1 = endRadius;
     }
 
+    /// <summary>
+    /// Gets the center of the starting circle.
+    /// </summary>
+    public PointF Center0 => this.center0;
+
+    /// <summary>
+    /// Gets the radius of the starting circle.
+    /// </summary>
+    public float Radius0 => this.radius0;
+
+    /// <summary>
+    /// Gets the center of the ending circle, or <see langword="null"/> for single-circle form.
+    /// </summary>
+    public PointF? Center1 => this.center1;
+
+    /// <summary>
+    /// Gets the radius of the ending circle, or <see langword="null"/> for single-circle form.
+    /// </summary>
+    public float? Radius1 => this.radius1;
+
+    /// <summary>
+    /// Gets a value indicating whether this is a two-circle radial gradient.
+    /// </summary>
+    public bool IsTwoCircle => this.center1.HasValue && this.radius1.HasValue;
+
     /// <inheritdoc/>
     public override bool Equals(Brush? other)
     {
@@ -95,7 +120,7 @@ public sealed class RadialGradientBrush : GradientBrush
             this.radius0,
             this.center1,
             this.radius1,
-            this.ColorStops,
+            this.ColorStopsArray,
             this.RepetitionMode);
 
     /// <summary>

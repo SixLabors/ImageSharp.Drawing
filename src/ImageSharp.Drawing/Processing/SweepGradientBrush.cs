@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Helpers;
+
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 using SixLabors.ImageSharp.Memory;
@@ -34,9 +36,24 @@ public sealed class SweepGradientBrush : GradientBrush
         : base(repetitionMode, colorStops)
     {
         this.center = center;
-        this.startAngleDegrees = startAngleDegrees;
-        this.endAngleDegrees = endAngleDegrees;
+        this.startAngleDegrees = NormalizeDegrees(startAngleDegrees);
+        this.endAngleDegrees = NormalizeDegrees(endAngleDegrees);
     }
+
+    /// <summary>
+    /// Gets the center point of the sweep gradient.
+    /// </summary>
+    public PointF Center => this.center;
+
+    /// <summary>
+    /// Gets the starting angle in degrees.
+    /// </summary>
+    public float StartAngleDegrees => this.startAngleDegrees;
+
+    /// <summary>
+    /// Gets the ending angle in degrees.
+    /// </summary>
+    public float EndAngleDegrees => this.endAngleDegrees;
 
     /// <inheritdoc/>
     public override bool Equals(Brush? other)
@@ -60,6 +77,17 @@ public sealed class SweepGradientBrush : GradientBrush
             this.startAngleDegrees,
             this.endAngleDegrees);
 
+    private static float NormalizeDegrees(float deg)
+    {
+        float d = deg % 360f;
+        if (d < 0f)
+        {
+            d += 360f;
+        }
+
+        return d;
+    }
+
     /// <inheritdoc />
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
         Configuration configuration,
@@ -70,10 +98,8 @@ public sealed class SweepGradientBrush : GradientBrush
             configuration,
             options,
             targetRegion,
-            this.center,
-            this.startAngleDegrees,
-            this.endAngleDegrees,
-            this.ColorStops,
+            this,
+            this.ColorStopsArray,
             this.RepetitionMode);
 
     /// <summary>
@@ -101,39 +127,45 @@ public sealed class SweepGradientBrush : GradientBrush
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
         /// <param name="targetRegion">The destination pixel region.</param>
-        /// <param name="center">The center of the sweep gradient.</param>
-        /// <param name="startAngleDegrees">The start angle in degrees (clockwise).</param>
-        /// <param name="endAngleDegrees">The end angle in degrees (clockwise).</param>
+        /// <param name="brush">The sweep gradient brush.</param>
         /// <param name="colorStops">The gradient color stops (ratios in [0..1]).</param>
         /// <param name="repetitionMode">Defines how gradient colors are repeated outside [0..1].</param>
         public SweepGradientBrushApplicator(
             Configuration configuration,
             GraphicsOptions options,
             Buffer2DRegion<TPixel> targetRegion,
-            PointF center,
-            float startAngleDegrees,
-            float endAngleDegrees,
+            SweepGradientBrush brush,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
             : base(configuration, options, targetRegion, colorStops, repetitionMode)
         {
-            this.cx = center.X;
-            this.cy = center.Y;
+            this.cx = brush.Center.X;
+            this.cy = brush.Center.Y;
 
-            float start = GeometryUtilities.DegreeToRadian(NormalizeDegrees(startAngleDegrees));
-            float end = GeometryUtilities.DegreeToRadian(NormalizeDegrees(endAngleDegrees));
+            float startRad = GeometryUtilities.DegreeToRadian(brush.StartAngleDegrees);
+            float endRad = GeometryUtilities.DegreeToRadian(brush.EndAngleDegrees);
 
-            float sweep = NormalizeDeltaRadians(end - start);
+            float sweep = NormalizeDeltaRadians(endRad - startRad);
 
-            // If sweep collapses numerically to ~0, treat as full circle.
             if (MathF.Abs(sweep) < 1e-6f)
             {
                 sweep = Tau;
             }
 
-            this.startRad = start;
+            this.startRad = startRad;
             this.invSweep = 1f / sweep;
             this.isFullCircle = MathF.Abs(sweep - Tau) < 1e-6f;
+        }
+
+        private static float NormalizeDeltaRadians(float delta)
+        {
+            float d = delta % Tau;
+            if (d <= 0f)
+            {
+                d += Tau;
+            }
+
+            return d;
         }
 
         /// <summary>
@@ -184,28 +216,6 @@ public sealed class SweepGradientBrush : GradientBrush
 
             // Partial sweep: phase beyond sweep -> t > 1 (lets repetition mode handle clipping).
             return phase * this.invSweep;
-        }
-
-        private static float NormalizeDegrees(float deg)
-        {
-            float d = deg % 360f;
-            if (d < 0f)
-            {
-                d += 360f;
-            }
-
-            return d;
-        }
-
-        private static float NormalizeDeltaRadians(float delta)
-        {
-            float d = delta % Tau;
-            if (d <= 0f)
-            {
-                d += Tau;
-            }
-
-            return d;
         }
     }
 }
