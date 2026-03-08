@@ -790,9 +790,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         int alignedRowBytesInt = checked((int)alignedRowBytes);
         int packedByteCount = checked(alignedRowBytesInt * sourceRegion.Height);
-        using IMemoryOwner<byte> packedOwner = memoryAllocator.Allocate<byte>(packedByteCount);
-        Span<byte> packedData = packedOwner.Memory.Span[..packedByteCount];
-        packedData.Clear();
+        using IMemoryOwner<byte> packedOwner = memoryAllocator.Allocate<byte>(packedByteCount, AllocationOptions.Clean);
+        Span<byte> packedData = packedOwner.Memory.Span;
         for (int y = 0; y < sourceRegion.Height; y++)
         {
             ReadOnlySpan<TPixel> sourceRow = sourceRegion.DangerousGetRowSpan(y);

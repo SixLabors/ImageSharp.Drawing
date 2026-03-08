@@ -41,6 +41,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private const uint PreparedBrushTypeImage = 1;
     private const string PreparedCompositeParamsBufferKey = "prepared-composite/params";
     private const string PreparedCompositeDispatchConfigBufferKey = "prepared-composite/dispatch-config";
+    private const string StrokeExpandPipelineKey = "stroke-expand";
+    private const string StrokeExpandCommandsBufferKey = "stroke-expand/commands";
+    private const string StrokeExpandConfigBufferKey = "stroke-expand/config";
+    private const string StrokeExpandCounterBufferKey = "stroke-expand/counter";
     private const int UniformBufferOffsetAlignment = 256;
     private const int CallbackTimeoutMilliseconds = 10_000;
 
@@ -555,9 +559,25 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 out int totalBandOffsetEntries,
                 out WgpuBuffer* bandOffsetsBuffer,
                 out nuint bandOffsetsBufferSize,
+                out StrokeExpandInfo strokeExpandInfo,
                 out error))
         {
             return false;
+        }
+
+        // Dispatch stroke expansion before composite rasterization.
+        // This generates outline edges from centerline edges in a separate compute pass.
+        if (strokeExpandInfo.HasCommands)
+        {
+            if (!this.TryDispatchStrokeExpand(
+                    flushContext,
+                    edgeBuffer,
+                    edgeBufferSize,
+                    strokeExpandInfo,
+                    out error))
+            {
+                return false;
+            }
         }
 
         if (!this.TryDispatchPreparedCompositeCommands<TPixel>(
@@ -681,7 +701,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         try
         {
             int flushCommandCount = commandCount;
-            Span<PreparedCompositeParameters> parameters = parametersOwner.Memory.Span[..commandCount];
+            Span<PreparedCompositeParameters> parameters = parametersOwner.Memory.Span;
             TextureView* brushTextureView = backdropTextureView;
             nint brushTextureViewHandle = (nint)backdropTextureView;
             bool hasImageTexture = false;
@@ -790,12 +810,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     command.GraphicsOptions.BlendPercentage,
                     solidColor,
                     command.GraphicsOptions.Antialias ? 0u : 1u,
-                    command.GraphicsOptions.AntialiasThreshold,
-                    edgePlacement.IsStroke ? 1u : 0u,
-                    edgePlacement.StrokeWidth * 0.5f,
-                    edgePlacement.StrokeLineCap,
-                    edgePlacement.StrokeLineJoin,
-                    edgePlacement.StrokeMiterLimit);
+                    command.GraphicsOptions.AntialiasThreshold);
 
                     parameters[commandIndex] = commandParameters;
                     commandIndex++;
@@ -949,6 +964,254 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         finally
         {
             parametersOwner.Dispose();
+        }
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Dispatches the stroke expand compute shader to generate outline edges
+    /// from centerline edges. Must be called before the composite dispatch
+    /// so the generated edges are available for the fill rasterizer.
+    /// </summary>
+    private bool TryDispatchStrokeExpand(
+        WebGPUFlushContext flushContext,
+        WgpuBuffer* edgeBuffer,
+        nuint edgeBufferSize,
+        StrokeExpandInfo expandInfo,
+        out string? error)
+    {
+        error = null;
+        if (!expandInfo.HasCommands)
+        {
+            return true;
+        }
+
+        List<StrokeExpandCommand> commands = expandInfo.Commands!;
+
+        // Create or get the pipeline.
+        bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
+            => TryCreateStrokeExpandBindGroupLayout(api, device, out layout, out layoutError);
+
+        if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
+                StrokeExpandPipelineKey,
+                StrokeExpandComputeShader.Code,
+                LayoutFactory,
+                out BindGroupLayout* bindGroupLayout,
+                out ComputePipeline* pipeline,
+                out error))
+        {
+            return false;
+        }
+
+        // Build GPU command array.
+        int commandCount = commands.Count;
+        using IMemoryOwner<GpuStrokeExpandCommand> gpuCommandsOwner = flushContext.MemoryAllocator.Allocate<GpuStrokeExpandCommand>(commandCount);
+        Span<GpuStrokeExpandCommand> gpuCommands = gpuCommandsOwner.Memory.Span;
+        for (int i = 0; i < commandCount; i++)
+        {
+            gpuCommands[i] = new GpuStrokeExpandCommand(commands[i]);
+        }
+
+        nuint commandsSize = (nuint)(commandCount * Unsafe.SizeOf<GpuStrokeExpandCommand>());
+        if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                StrokeExpandCommandsBufferKey,
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                commandsSize,
+                out WgpuBuffer* commandsBuffer,
+                out _,
+                out error))
+        {
+            return false;
+        }
+
+        fixed (GpuStrokeExpandCommand* commandsPtr = &MemoryMarshal.GetReference(gpuCommands))
+        {
+            flushContext.Api.QueueWriteBuffer(
+                flushContext.Queue,
+                commandsBuffer,
+                0,
+                commandsPtr,
+                commandsSize);
+        }
+
+        // Config uniform.
+        nuint configSize = (nuint)Unsafe.SizeOf<GpuStrokeExpandConfig>();
+        if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                StrokeExpandConfigBufferKey,
+                BufferUsage.Uniform | BufferUsage.CopyDst,
+                configSize,
+                out WgpuBuffer* configBuffer,
+                out _,
+                out error))
+        {
+            return false;
+        }
+
+        GpuStrokeExpandConfig config = new(
+            (uint)expandInfo.TotalCenterlineEdges,
+            (uint)commandCount);
+        flushContext.Api.QueueWriteBuffer(
+            flushContext.Queue,
+            configBuffer,
+            0,
+            &config,
+            configSize);
+
+        // Atomic output counters — one u32 per command, initialized to 0.
+        nuint counterSize = (nuint)(expandInfo.Commands!.Count * sizeof(uint));
+        if (!flushContext.DeviceState.TryGetOrCreateSharedBuffer(
+                StrokeExpandCounterBufferKey,
+                BufferUsage.Storage | BufferUsage.CopyDst,
+                counterSize,
+                out WgpuBuffer* counterBuffer,
+                out _,
+                out error))
+        {
+            return false;
+        }
+
+        // Clear the counter to 0.
+        flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, counterBuffer, 0, counterSize);
+
+        // Bind group.
+        BindGroupEntry* bindGroupEntries = stackalloc BindGroupEntry[4];
+        bindGroupEntries[0] = new BindGroupEntry
+        {
+            Binding = 0,
+            Buffer = edgeBuffer,
+            Offset = 0,
+            Size = edgeBufferSize
+        };
+        bindGroupEntries[1] = new BindGroupEntry
+        {
+            Binding = 1,
+            Buffer = commandsBuffer,
+            Offset = 0,
+            Size = commandsSize
+        };
+        bindGroupEntries[2] = new BindGroupEntry
+        {
+            Binding = 2,
+            Buffer = configBuffer,
+            Offset = 0,
+            Size = configSize
+        };
+        bindGroupEntries[3] = new BindGroupEntry
+        {
+            Binding = 3,
+            Buffer = counterBuffer,
+            Offset = 0,
+            Size = counterSize
+        };
+
+        BindGroupDescriptor bindGroupDescriptor = new()
+        {
+            Layout = bindGroupLayout,
+            EntryCount = 4,
+            Entries = bindGroupEntries
+        };
+
+        BindGroup* bindGroup = flushContext.Api.DeviceCreateBindGroup(flushContext.Device, in bindGroupDescriptor);
+        if (bindGroup is null)
+        {
+            error = "Failed to create stroke expand bind group.";
+            return false;
+        }
+
+        flushContext.TrackBindGroup(bindGroup);
+
+        // Dispatch in a separate compute pass (guarantees ordering before composite pass).
+        ComputePassDescriptor passDescriptor = default;
+        ComputePassEncoder* passEncoder = flushContext.Api.CommandEncoderBeginComputePass(
+            flushContext.CommandEncoder, in passDescriptor);
+        if (passEncoder is null)
+        {
+            error = "Failed to begin stroke expand compute pass.";
+            return false;
+        }
+
+        try
+        {
+            uint workgroupCount = DivideRoundUp(expandInfo.TotalCenterlineEdges, 256);
+            flushContext.Api.ComputePassEncoderSetPipeline(passEncoder, pipeline);
+            flushContext.Api.ComputePassEncoderSetBindGroup(passEncoder, 0, bindGroup, 0, null);
+            flushContext.Api.ComputePassEncoderDispatchWorkgroups(passEncoder, workgroupCount, 1, 1);
+        }
+        finally
+        {
+            flushContext.Api.ComputePassEncoderEnd(passEncoder);
+            flushContext.Api.ComputePassEncoderRelease(passEncoder);
+        }
+
+        return true;
+    }
+
+    private static bool TryCreateStrokeExpandBindGroupLayout(
+        WebGPU api,
+        Device* device,
+        out BindGroupLayout* layout,
+        out string? error)
+    {
+        layout = null;
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[4];
+        entries[0] = new BindGroupLayoutEntry
+        {
+            Binding = 0,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[1] = new BindGroupLayoutEntry
+        {
+            Binding = 1,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.ReadOnlyStorage,
+                HasDynamicOffset = false,
+                MinBindingSize = 0
+            }
+        };
+        entries[2] = new BindGroupLayoutEntry
+        {
+            Binding = 2,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Uniform,
+                HasDynamicOffset = false,
+                MinBindingSize = (nuint)Unsafe.SizeOf<GpuStrokeExpandConfig>()
+            }
+        };
+        entries[3] = new BindGroupLayoutEntry
+        {
+            Binding = 3,
+            Visibility = ShaderStage.Compute,
+            Buffer = new BufferBindingLayout
+            {
+                Type = BufferBindingType.Storage,
+                HasDynamicOffset = false,
+                MinBindingSize = sizeof(uint)
+            }
+        };
+
+        BindGroupLayoutDescriptor descriptor = new()
+        {
+            EntryCount = 4,
+            Entries = entries
+        };
+
+        layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
+        if (layout is null)
+        {
+            error = "Failed to create stroke expand bind group layout.";
+            return false;
         }
 
         error = null;
@@ -1735,23 +1998,13 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             uint edgeCount,
             uint fillRule,
             uint csrOffsetsStart,
-            uint csrBandCount,
-            bool isStroke = false,
-            float strokeWidth = 0f,
-            uint strokeLineCap = 0,
-            uint strokeLineJoin = 0,
-            float strokeMiterLimit = 0f)
+            uint csrBandCount)
         {
             this.EdgeStart = edgeStart;
             this.EdgeCount = edgeCount;
             this.FillRule = fillRule;
             this.CsrOffsetsStart = csrOffsetsStart;
             this.CsrBandCount = csrBandCount;
-            this.IsStroke = isStroke;
-            this.StrokeWidth = strokeWidth;
-            this.StrokeLineCap = strokeLineCap;
-            this.StrokeLineJoin = strokeLineJoin;
-            this.StrokeMiterLimit = strokeMiterLimit;
         }
 
         public uint EdgeStart { get; }
@@ -1763,16 +2016,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         public uint CsrOffsetsStart { get; }
 
         public uint CsrBandCount { get; }
-
-        public bool IsStroke { get; }
-
-        public float StrokeWidth { get; }
-
-        public uint StrokeLineCap { get; }
-
-        public uint StrokeLineJoin { get; }
-
-        public float StrokeMiterLimit { get; }
     }
 
     /// <summary>
@@ -1868,12 +2111,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         public readonly uint SolidA;
         public readonly uint RasterizationMode;
         public readonly uint AntialiasThreshold;
-        public readonly uint StrokeMode;
-        public readonly uint StrokeHalfWidth;
-        public readonly uint StrokeLineCap;
-        public readonly uint StrokeLineJoin;
-        public readonly uint StrokeMiterLimit;
-        public readonly uint StrokePad0;
+        public readonly uint Pad0;
+        public readonly uint Pad1;
 
         public PreparedCompositeParameters(
             int destinationX,
@@ -1898,12 +2137,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             float blendPercentage,
             Vector4 solidColor,
             uint rasterizationMode,
-            float antialiasThreshold,
-            uint strokeMode = 0,
-            float strokeHalfWidth = 0f,
-            uint strokeLineCap = 0,
-            uint strokeLineJoin = 0,
-            float strokeMiterLimit = 0f)
+            float antialiasThreshold)
         {
             this.DestinationX = (uint)destinationX;
             this.DestinationY = (uint)destinationY;
@@ -1931,12 +2165,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             this.SolidA = FloatToUInt32Bits(solidColor.W);
             this.RasterizationMode = rasterizationMode;
             this.AntialiasThreshold = FloatToUInt32Bits(antialiasThreshold);
-            this.StrokeMode = strokeMode;
-            this.StrokeHalfWidth = FloatToUInt32Bits(strokeHalfWidth);
-            this.StrokeLineCap = strokeLineCap;
-            this.StrokeLineJoin = strokeLineJoin;
-            this.StrokeMiterLimit = FloatToUInt32Bits(strokeMiterLimit);
-            this.StrokePad0 = 0;
+            this.Pad0 = 0;
+            this.Pad1 = 0;
         }
     }
 }

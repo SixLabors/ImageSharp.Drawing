@@ -16,7 +16,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed unsafe partial class WebGPUDrawingBackend
 {
     private const int TileHeight = 16;
-    private const int EdgeStrideBytes = 20;
+    private const int EdgeStrideBytes = 28;
     private const int FixedShift = 8;
     private const int FixedOne = 1 << FixedShift;
     private const int CsrWorkgroupSize = 256;
@@ -35,9 +35,25 @@ public sealed unsafe partial class WebGPUDrawingBackend
     private delegate void ComputePassDispatch(ComputePassEncoder* pass);
 
     /// <summary>
-    /// Builds flattened fixed-point edge geometry for all coverage definitions and uploads to a GPU buffer.
-    /// Each edge is in 24.8 fixed-point format with min_row/max_row and CSR metadata.
+    /// Computes the maximum number of outline edges a single centerline edge can produce
+    /// for the given stroke parameters. The worst case is a round join or cap where
+    /// the arc step count scales with stroke width: max(4, ceil(π * halfWidth * 0.5)).
     /// </summary>
+    private static int ComputeOutlineEdgesPerCenterline(float halfWidth, LineJoin lineJoin, LineCap lineCap)
+    {
+        // Side edges always produce exactly 2.
+        // Join: 1 inner bevel + outer edges (miter variants: up to 3, bevel: 1, round: arc steps).
+        // Cap: butt=1, square=3, round=arc steps.
+        int roundArcSteps = Math.Max(4, (int)MathF.Ceiling(MathF.PI * halfWidth * 0.5f));
+        int maxJoin = lineJoin is LineJoin.Round or LineJoin.MiterRound
+            ? 1 + roundArcSteps
+            : 4; // miter clamp worst case: 1 inner + 3 outer
+        int maxCap = lineCap == LineCap.Round
+            ? roundArcSteps
+            : 3; // square cap
+        return Math.Max(Math.Max(maxJoin, maxCap), 2);
+    }
+
     private bool TryCreateEdgeBuffer<TPixel>(
         WebGPUFlushContext flushContext,
         List<CompositionCoverageDefinition> definitions,
@@ -49,6 +65,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         out int totalBandOffsetEntries,
         out WgpuBuffer* bandOffsetsBuffer,
         out nuint bandOffsetsBufferSize,
+        out StrokeExpandInfo strokeExpandInfo,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -59,6 +76,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         totalBandOffsetEntries = 0;
         bandOffsetsBuffer = null;
         bandOffsetsBufferSize = 0;
+        strokeExpandInfo = default;
         error = null;
         if (definitions.Count == 0)
         {
@@ -71,6 +89,12 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         // Build pre-split geometry for each definition and compute edge placements.
         DefinitionGeometry[] geometries = new DefinitionGeometry[definitions.Count];
+
+        // Track stroke definitions for the expand dispatch.
+        List<StrokeExpandCommand>? strokeCommands = null;
+        int totalStrokeCenterlineEdges = 0;
+        int totalOutlineSlots = 0;
+
         for (int i = 0; i < definitions.Count; i++)
         {
             CompositionCoverageDefinition definition = definitions[i];
@@ -82,13 +106,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             }
 
             uint fillRule = definition.RasterizerOptions.IntersectionRule == IntersectionRule.EvenOdd ? 1u : 0u;
-            int bandCount = (int)DivideRoundUp(interest.Height, TileHeight);
 
-            // For stroke definitions, expand band assignment so distance-field
-            // lookups can find nearby edges beyond the edge's own Y range.
-            int strokeExpand = definition.IsStroke
-                ? (int)MathF.Ceiling(definition.StrokeWidth * 0.5f) + 1
-                : 0;
+            int bandCount = (int)DivideRoundUp(interest.Height, TileHeight);
 
             IMemoryOwner<GpuEdge>? defEdgeOwner;
             int edgeCount;
@@ -101,14 +120,13 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     definition.Path,
                     in interest,
                     definition.RasterizerOptions.SamplingOrigin,
-                    definition.StrokeWidth * 0.5f,
-                    definition.StrokeOptions?.LineJoin ?? LineJoin.Bevel,
+                    definition.StrokeWidth,
                     (float)(definition.StrokeOptions?.MiterLimit ?? 4.0),
+                    bandCount,
                     out defEdgeOwner,
                     out edgeCount,
                     out defBandOffsets,
-                    out error,
-                    strokeExpand);
+                    out error);
             }
             else
             {
@@ -125,7 +143,6 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             if (!edgeSuccess)
             {
-                // Dispose any already-built geometry on failure.
                 for (int j = 0; j < i; j++)
                 {
                     geometries[j].EdgeOwner?.Dispose();
@@ -136,35 +153,144 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             geometries[i] = new DefinitionGeometry(defEdgeOwner, edgeCount, bandCount, defBandOffsets);
 
-            int bandOffsetEntriesForDef = bandCount + 1;
-            uint strokeLineCap = definition.IsStroke ? (uint)(definition.StrokeOptions?.LineCap ?? LineCap.Butt) : 0;
-            uint strokeLineJoin = definition.IsStroke ? (uint)(definition.StrokeOptions?.LineJoin ?? LineJoin.Bevel) : 0;
-            float strokeMiterLimit = definition.IsStroke ? (float)(definition.StrokeOptions?.MiterLimit ?? 4.0) : 0f;
+            if (definition.IsStroke && edgeCount > 0)
+            {
+                // Centerline edges are band-sorted. Create one StrokeExpandCommand per band
+                // so the GPU expand shader writes outline edges into per-band output slots.
+                // This produces band-sorted outline edges compatible with the fill rasterizer.
+                uint[] clBandOffsets = defBandOffsets!;
+                LineCap defLineCap = definition.StrokeOptions?.LineCap ?? LineCap.Butt;
+                LineJoin defLineJoin = definition.StrokeOptions?.LineJoin ?? LineJoin.Bevel;
+                int outlineEdgesPerCenterline = ComputeOutlineEdgesPerCenterline(
+                    definition.StrokeWidth * 0.5f, defLineJoin, defLineCap);
+                strokeCommands ??= [];
+                for (int b = 0; b < bandCount; b++)
+                {
+                    uint bandStart = clBandOffsets[b];
+                    uint bandEnd = b + 1 < clBandOffsets.Length ? clBandOffsets[b + 1] : (uint)edgeCount;
+                    uint bandEdgeCount = bandEnd - bandStart;
+                    if (bandEdgeCount == 0)
+                    {
+                        continue;
+                    }
 
-            edgePlacements[i] = new EdgePlacement(
-                (uint)runningEdgeStart,
-                (uint)edgeCount,
-                fillRule,
-                (uint)runningBandOffset,
-                (uint)bandCount,
-                definition.IsStroke,
-                definition.StrokeWidth,
-                strokeLineCap,
-                strokeLineJoin,
-                strokeMiterLimit);
+                    int bandOutlineMax = (int)bandEdgeCount * outlineEdgesPerCenterline;
+                    strokeCommands.Add(new StrokeExpandCommand(
+                        i,
+                        (uint)runningEdgeStart + bandStart,
+                        bandEdgeCount,
+                        definition.StrokeWidth * 0.5f,
+                        (uint)defLineCap,
+                        (uint)defLineJoin,
+                        (float)(definition.StrokeOptions?.MiterLimit ?? 4.0),
+                        bandOutlineMax,
+                        Band: b));
 
-            runningEdgeStart += edgeCount;
-            runningBandOffset += bandOffsetEntriesForDef;
+                    totalOutlineSlots += bandOutlineMax;
+                }
+
+                totalStrokeCenterlineEdges += edgeCount;
+
+                // Placeholder EdgePlacement — will be updated after outline space is allocated.
+                int bandOffsetEntriesForDef = bandCount + 1;
+                edgePlacements[i] = new EdgePlacement(
+                    (uint)runningEdgeStart,
+                    (uint)edgeCount,
+                    fillRule,
+                    (uint)runningBandOffset,
+                    (uint)bandCount);
+
+                runningEdgeStart += edgeCount;
+                runningBandOffset += bandOffsetEntriesForDef;
+            }
+            else
+            {
+                int bandOffsetEntriesForDef = bandCount + 1;
+
+                edgePlacements[i] = new EdgePlacement(
+                    (uint)runningEdgeStart,
+                    (uint)edgeCount,
+                    fillRule,
+                    (uint)runningBandOffset,
+                    (uint)bandCount);
+
+                runningEdgeStart += edgeCount;
+                runningBandOffset += bandOffsetEntriesForDef;
+            }
         }
 
         totalEdgeCount = runningEdgeStart;
         totalBandOffsetEntries = runningBandOffset;
 
+        // Reserve outline edge space for stroke definitions.
+        // Outline edges are placed after all centerline/fill edges in the buffer.
+        // Each band within a stroke definition gets its own output slot so the
+        // resulting outline edges are band-sorted — compatible with the fill rasterizer.
+        // outlineBandOffsetsPerDef[defIndex] stores the outline band offsets array for
+        // stroke definitions (null for fills). Used in the merged band offsets upload.
+        uint[]?[] outlineBandOffsetsPerDef = new uint[]?[definitions.Count];
+        int outlineRegionStart = totalEdgeCount;
+        if (strokeCommands is not null)
+        {
+            // Assign per-command output offsets and build per-definition outline band offsets.
+            int runningOutlineOffset = outlineRegionStart;
+            for (int sc = 0; sc < strokeCommands.Count; sc++)
+            {
+                StrokeExpandCommand cmd = strokeCommands[sc];
+                strokeCommands[sc] = cmd with
+                {
+                    OutputStart = (uint)runningOutlineOffset,
+                    OutputMax = (uint)(runningOutlineOffset + cmd.OutlineMax)
+                };
+                runningOutlineOffset += cmd.OutlineMax;
+            }
+
+            totalEdgeCount = runningOutlineOffset;
+
+            // Build outline band offsets for each stroke definition.
+            // Commands are ordered by definition, then by band within each definition.
+            int cmdCursor = 0;
+            while (cmdCursor < strokeCommands.Count)
+            {
+                int defIndex = strokeCommands[cmdCursor].DefinitionIndex;
+                int defBandCount = geometries[defIndex].BandCount;
+                int defOutlineStart = (int)strokeCommands[cmdCursor].OutputStart;
+
+                // Build full band offsets: offsets[b] = local offset within this def's outline region.
+                uint[] outOffsets = new uint[defBandCount + 1];
+                uint localOffset = 0;
+                for (int b = 0; b < defBandCount; b++)
+                {
+                    outOffsets[b] = localOffset;
+                    if (cmdCursor < strokeCommands.Count
+                        && strokeCommands[cmdCursor].DefinitionIndex == defIndex
+                        && strokeCommands[cmdCursor].Band == b)
+                    {
+                        localOffset += (uint)strokeCommands[cmdCursor].OutlineMax;
+                        cmdCursor++;
+                    }
+                }
+
+                int defOutlineTotal = (int)localOffset;
+                outOffsets[defBandCount] = (uint)defOutlineTotal;
+                outlineBandOffsetsPerDef[defIndex] = outOffsets;
+
+                // Update EdgePlacement to point to the outline region.
+                EdgePlacement oldPlacement = edgePlacements[defIndex];
+                edgePlacements[defIndex] = new EdgePlacement(
+                    (uint)defOutlineStart,
+                    (uint)defOutlineTotal,
+                    oldPlacement.FillRule,
+                    (uint)runningBandOffset,
+                    (uint)defBandCount);
+
+                runningBandOffset += defBandCount + 1;
+                totalBandOffsetEntries = runningBandOffset;
+            }
+        }
+
         if (totalEdgeCount == 0)
         {
-            // Provide properly sized buffers even when there are no edges.
-            // The shader reads band_offsets[bandOffsetsStart + band], so the
-            // buffer must be large enough and zeroed.
             edgeBufferSize = EdgeStrideBytes;
             int emptyOffsetsCount = Math.Max(totalBandOffsetEntries, 1);
             bandOffsetsBufferSize = checked((nuint)(emptyOffsetsCount * sizeof(uint)));
@@ -178,21 +304,21 @@ public sealed unsafe partial class WebGPUDrawingBackend
             return true;
         }
 
-        // Merge edge arrays. Edges are already pre-split and band-sorted per definition.
-        // For single-definition scenes (common case), use the buffer directly.
+        // Merge edge arrays. Includes space for outline edges at the end.
         int edgeBufferBytes = checked(totalEdgeCount * EdgeStrideBytes);
         edgeBufferSize = (nuint)edgeBufferBytes;
 
+        // Upload only the centerline/fill edges; outline region will be written by GPU.
+        int uploadEdgeCount = outlineRegionStart;
+
         IMemoryOwner<GpuEdge>? mergedEdgeOwner;
-        if (geometries.Length == 1 && geometries[0].EdgeOwner is not null)
+        if (geometries.Length == 1 && geometries[0].EdgeOwner is not null && strokeCommands is null)
         {
-            // Single definition: use directly (no per-edge metadata to stamp).
             mergedEdgeOwner = geometries[0].EdgeOwner!;
         }
         else
         {
-            // Multiple definitions: concatenate into a new buffer.
-            mergedEdgeOwner = flushContext.MemoryAllocator.Allocate<GpuEdge>(totalEdgeCount);
+            mergedEdgeOwner = flushContext.MemoryAllocator.Allocate<GpuEdge>(uploadEdgeCount > 0 ? uploadEdgeCount : 1);
             int mergedEdgeIndex = 0;
             for (int defIndex = 0; defIndex < geometries.Length; defIndex++)
             {
@@ -202,15 +328,12 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     continue;
                 }
 
-                ReadOnlySpan<GpuEdge> source = geometry.EdgeOwner.Memory.Span[..geometry.EdgeCount];
+                ReadOnlySpan<GpuEdge> source = geometry.EdgeOwner.Memory.Span;
                 Span<GpuEdge> dest = mergedEdgeOwner.Memory.Span.Slice(mergedEdgeIndex, geometry.EdgeCount);
                 source.CopyTo(dest);
                 mergedEdgeIndex += geometry.EdgeCount;
             }
         }
-
-        // Reinterpret typed buffer as bytes for GPU upload.
-        Span<byte> edgeUpload = MemoryMarshal.AsBytes(mergedEdgeOwner.Memory.Span[..totalEdgeCount]);
 
         if (!TryGetOrCreateCoverageBuffer(
                 flushContext,
@@ -224,20 +347,32 @@ public sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
-        if (!this.TryUploadDirtyCoverageRange(
-                flushContext,
-                edgeBuffer,
-                edgeUpload,
-                ref this.cachedCoverageLineUpload,
-                ref this.cachedCoverageLineLength,
-                out error))
+        // Upload centerline/fill edges to the beginning of the buffer.
+        if (uploadEdgeCount > 0)
         {
-            DisposeGeometries(geometries, mergedEdgeOwner);
-            return false;
+            Span<byte> edgeUpload = MemoryMarshal.AsBytes(mergedEdgeOwner.Memory.Span);
+            if (!this.TryUploadDirtyCoverageRange(
+                    flushContext,
+                    edgeBuffer,
+                    edgeUpload,
+                    ref this.cachedCoverageLineUpload,
+                    ref this.cachedCoverageLineLength,
+                    out error))
+            {
+                DisposeGeometries(geometries, mergedEdgeOwner);
+                return false;
+            }
+        }
+
+        // Clear the outline region so unused slots have y0 == y1 == 0 (no winding contribution).
+        if (totalOutlineSlots > 0)
+        {
+            nuint outlineByteOffset = (nuint)(outlineRegionStart * EdgeStrideBytes);
+            nuint outlineByteSize = (nuint)(totalOutlineSlots * EdgeStrideBytes);
+            flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, edgeBuffer, outlineByteOffset, outlineByteSize);
         }
 
         // Build merged band offsets from pre-computed per-definition data.
-        // Band offsets are local to each definition's edge range (0-based).
         int bandOffsetsCount = Math.Max(totalBandOffsetEntries, 1);
         bandOffsetsBufferSize = checked((nuint)(bandOffsetsCount * sizeof(uint)));
 
@@ -249,27 +384,27 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         if (totalEdgeCount > 0 && totalBandOffsetEntries > 0)
         {
-            uint[] mergedOffsets = new uint[totalBandOffsetEntries];
+            using IMemoryOwner<uint> mergedOffsetsOwner = flushContext.MemoryAllocator.Allocate<uint>(totalBandOffsetEntries, AllocationOptions.Clean);
+            Span<uint> mergedOffsets = mergedOffsetsOwner.Memory.Span;
             for (int defIndex = 0; defIndex < geometries.Length; defIndex++)
             {
                 ref DefinitionGeometry geometry = ref geometries[defIndex];
-                if (geometry.BandOffsets is null)
-                {
-                    continue;
-                }
-
                 EdgePlacement placement = edgePlacements[defIndex];
                 int bandStart = (int)placement.CsrOffsetsStart;
-                uint[] defOffsets = geometry.BandOffsets;
 
-                // Copy band offsets directly (already 0-based per definition).
-                for (int b = 0; b < defOffsets.Length; b++)
+                // Use outline band offsets for stroke definitions, fill band offsets otherwise.
+                uint[]? outlineOffsets = outlineBandOffsetsPerDef[defIndex];
+                uint[]? defOffsets = outlineOffsets ?? geometry.BandOffsets;
+                if (defOffsets is not null)
                 {
-                    mergedOffsets[bandStart + b] = defOffsets[b];
+                    for (int b = 0; b < defOffsets.Length; b++)
+                    {
+                        mergedOffsets[bandStart + b] = defOffsets[b];
+                    }
                 }
             }
 
-            fixed (uint* offsetsPtr = mergedOffsets)
+            fixed (uint* offsetsPtr = &MemoryMarshal.GetReference(mergedOffsets))
             {
                 flushContext.Api.QueueWriteBuffer(
                     flushContext.Queue,
@@ -282,6 +417,12 @@ public sealed unsafe partial class WebGPUDrawingBackend
         else
         {
             flushContext.Api.CommandEncoderClearBuffer(flushContext.CommandEncoder, bandOffsetsBuffer, 0, bandOffsetsBufferSize);
+        }
+
+        // Build stroke expand info for the GPU dispatch.
+        if (strokeCommands is not null && strokeCommands.Count > 0)
+        {
+            strokeExpandInfo = new StrokeExpandInfo(strokeCommands, totalStrokeCenterlineEdges);
         }
 
         DisposeGeometries(geometries, mergedEdgeOwner);
@@ -462,7 +603,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         // Pass 1: Flatten path and count edges per band.
         int totalSubEdges = 0;
-        int[] bandCounts = new int[bandCount];
+        using IMemoryOwner<int> bandCountsOwner = allocator.Allocate<int>(bandCount, AllocationOptions.Clean);
+        Span<int> bandCounts = bandCountsOwner.Memory.Span;
 
         foreach (ISimplePath simplePath in path.Flatten())
         {
@@ -525,7 +667,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         // Pass 2: Flatten again and scatter edges directly into the final buffer.
         IMemoryOwner<GpuEdge> finalOwner = allocator.Allocate<GpuEdge>(totalSubEdges);
         Span<GpuEdge> finalSpan = finalOwner.Memory.Span;
-        uint[] writeCursors = new uint[bandCount];
+        using IMemoryOwner<uint> writeCursorsOwner = allocator.Allocate<uint>(bandCount, AllocationOptions.Clean);
+        Span<uint> writeCursors = writeCursorsOwner.Memory.Span;
 
         foreach (ISimplePath simplePath in path.Flatten())
         {
@@ -582,23 +725,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
     }
 
     /// <summary>
-    /// Builds stroke-specific fixed-point edge geometry with cap flags and miter extensions.
-    /// Unlike the fill edge builder, this includes horizontal edges and computes
-    /// per-vertex miter extensions for Miter/MiterRevert/MiterRound join types.
+    /// Builds stroke centerline edges with join and cap descriptors for GPU-side outline generation.
+    /// The GPU shader expands centerline edges into outline polygon edges and rasterizes them
+    /// using the same fill rasterizer. Edges are band-sorted with expanded Y ranges to account
+    /// for stroke offset so each tile only processes edges relevant to its vertical range.
     /// </summary>
     private static bool TryBuildStrokeEdges(
         MemoryAllocator allocator,
         IPath path,
         in Rectangle interest,
         RasterizerSamplingOrigin samplingOrigin,
-        float halfWidth,
-        LineJoin lineJoin,
+        float strokeWidth,
         float miterLimit,
+        int bandCount,
         out IMemoryOwner<GpuEdge>? edgeOwner,
         out int edgeCount,
         out uint[]? bandOffsets,
-        out string? error,
-        int strokeExpandPixels = 0)
+        out string? error)
     {
         error = null;
         edgeOwner = null;
@@ -607,15 +750,17 @@ public sealed unsafe partial class WebGPUDrawingBackend
         bool samplePixelCenter = samplingOrigin == RasterizerSamplingOrigin.PixelCenter;
         float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
         float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
-        int height = interest.Height;
         int interestX = interest.X;
         int interestY = interest.Y;
-        int bandCount = (int)DivideRoundUp(height, TileHeight);
-        bool isMiterJoin = lineJoin is LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound;
+        int height = interest.Height;
 
-        // Pre-process: flatten all sub-paths and compute stroke edges with
-        // miter extensions and endpoint flags.
+        // Maximum Y expansion in pixels: miter joins can extend up to miterLimit * halfWidth.
+        float halfWidth = strokeWidth * 0.5f;
+        int yExpansionFixed = (int)MathF.Ceiling(Math.Max(miterLimit, 1f) * halfWidth * FixedOne);
+
+        // Pass 1: Collect all stroke edges and count per band.
         List<GpuEdge> strokeEdges = [];
+        List<(int YMinFixed, int YMaxFixed)> edgeYRanges = [];
 
         foreach (ISimplePath simplePath in path.Flatten())
         {
@@ -632,76 +777,92 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 continue;
             }
 
-            // Pre-compute per-vertex miter extensions.
-            // extensions[j] is the amount to extend the outgoing segment backward
-            // (and the incoming segment forward) at vertex j.
-            float[] extensions = new float[points.Length];
-            if (isMiterJoin)
-            {
-                ComputeMiterExtensions(points, isClosed, halfWidth, miterLimit, lineJoin, extensions);
-            }
-
+            // Emit centerline edges.
             for (int j = 0; j < segmentCount; j++)
             {
                 int j1 = j + 1 == points.Length ? 0 : j + 1;
                 PointF p0 = points[j];
                 PointF p1 = points[j1];
 
-                // Apply miter extensions at both endpoints.
-                float ext0 = extensions[j];   // extension at start vertex (forward along this segment)
-                float ext1 = extensions[j1];  // extension at end vertex (backward along this segment)
-
-                if (ext0 > 0f || ext1 > 0f)
-                {
-                    float dx = p1.X - p0.X;
-                    float dy = p1.Y - p0.Y;
-                    float segLen = MathF.Sqrt((dx * dx) + (dy * dy));
-                    if (segLen > 1e-6f)
-                    {
-                        float invLen = 1f / segLen;
-                        float dirX = dx * invLen;
-                        float dirY = dy * invLen;
-
-                        // Extend start backward (away from p1).
-                        if (ext0 > 0f)
-                        {
-                            p0 = new PointF(p0.X - (dirX * ext0), p0.Y - (dirY * ext0));
-                        }
-
-                        // Extend end forward (away from p0).
-                        if (ext1 > 0f)
-                        {
-                            p1 = new PointF(p1.X + (dirX * ext1), p1.Y + (dirY * ext1));
-                        }
-                    }
-                }
-
-                // Compute cap flags.
-                int flags = 0;
-                if (!isClosed)
-                {
-                    if (j == 0)
-                    {
-                        flags |= 1; // open start at (x0, y0)
-                    }
-
-                    if (j == segmentCount - 1)
-                    {
-                        flags |= 2; // open end at (x1, y1)
-                    }
-                }
-
-                float fx0 = (p0.X - interestX) + samplingOffsetX;
                 float fy0 = (p0.Y - interestY) + samplingOffsetY;
-                float fx1 = (p1.X - interestX) + samplingOffsetX;
                 float fy1 = (p1.Y - interestY) + samplingOffsetY;
+                int iy0 = (int)MathF.Round(fy0 * FixedOne);
+                int iy1 = (int)MathF.Round(fy1 * FixedOne);
 
-                int x0 = (int)MathF.Round(fx0 * FixedOne);
-                int y0 = (int)MathF.Round(fy0 * FixedOne);
-                int x1 = (int)MathF.Round(fx1 * FixedOne);
-                int y1 = (int)MathF.Round(fy1 * FixedOne);
+                strokeEdges.Add(new GpuEdge
+                {
+                    X0 = (int)MathF.Round(((p0.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y0 = iy0,
+                    X1 = (int)MathF.Round(((p1.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y1 = iy1,
+                });
 
-                strokeEdges.Add(new GpuEdge { X0 = x0, Y0 = y0, X1 = x1, Y1 = y1, Flags = flags });
+                int eMin = Math.Min(iy0, iy1) - yExpansionFixed;
+                int eMax = Math.Max(iy0, iy1) + yExpansionFixed;
+                edgeYRanges.Add((eMin, eMax));
+            }
+
+            // Emit join descriptors at interior vertices.
+            int startVertex = isClosed ? 0 : 1;
+            int endVertex = isClosed ? points.Length : points.Length - 1;
+
+            for (int i = startVertex; i < endVertex; i++)
+            {
+                int prev = isClosed ? ((i - 1 + points.Length) % points.Length) : i - 1;
+                int next = isClosed ? ((i + 1) % points.Length) : i + 1;
+
+                PointF v = points[i];
+                PointF pv = points[prev];
+                PointF nv = points[next];
+
+                int vy = (int)MathF.Round(((v.Y - interestY) + samplingOffsetY) * FixedOne);
+
+                strokeEdges.Add(new GpuEdge
+                {
+                    X0 = (int)MathF.Round(((v.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y0 = vy,
+                    X1 = (int)MathF.Round(((pv.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y1 = (int)MathF.Round(((pv.Y - interestY) + samplingOffsetY) * FixedOne),
+                    Flags = 32, // EDGE_JOIN
+                    AdjX = (int)MathF.Round(((nv.X - interestX) + samplingOffsetX) * FixedOne),
+                    AdjY = (int)MathF.Round(((nv.Y - interestY) + samplingOffsetY) * FixedOne),
+                });
+
+                edgeYRanges.Add((vy - yExpansionFixed, vy + yExpansionFixed));
+            }
+
+            // Emit cap descriptors at open endpoints.
+            if (!isClosed)
+            {
+                PointF capStart = points[0];
+                PointF adjStart = points[1];
+                int csy = (int)MathF.Round(((capStart.Y - interestY) + samplingOffsetY) * FixedOne);
+
+                strokeEdges.Add(new GpuEdge
+                {
+                    X0 = (int)MathF.Round(((capStart.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y0 = csy,
+                    X1 = (int)MathF.Round(((adjStart.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y1 = (int)MathF.Round(((adjStart.Y - interestY) + samplingOffsetY) * FixedOne),
+                    Flags = 64, // EDGE_CAP_START
+                });
+
+                edgeYRanges.Add((csy - yExpansionFixed, csy + yExpansionFixed));
+
+                PointF capEnd = points[^1];
+                PointF adjEnd = points[^2];
+                int cey = (int)MathF.Round(((capEnd.Y - interestY) + samplingOffsetY) * FixedOne);
+
+                strokeEdges.Add(new GpuEdge
+                {
+                    X0 = (int)MathF.Round(((capEnd.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y0 = cey,
+                    X1 = (int)MathF.Round(((adjEnd.X - interestX) + samplingOffsetX) * FixedOne),
+                    Y1 = (int)MathF.Round(((adjEnd.Y - interestY) + samplingOffsetY) * FixedOne),
+                    Flags = 128, // EDGE_CAP_END
+                });
+
+                edgeYRanges.Add((cey - yExpansionFixed, cey + yExpansionFixed));
             }
         }
 
@@ -710,28 +871,29 @@ public sealed unsafe partial class WebGPUDrawingBackend
             return true;
         }
 
-        // Count edges per band (including horizontal edges, with stroke expansion).
-        int[] bandCounts = new int[bandCount];
-        int totalSubEdges = 0;
+        // Band-sort centerline edges using expanded Y ranges so each band contains
+        // all centerline edges whose outline could affect that band's vertical range.
+        // This mirrors TryBuildFixedPointEdges but uses pre-computed Y expansion.
+        using IMemoryOwner<int> bandCountsOwner = allocator.Allocate<int>(bandCount, AllocationOptions.Clean);
+        Span<int> bandCounts = bandCountsOwner.Memory.Span;
+        int totalBandEdges = 0;
 
         for (int i = 0; i < strokeEdges.Count; i++)
         {
-            GpuEdge edge = strokeEdges[i];
-            ComputeStrokeBandRange(edge, height, strokeExpandPixels, out int minBand, out int maxBand);
-            if (minBand > maxBand)
-            {
-                continue;
-            }
-
+            (int yMin, int yMax) = edgeYRanges[i];
+            int minRow = Math.Max(0, yMin >> FixedShift);
+            int maxRow = Math.Min(height - 1, Math.Max(0, (yMax - 1) >> FixedShift));
+            int minBand = Math.Min(minRow / TileHeight, bandCount - 1);
+            int maxBand = Math.Min(maxRow / TileHeight, bandCount - 1);
             for (int b = minBand; b <= maxBand; b++)
             {
                 bandCounts[b]++;
             }
 
-            totalSubEdges += maxBand - minBand + 1;
+            totalBandEdges += maxBand - minBand + 1;
         }
 
-        if (totalSubEdges == 0)
+        if (totalBandEdges == 0)
         {
             return true;
         }
@@ -747,20 +909,20 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         offsets[bandCount] = running;
 
-        // Scatter edges into band-sorted buffer.
-        IMemoryOwner<GpuEdge> finalOwner = allocator.Allocate<GpuEdge>(totalSubEdges);
+        // Scatter centerline edges into band-sorted buffer.
+        IMemoryOwner<GpuEdge> finalOwner = allocator.Allocate<GpuEdge>(totalBandEdges);
         Span<GpuEdge> finalSpan = finalOwner.Memory.Span;
-        uint[] writeCursors = new uint[bandCount];
+        using IMemoryOwner<uint> writeCursorsOwner = allocator.Allocate<uint>(bandCount, AllocationOptions.Clean);
+        Span<uint> writeCursors = writeCursorsOwner.Memory.Span;
 
         for (int i = 0; i < strokeEdges.Count; i++)
         {
             GpuEdge edge = strokeEdges[i];
-            ComputeStrokeBandRange(edge, height, strokeExpandPixels, out int minBand, out int maxBand);
-            if (minBand > maxBand)
-            {
-                continue;
-            }
-
+            (int yMin, int yMax) = edgeYRanges[i];
+            int minRow = Math.Max(0, yMin >> FixedShift);
+            int maxRow = Math.Min(height - 1, Math.Max(0, (yMax - 1) >> FixedShift));
+            int minBand = Math.Min(minRow / TileHeight, bandCount - 1);
+            int maxBand = Math.Min(maxRow / TileHeight, bandCount - 1);
             for (int band = minBand; band <= maxBand; band++)
             {
                 finalSpan[(int)(offsets[band] + writeCursors[band])] = edge;
@@ -769,162 +931,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         edgeOwner = finalOwner;
-        edgeCount = totalSubEdges;
+        edgeCount = totalBandEdges;
         bandOffsets = offsets;
         return true;
-    }
-
-    /// <summary>
-    /// Computes band range for a stroke edge, including horizontal edges and stroke expansion.
-    /// </summary>
-    private static void ComputeStrokeBandRange(in GpuEdge edge, int height, int strokeExpandPixels, out int minBand, out int maxBand)
-    {
-        int y0 = edge.Y0;
-        int y1 = edge.Y1;
-
-        int yMinFixed, yMaxFixed;
-        if (y0 == y1)
-        {
-            // Horizontal edge: use the row at this Y position.
-            yMinFixed = y0;
-            yMaxFixed = y0 + 1; // ensure at least one row
-        }
-        else
-        {
-            yMinFixed = Math.Min(y0, y1);
-            yMaxFixed = Math.Max(y0, y1);
-        }
-
-        int minRow = Math.Max(0, yMinFixed >> FixedShift);
-        int maxRow = Math.Min(height - 1, (yMaxFixed - 1) >> FixedShift);
-
-        // For horizontal edges the row range can be empty; use the Y row directly.
-        if (y0 == y1)
-        {
-            int row = Math.Clamp(y0 >> FixedShift, 0, height - 1);
-            minRow = row;
-            maxRow = row;
-        }
-
-        if (strokeExpandPixels > 0)
-        {
-            minRow = Math.Max(0, minRow - strokeExpandPixels);
-            maxRow = Math.Min(height - 1, maxRow + strokeExpandPixels);
-        }
-
-        if (minRow > maxRow)
-        {
-            minBand = 1;
-            maxBand = 0; // empty range sentinel
-            return;
-        }
-
-        minBand = minRow / TileHeight;
-        maxBand = maxRow / TileHeight;
-    }
-
-    /// <summary>
-    /// Pre-computes miter extension lengths at each vertex of a sub-path.
-    /// At each interior vertex where two segments meet, the extension is
-    /// <c>halfWidth / tan(halfAngle)</c>, clamped by the miter limit.
-    /// </summary>
-    private static void ComputeMiterExtensions(
-        ReadOnlySpan<PointF> points,
-        bool isClosed,
-        float halfWidth,
-        float miterLimit,
-        LineJoin lineJoin,
-        float[] extensions)
-    {
-        int n = points.Length;
-
-        for (int i = 0; i < n; i++)
-        {
-            extensions[i] = 0f;
-        }
-
-        // For each interior vertex, compute the miter extension.
-        int startVertex = isClosed ? 0 : 1;
-        int endVertex = isClosed ? n : n - 1;
-        float limit = halfWidth * miterLimit;
-
-        for (int i = startVertex; i < endVertex; i++)
-        {
-            int prev = isClosed ? (i - 1 + n) % n : i - 1;
-            int next = isClosed ? (i + 1) % n : i + 1;
-
-            float dx1 = points[i].X - points[prev].X;
-            float dy1 = points[i].Y - points[prev].Y;
-            float dx2 = points[next].X - points[i].X;
-            float dy2 = points[next].Y - points[i].Y;
-
-            float len1 = MathF.Sqrt((dx1 * dx1) + (dy1 * dy1));
-            float len2 = MathF.Sqrt((dx2 * dx2) + (dy2 * dy2));
-            if (len1 < 1e-6f || len2 < 1e-6f)
-            {
-                continue;
-            }
-
-            // Normalize directions.
-            float ux1 = dx1 / len1;
-            float uy1 = dy1 / len1;
-            float ux2 = dx2 / len2;
-            float uy2 = dy2 / len2;
-
-            // Dot product of directions gives cos(angle).
-            float dot = (ux1 * ux2) + (uy1 * uy2);
-            dot = Math.Clamp(dot, -1f, 1f);
-
-            // Half-angle: cos(θ) = dot → θ = acos(dot) → half = θ/2.
-            float angle = MathF.Acos(dot);
-            float halfAngle = angle * 0.5f;
-            float sinHalf = MathF.Sin(halfAngle);
-
-            if (sinHalf < 1e-6f)
-            {
-                // Near-parallel segments (straight line), no miter needed.
-                continue;
-            }
-
-            float cosHalf = MathF.Cos(halfAngle);
-            float tanHalf = sinHalf / cosHalf;
-            if (tanHalf < 1e-6f)
-            {
-                continue;
-            }
-
-            // Full extension along each segment = halfWidth / tan(halfAngle).
-            float ext = halfWidth / tanHalf;
-
-            // Miter distance from vertex = halfWidth / sin(halfAngle).
-            float miterDistance = halfWidth / sinHalf;
-
-            if (miterDistance <= limit)
-            {
-                // Within miter limit: full extension for all join types.
-                extensions[i] = ext;
-            }
-            else
-            {
-                // Miter limit exceeded: behavior depends on join type.
-                switch (lineJoin)
-                {
-                    case LineJoin.Miter:
-                        // Clip the miter at the limit distance.
-                        // The clipped extension is the projection of the clipped point onto the segment.
-                        extensions[i] = limit * cosHalf;
-                        break;
-
-                    case LineJoin.MiterRevert:
-                        // Bevel fallback: no extension needed.
-                        break;
-
-                    case LineJoin.MiterRound:
-                        // Round fallback: natural SDF handles it, no extension needed.
-                        break;
-                }
-            }
-        }
     }
 
     /// <summary>
@@ -1185,8 +1194,16 @@ public sealed unsafe partial class WebGPUDrawingBackend
         /// Bit flags for stroke edge metadata.
         /// Bit 0: open start — the (X0,Y0) endpoint is an open path start (cap applies).
         /// Bit 1: open end — the (X1,Y1) endpoint is an open path end (cap applies).
+        /// Bit 2: bevel fill — this edge is a bevel fill chord (AdjX,AdjY = join vertex).
         /// </summary>
         public int Flags;
+
+        /// <summary>
+        /// Auxiliary coordinates (fixed-point). For bevel fill edges, stores the
+        /// join vertex V so the shader can compute the bevel triangle SDF.
+        /// </summary>
+        public int AdjX;
+        public int AdjY;
     }
 
     /// <summary>
@@ -1212,5 +1229,83 @@ public sealed unsafe partial class WebGPUDrawingBackend
             this.BandCount = bandCount;
             this.BandOffsets = bandOffsets;
         }
+    }
+
+    /// <summary>
+    /// Describes a stroke expand command for the GPU shader.
+    /// Each command expands one coverage definition's centerline edges into outline edges.
+    /// </summary>
+    private record struct StrokeExpandCommand(
+        int DefinitionIndex,
+        uint InputStart,
+        uint InputCount,
+        float HalfWidth,
+        uint LineCap,
+        uint LineJoin,
+        float MiterLimit,
+        int OutlineMax,
+        uint OutputStart = 0,
+        uint OutputMax = 0,
+        int Band = 0);
+
+    /// <summary>
+    /// GPU-side stroke expand command matching the WGSL StrokeExpandCommand struct layout.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct GpuStrokeExpandCommand
+    {
+        public readonly uint InputStart;
+        public readonly uint InputCount;
+        public readonly uint OutputStart;
+        public readonly uint OutputMax;
+        public readonly uint HalfWidth; // f32 as bits
+        public readonly uint LineCap;
+        public readonly uint LineJoin;
+        public readonly uint MiterLimit; // f32 as bits
+
+        public GpuStrokeExpandCommand(StrokeExpandCommand cmd)
+        {
+            this.InputStart = cmd.InputStart;
+            this.InputCount = cmd.InputCount;
+            this.OutputStart = cmd.OutputStart;
+            this.OutputMax = cmd.OutputMax;
+            this.HalfWidth = FloatToUInt32Bits(cmd.HalfWidth);
+            this.LineCap = cmd.LineCap;
+            this.LineJoin = cmd.LineJoin;
+            this.MiterLimit = FloatToUInt32Bits(cmd.MiterLimit);
+        }
+    }
+
+    /// <summary>
+    /// GPU-side stroke expand config matching the WGSL StrokeExpandConfig struct layout.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct GpuStrokeExpandConfig
+    {
+        public readonly uint TotalInputEdges;
+        public readonly uint CommandCount;
+
+        public GpuStrokeExpandConfig(uint totalInputEdges, uint commandCount)
+        {
+            this.TotalInputEdges = totalInputEdges;
+            this.CommandCount = commandCount;
+        }
+    }
+
+    /// <summary>
+    /// Contains stroke expansion data needed for the GPU dispatch.
+    /// </summary>
+    private readonly struct StrokeExpandInfo
+    {
+        public readonly List<StrokeExpandCommand>? Commands;
+        public readonly int TotalCenterlineEdges;
+
+        public StrokeExpandInfo(List<StrokeExpandCommand>? commands, int totalCenterlineEdges)
+        {
+            this.Commands = commands;
+            this.TotalCenterlineEdges = totalCenterlineEdges;
+        }
+
+        public bool HasCommands => this.Commands is not null && this.Commands.Count > 0;
     }
 }

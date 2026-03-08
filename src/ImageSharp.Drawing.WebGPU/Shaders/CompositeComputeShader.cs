@@ -25,6 +25,8 @@ internal static class CompositeComputeShader
             x1: i32,
             y1: i32,
             flags: i32,
+            adj_x: i32,
+            adj_y: i32,
         }
 
         struct Params {
@@ -54,12 +56,8 @@ internal static class CompositeComputeShader
             solid_a: u32,
             rasterization_mode: u32,
             antialias_threshold: u32,
-            stroke_mode: u32,
-            stroke_half_width: u32,
-            stroke_line_cap: u32,
-            stroke_line_join: u32,
-            stroke_miter_limit: u32,
-            stroke_pad0: u32,
+            pad0: u32,
+            pad1: u32,
         };
 
         struct DispatchConfig {
@@ -815,148 +813,6 @@ internal static class CompositeComputeShader
         }
 
         // -----------------------------------------------------------------------
-        // Stroke distance-field helpers
-        // -----------------------------------------------------------------------
-
-        // Returns vec2(squared_distance, unclamped_t) from point p to line segment a→b.
-        // The returned distance uses clamped t (0..1), but the unclamped t is also returned
-        // so callers can detect endpoint proximity for cap handling.
-        fn dist_to_segment(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
-            let ab = b - a;
-            let ap = p - a;
-            let len_sq = dot(ab, ab);
-            var unclamped_t: f32;
-            if len_sq < 1e-10 {
-                unclamped_t = 0.0;
-            } else {
-                unclamped_t = dot(ap, ab) / len_sq;
-            }
-            let t = clamp(unclamped_t, 0.0, 1.0);
-            let closest = a + ab * t;
-            let d = p - closest;
-            return vec2<f32>(dot(d, d), unclamped_t);
-        }
-
-        // Edge flags (matches C# GpuEdge.Flags bit layout).
-        const EDGE_OPEN_START: i32 = 1; // (x0,y0) is an open path start
-        const EDGE_OPEN_END: i32 = 2;   // (x1,y1) is an open path end
-
-        // LineCap enum values.
-        const CAP_BUTT: u32 = 0u;
-        const CAP_SQUARE: u32 = 1u;
-        const CAP_ROUND: u32 = 2u;
-
-        // Computes stroke coverage for a pixel using distance-field evaluation.
-        // Iterates all edges in relevant bands, finds min distance to centerline,
-        // applies line cap rules using edge flags, and returns antialiased coverage.
-        //
-        // Line join handling:
-        //   Miter/MiterRevert/MiterRound joins are handled by extending centerline
-        //   segments past interior vertices on the CPU side. The distance field then
-        //   naturally produces the correct miter coverage.
-        //   Round joins are the natural distance-field behavior.
-        //   Bevel join coverage is very close to round and accepted as-is.
-        fn stroke_coverage(
-            dest_x_i32: i32,
-            dest_y_i32: i32,
-            command: Params,
-            half_width: f32,
-            line_cap: u32,
-            line_join: u32,
-            miter_limit: f32,
-            tile_min_x: i32,
-            tile_min_y: i32,
-        ) -> f32 {
-            let px = f32(dest_x_i32 - command.edge_origin_x) + 0.5;
-            let py = f32(dest_y_i32 - command.edge_origin_y) + 0.5;
-            let point = vec2<f32>(px, py);
-
-            // Determine band range for this pixel. Edges are stored per 16-row band.
-            // We must check all bands whose edges could be within half_width + 1 distance.
-            let expand = i32(ceil(half_width)) + 1;
-            let pixel_y = i32(py);
-            var first_band = max((pixel_y - expand) / 16, 0);
-            if (pixel_y - expand) < 0 && ((pixel_y - expand) % 16) != 0 {
-                first_band = max(first_band - 1, 0);
-            }
-            let last_band = min((pixel_y + expand) / 16, i32(command.csr_band_count) - 1);
-            if first_band > last_band || i32(command.csr_band_count) == 0 {
-                return 0.0;
-            }
-
-            let sentinel = half_width * half_width + half_width * 2.0 + 1.0;
-            var min_dist_sq = sentinel;
-            let inv_fixed = 1.0 / f32(FIXED_ONE);
-
-            for (var band = first_band; band <= last_band; band++) {
-                let b_start = band_offsets[command.csr_offsets_start + u32(band)];
-                let b_end = band_offsets[command.csr_offsets_start + u32(band) + 1u];
-                for (var ei = b_start; ei < b_end; ei++) {
-                    let edge = edges[command.edge_start + ei];
-                    let a = vec2<f32>(f32(edge.x0) * inv_fixed, f32(edge.y0) * inv_fixed);
-                    let b = vec2<f32>(f32(edge.x1) * inv_fixed, f32(edge.y1) * inv_fixed);
-                    let flags = edge.flags;
-                    let is_open_start = (flags & EDGE_OPEN_START) != 0;
-                    let is_open_end = (flags & EDGE_OPEN_END) != 0;
-
-                    let result = dist_to_segment(point, a, b);
-                    var d_sq = result.x;
-                    let unclamped_t = result.y;
-
-                    // Cap handling at open path endpoints.
-                    // Interior vertices (no open flags) use the natural clamped distance,
-                    // which produces smooth coverage where adjacent segments meet.
-                    if line_cap == CAP_BUTT {
-                        // Butt cap: no coverage past the open endpoint.
-                        // Exclude this edge if the pixel projects past an open end.
-                        if (unclamped_t < 0.0 && is_open_start) || (unclamped_t > 1.0 && is_open_end) {
-                            d_sq = sentinel;
-                        }
-                    } else if line_cap == CAP_SQUARE {
-                        // Square cap: extend the segment by half_width at open endpoints only.
-                        let needs_ext = (unclamped_t < 0.0 && is_open_start) || (unclamped_t > 1.0 && is_open_end);
-                        if needs_ext {
-                            let seg = b - a;
-                            let seg_len = length(seg);
-                            if seg_len > 1e-6 {
-                                let dir = seg / seg_len;
-                                var ext_a = a;
-                                var ext_b = b;
-                                if is_open_start {
-                                    ext_a = a - dir * half_width;
-                                }
-                                if is_open_end {
-                                    ext_b = b + dir * half_width;
-                                }
-                                let ext_result = dist_to_segment(point, ext_a, ext_b);
-                                d_sq = ext_result.x;
-                            }
-                        }
-                        // For non-open endpoints or when projection is on-segment,
-                        // use the natural clamped distance (d_sq unchanged).
-                    }
-                    // CAP_ROUND: natural clamped distance produces round caps. No change needed.
-
-                    min_dist_sq = min(min_dist_sq, d_sq);
-                }
-            }
-
-            let min_dist = sqrt(min_dist_sq);
-
-            // Antialiased coverage.
-            let rasterization_mode = command.rasterization_mode;
-            if rasterization_mode == 1u {
-                // Aliased mode.
-                if min_dist <= half_width {
-                    return 1.0;
-                }
-                return 0.0;
-            }
-            // Antialiased: smooth transition over 1 pixel at boundary.
-            return clamp(half_width + 0.5 - min_dist, 0.0, 1.0);
-        }
-
-        // -----------------------------------------------------------------------
         // Main entry point
         // -----------------------------------------------------------------------
 
@@ -1011,31 +867,13 @@ internal static class CompositeComputeShader
                     continue;
                 }
 
-                // Branch: stroke mode vs fill mode.
-                let is_stroke = command.stroke_mode == 1u;
-
                 var coverage_value = 0.0;
-                if is_stroke {
-                    // Stroke path: per-pixel distance-field evaluation.
-                    if in_bounds && dest_x_i32 >= cmd_min_x && dest_x_i32 < cmd_max_x && dest_y_i32 >= cmd_min_y && dest_y_i32 < cmd_max_y {
-                        let half_width = u32_to_f32(command.stroke_half_width);
-                        coverage_value = stroke_coverage(
-                            dest_x_i32, dest_y_i32, command,
-                            half_width,
-                            command.stroke_line_cap,
-                            command.stroke_line_join,
-                            u32_to_f32(command.stroke_miter_limit),
-                            tile_min_x, tile_min_y);
-                    }
-                } else {
-                // Fill path: scanline rasterizer.
 
-                // Determine this tile's position in coverage-local space.
+                // Tile position in edge-local (coverage-local) space.
                 let band_top = tile_min_y - command.edge_origin_y;
                 let band_left_fixed = (tile_min_x - command.edge_origin_x) << FIXED_SHIFT;
 
-                // Band lookup: when edge_origin_y is 16-aligned the tile maps to one band;
-                // otherwise it can overlap two bands.
+                // Multi-band lookup: tile may overlap one or two bands.
                 var first_band = band_top / 16;
                 if band_top < 0 && (band_top % 16) != 0 {
                     first_band -= 1;
@@ -1082,7 +920,9 @@ internal static class CompositeComputeShader
                             break;
                         }
                         let edge = edges[command.edge_start + b_start + ei];
-                        if min(edge.x0, edge.x1) >= tile_right_fixed {
+                        if edge.y0 == edge.y1 {
+                            // Skip degenerate edges (sentinel slots from stroke expand).
+                        } else if min(edge.x0, edge.x1) >= tile_right_fixed {
                         } else if max(edge.x0, edge.x1) < band_left_fixed {
                             accumulate_start_cover(edge.y0, edge.y1, clip_top, clip_bottom, tile_top_fixed);
                         } else {
@@ -1093,7 +933,7 @@ internal static class CompositeComputeShader
                 }
                 workgroupBarrier();
 
-                // Compute coverage for fill.
+                // Compute coverage.
                 if in_bounds {
                     if dest_x_i32 >= cmd_min_x && dest_x_i32 < cmd_max_x && dest_y_i32 >= cmd_min_y && dest_y_i32 < cmd_max_y {
                         var cover = atomicLoad(&tile_start_cover[py]);
@@ -1104,7 +944,6 @@ internal static class CompositeComputeShader
                         coverage_value = area_to_coverage(area_val, command.fill_rule_value, command.rasterization_mode, u32_to_f32(command.antialias_threshold));
                     }
                 }
-                } // end fill path
 
                 // Compose coverage result (shared by fill and stroke paths).
                 if in_bounds && coverage_value > 0.0 {

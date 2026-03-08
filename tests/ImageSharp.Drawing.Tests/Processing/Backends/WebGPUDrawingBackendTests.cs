@@ -435,13 +435,11 @@ public class WebGPUDrawingBackendTests
         AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
-        // Stroking difference are minor subpixel differences but accumulate more than typical rasterization differences,
-        // so use a higher threshold here and below.
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.0292F);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.007F);
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
-        AssertBackendTripletSimilarityInRegion(defaultImage, cpuRegionImage, nativeSurfaceImage, textRegion, 0.0376F);
+        AssertBackendTripletSimilarityInRegion(defaultImage, cpuRegionImage, nativeSurfaceImage, textRegion, 0.009F);
     }
 
     [Theory]
@@ -1073,7 +1071,120 @@ public class WebGPUDrawingBackendTests
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.05F);
+    }
+
+    public static TheoryData<LineJoin> LineJoinValues { get; } = new()
+    {
+        LineJoin.Miter,
+        LineJoin.MiterRevert,
+        LineJoin.MiterRound,
+        LineJoin.Bevel,
+        LineJoin.Round
+    };
+
+    [Theory]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Miter)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRevert)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Bevel)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Round)]
+    public void DrawPath_Stroke_LineJoin_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider, LineJoin lineJoin)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        // Sharp angles to exercise join behavior.
+        PathBuilder pb = new();
+        pb.AddLine(new PointF(30, 250), new PointF(100, 30));
+        pb.AddLine(new PointF(100, 30), new PointF(170, 250));
+        pb.AddLine(new PointF(170, 250), new PointF(240, 30));
+        pb.AddLine(new PointF(240, 30), new PointF(370, 150));
+        IPath path = pb.Build();
+
+        Pen pen = new SolidPen(new PenOptions(Color.DarkBlue, 12F)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = lineJoin }
+        });
+
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTripletNoRef(provider, $"DrawPath_Stroke_LineJoin_{lineJoin}", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Butt)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Square)]
+    [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Round)]
+    public void DrawPath_Stroke_LineCap_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider, LineCap lineCap)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        // Open path to exercise cap behavior at endpoints.
+        PathBuilder pb = new();
+        pb.AddLine(new PointF(50, 150), new PointF(200, 50));
+        pb.AddLine(new PointF(200, 50), new PointF(350, 150));
+        IPath path = pb.Build();
+
+        Pen pen = new SolidPen(new PenOptions(Color.DarkBlue, 16F)
+        {
+            StrokeOptions = new StrokeOptions { LineCap = lineCap }
+        });
+
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTripletNoRef(provider, $"DrawPath_Stroke_LineCap_{lineCap}", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
     }
 
     [Theory]

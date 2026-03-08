@@ -27,7 +27,7 @@ public class InProcessConfig : ManualConfig
         this.AddJob(
             Job.Default
                 .WithLaunchCount(3)
-                .WithWarmupCount(15)
+                .WithWarmupCount(40)
                 .WithIterationCount(40)
                 .WithToolchain(InProcessEmitToolchain.Instance));
     }
