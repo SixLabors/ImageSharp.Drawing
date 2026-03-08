@@ -155,9 +155,7 @@ public static unsafe class Program
 
         Console.WriteLine($"Device: 0x{(nuint)device:X}, Queue: 0x{(nuint)queue:X}");
 
-        // Query surface capabilities and configure the swap chain.
-        wgpu.SurfaceGetCapabilities(surface, adapter, ref surfaceCapabilities);
-        Console.WriteLine($"Surface format: {surfaceCapabilities.Formats[0]}");
+        // Configure the swap chain.
         ConfigureSwapchain();
 
         // Initialize the ImageSharp.Drawing WebGPU backend and attach it to a

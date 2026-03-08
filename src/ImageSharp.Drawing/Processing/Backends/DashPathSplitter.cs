@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Splits a path into dash segments without performing stroke expansion.
 /// Each "on" dash segment is returned as an open sub-path.
 /// </summary>
-internal static class DashPathSplitter
+public static class DashPathSplitter
 {
     /// <summary>
     /// Splits the given path into dash segments based on the provided pattern.

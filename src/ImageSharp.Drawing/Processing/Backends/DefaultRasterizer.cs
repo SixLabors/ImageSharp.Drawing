@@ -113,6 +113,53 @@ internal static class DefaultRasterizer
     }
 
     /// <summary>
+    /// Rasterizes a stroke path by expanding centerline edges into outline edges per-band in parallel.
+    /// </summary>
+    /// <param name="path">Centerline path to stroke.</param>
+    /// <param name="options">Rasterization options (interest rect should already include stroke expansion).</param>
+    /// <param name="allocator">Temporary buffer allocator.</param>
+    /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
+    /// <param name="strokeWidth">Stroke width in pixels.</param>
+    /// <param name="lineJoin">Outer join style.</param>
+    /// <param name="lineCap">Cap style for open contour endpoints.</param>
+    /// <param name="miterLimit">Miter limit for miter-family joins.</param>
+    public static void RasterizeStrokeRows(
+        IPath path,
+        in RasterizerOptions options,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        float strokeWidth,
+        LineJoin lineJoin,
+        LineCap lineCap,
+        float miterLimit)
+    {
+        WorkerScratch? scratch = null;
+        try
+        {
+            RasterizeStrokeCoreRows(path, options, allocator, rowHandler, allowParallel: true, ref scratch, strokeWidth, lineJoin, lineCap, miterLimit);
+        }
+        finally
+        {
+            scratch?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Rasterizes a stroke path with caller-managed scratch reuse.
+    /// </summary>
+    internal static void RasterizeStrokeRows(
+        IPath path,
+        in RasterizerOptions options,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch,
+        float strokeWidth,
+        LineJoin lineJoin,
+        LineCap lineCap,
+        float miterLimit)
+        => RasterizeStrokeCoreRows(path, options, allocator, rowHandler, allowParallel: true, ref reusableScratch, strokeWidth, lineJoin, lineCap, miterLimit);
+
+    /// <summary>
     /// Shared entry point for trimmed-row rasterization.
     /// </summary>
     /// <param name="path">Path to rasterize.</param>
@@ -204,6 +251,128 @@ internal static class DefaultRasterizer
             allocator,
             rowHandler,
             ref reusableScratch);
+    }
+
+    /// <summary>
+    /// Shared entry point for stroke-aware trimmed-row rasterization.
+    /// Expands centerline edges into outline edges per-band and rasterizes directly.
+    /// </summary>
+    private static void RasterizeStrokeCoreRows(
+        IPath path,
+        in RasterizerOptions options,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        bool allowParallel,
+        ref WorkerScratch? reusableScratch,
+        float strokeWidth,
+        LineJoin lineJoin,
+        LineCap lineCap,
+        float miterLimit)
+    {
+        Rectangle interest = options.Interest;
+        int width = interest.Width;
+        int height = interest.Height;
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        int wordsPerRow = BitVectorsForMaxBitCount(width);
+        int maxBandRows = 0;
+        long coverStride = (long)width * 2;
+        if (coverStride > int.MaxValue || !TryGetBandHeight(width, height, wordsPerRow, coverStride, out maxBandRows))
+        {
+            ThrowInterestBoundsTooLarge();
+        }
+
+        int coverStrideInt = (int)coverStride;
+        bool samplePixelCenter = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter;
+        float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
+        float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
+
+        // Flatten path and collect contour info, preserving open/closed state for cap/join generation.
+        List<ISimplePath> contours = [];
+        int totalVertexCount = 0;
+        foreach (ISimplePath sp in path.Flatten())
+        {
+            if (sp.Points.Length < 2)
+            {
+                continue;
+            }
+
+            contours.Add(sp);
+            totalVertexCount += sp.Points.Length;
+        }
+
+        if (totalVertexCount == 0)
+        {
+            return;
+        }
+
+        // Max stroke descriptors: closed contours emit 2*N (sides + joins),
+        // open contours emit 2*N-1 (sides + interior joins + 2 caps).
+        int maxEdgeCount = totalVertexCount * 2;
+        using IMemoryOwner<StrokeEdgeData> edgeDataOwner = allocator.Allocate<StrokeEdgeData>(maxEdgeCount);
+        int edgeCount = BuildStrokeEdgeTable(
+            contours,
+            interest.Left,
+            interest.Top,
+            samplingOffsetX,
+            samplingOffsetY,
+            edgeDataOwner.Memory.Span);
+
+        if (edgeCount <= 0)
+        {
+            return;
+        }
+
+        float halfWidth = strokeWidth / 2f;
+        float expansion = halfWidth * MathF.Max(miterLimit, 1f);
+
+        if (allowParallel &&
+            TryRasterizeStrokeParallel(
+                edgeDataOwner.Memory,
+                edgeCount,
+                width,
+                height,
+                interest.Top,
+                wordsPerRow,
+                coverStrideInt,
+                maxBandRows,
+                options.IntersectionRule,
+                options.RasterizationMode,
+                options.AntialiasThreshold,
+                allocator,
+                rowHandler,
+                ref reusableScratch,
+                halfWidth,
+                expansion,
+                lineJoin,
+                lineCap,
+                miterLimit))
+        {
+            return;
+        }
+
+        RasterizeStrokeSequentialBands(
+            edgeDataOwner.Memory.Span[..edgeCount],
+            width,
+            height,
+            interest.Top,
+            wordsPerRow,
+            coverStrideInt,
+            maxBandRows,
+            options.IntersectionRule,
+            options.RasterizationMode,
+            options.AntialiasThreshold,
+            allocator,
+            rowHandler,
+            ref reusableScratch,
+            halfWidth,
+            expansion,
+            lineJoin,
+            lineCap,
+            miterLimit);
     }
 
     /// <summary>
@@ -484,6 +653,237 @@ internal static class DefaultRasterizer
     }
 
     /// <summary>
+    /// Sequential stroke rasterization using band buckets over the prebuilt stroke edge table.
+    /// </summary>
+    private static void RasterizeStrokeSequentialBands(
+        ReadOnlySpan<StrokeEdgeData> edges,
+        int width,
+        int height,
+        int interestTop,
+        int wordsPerRow,
+        int coverStrideInt,
+        int maxBandRows,
+        IntersectionRule intersectionRule,
+        RasterizationMode rasterizationMode,
+        float antialiasThreshold,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch,
+        float halfWidth,
+        float expansion,
+        LineJoin lineJoin,
+        LineCap lineCap,
+        float miterLimit)
+    {
+        int bandHeight = maxBandRows;
+        int bandCount = (height + bandHeight - 1) / bandHeight;
+        if (bandCount < 1)
+        {
+            return;
+        }
+
+        if (!TryBuildBandSortedStrokeEdges(
+            edges,
+            bandCount,
+            bandHeight,
+            expansion,
+            allocator,
+            out IMemoryOwner<StrokeEdgeData> sortedEdgesOwner,
+            out IMemoryOwner<int> bandOffsetsOwner))
+        {
+            ThrowInterestBoundsTooLarge();
+        }
+
+        using (sortedEdgesOwner)
+        using (bandOffsetsOwner)
+        {
+            Span<StrokeEdgeData> sortedEdges = sortedEdgesOwner.Memory.Span;
+            Span<int> bandOffsets = bandOffsetsOwner.Memory.Span;
+
+            if (reusableScratch == null || !reusableScratch.CanReuse(wordsPerRow, coverStrideInt, width, bandHeight))
+            {
+                reusableScratch?.Dispose();
+                reusableScratch = WorkerScratch.Create(allocator, wordsPerRow, coverStrideInt, width, bandHeight);
+            }
+
+            WorkerScratch scratch = reusableScratch;
+            for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
+            {
+                int bandTop = bandIndex * bandHeight;
+                int currentBandHeight = Math.Min(bandHeight, height - bandTop);
+                int start = bandOffsets[bandIndex];
+                int length = bandOffsets[bandIndex + 1] - start;
+                if (length == 0)
+                {
+                    continue;
+                }
+
+                Context context = scratch.CreateContext(currentBandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
+                context.RasterizeStrokeEdges(sortedEdges.Slice(start, length), bandTop, halfWidth, lineJoin, lineCap, miterLimit);
+                context.EmitCoverageRows(interestTop + bandTop, scratch.Scanline, rowHandler);
+                context.ResetTouchedRows();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Attempts to execute the tiled parallel stroke scanner.
+    /// </summary>
+    private static bool TryRasterizeStrokeParallel(
+        Memory<StrokeEdgeData> edgeMemory,
+        int edgeCount,
+        int width,
+        int height,
+        int interestTop,
+        int wordsPerRow,
+        int coverStride,
+        int maxBandRows,
+        IntersectionRule intersectionRule,
+        RasterizationMode rasterizationMode,
+        float antialiasThreshold,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch,
+        float halfWidth,
+        float expansion,
+        LineJoin lineJoin,
+        LineCap lineCap,
+        float miterLimit)
+    {
+        int tileHeight = Math.Min(DefaultTileHeight, maxBandRows);
+        if (tileHeight < 1)
+        {
+            return false;
+        }
+
+        int tileCount = (height + tileHeight - 1) / tileHeight;
+        if (tileCount == 1 || edgeCount <= 64)
+        {
+            RasterizeStrokeSingleTileDirect(
+                edgeMemory.Span[..edgeCount],
+                width,
+                height,
+                interestTop,
+                wordsPerRow,
+                coverStride,
+                intersectionRule,
+                rasterizationMode,
+                antialiasThreshold,
+                allocator,
+                rowHandler,
+                ref reusableScratch,
+                halfWidth,
+                lineJoin,
+                lineCap,
+                miterLimit);
+
+            return true;
+        }
+
+        if (Environment.ProcessorCount < 2)
+        {
+            return false;
+        }
+
+        if (!TryBuildBandSortedStrokeEdges(
+            edgeMemory.Span[..edgeCount],
+            tileCount,
+            tileHeight,
+            expansion,
+            allocator,
+            out IMemoryOwner<StrokeEdgeData> sortedEdgesOwner,
+            out IMemoryOwner<int> tileOffsetsOwner))
+        {
+            return false;
+        }
+
+        using (sortedEdgesOwner)
+        using (tileOffsetsOwner)
+        {
+            Memory<StrokeEdgeData> sortedEdgesMemory = sortedEdgesOwner.Memory;
+            Memory<int> tileOffsetsMemory = tileOffsetsOwner.Memory;
+
+            ParallelOptions parallelOptions = new()
+            {
+                MaxDegreeOfParallelism = Math.Min(MaxParallelWorkerCount, Math.Min(Environment.ProcessorCount, tileCount))
+            };
+
+            _ = Parallel.For(
+                0,
+                tileCount,
+                parallelOptions,
+                () => WorkerScratch.Create(allocator, wordsPerRow, coverStride, width, tileHeight),
+                (tileIndex, _, worker) =>
+                {
+                    Context context = default;
+                    bool hasCoverage = false;
+                    int bandTop = tileIndex * tileHeight;
+                    try
+                    {
+                        Span<int> tileOffsets = tileOffsetsMemory.Span;
+                        int bandHeight = Math.Min(tileHeight, height - bandTop);
+                        int start = tileOffsets[tileIndex];
+                        int length = tileOffsets[tileIndex + 1] - start;
+                        if (length > 0)
+                        {
+                            ReadOnlySpan<StrokeEdgeData> tileEdges = sortedEdgesMemory.Span.Slice(start, length);
+                            context = worker.CreateContext(bandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
+                            context.RasterizeStrokeEdges(tileEdges, bandTop, halfWidth, lineJoin, lineCap, miterLimit);
+                            hasCoverage = true;
+                            context.EmitCoverageRows(interestTop + bandTop, worker.Scanline, rowHandler);
+                        }
+                    }
+                    finally
+                    {
+                        if (hasCoverage)
+                        {
+                            context.ResetTouchedRows();
+                        }
+                    }
+
+                    return worker;
+                },
+                static worker => worker.Dispose());
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Rasterizes stroke edges in a single tile directly into the caller callback.
+    /// </summary>
+    private static void RasterizeStrokeSingleTileDirect(
+        ReadOnlySpan<StrokeEdgeData> edges,
+        int width,
+        int height,
+        int interestTop,
+        int wordsPerRow,
+        int coverStride,
+        IntersectionRule intersectionRule,
+        RasterizationMode rasterizationMode,
+        float antialiasThreshold,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch,
+        float halfWidth,
+        LineJoin lineJoin,
+        LineCap lineCap,
+        float miterLimit)
+    {
+        if (reusableScratch == null || !reusableScratch.CanReuse(wordsPerRow, coverStride, width, height))
+        {
+            reusableScratch?.Dispose();
+            reusableScratch = WorkerScratch.Create(allocator, wordsPerRow, coverStride, width, height);
+        }
+
+        WorkerScratch scratch = reusableScratch;
+        Context context = scratch.CreateContext(height, intersectionRule, rasterizationMode, antialiasThreshold);
+        context.RasterizeStrokeEdges(edges, bandTop: 0, halfWidth, lineJoin, lineCap, miterLimit);
+        context.EmitCoverageRows(interestTop, scratch.Scanline, rowHandler);
+        context.ResetTouchedRows();
+    }
+
+    /// <summary>
     /// Builds a band-sorted edge buffer where edges are duplicated into each band they touch.
     /// Band offsets provide direct indexing — no per-band edge index array is needed.
     /// </summary>
@@ -550,6 +950,215 @@ internal static class DefaultRasterizer
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Builds a band-sorted stroke edge buffer where descriptors are duplicated into each band
+    /// their stroke expansion could touch.
+    /// </summary>
+    private static bool TryBuildBandSortedStrokeEdges(
+        ReadOnlySpan<StrokeEdgeData> edges,
+        int bucketCount,
+        int bucketHeight,
+        float expansion,
+        MemoryAllocator allocator,
+        out IMemoryOwner<StrokeEdgeData> sortedEdgesOwner,
+        out IMemoryOwner<int> offsetsOwner)
+    {
+        using IMemoryOwner<int> countsOwner = allocator.Allocate<int>(bucketCount, AllocationOptions.Clean);
+        Span<int> counts = countsOwner.Memory.Span;
+        long totalRefs = 0;
+        for (int i = 0; i < edges.Length; i++)
+        {
+            ref readonly StrokeEdgeData edge = ref edges[i];
+
+            // Side edges: outline extends halfWidth from both endpoints.
+            // Join/cap edges: geometry is centered on vertex (X0,Y0), extends by expansion.
+            float minY, maxY;
+            if (edge.Flags == StrokeEdgeFlags.None)
+            {
+                minY = MathF.Min(edge.Y0, edge.Y1) - expansion;
+                maxY = MathF.Max(edge.Y0, edge.Y1) + expansion;
+            }
+            else
+            {
+                minY = edge.Y0 - expansion;
+                maxY = edge.Y0 + expansion;
+            }
+
+            int startBucket = Math.Max(0, (int)MathF.Floor(minY / bucketHeight));
+            int endBucket = Math.Min(bucketCount - 1, (int)MathF.Floor(maxY / bucketHeight));
+            if (startBucket > endBucket)
+            {
+                continue;
+            }
+
+            totalRefs += (endBucket - startBucket) + 1;
+            if (totalRefs > int.MaxValue)
+            {
+                sortedEdgesOwner = null!;
+                offsetsOwner = null!;
+                return false;
+            }
+
+            for (int b = startBucket; b <= endBucket; b++)
+            {
+                counts[b]++;
+            }
+        }
+
+        int totalEdges = (int)totalRefs;
+        offsetsOwner = allocator.Allocate<int>(bucketCount + 1);
+        Span<int> offsets = offsetsOwner.Memory.Span;
+        int offset = 0;
+        for (int b = 0; b < bucketCount; b++)
+        {
+            offsets[b] = offset;
+            offset += counts[b];
+        }
+
+        offsets[bucketCount] = offset;
+        using IMemoryOwner<int> writeCursorOwner = allocator.Allocate<int>(bucketCount);
+        Span<int> writeCursor = writeCursorOwner.Memory.Span;
+        offsets[..bucketCount].CopyTo(writeCursor);
+
+        sortedEdgesOwner = allocator.Allocate<StrokeEdgeData>(Math.Max(totalEdges, 1));
+        Span<StrokeEdgeData> sorted = sortedEdgesOwner.Memory.Span;
+        for (int i = 0; i < edges.Length; i++)
+        {
+            ref readonly StrokeEdgeData edge = ref edges[i];
+            float minY, maxY;
+            if (edge.Flags == StrokeEdgeFlags.None)
+            {
+                minY = MathF.Min(edge.Y0, edge.Y1) - expansion;
+                maxY = MathF.Max(edge.Y0, edge.Y1) + expansion;
+            }
+            else
+            {
+                minY = edge.Y0 - expansion;
+                maxY = edge.Y0 + expansion;
+            }
+
+            int startBucket = Math.Max(0, (int)MathF.Floor(minY / bucketHeight));
+            int endBucket = Math.Min(bucketCount - 1, (int)MathF.Floor(maxY / bucketHeight));
+            for (int b = startBucket; b <= endBucket; b++)
+            {
+                sorted[writeCursor[b]++] = edge;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Builds a stroke edge table from flattened path contours.
+    /// Each contour produces side edge descriptors for segments, join descriptors at interior
+    /// vertices, and cap descriptors at endpoints of open contours.
+    /// </summary>
+    /// <param name="contours">Flattened path contours with open/closed state.</param>
+    /// <param name="minX">Interest left in absolute coordinates.</param>
+    /// <param name="minY">Interest top in absolute coordinates.</param>
+    /// <param name="samplingOffsetX">Horizontal sampling offset.</param>
+    /// <param name="samplingOffsetY">Vertical sampling offset.</param>
+    /// <param name="destination">Destination span for stroke edge descriptors.</param>
+    /// <returns>Number of valid descriptors written.</returns>
+    private static int BuildStrokeEdgeTable(
+        List<ISimplePath> contours,
+        float minX,
+        float minY,
+        float samplingOffsetX,
+        float samplingOffsetY,
+        Span<StrokeEdgeData> destination)
+    {
+        int count = 0;
+        for (int c = 0; c < contours.Count; c++)
+        {
+            ISimplePath sp = contours[c];
+            ReadOnlySpan<PointF> pts = sp.Points.Span;
+            int n = pts.Length;
+            if (n < 2)
+            {
+                continue;
+            }
+
+            bool isClosed = sp.IsClosed;
+            float offX = samplingOffsetX - minX;
+            float offY = samplingOffsetY - minY;
+
+            if (isClosed)
+            {
+                // Side edges for all segments, including closing segment back to first vertex.
+                for (int i = 0; i < n; i++)
+                {
+                    int j = (i + 1) % n;
+                    destination[count++] = new StrokeEdgeData(
+                        pts[i].X + offX,
+                        pts[i].Y + offY,
+                        pts[j].X + offX,
+                        pts[j].Y + offY,
+                        0);
+                }
+
+                // Join at each vertex.
+                for (int i = 0; i < n; i++)
+                {
+                    int prev = (i - 1 + n) % n;
+                    int next = (i + 1) % n;
+                    destination[count++] = new StrokeEdgeData(
+                        pts[i].X + offX,
+                        pts[i].Y + offY,
+                        pts[prev].X + offX,
+                        pts[prev].Y + offY,
+                        StrokeEdgeFlags.Join,
+                        pts[next].X + offX,
+                        pts[next].Y + offY);
+                }
+            }
+            else
+            {
+                // Side edges for all segments.
+                for (int i = 0; i < n - 1; i++)
+                {
+                    destination[count++] = new StrokeEdgeData(
+                        pts[i].X + offX,
+                        pts[i].Y + offY,
+                        pts[i + 1].X + offX,
+                        pts[i + 1].Y + offY,
+                        0);
+                }
+
+                // Interior joins.
+                for (int i = 1; i < n - 1; i++)
+                {
+                    destination[count++] = new StrokeEdgeData(
+                        pts[i].X + offX,
+                        pts[i].Y + offY,
+                        pts[i - 1].X + offX,
+                        pts[i - 1].Y + offY,
+                        StrokeEdgeFlags.Join,
+                        pts[i + 1].X + offX,
+                        pts[i + 1].Y + offY);
+                }
+
+                // Start cap.
+                destination[count++] = new StrokeEdgeData(
+                    pts[0].X + offX,
+                    pts[0].Y + offY,
+                    pts[1].X + offX,
+                    pts[1].Y + offY,
+                    StrokeEdgeFlags.CapStart);
+
+                // End cap.
+                destination[count++] = new StrokeEdgeData(
+                    pts[n - 1].X + offX,
+                    pts[n - 1].Y + offY,
+                    pts[n - 2].X + offX,
+                    pts[n - 2].Y + offY,
+                    StrokeEdgeFlags.CapEnd);
+            }
+        }
+
+        return count;
     }
 
     /// <summary>
@@ -1010,6 +1619,447 @@ internal static class DefaultRasterizer
                 y1 -= bandTopFixed;
 
                 this.RasterizeLine(x0, y0, x1, y1);
+            }
+        }
+
+        /// <summary>
+        /// Expands stroke centerline edge descriptors into outline polygon edges and rasterizes them.
+        /// </summary>
+        /// <param name="edges">Band-sorted stroke edge descriptors.</param>
+        /// <param name="bandTop">Top row of this context in global scanner-local coordinates.</param>
+        /// <param name="halfWidth">Half the stroke width in pixels.</param>
+        /// <param name="lineJoin">Outer join style.</param>
+        /// <param name="lineCap">Cap style for open contour endpoints.</param>
+        /// <param name="miterLimit">Miter limit for miter-family joins.</param>
+        public void RasterizeStrokeEdges(
+            ReadOnlySpan<StrokeEdgeData> edges,
+            int bandTop,
+            float halfWidth,
+            LineJoin lineJoin,
+            LineCap lineCap,
+            float miterLimit)
+        {
+            int bandTopFixed = bandTop * FixedOne;
+            int bandBottomFixed = bandTopFixed + (this.height * FixedOne);
+
+            for (int i = 0; i < edges.Length; i++)
+            {
+                ref readonly StrokeEdgeData edge = ref edges[i];
+                StrokeEdgeFlags flags = edge.Flags;
+
+                if (flags == StrokeEdgeFlags.None)
+                {
+                    this.ExpandSideEdge(in edge, halfWidth, bandTopFixed, bandBottomFixed);
+                }
+                else if ((flags & StrokeEdgeFlags.Join) != 0)
+                {
+                    this.ExpandJoinEdge(in edge, halfWidth, lineJoin, miterLimit, bandTopFixed, bandBottomFixed);
+                }
+                else if ((flags & StrokeEdgeFlags.CapStart) != 0)
+                {
+                    this.ExpandCapEdge(in edge, halfWidth, lineCap, isStart: true, bandTopFixed, bandBottomFixed);
+                }
+                else
+                {
+                    this.ExpandCapEdge(in edge, halfWidth, lineCap, isStart: false, bandTopFixed, bandBottomFixed);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Emits one outline edge into the rasterizer, converting from float to fixed-point
+        /// and clipping to band bounds.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void EmitOutlineEdge(
+            float ex0,
+            float ey0,
+            float ex1,
+            float ey1,
+            int bandTopFixed,
+            int bandBottomFixed)
+        {
+            int fy0 = FloatToFixed24Dot8(ey0);
+            int fy1 = FloatToFixed24Dot8(ey1);
+            if (fy0 == fy1)
+            {
+                return;
+            }
+
+            int fx0 = FloatToFixed24Dot8(ex0);
+            int fx1 = FloatToFixed24Dot8(ex1);
+
+            int minY = Math.Min(fy0, fy1);
+            int maxY = Math.Max(fy0, fy1);
+            if (minY >= bandBottomFixed || maxY <= bandTopFixed)
+            {
+                return;
+            }
+
+            if (minY >= bandTopFixed && maxY <= bandBottomFixed)
+            {
+                this.RasterizeLine(fx0, fy0 - bandTopFixed, fx1, fy1 - bandTopFixed);
+                return;
+            }
+
+            int x0 = fx0, y0 = fy0, x1 = fx1, y1 = fy1;
+            if (ClipToVerticalBoundsFixed(ref x0, ref y0, ref x1, ref y1, bandTopFixed, bandBottomFixed))
+            {
+                this.RasterizeLine(x0, y0 - bandTopFixed, x1, y1 - bandTopFixed);
+            }
+        }
+
+        /// <summary>
+        /// Expands a side (segment) edge into two outline edges offset by the stroke normal.
+        /// </summary>
+        private void ExpandSideEdge(
+            in StrokeEdgeData edge,
+            float halfWidth,
+            int bandTopFixed,
+            int bandBottomFixed)
+        {
+            float dx = edge.X1 - edge.X0;
+            float dy = edge.Y1 - edge.Y0;
+            float len = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (len < 1e-6f)
+            {
+                return;
+            }
+
+            float nx = (-dy / len) * halfWidth;
+            float ny = (dx / len) * halfWidth;
+
+            // Left side.
+            this.EmitOutlineEdge(
+                edge.X0 + nx,
+                edge.Y0 + ny,
+                edge.X1 + nx,
+                edge.Y1 + ny,
+                bandTopFixed,
+                bandBottomFixed);
+
+            // Right side (reversed winding).
+            this.EmitOutlineEdge(
+                edge.X1 - nx,
+                edge.Y1 - ny,
+                edge.X0 - nx,
+                edge.Y0 - ny,
+                bandTopFixed,
+                bandBottomFixed);
+        }
+
+        /// <summary>
+        /// Expands a join descriptor into inner bevel + outer join edges.
+        /// Ported from the GPU StrokeExpandComputeShader join logic.
+        /// </summary>
+        private void ExpandJoinEdge(
+            in StrokeEdgeData edge,
+            float halfWidth,
+            LineJoin lineJoin,
+            float miterLimit,
+            int bandTopFixed,
+            int bandBottomFixed)
+        {
+            float vx = edge.X0, vy = edge.Y0;
+            float dx1 = vx - edge.X1, dy1 = vy - edge.Y1;
+            float len1 = MathF.Sqrt((dx1 * dx1) + (dy1 * dy1));
+            if (len1 < 1e-6f)
+            {
+                return;
+            }
+
+            float dx2 = edge.AdjX - vx, dy2 = edge.AdjY - vy;
+            float len2 = MathF.Sqrt((dx2 * dx2) + (dy2 * dy2));
+            if (len2 < 1e-6f)
+            {
+                return;
+            }
+
+            float nx1 = -dy1 / len1, ny1 = dx1 / len1;
+            float nx2 = -dy2 / len2, ny2 = dx2 / len2;
+            float cross = (dx1 * dy2) - (dy1 * dx2);
+
+            float oax, oay, obx, oby, iax, iay, ibx, iby;
+            if (cross > 0)
+            {
+                oax = vx - (nx1 * halfWidth);
+                oay = vy - (ny1 * halfWidth);
+                obx = vx - (nx2 * halfWidth);
+                oby = vy - (ny2 * halfWidth);
+                iax = vx + (nx1 * halfWidth);
+                iay = vy + (ny1 * halfWidth);
+                ibx = vx + (nx2 * halfWidth);
+                iby = vy + (ny2 * halfWidth);
+            }
+            else
+            {
+                oax = vx + (nx1 * halfWidth);
+                oay = vy + (ny1 * halfWidth);
+                obx = vx + (nx2 * halfWidth);
+                oby = vy + (ny2 * halfWidth);
+                iax = vx - (nx1 * halfWidth);
+                iay = vy - (ny1 * halfWidth);
+                ibx = vx - (nx2 * halfWidth);
+                iby = vy - (ny2 * halfWidth);
+            }
+
+            float ofx, ofy, otx, oty, ifx, ify, itx, ity;
+            if (cross > 0)
+            {
+                ofx = obx;
+                ofy = oby;
+                otx = oax;
+                oty = oay;
+                ifx = iax;
+                ify = iay;
+                itx = ibx;
+                ity = iby;
+            }
+            else
+            {
+                ofx = oax;
+                ofy = oay;
+                otx = obx;
+                oty = oby;
+                ifx = ibx;
+                ify = iby;
+                itx = iax;
+                ity = iay;
+            }
+
+            // Inner join: always bevel.
+            this.EmitOutlineEdge(ifx, ify, itx, ity, bandTopFixed, bandBottomFixed);
+
+            // Outer join.
+            bool miterHandled = false;
+            if (lineJoin is LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound)
+            {
+                float ux1 = dx1 / len1;
+                float uy1 = dy1 / len1;
+                float ux2 = dx2 / len2;
+                float uy2 = dy2 / len2;
+                float denom = (ux1 * uy2) - (uy1 * ux2);
+                if (MathF.Abs(denom) > 1e-4f)
+                {
+                    float dpx = obx - oax;
+                    float dpy = oby - oay;
+                    float t = ((dpx * uy2) - (dpy * ux2)) / denom;
+                    float mx = oax + (t * ux1);
+                    float my = oay + (t * uy1);
+                    float mdx = mx - vx;
+                    float mdy = my - vy;
+                    float miterDist = MathF.Sqrt((mdx * mdx) + (mdy * mdy));
+                    float limit = halfWidth * miterLimit;
+                    if (miterDist <= limit)
+                    {
+                        this.EmitOutlineEdge(ofx, ofy, mx, my, bandTopFixed, bandBottomFixed);
+                        this.EmitOutlineEdge(mx, my, otx, oty, bandTopFixed, bandBottomFixed);
+                        miterHandled = true;
+                    }
+                    else if (lineJoin == LineJoin.Miter)
+                    {
+                        // Clipped miter: blend between bevel and full miter at the limit distance.
+                        float bdx = ((oax + obx) * 0.5f) - vx;
+                        float bdy = ((oay + oby) * 0.5f) - vy;
+                        float bdist = MathF.Sqrt((bdx * bdx) + (bdy * bdy));
+                        float blend = Math.Clamp((limit - bdist) / (miterDist - bdist), 0f, 1f);
+                        float cx1 = ofx + ((mx - ofx) * blend);
+                        float cy1 = ofy + ((my - ofy) * blend);
+                        float cx2 = otx + ((mx - otx) * blend);
+                        float cy2 = oty + ((my - oty) * blend);
+                        this.EmitOutlineEdge(ofx, ofy, cx1, cy1, bandTopFixed, bandBottomFixed);
+                        this.EmitOutlineEdge(cx1, cy1, cx2, cy2, bandTopFixed, bandBottomFixed);
+                        this.EmitOutlineEdge(cx2, cy2, otx, oty, bandTopFixed, bandBottomFixed);
+                        miterHandled = true;
+                    }
+                }
+            }
+
+            if (!miterHandled)
+            {
+                if (lineJoin is LineJoin.Round or LineJoin.MiterRound)
+                {
+                    float sa = MathF.Atan2(ofy - vy, ofx - vx);
+                    float ea = MathF.Atan2(oty - vy, otx - vx);
+                    float sweep = ea - sa;
+                    if (sweep > MathF.PI)
+                    {
+                        sweep -= MathF.PI * 2f;
+                    }
+
+                    if (sweep < -MathF.PI)
+                    {
+                        sweep += MathF.PI * 2f;
+                    }
+
+                    int steps = Math.Max(4, (int)MathF.Ceiling(MathF.Abs(sweep) * halfWidth * 0.5f));
+                    float da = sweep / steps;
+                    float pax = ofx;
+                    float pay = ofy;
+                    for (int s = 1; s <= steps; s++)
+                    {
+                        float cax, cay;
+                        if (s == steps)
+                        {
+                            cax = otx;
+                            cay = oty;
+                        }
+                        else
+                        {
+                            float a = sa + (da * s);
+                            cax = vx + (MathF.Cos(a) * halfWidth);
+                            cay = vy + (MathF.Sin(a) * halfWidth);
+                        }
+
+                        this.EmitOutlineEdge(pax, pay, cax, cay, bandTopFixed, bandBottomFixed);
+                        pax = cax;
+                        pay = cay;
+                    }
+                }
+                else
+                {
+                    // Bevel.
+                    this.EmitOutlineEdge(ofx, ofy, otx, oty, bandTopFixed, bandBottomFixed);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Expands a cap descriptor into cap geometry edges (butt, square, or round).
+        /// Ported from the GPU StrokeExpandComputeShader cap logic.
+        /// </summary>
+        private void ExpandCapEdge(
+            in StrokeEdgeData edge,
+            float halfWidth,
+            LineCap lineCap,
+            bool isStart,
+            int bandTopFixed,
+            int bandBottomFixed)
+        {
+            float cx = edge.X0;
+            float cy = edge.Y0;
+            float ax = edge.X1;
+            float ay = edge.Y1;
+            float dx, dy;
+            if (isStart)
+            {
+                dx = ax - cx;
+                dy = ay - cy;
+            }
+            else
+            {
+                dx = cx - ax;
+                dy = cy - ay;
+            }
+
+            float len = MathF.Sqrt((dx * dx) + (dy * dy));
+            if (len < 1e-6f)
+            {
+                return;
+            }
+
+            float dirX = dx / len;
+            float dirY = dy / len;
+            float nx = -dirY * halfWidth;
+            float ny = dirX * halfWidth;
+            float lx = cx + nx;
+            float ly = cy + ny;
+            float rx = cx - nx;
+            float ry = cy - ny;
+
+            if (lineCap == LineCap.Butt)
+            {
+                if (isStart)
+                {
+                    this.EmitOutlineEdge(rx, ry, lx, ly, bandTopFixed, bandBottomFixed);
+                }
+                else
+                {
+                    this.EmitOutlineEdge(lx, ly, rx, ry, bandTopFixed, bandBottomFixed);
+                }
+            }
+            else if (lineCap == LineCap.Square)
+            {
+                float ox, oy;
+                if (isStart)
+                {
+                    ox = -dirX * halfWidth;
+                    oy = -dirY * halfWidth;
+                }
+                else
+                {
+                    ox = dirX * halfWidth;
+                    oy = dirY * halfWidth;
+                }
+
+                float lxe = lx + ox;
+                float lye = ly + oy;
+                float rxe = rx + ox;
+                float rye = ry + oy;
+
+                if (isStart)
+                {
+                    this.EmitOutlineEdge(rx, ry, rxe, rye, bandTopFixed, bandBottomFixed);
+                    this.EmitOutlineEdge(rxe, rye, lxe, lye, bandTopFixed, bandBottomFixed);
+                    this.EmitOutlineEdge(lxe, lye, lx, ly, bandTopFixed, bandBottomFixed);
+                }
+                else
+                {
+                    this.EmitOutlineEdge(lx, ly, lxe, lye, bandTopFixed, bandBottomFixed);
+                    this.EmitOutlineEdge(lxe, lye, rxe, rye, bandTopFixed, bandBottomFixed);
+                    this.EmitOutlineEdge(rxe, rye, rx, ry, bandTopFixed, bandBottomFixed);
+                }
+            }
+            else
+            {
+                // Round cap.
+                float sa, sx, sy, ex, ey;
+                if (isStart)
+                {
+                    sa = MathF.Atan2(ry - cy, rx - cx);
+                    sx = rx;
+                    sy = ry;
+                    ex = lx;
+                    ey = ly;
+                }
+                else
+                {
+                    sa = MathF.Atan2(ly - cy, lx - cx);
+                    sx = lx;
+                    sy = ly;
+                    ex = rx;
+                    ey = ry;
+                }
+
+                float sweep = MathF.Atan2(ey - cy, ex - cx) - sa;
+                if (sweep > 0f)
+                {
+                    sweep -= MathF.PI * 2f;
+                }
+
+                int steps = Math.Max(4, (int)MathF.Ceiling(MathF.Abs(sweep) * halfWidth * 0.5f));
+                float da = sweep / steps;
+                float pax = sx;
+                float pay = sy;
+                for (int s = 1; s <= steps; s++)
+                {
+                    float cax, cay;
+                    if (s == steps)
+                    {
+                        cax = ex;
+                        cay = ey;
+                    }
+                    else
+                    {
+                        float a = sa + (da * s);
+                        cax = cx + (MathF.Cos(a) * halfWidth);
+                        cay = cy + (MathF.Sin(a) * halfWidth);
+                    }
+
+                    this.EmitOutlineEdge(pax, pay, cax, cay, bandTopFixed, bandBottomFixed);
+                    pax = cax;
+                    pay = cay;
+                }
             }
         }
 
@@ -2072,6 +3122,47 @@ internal static class DefaultRasterizer
             this.Y0 = y0;
             this.X1 = x1;
             this.Y1 = y1;
+        }
+    }
+
+    /// <summary>
+    /// Stroke centerline edge descriptor used for per-band parallel stroke expansion.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each descriptor represents one centerline edge with associated join/cap metadata.
+    /// During rasterization, each descriptor is expanded into outline polygon edges that
+    /// are rasterized directly via <see cref="Context.RasterizeLine"/>.
+    /// </para>
+    /// <para>
+    /// The layout mirrors the GPU <c>StrokeExpandComputeShader</c> edge format:
+    /// <list type="bullet">
+    /// <item><description>Side edge (flags=0): <c>(X0,Y0)→(X1,Y1)</c> is the centerline segment.</description></item>
+    /// <item><description>Join edge (<see cref="StrokeEdgeFlags.Join"/>): <c>(X0,Y0)</c> is the vertex, <c>(X1,Y1)</c> is the previous endpoint, <c>(AdjX,AdjY)</c> is the next endpoint.</description></item>
+    /// <item><description>Cap edge (<see cref="StrokeEdgeFlags.CapStart"/>/<see cref="StrokeEdgeFlags.CapEnd"/>): <c>(X0,Y0)</c> is the cap vertex, <c>(X1,Y1)</c> is the adjacent endpoint.</description></item>
+    /// </list>
+    /// </para>
+    /// <para>All coordinates are in scanner-local float space (relative to interest top-left with sampling offset).</para>
+    /// </remarks>
+    internal readonly struct StrokeEdgeData
+    {
+        public readonly float X0;
+        public readonly float Y0;
+        public readonly float X1;
+        public readonly float Y1;
+        public readonly float AdjX;
+        public readonly float AdjY;
+        public readonly StrokeEdgeFlags Flags;
+
+        public StrokeEdgeData(float x0, float y0, float x1, float y1, StrokeEdgeFlags flags, float adjX = 0, float adjY = 0)
+        {
+            this.X0 = x0;
+            this.Y0 = y0;
+            this.X1 = x1;
+            this.Y1 = y1;
+            this.Flags = flags;
+            this.AdjX = adjX;
+            this.AdjY = adjY;
         }
     }
 

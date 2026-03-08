@@ -823,7 +823,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     Y0 = vy,
                     X1 = (int)MathF.Round(((pv.X - interestX) + samplingOffsetX) * FixedOne),
                     Y1 = (int)MathF.Round(((pv.Y - interestY) + samplingOffsetY) * FixedOne),
-                    Flags = 32, // EDGE_JOIN
+                    Flags = StrokeEdgeFlags.Join,
                     AdjX = (int)MathF.Round(((nv.X - interestX) + samplingOffsetX) * FixedOne),
                     AdjY = (int)MathF.Round(((nv.Y - interestY) + samplingOffsetY) * FixedOne),
                 });
@@ -844,7 +844,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     Y0 = csy,
                     X1 = (int)MathF.Round(((adjStart.X - interestX) + samplingOffsetX) * FixedOne),
                     Y1 = (int)MathF.Round(((adjStart.Y - interestY) + samplingOffsetY) * FixedOne),
-                    Flags = 64, // EDGE_CAP_START
+                    Flags = StrokeEdgeFlags.CapStart,
                 });
 
                 edgeYRanges.Add((csy - yExpansionFixed, csy + yExpansionFixed));
@@ -859,7 +859,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                     Y0 = cey,
                     X1 = (int)MathF.Round(((adjEnd.X - interestX) + samplingOffsetX) * FixedOne),
                     Y1 = (int)MathF.Round(((adjEnd.Y - interestY) + samplingOffsetY) * FixedOne),
-                    Flags = 128, // EDGE_CAP_END
+                    Flags = StrokeEdgeFlags.CapEnd,
                 });
 
                 edgeYRanges.Add((cey - yExpansionFixed, cey + yExpansionFixed));
@@ -1191,12 +1191,9 @@ public sealed unsafe partial class WebGPUDrawingBackend
         public int Y1;
 
         /// <summary>
-        /// Bit flags for stroke edge metadata.
-        /// Bit 0: open start — the (X0,Y0) endpoint is an open path start (cap applies).
-        /// Bit 1: open end — the (X1,Y1) endpoint is an open path end (cap applies).
-        /// Bit 2: bevel fill — this edge is a bevel fill chord (AdjX,AdjY = join vertex).
+        /// Stroke edge type flags matching the WGSL shader constants.
         /// </summary>
-        public int Flags;
+        public StrokeEdgeFlags Flags;
 
         /// <summary>
         /// Auxiliary coordinates (fixed-point). For bevel fill edges, stores the

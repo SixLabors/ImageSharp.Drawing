@@ -155,26 +155,30 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
 
         CompositionCoverageDefinition definition = compositionBatch.Definition;
 
-        // When the definition carries stroke metadata, expand the centerline
-        // path into a filled outline before rasterization.
         IPath rasterPath = definition.Path;
         RasterizerOptions rasterizerOptions = definition.RasterizerOptions;
 
-        if (definition.IsStroke)
+        if (definition.IsStroke && definition.StrokePattern.Length > 0)
         {
-            rasterPath = definition.StrokePattern.Length > 0
-                ? rasterPath.GenerateOutline(definition.StrokeWidth, definition.StrokePattern.Span, definition.StrokeOptions!)
-                : rasterPath.GenerateOutline(definition.StrokeWidth, definition.StrokeOptions!);
+            // Dashed strokes: split into dash segments on the CPU, then stroke-expand
+            // each segment via the per-band parallel path (same as solid strokes).
+            rasterPath = DashPathSplitter.SplitDashes(rasterPath, definition.StrokeWidth, definition.StrokePattern.Span);
 
-            // Compute the exact interest from the actual stroke outline bounds
-            // so band boundaries and coverage values match the old canvas-side path.
-            RectangleF outlineBounds = rasterPath.Bounds;
-            outlineBounds = new RectangleF(outlineBounds.X + 0.5F, outlineBounds.Y + 0.5F, outlineBounds.Width, outlineBounds.Height);
+            // Recompute interest from the split path bounds with stroke expansion.
+            float halfWidth = definition.StrokeWidth * 0.5f;
+            float maxExtent = halfWidth * Math.Max((float)(definition.StrokeOptions?.MiterLimit ?? 4.0), 1.0f);
+            RectangleF pathBounds = rasterPath.Bounds;
+            pathBounds = new RectangleF(
+                pathBounds.X + 0.5F - maxExtent,
+                pathBounds.Y + 0.5F - maxExtent,
+                pathBounds.Width + (maxExtent * 2),
+                pathBounds.Height + (maxExtent * 2));
+
             Rectangle interest = Rectangle.FromLTRB(
-                (int)MathF.Floor(outlineBounds.Left),
-                (int)MathF.Floor(outlineBounds.Top),
-                (int)MathF.Ceiling(outlineBounds.Right),
-                (int)MathF.Ceiling(outlineBounds.Bottom));
+                (int)MathF.Floor(pathBounds.Left),
+                (int)MathF.Floor(pathBounds.Top),
+                (int)MathF.Ceiling(pathBounds.Right),
+                (int)MathF.Ceiling(pathBounds.Bottom));
 
             rasterizerOptions = new RasterizerOptions(
                 interest,
@@ -183,7 +187,7 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
                 rasterizerOptions.SamplingOrigin,
                 rasterizerOptions.AntialiasThreshold);
 
-            // Re-prepare commands with the actual outline interest so destination
+            // Re-prepare commands with the dash-split interest so destination
             // regions and source offsets are aligned with the rasterizer.
             CompositionScenePlanner.ReprepareBatchCommands(compositionBatch.Commands, target.Bounds, interest);
         }
@@ -213,12 +217,29 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
                 destinationBounds,
                 rasterizerOptions.Interest.Top);
 
-            DefaultRasterizer.RasterizeRows(
-                rasterPath,
-                rasterizerOptions,
-                configuration.MemoryAllocator,
-                operation.InvokeCoverageRow,
-                ref reusableScratch);
+            if (definition.IsStroke)
+            {
+                // All strokes (solid and dashed) use per-band parallel stroke expansion.
+                DefaultRasterizer.RasterizeStrokeRows(
+                    rasterPath,
+                    rasterizerOptions,
+                    configuration.MemoryAllocator,
+                    operation.InvokeCoverageRow,
+                    ref reusableScratch,
+                    definition.StrokeWidth,
+                    definition.StrokeOptions!.LineJoin,
+                    definition.StrokeOptions!.LineCap,
+                    (float)definition.StrokeOptions!.MiterLimit);
+            }
+            else
+            {
+                DefaultRasterizer.RasterizeRows(
+                    rasterPath,
+                    rasterizerOptions,
+                    configuration.MemoryAllocator,
+                    operation.InvokeCoverageRow,
+                    ref reusableScratch);
+            }
         }
         finally
         {
