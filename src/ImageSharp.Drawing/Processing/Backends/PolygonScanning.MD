@@ -52,14 +52,14 @@ each parallel band only expands the centerline edges that overlap it. This avoid
 the cost of a serial full-path `GenerateOutline()` call and eliminates the
 intermediate `IPath` allocation for the expanded outline.
 
-For dashed strokes, `DashPathSplitter` splits the centerline into dash segments
+For dashed strokes, `SplitPathExtensions` splits the centerline into dash segments
 on the CPU before passing the result through the same per-band stroke expansion
 pipeline.
 
 ```
 IPath (centerline)
   |
-  +--> [if dashed] DashPathSplitter.SplitDashes(path, strokeWidth, pattern)
+  +--> [if dashed] SplitPathExtensions.GenerateDashes(path, strokeWidth, pattern)
   |
   v
 path.Flatten() -> List<ISimplePath> (preserving open/closed state)

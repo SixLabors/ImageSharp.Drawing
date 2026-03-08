@@ -506,7 +506,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             {
                 // For dashed strokes, split the path into dash segments on the CPU
                 // so the GPU evaluates solid strokes on each dash segment.
-                strokePath = DashPathSplitter.SplitDashes(strokePath, definition.StrokeWidth, definition.StrokePattern.Span);
+                strokePath = strokePath.GenerateDashes(definition.StrokeWidth, definition.StrokePattern.Span);
             }
 
             float halfWidth = definition.StrokeWidth * 0.5f;

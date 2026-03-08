@@ -14,67 +14,6 @@ namespace SixLabors.ImageSharp.Drawing.PolygonGeometry;
 internal static class StrokedShapeGenerator
 {
     /// <summary>
-    /// Strokes a collection of dashed polyline spans and returns a merged outline.
-    /// </summary>
-    /// <param name="spans">
-    /// The input spans. Each <see cref="PointF"/> array is treated as an open polyline
-    /// and is stroked using the current stroker settings.
-    /// Spans that are null or contain fewer than 2 points are ignored.
-    /// </param>
-    /// <param name="width">The stroke width in the caller's coordinate space.</param>
-    /// <param name="options">The stroke geometry options.</param>
-    /// <returns>
-    /// A <see cref="ComplexPolygon"/> representing the stroked outline after boolean merge.
-    /// </returns>
-    public static ComplexPolygon GenerateStrokedShapes(List<PointF[]> spans, float width, StrokeOptions options)
-    {
-        // 1) Stroke each dashed span as open.
-        PCPolygon rings = new(spans.Count);
-        foreach (PointF[] span in spans)
-        {
-            if (span == null || span.Length < 2)
-            {
-                continue;
-            }
-
-            Contour ring = new(span.Length);
-            for (int i = 0; i < span.Length; i++)
-            {
-                PointF p = span[i];
-                ring.Add(new Vertex(p.X, p.Y));
-            }
-
-            rings.Add(ring);
-        }
-
-        int count = rings.Count;
-        if (count == 0)
-        {
-            return new([]);
-        }
-
-        PCPolygon result = PolygonStroker.Stroke(rings, width, CreateStrokeOptions(options));
-
-        IPath[] shapes = new IPath[result.Count];
-        int index = 0;
-        for (int i = 0; i < result.Count; i++)
-        {
-            Contour contour = result[i];
-            PointF[] points = new PointF[contour.Count];
-
-            for (int j = 0; j < contour.Count; j++)
-            {
-                Vertex vertex = contour[j];
-                points[j] = new PointF((float)vertex.X, (float)vertex.Y);
-            }
-
-            shapes[index++] = new Polygon(points);
-        }
-
-        return new(shapes);
-    }
-
-    /// <summary>
     /// Strokes a path and returns a merged outline from its flattened segments.
     /// </summary>
     /// <param name="path">The source path. It is flattened using the current flattening settings.</param>
@@ -168,7 +107,8 @@ internal static class StrokedShapeGenerator
                 LineCap.Round => PolygonClipper.LineCap.Round,
                 LineCap.Square => PolygonClipper.LineCap.Square,
                 _ => PolygonClipper.LineCap.Butt,
-            }
+            },
+            NormalizeOutput = options.NormalizeOutput
         };
 
         return o;

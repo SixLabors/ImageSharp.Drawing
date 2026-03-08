@@ -162,7 +162,7 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         {
             // Dashed strokes: split into dash segments on the CPU, then stroke-expand
             // each segment via the per-band parallel path (same as solid strokes).
-            rasterPath = DashPathSplitter.SplitDashes(rasterPath, definition.StrokeWidth, definition.StrokePattern.Span);
+            rasterPath = rasterPath.GenerateDashes(definition.StrokeWidth, definition.StrokePattern.Span);
 
             // Recompute interest from the split path bounds with stroke expansion.
             float halfWidth = definition.StrokeWidth * 0.5f;

@@ -72,7 +72,7 @@ DrawingCanvasBatcher.Flush()
 For stroke definitions (`CompositionCoverageDefinition.IsStroke`), the backend
 performs stroke expansion on the GPU using `StrokeExpandComputeShader`:
 
-1. **Dash splitting** (CPU): If the definition has a dash pattern, `DashPathSplitter.SplitDashes()`
+1. **Dash splitting** (CPU): If the definition has a dash pattern, `SplitPathExtensions.GenerateDashes()`
    (shared with `DefaultDrawingBackend` in the core project) segments the centerline into
    open dash sub-paths before edge building.
 
@@ -194,7 +194,7 @@ Edge preparation (path flattening, fixed-point conversion, CSR construction) run
 Both the CPU and GPU backends use per-band parallel stroke expansion - the CPU
 via `DefaultRasterizer.RasterizeStrokeRows` and the GPU via
 `StrokeExpandComputeShader`. Both share the same `StrokeEdgeFlags` enum and
-`DashPathSplitter` (in the core project). The CPU backend fuses stroke expansion
+`SplitPathExtensions.GenerateDashes` (in the core project). The CPU backend fuses stroke expansion
 directly into the rasterizer's band loop, while the GPU backend uses a separate
 compute dispatch that writes outline edges into pre-allocated per-band output
 slots sized by `ComputeOutlineEdgesPerCenterline()`.

@@ -40,6 +40,16 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     /// </summary>
     public InnerJoin InnerJoin { get; set; } = InnerJoin.Miter;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether stroked contours should be normalized
+    /// by resolving self-intersections and overlaps before returning.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to false for maximum throughput. When disabled, callers should rasterize
+    /// with a non-zero winding fill rule.
+    /// </remarks>
+    public bool NormalizeOutput { get; set; }
+
     /// <inheritdoc/>
     public override bool Equals(object? obj) => this.Equals(obj as StrokeOptions);
 
@@ -51,7 +61,8 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
            this.ArcDetailScale == other.ArcDetailScale &&
            this.LineJoin == other.LineJoin &&
            this.LineCap == other.LineCap &&
-           this.InnerJoin == other.InnerJoin;
+           this.InnerJoin == other.InnerJoin &&
+           this.NormalizeOutput == other.NormalizeOutput;
 
     /// <inheritdoc/>
     public override int GetHashCode()
@@ -61,5 +72,6 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
             this.ArcDetailScale,
             this.LineJoin,
             this.LineCap,
-            this.InnerJoin);
+            this.InnerJoin,
+            this.NormalizeOutput);
 }
