@@ -610,7 +610,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         Guard.NotNull(text, nameof(text));
 
         FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
-        return RectangleF.FromLTRB(0, 0, advance.Width, advance.Height);
+        return RectangleF.FromLTRB(advance.Left, advance.Top, advance.Right, advance.Bottom);
     }
 
     /// <inheritdoc />
@@ -625,6 +625,17 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
+    public RectangleF MeasureTextRenderableBounds(RichTextOptions textOptions, string text)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        FontRectangle renderableBounds = TextMeasurer.MeasureRenderableBounds(text, textOptions);
+        return RectangleF.FromLTRB(renderableBounds.Left, renderableBounds.Top, renderableBounds.Right, renderableBounds.Bottom);
+    }
+
+    /// <inheritdoc />
     public RectangleF MeasureTextSize(RichTextOptions textOptions, string text)
     {
         this.EnsureNotDisposed();
@@ -632,7 +643,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         Guard.NotNull(text, nameof(text));
 
         FontRectangle size = TextMeasurer.MeasureSize(text, textOptions);
-        return RectangleF.FromLTRB(0, 0, size.Width, size.Height);
+        return RectangleF.FromLTRB(size.Left, size.Top, size.Right, size.Bottom);
     }
 
     /// <inheritdoc />
@@ -653,6 +664,16 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         Guard.NotNull(text, nameof(text));
 
         return TextMeasurer.TryMeasureCharacterBounds(text, textOptions, out bounds);
+    }
+
+    /// <inheritdoc />
+    public bool TryMeasureCharacterRenderableBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(textOptions, nameof(textOptions));
+        Guard.NotNull(text, nameof(text));
+
+        return TextMeasurer.TryMeasureCharacterRenderableBounds(text, textOptions, out bounds);
     }
 
     /// <inheritdoc />

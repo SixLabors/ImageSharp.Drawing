@@ -236,70 +236,145 @@ public interface IDrawingCanvas : IDisposable
         IReadOnlyList<GlyphPathCollection> glyphs);
 
     /// <summary>
-    /// Measures the advance box of the specified text.
+    /// Measures the logical advance of the text in pixel units.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <returns>The measured advance as a rectangle in px units.</returns>
+    /// <returns>The logical advance rectangle of the text if it was to be rendered.</returns>
+    /// <remarks>
+    /// This measurement reflects line-box height and horizontal or vertical text advance from the layout model.
+    /// It does not guarantee that all rendered glyph pixels fit within the returned rectangle.
+    /// Use <see cref="MeasureTextBounds"/> for glyph ink bounds or
+    /// <see cref="MeasureTextRenderableBounds"/> for the union of logical advance and rendered bounds.
+    /// </remarks>
     public RectangleF MeasureTextAdvance(RichTextOptions textOptions, string text);
 
     /// <summary>
-    /// Measures the tight bounds of the specified text.
+    /// Measures the rendered glyph bounds of the text in pixel units.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <returns>The measured bounds rectangle in px units.</returns>
+    /// <returns>The rendered glyph bounds of the text if it was to be rendered.</returns>
+    /// <remarks>
+    /// This measures the tight ink bounds enclosing all rendered glyphs. The returned rectangle
+    /// may be smaller or larger than the logical advance and may have a non-zero origin.
+    /// Use <see cref="MeasureTextAdvance"/> for the logical layout box or
+    /// <see cref="MeasureTextRenderableBounds"/> for the union of both.
+    /// </remarks>
     public RectangleF MeasureTextBounds(RichTextOptions textOptions, string text);
 
     /// <summary>
-    /// Measures the size of the specified text.
+    /// Measures the full renderable bounds of the text in pixel units.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <returns>The measured size as a rectangle in px units.</returns>
+    /// <returns>
+    /// The union of the logical advance rectangle and the rendered glyph bounds if the text was to be rendered.
+    /// </returns>
+    /// <remarks>
+    /// The returned rectangle is in absolute coordinates and is large enough to contain both the logical advance
+    /// rectangle and the rendered glyph bounds.
+    /// Use this method when both typographic advance and rendered glyph overshoot must fit within the same rectangle.
+    /// </remarks>
+    public RectangleF MeasureTextRenderableBounds(RichTextOptions textOptions, string text);
+
+    /// <summary>
+    /// Measures the normalized rendered size of the text in pixel units.
+    /// </summary>
+    /// <param name="textOptions">The text shaping and layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <returns>The rendered size of the text with the origin normalized to <c>(0, 0)</c>.</returns>
+    /// <remarks>
+    /// This is equivalent to measuring the rendered bounds and returning only the width and height.
+    /// Use <see cref="MeasureTextBounds"/> when the returned X and Y offset are also required.
+    /// </remarks>
     public RectangleF MeasureTextSize(RichTextOptions textOptions, string text);
 
     /// <summary>
-    /// Tries to measure per-character advances for the specified text.
+    /// Measures the logical advance of each laid-out character entry in pixel units.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <param name="advances">Receives per-character advance metrics in px units.</param>
-    /// <returns><see langword="true"/> if all character advances were measured; otherwise <see langword="false"/>.</returns>
+    /// <param name="advances">The list of per-entry logical advances of the text if it was to be rendered.</param>
+    /// <returns>Whether any of the entries had non-empty advances.</returns>
+    /// <remarks>
+    /// Each entry reflects the typographic advance width and height for one character.
+    /// Use <see cref="TryMeasureCharacterBounds"/> for per-character ink bounds or
+    /// <see cref="TryMeasureCharacterRenderableBounds"/> for the union of both.
+    /// </remarks>
     public bool TryMeasureCharacterAdvances(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> advances);
 
     /// <summary>
-    /// Tries to measure per-character bounds for the specified text.
+    /// Measures the rendered glyph bounds of each laid-out character entry in pixel units.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <param name="bounds">Receives per-character bounds in px units.</param>
-    /// <returns><see langword="true"/> if all character bounds were measured; otherwise <see langword="false"/>.</returns>
+    /// <param name="bounds">The list of per-entry rendered glyph bounds of the text if it was to be rendered.</param>
+    /// <returns>Whether any of the entries had non-empty bounds.</returns>
+    /// <remarks>
+    /// Each entry reflects the tight ink bounds of one rendered glyph.
+    /// Use <see cref="TryMeasureCharacterAdvances"/> for per-character logical advances or
+    /// <see cref="TryMeasureCharacterRenderableBounds"/> for the union of both.
+    /// </remarks>
     public bool TryMeasureCharacterBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds);
 
     /// <summary>
-    /// Tries to measure per-character sizes for the specified text.
+    /// Measures the full renderable bounds of each laid-out character entry in pixel units.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <param name="sizes">Receives per-character sizes in px units.</param>
-    /// <returns><see langword="true"/> if all character sizes were measured; otherwise <see langword="false"/>.</returns>
+    /// <param name="bounds">The list of per-entry renderable bounds of the text if it was to be rendered.</param>
+    /// <returns>Whether any of the entries had non-empty bounds.</returns>
+    /// <remarks>
+    /// Each returned rectangle is in absolute coordinates and is large enough to contain both the logical advance
+    /// rectangle and the rendered glyph bounds for the corresponding laid-out entry.
+    /// Use this when both typographic advance and rendered glyph overshoot must fit within the same rectangle.
+    /// </remarks>
+    public bool TryMeasureCharacterRenderableBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds);
+
+    /// <summary>
+    /// Measures the normalized rendered size of each laid-out character entry in pixel units.
+    /// </summary>
+    /// <param name="textOptions">The text shaping and layout options.</param>
+    /// <param name="text">The text to measure.</param>
+    /// <param name="sizes">The list of per-entry rendered sizes with the origin normalized to <c>(0, 0)</c>.</param>
+    /// <returns>Whether any of the entries had non-empty dimensions.</returns>
+    /// <remarks>
+    /// This is equivalent to measuring per-character bounds and returning only the width and height.
+    /// Use <see cref="TryMeasureCharacterBounds"/> when the returned X and Y offset are also required.
+    /// </remarks>
     public bool TryMeasureCharacterSizes(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> sizes);
 
     /// <summary>
-    /// Counts the rendered text lines for the specified text.
+    /// Gets the number of laid-out lines contained within the text.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <returns>The number of rendered lines.</returns>
+    /// <returns>The laid-out line count.</returns>
     public int CountTextLines(RichTextOptions textOptions, string text);
 
     /// <summary>
-    /// Gets line metrics for the specified text.
+    /// Gets per-line layout metrics for the supplied text.
     /// </summary>
-    /// <param name="textOptions">Text layout options.</param>
+    /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
-    /// <returns>An array of line metrics in px units.</returns>
+    /// <returns>
+    /// An array of <see cref="LineMetrics"/> in pixel units, one entry per laid-out line.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// The returned <see cref="LineMetrics.Start"/> and <see cref="LineMetrics.Extent"/> are expressed
+    /// in the primary flow direction for the active layout mode.
+    /// </para>
+    /// <para>
+    /// <see cref="LineMetrics.Ascender"/>, <see cref="LineMetrics.Baseline"/>, and <see cref="LineMetrics.Descender"/>
+    /// are line-box positions relative to the current line origin and are suitable for drawing guide lines.
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Horizontal layouts: Start = X position, Extent = width.</description></item>
+    /// <item><description>Vertical layouts: Start = Y position, Extent = height.</description></item>
+    /// </list>
+    /// </remarks>
     public LineMetrics[] GetTextLineMetrics(RichTextOptions textOptions, string text);
 
     /// <summary>
