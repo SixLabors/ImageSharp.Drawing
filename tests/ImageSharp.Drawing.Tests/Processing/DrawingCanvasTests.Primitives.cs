@@ -9,6 +9,127 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 public partial class DrawingCanvasTests
 {
     [Theory]
+    [WithBlankImage(50, 50, PixelTypes.Rgba32)]
+    public void FillRectangle_AliasedRendersFullCorners<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        const int x = 10;
+        const int y = 10;
+        const int w = 30;
+        const int h = 20;
+
+        DrawingOptions options = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        using Image<TPixel> target = provider.GetImage();
+        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
+
+        canvas.Clear(Brushes.Solid(Color.Black));
+        canvas.Fill(Brushes.Solid(Color.White), new Rectangle(x, y, w, h));
+        canvas.Flush();
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        // Verify all four corner pixels are fully white.
+        Rgba32 topLeft = target[x, y].ToRgba32();
+        Rgba32 topRight = target[x + w - 1, y].ToRgba32();
+        Rgba32 bottomLeft = target[x, y + h - 1].ToRgba32();
+        Rgba32 bottomRight = target[x + w - 1, y + h - 1].ToRgba32();
+
+        Assert.Equal(255, topLeft.R);
+        Assert.Equal(255, topRight.R);
+        Assert.Equal(255, bottomLeft.R);
+        Assert.Equal(255, bottomRight.R);
+
+        // Verify pixels just outside each corner are still black.
+        Assert.Equal(0, target[x - 1, y].ToRgba32().R);
+        Assert.Equal(0, target[x, y - 1].ToRgba32().R);
+        Assert.Equal(0, target[x + w, y].ToRgba32().R);
+        Assert.Equal(0, target[x + w - 1, y - 1].ToRgba32().R);
+        Assert.Equal(0, target[x - 1, y + h - 1].ToRgba32().R);
+        Assert.Equal(0, target[x, y + h].ToRgba32().R);
+        Assert.Equal(0, target[x + w, y + h - 1].ToRgba32().R);
+        Assert.Equal(0, target[x + w - 1, y + h].ToRgba32().R);
+
+        // Verify interior pixel count matches expected area.
+        int whiteCount = 0;
+        target.ProcessPixelRows(accessor =>
+        {
+            for (int row = 0; row < accessor.Height; row++)
+            {
+                Span<TPixel> span = accessor.GetRowSpan(row);
+                for (int col = 0; col < span.Length; col++)
+                {
+                    if (span[col].ToRgba32().R == 255)
+                    {
+                        whiteCount++;
+                    }
+                }
+            }
+        });
+
+        Assert.Equal(w * h, whiteCount);
+    }
+
+    [Theory]
+    [WithBlankImage(50, 50, PixelTypes.Rgba32)]
+    public void DrawRectangle_AliasedRendersFullCorners<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // A 2px pen centered on the rectangle edge places 1px inside and 1px outside.
+        // For a rect at (10,10) size 30x20, the outer stroke boundary is (9,9)-(40,30)
+        // and the inner boundary is (11,11)-(38,28).
+        // Miter join ensures corners are fully filled (bevel would cut them).
+        const int x = 10;
+        const int y = 10;
+        const int w = 30;
+        const int h = 20;
+        const float penWidth = 2;
+
+        DrawingOptions options = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false, AntialiasThreshold = 0.01F }
+        };
+
+        SolidPen pen = new(new PenOptions(Color.White, penWidth, null)
+        {
+            StrokeOptions = new StrokeOptions { LineJoin = LineJoin.Miter }
+        });
+
+        using Image<TPixel> target = provider.GetImage();
+        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
+
+        canvas.Clear(Brushes.Solid(Color.Black));
+        canvas.Draw(pen, new Rectangle(x, y, w, h));
+        canvas.Flush();
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+
+        // Outer corners of the stroke (1px outside the rect edge).
+        Assert.Equal(255, target[x - 1, y - 1].ToRgba32().R);
+        Assert.Equal(255, target[x + w, y - 1].ToRgba32().R);
+        Assert.Equal(255, target[x - 1, y + h].ToRgba32().R);
+        Assert.Equal(255, target[x + w, y + h].ToRgba32().R);
+
+        // Inner corners of the stroke (1px inside the rect edge).
+        Assert.Equal(255, target[x, y].ToRgba32().R);
+        Assert.Equal(255, target[x + w - 1, y].ToRgba32().R);
+        Assert.Equal(255, target[x, y + h - 1].ToRgba32().R);
+        Assert.Equal(255, target[x + w - 1, y + h - 1].ToRgba32().R);
+
+        // Well outside the stroke boundary should be black.
+        Assert.Equal(0, target[x - 3, y - 3].ToRgba32().R);
+        Assert.Equal(0, target[x + w + 2, y - 3].ToRgba32().R);
+        Assert.Equal(0, target[x - 3, y + h + 2].ToRgba32().R);
+        Assert.Equal(0, target[x + w + 2, y + h + 2].ToRgba32().R);
+
+        // Interior of the rectangle (well inside the stroke) should be black.
+        Assert.Equal(0, target[x + (w / 2), y + (h / 2)].ToRgba32().R);
+    }
+
+    [Theory]
     [WithBlankImage(240, 160, PixelTypes.Rgba32)]
     public void DrawPrimitiveHelpers_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
