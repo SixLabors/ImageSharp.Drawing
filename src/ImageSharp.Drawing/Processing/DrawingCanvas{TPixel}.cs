@@ -55,12 +55,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     private readonly List<Image<TPixel>> pendingImageResources = [];
 
     /// <summary>
-    /// Indicates whether this canvas is the root owner of the target frame.
-    /// Only the root canvas releases backend resources on dispose.
-    /// </summary>
-    private readonly bool isRoot;
-
-    /// <summary>
     /// Tracks whether this instance has already been disposed.
     /// </summary>
     private bool isDisposed;
@@ -135,14 +129,12 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="targetFrame">The destination frame.</param>
     /// <param name="batcher">The command batcher used for deferred composition.</param>
     /// <param name="defaultState">The default state used when no scoped state is active.</param>
-    /// <param name="isRoot">Whether this canvas is the root owner of the target frame.</param>
     private DrawingCanvas(
         Configuration configuration,
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame,
         DrawingCanvasBatcher<TPixel> batcher,
-        DrawingCanvasState defaultState,
-        bool isRoot)
+        DrawingCanvasState defaultState)
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(backend, nameof(backend));
@@ -159,7 +151,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         this.backend = backend;
         this.targetFrame = targetFrame;
         this.batcher = batcher;
-        this.isRoot = isRoot;
 
         // Canvas coordinates are local to the current frame; origin stays at (0,0).
         this.Bounds = new Rectangle(0, 0, targetFrame.Bounds.Width, targetFrame.Bounds.Height);
@@ -1252,7 +1243,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         }
 
         RectangleF totalBounds = new(minX, minY, maxX - minX, maxY - minY);
-        return new PreFlattenedCompositePath(subPaths.ToArray(), totalBounds);
+        return new PreFlattenedCompositePath([.. subPaths], totalBounds);
     }
 
     /// <summary>

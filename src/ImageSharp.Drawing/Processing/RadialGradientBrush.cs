@@ -1,11 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace SixLabors.ImageSharp.Drawing.Processing;
-
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
+
+namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
 /// A radial gradient brush defined by either one circle or two circles.
