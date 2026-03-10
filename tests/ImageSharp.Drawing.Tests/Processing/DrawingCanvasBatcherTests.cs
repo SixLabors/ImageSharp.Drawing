@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -167,12 +166,9 @@ public class DrawingCanvasBatcherTests
             Configuration configuration,
             ICanvasFrame<TPixel> target,
             Rectangle sourceRectangle,
-            [NotNullWhen(true)] out Image<TPixel> image)
+            Buffer2D<TPixel> destination)
             where TPixel : unmanaged, IPixel<TPixel>
-        {
-            image = null;
-            return false;
-        }
+            => false;
 
         public void ComposeLayer<TPixel>(
             Configuration configuration,

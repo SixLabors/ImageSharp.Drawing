@@ -198,14 +198,13 @@ public partial class DrawingCanvasTests
             Configuration configuration,
             ICanvasFrame<TTargetPixel> target,
             Rectangle sourceRectangle,
-            out Image<TTargetPixel>? image)
+            Buffer2D<TTargetPixel> destination)
             where TTargetPixel : unmanaged, IPixel<TTargetPixel>
         {
             this.LastReadbackConfiguration = configuration;
 
             if (this.readbackSource is null)
             {
-                image = null;
                 return false;
             }
 
@@ -214,12 +213,19 @@ public partial class DrawingCanvasTests
             Rectangle clipped = Rectangle.Intersect(this.readbackSource.Bounds, sourceRectangle);
             if (clipped.Width <= 0 || clipped.Height <= 0)
             {
-                image = null;
                 return false;
             }
 
             using Image<TPixel> cropped = this.readbackSource.Clone(ctx => ctx.Crop(clipped));
-            image = cropped.CloneAs<TTargetPixel>();
+            using Image<TTargetPixel> converted = cropped.CloneAs<TTargetPixel>();
+            Buffer2D<TTargetPixel> source = converted.Frames.RootFrame.PixelBuffer;
+            int copyWidth = Math.Min(source.Width, destination.Width);
+            int copyHeight = Math.Min(source.Height, destination.Height);
+            for (int y = 0; y < copyHeight; y++)
+            {
+                source.DangerousGetRowSpan(y).Slice(0, copyWidth).CopyTo(destination.DangerousGetRowSpan(y));
+            }
+
             return true;
         }
 

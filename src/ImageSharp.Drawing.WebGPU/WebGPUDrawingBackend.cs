@@ -675,24 +675,25 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         _ = destination.TryGetNativeSurface(out NativeSurface? destSurface);
         _ = destSurface!.TryGetCapability(out WebGPUSurfaceCapability? destCapability);
 
-        // Read destination and source from the GPU into CPU images.
-        if (!this.TryReadRegion(configuration, destination, destination.Bounds, out Image<TPixel>? destImage))
+        MemoryAllocator allocator = configuration.MemoryAllocator;
+
+        // Read destination and source from the GPU into CPU buffers.
+        using Buffer2D<TPixel> destBuffer = allocator.Allocate2D<TPixel>(destination.Bounds.Width, destination.Bounds.Height);
+        if (!this.TryReadRegion(configuration, destination, destination.Bounds, destBuffer))
         {
             return;
         }
 
-        if (!this.TryReadRegion(configuration, source, source.Bounds, out Image<TPixel>? srcImage))
+        using Buffer2D<TPixel> srcBuffer = allocator.Allocate2D<TPixel>(source.Bounds.Width, source.Bounds.Height);
+        if (!this.TryReadRegion(configuration, source, source.Bounds, srcBuffer))
         {
-            destImage.Dispose();
             return;
         }
 
-        using (destImage)
-        using (srcImage)
         {
-            Buffer2DRegion<TPixel> destRegion = new(destImage.Frames.RootFrame.PixelBuffer);
+            Buffer2DRegion<TPixel> destRegion = new(destBuffer);
             ICanvasFrame<TPixel> destFrame = new MemoryCanvasFrame<TPixel>(destRegion);
-            ICanvasFrame<TPixel> srcFrame = new MemoryCanvasFrame<TPixel>(new Buffer2DRegion<TPixel>(srcImage.Frames.RootFrame.PixelBuffer));
+            ICanvasFrame<TPixel> srcFrame = new MemoryCanvasFrame<TPixel>(new Buffer2DRegion<TPixel>(srcBuffer));
 
             this.fallbackBackend.ComposeLayer(configuration, srcFrame, destFrame, destinationOffset, options);
 

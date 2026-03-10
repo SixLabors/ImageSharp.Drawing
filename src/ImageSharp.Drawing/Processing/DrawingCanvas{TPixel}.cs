@@ -240,6 +240,9 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
     /// <inheritdoc />
     public int Save(DrawingOptions options, params IPath[] clipPaths)
+        => this.SaveCore(options, clipPaths);
+
+    private int SaveCore(DrawingOptions options, IReadOnlyList<IPath> clipPaths)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(options, nameof(options));
@@ -1125,7 +1128,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     private void ExecuteWithTemporaryState(DrawingOptions options, IReadOnlyList<IPath> clipPaths, Action action)
     {
         int saveCount = this.savedStates.Count;
-        _ = this.Save(options, [.. clipPaths]);
+        _ = this.SaveCore(options, clipPaths);
         try
         {
             action();
@@ -1138,12 +1141,23 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
     /// <summary>
     /// Attempts to create a source image for process-in-path operations.
+    /// The backend copies pixels directly into the image's pixel buffer — single copy.
     /// </summary>
     /// <param name="sourceRect">Source rectangle in local canvas coordinates.</param>
     /// <param name="sourceImage">The readback image when available.</param>
     /// <returns><see langword="true"/> when source pixels were resolved.</returns>
     private bool TryCreateProcessSourceImage(Rectangle sourceRect, [NotNullWhen(true)] out Image<TPixel>? sourceImage)
-        => this.backend.TryReadRegion(this.configuration, this.targetFrame, sourceRect, out sourceImage);
+    {
+        sourceImage = new Image<TPixel>(this.configuration, sourceRect.Width, sourceRect.Height);
+        if (!this.backend.TryReadRegion(this.configuration, this.targetFrame, sourceRect, sourceImage.Frames.RootFrame.PixelBuffer))
+        {
+            sourceImage.Dispose();
+            sourceImage = null;
+            return false;
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Flattens the path first (reusing any cached curve subdivision), then transforms

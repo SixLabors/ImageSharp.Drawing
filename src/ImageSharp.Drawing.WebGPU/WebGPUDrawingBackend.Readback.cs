@@ -2,10 +2,11 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
@@ -23,14 +24,13 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
-        [NotNullWhen(true)] out Image<TPixel>? image)
+        Buffer2D<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(target, nameof(target));
-
-        image = null;
+        Guard.NotNull(destination, nameof(destination));
 
         // Readback is only available for native WebGPU targets with valid interop handles.
         if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
@@ -78,7 +78,6 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         // WebGPU copy-to-buffer requires bytes-per-row alignment to 256 bytes.
         int readbackRowBytes = Align(packedRowBytes, 256);
-        int packedByteCount = checked(packedRowBytes * source.Height);
         ulong readbackByteCount = checked((ulong)readbackRowBytes * (ulong)source.Height);
 
         WgpuBuffer* readbackBuffer = null;
@@ -169,18 +168,17 @@ public sealed unsafe partial class WebGPUDrawingBackend
             try
             {
                 ReadOnlySpan<byte> readback = new(mapped, checked((int)readbackByteCount));
-                byte[] packed = new byte[packedByteCount];
-                Span<byte> packedSpan = packed;
 
-                // Strip WebGPU row padding so Image.LoadPixelData receives tightly packed rows.
-                for (int y = 0; y < source.Height; y++)
+                // Copy directly from the mapped GPU buffer into the caller's buffer,
+                // stripping WebGPU row padding in the process. Single copy, no intermediate array.
+                int copyHeight = Math.Min(source.Height, destination.Height);
+                for (int y = 0; y < copyHeight; y++)
                 {
                     readback
                         .Slice(y * readbackRowBytes, packedRowBytes)
-                        .CopyTo(packedSpan.Slice(y * packedRowBytes, packedRowBytes));
+                        .CopyTo(MemoryMarshal.AsBytes(destination.DangerousGetRowSpan(y)));
                 }
 
-                image = Image.LoadPixelData<TPixel>(configuration, packed, source.Width, source.Height);
                 return true;
             }
             finally

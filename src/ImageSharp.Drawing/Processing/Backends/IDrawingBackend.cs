@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -29,21 +29,22 @@ public interface IDrawingBackend
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
-    /// Attempts to read source pixels from the target into a temporary image.
+    /// Attempts to read source pixels from the target into a caller-provided buffer.
     /// </summary>
-    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">The active processing configuration.</param>
     /// <param name="target">The target frame.</param>
     /// <param name="sourceRectangle">Source rectangle in target-local coordinates.</param>
-    /// <param name="image">
-    /// When this method returns <see langword="true"/>, receives a newly allocated source image.
+    /// <param name="destination">
+    /// The caller-allocated buffer to receive the pixel data.
+    /// Must be at least as large as <paramref name="sourceRectangle"/> (clamped to target bounds).
     /// </param>
     /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
     public bool TryReadRegion<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
-        [NotNullWhen(true)] out Image<TPixel>? image)
+        Buffer2D<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>

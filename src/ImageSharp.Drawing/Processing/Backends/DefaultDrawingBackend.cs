@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -159,15 +158,15 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
-        [NotNullWhen(true)] out Image<TPixel>? image)
+        Buffer2D<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Guard.NotNull(configuration, nameof(configuration));
+        Guard.NotNull(destination, nameof(destination));
 
         // CPU backend readback is available only when the target exposes CPU pixels.
         if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> sourceRegion))
         {
-            image = null;
             return false;
         }
 
@@ -178,17 +177,15 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
 
         if (clipped.Width <= 0 || clipped.Height <= 0)
         {
-            image = null;
             return false;
         }
 
-        // Build a tightly packed temporary image for downstream processing operations.
-        image = new(configuration, clipped.Width, clipped.Height);
-        Buffer2D<TPixel> destination = image.Frames.RootFrame.PixelBuffer;
-        for (int y = 0; y < clipped.Height; y++)
+        int copyWidth = Math.Min(clipped.Width, destination.Width);
+        int copyHeight = Math.Min(clipped.Height, destination.Height);
+        for (int y = 0; y < copyHeight; y++)
         {
             sourceRegion.DangerousGetRowSpan(clipped.Y + y)
-                .Slice(clipped.X, clipped.Width)
+                .Slice(clipped.X, copyWidth)
                 .CopyTo(destination.DangerousGetRowSpan(y));
         }
 
