@@ -14,7 +14,7 @@ using SixLabors.ImageSharp.Processing;
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing.Backends;
 
 [GroupOutput("Drawing")]
-public class WebGPUDrawingBackendTests
+public partial class WebGPUDrawingBackendTests
 {
     public static TheoryData<PixelColorBlendingMode, PixelAlphaCompositionMode> GraphicsOptionsModePairs { get; } =
     new()
@@ -49,10 +49,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -63,26 +59,15 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath", defaultImage, cpuRegionImage, nativeSurfaceImage);
-
-        Assert.True(cpuRegionBackend.TestingPrepareCoverageCallCount > 0);
-        Assert.Equal(cpuRegionBackend.TestingPrepareCoverageCallCount, cpuRegionBackend.TestingReleaseCoverageCallCount);
-        Assert.Equal(0, cpuRegionBackend.TestingLiveCoverageCount);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
-        if (cpuRegionBackend.TestingIsGPUReady)
-        {
-            Assert.True(cpuRegionBackend.TestingGPUPrepareCoverageCallCount > 0);
-            Assert.True(cpuRegionBackend.TestingGPUCompositeCoverageCallCount + cpuRegionBackend.TestingFallbackCompositeCoverageCallCount > 0);
-        }
+        DebugSaveBackendPair(provider, "FillPath", defaultImage, nativeSurfaceImage);
 
         Assert.True(nativeSurfaceBackend.TestingPrepareCoverageCallCount > 0);
         Assert.Equal(nativeSurfaceBackend.TestingPrepareCoverageCallCount, nativeSurfaceBackend.TestingReleaseCoverageCallCount);
         Assert.Equal(0, nativeSurfaceBackend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
 
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
     }
 
     [WebGPUTheory]
@@ -103,10 +88,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -117,12 +98,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_AliasedThreshold", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, "FillPath_AliasedThreshold", defaultImage, nativeSurfaceImage);
 
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
     }
 
     [WebGPUTheory]
@@ -149,10 +128,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = new(384, 256);
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = new(384, 256);
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
@@ -161,16 +136,7 @@ public class WebGPUDrawingBackendTests
             drawingOptions,
             (Action<DrawingCanvas<TPixel>>)DrawAction);
 
-        DebugSaveBackendTriplet(provider, "FillPath_ImageBrush", defaultImage, cpuRegionImage, nativeSurfaceImage);
-
-        Assert.True(cpuRegionBackend.TestingPrepareCoverageCallCount > 0);
-        Assert.Equal(cpuRegionBackend.TestingPrepareCoverageCallCount, cpuRegionBackend.TestingReleaseCoverageCallCount);
-        Assert.Equal(0, cpuRegionBackend.TestingLiveCoverageCount);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
-        if (cpuRegionBackend.TestingIsGPUReady)
-        {
-            Assert.True(cpuRegionBackend.TestingGPUCompositeCoverageCallCount > 0);
-        }
+        DebugSaveBackendPair(provider, "FillPath_ImageBrush", defaultImage, nativeSurfaceImage);
 
         Assert.True(nativeSurfaceBackend.TestingPrepareCoverageCallCount > 0);
         Assert.Equal(nativeSurfaceBackend.TestingPrepareCoverageCallCount, nativeSurfaceBackend.TestingReleaseCoverageCallCount);
@@ -181,9 +147,8 @@ public class WebGPUDrawingBackendTests
             Assert.True(nativeSurfaceBackend.TestingGPUCompositeCoverageCallCount > 0);
         }
 
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
     }
 
     [WebGPUTheory]
@@ -230,10 +195,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -244,26 +205,19 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_NonZeroNestedContours", defaultImage, cpuRegionImage, nativeSurfaceImage);
-
-        Assert.True(cpuRegionBackend.TestingPrepareCoverageCallCount > 0);
-        Assert.Equal(cpuRegionBackend.TestingPrepareCoverageCallCount, cpuRegionBackend.TestingReleaseCoverageCallCount);
-        Assert.Equal(0, cpuRegionBackend.TestingLiveCoverageCount);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_NonZeroNestedContours", defaultImage, nativeSurfaceImage);
 
         Assert.True(nativeSurfaceBackend.TestingPrepareCoverageCallCount > 0);
         Assert.Equal(nativeSurfaceBackend.TestingPrepareCoverageCallCount, nativeSurfaceBackend.TestingReleaseCoverageCallCount);
         Assert.Equal(0, nativeSurfaceBackend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
 
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
         // Non-zero winding semantics must still match on an interior point.
-        Assert.Equal(defaultImage[128, 128], cpuRegionImage[128, 128]);
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
 
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
     }
 
     [WebGPUTheory]
@@ -294,10 +248,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = baseImage.Clone();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = baseImage.Clone();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
@@ -307,18 +257,15 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             baseImage);
 
-        DebugSaveBackendTriplet(
+        DebugSaveBackendPair(
             provider,
             $"FillPath_GraphicsOptions_SolidBrush_{colorMode}_{alphaMode}",
             defaultImage,
-            cpuRegionImage,
             nativeSurfaceImage);
 
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
     }
 
     [WebGPUTheory]
@@ -350,10 +297,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = baseImage.Clone();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = baseImage.Clone();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
@@ -363,18 +306,15 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             baseImage);
 
-        DebugSaveBackendTriplet(
+        DebugSaveBackendPair(
             provider,
             $"FillPath_GraphicsOptions_ImageBrush_{colorMode}_{alphaMode}",
             defaultImage,
-            cpuRegionImage,
             nativeSurfaceImage);
 
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.1F);
     }
 
     [WebGPUTheory]
@@ -401,10 +341,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -415,13 +351,7 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "DrawText", defaultImage, cpuRegionImage, nativeSurfaceImage);
-
-        Assert.True(cpuRegionBackend.TestingPrepareCoverageCallCount > 0);
-        Assert.True(cpuRegionBackend.TestingCompositeCoverageCallCount >= cpuRegionBackend.TestingPrepareCoverageCallCount);
-        Assert.Equal(cpuRegionBackend.TestingPrepareCoverageCallCount, cpuRegionBackend.TestingReleaseCoverageCallCount);
-        Assert.Equal(0, cpuRegionBackend.TestingLiveCoverageCount);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "DrawText", defaultImage, nativeSurfaceImage);
 
         Assert.True(nativeSurfaceBackend.TestingPrepareCoverageCallCount > 0);
         Assert.True(nativeSurfaceBackend.TestingCompositeCoverageCallCount >= nativeSurfaceBackend.TestingPrepareCoverageCallCount);
@@ -429,14 +359,13 @@ public class WebGPUDrawingBackendTests
         Assert.Equal(0, nativeSurfaceBackend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
 
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.007F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.007F);
         Rectangle textRegion = Rectangle.Intersect(
             new Rectangle(0, 0, defaultImage.Width, defaultImage.Height),
             new Rectangle(8, 12, defaultImage.Width - 16, Math.Min(220, defaultImage.Height - 12)));
-        AssertBackendTripletSimilarityInRegion(defaultImage, cpuRegionImage, nativeSurfaceImage, textRegion, 0.009F);
+        AssertBackendPairSimilarityInRegion(defaultImage, nativeSurfaceImage, textRegion, 0.009F);
     }
 
     [WebGPUTheory]
@@ -461,10 +390,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -475,12 +400,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_NativeSurfaceParity", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_NativeSurfaceParity", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
     }
 
     [WebGPUTheory]
@@ -507,10 +430,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -521,12 +440,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_NativeSurfaceSubregionParity", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
     }
 
     [WebGPUTheory]
@@ -547,10 +464,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
             defaultImage.Width,
@@ -559,14 +472,12 @@ public class WebGPUDrawingBackendTests
             drawingOptions,
             (Action<DrawingCanvas<TPixel>>)DrawAction);
 
-        DebugSaveBackendTriplet(provider, "Process", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "Process", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
         // Differences are visually allowable so use a higher threshold here.
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.0516F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0516F);
     }
 
     [WebGPUTheory]
@@ -593,10 +504,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -607,14 +514,8 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "RepeatedGlyphs", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 2F);
-
-        Assert.InRange(cpuRegionBackend.TestingPrepareCoverageCallCount, 1, 20);
-        Assert.True(cpuRegionBackend.TestingCompositeCoverageCallCount >= cpuRegionBackend.TestingPrepareCoverageCallCount);
-        Assert.Equal(cpuRegionBackend.TestingPrepareCoverageCallCount, cpuRegionBackend.TestingReleaseCoverageCallCount);
-        Assert.Equal(0, cpuRegionBackend.TestingLiveCoverageCount);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "RepeatedGlyphs", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
 
         Assert.InRange(nativeSurfaceBackend.TestingPrepareCoverageCallCount, 1, 20);
         Assert.True(nativeSurfaceBackend.TestingCompositeCoverageCallCount >= nativeSurfaceBackend.TestingPrepareCoverageCallCount);
@@ -622,7 +523,6 @@ public class WebGPUDrawingBackendTests
         Assert.Equal(0, nativeSurfaceBackend.TestingLiveCoverageCount);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
 
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
@@ -671,26 +571,6 @@ public class WebGPUDrawingBackendTests
             defaultDrawCanvas.Flush();
         }
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        Configuration cpuRegionConfiguration = Configuration.Default.Clone();
-        cpuRegionConfiguration.SetDrawingBackend(cpuRegionBackend);
-
-        using (DrawingCanvas<TPixel> cpuRegionClearCanvas = new(cpuRegionConfiguration, GetFrameRegion(cpuRegionImage), clearOptions))
-        {
-            cpuRegionClearCanvas.Fill(clearBrush);
-            cpuRegionClearCanvas.Flush();
-        }
-
-        int cpuRegionComputeBatchesBeforeDraw = cpuRegionBackend.TestingComputePathBatchCount;
-        using (DrawingCanvas<TPixel> cpuRegionDrawCanvas = new(cpuRegionConfiguration, GetFrameRegion(cpuRegionImage), drawingOptions))
-        {
-            cpuRegionDrawCanvas.DrawText(textOptions, text, drawBrush, null);
-            cpuRegionDrawCanvas.Flush();
-        }
-
-        int cpuRegionComputeBatchesFromDraw = cpuRegionBackend.TestingComputePathBatchCount - cpuRegionComputeBatchesBeforeDraw;
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         Assert.True(
             WebGPUTestNativeSurfaceAllocator.TryCreate<TPixel>(
@@ -737,19 +617,11 @@ public class WebGPUDrawingBackendTests
 
             using (nativeSurfaceImage)
             {
-                DebugSaveBackendTriplet(provider, "RepeatedGlyphs_AfterClear", defaultImage, cpuRegionImage, nativeSurfaceImage);
-                AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 2F);
+                DebugSaveBackendPair(provider, "RepeatedGlyphs_AfterClear", defaultImage, nativeSurfaceImage);
+                AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 2F);
             }
 
-            AssertGpuPathWhenRequired(cpuRegionBackend);
             AssertGpuPathWhenRequired(nativeSurfaceBackend);
-
-            if (cpuRegionBackend.TestingIsGPUReady)
-            {
-                Assert.True(
-                    cpuRegionComputeBatchesFromDraw > 0,
-                    "Expected repeated-glyph draw batch to execute via tiled compute composition on the CPURegion pipeline.");
-            }
 
             if (nativeSurfaceBackend.TestingIsGPUReady)
             {
@@ -813,20 +685,6 @@ public class WebGPUDrawingBackendTests
         return pathBuilder.Build();
     }
 
-    private static void RenderWithCpuRegionWebGpuBackend<TPixel>(
-        Image<TPixel> image,
-        WebGPUDrawingBackend backend,
-        DrawingOptions options,
-        Action<DrawingCanvas<TPixel>> drawAction)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        Configuration configuration = Configuration.Default.Clone();
-        configuration.SetDrawingBackend(backend);
-        using DrawingCanvas<TPixel> canvas = new(configuration, GetFrameRegion(image), options);
-        drawAction(canvas);
-        canvas.Flush();
-    }
-
     private static Image<TPixel> RenderWithNativeSurfaceWebGpuBackend<TPixel>(
         int width,
         int height,
@@ -886,11 +744,10 @@ public class WebGPUDrawingBackendTests
         }
     }
 
-    private static void DebugSaveBackendTriplet<TPixel>(
+    private static void DebugSaveBackendPair<TPixel>(
         TestImageProvider<TPixel> provider,
         string testName,
         Image<TPixel> defaultImage,
-        Image<TPixel> cpuRegionImage,
         Image<TPixel> nativeSurfaceImage,
         float tolerantPercentage = 0.0003F)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -898,12 +755,6 @@ public class WebGPUDrawingBackendTests
         defaultImage.DebugSave(
             provider,
             $"{testName}_Default",
-            appendPixelTypeToFileName: false,
-            appendSourceFileOrDescription: false);
-
-        cpuRegionImage.DebugSave(
-            provider,
-            $"{testName}_WebGPU_CPURegion",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
@@ -921,13 +772,6 @@ public class WebGPUDrawingBackendTests
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
-        cpuRegionImage.CompareToReferenceOutput(
-            tolerantComparer,
-            provider,
-            $"{testName}_WebGPU_CPURegion",
-            appendPixelTypeToFileName: false,
-            appendSourceFileOrDescription: false);
-
         nativeSurfaceImage.CompareToReferenceOutput(
             tolerantComparer,
             provider,
@@ -936,23 +780,16 @@ public class WebGPUDrawingBackendTests
             appendSourceFileOrDescription: false);
     }
 
-    private static void DebugSaveBackendTripletNoRef<TPixel>(
+    private static void DebugSaveBackendPairNoRef<TPixel>(
         TestImageProvider<TPixel> provider,
         string testName,
         Image<TPixel> defaultImage,
-        Image<TPixel> cpuRegionImage,
         Image<TPixel> nativeSurfaceImage)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         defaultImage.DebugSave(
             provider,
             $"{testName}_Default",
-            appendPixelTypeToFileName: false,
-            appendSourceFileOrDescription: false);
-
-        cpuRegionImage.DebugSave(
-            provider,
-            $"{testName}_WebGPU_CPURegion",
             appendPixelTypeToFileName: false,
             appendSourceFileOrDescription: false);
 
@@ -963,31 +800,26 @@ public class WebGPUDrawingBackendTests
             appendSourceFileOrDescription: false);
     }
 
-    private static void AssertBackendTripletSimilarity<TPixel>(
+    private static void AssertBackendPairSimilarity<TPixel>(
         Image<TPixel> defaultImage,
-        Image<TPixel> cpuRegionImage,
         Image<TPixel> nativeSurfaceImage,
         float defaultTolerancePercent)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        ImageComparer.TolerantPercentage(0.01F).VerifySimilarity(cpuRegionImage, nativeSurfaceImage);
         ImageComparer tolerantComparer = ImageComparer.TolerantPercentage(defaultTolerancePercent);
-        tolerantComparer.VerifySimilarity(defaultImage, cpuRegionImage);
         tolerantComparer.VerifySimilarity(defaultImage, nativeSurfaceImage);
     }
 
-    private static void AssertBackendTripletSimilarityInRegion<TPixel>(
+    private static void AssertBackendPairSimilarityInRegion<TPixel>(
         Image<TPixel> defaultImage,
-        Image<TPixel> cpuRegionImage,
         Image<TPixel> nativeSurfaceImage,
         Rectangle region,
         float defaultTolerancePercent)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> defaultRegion = defaultImage.Clone(ctx => ctx.Crop(region));
-        using Image<TPixel> cpuRegion = cpuRegionImage.Clone(ctx => ctx.Crop(region));
         using Image<TPixel> nativeRegion = nativeSurfaceImage.Clone(ctx => ctx.Crop(region));
-        AssertBackendTripletSimilarity(defaultRegion, cpuRegion, nativeRegion, defaultTolerancePercent);
+        AssertBackendPairSimilarity(defaultRegion, nativeRegion, defaultTolerancePercent);
     }
 
     private static void AssertCoverageExecutionAccounting(WebGPUDrawingBackend backend)
@@ -1050,9 +882,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1064,12 +893,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "DrawPath_Stroke", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "DrawPath_Stroke", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     public static TheoryData<LineJoin> LineJoinValues { get; } = new()
@@ -1113,9 +940,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1127,12 +951,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, $"DrawPath_Stroke_LineJoin_{lineJoin}", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, $"DrawPath_Stroke_LineJoin_{lineJoin}", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
     }
 
     [WebGPUTheory]
@@ -1163,9 +985,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1177,12 +996,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, $"DrawPath_Stroke_LineCap_{lineCap}", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, $"DrawPath_Stroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
     }
 
     [WebGPUTheory]
@@ -1209,9 +1026,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1223,14 +1037,12 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_MultipleSeparate", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        DebugSaveBackendPair(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
 
-        Assert.True(cpuRegionBackend.TestingPrepareCoverageCallCount >= 20);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
     }
 
     [WebGPUTheory]
@@ -1276,9 +1088,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1290,16 +1099,13 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_EvenOdd", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_EvenOdd", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
 
         // EvenOdd with same winding inner contour should create a hole at center.
-        Assert.Equal(defaultImage[128, 128], cpuRegionImage[128, 128]);
         Assert.Equal(defaultImage[128, 128], nativeSurfaceImage[128, 128]);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.5F);
     }
 
     [WebGPUTheory]
@@ -1320,9 +1126,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1334,12 +1137,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_LargeTileCount", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_LargeTileCount", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
     }
 
     [WebGPUTheory]
@@ -1366,24 +1167,6 @@ public class WebGPUDrawingBackendTests
         }
 
         using (DrawingCanvas<TPixel> canvas2 = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
-        {
-            canvas2.Fill(blueBrush, rect2);
-            canvas2.Flush();
-        }
-
-        // WebGPU backend: two separate flushes reusing the same backend
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        Configuration cpuConfig = Configuration.Default.Clone();
-        cpuConfig.SetDrawingBackend(cpuRegionBackend);
-
-        using (DrawingCanvas<TPixel> canvas1 = new(cpuConfig, GetFrameRegion(cpuRegionImage), drawingOptions))
-        {
-            canvas1.Fill(redBrush, rect1);
-            canvas1.Flush();
-        }
-
-        using (DrawingCanvas<TPixel> canvas2 = new(cpuConfig, GetFrameRegion(cpuRegionImage), drawingOptions))
         {
             canvas2.Fill(blueBrush, rect2);
             canvas2.Flush();
@@ -1443,12 +1226,10 @@ public class WebGPUDrawingBackendTests
 
             using (nativeSurfaceImage)
             {
-                DebugSaveBackendTriplet(provider, "MultipleFlushes", defaultImage, cpuRegionImage, nativeSurfaceImage);
-                AssertCoverageExecutionAccounting(cpuRegionBackend);
+                DebugSaveBackendPair(provider, "MultipleFlushes", defaultImage, nativeSurfaceImage);
                 AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-                AssertGpuPathWhenRequired(cpuRegionBackend);
                 AssertGpuPathWhenRequired(nativeSurfaceBackend);
-                AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
+                AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
             }
         }
         finally
@@ -1481,9 +1262,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1496,12 +1274,10 @@ public class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         // MacOS on CI has some outliers with this test, so using a slightly higher tolerance here to avoid noise.
-        DebugSaveBackendTriplet(provider, "FillPath_LinearGradient", defaultImage, cpuRegionImage, nativeSurfaceImage, tolerantPercentage: 0.0007F);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_LinearGradient", defaultImage, nativeSurfaceImage, tolerantPercentage: 0.0007F);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1527,9 +1303,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1541,12 +1314,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_LinearGradient_Repeat", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_LinearGradient_Repeat", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1572,9 +1343,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1586,12 +1354,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_RadialGradient_Single", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_RadialGradient_Single", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1619,9 +1385,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1633,12 +1396,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1665,9 +1426,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1679,12 +1437,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_EllipticGradient", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_EllipticGradient", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1713,9 +1469,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1727,12 +1480,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_SweepGradient", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_SweepGradient", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1759,9 +1510,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1774,17 +1522,14 @@ public class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         // MacOS on CI has some outliers with this test, so using a slightly higher tolerance here to avoid noise.
-        DebugSaveBackendTriplet(
+        DebugSaveBackendPair(
             provider,
             "FillPath_SweepGradient_PartialArc",
             defaultImage,
-            cpuRegionImage,
             nativeSurfaceImage,
             tolerantPercentage: 0.0280F);
 
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
@@ -1806,9 +1551,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1820,12 +1562,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_PatternBrush_Horizontal", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_PatternBrush_Horizontal", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1846,9 +1586,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1860,12 +1597,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_PatternBrush_Diagonal", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_PatternBrush_Diagonal", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1886,9 +1621,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1900,12 +1632,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_RecolorBrush", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_RecolorBrush", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1932,9 +1662,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1946,12 +1673,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -1979,9 +1704,6 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1993,12 +1715,10 @@ public class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "FillPath_EllipticGradient_Reflect", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "FillPath_EllipticGradient_Reflect", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
     }
 
     [WebGPUTheory]
@@ -2213,9 +1933,6 @@ the evil Galactic Empire.";
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-        using Image<TPixel> cpuRegionImage = provider.GetImage();
-        using WebGPUDrawingBackend cpuRegionBackend = new();
-        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -2227,12 +1944,236 @@ the evil Galactic Empire.";
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendTriplet(provider, "StarWarsCrawl", defaultImage, cpuRegionImage, nativeSurfaceImage);
-        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        DebugSaveBackendPair(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
-        AssertGpuPathWhenRequired(cpuRegionBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
-        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
+    public void SaveLayer_FullOpacity_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Red);
+        RectangularPolygon polygon = new(10, 10, 80, 80);
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.SaveLayer();
+            canvas.Fill(brush, polygon);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "SaveLayer_FullOpacity", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
+    public void SaveLayer_HalfOpacity_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+        Brush brush = Brushes.Solid(Color.Red);
+        RectangularPolygon polygon = new(10, 10, 80, 80);
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
+            canvas.Fill(brush, polygon);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "SaveLayer_HalfOpacity", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
+    public void SaveLayer_NestedLayers_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Outer layer: red fill.
+            canvas.SaveLayer();
+            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(0, 0, 128, 128));
+
+            // Inner layer: blue fill over center.
+            canvas.SaveLayer();
+            canvas.Fill(Brushes.Solid(Color.Blue), new RectangularPolygon(32, 32, 64, 64));
+            canvas.Restore(); // Composites blue onto red.
+
+            canvas.Restore(); // Composites red+blue onto white.
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "SaveLayer_NestedLayers", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
+    public void SaveLayer_WithBlendMode_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(20, 20, 88, 88));
+
+            canvas.SaveLayer(new GraphicsOptions
+            {
+                ColorBlendingMode = PixelColorBlendingMode.Multiply,
+                AlphaCompositionMode = PixelAlphaCompositionMode.SrcOver,
+                BlendPercentage = 1f
+            });
+
+            canvas.Fill(Brushes.Solid(Color.Blue), new RectangularPolygon(40, 40, 88, 88));
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "SaveLayer_WithBlendMode", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
+    public void SaveLayer_WithBounds_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            // Layer restricted to a sub-region; draw within the layer's local bounds.
+            canvas.SaveLayer(new GraphicsOptions(), new Rectangle(16, 16, 96, 96));
+            canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 96, 96));
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "SaveLayer_WithBounds", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
+    public void SaveLayer_MixedSaveAndSaveLayer_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new();
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+
+            int before = canvas.SaveCount;
+            canvas.Save();              // plain save
+            canvas.SaveLayer();         // layer
+            canvas.Save();              // plain save
+
+            canvas.Fill(Brushes.Solid(Color.Green), new RectangularPolygon(0, 0, 128, 128));
+
+            canvas.RestoreTo(before);
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendPair(provider, "SaveLayer_MixedSaveAndSaveLayer", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
     }
 
     private static Buffer2DRegion<TPixel> GetFrameRegion<TPixel>(Image<TPixel> image)

@@ -1,16 +1,17 @@
 # WebGPU Backend Process
 
-This document describes the current runtime flow used by `WebGPUDrawingBackend` when flushing a `CompositionScene`.
+This document describes the runtime flows used by `WebGPUDrawingBackend` for scene flushing and layer compositing.
 
 ## End-to-End Flow
 
 ```text
 DrawingCanvasBatcher.Flush()
   -> IDrawingBackend.FlushCompositions(scene)
+     -> if target has no NativeSurface: delegate to DefaultDrawingBackend directly
      -> capability checks
         -> TryGetCompositeTextureFormat<TPixel>
         -> AreAllCompositionBrushesSupported<TPixel>
-        -> if unsupported: scene-scoped fallback (DefaultDrawingBackend)
+        -> if unsupported: staging fallback (see Fallback Behavior)
      -> CompositionScenePlanner.CreatePreparedBatches(commands, targetBounds)
         -> clip each command to target bounds
         -> group contiguous commands by DefinitionKey
@@ -57,13 +58,9 @@ DrawingCanvasBatcher.Flush()
                     -> samples brush (see Brush Types below)
                     -> composes pixel using Porter-Duff alpha composition + color blend mode
                  -> writes final pixel to output texture
-        -> destination writeback:
-           -> NativeSurface: copy output texture region into target texture
-           -> CPU Region: set ReadbackSourceOverride to output texture (skip extra copy)
+        -> copy composited output texture region back into target texture
      -> TryFinalizeFlush
-        -> NativeSurface: finish encoder + single QueueSubmit (non-blocking)
-        -> CPU Region: encode texture->buffer copy, finish encoder, QueueSubmit,
-           synchronous BufferMapAsync + poll wait, copy mapped bytes to CPU region
+        -> finish encoder + single QueueSubmit (non-blocking)
      -> on any GPU failure: scene-scoped fallback (DefaultDrawingBackend)
 ```
 
@@ -163,23 +160,115 @@ Color stops are sorted by ratio in the `GradientBrush` constructor using a stabl
 ## Destination Writeback
 
 - `FlushCompositions` performs one command-buffer submission (`QueueSubmit`) per scene flush.
-- NativeSurface targets: one GPU-side `CommandEncoderCopyTextureToTexture` from output into the target at composition bounds. No CPU stall.
-- CPU Region targets: readback from the output texture directly (skipping the output-to-target copy). Uses `CommandEncoderCopyTextureToBuffer`, `QueueSubmit`, synchronous `BufferMapAsync` with device polling, then copies mapped bytes to the CPU `Buffer2DRegion<TPixel>`.
+- One GPU-side `CommandEncoderCopyTextureToTexture` from output into the target at composition bounds. No CPU stall.
+- The WebGPU backend only operates on native GPU surfaces. CPU-backed frames are handled entirely by `DefaultDrawingBackend`.
 
 ## Fallback Behavior
 
-Fallback is scene-scoped and triggered when:
-- The pixel format has no supported WebGPU texture format mapping.
-- Any command uses an unsupported brush type (`PathGradientBrush` is not GPU-composable; all other brush types are supported).
-- Any GPU operation fails during the flush.
+### FlushCompositions
 
-Fallback path:
-- If target exposes a CPU region: run `DefaultDrawingBackend.FlushCompositions(...)` directly.
-- If target is native-surface only: rent CPU staging frame, run fallback on staging, upload staging pixels back to native target texture.
+1. **Non-native target**: If the target frame has no `NativeSurface`, delegate directly
+   to `DefaultDrawingBackend.FlushCompositions` (no staging, no upload).
+2. **Native target, unsupported scene**: Pixel format has no GPU mapping, or a command
+   uses an unsupported brush (`PathGradientBrush`). Fallback: allocate a clean CPU
+   staging `Buffer2D`, run `DefaultDrawingBackend.FlushCompositions` on it, then
+   upload the staging region to the native target texture via `UploadTextureFromRegion`.
+3. **GPU failure**: Any GPU operation fails during `TryRenderPreparedFlush` or
+   `TryFinalizeFlush`. Same staging + upload fallback as (2).
+
+### ComposeLayer
+
+1. **Non-native destination**: Delegate directly to `DefaultDrawingBackend.ComposeLayer`.
+2. **Native destination, GPU compose fails**: Read both destination and source textures
+   from the GPU via `TryReadRegion`, compose on CPU via `DefaultDrawingBackend.ComposeLayer`,
+   then upload the composited destination back to the native texture.
+
+## Layer Compositing (ComposeLayer)
+
+`SaveLayer` on `DrawingCanvas` calls `IDrawingBackend.CreateLayerFrame` to allocate the layer.
+When the parent target is a native GPU surface, `WebGPUDrawingBackend` creates a GPU-resident
+texture for the layer (zero-copy). For CPU-backed parents it falls back to `DefaultDrawingBackend`.
+On `Restore`, `IDrawingBackend.ComposeLayer` blends the layer onto the parent target.
+
+```text
+DrawingCanvas.SaveLayer()
+  -> IDrawingBackend.CreateLayerFrame(parentTarget, width, height)
+     -> WebGPUDrawingBackend: GPU texture if parent is native, else CPU fallback
+  -> redirect draw commands to layer frame
+
+DrawingCanvas.Restore() / RestoreTo()
+  -> CompositeAndPopLayer(layerState)
+     -> Flush() current layer batcher
+     -> pop LayerData from layerDataStack
+     -> restore parent batcher
+     -> IDrawingBackend.ComposeLayer(source=layerFrame, destination=parentFrame, offset, options)
+        -> WebGPUDrawingBackend.ComposeLayer
+           -> TryComposeLayerGpu (requires destination with NativeSurface)
+              -> TryGetCompositeTextureFormat<TPixel>
+              -> destination must expose NativeSurface with WebGPU capability
+              -> TryAcquireSourceTexture: bind native GPU texture directly (zero-copy)
+                 or upload CPU pixels to temporary GPU texture
+              -> create output texture sized to composite region
+              -> ComposeLayerComputeShader dispatch:
+                 -> workgroup size 16x16
+                 -> each thread reads backdrop at (out_x + offset, out_y + offset)
+                 -> reads source at (out_x, out_y)
+                 -> applies layer opacity, blend mode, alpha composition
+                 -> writes result to output at (out_x, out_y)
+              -> copy output back to destination texture at compositing offset
+              -> QueueSubmit
+           -> fallback: ComposeLayerFallback
+              -> TryReadRegion(destination) -> CPU staging image
+              -> TryReadRegion(source) -> CPU staging image
+              -> DefaultDrawingBackend.ComposeLayer on staging frames
+              -> UploadTextureFromRegion back to destination texture
+     -> IDrawingBackend.ReleaseFrameResources(layerFrame)
+        -> GPU frames: release texture + texture view
+        -> CPU frames: dispose Buffer2D
+```
+
+### Shader Bindings (ComposeLayerComputeShader)
+
+| Binding | Type | Description |
+|---|---|---|
+| 0 | `texture_2d` | Source layer texture (read) |
+| 1 | `texture_2d` | Backdrop/destination texture (read) |
+| 2 | `texture_storage_2d, write` | Output texture |
+| 3 | `uniform` | `LayerConfig` (source dims, dest offset, blend mode, opacity) |
+
+### LayerConfig Uniform
+
+| Field | Type | Description |
+|---|---|---|
+| source_width, source_height | u32 | Source layer dimensions |
+| dest_offset_x, dest_offset_y | i32 | Offset into backdrop texture |
+| color_blend_mode | u32 | Porter-Duff color blend mode |
+| alpha_composition_mode | u32 | Porter-Duff alpha composition mode |
+| blend_percentage | u32 | Layer opacity (f32 bitcast to u32) |
+
+### Coordinate Spaces
+
+The output texture is sized to the composite region (intersection of source and
+destination bounds). The shader uses local coordinates `(out_x, out_y)` for source
+reads and output writes, and offset coordinates `(out_x + dest_offset, out_y + dest_offset)`
+for backdrop reads. The final `CopyTextureRegion` places the output at the
+compositing offset in the destination texture.
+
+## Shared Composition Functions
+
+`CompositionShaderSnippets.BlendAndCompose` contains shared WGSL functions used by both
+`CompositeComputeShader` and `ComposeLayerComputeShader`:
+
+- `unpremultiply(rgb, alpha)` — converts premultiplied alpha to straight alpha
+- `blend_color(backdrop, source, mode)` — 8 color blend modes (Normal, Multiply, Add, Subtract, Screen, Darken, Lighten, Overlay, HardLight)
+- `compose_pixel(backdrop, source, blend_mode, compose_mode)` — full Porter-Duff alpha composition with 12 modes (Clear, Src, Dest, SrcOver, DestOver, SrcIn, DestIn, SrcOut, DestOut, SrcAtop, DestAtop, Xor)
+
+Both shaders include these functions via the `__BLEND_AND_COMPOSE__` template placeholder,
+avoiding code duplication between the rasterize+composite and layer composite pipelines.
 
 ## Shader Source
 
-`CompositeComputeShader` generates WGSL source per target texture format at runtime, substituting format-specific template tokens for texel decode/encode, backdrop/brush load, and output store. Generated source is cached by `TextureFormat` as null-terminated UTF-8 bytes.
+`CompositeComputeShader` generates WGSL source per target texture format at runtime, substituting format-specific template tokens for texel decode/encode, backdrop/brush load, and output store. `ComposeLayerComputeShader` uses the same template approach with its own format traits. Generated source is cached by `TextureFormat` as null-terminated UTF-8 bytes.
 
 The following static WGSL shaders exist for the legacy CSR GPU pipeline but are not used in the current dispatch path (CSR is computed on CPU):
 - `CsrCountComputeShader`, `CsrScatterComputeShader`

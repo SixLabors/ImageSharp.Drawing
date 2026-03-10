@@ -46,8 +46,50 @@ public interface IDrawingCanvas : IDisposable
     public int Save(DrawingOptions options, params IPath[] clipPaths);
 
     /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer.
+    /// Subsequent draw commands render to a temporary surface. When <see cref="Restore"/>
+    /// is called, the layer is composited back onto the parent using the default
+    /// <see cref="GraphicsOptions"/>.
+    /// </summary>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public int SaveLayer();
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer.
+    /// Subsequent draw commands render to a temporary surface. When <see cref="Restore"/>
+    /// is called, the layer is composited back onto the parent using the specified
+    /// <paramref name="layerOptions"/> (blend mode, alpha composition, opacity).
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the layer is composited on restore.
+    /// </param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public int SaveLayer(GraphicsOptions layerOptions);
+
+    /// <summary>
+    /// Saves the current drawing state and begins an isolated compositing layer
+    /// bounded to a subregion. Subsequent draw commands render to a temporary surface
+    /// sized to <paramref name="bounds"/>. When <see cref="Restore"/> is called, the
+    /// layer is composited back onto the parent using the specified
+    /// <paramref name="layerOptions"/>.
+    /// </summary>
+    /// <param name="layerOptions">
+    /// Graphics options controlling how the layer is composited on restore.
+    /// </param>
+    /// <param name="bounds">
+    /// The local bounds of the layer. Only this region is allocated and composited.
+    /// </param>
+    /// <returns>The save count after the layer state has been pushed.</returns>
+    public int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds);
+
+    /// <summary>
     /// Restores the most recently saved state.
     /// </summary>
+    /// <remarks>
+    /// If the most recently saved state was created by a <c>SaveLayer</c> overload,
+    /// pending commands are flushed to the layer surface, the layer is composited back onto
+    /// the parent target, and the temporary layer buffer is disposed.
+    /// </remarks>
     public void Restore();
 
     /// <summary>
@@ -56,6 +98,8 @@ public interface IDrawingCanvas : IDisposable
     /// <remarks>
     /// State frames above <paramref name="saveCount"/> are discarded,
     /// and the last discarded frame becomes the current state.
+    /// If any discarded state was created by a <c>SaveLayer</c> overload,
+    /// the layer is composited and its resources disposed.
     /// </remarks>
     /// <param name="saveCount">The save count to restore to.</param>
     public void RestoreTo(int saveCount);

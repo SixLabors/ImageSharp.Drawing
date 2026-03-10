@@ -33,6 +33,11 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     }
 
     /// <summary>
+    /// Gets the target frame that this batcher flushes to.
+    /// </summary>
+    public ICanvasFrame<TPixel> TargetFrame => this.targetFrame;
+
+    /// <summary>
     /// Appends one normalized composition command to the pending queue.
     /// </summary>
     /// <param name="composition">The command to queue.</param>

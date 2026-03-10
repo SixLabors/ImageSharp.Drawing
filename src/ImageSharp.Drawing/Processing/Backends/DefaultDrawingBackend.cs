@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Memory;
 
@@ -72,12 +73,85 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
     }
 
     /// <inheritdoc />
+    public void ComposeLayer<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> source,
+        ICanvasFrame<TPixel> destination,
+        Point destinationOffset,
+        GraphicsOptions options)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Guard.NotNull(configuration, nameof(configuration));
+
+        if (!source.TryGetCpuRegion(out Buffer2DRegion<TPixel> sourceRegion))
+        {
+            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible source frames.");
+        }
+
+        if (!destination.TryGetCpuRegion(out Buffer2DRegion<TPixel> destinationRegion))
+        {
+            throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible destination frames.");
+        }
+
+        PixelBlender<TPixel> blender = PixelOperations<TPixel>.Instance.GetPixelBlender(options);
+        float blendPercentage = options.BlendPercentage;
+
+        int srcWidth = sourceRegion.Width;
+        int srcHeight = sourceRegion.Height;
+        int dstWidth = destinationRegion.Width;
+        int dstHeight = destinationRegion.Height;
+
+        // Clamp the compositing region to both source and destination bounds.
+        int startX = Math.Max(0, -destinationOffset.X);
+        int startY = Math.Max(0, -destinationOffset.Y);
+        int endX = Math.Min(srcWidth, dstWidth - destinationOffset.X);
+        int endY = Math.Min(srcHeight, dstHeight - destinationOffset.Y);
+
+        if (endX <= startX || endY <= startY)
+        {
+            return;
+        }
+
+        int width = endX - startX;
+
+        // Allocate a reusable per-row amount buffer from the memory pool.
+        using IMemoryOwner<float> amountsOwner = configuration.MemoryAllocator.Allocate<float>(width);
+        Span<float> amounts = amountsOwner.Memory.Span;
+        amounts.Fill(blendPercentage);
+
+        for (int y = startY; y < endY; y++)
+        {
+            Span<TPixel> srcRow = sourceRegion.DangerousGetRowSpan(y).Slice(startX, width);
+            int dstX = destinationOffset.X + startX;
+            int dstY = destinationOffset.Y + y;
+            Span<TPixel> dstRow = destinationRegion.DangerousGetRowSpan(dstY).Slice(dstX, width);
+
+            blender.Blend(configuration, dstRow, dstRow, srcRow, amounts);
+        }
+    }
+
+    /// <inheritdoc />
+    public ICanvasFrame<TPixel> CreateLayerFrame<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> parentTarget,
+        int width,
+        int height)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Buffer2D<TPixel> buffer = configuration.MemoryAllocator.Allocate2D<TPixel>(width, height, AllocationOptions.Clean);
+        return new MemoryCanvasFrame<TPixel>(new Buffer2DRegion<TPixel>(buffer));
+    }
+
+    /// <inheritdoc />
     public void ReleaseFrameResources<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        // No cached resources to release for CPU-only backend.
+        if (target.TryGetCpuRegion(out Buffer2DRegion<TPixel> region))
+        {
+            region.Buffer.Dispose();
+        }
     }
 
     /// <inheritdoc />

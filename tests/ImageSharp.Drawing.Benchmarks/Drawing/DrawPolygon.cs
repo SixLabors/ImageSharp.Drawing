@@ -23,7 +23,6 @@ public abstract class DrawPolygon
     private PointF[][] points;
 
     private Image<Rgba32> image;
-    private Image<Rgba32> webGpuImage;
 
     private Bitmap sdBitmap;
     private Graphics sdGraphics;
@@ -116,7 +115,6 @@ public abstract class DrawPolygon
         this.webGpuBackend = new WebGPUDrawingBackend();
         this.webGpuConfiguration = Configuration.Default.Clone();
         this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
-        this.webGpuImage = new Image<Rgba32>(this.webGpuConfiguration, this.Width, this.Height);
 
         if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
                 this.Width,
@@ -174,7 +172,6 @@ public abstract class DrawPolygon
         this.skPath.Dispose();
 
         this.image.Dispose();
-        this.webGpuImage.Dispose();
         WebGPUTestNativeSurfaceAllocator.Release(
             this.webGpuNativeTextureHandle,
             this.webGpuNativeTextureViewHandle);
@@ -194,10 +191,6 @@ public abstract class DrawPolygon
     [Benchmark]
     public void ImageSharp()
         => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
-
-    [Benchmark]
-    public void ImageSharpCWebGPUMemoryBuffer()
-        => this.webGpuImage.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
     [Benchmark]
     public void ImageSharpWebGPUNativeSurface()

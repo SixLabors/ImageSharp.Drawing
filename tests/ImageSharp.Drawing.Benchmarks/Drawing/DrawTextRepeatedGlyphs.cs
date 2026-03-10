@@ -30,7 +30,6 @@ public class DrawTextRepeatedGlyphs
 
     private Configuration defaultConfiguration;
     private Image<Rgba32> defaultImage;
-    private Image<Rgba32> webGpuCpuImage;
     private WebGPUDrawingBackend webGpuBackend;
     private Configuration webGpuConfiguration;
     private NativeCanvasFrame<Rgba32> webGpuNativeFrame;
@@ -64,7 +63,6 @@ public class DrawTextRepeatedGlyphs
         this.webGpuBackend = new WebGPUDrawingBackend();
         this.webGpuConfiguration = Configuration.Default.Clone();
         this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
-        this.webGpuCpuImage = new Image<Rgba32>(this.webGpuConfiguration, Width, Height);
 
         if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
                 Width,
@@ -89,7 +87,6 @@ public class DrawTextRepeatedGlyphs
     public void Cleanup()
     {
         this.defaultImage.Dispose();
-        this.webGpuCpuImage.Dispose();
         WebGPUTestNativeSurfaceAllocator.Release(
             this.webGpuNativeTextureHandle,
             this.webGpuNativeTextureViewHandle);
@@ -104,16 +101,6 @@ public class DrawTextRepeatedGlyphs
         MemoryCanvasFrame<Rgba32> frame = new(GetFrameRegion(this.defaultImage));
 
         using DrawingCanvas<Rgba32> canvas = new(this.defaultConfiguration, frame, this.drawingOptions);
-        canvas.DrawText(this.textOptions, this.text, this.brush, null);
-        canvas.Flush();
-    }
-
-    [Benchmark(Description = "DrawingCanvas WebGPU Backend (CPURegion)")]
-    public void DrawingCanvasWebGPUBackendCpuRegion()
-    {
-        MemoryCanvasFrame<Rgba32> frame = new(GetFrameRegion(this.webGpuCpuImage));
-
-        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, frame, this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }

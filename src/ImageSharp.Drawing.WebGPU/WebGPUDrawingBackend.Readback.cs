@@ -32,13 +32,6 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         image = null;
 
-        // When a CPU-backed frame is used with this backend (for example in parity tests),
-        // delegate to the default CPU readback implementation.
-        if (target.TryGetCpuRegion(out _))
-        {
-            return this.fallbackBackend.TryReadRegion(configuration, target, sourceRectangle, out image);
-        }
-
         // Readback is only available for native WebGPU targets with valid interop handles.
         if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
             !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability) ||

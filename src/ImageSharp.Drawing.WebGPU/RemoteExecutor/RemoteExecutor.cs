@@ -46,14 +46,22 @@ internal static class RemoteExecutor
 
         if (!IOPath.GetFileName(HostRunner).Equals(hostName, StringComparison.OrdinalIgnoreCase))
         {
-            string runtimeDir = RuntimeEnvironment.GetRuntimeDirectory();
-            string? directory = IOPath.GetDirectoryName(IOPath.GetDirectoryName(IOPath.GetDirectoryName(runtimeDir)));
-            if (directory is not null)
+            // Walk up from the runtime directory to find the dotnet host executable.
+            // The runtime directory is typically:
+            //   <dotnet_root>/shared/Microsoft.NETCore.App/<version>/
+            // so dotnet.exe is 3–4 levels up depending on trailing separator.
+            string? directory = RuntimeEnvironment.GetRuntimeDirectory();
+            for (int i = 0; i < 4 && directory is not null; i++)
             {
-                string dotnetExe = IOPath.Combine(directory, hostName);
-                if (File.Exists(dotnetExe))
+                directory = IOPath.GetDirectoryName(directory);
+                if (directory is not null)
                 {
-                    HostRunner = dotnetExe;
+                    string dotnetExe = IOPath.Combine(directory, hostName);
+                    if (File.Exists(dotnetExe))
+                    {
+                        HostRunner = dotnetExe;
+                        break;
+                    }
                 }
             }
         }

@@ -28,13 +28,10 @@ internal enum CompositePipelineBlendMode
 /// </summary>
 internal sealed unsafe class WebGPUFlushContext : IDisposable
 {
-    private static readonly ConcurrentDictionary<Type, IDisposable> FallbackStagingCache = new();
     private static readonly ConcurrentDictionary<nint, DeviceSharedState> DeviceStateCache = new();
     private bool disposed;
     private bool ownsTargetTexture;
     private bool ownsTargetView;
-    private bool ownsReadbackBuffer;
-    private DeviceSharedState.CpuTargetLease? cpuTargetLease;
     private readonly List<nint> transientBindGroups = [];
     private readonly List<nint> transientBuffers = [];
     private readonly List<nint> transientTextureViews = [];
@@ -115,33 +112,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public TextureView* TargetView { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether CPU readback is required after GPU execution.
-    /// </summary>
-    public bool RequiresReadback { get; private set; }
-
-    /// <summary>
-    /// Gets or sets an optional override texture to read back from instead of <see cref="TargetTexture"/>.
-    /// When set, readback copies from this texture at origin (0,0) rather than from the target
-    /// at composition bounds, eliminating an intermediate texture-to-texture copy.
-    /// </summary>
-    public Texture* ReadbackSourceOverride { get; set; }
-
-    /// <summary>
-    /// Gets the readback buffer used when CPU readback is required.
-    /// </summary>
-    public WgpuBuffer* ReadbackBuffer { get; private set; }
-
-    /// <summary>
-    /// Gets the readback row stride in bytes.
-    /// </summary>
-    public uint ReadbackBytesPerRow { get; private set; }
-
-    /// <summary>
-    /// Gets the readback buffer byte size.
-    /// </summary>
-    public ulong ReadbackByteCount { get; private set; }
-
-    /// <summary>
     /// Gets the shared instance-data buffer used for parameter uploads.
     /// </summary>
     public WgpuBuffer* InstanceBuffer { get; private set; }
@@ -167,7 +137,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public RenderPassEncoder* PassEncoder { get; private set; }
 
     /// <summary>
-    /// Creates a flush context for either a native WebGPU surface or a CPU-backed frame.
+    /// Creates a flush context for a native WebGPU surface.
+    /// Returns <see langword="null"/> when the frame does not expose a native surface
+    /// or the device lacks the required feature.
     /// </summary>
     /// <param name="frame">The target frame.</param>
     /// <param name="expectedTextureFormat">The expected GPU texture format.</param>
@@ -175,60 +147,29 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// A device feature required by the pixel type for storage binding, or
     /// <see cref="FeatureName.Undefined"/> when no special feature is needed.
     /// </param>
-    /// <param name="pixelSizeInBytes">The unmanaged pixel size in bytes.</param>
     /// <param name="memoryAllocator">The memory allocator for staging buffers.</param>
-    /// <param name="initialUploadBounds">Optional initial upload region for CPU targets.</param>
-    /// <returns>The flush context, or <see langword="null"/> if the device lacks <paramref name="requiredFeature"/>.</returns>
+    /// <returns>The flush context, or <see langword="null"/> when GPU execution is unavailable.</returns>
     public static WebGPUFlushContext? Create<TPixel>(
         ICanvasFrame<TPixel> frame,
         TextureFormat expectedTextureFormat,
         FeatureName requiredFeature,
-        int pixelSizeInBytes,
-        MemoryAllocator memoryAllocator,
-        Rectangle? initialUploadBounds = null)
+        MemoryAllocator memoryAllocator)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         WebGPUSurfaceCapability? nativeCapability = TryGetNativeSurfaceCapability(frame, expectedTextureFormat);
+        if (nativeCapability is null)
+        {
+            return null;
+        }
+
         WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         try
         {
-            Device* device;
-            Queue* queue;
-            TextureFormat textureFormat;
-            Rectangle bounds = frame.Bounds;
-            DeviceSharedState deviceState;
-            WebGPUFlushContext context;
-
-            if (nativeCapability is not null)
-            {
-                device = (Device*)nativeCapability.Device;
-                queue = (Queue*)nativeCapability.Queue;
-                textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
-                bounds = new Rectangle(0, 0, nativeCapability.Width, nativeCapability.Height);
-                deviceState = GetOrCreateDeviceState(lease.Api, device);
-
-                if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
-                {
-                    lease.Dispose();
-                    return null;
-                }
-
-                context = new WebGPUFlushContext(lease, device, queue, in bounds, textureFormat, memoryAllocator, deviceState);
-                context.InitializeNativeTarget(nativeCapability);
-                return context;
-            }
-
-            if (!frame.TryGetCpuRegion(out Buffer2DRegion<TPixel> cpuRegion))
-            {
-                throw new NotSupportedException("Frame does not expose a GPU-native surface or CPU region.");
-            }
-
-            if (!WebGPURuntime.TryGetOrCreateDevice(out device, out queue, out string? error))
-            {
-                throw new InvalidOperationException(error ?? "WebGPU device auto-provisioning failed.");
-            }
-
-            deviceState = GetOrCreateDeviceState(lease.Api, device);
+            Device* device = (Device*)nativeCapability.Device;
+            Queue* queue = (Queue*)nativeCapability.Queue;
+            TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
+            Rectangle bounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
+            DeviceSharedState deviceState = GetOrCreateDeviceState(lease.Api, device);
 
             if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
             {
@@ -236,43 +177,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
                 return null;
             }
 
-            context = new WebGPUFlushContext(lease, device, queue, in bounds, expectedTextureFormat, memoryAllocator, deviceState);
-            nint targetIdentity = (nint)RuntimeHelpers.GetHashCode(frame);
-            context.InitializeCpuTarget(cpuRegion, pixelSizeInBytes, targetIdentity, initialUploadBounds);
-            return context;
-        }
-        catch
-        {
-            lease.Dispose();
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Creates a flush context intended for fallback upload into a writable native surface.
-    /// </summary>
-    public static WebGPUFlushContext CreateUploadContext<TPixel>(ICanvasFrame<TPixel> frame, MemoryAllocator memoryAllocator)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        WebGPUSurfaceCapability? nativeCapability =
-            TryGetWritableNativeSurfaceCapability(frame)
-            ?? throw new NotSupportedException("Fallback upload requires a native WebGPU surface exposing writable device, queue, and texture handles.");
-
-        WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-        try
-        {
-            Rectangle bounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
-            TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
-            Device* device = (Device*)nativeCapability.Device;
-            DeviceSharedState deviceState = GetOrCreateDeviceState(lease.Api, device);
-            WebGPUFlushContext context = new(
-                lease,
-                device,
-                (Queue*)nativeCapability.Queue,
-                in bounds,
-                textureFormat,
-                memoryAllocator,
-                deviceState);
+            WebGPUFlushContext context = new(lease, device, queue, in bounds, textureFormat, memoryAllocator, deviceState);
             context.InitializeNativeTarget(nativeCapability);
             return context;
         }
@@ -280,44 +185,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         {
             lease.Dispose();
             throw;
-        }
-    }
-
-    /// <summary>
-    /// Rents a CPU fallback staging buffer for the specified pixel type and bounds.
-    /// </summary>
-    public static FallbackStagingLease<TPixel> RentFallbackStaging<TPixel>(MemoryAllocator allocator, in Rectangle bounds)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        IDisposable entry = FallbackStagingCache.GetOrAdd(
-            typeof(TPixel),
-            static _ => new FallbackStagingEntry<TPixel>());
-
-        return ((FallbackStagingEntry<TPixel>)entry).Rent(allocator, in bounds);
-    }
-
-    /// <summary>
-    /// Clears all cached CPU fallback staging buffers.
-    /// </summary>
-    public static void ClearFallbackStagingCache()
-    {
-        foreach (IDisposable entry in FallbackStagingCache.Values)
-        {
-            entry.Dispose();
-        }
-
-        FallbackStagingCache.Clear();
-    }
-
-    /// <summary>
-    /// Releases all cached CPU target resources associated with the specified target identity.
-    /// </summary>
-    /// <param name="targetIdentity">The target frame identity whose cached resources should be released.</param>
-    public static void ReleaseCpuTargetEntries(nint targetIdentity)
-    {
-        foreach (DeviceSharedState state in DeviceStateCache.Values)
-        {
-            state.ReleaseCpuTargetEntries(targetIdentity);
         }
     }
 
@@ -540,14 +407,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         this.InstanceBufferWriteOffset = 0;
 
-        this.cpuTargetLease?.Dispose();
-        this.cpuTargetLease = null;
-
-        if (this.ownsReadbackBuffer && this.ReadbackBuffer is not null)
-        {
-            this.Api.BufferRelease(this.ReadbackBuffer);
-        }
-
         if (this.ownsTargetView && this.TargetView is not null)
         {
             this.Api.TextureViewRelease(this.TargetView);
@@ -586,13 +445,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         // Cache entries point to transient texture views that are released above.
         this.cachedSourceTextureViews.Clear();
 
-        this.ReadbackBuffer = null;
         this.TargetView = null;
         this.TargetTexture = null;
-        this.ReadbackBytesPerRow = 0;
-        this.ReadbackByteCount = 0;
-        this.RequiresReadback = false;
-        this.ownsReadbackBuffer = false;
         this.ownsTargetView = false;
         this.ownsTargetTexture = false;
 
@@ -622,66 +476,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     {
         this.TargetTexture = (Texture*)capability.TargetTexture;
         this.TargetView = (TextureView*)capability.TargetTextureView;
-        this.RequiresReadback = false;
-        this.ReadbackBuffer = null;
-        this.ReadbackBytesPerRow = 0;
-        this.ReadbackByteCount = 0;
         this.ownsTargetTexture = false;
         this.ownsTargetView = false;
-        this.ownsReadbackBuffer = false;
-    }
-
-    private void InitializeCpuTarget<TPixel>(
-        Buffer2DRegion<TPixel> cpuRegion,
-        int pixelSizeInBytes,
-        nint targetIdentity,
-        Rectangle? initialUploadBounds)
-        where TPixel : unmanaged
-    {
-        int width = cpuRegion.Width;
-        int height = cpuRegion.Height;
-        DeviceSharedState.CpuTargetLease lease = this.DeviceState.RentCpuTarget(
-            this.TextureFormat,
-            width,
-            height,
-            pixelSizeInBytes,
-            targetIdentity);
-        Texture* targetTexture = lease.TargetTexture;
-        TextureView* targetView = lease.TargetView;
-        WgpuBuffer* readbackBuffer = lease.ReadbackBuffer;
-        uint readbackRowBytes = lease.ReadbackBytesPerRow;
-        ulong readbackByteCount = lease.ReadbackByteCount;
-
-        try
-        {
-            if (initialUploadBounds is Rectangle uploadBounds &&
-                uploadBounds.Width > 0 &&
-                uploadBounds.Height > 0)
-            {
-                Buffer2DRegion<TPixel> uploadRegion = cpuRegion.GetSubRegion(uploadBounds);
-                UploadTextureFromRegion(this.Api, this.Queue, targetTexture, uploadRegion, this.MemoryAllocator, (uint)uploadBounds.X, (uint)uploadBounds.Y, 0);
-            }
-            else
-            {
-                UploadTextureFromRegion(this.Api, this.Queue, targetTexture, cpuRegion, this.MemoryAllocator);
-            }
-        }
-        catch
-        {
-            lease.Dispose();
-            throw;
-        }
-
-        this.cpuTargetLease = lease;
-        this.TargetTexture = targetTexture;
-        this.TargetView = targetView;
-        this.ReadbackBuffer = readbackBuffer;
-        this.ReadbackBytesPerRow = readbackRowBytes;
-        this.ReadbackByteCount = readbackByteCount;
-        this.RequiresReadback = true;
-        this.ownsTargetTexture = false;
-        this.ownsTargetView = false;
-        this.ownsReadbackBuffer = false;
     }
 
     private static WebGPUSurfaceCapability? TryGetNativeSurfaceCapability<TPixel>(ICanvasFrame<TPixel> frame, TextureFormat expectedTextureFormat)
@@ -697,32 +493,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             capability.Queue == 0 ||
             capability.TargetTextureView == 0 ||
             WebGPUTextureFormatMapper.ToSilk(capability.TargetFormat) != expectedTextureFormat)
-        {
-            return null;
-        }
-
-        Rectangle bounds = frame.Bounds;
-        if (bounds.X < 0 ||
-            bounds.Y < 0 ||
-            bounds.Right > capability.Width ||
-            bounds.Bottom > capability.Height)
-        {
-            return null;
-        }
-
-        return capability;
-    }
-
-    private static WebGPUSurfaceCapability? TryGetWritableNativeSurfaceCapability<TPixel>(ICanvasFrame<TPixel> frame)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (!frame.TryGetNativeSurface(out NativeSurface? nativeSurface) ||
-            !nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability))
-        {
-            return null;
-        }
-
-        if (capability.Device == 0 || capability.Queue == 0 || capability.TargetTexture == 0)
         {
             return null;
         }
@@ -834,7 +604,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     /// </summary>
     internal sealed class DeviceSharedState : IDisposable
     {
-        private readonly ConcurrentDictionary<CpuTargetCacheKey, CpuTargetEntry> cpuTargetCache = new();
         private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
@@ -900,43 +669,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             }
 
             return result;
-        }
-
-        /// <summary>
-        /// Rents CPU-target staging resources for a destination texture shape and format.
-        /// </summary>
-        /// <param name="textureFormat">The destination texture format.</param>
-        /// <param name="width">The destination width.</param>
-        /// <param name="height">The destination height.</param>
-        /// <param name="pixelSizeInBytes">The destination pixel size in bytes.</param>
-        /// <param name="targetIdentity">Identity of the target frame to prevent cache collisions.</param>
-        /// <returns>A lease for staging resources.</returns>
-        public CpuTargetLease RentCpuTarget(
-            TextureFormat textureFormat,
-            int width,
-            int height,
-            int pixelSizeInBytes,
-            nint targetIdentity)
-        {
-            CpuTargetCacheKey key = new(textureFormat, width, height, pixelSizeInBytes, targetIdentity);
-            CpuTargetEntry entry = this.cpuTargetCache.GetOrAdd(key, static _ => new CpuTargetEntry());
-            return entry.Rent(this.Api, this.Device, in key);
-        }
-
-        /// <summary>
-        /// Releases and removes all CPU target cache entries matching the specified target identity.
-        /// </summary>
-        /// <param name="targetIdentity">The target frame identity whose entries should be released.</param>
-        public void ReleaseCpuTargetEntries(nint targetIdentity)
-        {
-            foreach (KeyValuePair<CpuTargetCacheKey, CpuTargetEntry> pair in this.cpuTargetCache)
-            {
-                if (pair.Key.TargetIdentity == targetIdentity &&
-                    this.cpuTargetCache.TryRemove(pair.Key, out CpuTargetEntry? entry))
-                {
-                    entry.Dispose(this.Api);
-                }
-            }
         }
 
         /// <summary>
@@ -1224,12 +956,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
             this.sharedBuffers.Clear();
 
-            foreach (CpuTargetEntry entry in this.cpuTargetCache.Values)
-            {
-                entry.Dispose(this.Api);
-            }
-
-            this.cpuTargetCache.Clear();
             this.disposed = true;
         }
 
@@ -1465,358 +1191,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
 
         /// <summary>
-        /// Cache key for CPU-target staging resources.
-        /// </summary>
-        internal readonly struct CpuTargetCacheKey(
-            TextureFormat textureFormat,
-            int width,
-            int height,
-            int pixelSizeInBytes,
-            nint targetIdentity) : IEquatable<CpuTargetCacheKey>
-        {
-            /// <summary>
-            /// Gets the texture format for the cached CPU target.
-            /// </summary>
-            public TextureFormat TextureFormat { get; } = textureFormat;
-
-            /// <summary>
-            /// Gets the target width.
-            /// </summary>
-            public int Width { get; } = width;
-
-            /// <summary>
-            /// Gets the target height.
-            /// </summary>
-            public int Height { get; } = height;
-
-            /// <summary>
-            /// Gets the pixel size in bytes.
-            /// </summary>
-            public int PixelSizeInBytes { get; } = pixelSizeInBytes;
-
-            /// <summary>
-            /// Gets the identity of the target frame to prevent different targets
-            /// with the same dimensions from sharing GPU texture content.
-            /// </summary>
-            public nint TargetIdentity { get; } = targetIdentity;
-
-            /// <summary>
-            /// Determines whether this key equals another CPU target cache key.
-            /// </summary>
-            /// <param name="other">The key to compare.</param>
-            /// <returns><see langword="true"/> if all fields match; otherwise <see langword="false"/>.</returns>
-            public bool Equals(CpuTargetCacheKey other)
-                => this.TextureFormat == other.TextureFormat &&
-                   this.Width == other.Width &&
-                   this.Height == other.Height &&
-                   this.PixelSizeInBytes == other.PixelSizeInBytes &&
-                   this.TargetIdentity == other.TargetIdentity;
-
-            /// <inheritdoc/>
-            public override bool Equals(object? obj) => obj is CpuTargetCacheKey other && this.Equals(other);
-
-            /// <inheritdoc/>
-            public override int GetHashCode() => HashCode.Combine((int)this.TextureFormat, this.Width, this.Height, this.PixelSizeInBytes, this.TargetIdentity);
-        }
-
-        /// <summary>
-        /// Cache entry that owns the CPU-target staging resources.
-        /// </summary>
-        internal sealed class CpuTargetEntry
-        {
-            private Texture* targetTexture;
-            private TextureView* targetView;
-            private WgpuBuffer* readbackBuffer;
-            private uint readbackBytesPerRow;
-            private ulong readbackByteCount;
-            private int inUse;
-
-            /// <summary>
-            /// Rents staging resources for the specified cache key.
-            /// </summary>
-            internal CpuTargetLease Rent(WebGPU api, Device* device, in CpuTargetCacheKey key)
-            {
-                if (Interlocked.CompareExchange(ref this.inUse, 1, 0) == 0)
-                {
-                    try
-                    {
-                        this.EnsureResources(api, device, in key);
-                    }
-                    catch
-                    {
-                        this.Release();
-                        throw;
-                    }
-
-                    return new CpuTargetLease(
-                        api,
-                        this,
-                        ownsResources: false,
-                        this.targetTexture,
-                        this.targetView,
-                        this.readbackBuffer,
-                        this.readbackBytesPerRow,
-                        this.readbackByteCount);
-                }
-
-                if (!TryCreateCpuTargetResources(
-                        api,
-                        device,
-                        in key,
-                        out Texture* temporaryTexture,
-                        out TextureView* temporaryView,
-                        out WgpuBuffer* temporaryReadbackBuffer,
-                        out uint temporaryReadbackRowBytes,
-                        out ulong temporaryReadbackByteCount))
-                {
-                    throw new InvalidOperationException("Failed to create temporary CPU flush target resources.");
-                }
-
-                return new CpuTargetLease(
-                    api,
-                    owner: null,
-                    ownsResources: true,
-                    temporaryTexture,
-                    temporaryView,
-                    temporaryReadbackBuffer,
-                    temporaryReadbackRowBytes,
-                    temporaryReadbackByteCount);
-            }
-
-            /// <summary>
-            /// Marks this entry as available for reuse.
-            /// </summary>
-            internal void Release() => Volatile.Write(ref this.inUse, 0);
-
-            /// <summary>
-            /// Releases all resources currently owned by this entry.
-            /// </summary>
-            internal void Dispose(WebGPU api)
-            {
-                ReleaseCpuTargetResources(api, this.targetTexture, this.targetView, this.readbackBuffer);
-                this.targetTexture = null;
-                this.targetView = null;
-                this.readbackBuffer = null;
-                this.readbackBytesPerRow = 0;
-                this.readbackByteCount = 0;
-                this.inUse = 0;
-            }
-
-            private void EnsureResources(WebGPU api, Device* device, in CpuTargetCacheKey key)
-            {
-                if (this.targetTexture is not null &&
-                    this.targetView is not null &&
-                    this.readbackBuffer is not null)
-                {
-                    return;
-                }
-
-                ReleaseCpuTargetResources(api, this.targetTexture, this.targetView, this.readbackBuffer);
-                this.targetTexture = null;
-                this.targetView = null;
-                this.readbackBuffer = null;
-                this.readbackBytesPerRow = 0;
-                this.readbackByteCount = 0;
-
-                if (!TryCreateCpuTargetResources(
-                        api,
-                        device,
-                        in key,
-                        out this.targetTexture,
-                        out this.targetView,
-                        out this.readbackBuffer,
-                        out this.readbackBytesPerRow,
-                        out this.readbackByteCount))
-                {
-                    throw new InvalidOperationException("Failed to create cached CPU flush target resources.");
-                }
-            }
-
-            private static bool TryCreateCpuTargetResources(
-                WebGPU api,
-                Device* device,
-                in CpuTargetCacheKey key,
-                out Texture* targetTexture,
-                out TextureView* targetView,
-                out WgpuBuffer* readbackBuffer,
-                out uint readbackBytesPerRow,
-                out ulong readbackByteCount)
-            {
-                targetTexture = null;
-                targetView = null;
-                readbackBuffer = null;
-                readbackBytesPerRow = 0;
-                readbackByteCount = 0;
-
-                uint textureRowBytes = checked((uint)key.Width * (uint)key.PixelSizeInBytes);
-                readbackBytesPerRow = AlignTo256(textureRowBytes);
-                readbackByteCount = checked((ulong)readbackBytesPerRow * (uint)key.Height);
-
-                TextureDescriptor targetTextureDescriptor = new()
-                {
-                    Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding,
-                    Dimension = TextureDimension.Dimension2D,
-                    Size = new Extent3D((uint)key.Width, (uint)key.Height, 1),
-                    Format = key.TextureFormat,
-                    MipLevelCount = 1,
-                    SampleCount = 1
-                };
-
-                targetTexture = api.DeviceCreateTexture(device, in targetTextureDescriptor);
-                if (targetTexture is null)
-                {
-                    return false;
-                }
-
-                TextureViewDescriptor targetViewDescriptor = new()
-                {
-                    Format = key.TextureFormat,
-                    Dimension = TextureViewDimension.Dimension2D,
-                    BaseMipLevel = 0,
-                    MipLevelCount = 1,
-                    BaseArrayLayer = 0,
-                    ArrayLayerCount = 1,
-                    Aspect = TextureAspect.All
-                };
-
-                targetView = api.TextureCreateView(targetTexture, in targetViewDescriptor);
-                if (targetView is null)
-                {
-                    api.TextureRelease(targetTexture);
-                    targetTexture = null;
-                    return false;
-                }
-
-                BufferDescriptor readbackDescriptor = new()
-                {
-                    Usage = BufferUsage.MapRead | BufferUsage.CopyDst,
-                    Size = readbackByteCount
-                };
-
-                readbackBuffer = api.DeviceCreateBuffer(device, in readbackDescriptor);
-                if (readbackBuffer is null)
-                {
-                    api.TextureViewRelease(targetView);
-                    api.TextureRelease(targetTexture);
-                    targetView = null;
-                    targetTexture = null;
-                    return false;
-                }
-
-                return true;
-            }
-
-            private static void ReleaseCpuTargetResources(
-                WebGPU api,
-                Texture* targetTexture,
-                TextureView* targetView,
-                WgpuBuffer* readbackBuffer)
-            {
-                if (readbackBuffer is not null)
-                {
-                    api.BufferRelease(readbackBuffer);
-                }
-
-                if (targetView is not null)
-                {
-                    api.TextureViewRelease(targetView);
-                }
-
-                if (targetTexture is not null)
-                {
-                    api.TextureRelease(targetTexture);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Lease wrapper for CPU-target staging resources.
-        /// </summary>
-        public sealed class CpuTargetLease : IDisposable
-        {
-            private readonly WebGPU api;
-            private readonly CpuTargetEntry? owner;
-            private readonly bool ownsResources;
-            private int disposed;
-
-            internal CpuTargetLease(
-                WebGPU api,
-                CpuTargetEntry? owner,
-                bool ownsResources,
-                Texture* targetTexture,
-                TextureView* targetView,
-                WgpuBuffer* readbackBuffer,
-                uint readbackBytesPerRow,
-                ulong readbackByteCount)
-            {
-                this.api = api;
-                this.owner = owner;
-                this.ownsResources = ownsResources;
-                this.TargetTexture = targetTexture;
-                this.TargetView = targetView;
-                this.ReadbackBuffer = readbackBuffer;
-                this.ReadbackBytesPerRow = readbackBytesPerRow;
-                this.ReadbackByteCount = readbackByteCount;
-            }
-
-            /// <summary>
-            /// Gets the target texture used for CPU staging operations.
-            /// </summary>
-            public Texture* TargetTexture { get; }
-
-            /// <summary>
-            /// Gets the texture view of <see cref="TargetTexture"/>.
-            /// </summary>
-            public TextureView* TargetView { get; }
-
-            /// <summary>
-            /// Gets the readback buffer used to copy staged pixels to CPU memory.
-            /// </summary>
-            public WgpuBuffer* ReadbackBuffer { get; }
-
-            /// <summary>
-            /// Gets the readback row stride in bytes.
-            /// </summary>
-            public uint ReadbackBytesPerRow { get; }
-
-            /// <summary>
-            /// Gets the total readback buffer size in bytes.
-            /// </summary>
-            public ulong ReadbackByteCount { get; }
-
-            /// <summary>
-            /// Releases leased resources or returns ownership to the shared cache entry.
-            /// </summary>
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref this.disposed, 1) != 0)
-                {
-                    return;
-                }
-
-                if (this.ownsResources)
-                {
-                    if (this.ReadbackBuffer is not null)
-                    {
-                        this.api.BufferRelease(this.ReadbackBuffer);
-                    }
-
-                    if (this.TargetView is not null)
-                    {
-                        this.api.TextureViewRelease(this.TargetView);
-                    }
-
-                    if (this.TargetTexture is not null)
-                    {
-                        this.api.TextureRelease(this.TargetTexture);
-                    }
-                }
-
-                this.owner?.Release();
-            }
-        }
-
-        /// <summary>
         /// Shared render-pipeline infrastructure for compositing variants.
         /// </summary>
         private sealed class CompositePipelineInfrastructure
@@ -1848,117 +1222,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             public nuint Capacity { get; set; }
 
             public BufferUsage Usage { get; set; }
-        }
-    }
-
-    /// <summary>
-    /// Lease over a CPU fallback staging region.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel type of the staging region.</typeparam>
-    public sealed class FallbackStagingLease<TPixel> : IDisposable
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly FallbackStagingEntry<TPixel>? owner;
-        private readonly Buffer2D<TPixel>? temporaryBuffer;
-        private int disposed;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FallbackStagingLease{TPixel}"/> class.
-        /// </summary>
-        internal FallbackStagingLease(
-            Buffer2DRegion<TPixel> region,
-            FallbackStagingEntry<TPixel>? owner,
-            Buffer2D<TPixel>? temporaryBuffer)
-        {
-            this.Region = region;
-            this.owner = owner;
-            this.temporaryBuffer = temporaryBuffer;
-        }
-
-        /// <summary>
-        /// Gets the staging region for fallback rendering.
-        /// </summary>
-        public Buffer2DRegion<TPixel> Region { get; }
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref this.disposed, 1) != 0)
-            {
-                return;
-            }
-
-            this.temporaryBuffer?.Dispose();
-            this.owner?.Release();
-        }
-    }
-
-    /// <summary>
-    /// Cached staging entry for one pixel type.
-    /// </summary>
-    /// <typeparam name="TPixel">The pixel type stored by this entry.</typeparam>
-    internal sealed class FallbackStagingEntry<TPixel> : IDisposable
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private Buffer2D<TPixel>? buffer;
-        private Size size;
-        private int inUse;
-
-        /// <summary>
-        /// Rents a staging lease for the specified bounds.
-        /// </summary>
-        public FallbackStagingLease<TPixel> Rent(MemoryAllocator allocator, in Rectangle bounds)
-        {
-            if (Interlocked.CompareExchange(ref this.inUse, 1, 0) == 0)
-            {
-                this.EnsureSize(allocator, bounds.Size);
-                Buffer2D<TPixel>? current = this.buffer;
-                if (current is null)
-                {
-                    this.Release();
-                    throw new InvalidOperationException("Fallback staging buffer is not initialized.");
-                }
-
-                return new FallbackStagingLease<TPixel>(
-                    new Buffer2DRegion<TPixel>(current, bounds),
-                    this,
-                    temporaryBuffer: null);
-            }
-
-            Buffer2D<TPixel> temporary = allocator.Allocate2D<TPixel>(bounds.Size, AllocationOptions.Clean);
-            return new FallbackStagingLease<TPixel>(
-                new Buffer2DRegion<TPixel>(temporary, bounds),
-                owner: null,
-                temporaryBuffer: temporary);
-        }
-
-        /// <summary>
-        /// Releases an acquired cached staging entry.
-        /// </summary>
-        public void Release()
-            => Volatile.Write(ref this.inUse, 0);
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            this.buffer?.Dispose();
-            this.buffer = null;
-            this.size = default;
-            this.inUse = 0;
-        }
-
-        private void EnsureSize(MemoryAllocator allocator, Size requiredSize)
-        {
-            if (this.buffer is not null &&
-                this.size.Width >= requiredSize.Width &&
-                this.size.Height >= requiredSize.Height)
-            {
-                return;
-            }
-
-            this.buffer?.Dispose();
-            this.buffer = allocator.Allocate2D<TPixel>(requiredSize, AllocationOptions.Clean);
-            this.size = requiredSize;
         }
     }
 }

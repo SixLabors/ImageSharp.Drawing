@@ -6,7 +6,6 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
-using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
@@ -27,9 +26,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <code>
 /// CompositionScene
 ///   -> Encoded scene stream (draw tags + draw-data stream)
-///   -> Acquire flush context
+///   -> Acquire flush context (native GPU surface only)
 ///   -> Execute one tiled scene pass (binning -> coarse -> fine)
-///   -> Blit once and optionally read back to CPU region
+///   -> Blit composited output back to target texture
 ///   -> On failure: delegate scene to DefaultDrawingBackend
 /// </code>
 /// </remarks>
@@ -46,7 +45,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private const string StrokeExpandConfigBufferKey = "stroke-expand/config";
     private const string StrokeExpandCounterBufferKey = "stroke-expand/counter";
     private const int UniformBufferOffsetAlignment = 256;
-    private const int CallbackTimeoutMilliseconds = 10_000;
 
     private readonly DefaultDrawingBackend fallbackBackend;
     private static bool? isSupported;
@@ -306,18 +304,26 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
+        // CPU-backed target — delegate directly to the CPU backend.
+        if (!target.TryGetNativeSurface(out _))
+        {
+            this.fallbackBackend.FlushCompositions(configuration, target, compositionScene);
+            return;
+        }
+
         if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature) ||
             !AreAllCompositionBrushesSupported<TPixel>(compositionScene.Commands))
         {
             int fallbackCommandCount = compositionScene.Commands.Count;
             this.TestingFallbackPrepareCoverageCallCount += fallbackCommandCount;
             this.TestingFallbackCompositeCoverageCallCount += fallbackCommandCount;
+
             this.FlushCompositionsFallback(
                 configuration,
                 target,
                 compositionScene,
-                target.TryGetCpuRegion(out Buffer2DRegion<TPixel> _),
                 compositionBounds: null);
+
             return;
         }
 
@@ -366,7 +372,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.TestingCompositeCoverageCallCount += commandCount;
 
-        bool hasCpuRegion = target.TryGetCpuRegion(out Buffer2DRegion<TPixel> cpuRegion);
         compositionBounds = Rectangle.Intersect(
             compositionBounds.Value,
             new Rectangle(0, 0, target.Bounds.Width, target.Bounds.Height));
@@ -378,15 +383,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         bool gpuSuccess = false;
         bool gpuReady = false;
         string? failure = null;
-        int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
 
         WebGPUFlushContext? flushContext = WebGPUFlushContext.Create(
             target,
             textureFormat,
             requiredFeature,
-            pixelSizeInBytes,
-            configuration.MemoryAllocator,
-            compositionBounds);
+            configuration.MemoryAllocator);
 
         if (flushContext is null)
         {
@@ -396,7 +398,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 configuration,
                 target,
                 compositionScene,
-                target.TryGetCpuRegion(out Buffer2DRegion<TPixel> _),
                 compositionBounds);
             return;
         }
@@ -417,7 +418,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 out Rectangle effectiveBounds,
                 out failure);
 
-            bool finalizeOk = renderOk && this.TryFinalizeFlush(flushContext, cpuRegion, effectiveBounds);
+            bool finalizeOk = renderOk && TryFinalizeFlush(flushContext);
 
             gpuSuccess = finalizeOk;
         }
@@ -450,8 +451,106 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             configuration,
             target,
             compositionScene,
-            hasCpuRegion,
             compositionBounds);
+    }
+
+    /// <inheritdoc />
+    public ICanvasFrame<TPixel> CreateLayerFrame<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> parentTarget,
+        int width,
+        int height)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        this.ThrowIfDisposed();
+
+        // Try GPU texture allocation when the parent target has a native WebGPU surface.
+        if (TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature)
+            && parentTarget.TryGetNativeSurface(out NativeSurface? parentSurface))
+        {
+            _ = parentSurface.TryGetCapability(out WebGPUSurfaceCapability? parentCapability);
+            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+            WebGPU api = lease.Api;
+            Device* device = (Device*)parentCapability!.Device;
+
+            WebGPUFlushContext.DeviceSharedState deviceState = WebGPUFlushContext.GetOrCreateDeviceState(api, device);
+            if (requiredFeature == FeatureName.Undefined || deviceState.HasFeature(requiredFeature))
+            {
+                TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
+                TextureDescriptor textureDescriptor = new()
+                {
+                    Usage = TextureUsage.TextureBinding | TextureUsage.StorageBinding | TextureUsage.CopySrc | TextureUsage.CopyDst,
+                    Dimension = TextureDimension.Dimension2D,
+                    Size = new Extent3D((uint)width, (uint)height, 1),
+                    Format = textureFormat,
+                    MipLevelCount = 1,
+                    SampleCount = 1
+                };
+
+                Texture* texture = api.DeviceCreateTexture(device, in textureDescriptor);
+                if (texture is not null)
+                {
+                    TextureViewDescriptor viewDescriptor = new()
+                    {
+                        Format = textureFormat,
+                        Dimension = TextureViewDimension.Dimension2D,
+                        BaseMipLevel = 0,
+                        MipLevelCount = 1,
+                        BaseArrayLayer = 0,
+                        ArrayLayerCount = 1,
+                        Aspect = TextureAspect.All
+                    };
+
+                    TextureView* textureView = api.TextureCreateView(texture, in viewDescriptor);
+                    if (textureView is not null)
+                    {
+                        NativeSurface surface = WebGPUNativeSurfaceFactory.Create<TPixel>(
+                            parentCapability.Device,
+                            parentCapability.Queue,
+                            (nint)texture,
+                            (nint)textureView,
+                            formatId,
+                            width,
+                            height);
+
+                        return new NativeCanvasFrame<TPixel>(new Rectangle(0, 0, width, height), surface);
+                    }
+
+                    api.TextureRelease(texture);
+                }
+            }
+        }
+
+        // Fall back to CPU allocation.
+        return this.fallbackBackend.CreateLayerFrame(configuration, parentTarget, width, height);
+    }
+
+    /// <inheritdoc />
+    public void ComposeLayer<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> source,
+        ICanvasFrame<TPixel> destination,
+        Point destinationOffset,
+        GraphicsOptions options)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        this.ThrowIfDisposed();
+
+        // CPU-backed destination — delegate directly.
+        if (!destination.TryGetNativeSurface(out _))
+        {
+            this.fallbackBackend.ComposeLayer(configuration, source, destination, destinationOffset, options);
+            return;
+        }
+
+        // Try the GPU compute path first.
+        if (this.TryComposeLayerGpu(configuration, source, destination, destinationOffset, options))
+        {
+            return;
+        }
+
+        // GPU path unavailable — stage through CPU and upload.
+        this.ComposeLayerFallback(configuration, source, destination, destinationOffset, options);
     }
 
     /// <inheritdoc />
@@ -460,8 +559,20 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        nint targetIdentity = RuntimeHelpers.GetHashCode(target);
-        WebGPUFlushContext.ReleaseCpuTargetEntries(targetIdentity);
+        // Release GPU texture resources for layer frames created by this backend.
+        if (target.TryGetNativeSurface(out NativeSurface? nativeSurface))
+        {
+            _ = nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability);
+            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+            WebGPU api = lease.Api;
+            api.TextureViewRelease((TextureView*)capability!.TargetTextureView);
+            api.TextureRelease((Texture*)capability.TargetTexture);
+        }
+        else
+        {
+            // CPU-backed frame: delegate cleanup to the fallback backend.
+            this.fallbackBackend.ReleaseFrameResources(configuration, target);
+        }
     }
 
     /// <summary>
@@ -498,62 +609,89 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             or RecolorBrush;
 
     /// <summary>
-    /// Executes the scene on the CPU fallback backend.
+    /// Executes the scene on the CPU fallback backend, then uploads the result
+    /// to the native GPU surface.
     /// </summary>
-    /// <typeparam name="TPixel">The destination pixel format.</typeparam>
-    /// <param name="configuration">The active processing configuration.</param>
-    /// <param name="target">The original destination frame.</param>
-    /// <param name="compositionScene">The scene to execute.</param>
-    /// <param name="hasCpuRegion">
-    /// Indicates whether <paramref name="target"/> exposes CPU pixels directly. When <see langword="false"/>,
-    /// a temporary staging frame is composed and uploaded to the native surface.
-    /// </param>
-    /// <param name="compositionBounds">The destination-local bounds touched by the scene when known.</param>
     private void FlushCompositionsFallback<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         CompositionScene compositionScene,
-        bool hasCpuRegion,
         Rectangle? compositionBounds)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (hasCpuRegion)
+        _ = target.TryGetNativeSurface(out NativeSurface? nativeSurface);
+        _ = nativeSurface!.TryGetCapability(out WebGPUSurfaceCapability? capability);
+
+        Rectangle targetBounds = target.Bounds;
+        using Buffer2D<TPixel> stagingBuffer =
+            configuration.MemoryAllocator.Allocate2D<TPixel>(targetBounds.Width, targetBounds.Height, AllocationOptions.Clean);
+
+        Buffer2DRegion<TPixel> stagingRegion = new(stagingBuffer);
+        ICanvasFrame<TPixel> stagingFrame = new MemoryCanvasFrame<TPixel>(stagingRegion);
+
+        this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
+
+        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        Buffer2DRegion<TPixel> uploadRegion = compositionBounds is Rectangle cb && cb.Width > 0 && cb.Height > 0
+            ? stagingRegion.GetSubRegion(cb)
+            : stagingRegion;
+
+        uint destX = compositionBounds is Rectangle cbx ? (uint)cbx.X : 0;
+        uint destY = compositionBounds is Rectangle cby ? (uint)cby.Y : 0;
+
+        WebGPUFlushContext.UploadTextureFromRegion(
+            lease.Api,
+            (Queue*)capability!.Queue,
+            (Texture*)capability.TargetTexture,
+            uploadRegion,
+            configuration.MemoryAllocator,
+            destX,
+            destY,
+            0);
+    }
+
+    /// <summary>
+    /// CPU fallback for layer compositing when the GPU path is unavailable but the
+    /// destination is a native GPU surface.
+    /// </summary>
+    private void ComposeLayerFallback<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> source,
+        ICanvasFrame<TPixel> destination,
+        Point destinationOffset,
+        GraphicsOptions options)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        _ = destination.TryGetNativeSurface(out NativeSurface? destSurface);
+        _ = destSurface!.TryGetCapability(out WebGPUSurfaceCapability? destCapability);
+
+        // Read destination and source from the GPU into CPU images.
+        if (!this.TryReadRegion(configuration, destination, destination.Bounds, out Image<TPixel>? destImage))
         {
-            this.fallbackBackend.FlushCompositions(configuration, target, compositionScene);
             return;
         }
 
-        Rectangle targetBounds = target.Bounds;
-        using WebGPUFlushContext.FallbackStagingLease<TPixel> stagingLease =
-            WebGPUFlushContext.RentFallbackStaging<TPixel>(configuration.MemoryAllocator, in targetBounds);
-
-        Buffer2DRegion<TPixel> stagingRegion = stagingLease.Region;
-        ICanvasFrame<TPixel> stagingFrame = new MemoryCanvasFrame<TPixel>(stagingRegion);
-        this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
-
-        using WebGPUFlushContext uploadContext = WebGPUFlushContext.CreateUploadContext(target, configuration.MemoryAllocator);
-        if (compositionBounds is Rectangle uploadBounds &&
-            uploadBounds.Width > 0 &&
-            uploadBounds.Height > 0)
+        if (!this.TryReadRegion(configuration, source, source.Bounds, out Image<TPixel>? srcImage))
         {
-            Buffer2DRegion<TPixel> uploadRegion = stagingRegion.GetSubRegion(uploadBounds);
-            WebGPUFlushContext.UploadTextureFromRegion(
-                uploadContext.Api,
-                uploadContext.Queue,
-                uploadContext.TargetTexture,
-                uploadRegion,
-                configuration.MemoryAllocator,
-                (uint)uploadBounds.X,
-                (uint)uploadBounds.Y,
-                0);
+            destImage.Dispose();
+            return;
         }
-        else
+
+        using (destImage)
+        using (srcImage)
         {
+            Buffer2DRegion<TPixel> destRegion = new(destImage.Frames.RootFrame.PixelBuffer);
+            ICanvasFrame<TPixel> destFrame = new MemoryCanvasFrame<TPixel>(destRegion);
+            ICanvasFrame<TPixel> srcFrame = new MemoryCanvasFrame<TPixel>(new Buffer2DRegion<TPixel>(srcImage.Frames.RootFrame.PixelBuffer));
+
+            this.fallbackBackend.ComposeLayer(configuration, srcFrame, destFrame, destinationOffset, options);
+
+            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
             WebGPUFlushContext.UploadTextureFromRegion(
-                uploadContext.Api,
-                uploadContext.Queue,
-                uploadContext.TargetTexture,
-                stagingRegion,
+                lease.Api,
+                (Queue*)destCapability!.Queue,
+                (Texture*)destCapability.TargetTexture,
+                destRegion,
                 configuration.MemoryAllocator);
         }
     }
@@ -582,12 +720,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         if (!flushContext.EnsureCommandEncoder())
         {
             error = "Failed to create WebGPU command encoder.";
-            return false;
-        }
-
-        if (flushContext.TargetTexture is null || flushContext.TargetView is null)
-        {
-            error = "WebGPU flush context does not expose required target resources.";
             return false;
         }
 
@@ -743,8 +875,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 out WgpuBuffer* edgeBuffer,
                 out nuint edgeBufferSize,
                 out EdgePlacement[] edgePlacements,
-                out int totalEdgeCount,
-                out int totalBandOffsetEntries,
+                out _,
+                out _,
                 out WgpuBuffer* bandOffsetsBuffer,
                 out nuint bandOffsetsBufferSize,
                 out StrokeExpandInfo strokeExpandInfo,
@@ -791,26 +923,17 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return false;
         }
 
-        if (flushContext.RequiresReadback)
-        {
-            // CPU target: read back directly from the output texture at (0,0)
-            // instead of copying output→target and then reading from target.
-            flushContext.ReadbackSourceOverride = outputTexture;
-        }
-        else
-        {
-            // Native GPU surface: copy composited output back into the target.
-            CopyTextureRegion(
-                flushContext,
-                outputTexture,
-                0,
-                0,
-                flushContext.TargetTexture,
-                targetLocalBounds.X,
-                targetLocalBounds.Y,
-                targetLocalBounds.Width,
-                targetLocalBounds.Height);
-        }
+        // Copy composited output back into the target texture.
+        CopyTextureRegion(
+            flushContext,
+            outputTexture,
+            0,
+            0,
+            flushContext.TargetTexture,
+            targetLocalBounds.X,
+            targetLocalBounds.Y,
+            targetLocalBounds.Width,
+            targetLocalBounds.Height);
 
         error = null;
         return true;
@@ -848,11 +971,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return false;
         }
 
-        if (!CompositeComputeShader.TryGetInputSampleType(flushContext.TextureFormat, out TextureSampleType inputTextureSampleType))
-        {
-            error = $"Prepared composite fine shader does not support texture format '{flushContext.TextureFormat}'.";
-            return false;
-        }
+        // TryGetCode already validates format support via TryGetInputSampleType internally.
+        _ = CompositeComputeShader.TryGetInputSampleType(flushContext.TextureFormat, out TextureSampleType inputTextureSampleType);
 
         string pipelineKey = $"prepared-composite-fine/{flushContext.TextureFormat}";
         bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
@@ -1892,7 +2012,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         out TextureView* textureView,
         out string? error)
     {
-        texture = null;
         textureView = null;
 
         TextureDescriptor textureDescriptor = new()
@@ -2031,20 +2150,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Finalizes one flush by submitting command buffers and optionally reading results back to CPU memory.
+    /// Finalizes one flush by submitting command buffers.
     /// </summary>
-    private bool TryFinalizeFlush<TPixel>(
-        WebGPUFlushContext flushContext,
-        Buffer2DRegion<TPixel> cpuRegion,
-        Rectangle? readbackBounds)
-        where TPixel : unmanaged, IPixel<TPixel>
+    private static bool TryFinalizeFlush(WebGPUFlushContext flushContext)
     {
         flushContext.EndRenderPassIfOpen();
-        if (flushContext.RequiresReadback)
-        {
-            return this.TryReadBackToCpuRegion(flushContext, cpuRegion, readbackBounds);
-        }
-
         return TrySubmit(flushContext);
     }
 
@@ -2086,179 +2196,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Copies target texture contents to the readback buffer and transfers bytes into destination CPU pixels.
-    /// </summary>
-    private bool TryReadBackToCpuRegion<TPixel>(
-        WebGPUFlushContext flushContext,
-        Buffer2DRegion<TPixel> destinationRegion,
-        Rectangle? readbackBounds)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (flushContext.TargetTexture is null ||
-            flushContext.ReadbackBuffer is null ||
-            flushContext.ReadbackByteCount == 0 ||
-            flushContext.ReadbackBytesPerRow == 0)
-        {
-            return false;
-        }
-
-        if (!flushContext.EnsureCommandEncoder())
-        {
-            return false;
-        }
-
-        Rectangle copyBounds = readbackBounds ?? new Rectangle(0, 0, destinationRegion.Width, destinationRegion.Height);
-        if (copyBounds.Width <= 0 || copyBounds.Height <= 0)
-        {
-            return true;
-        }
-
-        uint copyBytesPerRow = checked((uint)copyBounds.Width * (uint)Unsafe.SizeOf<TPixel>());
-        copyBytesPerRow = (copyBytesPerRow + 255U) & ~255U;
-
-        // When ReadbackSourceOverride is set, the output texture already contains the
-        // composited result at (0,0), so we read from there instead of the target texture.
-        bool useOverride = flushContext.ReadbackSourceOverride is not null;
-        Texture* readbackTexture = useOverride ? flushContext.ReadbackSourceOverride : flushContext.TargetTexture;
-        uint readbackOriginX = useOverride ? 0 : (uint)copyBounds.X;
-        uint readbackOriginY = useOverride ? 0 : (uint)copyBounds.Y;
-
-        ImageCopyTexture source = new()
-        {
-            Texture = readbackTexture,
-            MipLevel = 0,
-            Origin = new Origin3D(readbackOriginX, readbackOriginY, 0),
-            Aspect = TextureAspect.All
-        };
-
-        ImageCopyBuffer destination = new()
-        {
-            Buffer = flushContext.ReadbackBuffer,
-            Layout = new TextureDataLayout
-            {
-                Offset = 0,
-                BytesPerRow = copyBytesPerRow,
-                RowsPerImage = (uint)copyBounds.Height
-            }
-        };
-
-        Extent3D copySize = new((uint)copyBounds.Width, (uint)copyBounds.Height, 1);
-        flushContext.Api.CommandEncoderCopyTextureToBuffer(flushContext.CommandEncoder, in source, in destination, in copySize);
-
-        if (!TrySubmit(flushContext))
-        {
-            return false;
-        }
-
-        return this.TryReadBackBufferToRegion(
-            flushContext,
-            flushContext.ReadbackBuffer,
-            checked((int)copyBytesPerRow),
-            destinationRegion,
-            copyBounds);
-    }
-
-    /// <summary>
-    /// Maps the readback buffer and copies pixel data into the destination region.
-    /// </summary>
-    private bool TryReadBackBufferToRegion<TPixel>(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* readbackBuffer,
-        int sourceRowBytes,
-        Buffer2DRegion<TPixel> destinationRegion,
-        in Rectangle copyBounds)
-        where TPixel : unmanaged
-    {
-        int destinationRowBytes = checked(copyBounds.Width * Unsafe.SizeOf<TPixel>());
-        int readbackByteCount = checked(sourceRowBytes * copyBounds.Height);
-        if (!this.TryMapReadBuffer(flushContext, readbackBuffer, (nuint)readbackByteCount, out byte* mappedData))
-        {
-            return false;
-        }
-
-        try
-        {
-            ReadOnlySpan<byte> sourceData = new(mappedData, readbackByteCount);
-            int destinationStrideBytes = checked(destinationRegion.Buffer.RowStride * Unsafe.SizeOf<TPixel>());
-
-            // Fast path for contiguous full-width rows.
-            if (copyBounds.X == 0 &&
-                copyBounds.Width == destinationRegion.Width &&
-                destinationRegion.Buffer.DangerousTryGetSingleMemory(out Memory<TPixel> contiguousDestination))
-            {
-                Span<byte> destinationBytes = MemoryMarshal.AsBytes(contiguousDestination.Span);
-                int destinationStart = checked((destinationRegion.Rectangle.Y + copyBounds.Y) * destinationStrideBytes);
-                int copyByteCount = checked(destinationStrideBytes * copyBounds.Height);
-                Span<byte> destinationSlice = destinationBytes.Slice(destinationStart, copyByteCount);
-                if (sourceRowBytes == destinationStrideBytes)
-                {
-                    sourceData[..copyByteCount].CopyTo(destinationSlice);
-                    return true;
-                }
-
-                for (int y = 0; y < copyBounds.Height; y++)
-                {
-                    sourceData.Slice(y * sourceRowBytes, destinationStrideBytes)
-                        .CopyTo(destinationSlice.Slice(y * destinationStrideBytes, destinationStrideBytes));
-                }
-
-                return true;
-            }
-
-            for (int y = 0; y < copyBounds.Height; y++)
-            {
-                ReadOnlySpan<byte> sourceRow = sourceData.Slice(y * sourceRowBytes, destinationRowBytes);
-                MemoryMarshal.Cast<byte, TPixel>(sourceRow).CopyTo(
-                    destinationRegion.DangerousGetRowSpan(copyBounds.Y + y).Slice(copyBounds.X, copyBounds.Width));
-            }
-
-            return true;
-        }
-        finally
-        {
-            flushContext.Api.BufferUnmap(readbackBuffer);
-        }
-    }
-
-    /// <summary>
-    /// Maps a readback buffer for CPU access and returns the mapped pointer.
-    /// </summary>
-    private bool TryMapReadBuffer(
-        WebGPUFlushContext flushContext,
-        WgpuBuffer* readbackBuffer,
-        nuint byteCount,
-        out byte* mappedData)
-    {
-        mappedData = null;
-        BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
-        using ManualResetEventSlim callbackReady = new(false);
-        void Callback(BufferMapAsyncStatus status, void* userData)
-        {
-            mapStatus = status;
-            callbackReady.Set();
-        }
-
-        using PfnBufferMapCallback callbackPtr = PfnBufferMapCallback.From(Callback);
-        flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, byteCount, callbackPtr, null);
-
-        if (!WaitForSignal(flushContext, callbackReady) || mapStatus != BufferMapAsyncStatus.Success)
-        {
-            return false;
-        }
-
-        void* mapped = flushContext.Api.BufferGetConstMappedRange(readbackBuffer, 0, byteCount);
-        if (mapped is null)
-        {
-            flushContext.Api.BufferUnmap(readbackBuffer);
-            return false;
-        }
-
-        mappedData = (byte*)mapped;
-        return true;
-    }
-
-    /// <summary>
-    /// Releases all cached shared WebGPU resources and fallback staging resources.
+    /// Releases all cached shared WebGPU resources.
     /// </summary>
     public void Dispose()
     {
@@ -2269,7 +2207,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.DisposeCoverageResources();
         WebGPUFlushContext.ClearDeviceStateCache();
-        WebGPUFlushContext.ClearFallbackStagingCache();
 
         this.TestingLiveCoverageCount = 0;
         this.TestingIsGPUReady = false;
@@ -2283,20 +2220,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ThrowIfDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-    /// <summary>
-    /// Waits for a GPU callback signal, polling the device when the WGPU extension is available.
-    /// </summary>
-    private static bool WaitForSignal(WebGPUFlushContext flushContext, ManualResetEventSlim signal)
-    {
-        Wgpu? extension = flushContext.RuntimeLease.WgpuExtension;
-        if (extension is not null)
-        {
-            _ = extension.DevicePoll(flushContext.Device, true, (WrappedSubmissionIndex*)null);
-        }
-
-        return signal.Wait(CallbackTimeoutMilliseconds);
-    }
 
     /// <summary>
     /// Key that identifies a coverage definition for reuse within a flush.

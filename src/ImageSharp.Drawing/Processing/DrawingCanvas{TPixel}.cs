@@ -39,8 +39,15 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
     /// <summary>
     /// Command batcher used to defer and submit composition commands.
+    /// Reassigned when a layer is pushed or popped via <see cref="SaveLayer()"/>.
     /// </summary>
-    private readonly DrawingCanvasBatcher<TPixel> batcher;
+    private DrawingCanvasBatcher<TPixel> batcher;
+
+    /// <summary>
+    /// Active layer data stack. Each entry corresponds to a <see cref="SaveLayer()"/>
+    /// call on the saved-states stack and holds the parent batcher and temporary layer buffer.
+    /// </summary>
+    private readonly Stack<LayerData<TPixel>> layerDataStack = new();
 
     /// <summary>
     /// Temporary image resources that must stay alive until queued commands are flushed.
@@ -233,7 +240,11 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     public int Save()
     {
         this.EnsureNotDisposed();
-        this.savedStates.Push(this.ResolveState());
+        DrawingCanvasState current = this.ResolveState();
+
+        // Push a non-layer copy of the current state.
+        // Only states pushed by SaveLayer() should trigger layer compositing on restore.
+        this.savedStates.Push(new DrawingCanvasState(current.Options, current.ClipPaths));
         return this.savedStates.Count;
     }
 
@@ -252,6 +263,59 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
+    public int SaveLayer()
+        => this.SaveLayer(new GraphicsOptions());
+
+    /// <inheritdoc />
+    public int SaveLayer(GraphicsOptions layerOptions)
+        => this.SaveLayer(layerOptions, this.Bounds);
+
+    /// <inheritdoc />
+    public int SaveLayer(GraphicsOptions layerOptions, Rectangle bounds)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(layerOptions, nameof(layerOptions));
+
+        // Flush any pending commands to the current target before switching.
+        this.Flush();
+
+        // Clamp bounds to the canvas.
+        Rectangle layerBounds = Rectangle.Intersect(this.Bounds, bounds);
+        if (layerBounds.Width <= 0 || layerBounds.Height <= 0)
+        {
+            layerBounds = new Rectangle(0, 0, 1, 1);
+        }
+
+        // Allocate a layer frame via the backend (CPU image or GPU texture).
+        ICanvasFrame<TPixel> currentTarget = this.batcher.TargetFrame;
+        ICanvasFrame<TPixel> layerFrame = this.backend.CreateLayerFrame(
+            this.configuration,
+            currentTarget,
+            layerBounds.Width,
+            layerBounds.Height);
+
+        // Save the current batcher so we can restore it later.
+        DrawingCanvasBatcher<TPixel> parentBatcher = this.batcher;
+        LayerData<TPixel> layerData = new(parentBatcher, layerFrame, layerBounds);
+        this.layerDataStack.Push(layerData);
+
+        // Redirect commands to the layer target.
+        this.batcher = new DrawingCanvasBatcher<TPixel>(this.configuration, this.backend, layerFrame);
+
+        // Push a layer state onto the saved states stack.
+        DrawingCanvasState currentState = this.ResolveState();
+        DrawingCanvasState layerState = new(currentState.Options, currentState.ClipPaths)
+        {
+            IsLayer = true,
+            LayerOptions = layerOptions,
+            LayerBounds = layerBounds,
+        };
+
+        this.savedStates.Push(layerState);
+        return this.savedStates.Count;
+    }
+
+    /// <inheritdoc />
     public void Restore()
     {
         this.EnsureNotDisposed();
@@ -260,7 +324,11 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             return;
         }
 
-        _ = this.savedStates.Pop();
+        DrawingCanvasState popped = this.savedStates.Pop();
+        if (popped.IsLayer)
+        {
+            this.CompositeAndPopLayer(popped);
+        }
     }
 
     /// <inheritdoc />
@@ -271,7 +339,11 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         while (this.savedStates.Count > saveCount)
         {
-            _ = this.savedStates.Pop();
+            DrawingCanvasState popped = this.savedStates.Pop();
+            if (popped.IsLayer)
+            {
+                this.CompositeAndPopLayer(popped);
+            }
         }
     }
 
@@ -1125,16 +1197,27 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         try
         {
+            // Composite any active layers back before final flush.
+            while (this.layerDataStack.Count > 0)
+            {
+                this.Flush();
+                LayerData<TPixel> layerData = this.layerDataStack.Pop();
+                this.batcher = layerData.ParentBatcher;
+                ICanvasFrame<TPixel> destination = this.batcher.TargetFrame;
+                this.backend.ComposeLayer(
+                    this.configuration,
+                    layerData.LayerFrame,
+                    destination,
+                    layerData.LayerBounds.Location,
+                    new GraphicsOptions());
+                this.backend.ReleaseFrameResources(this.configuration, layerData.LayerFrame);
+            }
+
             this.batcher.FlushCompositions();
         }
         finally
         {
             this.DisposePendingImageResources();
-
-            if (this.isRoot)
-            {
-                this.backend.ReleaseFrameResources(this.configuration, this.targetFrame);
-            }
 
             this.isDisposed = true;
         }
@@ -1145,6 +1228,36 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// </summary>
     private void EnsureNotDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
+
+    /// <summary>
+    /// Flushes the current layer batcher, composites the layer onto its parent target,
+    /// restores the parent batcher, and disposes the layer resources.
+    /// </summary>
+    /// <param name="layerState">The layer state that was just popped.</param>
+    private void CompositeAndPopLayer(DrawingCanvasState layerState)
+    {
+        // Flush pending commands to the layer surface.
+        this.Flush();
+
+        LayerData<TPixel> layerData = this.layerDataStack.Pop();
+
+        // Restore the parent batcher.
+        this.batcher = layerData.ParentBatcher;
+
+        // Composite the layer onto the parent batcher's target (which may be another layer
+        // in the case of nested SaveLayer calls, or the root target frame).
+        ICanvasFrame<TPixel> destination = this.batcher.TargetFrame;
+        GraphicsOptions options = layerState.LayerOptions ?? new GraphicsOptions();
+        Rectangle bounds = layerState.LayerBounds ?? this.Bounds;
+        this.backend.ComposeLayer(
+            this.configuration,
+            layerData.LayerFrame,
+            destination,
+            bounds.Location,
+            options);
+
+        this.backend.ReleaseFrameResources(this.configuration, layerData.LayerFrame);
+    }
 
     /// <summary>
     /// Normalizes text options to avoid applying origin translation twice when path-based text is used.
