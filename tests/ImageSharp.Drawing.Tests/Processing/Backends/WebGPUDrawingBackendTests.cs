@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#if !ENV_CI
+#if !ENV_CI_BAK
 // WebGPU is failing in our CI environment in Ubuntu with
 // WebGPU adapter request failed with status 'Unavailable'
 // It's also failing in Windows CI with "Test host process crashed : Fatal error.0xC0000005"
