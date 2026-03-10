@@ -142,33 +142,76 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// This probes the runtime by attempting to acquire an adapter and device.
     /// The result is cached after the first probe.
     /// </summary>
-    public bool IsSupported => isSupported ??= ProbeSupport();
+    public bool IsSupported => isSupported ??= ProbeFullSupport();
 
     /// <summary>
-    /// Determines whether WebGPU compute support is available on the current system.
+    /// Probes whether WebGPU compute is fully supported on the current system.
+    /// First checks adapter/device availability in-process. If that succeeds,
+    /// spawns a child process via <see cref="RemoteExecutor"/> to test compute
+    /// pipeline creation, which can crash with an unrecoverable access violation
+    /// on some systems. If the remote executor is not available, falls back to
+    /// the device-only check.
     /// </summary>
-    /// <remarks>
-    /// This method goes beyond checking adapter and device availability — it also compiles
-    /// a trivial compute shader and creates a compute pipeline to verify the full compute
-    /// path works. Some systems report a valid device but crash on pipeline creation due to
-    /// driver or runtime issues.
-    /// </remarks>
     /// <returns>Returns <see langword="true"/> if WebGPU compute support is available; otherwise, <see langword="false"/>.</returns>
+    private static bool ProbeFullSupport()
+    {
+        // Step 1: Quick in-process check for adapter/device availability.
+        if (!ProbeSupport())
+        {
+            return false;
+        }
+
+        // Step 2: Out-of-process probe for compute pipeline support.
+        // DeviceCreateComputePipeline can crash with an AccessViolationException
+        // on some systems (e.g. Windows CI with software renderers). This native
+        // crash cannot be caught in managed code, so we run it in a child process.
+        if (!RemoteExecutor.IsSupported)
+        {
+            // If we can't spawn a child process, assume device availability is sufficient.
+            return true;
+        }
+
+        return RemoteExecutor.Invoke(ProbeComputePipelineSupport) == 0;
+    }
+
+    /// <summary>
+    /// Determines whether WebGPU adapter and device are available on the current system.
+    /// </summary>
+    /// <remarks>This method only checks adapter and device availability. It does not attempt
+    /// compute pipeline creation. Use <see cref="ProbeFullSupport"/> for a complete check.</remarks>
+    /// <returns>Returns <see langword="true"/> if a WebGPU device is available; otherwise, <see langword="false"/>.</returns>
     public static bool ProbeSupport()
+    {
+        try
+        {
+            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+            return WebGPURuntime.TryGetOrCreateDevice(out _, out _, out _);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Probes full WebGPU compute pipeline support by compiling a trivial shader and
+    /// creating a compute pipeline. This method may crash with an access violation on
+    /// systems with broken WebGPU compute support — callers should run it in a child
+    /// process (e.g. via <c>RemoteExecutor</c>) to isolate the crash.
+    /// </summary>
+    /// <returns>Exit code: 0 on success, 1 on failure.</returns>
+    public static int ProbeComputePipelineSupport()
     {
         try
         {
             using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
             if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out _, out _))
             {
-                return false;
+                return 1;
             }
 
             WebGPU api = lease.Api;
 
-            // Compile a trivial compute shader and create a pipeline to verify the
-            // full compute path works end-to-end. Some drivers/runtimes crash at
-            // DeviceCreateComputePipeline despite successful device creation.
             ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn cs_main() {}\0"u8;
             fixed (byte* shaderCodePtr = probeShader)
             {
@@ -186,7 +229,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 ShaderModule* shaderModule = api.DeviceCreateShaderModule(device, in shaderDescriptor);
                 if (shaderModule is null)
                 {
-                    return false;
+                    return 1;
                 }
 
                 try
@@ -209,7 +252,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         PipelineLayout* pipelineLayout = api.DeviceCreatePipelineLayout(device, in layoutDescriptor);
                         if (pipelineLayout is null)
                         {
-                            return false;
+                            return 1;
                         }
 
                         try
@@ -223,11 +266,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                             ComputePipeline* pipeline = api.DeviceCreateComputePipeline(device, in pipelineDescriptor);
                             if (pipeline is null)
                             {
-                                return false;
+                                return 1;
                             }
 
                             api.ComputePipelineRelease(pipeline);
-                            return true;
+                            return 0;
                         }
                         finally
                         {
@@ -243,7 +286,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         }
         catch
         {
-            return false;
+            return 1;
         }
     }
 

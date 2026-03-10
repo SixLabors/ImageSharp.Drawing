@@ -6,31 +6,55 @@ using SixLabors.ImageSharp.Drawing.Processing.Backends;
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes;
 
 /// <summary>
-/// A <see cref="FactAttribute"/> that skips when WebGPU is not available on the current system.
+/// A <see cref="FactAttribute"/> that skips when WebGPU compute is not available on the current system.
 /// </summary>
 public class WebGPUFactAttribute : FactAttribute
 {
     public WebGPUFactAttribute()
     {
-        using WebGPUDrawingBackend backend = new();
-        if (!backend.IsSupported)
+        if (!WebGPUProbe.IsComputeSupported)
         {
-            this.Skip = "WebGPU is not available on this system.";
+            this.Skip = "WebGPU compute is not available on this system.";
         }
     }
 }
 
 /// <summary>
-/// A <see cref="TheoryAttribute"/> that skips when WebGPU is not available on the current system.
+/// A <see cref="TheoryAttribute"/> that skips when WebGPU compute is not available on the current system.
 /// </summary>
 public class WebGPUTheoryAttribute : TheoryAttribute
 {
     public WebGPUTheoryAttribute()
     {
-        using WebGPUDrawingBackend backend = new();
-        if (!backend.IsSupported)
+        if (!WebGPUProbe.IsComputeSupported)
         {
-            this.Skip = "WebGPU is not available on this system.";
+            this.Skip = "WebGPU compute is not available on this system.";
+        }
+    }
+}
+
+/// <summary>
+/// Caches the result of the WebGPU compute pipeline probe.
+/// The backend's <see cref="WebGPUDrawingBackend.IsSupported"/> already performs
+/// a full out-of-process probe via the internal RemoteExecutor, so we simply
+/// instantiate the backend and check its result.
+/// </summary>
+internal static class WebGPUProbe
+{
+    private static bool? computeSupported;
+
+    internal static bool IsComputeSupported => computeSupported ??= Probe();
+
+    private static bool Probe()
+    {
+        try
+        {
+            using WebGPUDrawingBackend backend = new();
+            return backend.IsSupported;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

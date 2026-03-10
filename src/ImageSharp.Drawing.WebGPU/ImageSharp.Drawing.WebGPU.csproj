@@ -12,6 +12,13 @@
     <PackageTags>Image Draw Shape Path Font</PackageTags>
     <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
     <Configurations>Debug;Release</Configurations>
+    <!--
+      OutputType=Exe is required so that runtimeconfig.json and deps.json are generated.
+      The internal RemoteExecutor uses 'dotnet exec' to spawn a child process that probes
+      compute pipeline support. This avoids unrecoverable AccessViolationException crashes
+      in the parent process. The assembly is still usable as a library via ProjectReference.
+    -->
+    <OutputType>Exe</OutputType>
     <IsTrimmable>true</IsTrimmable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
