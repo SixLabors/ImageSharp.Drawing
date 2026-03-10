@@ -11,6 +11,11 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public interface IDrawingBackend
 {
     /// <summary>
+    /// Gets a value indicating whether this backend is available on the current system.
+    /// </summary>
+    public bool IsSupported => true;
+
+    /// <summary>
     /// Flushes queued composition operations for the target.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>

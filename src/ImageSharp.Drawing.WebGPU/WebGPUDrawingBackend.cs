@@ -49,6 +49,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private const int CallbackTimeoutMilliseconds = 10_000;
 
     private readonly DefaultDrawingBackend fallbackBackend;
+    private static bool? isSupported;
     private bool isDisposed;
 
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
@@ -73,24 +74,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         SweepGradient = 6,
         Pattern = 7,
         Recolor = 8,
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether WebGPU is available on the current system.
-    /// This probes the runtime by attempting to acquire an adapter and device.
-    /// </summary>
-    /// <returns><see langword="true"/> when WebGPU is functional; otherwise <see langword="false"/>.</returns>
-    public static bool IsSupported()
-    {
-        try
-        {
-            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-            return WebGPURuntime.TryGetOrCreateDevice(out _, out _, out _);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     /// <summary>
@@ -153,6 +136,26 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// the compute composition path.
     /// </summary>
     internal int TestingComputePathBatchCount { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether WebGPU is available on the current system.
+    /// This probes the runtime by attempting to acquire an adapter and device.
+    /// The result is cached after the first probe.
+    /// </summary>
+    public bool IsSupported => isSupported ??= ProbeSupport();
+
+    private static bool ProbeSupport()
+    {
+        try
+        {
+            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+            return WebGPURuntime.TryGetOrCreateDevice(out _, out _, out _);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     /// <inheritdoc />
     public void FlushCompositions<TPixel>(
@@ -324,7 +327,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         ICanvasFrame<TPixel> target)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        nint targetIdentity = (nint)RuntimeHelpers.GetHashCode(target);
+        nint targetIdentity = RuntimeHelpers.GetHashCode(target);
         WebGPUFlushContext.ReleaseCpuTargetEntries(targetIdentity);
     }
 

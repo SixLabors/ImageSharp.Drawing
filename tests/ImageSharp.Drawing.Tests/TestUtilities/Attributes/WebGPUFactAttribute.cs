@@ -12,7 +12,8 @@ public class WebGPUFactAttribute : FactAttribute
 {
     public WebGPUFactAttribute()
     {
-        if (!WebGPUDrawingBackend.IsSupported())
+        using WebGPUDrawingBackend backend = new();
+        if (!backend.IsSupported)
         {
             this.Skip = "WebGPU is not available on this system.";
         }
@@ -26,7 +27,8 @@ public class WebGPUTheoryAttribute : TheoryAttribute
 {
     public WebGPUTheoryAttribute()
     {
-        if (!WebGPUDrawingBackend.IsSupported())
+        using WebGPUDrawingBackend backend = new();
+        if (!backend.IsSupported)
         {
             this.Skip = "WebGPU is not available on this system.";
         }
