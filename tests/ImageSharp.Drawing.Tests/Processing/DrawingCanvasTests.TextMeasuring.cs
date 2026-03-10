@@ -197,4 +197,89 @@ public partial class DrawingCanvasTests
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
+
+    [Fact]
+    public void MeasureTextSize_ReturnsNonEmptyRectangle()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> target = new(64, 64);
+        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
+
+        RectangleF size = canvas.MeasureTextSize(textOptions, "Hello");
+
+        Assert.True(size.Width > 0, "Width should be positive.");
+        Assert.True(size.Height > 0, "Height should be positive.");
+    }
+
+    [Fact]
+    public void MeasureTextSize_EmptyText_ReturnsEmpty()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> target = new(64, 64);
+        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
+
+        RectangleF size = canvas.MeasureTextSize(textOptions, ReadOnlySpan<char>.Empty);
+
+        Assert.Equal(RectangleF.Empty, size);
+    }
+
+    [Fact]
+    public void MeasureTextSize_LongerText_IsWider()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> target = new(64, 64);
+        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
+
+        RectangleF shortSize = canvas.MeasureTextSize(textOptions, "Hi");
+        RectangleF longSize = canvas.MeasureTextSize(textOptions, "Hello World");
+
+        Assert.True(longSize.Width > shortSize.Width, "Longer text should produce a wider measurement.");
+    }
+
+    [Fact]
+    public void TryMeasureCharacterAdvances_ReturnsAdvancesForEachCharacter()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> target = new(64, 64);
+        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
+
+        const string text = "ABC";
+        bool result = canvas.TryMeasureCharacterAdvances(textOptions, text, out ReadOnlySpan<GlyphBounds> advances);
+
+        Assert.True(result);
+        Assert.Equal(text.Length, advances.Length);
+
+        for (int i = 0; i < advances.Length; i++)
+        {
+            Assert.True(advances[i].Bounds.Width > 0, $"Advance width for character {i} should be positive.");
+        }
+    }
+
+    [Fact]
+    public void TryMeasureCharacterAdvances_EmptyText_ReturnsFalse()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> target = new(64, 64);
+        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 24);
+        RichTextOptions textOptions = new(font) { Origin = new PointF(0, 0) };
+
+        bool result = canvas.TryMeasureCharacterAdvances(textOptions, ReadOnlySpan<char>.Empty, out ReadOnlySpan<GlyphBounds> advances);
+
+        Assert.False(result);
+        Assert.True(advances.IsEmpty);
+    }
 }

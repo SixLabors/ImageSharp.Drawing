@@ -14,6 +14,35 @@ public partial class DrawingCanvasTests
 {
     [Theory]
     [WithBlankImage(220, 160, PixelTypes.Rgba32)]
+    public void Process_PathBuilder_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+
+        PathBuilder blurBuilder = new();
+        blurBuilder.AddArc(new PointF(55, 40), 55, 40, 0, 0, 360);
+        blurBuilder.CloseAllFigures();
+
+        PathBuilder pixelateBuilder = new();
+        pixelateBuilder.AddLine(110, 80, 220, 80);
+        pixelateBuilder.AddLine(220, 80, 165, 160);
+        pixelateBuilder.AddLine(165, 160, 110, 80);
+        pixelateBuilder.CloseAllFigures();
+
+        using (DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            DrawProcessScenario(canvas);
+            canvas.Process(blurBuilder, ctx => ctx.GaussianBlur(6F));
+            canvas.Process(pixelateBuilder, ctx => ctx.Pixelate(10));
+            canvas.Flush();
+        }
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithBlankImage(220, 160, PixelTypes.Rgba32)]
     public void Process_Path_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
