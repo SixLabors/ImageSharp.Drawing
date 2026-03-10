@@ -23,7 +23,6 @@ public abstract class BaseImageOperationsExtensionTest
     {
         this.graphicsOptions = new GraphicsOptions
         {
-            AntialiasSubpixelDepth = 99,
             Antialias = false,
             BlendPercentage = 0.9f,
             AlphaCompositionMode = PixelAlphaCompositionMode.DestOut,

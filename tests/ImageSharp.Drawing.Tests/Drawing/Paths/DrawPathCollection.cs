@@ -10,8 +10,6 @@ namespace SixLabors.ImageSharp.Drawing.Tests.Drawing.Paths;
 
 public class DrawPathCollection : BaseImageOperationsExtensionTest
 {
-    private readonly GraphicsOptions nonDefault = new() { Antialias = false };
-    private readonly Color color = Color.HotPink;
     private readonly SolidPen pen = Pens.Solid(Color.HotPink, 1);
     private readonly IPath path1 = new Path(new LinearLineSegment(
     [
@@ -162,8 +160,8 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
         {
             Assert.NotEqual(this.shapeOptions, p.Options.ShapeOptions);
             SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
-            Assert.Equal(this.pen.JointStyle, pPen.JointStyle);
-            Assert.Equal(this.pen.EndCapStyle, pPen.EndCapStyle);
+            Assert.Equal(this.pen.StrokeOptions.LineJoin, pPen.StrokeOptions.LineJoin);
+            Assert.Equal(this.pen.StrokeOptions.LineCap, pPen.StrokeOptions.LineCap);
         });
 
         Assert.Collection(
@@ -182,8 +180,8 @@ public class DrawPathCollection : BaseImageOperationsExtensionTest
         {
             Assert.Equal(this.shapeOptions, p.Options.ShapeOptions);
             SolidPen pPen = Assert.IsType<SolidPen>(p.Pen);
-            Assert.Equal(this.pen.JointStyle, pPen.JointStyle);
-            Assert.Equal(this.pen.EndCapStyle, pPen.EndCapStyle);
+            Assert.Equal(this.pen.StrokeOptions.LineJoin, pPen.StrokeOptions.LineJoin);
+            Assert.Equal(this.pen.StrokeOptions.LineCap, pPen.StrokeOptions.LineCap);
         });
 
         Assert.Collection(

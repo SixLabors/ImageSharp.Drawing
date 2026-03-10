@@ -16,14 +16,20 @@ public class InProcessConfig : ManualConfig
 {
     public InProcessConfig()
     {
-        AddLogger(ConsoleLogger.Default);
+        this.AddLogger(ConsoleLogger.Default);
 
-        AddColumnProvider(DefaultColumnProviders.Instance);
+        this.AddColumnProvider(DefaultColumnProviders.Instance);
 
-        AddExporter(DefaultExporters.Html, DefaultExporters.Csv);
+        this.AddExporter(DefaultExporters.Html, DefaultExporters.Csv);
 
-        this.AddJob(Job.MediumRun
-            .WithToolchain(InProcessEmitToolchain.Instance));
+        // Use a long, stable job for rasterization benchmarks where scheduler noise and
+        // thread-pool startup can otherwise dominate short in-process runs.
+        this.AddJob(
+            Job.Default
+                .WithLaunchCount(3)
+                .WithWarmupCount(15)
+                .WithIterationCount(40)
+                .WithToolchain(InProcessEmitToolchain.Instance));
     }
 }
 

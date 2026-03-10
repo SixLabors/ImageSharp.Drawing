@@ -7,6 +7,9 @@ using Moq;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Drawing;
+using SixLabors.ImageSharp.Drawing.Shapes;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
+using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors;
@@ -163,6 +166,126 @@ public class FillPathProcessorTests
             image.Mutate(ctx => ctx.Fill(Color.White, path));
         }
     }
+
+    [Fact]
+    public void DrawPathProcessor_UsesNonZeroRule_WhenStrokeNormalizationIsDisabled()
+    {
+        DrawingOptions options = new()
+        {
+            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+        };
+
+        SolidPen pen = new(Color.Black, 3F)
+        {
+            StrokeOptions = { NormalizeOutput = false }
+        };
+
+        DrawPathProcessor processor = new(options, pen, new RectangularPolygon(2F, 2F, 8F, 8F));
+
+        using Image<Rgba32> image = new(20, 20);
+        IImageProcessor<Rgba32> pixelProcessor =
+            processor.CreatePixelSpecificProcessor(image.Configuration, image, image.Bounds);
+
+        FillPathProcessor<Rgba32> fillProcessor = Assert.IsType<FillPathProcessor<Rgba32>>(pixelProcessor);
+        FillPathProcessor definition = fillProcessor.GetPrivateFieldValue<FillPathProcessor>("definition");
+
+        Assert.Equal(IntersectionRule.NonZero, definition.Options.ShapeOptions.IntersectionRule);
+    }
+
+    [Fact]
+    public void DrawPathProcessor_PreservesRule_WhenStrokeNormalizationIsEnabled()
+    {
+        DrawingOptions options = new()
+        {
+            ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
+        };
+
+        SolidPen pen = new(Color.Black, 3F)
+        {
+            StrokeOptions = { NormalizeOutput = true }
+        };
+
+        DrawPathProcessor processor = new(options, pen, new RectangularPolygon(2F, 2F, 8F, 8F));
+
+        using Image<Rgba32> image = new(20, 20);
+        IImageProcessor<Rgba32> pixelProcessor =
+            processor.CreatePixelSpecificProcessor(image.Configuration, image, image.Bounds);
+
+        FillPathProcessor<Rgba32> fillProcessor = Assert.IsType<FillPathProcessor<Rgba32>>(pixelProcessor);
+        FillPathProcessor definition = fillProcessor.GetPrivateFieldValue<FillPathProcessor>("definition");
+
+        Assert.Equal(IntersectionRule.EvenOdd, definition.Options.ShapeOptions.IntersectionRule);
+    }
+
+    [Fact]
+    public void FillPathProcessor_UsesConfiguredRasterizer()
+    {
+        RecordingRasterizer rasterizer = new();
+        Configuration configuration = new();
+        configuration.SetRasterizer(rasterizer);
+
+        FillPathProcessor processor = new(
+            new DrawingOptions(),
+            Brushes.Solid(Color.White),
+            new EllipsePolygon(6F, 6F, 4F));
+
+        using Image<Rgba32> image = new(configuration, 20, 20);
+        processor.Execute(configuration, image, image.Bounds);
+
+        Assert.True(rasterizer.CallCount > 0);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FillPathProcessor_UsesExpectedRasterizationModeAndPixelBoundarySamplingOrigin(bool antialias)
+    {
+        RecordingRasterizer rasterizer = new();
+        Configuration configuration = new();
+        configuration.SetRasterizer(rasterizer);
+
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions
+            {
+                Antialias = antialias
+            }
+        };
+
+        FillPathProcessor processor = new(
+            drawingOptions,
+            Brushes.Solid(Color.White),
+            new EllipsePolygon(6F, 6F, 4F));
+
+        using Image<Rgba32> image = new(configuration, 20, 20);
+        processor.Execute(configuration, image, image.Bounds);
+
+        RasterizationMode expectedMode = antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+        Assert.Equal(expectedMode, rasterizer.LastRasterizationMode);
+        Assert.Equal(RasterizerSamplingOrigin.PixelBoundary, rasterizer.LastSamplingOrigin);
+    }
+
+    private sealed class RecordingRasterizer : IRasterizer
+    {
+        public int CallCount { get; private set; }
+
+        public RasterizationMode LastRasterizationMode { get; private set; }
+
+        public RasterizerSamplingOrigin LastSamplingOrigin { get; private set; }
+
+        public void Rasterize<TState>(
+            IPath path,
+            in RasterizerOptions options,
+            MemoryAllocator allocator,
+            ref TState state,
+            RasterizerScanlineHandler<TState> scanlineHandler)
+            where TState : struct
+        {
+            this.CallCount++;
+            this.LastRasterizationMode = options.RasterizationMode;
+            this.LastSamplingOrigin = options.SamplingOrigin;
+        }
+    }
 }
 
 internal static class ReflectionHelpers
@@ -170,6 +293,12 @@ internal static class ReflectionHelpers
     internal static T GetProtectedValue<T>(this object obj, string name)
         => (T)obj.GetType()
         .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy)
+        .Single(x => x.Name == name)
+        .GetValue(obj);
+
+    internal static T GetPrivateFieldValue<T>(this object obj, string name)
+        => (T)obj.GetType()
+        .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.FlattenHierarchy)
         .Single(x => x.Name == name)
         .GetValue(obj);
 }

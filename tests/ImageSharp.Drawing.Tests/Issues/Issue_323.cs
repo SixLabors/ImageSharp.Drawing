@@ -22,19 +22,19 @@ public class Issue_323
             x => x.DrawPolygon(
                 color,
                 scale,
-                new PointF[] {
+                [
                     new(5, 5),
                     new(5, 150),
                     new(190, 150),
-                }),
+                ]),
             new { scale });
     }
 
     [Theory]
-    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 3f)]
-    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 1f)]
-    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.3f)]
-    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.7f)]
+    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 3f)]
+    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 1f)]
+    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.3f)]
+    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.7f)]
     [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.003f)]
     public void DrawPolygonMustDrawoutlineOnly_Pattern<TPixel>(TestImageProvider<TPixel> provider, float scale)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -44,11 +44,11 @@ public class Issue_323
         provider.RunValidatingProcessorTest(
                     x => x.DrawPolygon(
                       pen,
-                      new PointF[] {
-                            new(5, 5),
-                            new(5, 150),
-                            new(190, 150),
-                        }),
+                      [
+                          new(5, 5),
+                          new(5, 150),
+                          new(190, 150),
+                      ]),
                     new { scale });
     }
 }

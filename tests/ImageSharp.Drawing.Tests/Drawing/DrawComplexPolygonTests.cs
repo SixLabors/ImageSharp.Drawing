@@ -12,8 +12,8 @@ public class DrawComplexPolygonTests
 {
     [Theory]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, false, false)]
-    //[WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, true, false, false)]
-    //[WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, true, false)]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, true, false, false)]
+    [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, true, false)]
     [WithBasicTestPatternImages(250, 350, PixelTypes.Rgba32, false, false, true)]
     public void DrawComplexPolygon<TPixel>(TestImageProvider<TPixel> provider, bool overlap, bool transparent, bool dashed)
         where TPixel : unmanaged, IPixel<TPixel>

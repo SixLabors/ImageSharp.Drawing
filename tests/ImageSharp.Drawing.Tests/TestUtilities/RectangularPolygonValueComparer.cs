@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
-
 namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 
 /// <summary>
@@ -10,7 +8,7 @@ namespace SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 /// </summary>
 internal static class RectangularPolygonValueComparer
 {
-    public const float DefaultTolerance = ClipperUtils.FloatingPointTolerance;
+    public const float DefaultTolerance = 1e-05F;
 
     public static bool Equals(RectangularPolygon x, RectangularPolygon y, float epsilon = DefaultTolerance)
         => Math.Abs(x.Left - y.Left) < epsilon

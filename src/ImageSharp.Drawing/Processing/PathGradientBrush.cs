@@ -224,7 +224,7 @@ public sealed class PathGradientBrush : Brush
             : base(configuration, options, source)
         {
             this.edges = edges;
-            Vector2[] points = edges.Select(s => s.Start).ToArray();
+            Vector2[] points = [.. edges.Select(s => s.Start)];
 
             this.center = points.Aggregate((p1, p2) => p1 + p2) / edges.Count;
             this.centerColor = centerColor.ToScaledVector4();

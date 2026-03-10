@@ -58,6 +58,7 @@ public abstract class Pen : IEquatable<Pen>
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
         this.pattern = strokePattern;
+        this.StrokeOptions = new StrokeOptions();
     }
 
     /// <summary>
@@ -69,8 +70,7 @@ public abstract class Pen : IEquatable<Pen>
         this.StrokeFill = options.StrokeFill;
         this.StrokeWidth = options.StrokeWidth;
         this.pattern = options.StrokePattern;
-        this.JointStyle = options.JointStyle;
-        this.EndCapStyle = options.EndCapStyle;
+        this.StrokeOptions = options.StrokeOptions ?? new StrokeOptions();
     }
 
     /// <inheritdoc cref="PenOptions.StrokeFill"/>
@@ -82,11 +82,8 @@ public abstract class Pen : IEquatable<Pen>
     /// <inheritdoc cref="PenOptions.StrokePattern"/>
     public ReadOnlySpan<float> StrokePattern => this.pattern;
 
-    /// <inheritdoc cref="PenOptions.JointStyle"/>
-    public JointStyle JointStyle { get; }
-
-    /// <inheritdoc cref="PenOptions.EndCapStyle"/>
-    public EndCapStyle EndCapStyle { get; }
+    /// <inheritdoc cref="PenOptions.StrokeOptions"/>
+    public StrokeOptions StrokeOptions { get; }
 
     /// <summary>
     /// Applies the styling from the pen to a path and generate a new path with the final vector.
@@ -108,9 +105,8 @@ public abstract class Pen : IEquatable<Pen>
     public virtual bool Equals(Pen? other)
         => other != null
         && this.StrokeWidth == other.StrokeWidth
-        && this.JointStyle == other.JointStyle
-        && this.EndCapStyle == other.EndCapStyle
         && this.StrokeFill.Equals(other.StrokeFill)
+        && this.StrokeOptions.Equals(other.StrokeOptions)
         && this.StrokePattern.SequenceEqual(other.StrokePattern);
 
     /// <inheritdoc/>
@@ -118,5 +114,5 @@ public abstract class Pen : IEquatable<Pen>
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.StrokeWidth, this.JointStyle, this.EndCapStyle, this.StrokeFill, this.pattern);
+        => HashCode.Combine(this.StrokeWidth, this.StrokeFill, this.StrokeOptions, this.pattern);
 }

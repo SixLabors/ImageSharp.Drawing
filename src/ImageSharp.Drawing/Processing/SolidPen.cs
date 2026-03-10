@@ -68,5 +68,5 @@ public class SolidPen : Pen
 
     /// <inheritdoc />
     public override IPath GeneratePath(IPath path, float strokeWidth)
-        => path.GenerateOutline(strokeWidth, this.JointStyle, this.EndCapStyle);
+        => path.GenerateOutline(strokeWidth, this.StrokeOptions);
 }

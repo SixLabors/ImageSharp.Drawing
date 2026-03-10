@@ -51,8 +51,7 @@ public struct PenOptions
         this.StrokeFill = strokeFill;
         this.StrokeWidth = strokeWidth;
         this.StrokePattern = strokePattern ?? Pens.EmptyPattern;
-        this.JointStyle = JointStyle.Square;
-        this.EndCapStyle = EndCapStyle.Butt;
+        this.StrokeOptions = new StrokeOptions();
     }
 
     /// <summary>
@@ -71,12 +70,7 @@ public struct PenOptions
     public float[] StrokePattern { get; }
 
     /// <summary>
-    /// Gets or sets the joint style.
+    /// Gets or sets the stroke geometry options used to stroke paths drawn with this pen.
     /// </summary>
-    public JointStyle JointStyle { get; set; }
-
-    /// <summary>
-    /// Gets or sets the end cap style.
-    /// </summary>
-    public EndCapStyle EndCapStyle { get; set; }
+    public StrokeOptions? StrokeOptions { get; set; }
 }

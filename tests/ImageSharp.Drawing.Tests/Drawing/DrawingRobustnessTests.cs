@@ -1,11 +1,13 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+#pragma warning disable xUnit1004 // Test methods should not be skipped
 using System.Numerics;
 using System.Runtime.InteropServices;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -72,10 +74,10 @@ public class DrawingRobustnessTests
             appendSourceFileOrDescription: false);
 
         ImageSimilarityReport<Rgba32, Rgba32> result = ImageComparer.Exact.CompareImagesOrFrames(image, skResultImage);
-        throw new Exception(result.DifferencePercentageString);
+        throw new ImagesSimilarityException(result.DifferencePercentageString);
     }
 
-    [Theory]//(Skip = "For local testing")]
+    [Theory(Skip = "For local testing")]
     [WithSolidFilledImages(3600, 2400, "Black", PixelTypes.Rgba32, TestImages.GeoJson.States, 16, 30, 30)]
     public void LargeGeoJson_Lines(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, float sx, float sy)
     {
@@ -86,7 +88,7 @@ public class DrawingRobustnessTests
         using Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
         {
-            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
+            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0 },
         };
         foreach (PointF[] loop in points)
         {
@@ -106,14 +108,14 @@ public class DrawingRobustnessTests
     [WithSolidFilledImages(7200, 3300, "Black", PixelTypes.Rgba32)]
     public void LargeGeoJson_States_Fill(TestImageProvider<Rgba32> provider)
     {
-        using Image<Rgba32> image = this.FillGeoJsonPolygons(provider, TestImages.GeoJson.States, 16, new Vector2(60), new Vector2(0, -1000));
+        using Image<Rgba32> image = FillGeoJsonPolygons(provider, TestImages.GeoJson.States, true, new Vector2(60), new Vector2(0, -1000));
         ImageComparer comparer = ImageComparer.TolerantPercentage(0.001f);
 
         image.DebugSave(provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
         image.CompareToReferenceOutput(comparer, provider, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }
 
-    private Image<Rgba32> FillGeoJsonPolygons(TestImageProvider<Rgba32> provider, string geoJsonFile, int aa, Vector2 scale, Vector2 pixelOffset)
+    private static Image<Rgba32> FillGeoJsonPolygons(TestImageProvider<Rgba32> provider, string geoJsonFile, bool aa, Vector2 scale, Vector2 pixelOffset)
     {
         string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
 
@@ -122,7 +124,7 @@ public class DrawingRobustnessTests
         Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
         {
-            GraphicsOptions = new GraphicsOptions() { Antialias = aa > 0, AntialiasSubpixelDepth = aa },
+            GraphicsOptions = new GraphicsOptions() { Antialias = aa },
         };
         Random rnd = new(42);
         byte[] rgb = new byte[3];
@@ -130,7 +132,7 @@ public class DrawingRobustnessTests
         {
             rnd.NextBytes(rgb);
 
-            Color color = Color.FromPixel<Rgb24>(new Rgb24(rgb[0], rgb[1], rgb[2]));
+            Color color = Color.FromPixel(new Rgb24(rgb[0], rgb[1], rgb[2]));
             image.Mutate(c => c.FillPolygon(options, color, loop));
         }
 
@@ -200,7 +202,7 @@ public class DrawingRobustnessTests
         image.CompareToReferenceOutput(comparer, provider, testOutputDetails: details, appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
     }
 
-    [Theory]//(Skip = "For local experiments only")]
+    [Theory(Skip = "For local experiments only")]
     [InlineData(0)]
     [InlineData(5000)]
     [InlineData(9000)]
@@ -255,4 +257,108 @@ public class DrawingRobustnessTests
         using FileStream fs = File.Create(fn);
         data.SaveTo(fs);
     }
+
+    [Theory(Skip = "For local experiments only")]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_States_Separate_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54) * Matrix3x2.CreateScale(60, 60);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(
+            c =>
+            {
+                foreach (PointF[] loop in points)
+                {
+                    c.DrawPolygon(Color.White, thickness, loop);
+                }
+            });
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory(Skip = "For local experiments only")]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeGeoJson_States_All_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(TestImages.GeoJson.States));
+
+        FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(jsonContent);
+
+        Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
+
+        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54) * Matrix3x2.CreateScale(60, 60);
+        IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
+
+        PathBuilder pb = new();
+        foreach (PointF[] loop in points)
+        {
+            pb.StartFigure();
+            pb.AddLines(loop);
+            pb.CloseFigure();
+        }
+
+        IPath path = pb.Build();
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(c =>
+        {
+            c.SetRasterizer(DefaultRasterizer.Instance);
+            c.Draw(Color.White, thickness, path);
+        });
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    [Theory(Skip = "For local experiments only")]
+    [WithSolidFilledImages(1000, 1000, "Black", PixelTypes.Rgba32, 10)]
+    public void LargeStar_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
+    {
+        List<PointF[]> points = CreateStarPolygon(1001, 100F);
+        Matrix3x2 transform = Matrix3x2.CreateTranslation(250, 250);
+
+        using Image<Rgba32> image = provider.GetImage();
+
+        image.Mutate(
+            c =>
+            {
+                foreach (PointF[] loop in points)
+                {
+                    c.SetDrawingTransform(transform);
+                    c.DrawPolygon(Color.White, thickness, loop);
+                }
+            });
+
+        image.DebugSave(provider, $"Benchmark_{thickness}", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
+    }
+
+    private static List<PointF[]> CreateStarPolygon(int vertexCount, float radius)
+    {
+        if (vertexCount < 5 || (vertexCount & 1) == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(vertexCount), "Vertex count must be an odd number >= 5.");
+        }
+
+        int step = (vertexCount - 1) / 2;
+        List<PointF> contour = new(vertexCount + 1);
+        for (int i = 0; i < vertexCount; i++)
+        {
+            int index = (i * step) % vertexCount;
+            float angle = (index * MathF.PI * 2) / vertexCount;
+            contour.Add(new PointF(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius));
+        }
+
+        contour.Add(contour[0]);
+        return [[.. contour]];
+    }
 }
+#pragma warning restore xUnit1004 // Test methods should not be skipped

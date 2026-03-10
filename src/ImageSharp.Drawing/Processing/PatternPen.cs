@@ -75,5 +75,5 @@ public class PatternPen : Pen
 
     /// <inheritdoc />
     public override IPath GeneratePath(IPath path, float strokeWidth)
-        => path.GenerateOutline(strokeWidth, this.StrokePattern, this.JointStyle, this.EndCapStyle);
+        => path.GenerateOutline(strokeWidth, this.StrokePattern, this.StrokeOptions);
 }

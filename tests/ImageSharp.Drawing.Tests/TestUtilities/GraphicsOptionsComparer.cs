@@ -11,13 +11,11 @@ public class GraphicsOptionsComparer : IEqualityComparer<GraphicsOptions>
     {
         if (this.SkipClearOptions)
         {
-            return x.Antialias == y.Antialias
-                && x.AntialiasSubpixelDepth == y.AntialiasSubpixelDepth;
+            return x.Antialias == y.Antialias;
         }
 
         return x.AlphaCompositionMode == y.AlphaCompositionMode
             && x.Antialias == y.Antialias
-            && x.AntialiasSubpixelDepth == y.AntialiasSubpixelDepth
             && x.BlendPercentage == y.BlendPercentage
             && x.ColorBlendingMode == y.ColorBlendingMode;
     }

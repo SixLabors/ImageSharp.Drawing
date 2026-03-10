@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Shapes.PolygonClipper;
+using SixLabors.ImageSharp.Drawing.Shapes.PolygonGeometry;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.PolygonClipper;
@@ -25,21 +25,8 @@ public class ClipperTests
                     new Vector2(130, 40),
                     new Vector2(65, 137)));
 
-    private IEnumerable<IPath> Clip(IPath shape, params IPath[] hole)
-    {
-        Clipper clipper = new();
-
-        clipper.AddPath(shape, ClippingType.Subject);
-        if (hole != null)
-        {
-            foreach (IPath s in hole)
-            {
-                clipper.AddPath(s, ClippingType.Clip);
-            }
-        }
-
-        return clipper.GenerateClippedShapes(ClippingOperation.Difference, IntersectionRule.EvenOdd);
-    }
+    private static ComplexPolygon Clip(IPath shape, params IPath[] hole)
+        => ClippedShapeGenerator.GenerateClippedShapes(BooleanOperation.Difference, shape, hole);
 
     [Fact]
     public void OverlappingTriangleCutRightSide()
@@ -55,19 +42,19 @@ public class ClipperTests
             new Vector2(70, 100),
             new Vector2(20, 100)));
 
-        IEnumerable<IPath> shapes = this.Clip(triangle, cutout);
-        Assert.Single(shapes);
-        Assert.DoesNotContain(triangle, shapes);
+        ComplexPolygon shapes = Clip(triangle, cutout);
+        Assert.Single(shapes.Paths);
+        Assert.DoesNotContain(triangle, shapes.Paths);
     }
 
     [Fact]
     public void OverlappingTriangles()
     {
-        IEnumerable<IPath> shapes = this.Clip(this.bigTriangle, this.littleTriangle);
-        Assert.Single(shapes);
-        IReadOnlyList<PointF> path = shapes.Single().Flatten().First().Points.ToArray();
+        ComplexPolygon shapes = Clip(this.bigTriangle, this.littleTriangle);
+        Assert.Single(shapes.Paths);
+        PointF[] path = shapes.Paths.Single().Flatten().First().Points.ToArray();
 
-        Assert.Equal(7, path.Count);
+        Assert.Equal(7, path.Length);
         foreach (Vector2 p in this.bigTriangle.Flatten().First().Points.ToArray())
         {
             Assert.Contains(p, path, new ApproximateFloatComparer(RectangularPolygonValueComparer.DefaultTolerance));
@@ -77,7 +64,7 @@ public class ClipperTests
     [Fact]
     public void NonOverlapping()
     {
-        IEnumerable<RectangularPolygon> shapes = this.Clip(this.topLeft, this.topRight)
+        IEnumerable<RectangularPolygon> shapes = Clip(this.topLeft, this.topRight).Paths
             .OfType<Polygon>().Select(x => (RectangularPolygon)x);
 
         Assert.Single(shapes);
@@ -90,17 +77,17 @@ public class ClipperTests
     [Fact]
     public void OverLappingReturns1NewShape()
     {
-        IEnumerable<IPath> shapes = this.Clip(this.bigSquare, this.topLeft);
+        ComplexPolygon shapes = Clip(this.bigSquare, this.topLeft);
 
-        Assert.Single(shapes);
-        Assert.DoesNotContain(shapes, x => RectangularPolygonValueComparer.Equals(this.bigSquare, x));
-        Assert.DoesNotContain(shapes, x => RectangularPolygonValueComparer.Equals(this.topLeft, x));
+        Assert.Single(shapes.Paths);
+        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.bigSquare, x));
+        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.topLeft, x));
     }
 
     [Fact]
     public void OverlappingButNotCrossingReturnsOrigionalShapes()
     {
-        IEnumerable<RectangularPolygon> shapes = this.Clip(this.bigSquare, this.hole)
+        IEnumerable<RectangularPolygon> shapes = Clip(this.bigSquare, this.hole).Paths
             .OfType<Polygon>().Select(x => (RectangularPolygon)x);
 
         Assert.Equal(2, shapes.Count());
@@ -112,10 +99,10 @@ public class ClipperTests
     [Fact]
     public void TouchingButNotOverlapping()
     {
-        IEnumerable<IPath> shapes = this.Clip(this.topMiddle, this.topLeft);
-        Assert.Single(shapes);
-        Assert.DoesNotContain(shapes, x => RectangularPolygonValueComparer.Equals(this.topMiddle, x));
-        Assert.DoesNotContain(shapes, x => RectangularPolygonValueComparer.Equals(this.topLeft, x));
+        ComplexPolygon shapes = Clip(this.topMiddle, this.topLeft);
+        Assert.Single(shapes.Paths);
+        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.topMiddle, x));
+        Assert.DoesNotContain(shapes.Paths, x => RectangularPolygonValueComparer.Equals(this.topLeft, x));
     }
 
     [Fact]
@@ -126,8 +113,8 @@ public class ClipperTests
             .Flatten();
 
         Assert.Single(paths);
-        IReadOnlyList<PointF> points = paths.First().Points.ToArray();
+        PointF[] points = paths.First().Points.ToArray();
 
-        Assert.Equal(8, points.Count);
+        Assert.Equal(8, points.Length);
     }
 }
