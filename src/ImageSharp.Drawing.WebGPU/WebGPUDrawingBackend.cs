@@ -76,6 +76,24 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
+    /// Gets a value indicating whether WebGPU is available on the current system.
+    /// This probes the runtime by attempting to acquire an adapter and device.
+    /// </summary>
+    /// <returns><see langword="true"/> when WebGPU is functional; otherwise <see langword="false"/>.</returns>
+    public static bool IsSupported()
+    {
+        try
+        {
+            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+            return WebGPURuntime.TryGetOrCreateDevice(out _, out _, out _);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Gets the testing-only diagnostic counter for total coverage preparation requests.
     /// </summary>
     internal int TestingPrepareCoverageCallCount { get; private set; }

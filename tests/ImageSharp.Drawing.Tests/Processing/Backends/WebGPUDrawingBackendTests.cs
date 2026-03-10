@@ -1,15 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#if !ENV_CI_BAK
-// WebGPU is failing in our CI environment in Ubuntu with
-// WebGPU adapter request failed with status 'Unavailable'
-// It's also failing in Windows CI with "Test host process crashed : Fatal error.0xC0000005"
-// TODO: Ask the Silk.NET team for help.
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.Attributes;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
@@ -35,7 +31,7 @@ public class WebGPUDrawingBackendTests
         { PixelColorBlendingMode.Normal, PixelAlphaCompositionMode.Clear }
     };
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
     public void FillPath_WithWebGPUCoverageBackend_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -89,7 +85,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
     public void FillPath_AliasedWithThreshold_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -129,7 +125,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithBasicTestPatternImages(384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithImageBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -190,7 +186,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithNonZeroNestedContours_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -270,7 +266,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithBasicTestPatternImages(nameof(GraphicsOptionsModePairs), 384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithGraphicsOptionsModes_SolidBrush_MatchesDefaultOutput<TPixel>(
         TestImageProvider<TPixel> provider,
@@ -325,7 +321,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.1F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithBasicTestPatternImages(nameof(GraphicsOptionsModePairs), 384, 256, PixelTypes.Rgba32)]
     public void FillPath_WithGraphicsOptionsModes_ImageBrush_MatchesDefaultOutput<TPixel>(
         TestImageProvider<TPixel> provider,
@@ -381,7 +377,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.1F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(1200, 280, "White", PixelTypes.Rgba32)]
     public void DrawText_WithWebGPUCoverageBackend_RendersAndReleasesPreparedCoverage<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -443,7 +439,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarityInRegion(defaultImage, cpuRegionImage, nativeSurfaceImage, textRegion, 0.009F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
     public void FillPath_WithWebGPUCoverageBackend_NativeSurface_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -487,7 +483,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
     public void FillPath_WithWebGPUCoverageBackend_NativeSurfaceSubregion_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -533,7 +529,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithBlankImage(220, 160, PixelTypes.Rgba32)]
     public void Process_WithWebGPUBackend_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -573,7 +569,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.0516F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithBasicTestPatternImages(420, 220, PixelTypes.Rgba32)]
     public void DrawText_WithRepeatedGlyphs_UsesCoverageCache<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -630,7 +626,7 @@ public class WebGPUDrawingBackendTests
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithBlankImage(1200, 280, PixelTypes.Rgba32)]
     public void DrawText_WithRepeatedGlyphs_AfterClear_UsesBlendFastPath<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1032,7 +1028,7 @@ public class WebGPUDrawingBackendTests
             backend.TestingFallbackCompositeCoverageCallCount);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32)]
     public void DrawPath_Stroke_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1084,7 +1080,7 @@ public class WebGPUDrawingBackendTests
         LineJoin.Round
     };
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.Miter)]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRevert)]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineJoin.MiterRound)]
@@ -1138,7 +1134,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Butt)]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Square)]
     [WithSolidFilledImages(400, 300, "White", PixelTypes.Rgba32, LineCap.Round)]
@@ -1188,7 +1184,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.01F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(512, 512, "White", PixelTypes.Rgba32)]
     public void FillPath_MultipleSeparatePaths_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1236,7 +1232,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_EvenOddRule_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1305,7 +1301,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.5F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(800, 600, "White", PixelTypes.Rgba32)]
     public void FillPath_LargeTileCount_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1345,7 +1341,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 1F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(300, 200, "White", PixelTypes.Rgba32)]
     public void MultipleFlushes_OnSameBackend_ProduceCorrectResults<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1460,7 +1456,7 @@ public class WebGPUDrawingBackendTests
         }
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithLinearGradientBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1506,7 +1502,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithLinearGradientBrush_Repeat_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1551,7 +1547,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithRadialGradientBrush_SingleCircle_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1596,7 +1592,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithRadialGradientBrush_TwoCircle_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1643,7 +1639,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithEllipticGradientBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1689,7 +1685,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithSweepGradientBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1737,7 +1733,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithSweepGradientBrush_PartialArc_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1783,7 +1779,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithPatternBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1823,7 +1819,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithPatternBrush_Diagonal_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1863,7 +1859,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "Red", PixelTypes.Rgba32)]
     public void FillPath_WithRecolorBrush_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1903,7 +1899,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithLinearGradientBrush_ThreePoint_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1949,7 +1945,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(256, 256, "White", PixelTypes.Rgba32)]
     public void FillPath_WithEllipticGradientBrush_Reflect_MatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -1996,7 +1992,7 @@ public class WebGPUDrawingBackendTests
         AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
     }
 
-    [Theory]
+    [WebGPUTheory]
     [WithSolidFilledImages(500, 400, "Black", PixelTypes.Rgba32)]
     public void CanApplyPerspectiveTransform_StarWarsCrawl<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -2234,4 +2230,3 @@ the evil Galactic Empire.";
         where TPixel : unmanaged, IPixel<TPixel>
         => new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
 }
-#endif
