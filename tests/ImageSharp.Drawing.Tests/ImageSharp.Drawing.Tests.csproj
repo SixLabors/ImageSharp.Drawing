@@ -24,12 +24,9 @@
   </Choose>
   
   <ItemGroup>
-    <PackageReference Include="Magick.NET-Q16-AnyCPU" />
     <PackageReference Include="Microsoft.DotNet.RemoteExecutor" />
     <PackageReference Include="Microsoft.DotNet.XUnitExtensions" />
     <PackageReference Include="Moq" />
-    <PackageReference Include="runtime.osx.10.10-x64.CoreCompat.System.Drawing" Condition="'$(IsOSX)'=='true'" />
-    <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="GeoJSON.Net" />
     <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" />
     <PackageReference Include="Silk.NET.WebGPU.Extensions.WGPU" Version="2.23.0" />
