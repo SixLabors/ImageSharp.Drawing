@@ -884,7 +884,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                 configuration,
                 out WgpuBuffer* edgeBuffer,
                 out nuint edgeBufferSize,
-                out EdgePlacement[] edgePlacements,
+                out IMemoryOwner<EdgePlacement> edgePlacements,
                 out _,
                 out _,
                 out WgpuBuffer* bandOffsetsBuffer,
@@ -962,7 +962,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         List<CompositionBatch> preparedBatches,
         int[] batchCoverageIndices,
         int commandCount,
-        EdgePlacement[] edgePlacements,
+        IMemoryOwner<EdgePlacement> edgePlacements,
         WgpuBuffer* edgeBuffer,
         nuint edgeBufferSize,
         WgpuBuffer* bandOffsetsBuffer,
@@ -1025,6 +1025,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             nint brushTextureViewHandle = (nint)backdropTextureView;
             bool hasImageTexture = false;
 
+            ReadOnlySpan<EdgePlacement> edgePlacementsSpan = edgePlacements.Memory.Span;
             int commandIndex = 0;
             for (int batchIndex = 0; batchIndex < preparedBatches.Count; batchIndex++)
             {
@@ -1167,7 +1168,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                         return false;
                     }
 
-                    EdgePlacement edgePlacement = edgePlacements[coverageDefinitionIndex];
+                    EdgePlacement edgePlacement = edgePlacementsSpan[coverageDefinitionIndex];
                     Rectangle destinationRegion = command.DestinationRegion;
                     Point sourceOffset = command.SourceOffset;
 

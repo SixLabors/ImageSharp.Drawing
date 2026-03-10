@@ -60,7 +60,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Configuration configuration,
         out WgpuBuffer* edgeBuffer,
         out nuint edgeBufferSize,
-        out EdgePlacement[] edgePlacements,
+        out IMemoryOwner<EdgePlacement> edgePlacements,
         out int totalEdgeCount,
         out int totalBandOffsetEntries,
         out WgpuBuffer* bandOffsetsBuffer,
@@ -71,7 +71,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
     {
         edgeBuffer = null;
         edgeBufferSize = 0;
-        edgePlacements = [];
+        edgePlacements = null!;
         totalEdgeCount = 0;
         totalBandOffsetEntries = 0;
         bandOffsetsBuffer = null;
@@ -83,7 +83,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             return true;
         }
 
-        edgePlacements = new EdgePlacement[definitions.Count];
+        edgePlacements = flushContext.MemoryAllocator.Allocate<EdgePlacement>(definitions.Count);
+        Span<EdgePlacement> edgePlacementsSpan = edgePlacements.Memory.Span;
         int runningEdgeStart = 0;
         int runningBandOffset = 0;
 
@@ -111,7 +112,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             IMemoryOwner<GpuEdge>? defEdgeOwner;
             int edgeCount;
-            uint[]? defBandOffsets;
+            IMemoryOwner<uint>? defBandOffsets;
             bool edgeSuccess;
             if (definition.IsStroke)
             {
@@ -158,7 +159,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 // Centerline edges are band-sorted. Create one StrokeExpandCommand per band
                 // so the GPU expand shader writes outline edges into per-band output slots.
                 // This produces band-sorted outline edges compatible with the fill rasterizer.
-                uint[] clBandOffsets = defBandOffsets!;
+                Span<uint> clBandOffsets = defBandOffsets!.Memory.Span;
                 LineCap defLineCap = definition.StrokeOptions?.LineCap ?? LineCap.Butt;
                 LineJoin defLineJoin = definition.StrokeOptions?.LineJoin ?? LineJoin.Bevel;
                 int outlineEdgesPerCenterline = ComputeOutlineEdgesPerCenterline(
@@ -193,7 +194,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
                 // Placeholder EdgePlacement — will be updated after outline space is allocated.
                 int bandOffsetEntriesForDef = bandCount + 1;
-                edgePlacements[i] = new EdgePlacement(
+                edgePlacementsSpan[i] = new EdgePlacement(
                     (uint)runningEdgeStart,
                     (uint)edgeCount,
                     fillRule,
@@ -207,7 +208,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             {
                 int bandOffsetEntriesForDef = bandCount + 1;
 
-                edgePlacements[i] = new EdgePlacement(
+                edgePlacementsSpan[i] = new EdgePlacement(
                     (uint)runningEdgeStart,
                     (uint)edgeCount,
                     fillRule,
@@ -228,7 +229,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         // resulting outline edges are band-sorted — compatible with the fill rasterizer.
         // outlineBandOffsetsPerDef[defIndex] stores the outline band offsets array for
         // stroke definitions (null for fills). Used in the merged band offsets upload.
-        uint[]?[] outlineBandOffsetsPerDef = new uint[]?[definitions.Count];
+        IMemoryOwner<uint>?[] outlineBandOffsetsPerDef = new IMemoryOwner<uint>?[definitions.Count];
         int outlineRegionStart = totalEdgeCount;
         if (strokeCommands is not null)
         {
@@ -257,7 +258,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 int defOutlineStart = (int)strokeCommands[cmdCursor].OutputStart;
 
                 // Build full band offsets: offsets[b] = local offset within this def's outline region.
-                uint[] outOffsets = new uint[defBandCount + 1];
+                IMemoryOwner<uint> outOffsetsOwner = flushContext.MemoryAllocator.Allocate<uint>(defBandCount + 1);
+                Span<uint> outOffsets = outOffsetsOwner.Memory.Span;
                 uint localOffset = 0;
                 for (int b = 0; b < defBandCount; b++)
                 {
@@ -273,11 +275,11 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
                 int defOutlineTotal = (int)localOffset;
                 outOffsets[defBandCount] = (uint)defOutlineTotal;
-                outlineBandOffsetsPerDef[defIndex] = outOffsets;
+                outlineBandOffsetsPerDef[defIndex] = outOffsetsOwner;
 
                 // Update EdgePlacement to point to the outline region.
-                EdgePlacement oldPlacement = edgePlacements[defIndex];
-                edgePlacements[defIndex] = new EdgePlacement(
+                EdgePlacement oldPlacement = edgePlacementsSpan[defIndex];
+                edgePlacementsSpan[defIndex] = new EdgePlacement(
                     (uint)defOutlineStart,
                     (uint)defOutlineTotal,
                     oldPlacement.FillRule,
@@ -343,7 +345,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                 out edgeBuffer,
                 out error))
         {
-            DisposeGeometries(geometries, mergedEdgeOwner);
+            DisposeGeometries(geometries, mergedEdgeOwner, outlineBandOffsetsPerDef);
             return false;
         }
 
@@ -378,7 +380,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         if (!TryGetOrCreateCoverageBuffer(flushContext, "band-offsets", BufferUsage.Storage | BufferUsage.CopyDst, bandOffsetsBufferSize, out bandOffsetsBuffer, out error))
         {
-            DisposeGeometries(geometries, mergedEdgeOwner);
+            DisposeGeometries(geometries, mergedEdgeOwner, outlineBandOffsetsPerDef);
             return false;
         }
 
@@ -389,14 +391,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
             for (int defIndex = 0; defIndex < geometries.Length; defIndex++)
             {
                 ref DefinitionGeometry geometry = ref geometries[defIndex];
-                EdgePlacement placement = edgePlacements[defIndex];
+                EdgePlacement placement = edgePlacementsSpan[defIndex];
                 int bandStart = (int)placement.CsrOffsetsStart;
 
                 // Use outline band offsets for stroke definitions, fill band offsets otherwise.
-                uint[]? outlineOffsets = outlineBandOffsetsPerDef[defIndex];
-                uint[]? defOffsets = outlineOffsets ?? geometry.BandOffsets;
-                if (defOffsets is not null)
+                IMemoryOwner<uint>? defOffsetsOwner = outlineBandOffsetsPerDef[defIndex] ?? geometry.BandOffsets;
+                if (defOffsetsOwner is not null)
                 {
+                    ReadOnlySpan<uint> defOffsets = defOffsetsOwner.Memory.Span;
                     for (int b = 0; b < defOffsets.Length; b++)
                     {
                         mergedOffsets[bandStart + b] = defOffsets[b];
@@ -425,7 +427,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             strokeExpandInfo = new StrokeExpandInfo(strokeCommands, totalStrokeCenterlineEdges);
         }
 
-        DisposeGeometries(geometries, mergedEdgeOwner);
+        DisposeGeometries(geometries, mergedEdgeOwner, outlineBandOffsetsPerDef);
 
         error = null;
         return true;
@@ -546,7 +548,10 @@ public sealed unsafe partial class WebGPUDrawingBackend
     /// <summary>
     /// Disposes all edge memory owners from geometry entries and the merged owner.
     /// </summary>
-    private static void DisposeGeometries(DefinitionGeometry[] geometries, IMemoryOwner<GpuEdge>? mergedEdgeOwner)
+    private static void DisposeGeometries(
+        DefinitionGeometry[] geometries,
+        IMemoryOwner<GpuEdge>? mergedEdgeOwner,
+        IMemoryOwner<uint>?[]? outlineBandOffsets = null)
     {
         for (int i = 0; i < geometries.Length; i++)
         {
@@ -557,9 +562,20 @@ public sealed unsafe partial class WebGPUDrawingBackend
             }
 
             geometries[i].EdgeOwner = null;
+            geometries[i].BandOffsets?.Dispose();
+            geometries[i].BandOffsets = null;
         }
 
         mergedEdgeOwner?.Dispose();
+
+        if (outlineBandOffsets is not null)
+        {
+            for (int i = 0; i < outlineBandOffsets.Length; i++)
+            {
+                outlineBandOffsets[i]?.Dispose();
+                outlineBandOffsets[i] = null;
+            }
+        }
     }
 
     private void DisposeCoverageResources()
@@ -586,7 +602,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         RasterizerSamplingOrigin samplingOrigin,
         out IMemoryOwner<GpuEdge>? edgeOwner,
         out int edgeCount,
-        out uint[]? bandOffsets,
+        out IMemoryOwner<uint>? bandOffsets,
         out string? error)
     {
         error = null;
@@ -654,7 +670,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         // Prefix sum → band offsets.
-        uint[] offsets = new uint[bandCount + 1];
+        IMemoryOwner<uint> offsetsOwner = allocator.Allocate<uint>(bandCount + 1);
+        Span<uint> offsets = offsetsOwner.Memory.Span;
         uint running = 0;
         for (int b = 0; b < bandCount; b++)
         {
@@ -720,7 +737,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         edgeOwner = finalOwner;
         edgeCount = totalSubEdges;
-        bandOffsets = offsets;
+        bandOffsets = offsetsOwner;
         return true;
     }
 
@@ -740,7 +757,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         int bandCount,
         out IMemoryOwner<GpuEdge>? edgeOwner,
         out int edgeCount,
-        out uint[]? bandOffsets,
+        out IMemoryOwner<uint>? bandOffsets,
         out string? error)
     {
         error = null;
@@ -899,7 +916,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         // Prefix sum → band offsets.
-        uint[] offsets = new uint[bandCount + 1];
+        IMemoryOwner<uint> offsetsOwner = allocator.Allocate<uint>(bandCount + 1);
+        Span<uint> offsets = offsetsOwner.Memory.Span;
         uint running = 0;
         for (int b = 0; b < bandCount; b++)
         {
@@ -932,7 +950,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         edgeOwner = finalOwner;
         edgeCount = totalBandEdges;
-        bandOffsets = offsets;
+        bandOffsets = offsetsOwner;
         return true;
     }
 
@@ -1213,13 +1231,13 @@ public sealed unsafe partial class WebGPUDrawingBackend
         public IMemoryOwner<GpuEdge>? EdgeOwner;
         public int EdgeCount;
         public int BandCount;
-        public uint[]? BandOffsets;
+        public IMemoryOwner<uint>? BandOffsets;
 
         public DefinitionGeometry(
             IMemoryOwner<GpuEdge>? edgeOwner,
             int edgeCount,
             int bandCount,
-            uint[]? bandOffsets)
+            IMemoryOwner<uint>? bandOffsets)
         {
             this.EdgeOwner = edgeOwner;
             this.EdgeCount = edgeCount;
