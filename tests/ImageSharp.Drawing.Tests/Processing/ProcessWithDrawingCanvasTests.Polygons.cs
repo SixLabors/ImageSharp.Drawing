@@ -366,7 +366,6 @@ public partial class ProcessWithDrawingCanvasTests
     public void FillPolygon_IntersectionRules_OddEven<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using Image<TPixel> img = provider.GetImage();
         Polygon poly = new(new LinearLineSegment(
             new PointF(10, 30),
             new PointF(10, 20),
@@ -385,10 +384,10 @@ public partial class ProcessWithDrawingCanvasTests
             ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.EvenOdd }
         };
 
-        img.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)));
-
-        provider.Utility.SaveTestOutputFile(img);
-        Assert.Equal(Color.Blue.ToPixel<TPixel>(), img[25, 25]);
+        provider.RunValidatingProcessorTest(
+            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)),
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 
     [Theory]
@@ -396,8 +395,6 @@ public partial class ProcessWithDrawingCanvasTests
     public void FillPolygon_IntersectionRules_Nonzero<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        Configuration.Default.MaxDegreeOfParallelism = 1;
-        using Image<TPixel> img = provider.GetImage();
         Polygon poly = new(new LinearLineSegment(
             new PointF(10, 30),
             new PointF(10, 20),
@@ -416,9 +413,9 @@ public partial class ProcessWithDrawingCanvasTests
             ShapeOptions = new ShapeOptions { IntersectionRule = IntersectionRule.NonZero }
         };
 
-        img.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)));
-
-        provider.Utility.SaveTestOutputFile(img);
-        Assert.Equal(Color.HotPink.ToPixel<TPixel>(), img[25, 25]);
+        provider.RunValidatingProcessorTest(
+            c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.HotPink), poly)),
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
     }
 }
