@@ -19,7 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// A drawing canvas over a frame target.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
-public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
+public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     where TPixel : unmanaged, IPixel<TPixel>
 {
     /// <summary>
@@ -432,7 +432,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         IPath effectivePath = closed;
         if (effectiveOptions.Transform != Matrix4x4.Identity)
         {
-            effectivePath = closed.Transform(effectiveOptions.Transform);
+            effectivePath = FlattenAndTransform(closed, effectiveOptions.Transform);
             effectiveBrush = brush.Transform(effectiveOptions.Transform);
         }
 
@@ -469,7 +469,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         IPath closed = path.AsClosedPath();
         IPath transformedPath = effectiveOptions.Transform == Matrix4x4.Identity
             ? closed
-            : closed.Transform(effectiveOptions.Transform);
+            : FlattenAndTransform(closed, effectiveOptions.Transform);
         transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
 
         Rectangle sourceRect = ToConservativeBounds(transformedPath.Bounds);
@@ -552,7 +552,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         IPath transformedPath = effectiveOptions.Transform == Matrix4x4.Identity
             ? path
-            : path.Transform(effectiveOptions.Transform);
+            : FlattenAndTransform(path, effectiveOptions.Transform);
 
         // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
         if (effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
@@ -1155,6 +1155,105 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <returns><see langword="true"/> when source pixels were resolved.</returns>
     private bool TryCreateProcessSourceImage(Rectangle sourceRect, [NotNullWhen(true)] out Image<TPixel>? sourceImage)
         => this.backend.TryReadRegion(this.configuration, this.targetFrame, sourceRect, out sourceImage);
+
+    /// <summary>
+    /// Flattens the path first (reusing any cached curve subdivision), then transforms
+    /// the resulting flat points. This avoids discarding cached <see cref="CubicBezierLineSegment"/>
+    /// subdivision data that <see cref="IPath.Transform"/> would throw away.
+    /// </summary>
+    /// <summary>
+    /// Flattens a path into linear segments, then transforms the resulting points in place.
+    /// This avoids redundant curve subdivision that would occur if we transformed the original
+    /// path first (which discards cached flattening) and then flattened again.
+    /// </summary>
+    /// <param name="path">The path to flatten and transform. The original path is not mutated.</param>
+    /// <param name="matrix">The transform matrix to apply to the flattened points.</param>
+    /// <returns>
+    /// A pre-flattened <see cref="IPath"/> whose points are already transformed.
+    /// The returned path owns its point buffers and may mutate them on subsequent transforms.
+    /// </returns>
+    private static IPath FlattenAndTransform(IPath path, Matrix4x4 matrix)
+    {
+        List<PreFlattenedPath>? subPaths = null;
+        float minX = float.MaxValue, minY = float.MaxValue;
+        float maxX = float.MinValue, maxY = float.MinValue;
+
+        foreach (ISimplePath sp in path.Flatten())
+        {
+            ReadOnlySpan<PointF> srcPoints = sp.Points.Span;
+            if (srcPoints.Length < 2)
+            {
+                continue;
+            }
+
+            PointF[] dstPoints = new PointF[srcPoints.Length];
+            float spMinX = float.MaxValue, spMinY = float.MaxValue;
+            float spMaxX = float.MinValue, spMaxY = float.MinValue;
+
+            for (int i = 0; i < srcPoints.Length; i++)
+            {
+                ref PointF dst = ref dstPoints[i];
+                dst = PointF.Transform(srcPoints[i], matrix);
+
+                if (dst.X < spMinX)
+                {
+                    spMinX = dst.X;
+                }
+
+                if (dst.Y < spMinY)
+                {
+                    spMinY = dst.Y;
+                }
+
+                if (dst.X > spMaxX)
+                {
+                    spMaxX = dst.X;
+                }
+
+                if (dst.Y > spMaxY)
+                {
+                    spMaxY = dst.Y;
+                }
+            }
+
+            RectangleF spBounds = new(spMinX, spMinY, spMaxX - spMinX, spMaxY - spMinY);
+            subPaths ??= [];
+            subPaths.Add(new PreFlattenedPath(dstPoints, sp.IsClosed, spBounds));
+
+            if (spMinX < minX)
+            {
+                minX = spMinX;
+            }
+
+            if (spMinY < minY)
+            {
+                minY = spMinY;
+            }
+
+            if (spMaxX > maxX)
+            {
+                maxX = spMaxX;
+            }
+
+            if (spMaxY > maxY)
+            {
+                maxY = spMaxY;
+            }
+        }
+
+        if (subPaths is null)
+        {
+            return Path.Empty;
+        }
+
+        if (subPaths.Count == 1)
+        {
+            return subPaths[0];
+        }
+
+        RectangleF totalBounds = new(minX, minY, maxX - minX, maxY - minY);
+        return new PreFlattenedCompositePath(subPaths.ToArray(), totalBounds);
+    }
 
     /// <summary>
     /// Applies all clip paths to a subject path using the provided shape options.

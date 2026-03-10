@@ -136,6 +136,16 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     internal int TestingComputePathBatchCount { get; private set; }
 
     /// <summary>
+    /// Gets the cumulative number of composition commands executed on the GPU.
+    /// </summary>
+    public int DiagnosticGpuCompositeCount => this.TestingGPUCompositeCoverageCallCount;
+
+    /// <summary>
+    /// Gets the cumulative number of composition commands that fell back to the CPU backend.
+    /// </summary>
+    public int DiagnosticFallbackCompositeCount => this.TestingFallbackCompositeCoverageCallCount;
+
+    /// <summary>
     /// Gets a value indicating whether WebGPU is available on the current system.
     /// This probes the runtime by attempting to acquire an adapter and device.
     /// The result is cached after the first probe.
