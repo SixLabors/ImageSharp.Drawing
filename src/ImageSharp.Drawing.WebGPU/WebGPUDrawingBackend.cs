@@ -144,12 +144,102 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// </summary>
     public bool IsSupported => isSupported ??= ProbeSupport();
 
-    private static bool ProbeSupport()
+    /// <summary>
+    /// Determines whether WebGPU compute support is available on the current system.
+    /// </summary>
+    /// <remarks>
+    /// This method goes beyond checking adapter and device availability — it also compiles
+    /// a trivial compute shader and creates a compute pipeline to verify the full compute
+    /// path works. Some systems report a valid device but crash on pipeline creation due to
+    /// driver or runtime issues.
+    /// </remarks>
+    /// <returns>Returns <see langword="true"/> if WebGPU compute support is available; otherwise, <see langword="false"/>.</returns>
+    public static bool ProbeSupport()
     {
         try
         {
             using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-            return WebGPURuntime.TryGetOrCreateDevice(out _, out _, out _);
+            if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out _, out _))
+            {
+                return false;
+            }
+
+            WebGPU api = lease.Api;
+
+            // Compile a trivial compute shader and create a pipeline to verify the
+            // full compute path works end-to-end. Some drivers/runtimes crash at
+            // DeviceCreateComputePipeline despite successful device creation.
+            ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn cs_main() {}\0"u8;
+            fixed (byte* shaderCodePtr = probeShader)
+            {
+                ShaderModuleWGSLDescriptor wgslDescriptor = new()
+                {
+                    Chain = new ChainedStruct { SType = SType.ShaderModuleWgslDescriptor },
+                    Code = shaderCodePtr
+                };
+
+                ShaderModuleDescriptor shaderDescriptor = new()
+                {
+                    NextInChain = (ChainedStruct*)&wgslDescriptor
+                };
+
+                ShaderModule* shaderModule = api.DeviceCreateShaderModule(device, in shaderDescriptor);
+                if (shaderModule is null)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    ReadOnlySpan<byte> entryPoint = "cs_main\0"u8;
+                    fixed (byte* entryPointPtr = entryPoint)
+                    {
+                        ProgrammableStageDescriptor computeStage = new()
+                        {
+                            Module = shaderModule,
+                            EntryPoint = entryPointPtr
+                        };
+
+                        PipelineLayoutDescriptor layoutDescriptor = new()
+                        {
+                            BindGroupLayoutCount = 0,
+                            BindGroupLayouts = null
+                        };
+
+                        PipelineLayout* pipelineLayout = api.DeviceCreatePipelineLayout(device, in layoutDescriptor);
+                        if (pipelineLayout is null)
+                        {
+                            return false;
+                        }
+
+                        try
+                        {
+                            ComputePipelineDescriptor pipelineDescriptor = new()
+                            {
+                                Layout = pipelineLayout,
+                                Compute = computeStage
+                            };
+
+                            ComputePipeline* pipeline = api.DeviceCreateComputePipeline(device, in pipelineDescriptor);
+                            if (pipeline is null)
+                            {
+                                return false;
+                            }
+
+                            api.ComputePipelineRelease(pipeline);
+                            return true;
+                        }
+                        finally
+                        {
+                            api.PipelineLayoutRelease(pipelineLayout);
+                        }
+                    }
+                }
+                finally
+                {
+                    api.ShaderModuleRelease(shaderModule);
+                }
+            }
         }
         catch
         {
