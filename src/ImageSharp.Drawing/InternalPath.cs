@@ -223,7 +223,14 @@ internal class InternalPath
     /// </returns>
     private static PointData[] Simplify(IReadOnlyList<ILineSegment> segments, bool isClosed, bool removeCloseAndCollinear)
     {
-        List<PointF> simplified = new(segments.Count);
+        // Pre-compute capacity from cached flattened lengths to avoid List resizing.
+        int totalPoints = 0;
+        for (int s = 0; s < segments.Count; s++)
+        {
+            totalPoints += segments[s].Flatten().Length;
+        }
+
+        List<PointF> simplified = new(totalPoints);
 
         // Track indices where collinear direction reversals represent user-intended
         // geometry: interior points of multi-point linear segments, and junction

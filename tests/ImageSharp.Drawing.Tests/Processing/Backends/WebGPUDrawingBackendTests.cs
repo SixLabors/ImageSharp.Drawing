@@ -882,7 +882,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -940,7 +939,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -985,7 +983,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1026,7 +1023,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1038,7 +1034,6 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_MultipleSeparate", defaultImage, nativeSurfaceImage);
-
 
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
@@ -1088,7 +1083,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1125,7 +1119,6 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1262,7 +1255,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1303,7 +1295,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1342,7 +1333,6 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1385,7 +1375,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1425,7 +1414,6 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1469,7 +1457,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1509,7 +1496,6 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1551,7 +1537,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1586,7 +1571,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1620,7 +1604,6 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1662,7 +1645,6 @@ public partial class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1703,7 +1685,6 @@ public partial class WebGPUDrawingBackendTests
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -1777,10 +1758,10 @@ the evil Galactic Empire.";
         Rectangle sternBounds = new(0, 0, 300, 80);
         Matrix4x4 sternTransform = transformBuilder
             .AppendQuadDistortion(
-                topLeft: new PointF(50, 80),
-                topRight: new PointF(400, 90),
-                bottomRight: new PointF(390, 135),
-                bottomLeft: new PointF(60, 140))
+                topLeft: new PointF(70, 80),
+                topRight: new PointF(380, 90),
+                bottomRight: new PointF(400, 135),
+                bottomLeft: new PointF(50, 140))
             .BuildMatrix(sternBounds);
 
         PointF[] bottomHull =
@@ -1793,10 +1774,10 @@ the evil Galactic Empire.";
         Rectangle hullBounds = new(0, 0, 300, 80);
         Matrix4x4 hullTransform = transformBuilder.Clear()
             .AppendQuadDistortion(
-                topLeft: new PointF(60, 140),
-                topRight: new PointF(390, 135),
-                bottomRight: new PointF(300, 160),
-                bottomLeft: new PointF(-30, 170))
+                topLeft: new PointF(50, 140),
+                topRight: new PointF(400, 135),
+                bottomRight: new PointF(310, 170),
+                bottomLeft: new PointF(-40, 170))
             .BuildMatrix(hullBounds);
 
         PointF[] towerStem =
@@ -1933,7 +1914,6 @@ the evil Galactic Empire.";
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -1970,7 +1950,6 @@ the evil Galactic Empire.";
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -2005,7 +1984,6 @@ the evil Galactic Empire.";
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
 
-
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
         using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
@@ -2027,7 +2005,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
 
@@ -2045,7 +2023,6 @@ the evil Galactic Empire.";
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -2068,7 +2045,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
             canvas.Fill(Brushes.Solid(Color.Red), new RectangularPolygon(20, 20, 88, 88));
@@ -2086,7 +2063,6 @@ the evil Galactic Empire.";
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -2109,7 +2085,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
 
@@ -2121,7 +2097,6 @@ the evil Galactic Empire.";
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
@@ -2144,7 +2119,7 @@ the evil Galactic Empire.";
     {
         DrawingOptions drawingOptions = new();
 
-        void DrawAction(DrawingCanvas<TPixel> canvas)
+        static void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             canvas.Fill(Brushes.Solid(Color.White));
 
@@ -2160,7 +2135,6 @@ the evil Galactic Empire.";
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
-
 
         using WebGPUDrawingBackend nativeSurfaceBackend = new();
         using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();

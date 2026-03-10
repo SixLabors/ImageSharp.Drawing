@@ -109,48 +109,33 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
         for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
         {
-            List<PointF> bezierCurveDrawingPoints = FindDrawingPoints(curveIndex, controlPoints);
-
-            if (curveIndex != 0)
+            if (curveIndex == 0)
             {
-                // remove the fist point, as it coincides with the last point of the previous Bezier curve.
-                bezierCurveDrawingPoints.RemoveAt(0);
+                drawingPoints.Add(CalculateBezierPoint(curveIndex, 0, controlPoints));
             }
 
-            drawingPoints.AddRange(bezierCurveDrawingPoints);
+            SubdivideAndAppend(curveIndex, 0, 1, controlPoints, drawingPoints, 0);
+            drawingPoints.Add(CalculateBezierPoint(curveIndex, 1, controlPoints));
         }
 
         return [.. drawingPoints];
     }
 
-    private static List<PointF> FindDrawingPoints(int curveIndex, PointF[] controlPoints)
-    {
-        List<PointF> pointList = [];
-
-        Vector2 left = CalculateBezierPoint(curveIndex, 0, controlPoints);
-        Vector2 right = CalculateBezierPoint(curveIndex, 1, controlPoints);
-
-        pointList.Add(left);
-        pointList.Add(right);
-
-        FindDrawingPoints(curveIndex, 0, 1, pointList, 1, controlPoints, 0);
-
-        return pointList;
-    }
-
-    private static int FindDrawingPoints(
+    /// <summary>
+    /// Recursively subdivides a cubic bezier curve segment and appends points in left-to-right order.
+    /// Points are appended (not inserted), avoiding O(n) shifts per point.
+    /// </summary>
+    private static void SubdivideAndAppend(
         int curveIndex,
         float t0,
         float t1,
-        List<PointF> pointList,
-        int insertionIndex,
         PointF[] controlPoints,
+        List<PointF> output,
         int depth)
     {
-        // max recursive depth for control points, means this is approx the max number of points discoverable
         if (depth > 999)
         {
-            return 0;
+            return;
         }
 
         Vector2 left = CalculateBezierPoint(curveIndex, t0, controlPoints);
@@ -158,7 +143,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
         if ((left - right).LengthSquared() < MinimumSqrDistance)
         {
-            return 0;
+            return;
         }
 
         float midT = (t0 + t1) / 2;
@@ -169,17 +154,11 @@ public sealed class CubicBezierLineSegment : ILineSegment
 
         if (Vector2.Dot(leftDirection, rightDirection) > DivisionThreshold || Math.Abs(midT - 0.5f) < 0.0001f)
         {
-            int pointsAddedCount = 0;
-
-            pointsAddedCount += FindDrawingPoints(curveIndex, t0, midT, pointList, insertionIndex, controlPoints, depth + 1);
-            pointList.Insert(insertionIndex + pointsAddedCount, mid);
-            pointsAddedCount++;
-            pointsAddedCount += FindDrawingPoints(curveIndex, midT, t1, pointList, insertionIndex + pointsAddedCount, controlPoints, depth + 1);
-
-            return pointsAddedCount;
+            // Recurse left half, emit midpoint, recurse right half — all in order.
+            SubdivideAndAppend(curveIndex, t0, midT, controlPoints, output, depth + 1);
+            output.Add(mid);
+            SubdivideAndAppend(curveIndex, midT, t1, controlPoints, output, depth + 1);
         }
-
-        return 0;
     }
 
     private static PointF CalculateBezierPoint(int curveIndex, float t, PointF[] controlPoints)
