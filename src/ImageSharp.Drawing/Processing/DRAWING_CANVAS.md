@@ -18,7 +18,6 @@ DrawingCanvas<TPixel> : IDrawingCanvas, IDisposable
     savedStates            : Stack<DrawingCanvasState>    (min depth 1)
     layerDataStack         : Stack<LayerData<TPixel>>     (one per active SaveLayer)
     pendingImageResources  : List<Image<TPixel>>          (temp images awaiting flush)
-    isRoot                 : bool                         (only root releases frame resources)
     isDisposed             : bool
 ```
 
@@ -238,7 +237,6 @@ CreateRegion(region)
   -> create child canvas:
      - shares backend and batcher with parent
      - snapshots current state
-     - isRoot = false (no resource release on dispose)
      - local origin is (0,0) within clipped region
 ```
 
@@ -258,7 +256,6 @@ Dispose()
 
   Phase 3: Cleanup (in finally)
     -> DisposePendingImageResources()
-    -> if isRoot: backend.ReleaseFrameResources(target)
     -> isDisposed = true
 ```
 

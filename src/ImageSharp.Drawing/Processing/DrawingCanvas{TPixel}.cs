@@ -115,8 +115,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             backend,
             targetFrame,
             new DrawingCanvasBatcher<TPixel>(configuration, backend, targetFrame),
-            new DrawingCanvasState(options, clipPaths),
-            isRoot: true)
+            new DrawingCanvasState(options, clipPaths))
     {
     }
 
@@ -350,8 +349,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             this.backend,
             childFrame,
             this.batcher,
-            this.ResolveState(),
-            isRoot: false);
+            this.ResolveState());
     }
 
     /// <inheritdoc />

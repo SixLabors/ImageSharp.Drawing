@@ -15,11 +15,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 public sealed class RadialGradientBrush : GradientBrush
 {
-    private readonly PointF center0;
-    private readonly float radius0;
-    private readonly PointF? center1; // null means single-circle form
-    private readonly float? radius1;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="RadialGradientBrush"/> class using a single circle.
     /// </summary>
@@ -34,10 +29,10 @@ public sealed class RadialGradientBrush : GradientBrush
         params ColorStop[] colorStops)
         : base(repetitionMode, colorStops)
     {
-        this.center0 = center;
-        this.radius0 = radius;
-        this.center1 = null;
-        this.radius1 = null;
+        this.Center0 = center;
+        this.Radius0 = radius;
+        this.Center1 = null;
+        this.Radius1 = null;
     }
 
     /// <summary>
@@ -58,49 +53,49 @@ public sealed class RadialGradientBrush : GradientBrush
         params ColorStop[] colorStops)
         : base(repetitionMode, colorStops)
     {
-        this.center0 = startCenter;
-        this.radius0 = startRadius;
-        this.center1 = endCenter;
-        this.radius1 = endRadius;
+        this.Center0 = startCenter;
+        this.Radius0 = startRadius;
+        this.Center1 = endCenter;
+        this.Radius1 = endRadius;
     }
 
     /// <summary>
     /// Gets the center of the starting circle.
     /// </summary>
-    public PointF Center0 => this.center0;
+    public PointF Center0 { get; }
 
     /// <summary>
     /// Gets the radius of the starting circle.
     /// </summary>
-    public float Radius0 => this.radius0;
+    public float Radius0 { get; }
 
     /// <summary>
     /// Gets the center of the ending circle, or <see langword="null"/> for single-circle form.
     /// </summary>
-    public PointF? Center1 => this.center1;
+    public PointF? Center1 { get; }
 
     /// <summary>
     /// Gets the radius of the ending circle, or <see langword="null"/> for single-circle form.
     /// </summary>
-    public float? Radius1 => this.radius1;
+    public float? Radius1 { get; }
 
     /// <summary>
     /// Gets a value indicating whether this is a two-circle radial gradient.
     /// </summary>
-    public bool IsTwoCircle => this.center1.HasValue && this.radius1.HasValue;
+    public bool IsTwoCircle => this.Center1.HasValue && this.Radius1.HasValue;
 
     /// <inheritdoc/>
     public override Brush Transform(Matrix4x4 matrix)
     {
-        PointF tc0 = PointF.Transform(this.center0, matrix);
+        PointF tc0 = PointF.Transform(this.Center0, matrix);
         float scale = MatrixUtilities.GetAverageScale(in matrix);
         if (this.IsTwoCircle)
         {
-            PointF tc1 = PointF.Transform(this.center1!.Value, matrix);
-            return new RadialGradientBrush(tc0, this.radius0 * scale, tc1, this.radius1!.Value * scale, this.RepetitionMode, this.ColorStopsArray);
+            PointF tc1 = PointF.Transform(this.Center1!.Value, matrix);
+            return new RadialGradientBrush(tc0, this.Radius0 * scale, tc1, this.Radius1!.Value * scale, this.RepetitionMode, this.ColorStopsArray);
         }
 
-        return new RadialGradientBrush(tc0, this.radius0 * scale, this.RepetitionMode, this.ColorStopsArray);
+        return new RadialGradientBrush(tc0, this.Radius0 * scale, this.RepetitionMode, this.ColorStopsArray);
     }
 
     /// <inheritdoc/>
@@ -109,10 +104,10 @@ public sealed class RadialGradientBrush : GradientBrush
         if (other is RadialGradientBrush b)
         {
             return base.Equals(other)
-                && this.center0.Equals(b.center0)
-                && this.radius0.Equals(b.radius0)
-                && Nullable.Equals(this.center1, b.center1)
-                && Nullable.Equals(this.radius1, b.radius1);
+                && this.Center0.Equals(b.Center0)
+                && this.Radius0.Equals(b.Radius0)
+                && Nullable.Equals(this.Center1, b.Center1)
+                && Nullable.Equals(this.Radius1, b.Radius1);
         }
 
         return false;
@@ -120,7 +115,7 @@ public sealed class RadialGradientBrush : GradientBrush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(base.GetHashCode(), this.center0, this.radius0, this.center1, this.radius1);
+        => HashCode.Combine(base.GetHashCode(), this.Center0, this.Radius0, this.Center1, this.Radius1);
 
     /// <inheritdoc />
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
@@ -132,10 +127,10 @@ public sealed class RadialGradientBrush : GradientBrush
             configuration,
             options,
             targetRegion,
-            this.center0,
-            this.radius0,
-            this.center1,
-            this.radius1,
+            this.Center0,
+            this.Radius0,
+            this.Center1,
+            this.Radius1,
             this.ColorStopsArray,
             this.RepetitionMode);
 
