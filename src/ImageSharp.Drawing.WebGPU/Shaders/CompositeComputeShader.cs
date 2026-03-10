@@ -275,7 +275,7 @@ internal static class CompositeComputeShader
 
             if rx_sq < 1e-20 { return 0.0; }
             if ry_sq < 1e-20 { return 0.0; }
-            return rotated_x * rotated_x / rx_sq + rotated_y * rotated_y / ry_sq;
+            return sqrt(rotated_x * rotated_x / rx_sq + rotated_y * rotated_y / ry_sq);
         }
 
         // Sweep (angular) gradient. Computes radians and sweep from raw degrees.

@@ -72,7 +72,7 @@ public sealed class LinearLineSegment : ILineSegment
     /// <returns>
     /// A line segment with the matrix applied to it.
     /// </returns>
-    public LinearLineSegment Transform(Matrix3x2 matrix)
+    public LinearLineSegment Transform(Matrix4x4 matrix)
     {
         if (matrix.IsIdentity)
         {
@@ -95,5 +95,5 @@ public sealed class LinearLineSegment : ILineSegment
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A line segment with the matrix applied to it.</returns>
-    ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
+    ILineSegment ILineSegment.Transform(Matrix4x4 matrix) => this.Transform(matrix);
 }

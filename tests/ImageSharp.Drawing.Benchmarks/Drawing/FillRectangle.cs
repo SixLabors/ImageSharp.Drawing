@@ -34,7 +34,7 @@ public class FillRectangle
         using (Image<Rgba32> image = new(800, 800))
         {
             image.Mutate(x => x.ProcessWithCanvas(
-                canvas => canvas.Fill(new Rectangle(10, 10, 190, 140), Processing.Brushes.Solid(Color.HotPink))));
+                canvas => canvas.Fill(Processing.Brushes.Solid(Color.HotPink), new Rectangle(10, 10, 190, 140))));
 
             return new Size(image.Width, image.Height);
         }
@@ -47,14 +47,14 @@ public class FillRectangle
         {
             image.Mutate(x => x.ProcessWithCanvas(
                 canvas => canvas.Fill(
+                    Processing.Brushes.Solid(Color.HotPink),
                     new Polygon(
                     [
                         new PointF(10, 10),
                         new PointF(200, 10),
                         new PointF(200, 150),
                         new PointF(10, 150)
-                    ]),
-                    Processing.Brushes.Solid(Color.HotPink))));
+                    ]))));
 
             return new Size(image.Width, image.Height);
         }

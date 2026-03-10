@@ -106,7 +106,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.Blue;
 
         provider.RunValidatingProcessorTest(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(region, Brushes.Solid(color))),
+            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(color), region)),
             testDetails,
             ImageComparer.Exact);
     }
@@ -127,7 +127,7 @@ public partial class ProcessWithDrawingCanvasTests
         Color color = Color.Blue;
 
         provider.RunValidatingProcessorTestOnWrappedMemoryImage(
-            c => c.ProcessWithCanvas(canvas => canvas.Fill(region, Brushes.Solid(color))),
+            c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(color), region)),
             testDetails,
             ImageComparer.Exact,
             useReferenceOutputFrom: nameof(this.FillSolidBrush_Region));
@@ -161,7 +161,7 @@ public partial class ProcessWithDrawingCanvasTests
         if (triggerFillRegion)
         {
             RectangularPolygon path = new(0, 0, 16, 16);
-            image.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(path, Brushes.Solid(fillColor))));
+            image.Mutate(c => c.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(fillColor), path)));
         }
         else
         {

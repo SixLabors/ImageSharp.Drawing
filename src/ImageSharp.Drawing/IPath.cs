@@ -31,7 +31,7 @@ public interface IPath
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A new path with the matrix applied to it.</returns>
-    public IPath Transform(Matrix3x2 matrix);
+    public IPath Transform(Matrix4x4 matrix);
 
     /// <summary>
     /// Returns this path with all figures closed.

@@ -68,7 +68,7 @@ internal class BaseGlyphBuilder : IGlyphRenderer
     /// with the specified transform applied to all incoming glyph geometry.
     /// </summary>
     /// <param name="transform">A matrix transform applied to every point received from the font engine.</param>
-    public BaseGlyphBuilder(Matrix3x2 transform) => this.Builder = new PathBuilder(transform);
+    public BaseGlyphBuilder(Matrix4x4 transform) => this.Builder = new PathBuilder(transform);
 
     /// <summary>
     /// Gets the flattened paths captured for all glyphs/graphemes.

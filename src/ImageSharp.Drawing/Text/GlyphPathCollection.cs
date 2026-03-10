@@ -68,7 +68,7 @@ public sealed class GlyphPathCollection
     /// <returns>
     /// A new <see cref="GlyphPathCollection"/> with the matrix applied to it.
     /// </returns>
-    public GlyphPathCollection Transform(Matrix3x2 matrix)
+    public GlyphPathCollection Transform(Matrix4x4 matrix)
     {
         List<IPath> transformed = new(this.paths.Count);
 

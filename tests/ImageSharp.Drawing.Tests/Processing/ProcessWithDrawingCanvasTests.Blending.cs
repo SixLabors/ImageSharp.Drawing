@@ -39,12 +39,12 @@ public partial class ProcessWithDrawingCanvasTests
 
         image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY), Brushes.Solid(Color.DarkBlue));
+            canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY));
         }));
 
         image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
         {
-            canvas.Fill(new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY), Brushes.Solid(Color.HotPink));
+            canvas.Fill(Brushes.Solid(Color.HotPink), new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY));
         }));
 
         VerifyImage(provider, blending, composition, image);
@@ -66,17 +66,17 @@ public partial class ProcessWithDrawingCanvasTests
 
         image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY), Brushes.Solid(Color.DarkBlue));
+            canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY));
         }));
 
         image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
         {
-            canvas.Fill(new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY), Brushes.Solid(Color.HotPink));
+            canvas.Fill(Brushes.Solid(Color.HotPink), new Rectangle(20 * scaleX, 0 * scaleY, 30 * scaleX, 100 * scaleY));
         }));
 
         image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
         {
-            canvas.Fill(new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY), Brushes.Solid(Color.Transparent));
+            canvas.Fill(Brushes.Solid(Color.Transparent), new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY));
         }));
 
         VerifyImage(provider, blending, composition, image);
@@ -100,17 +100,17 @@ public partial class ProcessWithDrawingCanvasTests
         image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
             // Keep legacy shape coordinates identical to the original test.
-            canvas.Fill(new Rectangle(0 * scaleX, 40, 100 * scaleX, 20 * scaleY), Brushes.Solid(Color.DarkBlue));
+            canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40, 100 * scaleX, 20 * scaleY));
         }));
 
         image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
         {
-            canvas.Fill(new Rectangle(20 * scaleX, 0, 30 * scaleX, 100 * scaleY), Brushes.Solid(Color.HotPink));
+            canvas.Fill(Brushes.Solid(Color.HotPink), new Rectangle(20 * scaleX, 0, 30 * scaleX, 100 * scaleY));
         }));
 
         image.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>
         {
-            canvas.Fill(new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY), Brushes.Solid(transparentRed));
+            canvas.Fill(Brushes.Solid(transparentRed), new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY));
         }));
 
         VerifyImage(provider, blending, composition, image);
@@ -134,12 +134,12 @@ public partial class ProcessWithDrawingCanvasTests
 
         destinationImage.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY), Brushes.Solid(Color.DarkBlue));
+            canvas.Fill(Brushes.Solid(Color.DarkBlue), new Rectangle(0 * scaleX, 40 * scaleY, 100 * scaleX, 20 * scaleY));
         }));
 
         sourceImage.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY), Brushes.Solid(Color.Black));
+            canvas.Fill(Brushes.Solid(Color.Black), new EllipsePolygon(40 * scaleX, 50 * scaleY, 50 * scaleX, 50 * scaleY));
         }));
 
         destinationImage.Mutate(ctx => ctx.ProcessWithCanvas(blendOptions, canvas =>

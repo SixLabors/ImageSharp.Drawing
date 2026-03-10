@@ -34,9 +34,9 @@ public partial class DrawingCanvasTests
         Brush hatchBrush = Brushes.ForwardDiagonal(Color.DarkSlateGray.WithAlpha(0.7F), Color.Transparent);
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(new Rectangle(14, 14, 176, 126), linearBrush);
-        canvas.Fill(new EllipsePolygon(new PointF(236, 90), new SizeF(132, 98)), radialBrush);
-        canvas.Fill(CreateClosedPathBuilder(), hatchBrush);
+        canvas.Fill(linearBrush, new Rectangle(14, 14, 176, 126));
+        canvas.Fill(radialBrush, new EllipsePolygon(new PointF(236, 90), new SizeF(132, 98)));
+        canvas.Fill(hatchBrush, CreateClosedPathBuilder());
         canvas.Draw(Pens.DashDot(Color.Black, 3), new Rectangle(10, 10, 300, 180));
         canvas.Flush();
 

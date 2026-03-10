@@ -19,7 +19,7 @@ internal static class PolygonFactory
 
     // based on:
     // https://github.com/SixLabors/ImageSharp.Drawing/issues/15#issuecomment-521061283
-    public static IReadOnlyList<PointF[]> GetGeoJsonPoints(Feature geometryOwner, Matrix3x2 transform)
+    public static IReadOnlyList<PointF[]> GetGeoJsonPoints(Feature geometryOwner, Matrix4x4 transform)
     {
         List<PointF[]> result = [];
         IGeometryObject geometry = geometryOwner.Geometry;
@@ -64,14 +64,14 @@ internal static class PolygonFactory
         }
     }
 
-    public static PointF[][] GetGeoJsonPoints(string geoJsonContent, Matrix3x2 transform)
+    public static PointF[][] GetGeoJsonPoints(string geoJsonContent, Matrix4x4 transform)
     {
         FeatureCollection features = JsonConvert.DeserializeObject<FeatureCollection>(geoJsonContent);
         return features.Features.SelectMany(f => GetGeoJsonPoints(f, transform)).ToArray();
     }
 
     public static PointF[][] GetGeoJsonPoints(string geoJsonContent) =>
-        GetGeoJsonPoints(geoJsonContent, Matrix3x2.Identity);
+        GetGeoJsonPoints(geoJsonContent, Matrix4x4.Identity);
 
     public static Polygon CreatePolygon(params (float X, float Y)[] coords)
         => new(new LinearLineSegment(CreatePointArray(coords)))

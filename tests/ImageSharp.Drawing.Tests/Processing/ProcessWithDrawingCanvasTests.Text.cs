@@ -208,7 +208,7 @@ public partial class ProcessWithDrawingCanvasTests
             Origin = new PointF(x, y)
         };
 
-        Matrix3x2 transform = Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY));
+        Matrix4x4 transform = new(Matrix3x2.CreateRotation(radians, new Vector2(rotationOriginX, rotationOriginY)));
         DrawingOptions drawingOptions = new() { Transform = transform };
 
         provider.RunValidatingProcessorTest(
@@ -253,7 +253,7 @@ public partial class ProcessWithDrawingCanvasTests
             Origin = new PointF(x, y)
         };
 
-        Matrix3x2 transform = Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY));
+        Matrix4x4 transform = new(Matrix3x2.CreateSkew(radianX, radianY, new Vector2(rotationOriginX, rotationOriginY)));
         DrawingOptions drawingOptions = new() { Transform = transform };
 
         provider.RunValidatingProcessorTest(
@@ -482,8 +482,8 @@ public partial class ProcessWithDrawingCanvasTests
         AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
         RichTextOptions textOptions = new(font);
-        FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
-        Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(advance.X, advance.Y, advance.Width, advance.Height)));
+        FontRectangle renderable = TextMeasurer.MeasureRenderableBounds(text, textOptions);
+        Matrix4x4 transform = new(builder.BuildMatrix(Rectangle.Round(new RectangleF(renderable.X, renderable.Y, renderable.Width, renderable.Height))));
 
         DrawingOptions drawingOptions = new() { Transform = transform };
         provider.RunValidatingProcessorTest(
@@ -514,8 +514,8 @@ public partial class ProcessWithDrawingCanvasTests
         AffineTransformBuilder builder = new AffineTransformBuilder().AppendRotationDegrees(angle);
 
         RichTextOptions textOptions = new(font);
-        FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
-        Matrix3x2 transform = builder.BuildMatrix(Rectangle.Round(new RectangleF(advance.X, advance.Y, advance.Width, advance.Height)));
+        FontRectangle renderable = TextMeasurer.MeasureRenderableBounds(text, textOptions);
+        Matrix4x4 transform = new(builder.BuildMatrix(Rectangle.Round(new RectangleF(renderable.X, renderable.Y, renderable.Width, renderable.Height))));
 
         DrawingOptions drawingOptions = new() { Transform = transform };
         provider.RunValidatingProcessorTest(

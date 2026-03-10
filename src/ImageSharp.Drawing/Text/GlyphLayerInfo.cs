@@ -100,7 +100,7 @@ public readonly struct GlyphLayerInfo
     /// </summary>
     public GlyphLayerKind Kind { get; }
 
-    internal static GlyphLayerInfo Transform(in GlyphLayerInfo info, Matrix3x2 matrix)
+    internal static GlyphLayerInfo Transform(in GlyphLayerInfo info, Matrix4x4 matrix)
         => new(
             info.StartIndex,
             info.Count,

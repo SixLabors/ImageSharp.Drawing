@@ -36,7 +36,7 @@ public class EllipseStressTest
                     float y = this.Rand(this.height);
                     EllipsePolygon ellipse = new(new PointF(x, y), r);
 
-                    canvas.Fill(ellipse, Brushes.Solid(brushColor));
+                    canvas.Fill(Brushes.Solid(brushColor), ellipse);
                     canvas.Draw(Pens.Solid(penColor, this.Rand(5)), ellipse);
                 }
             }));

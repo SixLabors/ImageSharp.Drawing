@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -35,6 +36,13 @@ public abstract class Brush : IEquatable<Brush>
         Buffer2DRegion<TPixel> targetRegion,
         RectangleF region)
         where TPixel : unmanaged, IPixel<TPixel>;
+
+    /// <summary>
+    /// Returns a new brush with its defining geometry transformed by the given matrix.
+    /// </summary>
+    /// <param name="matrix">The transformation matrix to apply.</param>
+    /// <returns>A transformed brush, or <c>this</c> if the brush has no spatial parameters.</returns>
+    public virtual Brush Transform(Matrix4x4 matrix) => this;
 
     /// <inheritdoc/>
     public abstract bool Equals(Brush? other);

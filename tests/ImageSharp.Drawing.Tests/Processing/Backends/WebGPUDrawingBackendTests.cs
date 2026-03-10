@@ -6,6 +6,7 @@
 // WebGPU adapter request failed with status 'Unavailable'
 // It's also failing in Windows CI with "Test host process crashed : Fatal error.0xC0000005"
 // TODO: Ask the Silk.NET team for help.
+using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -47,7 +48,7 @@ public class WebGPUDrawingBackendTests
         RectangularPolygon polygon = new(48.25F, 63.5F, 401.25F, 302.75F);
         Brush brush = Brushes.Solid(Color.Black);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(polygon, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, polygon);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -101,7 +102,7 @@ public class WebGPUDrawingBackendTests
         EllipsePolygon ellipse = new(256, 256, 200, 150);
         Brush brush = Brushes.Solid(Color.Black);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(ellipse, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -146,7 +147,7 @@ public class WebGPUDrawingBackendTests
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             canvas.Clear(clearBrush);
-            canvas.Fill(polygon, brush);
+            canvas.Fill(brush, polygon);
         }
 
         using Image<TPixel> defaultImage = new(384, 256);
@@ -228,7 +229,7 @@ public class WebGPUDrawingBackendTests
 
         IPath path = pathBuilder.Build();
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(path, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, path);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -291,7 +292,7 @@ public class WebGPUDrawingBackendTests
             }
         };
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(polygon, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, polygon);
 
         using Image<TPixel> baseImage = provider.GetImage();
         using Image<TPixel> defaultImage = baseImage.Clone();
@@ -347,7 +348,7 @@ public class WebGPUDrawingBackendTests
 
         using Image<TPixel> foreground = provider.GetImage();
         Brush brush = new ImageBrush(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(polygon, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, polygon);
 
         using Image<TPixel> baseImage = provider.GetImage();
         using Image<TPixel> defaultImage = baseImage.Clone();
@@ -458,7 +459,7 @@ public class WebGPUDrawingBackendTests
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             canvas.Clear(clearBrush);
-            canvas.Fill(polygon, brush);
+            canvas.Fill(brush, polygon);
         }
 
         using Image<TPixel> defaultImage = provider.GetImage();
@@ -504,7 +505,7 @@ public class WebGPUDrawingBackendTests
             canvas.Clear(clearBrush);
 
             using DrawingCanvas<TPixel> regionCanvas = canvas.CreateRegion(region);
-            regionCanvas.Fill(localPolygon, brush);
+            regionCanvas.Fill(brush, localPolygon);
         }
 
         using Image<TPixel> defaultImage = provider.GetImage();
@@ -1204,7 +1205,7 @@ public class WebGPUDrawingBackendTests
             {
                 float x = 20 + (i * 24);
                 float y = 20 + (i * 22);
-                canvas.Fill(new RectangularPolygon(x, y, 80, 60), brush);
+                canvas.Fill(brush, new RectangularPolygon(x, y, 80, 60));
             }
         }
 
@@ -1273,7 +1274,7 @@ public class WebGPUDrawingBackendTests
 
         IPath path = pathBuilder.Build();
         Brush brush = Brushes.Solid(Color.Black);
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(path, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, path);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1317,7 +1318,7 @@ public class WebGPUDrawingBackendTests
         // Large polygon spanning most of the image to exercise many tiles.
         Brush brush = Brushes.Solid(Color.Black);
         EllipsePolygon ellipse = new(new PointF(400, 300), new SizeF(700, 500));
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(ellipse, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1363,13 +1364,13 @@ public class WebGPUDrawingBackendTests
         using Image<TPixel> defaultImage = provider.GetImage();
         using (DrawingCanvas<TPixel> canvas1 = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
         {
-            canvas1.Fill(rect1, redBrush);
+            canvas1.Fill(redBrush, rect1);
             canvas1.Flush();
         }
 
         using (DrawingCanvas<TPixel> canvas2 = new(Configuration.Default, GetFrameRegion(defaultImage), drawingOptions))
         {
-            canvas2.Fill(rect2, blueBrush);
+            canvas2.Fill(blueBrush, rect2);
             canvas2.Flush();
         }
 
@@ -1381,13 +1382,13 @@ public class WebGPUDrawingBackendTests
 
         using (DrawingCanvas<TPixel> canvas1 = new(cpuConfig, GetFrameRegion(cpuRegionImage), drawingOptions))
         {
-            canvas1.Fill(rect1, redBrush);
+            canvas1.Fill(redBrush, rect1);
             canvas1.Flush();
         }
 
         using (DrawingCanvas<TPixel> canvas2 = new(cpuConfig, GetFrameRegion(cpuRegionImage), drawingOptions))
         {
-            canvas2.Fill(rect2, blueBrush);
+            canvas2.Fill(blueBrush, rect2);
             canvas2.Flush();
         }
 
@@ -1423,14 +1424,14 @@ public class WebGPUDrawingBackendTests
             using (DrawingCanvas<TPixel> canvas1 =
                    new(nativeConfig, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
             {
-                canvas1.Fill(rect1, redBrush);
+                canvas1.Fill(redBrush, rect1);
                 canvas1.Flush();
             }
 
             using (DrawingCanvas<TPixel> canvas2 =
                    new(nativeConfig, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
             {
-                canvas2.Fill(rect2, blueBrush);
+                canvas2.Fill(blueBrush, rect2);
                 canvas2.Flush();
             }
 
@@ -1478,7 +1479,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0.5F, Color.Green),
             new ColorStop(1, Color.Blue));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(ellipse, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1523,7 +1524,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Yellow),
             new ColorStop(1, Color.Purple));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1568,7 +1569,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0, Color.White),
             new ColorStop(1, Color.DarkRed));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1615,7 +1616,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Yellow),
             new ColorStop(1, Color.Navy));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1661,7 +1662,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Cyan),
             new ColorStop(1, Color.Magenta));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1709,7 +1710,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0.67F, Color.Blue),
             new ColorStop(1, Color.Red));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(ellipse, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1755,7 +1756,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Orange),
             new ColorStop(1, Color.Teal));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1795,7 +1796,7 @@ public class WebGPUDrawingBackendTests
         RectangularPolygon rect = new(16, 16, 224, 224);
         Brush brush = Brushes.Horizontal(Color.Black, Color.White);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1835,7 +1836,7 @@ public class WebGPUDrawingBackendTests
         EllipsePolygon ellipse = new(128, 128, 100);
         Brush brush = Brushes.ForwardDiagonal(Color.DarkGreen, Color.LightGray);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(ellipse, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, ellipse);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1875,7 +1876,7 @@ public class WebGPUDrawingBackendTests
         RectangularPolygon rect = new(16, 16, 224, 224);
         Brush brush = new RecolorBrush(Color.Red, Color.Blue, 0.5F);
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1921,7 +1922,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0, Color.Coral),
             new ColorStop(1, Color.SteelBlue));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1968,7 +1969,7 @@ public class WebGPUDrawingBackendTests
             new ColorStop(0.5F, Color.DarkViolet),
             new ColorStop(1, Color.White));
 
-        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(rect, brush);
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, rect);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -1988,6 +1989,240 @@ public class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendTriplet(provider, "FillPath_EllipticGradient_Reflect", defaultImage, cpuRegionImage, nativeSurfaceImage);
+        AssertCoverageExecutionAccounting(cpuRegionBackend);
+        AssertCoverageExecutionAccounting(nativeSurfaceBackend);
+        AssertGpuPathWhenRequired(cpuRegionBackend);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+        AssertBackendTripletSimilarity(defaultImage, cpuRegionImage, nativeSurfaceImage, 0.005F);
+    }
+
+    [Theory]
+    [WithSolidFilledImages(500, 400, "Black", PixelTypes.Rgba32)]
+    public void CanApplyPerspectiveTransform_StarWarsCrawl<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = true }
+        };
+
+        Font font = TestFontUtilities.GetFont(TestFonts.OpenSans, 32);
+
+        const string text = @"A long time ago in a galaxy
+far, far away....
+
+It is a period of civil war.
+Rebel spaceships, striking
+from a hidden base, have won
+their first victory against
+the evil Galactic Empire.";
+
+        RichTextOptions textOptions = new(font)
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            TextAlignment = TextAlignment.Center,
+            Origin = new PointF(250, 360)
+        };
+
+        const float originX = 250;
+        const float originY = 380;
+        Matrix4x4 toOrigin = Matrix4x4.CreateTranslation(-originX, -originY, 0);
+        Matrix4x4 taperMatrix = Matrix4x4.Identity;
+        taperMatrix.M24 = -0.003F;
+        Matrix4x4 fromOrigin = Matrix4x4.CreateTranslation(originX, originY, 0);
+        Matrix4x4 perspective = toOrigin * taperMatrix * fromOrigin;
+
+        DrawingOptions perspectiveOptions = new() { Transform = perspective };
+
+        // Star Destroyer geometry.
+        PointF[] sternFace =
+        [
+            new(0, 0), new(300, 0), new(300, 80), new(0, 80),
+        ];
+
+        RectangularPolygon sternHighlightRect = new(4, 4, 292, 72);
+
+        EllipsePolygon thrusterLeft = new(50, 40, 42, 42);
+        EllipsePolygon thrusterCenter = new(150, 40, 48, 48);
+        EllipsePolygon thrusterRight = new(250, 40, 42, 42);
+
+        ProjectiveTransformBuilder transformBuilder = new();
+
+        Rectangle sternBounds = new(0, 0, 300, 80);
+        Matrix4x4 sternTransform = transformBuilder
+            .AppendQuadDistortion(
+                topLeft: new PointF(50, 80),
+                topRight: new PointF(400, 90),
+                bottomRight: new PointF(390, 135),
+                bottomLeft: new PointF(60, 140))
+            .BuildMatrix(sternBounds);
+
+        PointF[] bottomHull =
+        [
+            new(0, 0), new(300, 0), new(150, 80),
+        ];
+
+        EllipsePolygon hullDome = new(117, 80, 96, 96);
+
+        Rectangle hullBounds = new(0, 0, 300, 80);
+        Matrix4x4 hullTransform = transformBuilder.Clear()
+            .AppendQuadDistortion(
+                topLeft: new PointF(60, 140),
+                topRight: new PointF(390, 135),
+                bottomRight: new PointF(300, 160),
+                bottomLeft: new PointF(-30, 170))
+            .BuildMatrix(hullBounds);
+
+        PointF[] towerStem =
+        [
+            new(14, 8), new(26, 8), new(26, 20), new(14, 20),
+        ];
+
+        PointF[] towerTop =
+        [
+            new(0, 0), new(40, 0), new(40, 10), new(0, 10),
+        ];
+
+        Rectangle towerBounds = new(0, 0, 40, 20);
+        Matrix4x4 towerTransform = transformBuilder.Clear()
+            .AppendQuadDistortion(
+                topLeft: new PointF(175, 66),
+                topRight: new PointF(240, 68),
+                bottomRight: new PointF(238, 85),
+                bottomLeft: new PointF(177, 84))
+            .BuildMatrix(towerBounds);
+
+        Color sternColorLeft = Color.FromPixel(new Rgba32(70, 75, 85, 255));
+        Color sternColorRight = Color.FromPixel(new Rgba32(35, 38, 45, 255));
+        Color hullColorLeft = Color.FromPixel(new Rgba32(85, 90, 100, 255));
+        Color hullColorRight = Color.FromPixel(new Rgba32(45, 50, 58, 255));
+        Color highlightColorLeft = Color.FromPixel(new Rgba32(135, 140, 150, 255));
+        Color highlightColorRight = Color.FromPixel(new Rgba32(65, 70, 80, 255));
+        Color thrusterInnerGlow = Color.White;
+        Color thrusterOuterGlow = Color.Blue;
+
+        LinearGradientBrush sternBrush = new(
+            new PointF(0, 40),
+            new PointF(300, 40),
+            GradientRepetitionMode.None,
+            new ColorStop(0, sternColorLeft),
+            new ColorStop(1, sternColorRight));
+
+        LinearGradientBrush hullBrush = new(
+            new PointF(0, 40),
+            new PointF(300, 40),
+            GradientRepetitionMode.None,
+            new ColorStop(0, hullColorLeft),
+            new ColorStop(1, hullColorRight));
+
+        LinearGradientBrush highlightBrush = new(
+            new PointF(0, 40),
+            new PointF(300, 40),
+            GradientRepetitionMode.None,
+            new ColorStop(0, highlightColorLeft),
+            new ColorStop(1, highlightColorRight));
+
+        LinearGradientBrush towerBrush = new(
+            new PointF(0, 10),
+            new PointF(40, 10),
+            GradientRepetitionMode.None,
+            new ColorStop(0, sternColorLeft),
+            new ColorStop(1, sternColorRight));
+
+        LinearGradientBrush towerTopBrush = new(
+            new PointF(0, 5),
+            new PointF(40, 5),
+            GradientRepetitionMode.None,
+            new ColorStop(0, highlightColorLeft),
+            new ColorStop(1, highlightColorRight));
+
+        LinearGradientBrush domeBrush = new(
+            new PointF(21, 80),
+            new PointF(213, 80),
+            GradientRepetitionMode.None,
+            new ColorStop(0, highlightColorLeft),
+            new ColorStop(1, highlightColorRight));
+
+        EllipticGradientBrush thrusterBrushLeft = new(
+            new PointF(50, 40),
+            new PointF(50 + 42, 40),
+            1f,
+            GradientRepetitionMode.None,
+            new ColorStop(0, thrusterInnerGlow),
+            new ColorStop(.75F, thrusterOuterGlow));
+
+        EllipticGradientBrush thrusterBrushCenter = new(
+            new PointF(150, 40),
+            new PointF(150 + 48, 40),
+            1f,
+            GradientRepetitionMode.None,
+            new ColorStop(0, thrusterInnerGlow),
+            new ColorStop(.75F, thrusterOuterGlow));
+
+        EllipticGradientBrush thrusterBrushRight = new(
+            new PointF(250, 40),
+            new PointF(250 + 42, 40),
+            1f,
+            GradientRepetitionMode.None,
+            new ColorStop(0, thrusterInnerGlow),
+            new ColorStop(.75F, thrusterOuterGlow));
+
+        DrawingOptions sternOptions = new() { Transform = sternTransform };
+        DrawingOptions hullOptions = new() { Transform = hullTransform };
+        DrawingOptions towerOptions = new() { Transform = towerTransform };
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            // Bottom hull (draw first — behind stern).
+            canvas.Save(hullOptions);
+            canvas.Fill(highlightBrush, new Polygon(bottomHull));
+            canvas.Restore();
+
+            // Stern face with thrusters, highlight, and dome.
+            canvas.Save(sternOptions);
+            canvas.Fill(domeBrush, hullDome);
+            canvas.Draw(Pens.Solid(highlightColorRight, 2), hullDome);
+            canvas.Fill(sternBrush, new Polygon(sternFace));
+            canvas.Draw(Pens.Solid(highlightColorLeft, 2), sternHighlightRect);
+            canvas.Fill(thrusterBrushLeft, thrusterLeft);
+            canvas.Fill(thrusterBrushCenter, thrusterCenter);
+            canvas.Fill(thrusterBrushRight, thrusterRight);
+            canvas.Draw(Pens.Solid(highlightColorLeft, 2), thrusterLeft);
+            canvas.Draw(Pens.Solid(highlightColorLeft, 2), thrusterCenter);
+            canvas.Draw(Pens.Solid(highlightColorLeft, 2), thrusterRight);
+            canvas.Restore();
+
+            // Bridge tower.
+            canvas.Save(towerOptions);
+            canvas.Fill(towerTopBrush, new Polygon(towerTop));
+            canvas.Fill(towerBrush, new Polygon(towerStem));
+            canvas.Restore();
+
+            // Text crawl with perspective.
+            canvas.Save(perspectiveOptions);
+            canvas.DrawText(textOptions, text, Brushes.Solid(Color.Yellow), pen: null);
+            canvas.Restore();
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using Image<TPixel> cpuRegionImage = provider.GetImage();
+        using WebGPUDrawingBackend cpuRegionBackend = new();
+        RenderWithCpuRegionWebGpuBackend(cpuRegionImage, cpuRegionBackend, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage);
+
+        DebugSaveBackendTriplet(provider, "StarWarsCrawl", defaultImage, cpuRegionImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(cpuRegionBackend);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(cpuRegionBackend);

@@ -27,14 +27,14 @@ internal class DebugDraw
             return;
         }
 
-        path = path.Transform(Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(gridSize, gridSize));
+        path = path.Transform(Matrix4x4.CreateScale(scale) * Matrix4x4.CreateTranslation(gridSize, gridSize, 0));
         RectangleF bounds = path.Bounds;
         gridSize *= scale;
 
         using Image img = new Image<Rgba32>((int)(bounds.Right + (2 * gridSize)), (int)(bounds.Bottom + (2 * gridSize)));
         img.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(path, TestBrush);
+            canvas.Fill(TestBrush, path);
             DrawGrid(canvas, bounds, gridSize);
         }));
 

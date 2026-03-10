@@ -124,7 +124,10 @@ public abstract class GradientBrush : Brush
         {
             get
             {
-                float positionOnCompleteGradient = this.PositionOnGradient(x + 0.5f, y + 0.5f);
+                float fx = x + 0.5f;
+                float fy = y + 0.5f;
+
+                float positionOnCompleteGradient = this.PositionOnGradient(fx, fy);
 
                 switch (this.repetitionMode)
                 {

@@ -11,7 +11,7 @@ public class Issue_244
     public void DoesNotHang()
     {
         PathBuilder pathBuilder = new();
-        Matrix3x2 transform = Matrix3x2.CreateRotation(-0.04433158f, new Vector2(948, 640));
+        Matrix4x4 transform = new(Matrix3x2.CreateRotation(-0.04433158f, new Vector2(948, 640)));
         pathBuilder.SetTransform(transform);
         pathBuilder.AddQuadraticBezier(new PointF(-2147483648, 677), new PointF(-2147483648, 675), new PointF(-2147483648, 675));
         IPath path = pathBuilder.Build();

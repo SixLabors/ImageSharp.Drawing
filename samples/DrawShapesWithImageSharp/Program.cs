@@ -267,7 +267,7 @@ public static class Program
         {
             // Fill the canvas background and draw our shape.
             canvas.Fill(Brushes.Solid(Color.DarkBlue));
-            canvas.Fill(shape, Brushes.Solid(Color.White.WithAlpha(.25F)));
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.25F)), shape);
 
             // Draw our path collection.
             canvas.Fill(Brushes.Solid(Color.HotPink), collection);

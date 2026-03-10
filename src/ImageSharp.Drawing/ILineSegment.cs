@@ -29,5 +29,5 @@ public interface ILineSegment
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A line segment with the matrix applied to it.</returns>
-    ILineSegment Transform(Matrix3x2 matrix);
+    ILineSegment Transform(Matrix4x4 matrix);
 }

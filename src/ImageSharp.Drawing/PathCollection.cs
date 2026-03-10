@@ -63,7 +63,7 @@ public class PathCollection : IPathCollection
     public IEnumerator<IPath> GetEnumerator() => ((IEnumerable<IPath>)this.paths).GetEnumerator();
 
     /// <inheritdoc />
-    public IPathCollection Transform(Matrix3x2 matrix)
+    public IPathCollection Transform(Matrix4x4 matrix)
     {
         IPath[] result = new IPath[this.paths.Length];
 

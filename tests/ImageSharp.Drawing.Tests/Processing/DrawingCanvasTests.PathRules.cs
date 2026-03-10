@@ -30,14 +30,14 @@ public partial class DrawingCanvasTests
         };
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(new Rectangle(12, 12, 336, 196), Brushes.Solid(Color.AliceBlue.WithAlpha(0.7F)));
+        canvas.Fill(Brushes.Solid(Color.AliceBlue.WithAlpha(0.7F)), new Rectangle(12, 12, 336, 196));
 
         _ = canvas.Save(evenOddOptions);
-        canvas.Fill(leftPath, Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)));
+        canvas.Fill(Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)), leftPath);
         canvas.Restore();
 
         _ = canvas.Save(nonZeroOptions);
-        canvas.Fill(rightPath, Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)));
+        canvas.Fill(Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)), rightPath);
         canvas.Restore();
 
         canvas.Draw(Pens.Solid(Color.Black, 3F), leftPath);

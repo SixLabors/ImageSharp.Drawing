@@ -17,7 +17,7 @@ public static partial class PathExtensions
     /// <param name="radians">The radians to rotate the path.</param>
     /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
     public static IPathCollection Rotate(this IPathCollection path, float radians)
-        => path.Transform(Matrix3x2Extensions.CreateRotation(radians, RectangleF.Center(path.Bounds)));
+        => path.Transform(new Matrix4x4(Matrix3x2.CreateRotation(radians, RectangleF.Center(path.Bounds))));
 
     /// <summary>
     /// Creates a path rotated by the specified degrees around its center.
@@ -35,7 +35,7 @@ public static partial class PathExtensions
     /// <param name="position">The translation position.</param>
     /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPathCollection Translate(this IPathCollection path, PointF position)
-        => path.Transform(Matrix3x2.CreateTranslation(position));
+        => path.Transform(Matrix4x4.CreateTranslation(position.X, position.Y, 0));
 
     /// <summary>
     /// Creates a path translated by the supplied position
@@ -55,7 +55,7 @@ public static partial class PathExtensions
     /// <param name="scaleY">The amount to scale along the Y axis.</param>
     /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPathCollection Scale(this IPathCollection path, float scaleX, float scaleY)
-        => path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, RectangleF.Center(path.Bounds)));
+        => path.Transform(Matrix4x4.CreateScale(scaleX, scaleY, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 
     /// <summary>
     /// Creates a path translated by the supplied position
@@ -64,7 +64,7 @@ public static partial class PathExtensions
     /// <param name="scale">The amount to scale along both the x and y axis.</param>
     /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPathCollection Scale(this IPathCollection path, float scale)
-        => path.Transform(Matrix3x2.CreateScale(scale, RectangleF.Center(path.Bounds)));
+        => path.Transform(Matrix4x4.CreateScale(scale, scale, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 
     /// <summary>
     /// Creates a path rotated by the specified radians around its center.
@@ -73,7 +73,7 @@ public static partial class PathExtensions
     /// <param name="radians">The radians to rotate the path.</param>
     /// <returns>A <see cref="IPath"/> with a rotate transform applied.</returns>
     public static IPath Rotate(this IPath path, float radians)
-        => path.Transform(Matrix3x2.CreateRotation(radians, RectangleF.Center(path.Bounds)));
+        => path.Transform(new Matrix4x4(Matrix3x2.CreateRotation(radians, RectangleF.Center(path.Bounds))));
 
     /// <summary>
     /// Creates a path rotated by the specified degrees around its center.
@@ -91,7 +91,7 @@ public static partial class PathExtensions
     /// <param name="position">The translation position.</param>
     /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPath Translate(this IPath path, PointF position)
-        => path.Transform(Matrix3x2.CreateTranslation(position));
+        => path.Transform(Matrix4x4.CreateTranslation(position.X, position.Y, 0));
 
     /// <summary>
     /// Creates a path translated by the supplied position
@@ -111,7 +111,7 @@ public static partial class PathExtensions
     /// <param name="scaleY">The amount to scale along the Y axis.</param>
     /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPath Scale(this IPath path, float scaleX, float scaleY)
-        => path.Transform(Matrix3x2.CreateScale(scaleX, scaleY, RectangleF.Center(path.Bounds)));
+        => path.Transform(Matrix4x4.CreateScale(scaleX, scaleY, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 
     /// <summary>
     /// Creates a path translated by the supplied position
@@ -120,7 +120,7 @@ public static partial class PathExtensions
     /// <param name="scale">The amount to scale along both the x and y axis.</param>
     /// <returns>A <see cref="IPath"/> with a translate transform applied.</returns>
     public static IPath Scale(this IPath path, float scale)
-        => path.Transform(Matrix3x2.CreateScale(scale, RectangleF.Center(path.Bounds)));
+        => path.Transform(Matrix4x4.CreateScale(scale, scale, 1, new Vector3(RectangleF.Center(path.Bounds), 0)));
 
     /// <summary>
     /// Calculates the approximate length of the path as though each segment were unrolled into a line.

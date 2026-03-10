@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -63,6 +64,14 @@ public sealed class LinearGradientBrush : GradientBrush
     /// Gets the end point of the gradient axis.
     /// </summary>
     public PointF EndPoint { get; }
+
+    /// <inheritdoc/>
+    public override Brush Transform(Matrix4x4 matrix)
+        => new LinearGradientBrush(
+            PointF.Transform(this.StartPoint, matrix),
+            PointF.Transform(this.EndPoint, matrix),
+            this.RepetitionMode,
+            this.ColorStopsArray);
 
     /// <inheritdoc/>
     public override bool Equals(Brush? other)

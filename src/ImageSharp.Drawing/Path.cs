@@ -93,7 +93,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
         this.innerPath ??= new InternalPath(this.lineSegments, this.IsClosed, this.RemoveCloseAndCollinearPoints);
 
     /// <inheritdoc />
-    public virtual IPath Transform(Matrix3x2 matrix)
+    public virtual IPath Transform(Matrix4x4 matrix)
     {
         if (matrix.IsIdentity)
         {

@@ -12,17 +12,17 @@ namespace SixLabors.ImageSharp.Drawing;
 public class PathBuilder
 {
     private readonly List<Figure> figures = [];
-    private readonly Matrix3x2 defaultTransform;
+    private readonly Matrix4x4 defaultTransform;
     private Figure currentFigure;
-    private Matrix3x2 currentTransform;
-    private Matrix3x2 setTransform;
+    private Matrix4x4 currentTransform;
+    private Matrix4x4 setTransform;
     private Vector2 currentPoint;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PathBuilder" /> class.
     /// </summary>
     public PathBuilder()
-        : this(Matrix3x2.Identity)
+        : this(Matrix4x4.Identity)
     {
     }
 
@@ -30,7 +30,7 @@ public class PathBuilder
     /// Initializes a new instance of the <see cref="PathBuilder"/> class.
     /// </summary>
     /// <param name="defaultTransform">The default transform.</param>
-    public PathBuilder(Matrix3x2 defaultTransform)
+    public PathBuilder(Matrix4x4 defaultTransform)
     {
         this.defaultTransform = defaultTransform;
         this.Clear();
@@ -41,19 +41,19 @@ public class PathBuilder
     /// Gets the current transformation matrix.
     /// </summary>
     /// <remarks>
-    /// Returns a copy of the matrix. Because <see cref="Matrix3x2"/> is a value type,
+    /// Returns a copy of the matrix. Because <see cref="Matrix4x4"/> is a value type,
     /// modifications to the returned value do not affect the internal state. To change the transform,
-    /// call <see cref="SetTransform(Matrix3x2)"/>.
+    /// call <see cref="SetTransform(Matrix4x4)"/>.
     /// </remarks>
     /// <value>The current transformation matrix.</value>
-    public Matrix3x2 Transform => this.currentTransform;
+    public Matrix4x4 Transform => this.currentTransform;
 
     /// <summary>
     /// Sets the translation to be applied to all items to follow being applied to the <see cref="PathBuilder"/>.
     /// </summary>
     /// <param name="transform">The transform.</param>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
-    public PathBuilder SetTransform(Matrix3x2 transform)
+    public PathBuilder SetTransform(Matrix4x4 transform)
     {
         this.setTransform = transform;
         this.currentTransform = this.setTransform * this.defaultTransform;
@@ -68,7 +68,7 @@ public class PathBuilder
     public PathBuilder SetOrigin(PointF origin)
     {
         // The new origin should be transformed based on the default transform
-        this.setTransform.Translation = origin;
+        this.setTransform.Translation = new Vector3(origin.X, origin.Y, 0);
         this.currentTransform = this.setTransform * this.defaultTransform;
 
         return this;
@@ -80,7 +80,7 @@ public class PathBuilder
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder ResetTransform()
     {
-        this.setTransform = Matrix3x2.Identity;
+        this.setTransform = Matrix4x4.Identity;
         this.currentTransform = this.setTransform * this.defaultTransform;
 
         return this;
@@ -92,7 +92,7 @@ public class PathBuilder
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder ResetOrigin()
     {
-        this.setTransform.Translation = Vector2.Zero;
+        this.setTransform.Translation = Vector3.Zero;
         this.currentTransform = this.setTransform * this.defaultTransform;
 
         return this;

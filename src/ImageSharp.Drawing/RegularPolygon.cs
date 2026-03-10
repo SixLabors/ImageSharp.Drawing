@@ -70,7 +70,7 @@ public class RegularPolygon : Polygon
         PointF[] points = new PointF[vertices];
         for (int i = 0; i < vertices; i++)
         {
-            PointF rotated = PointF.Transform(distanceVector, Matrix3x2.CreateRotation(current));
+            PointF rotated = PointF.Transform(distanceVector, Matrix4x4.CreateRotationZ(current));
 
             points[i] = rotated + location;
 

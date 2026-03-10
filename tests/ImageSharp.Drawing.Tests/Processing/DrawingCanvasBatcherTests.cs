@@ -27,8 +27,8 @@ public class DrawingCanvasBatcherTests
         Brush brushA = Brushes.Solid(Color.Red);
         Brush brushB = Brushes.Solid(Color.Blue);
 
-        canvas.Fill(path, brushA);
-        canvas.Fill(path, brushB);
+        canvas.Fill(brushA, path);
+        canvas.Fill(brushB, path);
         canvas.Flush();
 
         Assert.True(backend.HasBatch);
@@ -78,7 +78,7 @@ public class DrawingCanvasBatcherTests
 
         for (int i = 0; i < 10; i++)
         {
-            canvas.Fill(path, Brushes.Solid(Color.FromPixel(new Rgba32((byte)i, 0, 0, 255))));
+            canvas.Fill(Brushes.Solid(Color.FromPixel(new Rgba32((byte)i, 0, 0, 255))), path);
         }
 
         canvas.Flush();

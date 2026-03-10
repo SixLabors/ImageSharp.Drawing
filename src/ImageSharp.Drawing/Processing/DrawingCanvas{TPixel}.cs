@@ -304,28 +304,28 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public void Clear(Rectangle region, Brush brush)
+    public void Clear(Brush brush, Rectangle region)
     {
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions options = state.Options.CloneForClearOperation();
-        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(region, brush));
+        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(brush, region));
     }
 
     /// <inheritdoc />
-    public void Clear(IPath path, Brush brush)
+    public void Clear(Brush brush, IPath path)
     {
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions options = state.Options.CloneForClearOperation();
-        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(path, brush));
+        this.ExecuteWithTemporaryState(options, state.ClipPaths, () => this.Fill(brush, path));
     }
 
     /// <inheritdoc />
     public void Fill(Brush brush)
-        => this.Fill(this.Bounds, brush);
+        => this.Fill(brush, this.Bounds);
 
     /// <inheritdoc />
-    public void Fill(Rectangle region, Brush brush)
-        => this.Fill(new RectangularPolygon(region.X, region.Y, region.Width, region.Height), brush);
+    public void Fill(Brush brush, Rectangle region)
+        => this.Fill(brush, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
 
     /// <inheritdoc />
     public void Fill(Brush brush, IPathCollection paths)
@@ -333,19 +333,19 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         Guard.NotNull(paths, nameof(paths));
         foreach (IPath path in paths)
         {
-            this.Fill(path, brush);
+            this.Fill(brush, path);
         }
     }
 
     /// <inheritdoc />
-    public void Fill(PathBuilder pathBuilder, Brush brush)
+    public void Fill(Brush brush, PathBuilder pathBuilder)
     {
         Guard.NotNull(pathBuilder, nameof(pathBuilder));
-        this.Fill(pathBuilder.Build(), brush);
+        this.Fill(brush, pathBuilder.Build());
     }
 
     /// <inheritdoc />
-    public void Fill(IPath path, Brush brush)
+    public void Fill(Brush brush, IPath path)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
@@ -356,13 +356,17 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         IPath closed = path.AsClosedPath();
 
-        IPath transformedPath = effectiveOptions.Transform == Matrix3x2.Identity
-            ? closed
-            : closed.Transform(effectiveOptions.Transform);
+        Brush effectiveBrush = brush;
+        IPath effectivePath = closed;
+        if (effectiveOptions.Transform != Matrix4x4.Identity)
+        {
+            effectivePath = closed.Transform(effectiveOptions.Transform);
+            effectiveBrush = brush.Transform(effectiveOptions.Transform);
+        }
 
-        transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
+        effectivePath = ApplyClipPaths(effectivePath, effectiveOptions.ShapeOptions, state.ClipPaths);
 
-        this.PrepareCompositionCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
+        this.PrepareCompositionCore(effectivePath, effectiveBrush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
     }
 
     /// <inheritdoc />
@@ -391,7 +395,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingOptions effectiveOptions = state.Options;
 
         IPath closed = path.AsClosedPath();
-        IPath transformedPath = effectiveOptions.Transform == Matrix3x2.Identity
+        IPath transformedPath = effectiveOptions.Transform == Matrix4x4.Identity
             ? closed
             : closed.Transform(effectiveOptions.Transform);
         transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
@@ -474,7 +478,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        IPath transformedPath = effectiveOptions.Transform == Matrix3x2.Identity
+        IPath transformedPath = effectiveOptions.Transform == Matrix4x4.Identity
             ? path
             : path.Transform(effectiveOptions.Transform);
 
@@ -508,13 +512,17 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <inheritdoc />
     public void DrawText(
         RichTextOptions textOptions,
-        string text,
+        ReadOnlySpan<char> text,
         Brush? brush,
         Pen? pen)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            return;
+        }
 
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
@@ -603,105 +611,149 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <inheritdoc />
-    public RectangleF MeasureTextAdvance(RichTextOptions textOptions, string text)
+    public RectangleF MeasureTextAdvance(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            return RectangleF.Empty;
+        }
 
         FontRectangle advance = TextMeasurer.MeasureAdvance(text, textOptions);
         return RectangleF.FromLTRB(advance.Left, advance.Top, advance.Right, advance.Bottom);
     }
 
     /// <inheritdoc />
-    public RectangleF MeasureTextBounds(RichTextOptions textOptions, string text)
+    public RectangleF MeasureTextBounds(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            return RectangleF.Empty;
+        }
 
         FontRectangle bounds = TextMeasurer.MeasureBounds(text, textOptions);
         return RectangleF.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom);
     }
 
     /// <inheritdoc />
-    public RectangleF MeasureTextRenderableBounds(RichTextOptions textOptions, string text)
+    public RectangleF MeasureTextRenderableBounds(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            return RectangleF.Empty;
+        }
 
         FontRectangle renderableBounds = TextMeasurer.MeasureRenderableBounds(text, textOptions);
         return RectangleF.FromLTRB(renderableBounds.Left, renderableBounds.Top, renderableBounds.Right, renderableBounds.Bottom);
     }
 
     /// <inheritdoc />
-    public RectangleF MeasureTextSize(RichTextOptions textOptions, string text)
+    public RectangleF MeasureTextSize(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            return RectangleF.Empty;
+        }
 
         FontRectangle size = TextMeasurer.MeasureSize(text, textOptions);
         return RectangleF.FromLTRB(size.Left, size.Top, size.Right, size.Bottom);
     }
 
     /// <inheritdoc />
-    public bool TryMeasureCharacterAdvances(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> advances)
+    public bool TryMeasureCharacterAdvances(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> advances)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            advances = [];
+            return false;
+        }
 
         return TextMeasurer.TryMeasureCharacterAdvances(text, textOptions, out advances);
     }
 
     /// <inheritdoc />
-    public bool TryMeasureCharacterBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds)
+    public bool TryMeasureCharacterBounds(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> bounds)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            bounds = [];
+            return false;
+        }
 
         return TextMeasurer.TryMeasureCharacterBounds(text, textOptions, out bounds);
     }
 
     /// <inheritdoc />
-    public bool TryMeasureCharacterRenderableBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds)
+    public bool TryMeasureCharacterRenderableBounds(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> bounds)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            bounds = [];
+            return false;
+        }
 
         return TextMeasurer.TryMeasureCharacterRenderableBounds(text, textOptions, out bounds);
     }
 
     /// <inheritdoc />
-    public bool TryMeasureCharacterSizes(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> sizes)
+    public bool TryMeasureCharacterSizes(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> sizes)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            sizes = [];
+            return false;
+        }
 
         return TextMeasurer.TryMeasureCharacterSizes(text, textOptions, out sizes);
     }
 
     /// <inheritdoc />
-    public int CountTextLines(RichTextOptions textOptions, string text)
+    public int CountTextLines(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            return 0;
+        }
 
         return TextMeasurer.CountLines(text, textOptions);
     }
 
     /// <inheritdoc />
-    public LineMetrics[] GetTextLineMetrics(RichTextOptions textOptions, string text)
+    public LineMetrics[] GetTextLineMetrics(RichTextOptions textOptions, ReadOnlySpan<char> text)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(textOptions, nameof(textOptions));
-        Guard.NotNull(text, nameof(text));
+
+        if (text.IsEmpty)
+        {
+            return [];
+        }
 
         return TextMeasurer.GetLineMetrics(text, textOptions);
     }
@@ -798,7 +850,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
             }
 
             // Phase 2: Apply canvas transform to image content when requested.
-            if (effectiveOptions.Transform != Matrix3x2.Identity)
+            if (effectiveOptions.Transform != Matrix4x4.Identity)
             {
                 Image<TPixel> transformed = CreateTransformedDrawImage(
                     brushImage,
@@ -843,7 +895,7 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
                 renderDestinationRect.Width,
                 renderDestinationRect.Height);
 
-            this.Fill(destinationPath, brush);
+            this.Fill(brush, destinationPath);
         }
         finally
         {
@@ -1278,21 +1330,22 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     private static Image<TPixel> CreateTransformedDrawImage(
         Image<TPixel> image,
         RectangleF destinationRect,
-        Matrix3x2 transform,
+        Matrix4x4 transform,
         IResampler? sampler,
         out RectangleF transformedDestinationRect)
     {
         // Source space: pixel coordinates in the untransformed source image (0..Width, 0..Height).
         // Destination space: where that image would land on the canvas without any extra transform.
         // This matrix maps source -> destination by scaling to destination size then translating to destination origin.
-        Matrix3x2 sourceToDestination = Matrix3x2.CreateScale(
+        Matrix4x4 sourceToDestination = Matrix4x4.CreateScale(
             destinationRect.Width / image.Width,
-            destinationRect.Height / image.Height)
-            * Matrix3x2.CreateTranslation(destinationRect.X, destinationRect.Y);
+            destinationRect.Height / image.Height,
+            1)
+            * Matrix4x4.CreateTranslation(destinationRect.X, destinationRect.Y, 0);
 
         // Apply the canvas transform after source->destination placement:
         // source -> destination -> transformed-canvas.
-        Matrix3x2 sourceToTransformedCanvas = sourceToDestination * transform;
+        Matrix4x4 sourceToTransformedCanvas = sourceToDestination * transform;
 
         // Compute the transformed axis-aligned bounds so we know how large the output bitmap must be.
         transformedDestinationRect = TransformRectangle(
@@ -1306,8 +1359,8 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
 
         // ImageSharp.Transform expects output coordinates relative to the output bitmap origin (0,0).
         // Shift transformed-canvas coordinates so transformedDestinationRect.Left/Top becomes 0,0.
-        Matrix3x2 sourceToTarget = sourceToTransformedCanvas
-            * Matrix3x2.CreateTranslation(-transformedDestinationRect.X, -transformedDestinationRect.Y);
+        Matrix4x4 sourceToTarget = sourceToTransformedCanvas
+            * Matrix4x4.CreateTranslation(-transformedDestinationRect.X, -transformedDestinationRect.Y, 0);
 
         // Resample source pixels into the target bitmap using the computed source->target mapping.
         return image.Clone(ctx => ctx.Transform(
@@ -1346,12 +1399,12 @@ public sealed class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="rectangle">Input rectangle.</param>
     /// <param name="matrix">Transform matrix.</param>
     /// <returns>Axis-aligned bounds of the transformed rectangle.</returns>
-    private static RectangleF TransformRectangle(RectangleF rectangle, Matrix3x2 matrix)
+    private static RectangleF TransformRectangle(RectangleF rectangle, Matrix4x4 matrix)
     {
-        Vector2 topLeft = Vector2.Transform(new Vector2(rectangle.Left, rectangle.Top), matrix);
-        Vector2 topRight = Vector2.Transform(new Vector2(rectangle.Right, rectangle.Top), matrix);
-        Vector2 bottomLeft = Vector2.Transform(new Vector2(rectangle.Left, rectangle.Bottom), matrix);
-        Vector2 bottomRight = Vector2.Transform(new Vector2(rectangle.Right, rectangle.Bottom), matrix);
+        PointF topLeft = PointF.Transform(new PointF(rectangle.Left, rectangle.Top), matrix);
+        PointF topRight = PointF.Transform(new PointF(rectangle.Right, rectangle.Top), matrix);
+        PointF bottomLeft = PointF.Transform(new PointF(rectangle.Left, rectangle.Bottom), matrix);
+        PointF bottomRight = PointF.Transform(new PointF(rectangle.Right, rectangle.Bottom), matrix);
 
         float left = MathF.Min(MathF.Min(topLeft.X, topRight.X), MathF.Min(bottomLeft.X, bottomRight.X));
         float top = MathF.Min(MathF.Min(topLeft.Y, topRight.Y), MathF.Min(bottomLeft.Y, bottomRight.Y));

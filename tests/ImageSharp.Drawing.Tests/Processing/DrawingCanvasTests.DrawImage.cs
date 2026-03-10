@@ -20,7 +20,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            Transform = Matrix3x2.CreateRotation(MathF.PI / 4F, new Vector2(192F, 128F))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(MathF.PI / 4F, new Vector2(192F, 128F)))
         };
 
         using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
@@ -75,13 +75,13 @@ public partial class DrawingCanvasTests
 
         DrawingOptions transformedOptions = new()
         {
-            Transform = Matrix3x2.CreateRotation(0.32F, new Vector2(180, 120))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.32F, new Vector2(180, 120)))
         };
 
         IPath clipPath = new EllipsePolygon(new PointF(180, 120), new SizeF(208, 126));
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(new Rectangle(18, 16, 324, 208), Brushes.Solid(Color.LightGray.WithAlpha(0.45F)));
+        canvas.Fill(Brushes.Solid(Color.LightGray.WithAlpha(0.45F)), new Rectangle(18, 16, 324, 208));
 
         _ = canvas.Save(transformedOptions, clipPath);
         canvas.DrawImage(

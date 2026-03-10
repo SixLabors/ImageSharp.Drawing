@@ -3,6 +3,8 @@
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
+using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
 
 /// <summary>
@@ -86,6 +88,20 @@ public sealed class RadialGradientBrush : GradientBrush
     /// Gets a value indicating whether this is a two-circle radial gradient.
     /// </summary>
     public bool IsTwoCircle => this.center1.HasValue && this.radius1.HasValue;
+
+    /// <inheritdoc/>
+    public override Brush Transform(Matrix4x4 matrix)
+    {
+        PointF tc0 = PointF.Transform(this.center0, matrix);
+        float scale = MatrixUtilities.GetAverageScale(in matrix);
+        if (this.IsTwoCircle)
+        {
+            PointF tc1 = PointF.Transform(this.center1!.Value, matrix);
+            return new RadialGradientBrush(tc0, this.radius0 * scale, tc1, this.radius1!.Value * scale, this.RepetitionMode, this.ColorStopsArray);
+        }
+
+        return new RadialGradientBrush(tc0, this.radius0 * scale, this.RepetitionMode, this.ColorStopsArray);
+    }
 
     /// <inheritdoc/>
     public override bool Equals(Brush? other)

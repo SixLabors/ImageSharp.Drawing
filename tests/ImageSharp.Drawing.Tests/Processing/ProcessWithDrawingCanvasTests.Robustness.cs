@@ -40,7 +40,7 @@ public partial class ProcessWithDrawingCanvasTests
     private static void CompareToSkiaResultsImpl(TestImageProvider<Rgba32> provider, IPath shape)
     {
         using Image<Rgba32> image = provider.GetImage();
-        image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(shape, Brushes.Solid(Color.White))));
+        image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Fill(Brushes.Solid(Color.White), shape)));
         image.DebugSave(provider, "ImageSharp", appendPixelTypeToFileName: false, appendSourceFileOrDescription: false);
 
         using SKBitmap bitmap = new(new SKImageInfo(image.Width, image.Height));
@@ -82,7 +82,7 @@ public partial class ProcessWithDrawingCanvasTests
     {
         string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
 
-        PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(sx, sy));
+        PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix4x4.CreateScale(sx, sy, 1));
 
         using Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
@@ -123,7 +123,7 @@ public partial class ProcessWithDrawingCanvasTests
     {
         string jsonContent = File.ReadAllText(TestFile.GetInputFileFullPath(geoJsonFile));
 
-        PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix3x2.CreateScale(scale) * Matrix3x2.CreateTranslation(pixelOffset));
+        PointF[][] points = PolygonFactory.GetGeoJsonPoints(jsonContent, Matrix4x4.CreateScale(scale.X, scale.Y, 1) * Matrix4x4.CreateTranslation(pixelOffset.X, pixelOffset.Y, 0));
 
         Image<Rgba32> image = provider.GetImage();
         DrawingOptions options = new()
@@ -140,7 +140,7 @@ public partial class ProcessWithDrawingCanvasTests
                 rnd.NextBytes(rgb);
 
                 Color color = Color.FromPixel(new Rgb24(rgb[0], rgb[1], rgb[2]));
-                canvas.Fill(new Polygon(new LinearLineSegment(loop)), Brushes.Solid(color));
+                canvas.Fill(Brushes.Solid(color), new Polygon(new LinearLineSegment(loop)));
             }
         }));
 
@@ -158,9 +158,9 @@ public partial class ProcessWithDrawingCanvasTests
 
         Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
-                        * Matrix3x2.CreateScale(60, 60)
-                        * Matrix3x2.CreateTranslation(pixelOffset, pixelOffset);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                        * Matrix4x4.CreateScale(60, 60, 1)
+                        * Matrix4x4.CreateTranslation(pixelOffset, pixelOffset, 0);
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
@@ -193,8 +193,8 @@ public partial class ProcessWithDrawingCanvasTests
 
         Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
-                        * Matrix3x2.CreateScale(60, 60);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                        * Matrix4x4.CreateScale(60, 60, 1);
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
@@ -204,9 +204,9 @@ public partial class ProcessWithDrawingCanvasTests
         {
             foreach (PointF[] loop in points)
             {
-                IPath outline = pen.GeneratePath(new Path(loop).Transform(Matrix3x2.CreateTranslation(0.5F, 0.5F)));
-                outline = outline.Transform(Matrix3x2.CreateScale(scale, scale));
-                canvas.Fill(outline, pen.StrokeFill);
+                IPath outline = pen.GeneratePath(new Path(loop).Transform(Matrix4x4.CreateTranslation(0.5F, 0.5F, 0)));
+                outline = outline.Transform(Matrix4x4.CreateScale(scale, scale, 1));
+                canvas.Fill(pen.StrokeFill, outline);
             }
         }));
 
@@ -230,9 +230,9 @@ public partial class ProcessWithDrawingCanvasTests
 
         Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
-                        * Matrix3x2.CreateScale(60, 60)
-                        * Matrix3x2.CreateTranslation(offset, offset);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                        * Matrix4x4.CreateScale(60, 60, 1)
+                        * Matrix4x4.CreateTranslation(offset, offset, 0);
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         SKPath path = new();
@@ -284,7 +284,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54) * Matrix3x2.CreateScale(60, 60);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0) * Matrix4x4.CreateScale(60, 60, 1);
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
@@ -311,7 +311,7 @@ public partial class ProcessWithDrawingCanvasTests
 
         Feature missisipiGeom = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54) * Matrix3x2.CreateScale(60, 60);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0) * Matrix4x4.CreateScale(60, 60, 1);
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         PathBuilder pb = new();
@@ -336,7 +336,7 @@ public partial class ProcessWithDrawingCanvasTests
     public void LargeStar_Benchmark(TestImageProvider<Rgba32> provider, int thickness)
     {
         List<PointF[]> points = CreateStarPolygon(1001, 100F);
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(250, 250);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(250, 250, 0);
         DrawingOptions options = new() { Transform = transform };
 
         using Image<Rgba32> image = provider.GetImage();

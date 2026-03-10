@@ -22,7 +22,7 @@ public partial class DrawingCanvasTests
 
         using (DrawingCanvas<TPixel> regionCanvas = canvas.CreateRegion(new Rectangle(40, 24, 140, 96)))
         {
-            regionCanvas.Fill(new Rectangle(10, 8, 80, 46), Brushes.Solid(Color.LightSeaGreen.WithAlpha(0.8F)));
+            regionCanvas.Fill(Brushes.Solid(Color.LightSeaGreen.WithAlpha(0.8F)), new Rectangle(10, 8, 80, 46));
             regionCanvas.Draw(Pens.Solid(Color.DarkBlue, 5), new Rectangle(0, 0, 140, 96));
             regionCanvas.DrawLine(
                 Pens.Solid(Color.OrangeRed, 4),
@@ -49,12 +49,12 @@ public partial class DrawingCanvasTests
         IPath clipPath = new EllipsePolygon(new PointF(96, 64), new SizeF(120, 76));
         _ = canvas.Save(new DrawingOptions(), clipPath);
 
-        canvas.Fill(new Rectangle(0, 0, 192, 128), Brushes.Solid(Color.MediumVioletRed.WithAlpha(0.85F)));
+        canvas.Fill(Brushes.Solid(Color.MediumVioletRed.WithAlpha(0.85F)), new Rectangle(0, 0, 192, 128));
         canvas.Draw(Pens.Solid(Color.Black, 3), new Rectangle(24, 16, 144, 96));
 
         canvas.Restore();
 
-        canvas.Fill(new Rectangle(0, 96, 192, 32), Brushes.Solid(Color.SteelBlue.WithAlpha(0.75F)));
+        canvas.Fill(Brushes.Solid(Color.SteelBlue.WithAlpha(0.75F)), new Rectangle(0, 96, 192, 32));
         canvas.Draw(Pens.Solid(Color.DarkGreen, 4), new Rectangle(8, 8, 176, 112));
 
         canvas.Flush();
@@ -77,15 +77,15 @@ public partial class DrawingCanvasTests
 
         DrawingOptions firstOptions = new()
         {
-            Transform = Matrix3x2.CreateTranslation(20F, 12F)
+            Transform = Matrix4x4.CreateTranslation(20F, 12F, 0)
         };
 
         int firstSaveCount = canvas.Save(firstOptions, new RectangularPolygon(20, 20, 144, 104));
-        canvas.Fill(new Rectangle(0, 0, 120, 84), Brushes.Solid(Color.SkyBlue.WithAlpha(0.8F)));
+        canvas.Fill(Brushes.Solid(Color.SkyBlue.WithAlpha(0.8F)), new Rectangle(0, 0, 120, 84));
 
         DrawingOptions secondOptions = new()
         {
-            Transform = Matrix3x2.CreateRotation(0.24F, new Vector2(112, 80))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.24F, new Vector2(112, 80)))
         };
 
         _ = canvas.Save(secondOptions, new EllipsePolygon(new PointF(112, 80), new SizeF(130, 90)));
@@ -99,7 +99,7 @@ public partial class DrawingCanvasTests
             new PointF(168, 92));
 
         canvas.RestoreTo(1);
-        canvas.Fill(new Rectangle(156, 106, 48, 34), Brushes.Solid(Color.Gold.WithAlpha(0.7F)));
+        canvas.Fill(Brushes.Solid(Color.Gold.WithAlpha(0.7F)), new Rectangle(156, 106, 48, 34));
         canvas.Draw(Pens.Solid(Color.DarkSlateGray, 4), new Rectangle(8, 8, 208, 144));
 
         canvas.Flush();
@@ -117,11 +117,11 @@ public partial class DrawingCanvasTests
         using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(new Rectangle(12, 12, 296, 196), Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)));
+        canvas.Fill(Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)), new Rectangle(12, 12, 296, 196));
 
         DrawingOptions rootOptions = new()
         {
-            Transform = Matrix3x2.CreateTranslation(6F, 4F)
+            Transform = Matrix4x4.CreateTranslation(6F, 4F, 0)
         };
 
         IPath rootClip = new EllipsePolygon(new PointF(160, 110), new SizeF(252, 164));
@@ -129,16 +129,16 @@ public partial class DrawingCanvasTests
 
         using (DrawingCanvas<TPixel> outerRegion = canvas.CreateRegion(new Rectangle(30, 24, 240, 156)))
         {
-            outerRegion.Fill(new Rectangle(0, 0, 240, 156), Brushes.Solid(Color.LightBlue.WithAlpha(0.35F)));
+            outerRegion.Fill(Brushes.Solid(Color.LightBlue.WithAlpha(0.35F)), new Rectangle(0, 0, 240, 156));
             outerRegion.Draw(Pens.Solid(Color.DarkBlue, 3F), new Rectangle(0, 0, 240, 156));
 
             DrawingOptions outerOptions = new()
             {
-                Transform = Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78))
+                Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.18F, new Vector2(120, 78)))
             };
 
             _ = outerRegion.Save(outerOptions, new RectangularPolygon(18, 14, 204, 128));
-            outerRegion.Fill(new Rectangle(16, 16, 208, 124), Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)));
+            outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
 
             using (DrawingCanvas<TPixel> innerRegion = outerRegion.CreateRegion(new Rectangle(52, 34, 132, 82)))
             {
@@ -146,11 +146,11 @@ public partial class DrawingCanvasTests
 
                 DrawingOptions innerOptions = new()
                 {
-                    Transform = Matrix3x2.CreateSkew(0.18F, 0F)
+                    Transform = new Matrix4x4(Matrix3x2.CreateSkew(0.18F, 0F))
                 };
 
                 _ = innerRegion.Save(innerOptions, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
-                innerRegion.Fill(new Rectangle(0, 0, 132, 82), Brushes.Solid(Color.SeaGreen.WithAlpha(0.55F)));
+                innerRegion.Fill(Brushes.Solid(Color.SeaGreen.WithAlpha(0.55F)), new Rectangle(0, 0, 132, 82));
                 innerRegion.DrawLine(
                     Pens.Solid(Color.DarkRed, 4F),
                     new PointF(0, 80),
@@ -163,7 +163,7 @@ public partial class DrawingCanvasTests
 
             outerRegion.Restore();
 
-            outerRegion.Fill(new Rectangle(8, 112, 90, 30), Brushes.Solid(Color.OrangeRed.WithAlpha(0.6F)));
+            outerRegion.Fill(Brushes.Solid(Color.OrangeRed.WithAlpha(0.6F)), new Rectangle(8, 112, 90, 30));
             outerRegion.DrawLine(Pens.Solid(Color.Black, 3F), new PointF(8, 8), new PointF(232, 148));
         }
 

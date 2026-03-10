@@ -93,7 +93,7 @@ public class ArcLineSegment : ILineSegment
     /// </summary>
     /// <param name="matrix">The transformation matrix.</param>
     /// <returns>An <see cref="ArcLineSegment"/> with the matrix applied to it.</returns>
-    public ILineSegment Transform(Matrix3x2 matrix)
+    public ILineSegment Transform(Matrix4x4 matrix)
     {
         if (matrix.IsIdentity)
         {
@@ -110,7 +110,7 @@ public class ArcLineSegment : ILineSegment
     }
 
     /// <inheritdoc/>
-    ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
+    ILineSegment ILineSegment.Transform(Matrix4x4 matrix) => this.Transform(matrix);
 
     private static PointF[] EllipticArcFromEndParams(
         PointF from,

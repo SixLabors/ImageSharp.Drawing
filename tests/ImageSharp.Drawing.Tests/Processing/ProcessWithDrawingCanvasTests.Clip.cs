@@ -27,7 +27,7 @@ public partial class ProcessWithDrawingCanvasTests
                 Rectangle bounds = canvas.Bounds;
                 int outerRadii = (int)(Math.Min(bounds.Width, bounds.Height) * sizeMult);
                 Star star = new(new PointF(bounds.Width / 2F, bounds.Height / 2F), 5, outerRadii / 2F, outerRadii);
-                Matrix3x2 builder = Matrix3x2.CreateTranslation(new Vector2(dx, dy));
+                Matrix4x4 builder = Matrix4x4.CreateTranslation(dx, dy, 0);
                 canvas.Process(star.Transform(builder), ctx => ctx.DetectEdges());
             }),
             testOutputDetails: testDetails,

@@ -30,7 +30,7 @@ public partial class DrawingCanvasTests
         };
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(new Rectangle(12, 12, 336, 196), Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)));
+        canvas.Fill(Brushes.Solid(Color.GhostWhite.WithAlpha(0.85F)), new Rectangle(12, 12, 336, 196));
 
         _ = canvas.Save(evenOddOptions);
         canvas.Draw(pen, leftPath);

@@ -59,7 +59,7 @@ public sealed class EllipsePolygon : Polygon, IPathInternals
     }
 
     /// <inheritdoc/>
-    public override IPath Transform(Matrix3x2 matrix)
+    public override IPath Transform(Matrix4x4 matrix)
     {
         if (matrix.IsIdentity)
         {

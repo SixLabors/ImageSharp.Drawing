@@ -304,7 +304,7 @@ public static unsafe class Program
             {
                 ref Ball ball = ref balls[i];
                 EllipsePolygon ellipse = new(ball.X, ball.Y, ball.Radius);
-                canvas.Fill(ellipse, Brushes.Solid(ball.Color));
+                canvas.Fill(Brushes.Solid(ball.Color), ellipse);
             }
 
             // Flush submits all queued draw operations to the GPU compositor and
@@ -367,7 +367,7 @@ public static unsafe class Program
                 continue;
             }
 
-            canvas.Fill(path.Transform(translation), textBrush);
+            canvas.Fill(textBrush, path.Transform(new Matrix4x4(translation)));
         }
     }
 

@@ -83,7 +83,7 @@ public partial class ProcessWithDrawingCanvasTests
             ctx => ctx.ProcessWithCanvas(canvas =>
             {
                 canvas.Clear(Brushes.Solid(Color.Blue));
-                canvas.Fill(polygon, brush);
+                canvas.Fill(brush, polygon);
             }));
     }
 
@@ -107,7 +107,7 @@ public partial class ProcessWithDrawingCanvasTests
             ctx => ctx.ProcessWithCanvas(canvas =>
             {
                 canvas.Clear(Brushes.Solid(Color.Blue));
-                canvas.Fill(polygon, brush);
+                canvas.Fill(brush, polygon);
             }));
     }
 
@@ -374,7 +374,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new();
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(clipped, Brushes.Solid(color))));
+        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(color), clipped)));
         image.DebugSave(
             provider,
             testDetails,
@@ -438,10 +438,10 @@ public partial class ProcessWithDrawingCanvasTests
         IPath polygon = new Polygon(new LinearLineSegment(simplePath));
         DrawingOptions options = new()
         {
-            Transform = Matrix3x2.CreateSkew(
+            Transform = new Matrix4x4(Matrix3x2.CreateSkew(
                 GeometryUtilities.DegreeToRadian(-15),
                 0,
-                new Vector2(200, 200))
+                new Vector2(200, 200)))
         };
 
         using Image<TPixel> image = provider.GetImage();
@@ -458,7 +458,7 @@ public partial class ProcessWithDrawingCanvasTests
         RectangularPolygon polygon = new(25, 25, 50, 50);
         DrawingOptions options = new()
         {
-            Transform = Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation((float)Math.PI / 4, new PointF(50, 50)))
         };
 
         using Image<TPixel> image = provider.GetImage();

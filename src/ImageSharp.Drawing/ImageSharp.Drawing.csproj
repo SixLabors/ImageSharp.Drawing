@@ -46,7 +46,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.25" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.78" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.83" />
     <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.0-alpha.0.52" />
   </ItemGroup>
   

@@ -64,7 +64,7 @@ internal sealed class PathGlyphBuilder : GlyphBuilder
         // Translate so the glyph's top-left aligns with the path point,
         // then rotate around the path point to follow the tangent.
         Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
-        Matrix3x2 matrix = Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(translation.X, translation.Y, 0) * new Matrix4x4(Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point));
 
         this.Builder.SetTransform(matrix);
     }

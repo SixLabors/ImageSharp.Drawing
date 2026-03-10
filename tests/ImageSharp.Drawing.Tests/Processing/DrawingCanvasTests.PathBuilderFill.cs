@@ -18,14 +18,14 @@ public partial class DrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            Transform = Matrix3x2.CreateRotation(0.2F, new Vector2(96F, 64F))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(0.2F, new Vector2(96F, 64F)))
         };
 
         using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
         PathBuilder pathBuilder = CreateClosedPathBuilder();
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(pathBuilder, Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)));
+        canvas.Fill(Brushes.Solid(Color.DeepPink.WithAlpha(0.85F)), pathBuilder);
         canvas.Flush();
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);

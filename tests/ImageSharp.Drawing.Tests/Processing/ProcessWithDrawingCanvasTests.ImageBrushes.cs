@@ -18,8 +18,8 @@ public partial class ProcessWithDrawingCanvasTests
             ImageBrush brush = new(source);
             using (Image<Rgba32> destination = new(10, 10))
             {
-                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(new Rectangle(0, 0, 10, 10), brush)));
-                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(new Rectangle(0, 0, 10, 10), brush)));
+                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush, new Rectangle(0, 0, 10, 10))));
+                destination.Mutate(ctx => ctx.ProcessWithCanvas(canvas => canvas.Fill(brush, new Rectangle(0, 0, 10, 10))));
             }
         }
     }
@@ -90,8 +90,8 @@ public partial class ProcessWithDrawingCanvasTests
         ImageBrush brush = new(overlay);
         background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(new Rectangle(0, 0, 400, 200), brush);
-            canvas.Fill(new Rectangle(-100, 200, 500, 200), brush);
+            canvas.Fill(brush, new Rectangle(0, 0, 400, 200));
+            canvas.Fill(brush, new Rectangle(-100, 200, 500, 200));
         }));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
@@ -112,8 +112,8 @@ public partial class ProcessWithDrawingCanvasTests
 
         background.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(new Rectangle(0, 0, 400, 200), brush);
-            canvas.Fill(new Rectangle(0, 200, 400, 200), brushOffset);
+            canvas.Fill(brush, new Rectangle(0, 0, 400, 200));
+            canvas.Fill(brushOffset, new Rectangle(0, 200, 400, 200));
         }));
 
         background.DebugSave(provider, appendSourceFileOrDescription: false);
@@ -194,13 +194,13 @@ public partial class ProcessWithDrawingCanvasTests
                 if (half)
                 {
                     int halfWidth = size.Width / 2;
-                    canvas.Fill(new Rectangle(x, y, halfWidth, size.Height), halfBrush);
+                    canvas.Fill(halfBrush, new Rectangle(x, y, halfWidth, size.Height));
                     x += halfWidth;
                     half = false;
                 }
                 else
                 {
-                    canvas.Fill(new Rectangle(x, y, size.Width, size.Height), brush);
+                    canvas.Fill(brush, new Rectangle(x, y, size.Width, size.Height));
                     x += size.Width;
                 }
             }

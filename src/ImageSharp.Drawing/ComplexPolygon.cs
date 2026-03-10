@@ -67,7 +67,7 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     public RectangleF Bounds => this.bounds ??= this.CalcBounds();
 
     /// <inheritdoc/>
-    public IPath Transform(Matrix3x2 matrix)
+    public IPath Transform(Matrix4x4 matrix)
     {
         if (matrix.IsIdentity)
         {

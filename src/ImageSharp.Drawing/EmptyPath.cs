@@ -35,5 +35,5 @@ public sealed class EmptyPath : IPath
     public IEnumerable<ISimplePath> Flatten() => [];
 
     /// <inheritdoc />
-    public IPath Transform(Matrix3x2 matrix) => this;
+    public IPath Transform(Matrix4x4 matrix) => this;
 }

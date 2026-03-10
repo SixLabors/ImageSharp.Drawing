@@ -156,7 +156,7 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
         => new(polygon.Bounds.X, polygon.Bounds.Y, polygon.Bounds.Width, polygon.Bounds.Height);
 
     /// <inheritdoc/>
-    public IPath Transform(Matrix3x2 matrix)
+    public IPath Transform(Matrix4x4 matrix)
     {
         if (matrix.IsIdentity)
         {

@@ -29,7 +29,7 @@ public class DefaultRasterizerTests
             (2, 5),
             (2, 4),
             (1, 4))
-            .Transform(Matrix3x2.CreateScale(200F));
+            .Transform(Matrix4x4.CreateScale(200F));
 
         Rectangle interest = Rectangle.Ceiling(path.Bounds);
         RasterizerOptions options = new(interest, rule, RasterizationMode.Antialiased, RasterizerSamplingOrigin.PixelBoundary, 0.5f);

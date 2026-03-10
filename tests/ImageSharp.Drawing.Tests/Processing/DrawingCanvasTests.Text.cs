@@ -60,7 +60,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            Transform = Matrix3x2.CreateTranslation(24F, 22F)
+            Transform = Matrix4x4.CreateTranslation(24F, 22F, 0)
         };
 
         using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
@@ -77,7 +77,7 @@ public partial class DrawingCanvasTests
         };
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(new Rectangle(0, 0, 712, 276), Brushes.Solid(Color.LightSteelBlue.WithAlpha(0.25F)));
+        canvas.Fill(Brushes.Solid(Color.LightSteelBlue.WithAlpha(0.25F)), new Rectangle(0, 0, 712, 276));
         canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
 
         LineMetrics[] lineMetrics = canvas.GetTextLineMetrics(textOptions, text);
@@ -120,7 +120,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            Transform = Matrix3x2.CreateRotation(-0.08F, new Vector2(210, 110))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(-0.08F, new Vector2(210, 110)))
         };
 
         using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);
@@ -159,7 +159,7 @@ public partial class DrawingCanvasTests
         };
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(new Rectangle(12, 14, 296, 152), Brushes.Solid(Color.LightSkyBlue.WithAlpha(0.45F)));
+        canvas.Fill(Brushes.Solid(Color.LightSkyBlue.WithAlpha(0.45F)), new Rectangle(12, 14, 296, 152));
         canvas.DrawText(textOptions, "OUTLINE", brush: null, pen: Pens.Solid(Color.SeaGreen, 3.5F));
         canvas.Flush();
 
@@ -227,7 +227,7 @@ public partial class DrawingCanvasTests
             "Sphinx of black quartz, judge my vow.";
 
         canvas.Clear(Brushes.Solid(Color.White));
-        canvas.Fill(layoutBounds, Brushes.Solid(Color.LightGoldenrodYellow.WithAlpha(0.45F)));
+        canvas.Fill(Brushes.Solid(Color.LightGoldenrodYellow.WithAlpha(0.45F)), layoutBounds);
         canvas.Draw(Pens.Solid(Color.SlateGray, 2F), layoutBounds);
         canvas.DrawLine(
             Pens.Dash(Color.Gray.WithAlpha(0.8F), 1.5F),

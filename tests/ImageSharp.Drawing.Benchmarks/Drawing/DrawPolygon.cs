@@ -52,7 +52,7 @@ public abstract class DrawPolygon
     protected abstract float Thickness { get; }
 
     protected virtual PointF[][] GetPoints(FeatureCollection features) =>
-        [.. features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60)))];
+        [.. features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix4x4.CreateScale(60, 60, 1)))];
 
     [GlobalSetup]
     public void Setup()
@@ -229,8 +229,8 @@ public class DrawPolygonMediumThin : DrawPolygon
     {
         Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
-                              * Matrix3x2.CreateScale(60, 60);
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                              * Matrix4x4.CreateScale(60, 60, 1);
         return [.. PolygonFactory.GetGeoJsonPoints(state, transform)];
     }
 }

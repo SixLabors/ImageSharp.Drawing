@@ -100,7 +100,7 @@ public partial class ProcessWithDrawingCanvasTests
         Rectangle region = new(x0, y0, w, h);
         DrawingOptions options = new();
 
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Clear(region, Brushes.Solid(clearColor))));
+        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Clear(Brushes.Solid(clearColor), region)));
 
         image.DebugSave(provider, $"(x{x0},y{y0},w{w},h{h})", appendPixelTypeToFileName: false);
         AssertRegionFill(image, region, clearColor, backgroundColor);
@@ -127,7 +127,7 @@ public partial class ProcessWithDrawingCanvasTests
         Rectangle region = new(x0, y0, w, h);
         DrawingOptions options = new();
 
-        wrapped.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Clear(region, Brushes.Solid(clearColor))));
+        wrapped.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Clear(Brushes.Solid(clearColor), region)));
 
         wrapped.DebugSave(provider, $"(x{x0},y{y0},w{w},h{h})", appendPixelTypeToFileName: false);
         AssertRegionFill(wrapped, region, clearColor, backgroundColor);

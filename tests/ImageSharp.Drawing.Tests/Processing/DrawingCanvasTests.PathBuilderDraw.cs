@@ -18,7 +18,7 @@ public partial class DrawingCanvasTests
 
         DrawingOptions options = new()
         {
-            Transform = Matrix3x2.CreateRotation(-0.15F, new Vector2(96F, 64F))
+            Transform = new Matrix4x4(Matrix3x2.CreateRotation(-0.15F, new Vector2(96F, 64F)))
         };
 
         using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, options);

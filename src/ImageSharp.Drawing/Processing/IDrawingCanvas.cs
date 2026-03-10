@@ -76,16 +76,16 @@ public interface IDrawingCanvas : IDisposable
     /// <summary>
     /// Clears a local region using the given brush and clear-style composition options.
     /// </summary>
-    /// <param name="region">Region to clear in local coordinates.</param>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    public void Clear(Rectangle region, Brush brush);
+    /// <param name="region">Region to clear in local coordinates.</param>
+    public void Clear(Brush brush, Rectangle region);
 
     /// <summary>
     /// Clears a path region using the given brush and clear-style composition options.
     /// </summary>
-    /// <param name="path">The path region to clear.</param>
     /// <param name="brush">Brush used to shade destination pixels during clear.</param>
-    public void Clear(IPath path, Brush brush);
+    /// <param name="path">The path region to clear.</param>
+    public void Clear(Brush brush, IPath path);
 
     /// <summary>
     /// Fills the whole canvas using the given brush.
@@ -96,9 +96,9 @@ public interface IDrawingCanvas : IDisposable
     /// <summary>
     /// Fills a local region using the given brush.
     /// </summary>
-    /// <param name="region">Region to fill in local coordinates.</param>
     /// <param name="brush">Brush used to shade destination pixels.</param>
-    public void Fill(Rectangle region, Brush brush);
+    /// <param name="region">Region to fill in local coordinates.</param>
+    public void Fill(Brush brush, Rectangle region);
 
     /// <summary>
     /// Fills all paths in a collection using the given brush and drawing options.
@@ -110,16 +110,16 @@ public interface IDrawingCanvas : IDisposable
     /// <summary>
     /// Fills a path built by the provided builder using the given brush.
     /// </summary>
-    /// <param name="pathBuilder">The path builder describing the fill region.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
-    public void Fill(PathBuilder pathBuilder, Brush brush);
+    /// <param name="pathBuilder">The path builder describing the fill region.</param>
+    public void Fill(Brush brush, PathBuilder pathBuilder);
 
     /// <summary>
     /// Fills a path in local coordinates using the given brush.
     /// </summary>
-    /// <param name="path">The path to fill.</param>
     /// <param name="brush">Brush used to shade covered pixels.</param>
-    public void Fill(IPath path, Brush brush);
+    /// <param name="path">The path to fill.</param>
+    public void Fill(Brush brush, IPath path);
 
     /// <summary>
     /// Applies an image-processing operation to a local region.
@@ -215,7 +215,7 @@ public interface IDrawingCanvas : IDisposable
     /// <param name="pen">Optional pen used to outline glyphs.</param>
     public void DrawText(
         RichTextOptions textOptions,
-        string text,
+        ReadOnlySpan<char> text,
         Brush? brush,
         Pen? pen);
 
@@ -247,7 +247,7 @@ public interface IDrawingCanvas : IDisposable
     /// Use <see cref="MeasureTextBounds"/> for glyph ink bounds or
     /// <see cref="MeasureTextRenderableBounds"/> for the union of logical advance and rendered bounds.
     /// </remarks>
-    public RectangleF MeasureTextAdvance(RichTextOptions textOptions, string text);
+    public RectangleF MeasureTextAdvance(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>
     /// Measures the rendered glyph bounds of the text in pixel units.
@@ -261,7 +261,7 @@ public interface IDrawingCanvas : IDisposable
     /// Use <see cref="MeasureTextAdvance"/> for the logical layout box or
     /// <see cref="MeasureTextRenderableBounds"/> for the union of both.
     /// </remarks>
-    public RectangleF MeasureTextBounds(RichTextOptions textOptions, string text);
+    public RectangleF MeasureTextBounds(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>
     /// Measures the full renderable bounds of the text in pixel units.
@@ -276,7 +276,7 @@ public interface IDrawingCanvas : IDisposable
     /// rectangle and the rendered glyph bounds.
     /// Use this method when both typographic advance and rendered glyph overshoot must fit within the same rectangle.
     /// </remarks>
-    public RectangleF MeasureTextRenderableBounds(RichTextOptions textOptions, string text);
+    public RectangleF MeasureTextRenderableBounds(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>
     /// Measures the normalized rendered size of the text in pixel units.
@@ -288,7 +288,7 @@ public interface IDrawingCanvas : IDisposable
     /// This is equivalent to measuring the rendered bounds and returning only the width and height.
     /// Use <see cref="MeasureTextBounds"/> when the returned X and Y offset are also required.
     /// </remarks>
-    public RectangleF MeasureTextSize(RichTextOptions textOptions, string text);
+    public RectangleF MeasureTextSize(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>
     /// Measures the logical advance of each laid-out character entry in pixel units.
@@ -302,7 +302,7 @@ public interface IDrawingCanvas : IDisposable
     /// Use <see cref="TryMeasureCharacterBounds"/> for per-character ink bounds or
     /// <see cref="TryMeasureCharacterRenderableBounds"/> for the union of both.
     /// </remarks>
-    public bool TryMeasureCharacterAdvances(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> advances);
+    public bool TryMeasureCharacterAdvances(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> advances);
 
     /// <summary>
     /// Measures the rendered glyph bounds of each laid-out character entry in pixel units.
@@ -316,7 +316,7 @@ public interface IDrawingCanvas : IDisposable
     /// Use <see cref="TryMeasureCharacterAdvances"/> for per-character logical advances or
     /// <see cref="TryMeasureCharacterRenderableBounds"/> for the union of both.
     /// </remarks>
-    public bool TryMeasureCharacterBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds);
+    public bool TryMeasureCharacterBounds(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> bounds);
 
     /// <summary>
     /// Measures the full renderable bounds of each laid-out character entry in pixel units.
@@ -330,7 +330,7 @@ public interface IDrawingCanvas : IDisposable
     /// rectangle and the rendered glyph bounds for the corresponding laid-out entry.
     /// Use this when both typographic advance and rendered glyph overshoot must fit within the same rectangle.
     /// </remarks>
-    public bool TryMeasureCharacterRenderableBounds(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> bounds);
+    public bool TryMeasureCharacterRenderableBounds(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> bounds);
 
     /// <summary>
     /// Measures the normalized rendered size of each laid-out character entry in pixel units.
@@ -343,7 +343,7 @@ public interface IDrawingCanvas : IDisposable
     /// This is equivalent to measuring per-character bounds and returning only the width and height.
     /// Use <see cref="TryMeasureCharacterBounds"/> when the returned X and Y offset are also required.
     /// </remarks>
-    public bool TryMeasureCharacterSizes(RichTextOptions textOptions, string text, out ReadOnlySpan<GlyphBounds> sizes);
+    public bool TryMeasureCharacterSizes(RichTextOptions textOptions, ReadOnlySpan<char> text, out ReadOnlySpan<GlyphBounds> sizes);
 
     /// <summary>
     /// Gets the number of laid-out lines contained within the text.
@@ -351,7 +351,7 @@ public interface IDrawingCanvas : IDisposable
     /// <param name="textOptions">The text shaping and layout options.</param>
     /// <param name="text">The text to measure.</param>
     /// <returns>The laid-out line count.</returns>
-    public int CountTextLines(RichTextOptions textOptions, string text);
+    public int CountTextLines(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>
     /// Gets per-line layout metrics for the supplied text.
@@ -375,7 +375,7 @@ public interface IDrawingCanvas : IDisposable
     /// <item><description>Vertical layouts: Start = Y position, Extent = height.</description></item>
     /// </list>
     /// </remarks>
-    public LineMetrics[] GetTextLineMetrics(RichTextOptions textOptions, string text);
+    public LineMetrics[] GetTextLineMetrics(RichTextOptions textOptions, ReadOnlySpan<char> text);
 
     /// <summary>
     /// Draws an image source region into a destination rectangle.

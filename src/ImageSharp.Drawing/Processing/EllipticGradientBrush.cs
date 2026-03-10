@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -50,6 +51,34 @@ public sealed class EllipticGradientBrush : GradientBrush
     /// Gets the ratio of the secondary axis to the primary axis.
     /// </summary>
     public float AxisRatio { get; }
+
+    /// <inheritdoc/>
+    public override Brush Transform(Matrix4x4 matrix)
+    {
+        PointF tc = PointF.Transform(this.Center, matrix);
+        PointF tRef = PointF.Transform(this.ReferenceAxisEnd, matrix);
+
+        // Compute a point on the perpendicular (secondary) axis and transform it.
+        float refDx = this.ReferenceAxisEnd.X - this.Center.X;
+        float refDy = this.ReferenceAxisEnd.Y - this.Center.Y;
+        float refLen = MathF.Sqrt((refDx * refDx) + (refDy * refDy));
+        float secondLen = refLen * this.AxisRatio;
+
+        // Perpendicular direction (rotated 90 degrees).
+        PointF secondEnd = new(
+            this.Center.X + (-refDy / refLen * secondLen),
+            this.Center.Y + (refDx / refLen * secondLen));
+        PointF tSec = PointF.Transform(secondEnd, matrix);
+
+        // Derive new ratio from transformed lengths.
+        float newRefLen = MathF.Sqrt(
+            ((tRef.X - tc.X) * (tRef.X - tc.X)) + ((tRef.Y - tc.Y) * (tRef.Y - tc.Y)));
+        float newSecLen = MathF.Sqrt(
+            ((tSec.X - tc.X) * (tSec.X - tc.X)) + ((tSec.Y - tc.Y) * (tSec.Y - tc.Y)));
+        float newRatio = newRefLen > 0f ? newSecLen / newRefLen : this.AxisRatio;
+
+        return new EllipticGradientBrush(tc, tRef, newRatio, this.RepetitionMode, this.ColorStopsArray);
+    }
 
     /// <inheritdoc />
     public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
@@ -123,7 +152,7 @@ public sealed class EllipticGradientBrush : GradientBrush
             float xSquared = xR * xR;
             float ySquared = yR * yR;
 
-            return (xSquared / this.referenceRadiusSquared) + (ySquared / this.secondRadiusSquared);
+            return MathF.Sqrt((xSquared / this.referenceRadiusSquared) + (ySquared / this.secondRadiusSquared));
         }
     }
 }

@@ -19,7 +19,7 @@ public partial class ProcessWithDrawingCanvasTests
         DrawingOptions options = new() { GraphicsOptions = new GraphicsOptions { Antialias = false } };
 
         using Image<TPixel> image = provider.GetImage();
-        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(circle, Brushes.Solid(Color.White))));
+        image.Mutate(ctx => ctx.ProcessWithCanvas(options, canvas => canvas.Fill(Brushes.Solid(Color.White), circle)));
 
         int whitePixels = CountPixelsAbove(image, 250);
         int partialPixels = CountPixelsBetween(image, 1, 250);
@@ -47,11 +47,11 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         using Image<TPixel> lowImage = provider.GetImage();
-        lowImage.Mutate(ctx => ctx.ProcessWithCanvas(lowOptions, canvas => canvas.Fill(circle, Brushes.Solid(Color.White))));
+        lowImage.Mutate(ctx => ctx.ProcessWithCanvas(lowOptions, canvas => canvas.Fill(Brushes.Solid(Color.White), circle)));
         int lowCount = CountPixelsAbove(lowImage, 250);
 
         using Image<TPixel> highImage = provider.GetImage();
-        highImage.Mutate(ctx => ctx.ProcessWithCanvas(highOptions, canvas => canvas.Fill(circle, Brushes.Solid(Color.White))));
+        highImage.Mutate(ctx => ctx.ProcessWithCanvas(highOptions, canvas => canvas.Fill(Brushes.Solid(Color.White), circle)));
         int highCount = CountPixelsAbove(highImage, 250);
 
         // A lower threshold includes more edge pixels, so the fill area should be larger.
@@ -76,10 +76,10 @@ public partial class ProcessWithDrawingCanvasTests
         };
 
         using Image<TPixel> image1 = provider.GetImage();
-        image1.Mutate(ctx => ctx.ProcessWithCanvas(options1, canvas => canvas.Fill(circle, Brushes.Solid(Color.White))));
+        image1.Mutate(ctx => ctx.ProcessWithCanvas(options1, canvas => canvas.Fill(Brushes.Solid(Color.White), circle)));
 
         using Image<TPixel> image2 = provider.GetImage();
-        image2.Mutate(ctx => ctx.ProcessWithCanvas(options2, canvas => canvas.Fill(circle, Brushes.Solid(Color.White))));
+        image2.Mutate(ctx => ctx.ProcessWithCanvas(options2, canvas => canvas.Fill(Brushes.Solid(Color.White), circle)));
 
         // In antialiased mode the threshold is irrelevant; images should be identical.
         ImageComparer.Exact.VerifySimilarity(image1, image2);

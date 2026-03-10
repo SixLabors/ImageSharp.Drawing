@@ -40,7 +40,7 @@ public partial class ProcessWithDrawingCanvasTests
             {
                 Rectangle bounds = canvas.Bounds;
                 Rectangle region = new(0, (bounds.Height / 2) - (bounds.Height / 4), bounds.Width, bounds.Height / 2);
-                canvas.Fill(region, brush);
+                canvas.Fill(brush, region);
             }),
             testInfo);
     }

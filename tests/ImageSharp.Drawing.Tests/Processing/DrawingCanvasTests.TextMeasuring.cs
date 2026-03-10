@@ -50,8 +50,8 @@ public partial class DrawingCanvasTests
             float endX = startX + metrics.Extent;
 
             canvas.Fill(
-                new RectangularPolygon(startX, lineOriginY, endX - startX, metrics.LineHeight),
-                Brushes.Solid(bandColors[i % bandColors.Length]));
+                Brushes.Solid(bandColors[i % bandColors.Length]),
+                new RectangularPolygon(startX, lineOriginY, endX - startX, metrics.LineHeight));
 
             canvas.DrawLine(
                 Pens.Solid(Color.Teal.WithAlpha(0.9F), 1.5F),
@@ -102,8 +102,8 @@ public partial class DrawingCanvasTests
             {
                 FontRectangle b = charBounds[i].Bounds;
                 canvas.Fill(
-                    new RectangularPolygon(b.X, b.Y, b.Width, b.Height),
-                    Brushes.Solid(charColors[i % charColors.Length]));
+                    Brushes.Solid(charColors[i % charColors.Length]),
+                    new RectangularPolygon(b.X, b.Y, b.Width, b.Height));
             }
         }
 
@@ -168,17 +168,17 @@ public partial class DrawingCanvasTests
                 if (keyEntries[i].Color2 is Color c2)
                 {
                     canvas.Fill(
-                        new RectangularPolygon(x, y, halfW, swatchH),
-                        Brushes.Solid(keyEntries[i].Color1));
+                        Brushes.Solid(keyEntries[i].Color1),
+                        new RectangularPolygon(x, y, halfW, swatchH));
                     canvas.Fill(
-                        new RectangularPolygon(x + halfW, y, halfW, swatchH),
-                        Brushes.Solid(c2));
+                        Brushes.Solid(c2),
+                        new RectangularPolygon(x + halfW, y, halfW, swatchH));
                 }
                 else
                 {
                     canvas.Fill(
-                        new RectangularPolygon(x, y, swatchW, swatchH),
-                        Brushes.Solid(keyEntries[i].Color1));
+                        Brushes.Solid(keyEntries[i].Color1),
+                        new RectangularPolygon(x, y, swatchW, swatchH));
                 }
             }
             else

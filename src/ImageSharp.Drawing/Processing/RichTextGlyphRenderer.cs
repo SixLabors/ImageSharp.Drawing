@@ -454,7 +454,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
                 }
 
                 // Scale about the chosen anchor so the fixed edge stays in place.
-                outline = outline.Transform(Matrix3x2.CreateScale(scale, anchor));
+                outline = outline.Transform(Matrix4x4.CreateScale(scale.X, scale.Y, 1, new Vector3(anchor, 0)));
             }
         }
 
@@ -752,14 +752,14 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
     /// <summary>
     /// Computes the combined translation + rotation matrix that places a glyph
-    /// along the text path. For linear text (no path), returns <see cref="Matrix3x2.Identity"/>.
+    /// along the text path. For linear text (no path), returns <see cref="Matrix4x4.Identity"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Matrix3x2 ComputeTransform(in FontRectangle bounds)
+    private Matrix4x4 ComputeTransform(in FontRectangle bounds)
     {
         if (this.path is null)
         {
-            return Matrix3x2.Identity;
+            return Matrix4x4.Identity;
         }
 
         // Find the point of this intersection along the given path.
@@ -769,7 +769,7 @@ internal sealed partial class RichTextGlyphRenderer : BaseGlyphBuilder, IDisposa
 
         // Now offset to our target point since we're aligning the top-left location of our glyph against the path.
         Vector2 translation = (Vector2)pathPoint.Point - bounds.Location - half + new Vector2(0, bounds.Top);
-        return Matrix3x2.CreateTranslation(translation) * Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point);
+        return Matrix4x4.CreateTranslation(translation.X, translation.Y, 0) * new Matrix4x4(Matrix3x2.CreateRotation(pathPoint.Angle - MathF.PI, (Vector2)pathPoint.Point));
     }
 
     /// <summary>

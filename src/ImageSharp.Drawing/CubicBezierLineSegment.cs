@@ -81,7 +81,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A line segment with the matrix applied to it.</returns>
-    public CubicBezierLineSegment Transform(Matrix3x2 matrix)
+    public CubicBezierLineSegment Transform(Matrix4x4 matrix)
     {
         if (matrix.IsIdentity)
         {
@@ -100,7 +100,7 @@ public sealed class CubicBezierLineSegment : ILineSegment
     }
 
     /// <inheritdoc/>
-    ILineSegment ILineSegment.Transform(Matrix3x2 matrix) => this.Transform(matrix);
+    ILineSegment ILineSegment.Transform(Matrix4x4 matrix) => this.Transform(matrix);
 
     private static PointF[] GetDrawingPoints(PointF[] controlPoints)
     {

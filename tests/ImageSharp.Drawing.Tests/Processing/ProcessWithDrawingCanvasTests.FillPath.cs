@@ -53,10 +53,10 @@ public partial class ProcessWithDrawingCanvasTests
         using Image<TPixel> image = provider.GetImage();
         image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(path, Brushes.Solid(Color.Green));
-            canvas.Fill(path2, Brushes.Solid(Color.Red));
-            canvas.Fill(path3, Brushes.Solid(Color.Purple));
-            canvas.Fill(path4, Brushes.Solid(Color.Blue));
+            canvas.Fill(Brushes.Solid(Color.Green), path);
+            canvas.Fill(Brushes.Solid(Color.Red), path2);
+            canvas.Fill(Brushes.Solid(Color.Purple), path3);
+            canvas.Fill(Brushes.Solid(Color.Blue), path4);
         }));
 
         image.DebugSave(provider, appendSourceFileOrDescription: false, appendPixelTypeToFileName: false);
@@ -103,7 +103,7 @@ public partial class ProcessWithDrawingCanvasTests
 
                     if (i > 1)
                     {
-                        canvas.Fill(pb.Build(), Brushes.Solid(Color.Black));
+                        canvas.Fill(Brushes.Solid(Color.Black), pb.Build());
                     }
                     else
                     {
@@ -141,8 +141,8 @@ public partial class ProcessWithDrawingCanvasTests
         using Image<TPixel> image = provider.GetImage();
         image.Mutate(ctx => ctx.ProcessWithCanvas(canvas =>
         {
-            canvas.Fill(path, Brushes.Solid(Color.Yellow));
-            canvas.Fill(path2, Brushes.Solid(Color.Red.WithAlpha(.5F)));
+            canvas.Fill(Brushes.Solid(Color.Yellow), path);
+            canvas.Fill(Brushes.Solid(Color.Red.WithAlpha(.5F)), path2);
         }));
 
         image.DebugSave(provider, appendSourceFileOrDescription: false, appendPixelTypeToFileName: false);

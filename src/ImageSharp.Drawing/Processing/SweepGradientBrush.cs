@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -54,6 +55,23 @@ public sealed class SweepGradientBrush : GradientBrush
     /// Gets the ending angle in degrees.
     /// </summary>
     public float EndAngleDegrees => this.endAngleDegrees;
+
+    /// <inheritdoc/>
+    public override Brush Transform(Matrix4x4 matrix)
+    {
+        PointF tc = PointF.Transform(this.center, matrix);
+
+        float startRad = GeometryUtilities.DegreeToRadian(this.startAngleDegrees);
+        float endRad = GeometryUtilities.DegreeToRadian(this.endAngleDegrees);
+
+        PointF startDir = PointF.Transform(new PointF(this.center.X + MathF.Cos(startRad), this.center.Y + MathF.Sin(startRad)), matrix);
+        PointF endDir = PointF.Transform(new PointF(this.center.X + MathF.Cos(endRad), this.center.Y + MathF.Sin(endRad)), matrix);
+
+        float newStart = MathF.Atan2(startDir.Y - tc.Y, startDir.X - tc.X) * (180f / MathF.PI);
+        float newEnd = MathF.Atan2(endDir.Y - tc.Y, endDir.X - tc.X) * (180f / MathF.PI);
+
+        return new SweepGradientBrush(tc, newStart, newEnd, this.RepetitionMode, this.ColorStopsArray);
+    }
 
     /// <inheritdoc/>
     public override bool Equals(Brush? other)

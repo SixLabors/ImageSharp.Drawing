@@ -20,5 +20,5 @@ public interface IPathCollection : IEnumerable<IPath>
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A new path collection with the matrix applied to it.</returns>
-    public IPathCollection Transform(Matrix3x2 matrix);
+    public IPathCollection Transform(Matrix4x4 matrix);
 }

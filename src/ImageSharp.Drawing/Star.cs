@@ -87,7 +87,7 @@ public sealed class Star : Polygon
                 distance = distanceVectorInner;
             }
 
-            Vector2 rotated = Vector2.Transform(distance, Matrix3x2.CreateRotation(current));
+            Vector2 rotated = PointF.Transform(distance, Matrix4x4.CreateRotationZ(current));
 
             points[i] = rotated + location;
 

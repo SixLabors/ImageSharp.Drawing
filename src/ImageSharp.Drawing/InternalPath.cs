@@ -169,11 +169,11 @@ internal class InternalPath
         Vector2 delta = a - b;
         float angle = (float)(Math.Atan2(delta.Y, delta.X) % (Math.PI * 2));
 
-        Matrix3x2 transform = Matrix3x2.CreateRotation(angle - MathF.PI) * Matrix3x2.CreateTranslation(b.X, b.Y);
+        Matrix4x4 transform = Matrix4x4.CreateRotationZ(angle - MathF.PI) * Matrix4x4.CreateTranslation(b.X, b.Y, 0);
 
         return new SegmentInfo
         {
-            Point = Vector2.Transform(new Vector2(distanceAlongPath, 0), transform),
+            Point = PointF.Transform(new PointF(distanceAlongPath, 0), transform),
             Angle = angle
         };
     }
