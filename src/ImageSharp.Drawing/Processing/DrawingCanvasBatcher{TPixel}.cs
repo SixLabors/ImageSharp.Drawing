@@ -19,7 +19,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 {
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
-    private readonly ICanvasFrame<TPixel> targetFrame;
     private readonly List<CompositionCommand> commands = [];
 
     internal DrawingCanvasBatcher(
@@ -29,13 +28,13 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.configuration = configuration;
         this.backend = backend;
-        this.targetFrame = targetFrame;
+        this.TargetFrame = targetFrame;
     }
 
     /// <summary>
     /// Gets the target frame that this batcher flushes to.
     /// </summary>
-    public ICanvasFrame<TPixel> TargetFrame => this.targetFrame;
+    public ICanvasFrame<TPixel> TargetFrame { get; }
 
     /// <summary>
     /// Appends one normalized composition command to the pending queue.
@@ -61,7 +60,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         try
         {
             CompositionScene scene = new(this.commands);
-            this.backend.FlushCompositions(this.configuration, this.targetFrame, scene);
+            this.backend.FlushCompositions(this.configuration, this.TargetFrame, scene);
         }
         finally
         {

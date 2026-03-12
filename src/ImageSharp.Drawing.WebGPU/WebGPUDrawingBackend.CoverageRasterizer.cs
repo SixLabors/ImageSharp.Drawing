@@ -617,20 +617,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
         int interestY = interest.Y;
         int bandCount = (int)DivideRoundUp(height, TileHeight);
 
-        // Pass 1: Flatten path and count edges per band.
+        // Flatten once and reuse the list for both passes.
+        IEnumerable<ISimplePath> flattened = path.Flatten();
+        IReadOnlyList<ISimplePath> contours = flattened is IReadOnlyList<ISimplePath> list
+            ? list
+            : [.. flattened];
+
+        // Pass 1: Count edges per band.
         int totalSubEdges = 0;
         using IMemoryOwner<int> bandCountsOwner = allocator.Allocate<int>(bandCount, AllocationOptions.Clean);
         Span<int> bandCounts = bandCountsOwner.Memory.Span;
 
-        foreach (ISimplePath simplePath in path.Flatten())
+        for (int c = 0; c < contours.Count; c++)
         {
+            ISimplePath simplePath = contours[c];
             ReadOnlySpan<PointF> points = simplePath.Points.Span;
-            if (points.Length < 2)
-            {
-                continue;
-            }
-
             int segmentCount = simplePath.IsClosed ? points.Length : points.Length - 1;
+
             for (int j = 0; j < segmentCount; j++)
             {
                 PointF p0 = points[j];
@@ -681,20 +684,16 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         offsets[bandCount] = running;
 
-        // Pass 2: Flatten again and scatter edges directly into the final buffer.
+        // Pass 2: Scatter edges directly into the final buffer.
         IMemoryOwner<GpuEdge> finalOwner = allocator.Allocate<GpuEdge>(totalSubEdges);
         Span<GpuEdge> finalSpan = finalOwner.Memory.Span;
         using IMemoryOwner<uint> writeCursorsOwner = allocator.Allocate<uint>(bandCount, AllocationOptions.Clean);
         Span<uint> writeCursors = writeCursorsOwner.Memory.Span;
 
-        foreach (ISimplePath simplePath in path.Flatten())
+        for (int c = 0; c < contours.Count; c++)
         {
+            ISimplePath simplePath = contours[c];
             ReadOnlySpan<PointF> points = simplePath.Points.Span;
-            if (points.Length < 2)
-            {
-                continue;
-            }
-
             int segmentCount = simplePath.IsClosed ? points.Length : points.Length - 1;
             for (int j = 0; j < segmentCount; j++)
             {
@@ -775,17 +774,20 @@ public sealed unsafe partial class WebGPUDrawingBackend
         float halfWidth = strokeWidth * 0.5f;
         int yExpansionFixed = (int)MathF.Ceiling(Math.Max(miterLimit, 1f) * halfWidth * FixedOne);
 
+        // Flatten once and reuse the list.
+        IEnumerable<ISimplePath> flattened = path.Flatten();
+        IReadOnlyList<ISimplePath> contours = flattened is IReadOnlyList<ISimplePath> list
+            ? list
+            : [.. flattened];
+
         // Pass 1: Collect all stroke edges and count per band.
         List<GpuEdge> strokeEdges = [];
         List<(int YMinFixed, int YMaxFixed)> edgeYRanges = [];
 
-        foreach (ISimplePath simplePath in path.Flatten())
+        for (int c = 0; c < contours.Count; c++)
         {
+            ISimplePath simplePath = contours[c];
             ReadOnlySpan<PointF> points = simplePath.Points.Span;
-            if (points.Length < 2)
-            {
-                continue;
-            }
 
             bool isClosed = simplePath.IsClosed;
             int segmentCount = isClosed ? points.Length : points.Length - 1;

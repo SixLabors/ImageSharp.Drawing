@@ -58,7 +58,8 @@ public readonly struct CompositionCoverageDefinition
     public int DefinitionKey { get; }
 
     /// <summary>
-    /// Gets the path used to generate coverage.
+    /// Gets the closed, flattened path used to generate coverage.
+    /// All sub-paths are pre-flattened and oriented for correct fill rasterization.
     /// </summary>
     public IPath Path { get; }
 

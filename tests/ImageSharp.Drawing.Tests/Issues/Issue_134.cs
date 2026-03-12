@@ -31,19 +31,19 @@ public class Issue_134
                 });
 
             c.ProcessWithCanvas(canvas =>
-                        {
-                            Brush brush = Brushes.Solid(Color.Black);
-                            Font font = SystemFonts.Get("Tahoma").CreateFont(8);
-                            RichTextOptions options = new(font)
-                            {
-                                WrappingLength = c.GetCurrentSize().Width / 2,
-                                VerticalAlignment = VerticalAlignment.Center,
-                                HorizontalAlignment = HorizontalAlignment.Center,
-                                Origin = new PointF(c.GetCurrentSize().Width / 2, c.GetCurrentSize().Height / 2)
-                            };
+            {
+                Brush brush = Brushes.Solid(Color.Black);
+                Font font = SystemFonts.Get("Tahoma").CreateFont(8);
+                RichTextOptions options = new(font)
+                {
+                    WrappingLength = c.GetCurrentSize().Width / 2,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Origin = new PointF(c.GetCurrentSize().Width / 2, c.GetCurrentSize().Height / 2)
+                };
 
-                            canvas.DrawText(options, "Lorem ipsum dolor sit amet", brush, null);
-                        });
+                canvas.DrawText(options, "Lorem ipsum dolor sit amet", brush, null);
+            });
         },
         testOutputDetails: $"{antialias}",
         appendSourceFileOrDescription: false);

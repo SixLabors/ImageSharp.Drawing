@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
+using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -1177,7 +1178,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// </returns>
     private static IPath FlattenAndTransform(IPath path, Matrix4x4 matrix)
     {
-        List<PreFlattenedPath>? subPaths = null;
+        List<(PointF[] Points, RectangleF Bounds, bool IsClosed)>? subPaths = null;
+        bool allClosed = true;
         float minX = float.MaxValue, minY = float.MaxValue;
         float maxX = float.MinValue, maxY = float.MinValue;
 
@@ -1221,7 +1223,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
             RectangleF spBounds = new(spMinX, spMinY, spMaxX - spMinX, spMaxY - spMinY);
             subPaths ??= [];
-            subPaths.Add(new PreFlattenedPath(dstPoints, sp.IsClosed, spBounds));
+            subPaths.Add((dstPoints, spBounds, sp.IsClosed));
+            allClosed &= sp.IsClosed;
 
             if (spMinX < minX)
             {
@@ -1249,13 +1252,43 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             return Path.Empty;
         }
 
-        if (subPaths.Count == 1)
+        RectangleF totalBounds = new(minX, minY, maxX - minX, maxY - minY);
+        if (allClosed)
         {
-            return subPaths[0];
+            // Fill path: enforce orientation for NonZero fill rule (ring 0 positive, ring 1+ negative).
+            if (subPaths.Count == 1)
+            {
+                PolygonUtilities.EnsureOrientation(subPaths[0].Points, 1);
+                return new FlattenedPath(subPaths[0].Points, true, subPaths[0].Bounds);
+            }
+
+            FlattenedPath[] closed = new FlattenedPath[subPaths.Count];
+            for (int i = 0; i < subPaths.Count; i++)
+            {
+                PolygonUtilities.EnsureOrientation(subPaths[i].Points, i == 0 ? 1 : -1);
+                closed[i] = new FlattenedPath(subPaths[i].Points, true, subPaths[i].Bounds);
+            }
+
+            return new FlattenedCompositePath(closed, totalBounds);
         }
 
-        RectangleF totalBounds = new(minX, minY, maxX - minX, maxY - minY);
-        return new PreFlattenedCompositePath([.. subPaths], totalBounds);
+        // Stroke centerline: preserve open/closed as-is, no orientation enforcement.
+        if (subPaths.Count == 1)
+        {
+            (PointF[] pts, RectangleF bounds, bool isClosed) = subPaths[0];
+            return new FlattenedPath(pts, isClosed, bounds);
+        }
+
+        // Multiple sub-paths with at least one open — return as a simple wrapper.
+        // This case is rare (multi-contour stroke centerlines).
+        FlattenedPath[] parts = new FlattenedPath[subPaths.Count];
+        for (int i = 0; i < subPaths.Count; i++)
+        {
+            (PointF[] pts, RectangleF bounds, bool isClosed) = subPaths[i];
+            parts[i] = new FlattenedPath(pts, isClosed, bounds);
+        }
+
+        return new FlattenedCompositePath(parts, totalBounds);
     }
 
     /// <summary>

@@ -178,19 +178,6 @@ internal class InternalPath
         };
     }
 
-    internal IMemoryOwner<PointF> ExtractVertices(MemoryAllocator allocator)
-    {
-        IMemoryOwner<PointF> buffer = allocator.Allocate<PointF>(this.points.Length + 1);
-        Span<PointF> span = buffer.Memory.Span;
-
-        for (int i = 0; i < this.points.Length; i++)
-        {
-            span[i] = this.points[i].Point;
-        }
-
-        return buffer;
-    }
-
     // Modulo is a very slow operation.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int WrapArrayIndex(int i, int arrayLength) => i < arrayLength ? i : i - arrayLength;

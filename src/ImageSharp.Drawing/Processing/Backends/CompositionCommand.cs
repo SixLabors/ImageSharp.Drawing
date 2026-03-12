@@ -53,7 +53,8 @@ public readonly struct CompositionCommand
     public int DefinitionKey { get; }
 
     /// <summary>
-    /// Gets the path to rasterize in target-local coordinates.
+    /// Gets the flattened path to rasterize in target-local coordinates.
+    /// All sub-paths are pre-flattened and oriented for correct fill rasterization.
     /// </summary>
     public IPath Path { get; }
 

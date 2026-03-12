@@ -15,13 +15,13 @@ public sealed partial class DrawingCanvas<TPixel>
     /// <see cref="Flatten"/> returns <c>this</c> directly, avoiding redundant curve subdivision.
     /// Points are mutated in place on <see cref="Transform"/>; no buffers are copied.
     /// </summary>
-    private sealed class PreFlattenedPath : IPath, ISimplePath
+    private sealed class FlattenedPath : IPath, ISimplePath
     {
         private readonly PointF[] points;
         private readonly bool isClosed;
         private RectangleF bounds;
 
-        public PreFlattenedPath(PointF[] points, bool isClosed, RectangleF bounds)
+        public FlattenedPath(PointF[] points, bool isClosed, RectangleF bounds)
         {
             this.points = points;
             this.isClosed = isClosed;
@@ -94,7 +94,21 @@ public sealed partial class DrawingCanvas<TPixel>
 
         /// <inheritdoc />
         public IPath AsClosedPath()
-            => this.isClosed ? this : new PreFlattenedPath(this.points, true, this.bounds);
+        {
+            if (this.isClosed)
+            {
+                return this;
+            }
+
+            PointF[] closedPoints = new PointF[this.points.Length + 1];
+            for (int i = 0; i < this.points.Length; i++)
+            {
+                closedPoints[i] = this.points[i];
+            }
+
+            closedPoints[^1] = this.points[0];
+            return new FlattenedPath(closedPoints, true, this.bounds);
+        }
     }
 
     /// <summary>
@@ -102,12 +116,13 @@ public sealed partial class DrawingCanvas<TPixel>
     /// <see cref="Flatten"/> yields each sub-path directly, avoiding redundant curve subdivision.
     /// Sub-path points are mutated in place on <see cref="Transform"/>; no buffers are copied.
     /// </summary>
-    private sealed class PreFlattenedCompositePath : IPath
+    private sealed class FlattenedCompositePath : IPath
     {
-        private readonly PreFlattenedPath[] subPaths;
+        private readonly FlattenedPath[] subPaths;
         private RectangleF bounds;
+        private PathTypes? pathType;
 
-        public PreFlattenedCompositePath(PreFlattenedPath[] subPaths, RectangleF bounds)
+        public FlattenedCompositePath(FlattenedPath[] subPaths, RectangleF bounds)
         {
             this.subPaths = subPaths;
             this.bounds = bounds;
@@ -121,9 +136,14 @@ public sealed partial class DrawingCanvas<TPixel>
         {
             get
             {
+                if (this.pathType.HasValue)
+                {
+                    return this.pathType.Value;
+                }
+
                 bool hasOpen = false;
                 bool hasClosed = false;
-                foreach (PreFlattenedPath sp in this.subPaths)
+                foreach (FlattenedPath sp in this.subPaths)
                 {
                     if (sp.PathType == PathTypes.Open)
                     {
@@ -140,7 +160,8 @@ public sealed partial class DrawingCanvas<TPixel>
                     }
                 }
 
-                return hasClosed ? PathTypes.Closed : PathTypes.Open;
+                this.pathType = hasClosed ? PathTypes.Closed : PathTypes.Open;
+                return this.pathType.Value;
             }
         }
 
@@ -165,7 +186,7 @@ public sealed partial class DrawingCanvas<TPixel>
 
             for (int i = 0; i < this.subPaths.Length; i++)
             {
-                this.subPaths[i].Transform(matrix);
+                _ = this.subPaths[i].Transform(matrix);
                 RectangleF spBounds = this.subPaths[i].Bounds;
 
                 if (spBounds.Left < minX)
@@ -201,13 +222,13 @@ public sealed partial class DrawingCanvas<TPixel>
                 return this;
             }
 
-            PreFlattenedPath[] closed = new PreFlattenedPath[this.subPaths.Length];
+            FlattenedPath[] closed = new FlattenedPath[this.subPaths.Length];
             for (int i = 0; i < this.subPaths.Length; i++)
             {
-                closed[i] = (PreFlattenedPath)this.subPaths[i].AsClosedPath();
+                closed[i] = (FlattenedPath)this.subPaths[i].AsClosedPath();
             }
 
-            return new PreFlattenedCompositePath(closed, this.bounds);
+            return new FlattenedCompositePath(closed, this.bounds);
         }
     }
 }
