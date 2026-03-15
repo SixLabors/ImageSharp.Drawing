@@ -20,6 +20,7 @@ public sealed partial class DrawingCanvas<TPixel>
         private readonly PointF[] points;
         private readonly bool isClosed;
         private RectangleF bounds;
+        private ISimplePath[]? flattenResult;
 
         public FlattenedPath(PointF[] points, bool isClosed, RectangleF bounds)
         {
@@ -41,10 +42,7 @@ public sealed partial class DrawingCanvas<TPixel>
         ReadOnlyMemory<PointF> ISimplePath.Points => this.points;
 
         /// <inheritdoc />
-        public IEnumerable<ISimplePath> Flatten()
-        {
-            yield return this;
-        }
+        public IEnumerable<ISimplePath> Flatten() => this.flattenResult ??= [this];
 
         /// <summary>
         /// Transforms all points in place and updates the bounds.
