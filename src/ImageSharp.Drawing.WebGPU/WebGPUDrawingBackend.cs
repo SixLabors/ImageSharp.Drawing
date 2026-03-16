@@ -789,74 +789,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return true;
         }
 
-        // Prepare stroke definitions for GPU distance-field evaluation.
-        // Instead of expanding to a filled outline on the CPU, we compute
-        // the interest rectangle from the centerline bounds inflated by
-        // half the stroke width and pass the centerline edges to the GPU.
-        // For dashed strokes, we pre-split the path into dash segments
-        // on the CPU (cheap) while keeping the actual stroke coverage on GPU.
-        for (int i = 0; i < coverageDefinitions.Count; i++)
-        {
-            CompositionCoverageDefinition definition = coverageDefinitions[i];
-            if (!definition.IsStroke)
-            {
-                continue;
-            }
-
-            IPath strokePath = definition.Path;
-
-            // For dashed strokes, split the path into dash segments.
-            // This reuses the outline generation with a minimal width to
-            // produce the dash-split centerline path, but instead we use
-            // the dedicated dash splitting API.
-            if (definition.StrokePattern.Length > 0)
-            {
-                // For dashed strokes, split the path into dash segments on the CPU
-                // so the GPU evaluates solid strokes on each dash segment.
-                strokePath = strokePath.GenerateDashes(definition.StrokeWidth, definition.StrokePattern.Span);
-            }
-
-            float halfWidth = definition.StrokeWidth * 0.5f;
-            float maxExtent = halfWidth * Math.Max((float)(definition.StrokeOptions?.MiterLimit ?? 4.0), 1.0f);
-
-            RectangleF pathBounds = strokePath.Bounds;
-            pathBounds = new RectangleF(
-                pathBounds.X + 0.5F - maxExtent,
-                pathBounds.Y + 0.5F - maxExtent,
-                pathBounds.Width + (maxExtent * 2),
-                pathBounds.Height + (maxExtent * 2));
-
-            Rectangle interest = Rectangle.FromLTRB(
-                (int)MathF.Floor(pathBounds.Left),
-                (int)MathF.Floor(pathBounds.Top),
-                (int)MathF.Ceiling(pathBounds.Right),
-                (int)MathF.Ceiling(pathBounds.Bottom));
-
-            RasterizerOptions opts = definition.RasterizerOptions;
-            coverageDefinitions[i] = new CompositionCoverageDefinition(
-                definition.DefinitionKey,
-                strokePath,
-                new RasterizerOptions(interest, opts.IntersectionRule, opts.RasterizationMode, opts.SamplingOrigin, opts.AntialiasThreshold),
-                definition.DestinationOffset,
-                definition.StrokeOptions,
-                definition.StrokeWidth,
-                definition.StrokePattern);
-
-            // Re-prepare all batches that reference this coverage definition.
-            for (int b = 0; b < preparedBatches.Count; b++)
-            {
-                if (batchCoverageIndices[b] == i)
-                {
-                    CompositionScenePlanner.ReprepareBatchCommands(
-                        preparedBatches[b].Commands,
-                        targetBounds,
-                        interest);
-                }
-            }
-        }
-
-        // Recompute effective composition bounds from updated command destinations
-        // after stroke re-preparation tightened the interest rectangles.
+        // Recompute effective composition bounds from command destinations.
         Rectangle targetExtent = new(0, 0, flushContext.TargetBounds.Width, flushContext.TargetBounds.Height);
         Rectangle? tightBounds = null;
         for (int batchIndex = 0; batchIndex < preparedBatches.Count; batchIndex++)
@@ -2239,7 +2172,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private readonly struct CoverageDefinitionIdentity : IEquatable<CoverageDefinitionIdentity>
     {
         private readonly int definitionKey;
-        private readonly IPath path;
+        private readonly PreparedGeometry geometry;
         private readonly Rectangle interest;
         private readonly IntersectionRule intersectionRule;
         private readonly RasterizationMode rasterizationMode;
@@ -2249,7 +2182,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         public CoverageDefinitionIdentity(in CompositionCoverageDefinition definition)
         {
             this.definitionKey = definition.DefinitionKey;
-            this.path = definition.Path;
+            this.geometry = definition.Geometry;
             this.interest = definition.RasterizerOptions.Interest;
             this.intersectionRule = definition.RasterizerOptions.IntersectionRule;
             this.rasterizationMode = definition.RasterizerOptions.RasterizationMode;
@@ -2264,7 +2197,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         /// <returns><see langword="true"/> when the identities describe the same coverage definition; otherwise <see langword="false"/>.</returns>
         public bool Equals(CoverageDefinitionIdentity other)
             => this.definitionKey == other.definitionKey &&
-               ReferenceEquals(this.path, other.path) &&
+               ReferenceEquals(this.geometry, other.geometry) &&
                this.interest.Equals(other.interest) &&
                this.intersectionRule == other.intersectionRule &&
                this.rasterizationMode == other.rasterizationMode &&
@@ -2279,7 +2212,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         public override int GetHashCode()
             => HashCode.Combine(
                 this.definitionKey,
-                RuntimeHelpers.GetHashCode(this.path),
+                RuntimeHelpers.GetHashCode(this.geometry),
                 this.interest,
                 (int)this.intersectionRule,
                 (int)this.rasterizationMode,

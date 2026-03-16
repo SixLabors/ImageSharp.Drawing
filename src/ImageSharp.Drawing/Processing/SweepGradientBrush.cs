@@ -107,15 +107,15 @@ public sealed class SweepGradientBrush : GradientBrush
     }
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        Buffer2DRegion<TPixel> targetRegion,
+        int canvasWidth,
         RectangleF region)
-        => new SweepGradientBrushApplicator<TPixel>(
+        => new SweepGradientBrushRenderer<TPixel>(
             configuration,
             options,
-            targetRegion,
+            canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
@@ -124,7 +124,7 @@ public sealed class SweepGradientBrush : GradientBrush
     /// The sweep (conic) gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class SweepGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
+    private sealed class SweepGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private const float Tau = MathF.Tau;
@@ -140,22 +140,22 @@ public sealed class SweepGradientBrush : GradientBrush
         private readonly bool isFullCircle;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SweepGradientBrushApplicator{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="SweepGradientBrushRenderer{TPixel}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="targetRegion">The destination pixel region.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="brush">The sweep gradient brush.</param>
         /// <param name="colorStops">The gradient color stops (ratios in [0..1]).</param>
         /// <param name="repetitionMode">Defines how gradient colors are repeated outside [0..1].</param>
-        public SweepGradientBrushApplicator(
+        public SweepGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            Buffer2DRegion<TPixel> targetRegion,
+            int canvasWidth,
             SweepGradientBrush brush,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, targetRegion, colorStops, repetitionMode)
+            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
         {
             this.cx = brush.Center.X;
             this.cy = brush.Center.Y;

@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -106,45 +105,41 @@ public sealed class PatternBrush : Brush
         => HashCode.Combine(this.pattern, this.patternVector);
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        Buffer2DRegion<TPixel> targetRegion,
-        RectangleF region) =>
-        new PatternBrushApplicator<TPixel>(
+        int canvasWidth,
+        RectangleF region)
+        =>
+        new PatternBrushRenderer<TPixel>(
             configuration,
             options,
-            targetRegion,
+            canvasWidth,
             this.pattern.ToPixelMatrix<TPixel>());
 
     /// <summary>
     /// The pattern brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class PatternBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    private sealed class PatternBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly DenseMatrix<TPixel> pattern;
-        private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
-        private bool isDisposed;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PatternBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="PatternBrushRenderer{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="targetRegion">The destination pixel region.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="pattern">The pattern.</param>
-        public PatternBrushApplicator(
+        public PatternBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            Buffer2DRegion<TPixel> targetRegion,
+            int canvasWidth,
             in DenseMatrix<TPixel> pattern)
-            : base(configuration, options, targetRegion)
-        {
-            this.pattern = pattern;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, targetRegion.Width);
-        }
+            : base(configuration, options, canvasWidth)
+            => this.pattern = pattern;
 
         internal TPixel this[int x, int y]
         {
@@ -159,11 +154,16 @@ public sealed class PatternBrush : Brush
         }
 
         /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
             int patternY = y % this.pattern.Rows;
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+            Span<float> amounts = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
 
             for (int i = 0; i < scanline.Length; i++)
             {
@@ -173,33 +173,12 @@ public sealed class PatternBrush : Brush
                 overlays[i] = this.pattern[patternY, patternX];
             }
 
-            int localY = y - this.TargetRegion.Rectangle.Y;
-            int localX = x - this.TargetRegion.Rectangle.X;
-            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, scanline.Length);
             this.Blender.Blend(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlays,
                 amounts);
-        }
-
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                this.blenderBuffers.Dispose();
-            }
-
-            this.isDisposed = true;
         }
     }
 }

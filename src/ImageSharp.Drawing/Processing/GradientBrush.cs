@@ -2,8 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Helpers;
-using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -80,7 +78,7 @@ public abstract class GradientBrush : Brush
     /// Base class for gradient brush applicators
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    internal abstract class GradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    internal abstract class GradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private static readonly TPixel Transparent = Color.Transparent.ToPixel<TPixel>();
@@ -89,35 +87,24 @@ public abstract class GradientBrush : Brush
 
         private readonly GradientRepetitionMode repetitionMode;
 
-        private readonly MemoryAllocator allocator;
-
-        private readonly int scanlineWidth;
-
-        private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
-
-        private bool isDisposed;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="GradientBrushApplicator{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="GradientBrushRenderer{TPixel}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="targetRegion">The destination pixel region.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="colorStops">An array of color stops sorted by their position.</param>
         /// <param name="repetitionMode">Defines if and how the gradient should be repeated.</param>
-        protected GradientBrushApplicator(
+        protected GradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            Buffer2DRegion<TPixel> targetRegion,
+            int canvasWidth,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, targetRegion)
+            : base(configuration, options, canvasWidth)
         {
             this.colorStops = colorStops;
             this.repetitionMode = repetitionMode;
-            this.scanlineWidth = targetRegion.Width;
-            this.allocator = configuration.MemoryAllocator;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(this.allocator, this.scanlineWidth);
         }
 
         internal TPixel this[int x, int y]
@@ -175,10 +162,15 @@ public abstract class GradientBrush : Brush
         }
 
         /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+            Span<float> amounts = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
             float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
@@ -199,9 +191,6 @@ public abstract class GradientBrush : Brush
                 }
             }
 
-            int localY = y - this.TargetRegion.Rectangle.Y;
-            int localX = x - this.TargetRegion.Rectangle.X;
-            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, scanline.Length);
             this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
         }
 
@@ -218,24 +207,6 @@ public abstract class GradientBrush : Brush
         /// e.g. for the <see cref="GradientRepetitionMode" /> enum.
         /// </returns>
         protected abstract float PositionOnGradient(float x, float y);
-
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                this.blenderBuffers.Dispose();
-            }
-
-            this.isDisposed = true;
-        }
 
         private (ColorStop From, ColorStop To) GetGradientSegment(float positionOnCompleteGradient)
         {

@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -59,6 +61,10 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         try
         {
+            // Expand stroke commands to fills in parallel.
+            // After this, every command has an immutable pre-flattened fill path.
+            this.PrepareCommands();
+
             CompositionScene scene = new(this.commands);
             this.backend.FlushCompositions(this.configuration, this.TargetFrame, scene);
         }
@@ -68,4 +74,19 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             this.commands.Clear();
         }
     }
+
+    /// <summary>
+    /// Prepares all queued commands in parallel. Each command expands strokes to fills,
+    /// applies transforms, clips, and flattens its path via <see cref="CompositionCommand.Prepare"/>.
+    /// After this call every command is a fill with an immutable pre-flattened path.
+    /// </summary>
+    private void PrepareCommands()
+        => Parallel.ForEach(Partitioner.Create(0, this.commands.Count), range =>
+        {
+            Span<CompositionCommand> span = CollectionsMarshal.AsSpan(this.commands);
+            for (int i = range.Item1; i < range.Item2; i++)
+            {
+                span[i].Prepare();
+            }
+        });
 }

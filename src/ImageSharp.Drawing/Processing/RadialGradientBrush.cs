@@ -118,15 +118,15 @@ public sealed class RadialGradientBrush : GradientBrush
         => HashCode.Combine(base.GetHashCode(), this.Center0, this.Radius0, this.Center1, this.Radius1);
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        Buffer2DRegion<TPixel> targetRegion,
+        int canvasWidth,
         RectangleF region)
-        => new RadialGradientBrushApplicator<TPixel>(
+        => new RadialGradientBrushRenderer<TPixel>(
             configuration,
             options,
-            targetRegion,
+            canvasWidth,
             this.Center0,
             this.Radius0,
             this.Center1,
@@ -137,7 +137,7 @@ public sealed class RadialGradientBrush : GradientBrush
     /// <summary>
     /// The radial gradient brush applicator.
     /// </summary>
-    private sealed class RadialGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
+    private sealed class RadialGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         // Single-circle fields
@@ -159,28 +159,28 @@ public sealed class RadialGradientBrush : GradientBrush
         private readonly float denom;    // dd - dr^2
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="RadialGradientBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="RadialGradientBrushRenderer{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="targetRegion">The destination pixel region.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="center0">Center of the starting circle.</param>
         /// <param name="radius0">Radius of the starting circle.</param>
         /// <param name="center1">Center of the ending circle, or null to use single-circle form.</param>
         /// <param name="radius1">Radius of the ending circle, or null to use single-circle form.</param>
         /// <param name="colorStops">Definition of colors.</param>
         /// <param name="repetitionMode">How the colors are repeated beyond the first gradient.</param>
-        public RadialGradientBrushApplicator(
+        public RadialGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            Buffer2DRegion<TPixel> targetRegion,
+            int canvasWidth,
             PointF center0,
             float radius0,
             PointF? center1,
             float? radius1,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, targetRegion, colorStops, repetitionMode)
+            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
         {
             this.c0x = center0.X;
             this.c0y = center0.Y;

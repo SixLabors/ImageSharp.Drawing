@@ -1,72 +1,71 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// One normalized composition command queued by <see cref="DrawingCanvasBatcher{TPixel}"/>.
+/// After <see cref="Prepare"/> is called by the batcher, every command is a fill
+/// with an immutable pre-flattened path ready for backend execution.
 /// </summary>
-public readonly struct CompositionCommand
+public struct CompositionCommand
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CompositionCommand"/> struct.
-    /// </summary>
-    /// <param name="definitionKey">Stable definition key used for composition-level caching.</param>
-    /// <param name="path">Path to rasterize in target-local coordinates.</param>
-    /// <param name="brush">Brush used during composition.</param>
-    /// <param name="brushBounds">Brush bounds used for applicator creation.</param>
-    /// <param name="graphicsOptions">Graphics options used for composition.</param>
-    /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
-    /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
-    /// <param name="strokeOptions">Optional stroke options for backend-side stroke expansion.</param>
-    /// <param name="strokeWidth">Stroke width in pixels when <paramref name="strokeOptions"/> is present.</param>
-    /// <param name="strokePattern">Optional dash pattern when <paramref name="strokeOptions"/> is present.</param>
+    private readonly Pen? pen;
+    private readonly IPath sourcePath;
+    private readonly Matrix4x4 transform;
+    private readonly IReadOnlyList<IPath>? clipPaths;
+    private readonly ShapeOptions shapeOptions;
+
     private CompositionCommand(
         int definitionKey,
-        IPath path,
+        IPath sourcePath,
         Brush brush,
-        Rectangle brushBounds,
         GraphicsOptions graphicsOptions,
         in RasterizerOptions rasterizerOptions,
         Point destinationOffset,
-        StrokeOptions? strokeOptions,
-        float strokeWidth,
-        ReadOnlyMemory<float> strokePattern)
+        Pen? pen,
+        Matrix4x4 transform,
+        IReadOnlyList<IPath>? clipPaths,
+        ShapeOptions shapeOptions)
     {
         this.DefinitionKey = definitionKey;
-        this.Path = path;
+        this.sourcePath = sourcePath;
+        this.Geometry = null;
         this.Brush = brush;
-        this.BrushBounds = brushBounds;
         this.GraphicsOptions = graphicsOptions;
         this.RasterizerOptions = rasterizerOptions;
         this.DestinationOffset = destinationOffset;
-        this.StrokeOptions = strokeOptions;
-        this.StrokeWidth = strokeWidth;
-        this.StrokePattern = strokePattern;
+        this.pen = pen;
+        this.transform = transform;
+        this.clipPaths = clipPaths;
+        this.shapeOptions = shapeOptions;
     }
 
     /// <summary>
     /// Gets a stable definition key used for composition-level caching.
+    /// Recomputed by <see cref="Prepare"/> after path replacement.
     /// </summary>
-    public int DefinitionKey { get; }
+    public int DefinitionKey { get; private set; }
 
     /// <summary>
-    /// Gets the flattened path to rasterize in target-local coordinates.
-    /// All sub-paths are pre-flattened and oriented for correct fill rasterization.
+    /// Gets the prepared backend-neutral geometry to rasterize in target-local coordinates.
+    /// This is populated by <see cref="Prepare"/>.
     /// </summary>
-    public IPath Path { get; }
+    public PreparedGeometry? Geometry { get; private set; }
 
     /// <summary>
     /// Gets the brush used during composition.
+    /// After <see cref="Prepare"/> this is transformed to match the path coordinate space.
     /// </summary>
-    public Brush Brush { get; }
+    public Brush Brush { get; private set; }
 
     /// <summary>
     /// Gets brush bounds used for applicator creation.
     /// </summary>
-    public Rectangle BrushBounds { get; }
+    public Rectangle BrushBounds { get; private set; }
 
     /// <summary>
     /// Gets graphics options used for composition.
@@ -75,8 +74,9 @@ public readonly struct CompositionCommand
 
     /// <summary>
     /// Gets rasterizer options used to generate coverage.
+    /// After <see cref="Prepare"/> the interest rect reflects the final path bounds.
     /// </summary>
-    public RasterizerOptions RasterizerOptions { get; }
+    public RasterizerOptions RasterizerOptions { get; private set; }
 
     /// <summary>
     /// Gets the absolute destination offset where the local coverage should be composited.
@@ -84,92 +84,110 @@ public readonly struct CompositionCommand
     public Point DestinationOffset { get; }
 
     /// <summary>
-    /// Gets the stroke options when this command represents a stroke operation.
+    /// Creates a composition command.
     /// </summary>
-    public StrokeOptions? StrokeOptions { get; }
-
-    /// <summary>
-    /// Gets the stroke width in pixels.
-    /// </summary>
-    public float StrokeWidth { get; }
-
-    /// <summary>
-    /// Gets the optional dash pattern.
-    /// </summary>
-    public ReadOnlyMemory<float> StrokePattern { get; }
-
-    /// <summary>
-    /// Creates a fill composition command.
-    /// </summary>
-    /// <param name="path">Path to rasterize in target-local coordinates.</param>
+    /// <param name="path">Path in target-local coordinates.</param>
     /// <param name="brush">Brush used during composition.</param>
     /// <param name="graphicsOptions">Graphics options used for composition.</param>
     /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
+    /// <param name="shapeOptions">Shape options for clip operations.</param>
+    /// <param name="transform">Transform matrix to apply during preparation.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
-    /// <param name="definitionKeyCache">Optional scoped cache to avoid repeated path flattening for the same <see cref="IPath"/> reference.</param>
-    /// <returns>The normalized composition command.</returns>
+    /// <param name="pen">Optional pen for stroke commands. The batcher expands strokes to fills.</param>
+    /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
+    /// <returns>The composition command.</returns>
     public static CompositionCommand Create(
         IPath path,
         Brush brush,
         GraphicsOptions graphicsOptions,
         in RasterizerOptions rasterizerOptions,
+        ShapeOptions shapeOptions,
+        Matrix4x4 transform,
         Point destinationOffset = default,
-        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
+        Pen? pen = null,
+        IReadOnlyList<IPath>? clipPaths = null)
     {
-        int definitionKey = ComputeCoverageDefinitionKey(path, in rasterizerOptions, definitionKeyCache);
-        Rectangle brushBounds = ComputeBrushBounds(path, destinationOffset);
+        int definitionKey = ComputeCoverageDefinitionKey(path, in rasterizerOptions);
 
         return new(
             definitionKey,
             path,
             brush,
-            brushBounds,
             graphicsOptions,
             in rasterizerOptions,
             destinationOffset,
-            null,
-            0f,
-            default);
+            pen,
+            transform,
+            clipPaths,
+            shapeOptions);
     }
 
     /// <summary>
-    /// Creates a stroke composition command where the backend is responsible for stroke expansion.
+    /// Prepares this command for backend execution. Expands strokes to fills,
+    /// clips, transforms, and linearizes the source path. After this call the command
+    /// is a fill with immutable prepared geometry.
     /// </summary>
-    /// <param name="path">The original centerline path in target-local coordinates.</param>
-    /// <param name="brush">Brush used during composition.</param>
-    /// <param name="graphicsOptions">Graphics options used for composition.</param>
-    /// <param name="rasterizerOptions">Rasterizer options with interest inflated for stroke bounds.</param>
-    /// <param name="strokeOptions">Stroke geometry options.</param>
-    /// <param name="strokeWidth">Stroke width in pixels.</param>
-    /// <param name="strokePattern">Optional dash pattern. Each element is a multiple of <paramref name="strokeWidth"/>.</param>
-    /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
-    /// <param name="definitionKeyCache">Optional scoped cache to avoid repeated path flattening for the same <see cref="IPath"/> reference.</param>
-    /// <returns>The normalized stroke composition command.</returns>
-    public static CompositionCommand CreateStroke(
-        IPath path,
-        Brush brush,
-        GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions,
-        StrokeOptions strokeOptions,
-        float strokeWidth,
-        ReadOnlyMemory<float> strokePattern = default,
-        Point destinationOffset = default,
-        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
+    internal void Prepare()
     {
-        int definitionKey = ComputeCoverageDefinitionKey(path, in rasterizerOptions, definitionKeyCache);
-        Rectangle brushBounds = ComputeBrushBounds(rasterizerOptions.Interest, destinationOffset);
+        IPath path = this.sourcePath;
 
-        return new(
-            definitionKey,
-            path,
-            brush,
-            brushBounds,
-            graphicsOptions,
-            in rasterizerOptions,
-            destinationOffset,
-            strokeOptions,
-            strokeWidth,
-            strokePattern);
+        // Transform to world space.
+        if (!this.transform.IsIdentity)
+        {
+            path = path.Transform(this.transform);
+        }
+
+        // Stroke expansion on the transformed path.
+        if (this.pen is not null)
+        {
+            path = this.pen.GeneratePath(path);
+        }
+
+        // Clip — path and clip paths are both in world space.
+        if (this.clipPaths is { Count: > 0 })
+        {
+            path = path.Clip(this.shapeOptions, this.clipPaths);
+        }
+
+        // Line preparation happens here so backends no longer need to traverse IPath.
+        PreparedGeometry geometry = PreparedGeometry.Create(path, enforceFillOrientation: this.pen is null);
+        this.Geometry = geometry;
+
+        // Transform the brush to match the path coordinate space.
+        if (!this.transform.IsIdentity)
+        {
+            this.Brush = this.Brush.Transform(this.transform);
+        }
+
+        // Recompute interest, brush bounds, and definition key from the final path.
+        RasterizerOptions old = this.RasterizerOptions;
+        RectangleF bounds = geometry.Bounds;
+        if (old.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter)
+        {
+            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
+        }
+
+        Rectangle interest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right),
+            (int)MathF.Ceiling(bounds.Bottom));
+
+        this.RasterizerOptions = new RasterizerOptions(
+            interest,
+            old.IntersectionRule,
+            old.RasterizationMode,
+            old.SamplingOrigin,
+            old.AntialiasThreshold);
+
+        this.BrushBounds = new Rectangle(
+            interest.X + this.DestinationOffset.X,
+            interest.Y + this.DestinationOffset.Y,
+            interest.Width,
+            interest.Height);
+
+        RasterizerOptions updated = this.RasterizerOptions;
+        this.DefinitionKey = ComputeCoverageDefinitionKey(geometry, in updated);
     }
 
     /// <summary>
@@ -193,25 +211,16 @@ public readonly struct CompositionCommand
         return HashCode.Combine(pathIdentity, rasterState);
     }
 
-    private static Rectangle ComputeBrushBounds(IPath path, Point destinationOffset)
+    internal static int ComputeCoverageDefinitionKey(
+        PreparedGeometry geometry,
+        in RasterizerOptions rasterizerOptions)
     {
-        RectangleF bounds = path.Bounds;
-        Rectangle localBrushBounds = Rectangle.FromLTRB(
-            (int)MathF.Floor(bounds.Left),
-            (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right),
-            (int)MathF.Ceiling(bounds.Bottom));
-        return new(
-            localBrushBounds.X + destinationOffset.X,
-            localBrushBounds.Y + destinationOffset.Y,
-            localBrushBounds.Width,
-            localBrushBounds.Height);
+        int geometryIdentity = RuntimeHelpers.GetHashCode(geometry);
+        int rasterState = HashCode.Combine(
+            rasterizerOptions.Interest.Size,
+            (int)rasterizerOptions.IntersectionRule,
+            (int)rasterizerOptions.RasterizationMode,
+            (int)rasterizerOptions.SamplingOrigin);
+        return HashCode.Combine(geometryIdentity, rasterState);
     }
-
-    private static Rectangle ComputeBrushBounds(Rectangle interest, Point destinationOffset)
-        => new(
-            interest.X + destinationOffset.X,
-            interest.Y + destinationOffset.Y,
-            interest.Width,
-            interest.Height);
 }

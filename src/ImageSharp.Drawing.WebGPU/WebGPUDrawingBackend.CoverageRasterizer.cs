@@ -110,37 +110,16 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             int bandCount = (int)DivideRoundUp(interest.Height, TileHeight);
 
-            IMemoryOwner<GpuEdge>? defEdgeOwner;
-            int edgeCount;
-            IMemoryOwner<uint>? defBandOffsets;
-            bool edgeSuccess;
-            if (definition.IsStroke)
-            {
-                edgeSuccess = TryBuildStrokeEdges(
-                    flushContext.MemoryAllocator,
-                    definition.Path,
-                    in interest,
-                    definition.RasterizerOptions.SamplingOrigin,
-                    definition.StrokeWidth,
-                    (float)(definition.StrokeOptions?.MiterLimit ?? 4.0),
-                    bandCount,
-                    out defEdgeOwner,
-                    out edgeCount,
-                    out defBandOffsets,
-                    out error);
-            }
-            else
-            {
-                edgeSuccess = TryBuildFixedPointEdges(
-                    flushContext.MemoryAllocator,
-                    definition.Path,
-                    in interest,
-                    definition.RasterizerOptions.SamplingOrigin,
-                    out defEdgeOwner,
-                    out edgeCount,
-                    out defBandOffsets,
-                    out error);
-            }
+            // All commands are fills by this point — strokes were expanded by the batcher.
+            bool edgeSuccess = TryBuildFixedPointEdges(
+                flushContext.MemoryAllocator,
+                definition.Geometry,
+                in interest,
+                definition.RasterizerOptions.SamplingOrigin,
+                out IMemoryOwner<GpuEdge>? defEdgeOwner,
+                out int edgeCount,
+                out IMemoryOwner<uint>? defBandOffsets,
+                out error);
 
             if (!edgeSuccess)
             {
@@ -154,70 +133,16 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             geometries[i] = new DefinitionGeometry(defEdgeOwner, edgeCount, bandCount, defBandOffsets);
 
-            if (definition.IsStroke && edgeCount > 0)
-            {
-                // Centerline edges are band-sorted. Create one StrokeExpandCommand per band
-                // so the GPU expand shader writes outline edges into per-band output slots.
-                // This produces band-sorted outline edges compatible with the fill rasterizer.
-                Span<uint> clBandOffsets = defBandOffsets!.Memory.Span;
-                LineCap defLineCap = definition.StrokeOptions?.LineCap ?? LineCap.Butt;
-                LineJoin defLineJoin = definition.StrokeOptions?.LineJoin ?? LineJoin.Bevel;
-                int outlineEdgesPerCenterline = ComputeOutlineEdgesPerCenterline(
-                    definition.StrokeWidth * 0.5f, defLineJoin, defLineCap);
-                strokeCommands ??= [];
-                for (int b = 0; b < bandCount; b++)
-                {
-                    uint bandStart = clBandOffsets[b];
-                    uint bandEnd = b + 1 < clBandOffsets.Length ? clBandOffsets[b + 1] : (uint)edgeCount;
-                    uint bandEdgeCount = bandEnd - bandStart;
-                    if (bandEdgeCount == 0)
-                    {
-                        continue;
-                    }
+            int bandOffsetEntriesForDef = bandCount + 1;
+            edgePlacementsSpan[i] = new EdgePlacement(
+                (uint)runningEdgeStart,
+                (uint)edgeCount,
+                fillRule,
+                (uint)runningBandOffset,
+                (uint)bandCount);
 
-                    int bandOutlineMax = (int)bandEdgeCount * outlineEdgesPerCenterline;
-                    strokeCommands.Add(new StrokeExpandCommand(
-                        i,
-                        (uint)runningEdgeStart + bandStart,
-                        bandEdgeCount,
-                        definition.StrokeWidth * 0.5f,
-                        (uint)defLineCap,
-                        (uint)defLineJoin,
-                        (float)(definition.StrokeOptions?.MiterLimit ?? 4.0),
-                        bandOutlineMax,
-                        Band: b));
-
-                    totalOutlineSlots += bandOutlineMax;
-                }
-
-                totalStrokeCenterlineEdges += edgeCount;
-
-                // Placeholder EdgePlacement — will be updated after outline space is allocated.
-                int bandOffsetEntriesForDef = bandCount + 1;
-                edgePlacementsSpan[i] = new EdgePlacement(
-                    (uint)runningEdgeStart,
-                    (uint)edgeCount,
-                    fillRule,
-                    (uint)runningBandOffset,
-                    (uint)bandCount);
-
-                runningEdgeStart += edgeCount;
-                runningBandOffset += bandOffsetEntriesForDef;
-            }
-            else
-            {
-                int bandOffsetEntriesForDef = bandCount + 1;
-
-                edgePlacementsSpan[i] = new EdgePlacement(
-                    (uint)runningEdgeStart,
-                    (uint)edgeCount,
-                    fillRule,
-                    (uint)runningBandOffset,
-                    (uint)bandCount);
-
-                runningEdgeStart += edgeCount;
-                runningBandOffset += bandOffsetEntriesForDef;
-            }
+            runningEdgeStart += edgeCount;
+            runningBandOffset += bandOffsetEntriesForDef;
         }
 
         totalEdgeCount = runningEdgeStart;
@@ -597,7 +522,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
     /// </remarks>
     private static bool TryBuildFixedPointEdges(
         MemoryAllocator allocator,
-        IPath path,
+        PreparedGeometry geometry,
         in Rectangle interest,
         RasterizerSamplingOrigin samplingOrigin,
         out IMemoryOwner<GpuEdge>? edgeOwner,
@@ -616,55 +541,44 @@ public sealed unsafe partial class WebGPUDrawingBackend
         int interestX = interest.X;
         int interestY = interest.Y;
         int bandCount = (int)DivideRoundUp(height, TileHeight);
-
-        // Flatten once and reuse the list for both passes.
-        IEnumerable<ISimplePath> flattened = path.Flatten();
-        IReadOnlyList<ISimplePath> contours = flattened is IReadOnlyList<ISimplePath> list
-            ? list
-            : [.. flattened];
+        ReadOnlySpan<PreparedLineSegment> segments = geometry.Segments;
 
         // Pass 1: Count edges per band.
         int totalSubEdges = 0;
         using IMemoryOwner<int> bandCountsOwner = allocator.Allocate<int>(bandCount, AllocationOptions.Clean);
         Span<int> bandCounts = bandCountsOwner.Memory.Span;
 
-        for (int c = 0; c < contours.Count; c++)
+        for (int i = 0; i < segments.Length; i++)
         {
-            ISimplePath simplePath = contours[c];
-            ReadOnlySpan<PointF> points = simplePath.Points.Span;
-            int segmentCount = simplePath.IsClosed ? points.Length : points.Length - 1;
+            PreparedLineSegment segment = segments[i];
+            PointF p0 = segment.P0;
+            PointF p1 = segment.P1;
 
-            for (int j = 0; j < segmentCount; j++)
+            int y0 = (int)MathF.Round(((p0.Y - interestY) + samplingOffsetY) * FixedOne);
+            int y1 = (int)MathF.Round(((p1.Y - interestY) + samplingOffsetY) * FixedOne);
+            if (y0 == y1)
             {
-                PointF p0 = points[j];
-                PointF p1 = points[j + 1 == points.Length ? 0 : j + 1];
-
-                int y0 = (int)MathF.Round(((p0.Y - interestY) + samplingOffsetY) * FixedOne);
-                int y1 = (int)MathF.Round(((p1.Y - interestY) + samplingOffsetY) * FixedOne);
-                if (y0 == y1)
-                {
-                    continue;
-                }
-
-                int yMinFixed = Math.Min(y0, y1);
-                int yMaxFixed = Math.Max(y0, y1);
-                int minRow = Math.Max(0, yMinFixed >> FixedShift);
-                int maxRow = Math.Min(height - 1, (yMaxFixed - 1) >> FixedShift);
-
-                if (minRow > maxRow)
-                {
-                    continue;
-                }
-
-                int minBand = minRow / TileHeight;
-                int maxBand = maxRow / TileHeight;
-                for (int b = minBand; b <= maxBand; b++)
-                {
-                    bandCounts[b]++;
-                }
-
-                totalSubEdges += maxBand - minBand + 1;
+                continue;
             }
+
+            int yMinFixed = Math.Min(y0, y1);
+            int yMaxFixed = Math.Max(y0, y1);
+            int minRow = Math.Max(0, yMinFixed >> FixedShift);
+            int maxRow = Math.Min(height - 1, (yMaxFixed - 1) >> FixedShift);
+
+            if (minRow > maxRow)
+            {
+                continue;
+            }
+
+            int minBand = minRow / TileHeight;
+            int maxBand = maxRow / TileHeight;
+            for (int b = minBand; b <= maxBand; b++)
+            {
+                bandCounts[b]++;
+            }
+
+            totalSubEdges += maxBand - minBand + 1;
         }
 
         if (totalSubEdges == 0)
@@ -690,47 +604,42 @@ public sealed unsafe partial class WebGPUDrawingBackend
         using IMemoryOwner<uint> writeCursorsOwner = allocator.Allocate<uint>(bandCount, AllocationOptions.Clean);
         Span<uint> writeCursors = writeCursorsOwner.Memory.Span;
 
-        for (int c = 0; c < contours.Count; c++)
+        for (int i = 0; i < segments.Length; i++)
         {
-            ISimplePath simplePath = contours[c];
-            ReadOnlySpan<PointF> points = simplePath.Points.Span;
-            int segmentCount = simplePath.IsClosed ? points.Length : points.Length - 1;
-            for (int j = 0; j < segmentCount; j++)
+            PreparedLineSegment segment = segments[i];
+            PointF p0 = segment.P0;
+            PointF p1 = segment.P1;
+            float fx0 = (p0.X - interestX) + samplingOffsetX;
+            float fy0 = (p0.Y - interestY) + samplingOffsetY;
+            float fx1 = (p1.X - interestX) + samplingOffsetX;
+            float fy1 = (p1.Y - interestY) + samplingOffsetY;
+
+            int x0 = (int)MathF.Round(fx0 * FixedOne);
+            int y0 = (int)MathF.Round(fy0 * FixedOne);
+            int x1 = (int)MathF.Round(fx1 * FixedOne);
+            int y1 = (int)MathF.Round(fy1 * FixedOne);
+            if (y0 == y1)
             {
-                PointF p0 = points[j];
-                PointF p1 = points[j + 1 == points.Length ? 0 : j + 1];
-                float fx0 = (p0.X - interestX) + samplingOffsetX;
-                float fy0 = (p0.Y - interestY) + samplingOffsetY;
-                float fx1 = (p1.X - interestX) + samplingOffsetX;
-                float fy1 = (p1.Y - interestY) + samplingOffsetY;
+                continue;
+            }
 
-                int x0 = (int)MathF.Round(fx0 * FixedOne);
-                int y0 = (int)MathF.Round(fy0 * FixedOne);
-                int x1 = (int)MathF.Round(fx1 * FixedOne);
-                int y1 = (int)MathF.Round(fy1 * FixedOne);
-                if (y0 == y1)
-                {
-                    continue;
-                }
+            int yMinFixed = Math.Min(y0, y1);
+            int yMaxFixed = Math.Max(y0, y1);
+            int minRow = Math.Max(0, yMinFixed >> FixedShift);
+            int maxRow = Math.Min(height - 1, (yMaxFixed - 1) >> FixedShift);
 
-                int yMinFixed = Math.Min(y0, y1);
-                int yMaxFixed = Math.Max(y0, y1);
-                int minRow = Math.Max(0, yMinFixed >> FixedShift);
-                int maxRow = Math.Min(height - 1, (yMaxFixed - 1) >> FixedShift);
+            if (minRow > maxRow)
+            {
+                continue;
+            }
 
-                if (minRow > maxRow)
-                {
-                    continue;
-                }
-
-                GpuEdge edge = new() { X0 = x0, Y0 = y0, X1 = x1, Y1 = y1 };
-                int minBand = minRow / TileHeight;
-                int maxBand = maxRow / TileHeight;
-                for (int band = minBand; band <= maxBand; band++)
-                {
-                    finalSpan[(int)(offsets[band] + writeCursors[band])] = edge;
-                    writeCursors[band]++;
-                }
+            GpuEdge edge = new() { X0 = x0, Y0 = y0, X1 = x1, Y1 = y1 };
+            int minBand = minRow / TileHeight;
+            int maxBand = maxRow / TileHeight;
+            for (int band = minBand; band <= maxBand; band++)
+            {
+                finalSpan[(int)(offsets[band] + writeCursors[band])] = edge;
+                writeCursors[band]++;
             }
         }
 

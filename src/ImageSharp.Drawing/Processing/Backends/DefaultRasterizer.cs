@@ -43,6 +43,126 @@ internal static class DefaultRasterizer
     private const float CoverageScale = 1F / CoverageStepCount;
 
     /// <summary>
+    /// Gets the preferred scene row height used by the CPU rasterizer.
+    /// </summary>
+    internal static int PreferredRowHeight => DefaultTileHeight;
+
+    /// <summary>
+    /// Builds the edge table for a path without rasterizing.
+    /// This does the expensive work — <see cref="IPath.Flatten"/> and <see cref="BuildEdgeTable"/> —
+    /// so it can be called in parallel across many geometries.
+    /// </summary>
+    internal static PrebuiltEdgeTable PreBuildEdgeTable(
+        PreparedGeometry geometry,
+        in RasterizerOptions options,
+        MemoryAllocator allocator)
+        => PreBuildEdgeTable(geometry, 0, 0, options, allocator);
+
+    internal static PrebuiltEdgeTable PreBuildEdgeTable(
+        PreparedGeometry geometry,
+        int translateX,
+        int translateY,
+        in RasterizerOptions options,
+        MemoryAllocator allocator)
+    {
+        Rectangle interest = options.Interest;
+        int width = interest.Width;
+        int height = interest.Height;
+        if (width <= 0 || height <= 0)
+        {
+            return default;
+        }
+
+        bool samplePixelCenter = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter;
+        float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
+        float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
+
+        int totalSegments = geometry.SegmentCount;
+        if (totalSegments == 0)
+        {
+            return default;
+        }
+
+        IMemoryOwner<EdgeData> edgeDataOwner = allocator.Allocate<EdgeData>(totalSegments);
+        int edgeCount = BuildEdgeTable(
+            geometry.Segments,
+            interest.Left,
+            interest.Top,
+            height,
+            samplingOffsetX,
+            samplingOffsetY,
+            translateX,
+            translateY,
+            edgeDataOwner.Memory.Span);
+
+        if (edgeCount <= 0)
+        {
+            edgeDataOwner.Dispose();
+            return default;
+        }
+
+        int wordsPerRow = BitVectorsForMaxBitCount(width);
+        long coverStride = (long)width * 2;
+        if (coverStride > int.MaxValue)
+        {
+            edgeDataOwner.Dispose();
+            ThrowInterestBoundsTooLarge();
+        }
+
+        int tileHeight = DefaultTileHeight;
+        int firstBandIndex = FloorDiv(interest.Top, tileHeight);
+        int lastBandIndex = FloorDiv(interest.Bottom - 1, tileHeight);
+        int tileCount = (lastBandIndex - firstBandIndex) + 1;
+        int bandTopStart = (firstBandIndex * tileHeight) - interest.Top;
+
+        // Sort edges into per-tile-row buckets (same boundaries as the internal rasterizer).
+        IMemoryOwner<EdgeData>? tileSortedEdgesOwner = null;
+        IMemoryOwner<int>? tileOffsetsOwner = null;
+        if (tileCount > 1 && edgeCount > 0)
+        {
+            if (!TryBuildBandSortedEdges(
+                edgeDataOwner.Memory.Span[..edgeCount],
+                tileCount,
+                tileHeight,
+                bandTopStart,
+                allocator,
+                out tileSortedEdgesOwner,
+                out tileOffsetsOwner))
+            {
+                // Fallback: treat as single tile.
+                tileCount = 1;
+            }
+        }
+
+        return new PrebuiltEdgeTable
+        {
+            EdgeDataOwner = edgeDataOwner,
+            EdgeCount = edgeCount,
+            TileSortedEdgesOwner = tileSortedEdgesOwner,
+            TileOffsetsOwner = tileOffsetsOwner,
+            TileCount = tileCount,
+            TileHeight = tileHeight,
+            BandTopStart = bandTopStart,
+            Width = width,
+            Height = height,
+            InterestTop = interest.Top,
+            WordsPerRow = wordsPerRow,
+            CoverStride = (int)coverStride,
+            IntersectionRule = options.IntersectionRule,
+            RasterizationMode = options.RasterizationMode == RasterizationMode.Antialiased
+                ? RasterizationMode.Antialiased
+                : RasterizationMode.Aliased,
+            AntialiasThreshold = options.AntialiasThreshold,
+        };
+    }
+
+    internal static PrebuiltEdgeTable PreBuildEdgeTable(
+        IPath path,
+        in RasterizerOptions options,
+        MemoryAllocator allocator)
+        => PreBuildEdgeTable(PreparedGeometry.Create(path), options, allocator);
+
+    /// <summary>
     /// Rasterizes the path into trimmed coverage rows using the default execution policy.
     /// </summary>
     /// <param name="path">Path to rasterize.</param>
@@ -55,14 +175,22 @@ internal static class DefaultRasterizer
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler)
     {
-        WorkerScratch? scratch = null;
+        PrebuiltEdgeTable prebuilt = PreBuildEdgeTable(PreparedGeometry.Create(path), options, allocator);
         try
         {
-            RasterizeCoreRows(path, options, allocator, rowHandler, allowParallel: true, ref scratch);
+            WorkerScratch? scratch = null;
+            try
+            {
+                RasterizeCoreRows(in prebuilt, options, allocator, rowHandler, allowParallel: true, ref scratch);
+            }
+            finally
+            {
+                scratch?.Dispose();
+            }
         }
         finally
         {
-            scratch?.Dispose();
+            prebuilt.Dispose();
         }
     }
 
@@ -86,7 +214,522 @@ internal static class DefaultRasterizer
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler,
         ref WorkerScratch? reusableScratch)
-        => RasterizeCoreRows(path, options, allocator, rowHandler, allowParallel: true, ref reusableScratch);
+    {
+        PrebuiltEdgeTable prebuilt = PreBuildEdgeTable(PreparedGeometry.Create(path), options, allocator);
+        try
+        {
+            RasterizeCoreRows(in prebuilt, options, allocator, rowHandler, allowParallel: true, ref reusableScratch);
+        }
+        finally
+        {
+            prebuilt.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Rasterizes pre-built edges into trimmed coverage rows, reusing caller-managed scratch buffers.
+    /// </summary>
+    internal static void RasterizeRows(
+        in PrebuiltEdgeTable prebuilt,
+        in RasterizerOptions options,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch)
+        => RasterizeCoreRows(in prebuilt, options, allocator, rowHandler, allowParallel: true, ref reusableScratch);
+
+    /// <summary>
+    /// Rasterizes a single prebuilt tile-row band into trimmed coverage rows.
+    /// </summary>
+    internal static void RasterizeBandRows(
+        in PrebuiltEdgeTable prebuilt,
+        int bandIndex,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch)
+    {
+        if (prebuilt.EdgeCount <= 0 || prebuilt.EdgeDataOwner is null || bandIndex < 0)
+        {
+            return;
+        }
+
+        int bandCapacity = prebuilt.TileCount > 1 ? prebuilt.TileHeight : prebuilt.Height;
+        if (bandCapacity <= 0)
+        {
+            return;
+        }
+
+        int bandTop;
+        int bandHeight;
+        ReadOnlySpan<EdgeData> bandEdges;
+        if (prebuilt.TileSortedEdgesOwner is not null &&
+            prebuilt.TileOffsetsOwner is not null &&
+            prebuilt.TileCount > 1)
+        {
+            if (bandIndex >= prebuilt.TileCount)
+            {
+                return;
+            }
+
+            ReadOnlySpan<int> bandOffsets = prebuilt.TileOffsetsOwner.Memory.Span;
+            int start = bandOffsets[bandIndex];
+            int length = bandOffsets[bandIndex + 1] - start;
+            if (length <= 0)
+            {
+                return;
+            }
+
+            bandTop = prebuilt.BandTopStart + (bandIndex * prebuilt.TileHeight);
+            bandHeight = prebuilt.TileHeight;
+            bandEdges = prebuilt.TileSortedEdgesOwner.Memory.Span.Slice(start, length);
+        }
+        else
+        {
+            if (bandIndex != 0)
+            {
+                return;
+            }
+
+            bandTop = 0;
+            bandHeight = prebuilt.Height;
+            bandEdges = prebuilt.EdgeDataOwner.Memory.Span[..prebuilt.EdgeCount];
+        }
+
+        if (bandHeight <= 0)
+        {
+            return;
+        }
+
+        if (reusableScratch == null ||
+            !reusableScratch.CanReuse(prebuilt.WordsPerRow, prebuilt.CoverStride, prebuilt.Width, bandCapacity))
+        {
+            reusableScratch?.Dispose();
+            reusableScratch = WorkerScratch.Create(
+                allocator,
+                prebuilt.WordsPerRow,
+                prebuilt.CoverStride,
+                prebuilt.Width,
+                bandCapacity);
+        }
+
+        WorkerScratch scratch = reusableScratch;
+        Context context = scratch.CreateContext(
+            prebuilt.Width,
+            prebuilt.WordsPerRow,
+            prebuilt.CoverStride,
+            bandHeight,
+            prebuilt.IntersectionRule,
+            prebuilt.RasterizationMode,
+            prebuilt.AntialiasThreshold);
+        context.RasterizeEdgeTable(bandEdges, bandTop);
+        context.EmitCoverageRows(prebuilt.InterestTop + bandTop, scratch.Scanline, rowHandler);
+        context.ResetTouchedRows();
+    }
+
+    /// <summary>
+    /// Rasterizes one geometry row-band directly from prepared geometry without a prebuilt edge table.
+    /// </summary>
+    internal static void RasterizeGeometryBandRows(
+        PreparedGeometry geometry,
+        ReadOnlySpan<int> bandSegmentIndices,
+        int translateX,
+        int translateY,
+        in RasterizerOptions options,
+        int bandIndex,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch,
+        ref EdgeScratch? reusableEdgeScratch)
+    {
+        if (!TryBuildGeometryBand(
+            geometry,
+            bandSegmentIndices,
+            translateX,
+            translateY,
+            in options,
+            bandIndex,
+            allocator,
+            ref reusableEdgeScratch,
+            out GeometryBand geometryBand))
+        {
+            return;
+        }
+
+        RasterizeBuiltGeometryBand(in geometryBand, allocator, rowHandler, ref reusableScratch);
+    }
+
+    internal static bool TryBuildRasterizableBand(
+        PreparedGeometry geometry,
+        ReadOnlySpan<int> bandSegmentIndices,
+        int translateX,
+        int translateY,
+        in RasterizerOptions options,
+        int bandIndex,
+        Span<RasterLineData> lineDestination,
+        Span<int> startCoverDestination,
+        out RasterizableBandInfo rasterizableBandInfo)
+    {
+        Rectangle interest = options.Interest;
+        int width = interest.Width;
+        int height = interest.Height;
+        if (width <= 0 || height <= 0 || bandSegmentIndices.Length == 0 || bandIndex < 0)
+        {
+            rasterizableBandInfo = default;
+            return false;
+        }
+
+        int tileHeight = DefaultTileHeight;
+        int firstBandIndex = FloorDiv(interest.Top, tileHeight);
+        int lastBandIndex = FloorDiv(interest.Bottom - 1, tileHeight);
+        int tileCount = (lastBandIndex - firstBandIndex) + 1;
+        if ((uint)bandIndex >= (uint)tileCount)
+        {
+            rasterizableBandInfo = default;
+            return false;
+        }
+
+        int bandTopStart = (firstBandIndex * tileHeight) - interest.Top;
+        int bandTop = bandTopStart + (bandIndex * tileHeight);
+        int bandHeight = tileHeight;
+        if (startCoverDestination.Length < bandHeight || lineDestination.Length < bandSegmentIndices.Length)
+        {
+            ThrowGeometryBandEdgeBufferTooSmall();
+        }
+
+        int wordsPerRow = BitVectorsForMaxBitCount(width);
+        long coverStrideLong = (long)width * 2;
+        if (coverStrideLong > int.MaxValue)
+        {
+            ThrowInterestBoundsTooLarge();
+        }
+
+        int coverStride = (int)coverStrideLong;
+        bool samplePixelCenter = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter;
+        float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
+        float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
+        float clipTop = MathF.Max(0F, bandTop);
+        float clipBottom = MathF.Min(height, bandTop + bandHeight);
+        if (clipBottom <= clipTop)
+        {
+            rasterizableBandInfo = default;
+            return false;
+        }
+
+        Span<int> startCovers = startCoverDestination[..bandHeight];
+        startCovers.Clear();
+        Span<int> rowMinTouchedColumn = stackalloc int[tileHeight];
+        Span<int> rowMaxTouchedColumn = stackalloc int[tileHeight];
+        Span<byte> rowHasBits = stackalloc byte[tileHeight];
+        Span<byte> rowTouched = stackalloc byte[tileHeight];
+        Span<int> touchedRows = stackalloc int[tileHeight];
+        Context startCoverContext = new(
+            [],
+            [],
+            startCovers,
+            rowMinTouchedColumn,
+            rowMaxTouchedColumn,
+            rowHasBits,
+            rowTouched,
+            touchedRows,
+            width: 0,
+            height: bandHeight,
+            wordsPerRow: 0,
+            coverStride: 0,
+            IntersectionRule.NonZero,
+            RasterizationMode.Antialiased,
+            antialiasThreshold: 0F);
+
+        int maxVisibleX = width * FixedOne;
+        int lineCount = 0;
+        ReadOnlySpan<PreparedLineSegment> segments = geometry.Segments;
+        for (int i = 0; i < bandSegmentIndices.Length; i++)
+        {
+            PreparedLineSegment segment = segments[bandSegmentIndices[i]];
+            PointF p0 = segment.P0;
+            PointF p1 = segment.P1;
+
+            float x0 = ((p0.X + translateX) - interest.Left) + samplingOffsetX;
+            float y0 = ((p0.Y + translateY) - interest.Top) + samplingOffsetY;
+            float x1 = ((p1.X + translateX) - interest.Left) + samplingOffsetX;
+            float y1 = ((p1.Y + translateY) - interest.Top) + samplingOffsetY;
+            if (!float.IsFinite(x0) || !float.IsFinite(y0) || !float.IsFinite(x1) || !float.IsFinite(y1))
+            {
+                continue;
+            }
+
+            if (!ClipToVerticalBounds(ref x0, ref y0, ref x1, ref y1, clipTop, clipBottom))
+            {
+                continue;
+            }
+
+            int fx0 = FloatToFixed24Dot8(x0);
+            int fy0 = FloatToFixed24Dot8(y0 - bandTop);
+            int fx1 = FloatToFixed24Dot8(x1);
+            int fy1 = FloatToFixed24Dot8(y1 - bandTop);
+            if (fy0 == fy1)
+            {
+                continue;
+            }
+
+            int minX = Math.Min(fx0, fx1);
+            int maxX = Math.Max(fx0, fx1);
+            if (minX < 0)
+            {
+                startCoverContext.RasterizeLineSegment(fx0, fy0, fx1, fy1);
+            }
+
+            if (maxX < 0 || minX > maxVisibleX)
+            {
+                continue;
+            }
+
+            int clippedX0 = fx0;
+            int clippedY0 = fy0;
+            int clippedX1 = fx1;
+            int clippedY1 = fy1;
+            if (!ClipToHorizontalBoundsFixed(ref clippedX0, ref clippedY0, ref clippedX1, ref clippedY1, 0, maxVisibleX))
+            {
+                continue;
+            }
+
+            if (clippedY0 == clippedY1)
+            {
+                continue;
+            }
+
+            lineDestination[lineCount++] = new RasterLineData(clippedX0, clippedY0, clippedX1, clippedY1);
+        }
+
+        bool hasStartCovers = false;
+        for (int i = 0; i < bandHeight; i++)
+        {
+            if (startCovers[i] != 0)
+            {
+                hasStartCovers = true;
+                break;
+            }
+        }
+
+        if (lineCount <= 0 && !hasStartCovers)
+        {
+            rasterizableBandInfo = default;
+            return false;
+        }
+
+        RasterizationMode rasterizationMode = options.RasterizationMode == RasterizationMode.Antialiased
+            ? RasterizationMode.Antialiased
+            : RasterizationMode.Aliased;
+        rasterizableBandInfo = new RasterizableBandInfo(
+            lineCount,
+            bandHeight,
+            width,
+            wordsPerRow,
+            coverStride,
+            interest.Top + bandTop,
+            options.IntersectionRule,
+            rasterizationMode,
+            options.AntialiasThreshold,
+            hasStartCovers);
+        return true;
+    }
+
+    internal static bool TryBuildGeometryBand(
+        PreparedGeometry geometry,
+        ReadOnlySpan<int> bandSegmentIndices,
+        int translateX,
+        int translateY,
+        in RasterizerOptions options,
+        int bandIndex,
+        Span<EdgeData> edgeDestination,
+        out GeometryBandInfo geometryBandInfo)
+    {
+        Rectangle interest = options.Interest;
+        int width = interest.Width;
+        int height = interest.Height;
+        if (width <= 0 || height <= 0 || bandSegmentIndices.Length == 0 || bandIndex < 0)
+        {
+            geometryBandInfo = default;
+            return false;
+        }
+
+        if (edgeDestination.Length < bandSegmentIndices.Length)
+        {
+            ThrowGeometryBandEdgeBufferTooSmall();
+        }
+
+        int tileHeight = DefaultTileHeight;
+        int firstBandIndex = FloorDiv(interest.Top, tileHeight);
+        int lastBandIndex = FloorDiv(interest.Bottom - 1, tileHeight);
+        int tileCount = (lastBandIndex - firstBandIndex) + 1;
+        if ((uint)bandIndex >= (uint)tileCount)
+        {
+            geometryBandInfo = default;
+            return false;
+        }
+
+        int bandTopStart = (firstBandIndex * tileHeight) - interest.Top;
+        int bandTop = bandTopStart + (bandIndex * tileHeight);
+        int bandHeight = tileHeight;
+        int wordsPerRow = BitVectorsForMaxBitCount(width);
+        long coverStrideLong = (long)width * 2;
+        if (coverStrideLong > int.MaxValue)
+        {
+            ThrowInterestBoundsTooLarge();
+        }
+
+        int coverStride = (int)coverStrideLong;
+
+        bool samplePixelCenter = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter;
+        float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
+        float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
+
+        int edgeCount = BuildBandEdgeTable(
+            geometry.Segments,
+            bandSegmentIndices,
+            interest.Left,
+            interest.Top,
+            height,
+            samplingOffsetX,
+            samplingOffsetY,
+            translateX,
+            translateY,
+            bandTop,
+            bandHeight,
+            edgeDestination);
+
+        if (edgeCount <= 0)
+        {
+            geometryBandInfo = default;
+            return false;
+        }
+
+        RasterizationMode rasterizationMode = options.RasterizationMode == RasterizationMode.Antialiased
+            ? RasterizationMode.Antialiased
+            : RasterizationMode.Aliased;
+        geometryBandInfo = new GeometryBandInfo(
+            edgeCount,
+            width,
+            wordsPerRow,
+            coverStride,
+            bandHeight,
+            interest.Top + bandTop,
+            options.IntersectionRule,
+            rasterizationMode,
+            options.AntialiasThreshold);
+        return true;
+    }
+
+    internal static bool TryBuildGeometryBand(
+        PreparedGeometry geometry,
+        ReadOnlySpan<int> bandSegmentIndices,
+        int translateX,
+        int translateY,
+        in RasterizerOptions options,
+        int bandIndex,
+        MemoryAllocator allocator,
+        ref EdgeScratch? reusableEdgeScratch,
+        out GeometryBand geometryBand)
+    {
+        Rectangle interest = options.Interest;
+        int width = interest.Width;
+        int height = interest.Height;
+        if (width <= 0 || height <= 0 || bandSegmentIndices.Length == 0 || bandIndex < 0)
+        {
+            geometryBand = default;
+            return false;
+        }
+
+        reusableEdgeScratch ??= new EdgeScratch();
+        Span<EdgeData> edgeBuffer = reusableEdgeScratch.GetBuffer(allocator, bandSegmentIndices.Length);
+        if (!TryBuildGeometryBand(
+            geometry,
+            bandSegmentIndices,
+            translateX,
+            translateY,
+            in options,
+            bandIndex,
+            edgeBuffer,
+            out GeometryBandInfo geometryBandInfo))
+        {
+            geometryBand = default;
+            return false;
+        }
+
+        geometryBand = geometryBandInfo.CreateGeometryBand(edgeBuffer);
+        return true;
+    }
+
+    internal static void RasterizeBuiltGeometryBand(
+        in GeometryBand geometryBand,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch)
+    {
+        if (reusableScratch == null ||
+            !reusableScratch.CanReuse(
+                geometryBand.WordsPerRow,
+                geometryBand.CoverStride,
+                geometryBand.Width,
+                geometryBand.BandHeight))
+        {
+            reusableScratch?.Dispose();
+            reusableScratch = WorkerScratch.Create(
+                allocator,
+                geometryBand.WordsPerRow,
+                geometryBand.CoverStride,
+                geometryBand.Width,
+                geometryBand.BandHeight);
+        }
+
+        WorkerScratch scratch = reusableScratch;
+        Context context = scratch.CreateContext(
+            geometryBand.Width,
+            geometryBand.WordsPerRow,
+            geometryBand.CoverStride,
+            geometryBand.BandHeight,
+            geometryBand.IntersectionRule,
+            geometryBand.RasterizationMode,
+            geometryBand.AntialiasThreshold);
+        ExecuteBuiltGeometryBand(ref context, in geometryBand, scratch.Scanline, rowHandler);
+    }
+
+    internal static void ExecuteBuiltGeometryBand(
+        ref Context context,
+        in GeometryBand geometryBand,
+        Span<float> scanline,
+        RasterizerCoverageRowHandler rowHandler)
+    {
+        context.Reconfigure(
+            geometryBand.Width,
+            geometryBand.WordsPerRow,
+            geometryBand.CoverStride,
+            geometryBand.BandHeight,
+            geometryBand.IntersectionRule,
+            geometryBand.RasterizationMode,
+            geometryBand.AntialiasThreshold);
+        context.RasterizeEdgeTable(geometryBand.Edges, bandTop: 0);
+        context.EmitCoverageRows(geometryBand.DestinationTop, scanline, rowHandler);
+        context.ResetTouchedRows();
+    }
+
+    internal static void ExecuteRasterizableBand(
+        ref Context context,
+        in RasterizableBand rasterizableBand,
+        Span<float> scanline,
+        RasterizerCoverageRowHandler rowHandler)
+    {
+        context.Reconfigure(
+            rasterizableBand.Width,
+            rasterizableBand.WordsPerRow,
+            rasterizableBand.CoverStride,
+            rasterizableBand.BandHeight,
+            rasterizableBand.IntersectionRule,
+            rasterizableBand.RasterizationMode,
+            rasterizableBand.AntialiasThreshold);
+        context.SeedStartCovers(rasterizableBand.StartCovers);
+        context.RasterizePreparedLines(rasterizableBand.Lines);
+        context.EmitCoverageRows(rasterizableBand.DestinationTop, scanline, rowHandler);
+        context.ResetTouchedRows();
+    }
 
     /// <summary>
     /// Rasterizes the path into trimmed coverage rows using forced sequential execution.
@@ -101,14 +744,22 @@ internal static class DefaultRasterizer
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler)
     {
-        WorkerScratch? scratch = null;
+        PrebuiltEdgeTable prebuilt = PreBuildEdgeTable(PreparedGeometry.Create(path), options, allocator);
         try
         {
-            RasterizeCoreRows(path, options, allocator, rowHandler, allowParallel: false, ref scratch);
+            WorkerScratch? scratch = null;
+            try
+            {
+                RasterizeCoreRows(in prebuilt, options, allocator, rowHandler, allowParallel: false, ref scratch);
+            }
+            finally
+            {
+                scratch?.Dispose();
+            }
         }
         finally
         {
-            scratch?.Dispose();
+            prebuilt.Dispose();
         }
     }
 
@@ -160,27 +811,21 @@ internal static class DefaultRasterizer
         => RasterizeStrokeCoreRows(path, options, allocator, rowHandler, allowParallel: true, ref reusableScratch, strokeWidth, lineJoin, lineCap, miterLimit);
 
     /// <summary>
-    /// Shared entry point for trimmed-row rasterization.
+    /// Shared entry point for trimmed-row rasterization using pre-built edges.
     /// </summary>
-    /// <param name="path">Path to rasterize.</param>
-    /// <param name="options">Rasterization options.</param>
-    /// <param name="allocator">Temporary buffer allocator.</param>
-    /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
-    /// <param name="allowParallel">
-    /// If <see langword="true"/>, the scanner may use parallel tiled execution when profitable.
-    /// </param>
-    /// <param name="reusableScratch">
-    /// Caller-managed scratch for the sequential path. Updated in place when a new scratch is
-    /// created or when an existing scratch is incompatible and replaced.
-    /// </param>
     private static void RasterizeCoreRows(
-        IPath path,
+        in PrebuiltEdgeTable prebuilt,
         in RasterizerOptions options,
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler,
         bool allowParallel,
         ref WorkerScratch? reusableScratch)
     {
+        if (prebuilt.EdgeCount <= 0 || prebuilt.EdgeDataOwner is null)
+        {
+            return;
+        }
+
         Rectangle interest = options.Interest;
         int width = interest.Width;
         int height = interest.Height;
@@ -198,54 +843,11 @@ internal static class DefaultRasterizer
         }
 
         int coverStrideInt = (int)coverStride;
-        bool samplePixelCenter = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter;
-        float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
-        float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
-
-        IEnumerable<ISimplePath> flattened = path.Flatten();
-        IReadOnlyList<ISimplePath> contours = flattened is IReadOnlyList<ISimplePath> list
-            ? list
-            : [.. flattened];
-
-        int totalSegments = 0;
-        for (int i = 0; i < contours.Count; i++)
-        {
-            ISimplePath sp = contours[i];
-            totalSegments += sp.IsClosed ? sp.Points.Length : sp.Points.Length - 1;
-        }
-
-        if (totalSegments == 0)
-        {
-            return;
-        }
-
-        using IMemoryOwner<EdgeData> edgeDataOwner = allocator.Allocate<EdgeData>(totalSegments);
-        int edgeCount = BuildEdgeTable(
-            contours,
-            interest.Left,
-            interest.Top,
-            height,
-            samplingOffsetX,
-            samplingOffsetY,
-            edgeDataOwner.Memory.Span);
-        if (edgeCount <= 0)
-        {
-            return;
-        }
 
         if (allowParallel &&
             TryRasterizeParallel(
-                edgeDataOwner.Memory,
-                edgeCount,
-                width,
-                height,
-                interest.Top,
-                wordsPerRow,
-                coverStrideInt,
+                in prebuilt,
                 maxBandRows,
-                options.IntersectionRule,
-                options.RasterizationMode,
-                options.AntialiasThreshold,
                 allocator,
                 rowHandler,
                 ref reusableScratch))
@@ -254,16 +856,8 @@ internal static class DefaultRasterizer
         }
 
         RasterizeSequentialBands(
-            edgeDataOwner.Memory.Span[..edgeCount],
-            width,
-            height,
-            interest.Top,
-            wordsPerRow,
-            coverStrideInt,
+            in prebuilt,
             maxBandRows,
-            options.IntersectionRule,
-            options.RasterizationMode,
-            options.AntialiasThreshold,
             allocator,
             rowHandler,
             ref reusableScratch);
@@ -394,18 +988,8 @@ internal static class DefaultRasterizer
     /// <summary>
     /// Sequential implementation using band buckets over the prebuilt edge table.
     /// </summary>
-    /// <param name="edges">Prebuilt edges in scanner-local coordinates.</param>
-    /// <param name="width">Destination width in pixels.</param>
-    /// <param name="height">Destination height in pixels.</param>
-    /// <param name="interestTop">Absolute top Y of the interest rectangle.</param>
-    /// <param name="wordsPerRow">Bit-vector words per row.</param>
-    /// <param name="coverStrideInt">Cover-area stride in ints.</param>
+    /// <param name="prebuilt">Prebuilt edge table and optional tile buckets.</param>
     /// <param name="maxBandRows">Maximum rows per reusable scratch band.</param>
-    /// <param name="intersectionRule">Fill rule.</param>
-    /// <param name="rasterizationMode">Coverage mode (AA or aliased).</param>
-    /// <param name="antialiasThreshold">
-    /// Antialiasing threshold in [0, 1] when <paramref name="rasterizationMode"/> is AA.
-    /// </param>
     /// <param name="allocator">Temporary buffer allocator.</param>
     /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
     /// <param name="reusableScratch">
@@ -413,6 +997,55 @@ internal static class DefaultRasterizer
     /// The caller owns the lifetime and must dispose after the last use.
     /// </param>
     private static void RasterizeSequentialBands(
+        in PrebuiltEdgeTable prebuilt,
+        int maxBandRows,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch)
+    {
+        if (prebuilt.TileSortedEdgesOwner is not null &&
+            prebuilt.TileOffsetsOwner is not null &&
+            prebuilt.TileCount > 1 &&
+            prebuilt.TileHeight <= maxBandRows)
+        {
+            RasterizeSequentialBandsFromBuckets(
+                prebuilt.TileSortedEdgesOwner.Memory.Span,
+                prebuilt.TileOffsetsOwner.Memory.Span,
+                prebuilt.TileCount,
+                prebuilt.TileHeight,
+                prebuilt.BandTopStart,
+                prebuilt.Width,
+                prebuilt.Height,
+                prebuilt.InterestTop,
+                prebuilt.WordsPerRow,
+                prebuilt.CoverStride,
+                prebuilt.IntersectionRule,
+                prebuilt.RasterizationMode,
+                prebuilt.AntialiasThreshold,
+                allocator,
+                rowHandler,
+                ref reusableScratch);
+
+            return;
+        }
+
+        RasterizeSequentialBandsFromRawEdges(
+            prebuilt.EdgeDataOwner!.Memory.Span[..prebuilt.EdgeCount],
+            prebuilt.Width,
+            prebuilt.Height,
+            prebuilt.InterestTop,
+            prebuilt.WordsPerRow,
+            prebuilt.CoverStride,
+            maxBandRows,
+            prebuilt.IntersectionRule,
+            prebuilt.RasterizationMode,
+            prebuilt.AntialiasThreshold,
+            allocator,
+            rowHandler,
+            ref reusableScratch);
+    }
+
+    private static void RasterizeSequentialBandsFromRawEdges(
         ReadOnlySpan<EdgeData> edges,
         int width,
         int height,
@@ -438,6 +1071,7 @@ internal static class DefaultRasterizer
             edges,
             bandCount,
             bandHeight,
+            0,
             allocator,
             out IMemoryOwner<EdgeData> sortedEdgesOwner,
             out IMemoryOwner<int> bandOffsetsOwner))
@@ -448,53 +1082,31 @@ internal static class DefaultRasterizer
         using (sortedEdgesOwner)
         using (bandOffsetsOwner)
         {
-            Span<EdgeData> sortedEdges = sortedEdgesOwner.Memory.Span;
-            Span<int> bandOffsets = bandOffsetsOwner.Memory.Span;
-
-            // Reuse the caller-provided scratch when dimensions match; create a new one otherwise.
-            if (reusableScratch == null || !reusableScratch.CanReuse(wordsPerRow, coverStrideInt, width, bandHeight))
-            {
-                reusableScratch?.Dispose();
-                reusableScratch = WorkerScratch.Create(allocator, wordsPerRow, coverStrideInt, width, bandHeight);
-            }
-
-            WorkerScratch scratch = reusableScratch;
-            for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
-            {
-                int bandTop = bandIndex * bandHeight;
-                int currentBandHeight = Math.Min(bandHeight, height - bandTop);
-                int start = bandOffsets[bandIndex];
-                int length = bandOffsets[bandIndex + 1] - start;
-                if (length == 0)
-                {
-                    // No edge crosses this band, so there is nothing to rasterize or clear.
-                    continue;
-                }
-
-                Context context = scratch.CreateContext(currentBandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
-                context.RasterizeEdgeTable(sortedEdges.Slice(start, length), bandTop);
-                context.EmitCoverageRows(interestTop + bandTop, scratch.Scanline, rowHandler);
-                context.ResetTouchedRows();
-            }
+            RasterizeSequentialBandsFromBuckets(
+                sortedEdgesOwner.Memory.Span,
+                bandOffsetsOwner.Memory.Span,
+                bandCount,
+                bandHeight,
+                0,
+                width,
+                height,
+                interestTop,
+                wordsPerRow,
+                coverStrideInt,
+                intersectionRule,
+                rasterizationMode,
+                antialiasThreshold,
+                allocator,
+                rowHandler,
+                ref reusableScratch);
         }
     }
 
     /// <summary>
     /// Attempts to execute the tiled parallel scanner.
     /// </summary>
-    /// <param name="edgeMemory">Memory block containing prebuilt edges.</param>
-    /// <param name="edgeCount">Number of valid edges in <paramref name="edgeMemory"/>.</param>
-    /// <param name="width">Destination width in pixels.</param>
-    /// <param name="height">Destination height in pixels.</param>
-    /// <param name="interestTop">Absolute top Y of the interest rectangle.</param>
-    /// <param name="wordsPerRow">Bit-vector words per row.</param>
-    /// <param name="coverStride">Cover-area stride in ints.</param>
+    /// <param name="prebuilt">Prebuilt edge table and optional tile buckets.</param>
     /// <param name="maxBandRows">Maximum rows per worker scratch context.</param>
-    /// <param name="intersectionRule">Fill rule.</param>
-    /// <param name="rasterizationMode">Coverage mode (AA or aliased).</param>
-    /// <param name="antialiasThreshold">
-    /// Antialiasing threshold in [0, 1] when <paramref name="rasterizationMode"/> is AA.
-    /// </param>
     /// <param name="allocator">Temporary buffer allocator.</param>
     /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
     /// <param name="reusableScratch">Caller-managed scratch. Reused when compatible; replaced and updated in place otherwise.</param>
@@ -503,35 +1115,37 @@ internal static class DefaultRasterizer
     /// <see langword="false"/> when the caller should run sequential fallback.
     /// </returns>
     private static bool TryRasterizeParallel(
-        Memory<EdgeData> edgeMemory,
-        int edgeCount,
-        int width,
-        int height,
-        int interestTop,
-        int wordsPerRow,
-        int coverStride,
+        in PrebuiltEdgeTable prebuilt,
         int maxBandRows,
-        IntersectionRule intersectionRule,
-        RasterizationMode rasterizationMode,
-        float antialiasThreshold,
         MemoryAllocator allocator,
         RasterizerCoverageRowHandler rowHandler,
         ref WorkerScratch? reusableScratch)
     {
+        int edgeCount = prebuilt.EdgeCount;
+        int width = prebuilt.Width;
+        int height = prebuilt.Height;
+        int interestTop = prebuilt.InterestTop;
+        int wordsPerRow = prebuilt.WordsPerRow;
+        int coverStride = prebuilt.CoverStride;
+        IntersectionRule intersectionRule = prebuilt.IntersectionRule;
+        RasterizationMode rasterizationMode = prebuilt.RasterizationMode;
+        float antialiasThreshold = prebuilt.AntialiasThreshold;
         int tileHeight = Math.Min(DefaultTileHeight, maxBandRows);
         if (tileHeight < 1)
         {
             return false;
         }
 
-        int tileCount = (height + tileHeight - 1) / tileHeight;
+        int tileCount = prebuilt.TileHeight == tileHeight && prebuilt.TileCount > 0
+            ? prebuilt.TileCount
+            : (height + tileHeight - 1) / tileHeight;
         if (tileCount == 1 || edgeCount <= 64)
         {
             // Small-geometry fast path: for paths with few edges (e.g. a stroked line
             // producing ~6-10 edges), iterating all edges against all rows is far cheaper
             // than the allocation overhead of band sorting + Parallel.For scheduling.
             RasterizeSingleTileDirect(
-                edgeMemory.Span[..edgeCount],
+                prebuilt.EdgeDataOwner!.Memory.Span[..edgeCount],
                 width,
                 height,
                 interestTop,
@@ -552,10 +1166,34 @@ internal static class DefaultRasterizer
             return false;
         }
 
+        if (prebuilt.TileSortedEdgesOwner is not null &&
+            prebuilt.TileOffsetsOwner is not null &&
+            prebuilt.TileHeight == tileHeight &&
+            prebuilt.TileCount == tileCount)
+        {
+            return TryRasterizeParallelBuckets(
+                prebuilt.TileSortedEdgesOwner.Memory,
+                prebuilt.TileOffsetsOwner.Memory,
+                tileCount,
+                tileHeight,
+                prebuilt.BandTopStart,
+                height,
+                interestTop,
+                wordsPerRow,
+                coverStride,
+                width,
+                intersectionRule,
+                rasterizationMode,
+                antialiasThreshold,
+                allocator,
+                rowHandler);
+        }
+
         if (!TryBuildBandSortedEdges(
-            edgeMemory.Span[..edgeCount],
+            prebuilt.EdgeDataOwner!.Memory.Span[..edgeCount],
             tileCount,
             tileHeight,
+            0,
             allocator,
             out IMemoryOwner<EdgeData> sortedEdgesOwner,
             out IMemoryOwner<int> tileOffsetsOwner))
@@ -566,53 +1204,140 @@ internal static class DefaultRasterizer
         using (sortedEdgesOwner)
         using (tileOffsetsOwner)
         {
-            Memory<EdgeData> sortedEdgesMemory = sortedEdgesOwner.Memory;
-            Memory<int> tileOffsetsMemory = tileOffsetsOwner.Memory;
-
-            ParallelOptions parallelOptions = new()
-            {
-                MaxDegreeOfParallelism = Math.Min(MaxParallelWorkerCount, Math.Min(Environment.ProcessorCount, tileCount))
-            };
-
-            _ = Parallel.For(
-                0,
+            return TryRasterizeParallelBuckets(
+                sortedEdgesOwner.Memory,
+                tileOffsetsOwner.Memory,
                 tileCount,
-                parallelOptions,
-                () => WorkerScratch.Create(allocator, wordsPerRow, coverStride, width, tileHeight),
-                (tileIndex, _, worker) =>
+                tileHeight,
+                0,
+                height,
+                interestTop,
+                wordsPerRow,
+                coverStride,
+                width,
+                intersectionRule,
+                rasterizationMode,
+                antialiasThreshold,
+                allocator,
+                rowHandler);
+        }
+    }
+
+    private static bool TryRasterizeParallelBuckets(
+        Memory<EdgeData> sortedEdgesMemory,
+        Memory<int> tileOffsetsMemory,
+        int tileCount,
+        int tileHeight,
+        int bandTopStart,
+        int height,
+        int interestTop,
+        int wordsPerRow,
+        int coverStride,
+        int width,
+        IntersectionRule intersectionRule,
+        RasterizationMode rasterizationMode,
+        float antialiasThreshold,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler)
+    {
+        ParallelOptions parallelOptions = new()
+        {
+            MaxDegreeOfParallelism = Math.Min(MaxParallelWorkerCount, Math.Min(Environment.ProcessorCount, tileCount))
+        };
+
+        _ = Parallel.For(
+            0,
+            tileCount,
+            parallelOptions,
+            () => WorkerScratch.Create(allocator, wordsPerRow, coverStride, width, tileHeight),
+            (tileIndex, _, worker) =>
+            {
+                Context context = default;
+                bool hasCoverage = false;
+                int tile = tileIndex;
+                int bandTop = bandTopStart + (tile * tileHeight);
+                try
                 {
-                    Context context = default;
-                    bool hasCoverage = false;
-                    int tile = tileIndex;
-                    int bandTop = tile * tileHeight;
-                    try
+                    Span<int> tileOffsets = tileOffsetsMemory.Span;
+                    int start = tileOffsets[tile];
+                    int length = tileOffsets[tile + 1] - start;
+                    if (length > 0)
                     {
-                        Span<int> tileOffsets = tileOffsetsMemory.Span;
-                        int bandHeight = Math.Min(tileHeight, height - bandTop);
-                        int start = tileOffsets[tile];
-                        int length = tileOffsets[tile + 1] - start;
-                        if (length > 0)
-                        {
-                            ReadOnlySpan<EdgeData> tileEdges = sortedEdgesMemory.Span.Slice(start, length);
-                            context = worker.CreateContext(bandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
-                            context.RasterizeEdgeTable(tileEdges, bandTop);
-                            hasCoverage = true;
-                            context.EmitCoverageRows(interestTop + bandTop, worker.Scanline, rowHandler);
-                        }
+                        ReadOnlySpan<EdgeData> tileEdges = sortedEdgesMemory.Span.Slice(start, length);
+                        context = worker.CreateContext(
+                            width,
+                            wordsPerRow,
+                            coverStride,
+                            tileHeight,
+                            intersectionRule,
+                            rasterizationMode,
+                            antialiasThreshold);
+                        context.RasterizeEdgeTable(tileEdges, bandTop);
+                        hasCoverage = true;
+                        context.EmitCoverageRows(interestTop + bandTop, worker.Scanline, rowHandler);
                     }
-                    finally
+                }
+                finally
+                {
+                    if (hasCoverage)
                     {
-                        if (hasCoverage)
-                        {
-                            context.ResetTouchedRows();
-                        }
+                        context.ResetTouchedRows();
                     }
+                }
 
-                    return worker;
-                },
-                static worker => worker.Dispose());
+                return worker;
+            },
+            static worker => worker.Dispose());
 
-            return true;
+        return true;
+    }
+
+    private static void RasterizeSequentialBandsFromBuckets(
+        ReadOnlySpan<EdgeData> sortedEdges,
+        ReadOnlySpan<int> bandOffsets,
+        int bandCount,
+        int bandHeight,
+        int bandTopStart,
+        int width,
+        int height,
+        int interestTop,
+        int wordsPerRow,
+        int coverStrideInt,
+        IntersectionRule intersectionRule,
+        RasterizationMode rasterizationMode,
+        float antialiasThreshold,
+        MemoryAllocator allocator,
+        RasterizerCoverageRowHandler rowHandler,
+        ref WorkerScratch? reusableScratch)
+    {
+        if (reusableScratch == null || !reusableScratch.CanReuse(wordsPerRow, coverStrideInt, width, bandHeight))
+        {
+            reusableScratch?.Dispose();
+            reusableScratch = WorkerScratch.Create(allocator, wordsPerRow, coverStrideInt, width, bandHeight);
+        }
+
+        WorkerScratch scratch = reusableScratch;
+        for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
+        {
+            int bandTop = bandTopStart + (bandIndex * bandHeight);
+            int start = bandOffsets[bandIndex];
+            int length = bandOffsets[bandIndex + 1] - start;
+            if (length == 0)
+            {
+                continue;
+            }
+
+            Context context = scratch.CreateContext(
+                width,
+                wordsPerRow,
+                coverStrideInt,
+                bandHeight,
+                intersectionRule,
+                rasterizationMode,
+                antialiasThreshold);
+            context.RasterizeEdgeTable(sortedEdges.Slice(start, length), bandTop);
+            context.EmitCoverageRows(interestTop + bandTop, scratch.Scanline, rowHandler);
+            context.ResetTouchedRows();
         }
     }
 
@@ -662,7 +1387,14 @@ internal static class DefaultRasterizer
         }
 
         WorkerScratch scratch = reusableScratch;
-        Context context = scratch.CreateContext(height, intersectionRule, rasterizationMode, antialiasThreshold);
+        Context context = scratch.CreateContext(
+            width,
+            wordsPerRow,
+            coverStride,
+            height,
+            intersectionRule,
+            rasterizationMode,
+            antialiasThreshold);
         context.RasterizeEdgeTable(edges, bandTop: 0);
         context.EmitCoverageRows(interestTop, scratch.Scanline, rowHandler);
         context.ResetTouchedRows();
@@ -734,7 +1466,14 @@ internal static class DefaultRasterizer
                     continue;
                 }
 
-                Context context = scratch.CreateContext(currentBandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
+                Context context = scratch.CreateContext(
+                    width,
+                    wordsPerRow,
+                    coverStrideInt,
+                    currentBandHeight,
+                    intersectionRule,
+                    rasterizationMode,
+                    antialiasThreshold);
                 context.RasterizeStrokeEdges(sortedEdges.Slice(start, length), bandTop, halfWidth, lineJoin, lineCap, miterLimit);
                 context.EmitCoverageRows(interestTop + bandTop, scratch.Scanline, rowHandler);
                 context.ResetTouchedRows();
@@ -843,7 +1582,14 @@ internal static class DefaultRasterizer
                         if (length > 0)
                         {
                             ReadOnlySpan<StrokeEdgeData> tileEdges = sortedEdgesMemory.Span.Slice(start, length);
-                            context = worker.CreateContext(bandHeight, intersectionRule, rasterizationMode, antialiasThreshold);
+                            context = worker.CreateContext(
+                                width,
+                                wordsPerRow,
+                                coverStride,
+                                bandHeight,
+                                intersectionRule,
+                                rasterizationMode,
+                                antialiasThreshold);
                             context.RasterizeStrokeEdges(tileEdges, bandTop, halfWidth, lineJoin, lineCap, miterLimit);
                             hasCoverage = true;
                             context.EmitCoverageRows(interestTop + bandTop, worker.Scanline, rowHandler);
@@ -893,7 +1639,14 @@ internal static class DefaultRasterizer
         }
 
         WorkerScratch scratch = reusableScratch;
-        Context context = scratch.CreateContext(height, intersectionRule, rasterizationMode, antialiasThreshold);
+        Context context = scratch.CreateContext(
+            width,
+            wordsPerRow,
+            coverStride,
+            height,
+            intersectionRule,
+            rasterizationMode,
+            antialiasThreshold);
         context.RasterizeStrokeEdges(edges, bandTop: 0, halfWidth, lineJoin, lineCap, miterLimit);
         context.EmitCoverageRows(interestTop, scratch.Scanline, rowHandler);
         context.ResetTouchedRows();
@@ -907,6 +1660,7 @@ internal static class DefaultRasterizer
         ReadOnlySpan<EdgeData> edges,
         int bucketCount,
         int bucketHeight,
+        int bandTopStart,
         MemoryAllocator allocator,
         out IMemoryOwner<EdgeData> sortedEdgesOwner,
         out IMemoryOwner<int> offsetsOwner)
@@ -919,8 +1673,8 @@ internal static class DefaultRasterizer
             ref readonly EdgeData edge = ref edges[i];
             int minRow = Math.Min(edge.Y0, edge.Y1) >> FixedShift;
             int maxRow = (Math.Max(edge.Y0, edge.Y1) - 1) >> FixedShift;
-            int startBucket = minRow / bucketHeight;
-            int endBucket = maxRow / bucketHeight;
+            int startBucket = Math.Clamp((minRow - bandTopStart) / bucketHeight, 0, bucketCount - 1);
+            int endBucket = Math.Clamp((maxRow - bandTopStart) / bucketHeight, 0, bucketCount - 1);
             totalRefs += (endBucket - startBucket) + 1;
             if (totalRefs > int.MaxValue)
             {
@@ -957,8 +1711,8 @@ internal static class DefaultRasterizer
             ref readonly EdgeData edge = ref edges[i];
             int minRow = Math.Min(edge.Y0, edge.Y1) >> FixedShift;
             int maxRow = (Math.Max(edge.Y0, edge.Y1) - 1) >> FixedShift;
-            int startBucket = minRow / bucketHeight;
-            int endBucket = maxRow / bucketHeight;
+            int startBucket = Math.Clamp((minRow - bandTopStart) / bucketHeight, 0, bucketCount - 1);
+            int endBucket = Math.Clamp((maxRow - bandTopStart) / bucketHeight, 0, bucketCount - 1);
             for (int b = startBucket; b <= endBucket; b++)
             {
                 sorted[writeCursor[b]++] = edge;
@@ -1180,60 +1934,127 @@ internal static class DefaultRasterizer
     /// <summary>
     /// Builds an edge table in scanner-local coordinates.
     /// </summary>
-    /// <param name="contours">Flattened path contours.</param>
+    /// <param name="segments">Prepared line segments.</param>
     /// <param name="minX">Interest left in absolute coordinates.</param>
     /// <param name="minY">Interest top in absolute coordinates.</param>
     /// <param name="height">Interest height in pixels.</param>
     /// <param name="samplingOffsetX">Horizontal sampling offset.</param>
     /// <param name="samplingOffsetY">Vertical sampling offset.</param>
+    /// <param name="translateX">Horizontal destination translation applied before rasterization.</param>
+    /// <param name="translateY">Vertical destination translation applied before rasterization.</param>
     /// <param name="destination">Destination span for edge records.</param>
     /// <returns>Number of valid edge records written.</returns>
     private static int BuildEdgeTable(
-        IReadOnlyList<ISimplePath> contours,
+        ReadOnlySpan<PreparedLineSegment> segments,
         int minX,
         int minY,
         int height,
         float samplingOffsetX,
         float samplingOffsetY,
+        int translateX,
+        int translateY,
         Span<EdgeData> destination)
     {
         int count = 0;
-        for (int r = 0; r < contours.Count; r++)
+        for (int i = 0; i < segments.Length; i++)
         {
-            ISimplePath contour = contours[r];
-            ReadOnlySpan<PointF> points = contour.Points.Span;
-            int segmentCount = contour.IsClosed ? points.Length : points.Length - 1;
-            for (int i = 0; i < segmentCount; i++)
+            PreparedLineSegment segment = segments[i];
+            PointF p0 = segment.P0;
+            PointF p1 = segment.P1;
+
+            float x0 = ((p0.X + translateX) - minX) + samplingOffsetX;
+            float y0 = ((p0.Y + translateY) - minY) + samplingOffsetY;
+            float x1 = ((p1.X + translateX) - minX) + samplingOffsetX;
+            float y1 = ((p1.Y + translateY) - minY) + samplingOffsetY;
+
+            if (!float.IsFinite(x0) || !float.IsFinite(y0) || !float.IsFinite(x1) || !float.IsFinite(y1))
             {
-                PointF p0 = points[i];
-                PointF p1 = points[i + 1 == points.Length ? 0 : i + 1];
-
-                float x0 = (p0.X - minX) + samplingOffsetX;
-                float y0 = (p0.Y - minY) + samplingOffsetY;
-                float x1 = (p1.X - minX) + samplingOffsetX;
-                float y1 = (p1.Y - minY) + samplingOffsetY;
-
-                if (!float.IsFinite(x0) || !float.IsFinite(y0) || !float.IsFinite(x1) || !float.IsFinite(y1))
-                {
-                    continue;
-                }
-
-                if (!ClipToVerticalBounds(ref x0, ref y0, ref x1, ref y1, 0F, height))
-                {
-                    continue;
-                }
-
-                int fx0 = FloatToFixed24Dot8(x0);
-                int fy0 = FloatToFixed24Dot8(y0);
-                int fx1 = FloatToFixed24Dot8(x1);
-                int fy1 = FloatToFixed24Dot8(y1);
-                if (fy0 == fy1)
-                {
-                    continue;
-                }
-
-                destination[count++] = new EdgeData(fx0, fy0, fx1, fy1);
+                continue;
             }
+
+            if (!ClipToVerticalBounds(ref x0, ref y0, ref x1, ref y1, 0F, height))
+            {
+                continue;
+            }
+
+            int fx0 = FloatToFixed24Dot8(x0);
+            int fy0 = FloatToFixed24Dot8(y0);
+            int fx1 = FloatToFixed24Dot8(x1);
+            int fy1 = FloatToFixed24Dot8(y1);
+            if (fy0 == fy1)
+            {
+                continue;
+            }
+
+            destination[count++] = new EdgeData(fx0, fy0, fx1, fy1);
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Builds one scanner-local row-band edge table directly from prepared line segments.
+    /// </summary>
+    private static int BuildBandEdgeTable(
+        ReadOnlySpan<PreparedLineSegment> segments,
+        ReadOnlySpan<int> segmentIndices,
+        int minX,
+        int minY,
+        int height,
+        float samplingOffsetX,
+        float samplingOffsetY,
+        int translateX,
+        int translateY,
+        int bandTop,
+        int bandHeight,
+        Span<EdgeData> destination)
+    {
+        float clipTop = MathF.Max(0F, bandTop);
+        float clipBottom = MathF.Min(height, bandTop + bandHeight);
+        if (clipBottom <= clipTop)
+        {
+            return 0;
+        }
+
+        int count = 0;
+        for (int i = 0; i < segmentIndices.Length; i++)
+        {
+            PreparedLineSegment segment = segments[segmentIndices[i]];
+            float localMinY = ((segment.MinY + translateY) - minY) + samplingOffsetY;
+            float localMaxY = ((segment.MaxY + translateY) - minY) + samplingOffsetY;
+            if (localMaxY <= clipTop || localMinY >= clipBottom)
+            {
+                continue;
+            }
+
+            PointF p0 = segment.P0;
+            PointF p1 = segment.P1;
+
+            float x0 = ((p0.X + translateX) - minX) + samplingOffsetX;
+            float y0 = ((p0.Y + translateY) - minY) + samplingOffsetY;
+            float x1 = ((p1.X + translateX) - minX) + samplingOffsetX;
+            float y1 = ((p1.Y + translateY) - minY) + samplingOffsetY;
+
+            if (!float.IsFinite(x0) || !float.IsFinite(y0) || !float.IsFinite(x1) || !float.IsFinite(y1))
+            {
+                continue;
+            }
+
+            if (!ClipToVerticalBounds(ref x0, ref y0, ref x1, ref y1, clipTop, clipBottom))
+            {
+                continue;
+            }
+
+            int fx0 = FloatToFixed24Dot8(x0);
+            int fy0 = FloatToFixed24Dot8(y0 - bandTop);
+            int fx1 = FloatToFixed24Dot8(x1);
+            int fy1 = FloatToFixed24Dot8(y1 - bandTop);
+            if (fy0 == fy1)
+            {
+                continue;
+            }
+
+            destination[count++] = new EdgeData(fx0, fy0, fx1, fy1);
         }
 
         return count;
@@ -1244,6 +2065,22 @@ internal static class DefaultRasterizer
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int BitVectorsForMaxBitCount(int maxBitCount) => (maxBitCount + WordBitCount - 1) / WordBitCount;
+
+    /// <summary>
+    /// Integer floor division for potentially negative values.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int FloorDiv(int value, int divisor)
+    {
+        int quotient = value / divisor;
+        int remainder = value % divisor;
+        if (remainder != 0 && ((remainder < 0) != (divisor < 0)))
+        {
+            quotient--;
+        }
+
+        return quotient;
+    }
 
     /// <summary>
     /// Calculates the maximum reusable band height under memory and indexing constraints.
@@ -1315,6 +2152,42 @@ internal static class DefaultRasterizer
         }
 
         if (!ClipTestFixed(dy, maxY - (double)originY0, ref t0, ref t1))
+        {
+            return false;
+        }
+
+        if (t1 < 1D)
+        {
+            x1 = originX0 + (int)Math.Round(dx * t1);
+            y1 = originY0 + (int)Math.Round(dy * t1);
+        }
+
+        if (t0 > 0D)
+        {
+            x0 = originX0 + (int)Math.Round(dx * t0);
+            y0 = originY0 + (int)Math.Round(dy * t0);
+        }
+
+        return y0 != y1;
+    }
+
+    /// <summary>
+    /// Clips a fixed-point segment against horizontal bounds.
+    /// </summary>
+    private static bool ClipToHorizontalBoundsFixed(ref int x0, ref int y0, ref int x1, ref int y1, int minX, int maxX)
+    {
+        double t0 = 0D;
+        double t1 = 1D;
+        int originX0 = x0;
+        int originY0 = y0;
+        long dx = (long)x1 - originX0;
+        long dy = (long)y1 - originY0;
+        if (!ClipTestFixed(-(double)dx, originX0 - (double)minX, ref t0, ref t1))
+        {
+            return false;
+        }
+
+        if (!ClipTestFixed(dx, maxX - (double)originX0, ref t0, ref t1))
         {
             return false;
         }
@@ -1482,8 +2355,236 @@ internal static class DefaultRasterizer
         => throw new ImageProcessingException("The rasterizer interest bounds are too large for DefaultRasterizer buffers.");
 
     [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowGeometryBandEdgeBufferTooSmall()
+        => throw new ImageProcessingException("The destination edge buffer is too small for the requested geometry band.");
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowBandHeightExceedsScratchCapacity()
         => throw new ImageProcessingException("Requested band height exceeds worker scratch capacity.");
+
+    internal readonly struct GeometryBandInfo
+    {
+        public GeometryBandInfo(
+            int edgeCount,
+            int width,
+            int wordsPerRow,
+            int coverStride,
+            int bandHeight,
+            int destinationTop,
+            IntersectionRule intersectionRule,
+            RasterizationMode rasterizationMode,
+            float antialiasThreshold)
+        {
+            this.EdgeCount = edgeCount;
+            this.Width = width;
+            this.WordsPerRow = wordsPerRow;
+            this.CoverStride = coverStride;
+            this.BandHeight = bandHeight;
+            this.DestinationTop = destinationTop;
+            this.IntersectionRule = intersectionRule;
+            this.RasterizationMode = rasterizationMode;
+            this.AntialiasThreshold = antialiasThreshold;
+        }
+
+        public int EdgeCount { get; }
+
+        public int Width { get; }
+
+        public int WordsPerRow { get; }
+
+        public int CoverStride { get; }
+
+        public int BandHeight { get; }
+
+        public int DestinationTop { get; }
+
+        public IntersectionRule IntersectionRule { get; }
+
+        public RasterizationMode RasterizationMode { get; }
+
+        public float AntialiasThreshold { get; }
+
+        public GeometryBand CreateGeometryBand(ReadOnlySpan<EdgeData> edges)
+        {
+            if (edges.Length < this.EdgeCount)
+            {
+                ThrowGeometryBandEdgeBufferTooSmall();
+            }
+
+            return new GeometryBand(
+                edges[..this.EdgeCount],
+                this.Width,
+                this.WordsPerRow,
+                this.CoverStride,
+                this.BandHeight,
+                this.DestinationTop,
+                this.IntersectionRule,
+                this.RasterizationMode,
+                this.AntialiasThreshold);
+        }
+    }
+
+    /// <summary>
+    /// One prepared row-band worth of edges plus the raster state needed to emit it.
+    /// </summary>
+    internal readonly ref struct GeometryBand
+    {
+        public GeometryBand(
+            ReadOnlySpan<EdgeData> edges,
+            int width,
+            int wordsPerRow,
+            int coverStride,
+            int bandHeight,
+            int destinationTop,
+            IntersectionRule intersectionRule,
+            RasterizationMode rasterizationMode,
+            float antialiasThreshold)
+        {
+            this.Edges = edges;
+            this.Width = width;
+            this.WordsPerRow = wordsPerRow;
+            this.CoverStride = coverStride;
+            this.BandHeight = bandHeight;
+            this.DestinationTop = destinationTop;
+            this.IntersectionRule = intersectionRule;
+            this.RasterizationMode = rasterizationMode;
+            this.AntialiasThreshold = antialiasThreshold;
+        }
+
+        public ReadOnlySpan<EdgeData> Edges { get; }
+
+        public int Width { get; }
+
+        public int WordsPerRow { get; }
+
+        public int CoverStride { get; }
+
+        public int BandHeight { get; }
+
+        public int DestinationTop { get; }
+
+        public IntersectionRule IntersectionRule { get; }
+
+        public RasterizationMode RasterizationMode { get; }
+
+        public float AntialiasThreshold { get; }
+    }
+
+    internal readonly struct RasterizableBandInfo
+    {
+        public RasterizableBandInfo(
+            int lineCount,
+            int bandHeight,
+            int width,
+            int wordsPerRow,
+            int coverStride,
+            int destinationTop,
+            IntersectionRule intersectionRule,
+            RasterizationMode rasterizationMode,
+            float antialiasThreshold,
+            bool hasStartCovers)
+        {
+            this.LineCount = lineCount;
+            this.BandHeight = bandHeight;
+            this.Width = width;
+            this.WordsPerRow = wordsPerRow;
+            this.CoverStride = coverStride;
+            this.DestinationTop = destinationTop;
+            this.IntersectionRule = intersectionRule;
+            this.RasterizationMode = rasterizationMode;
+            this.AntialiasThreshold = antialiasThreshold;
+            this.HasStartCovers = hasStartCovers;
+        }
+
+        public int LineCount { get; }
+
+        public int BandHeight { get; }
+
+        public int Width { get; }
+
+        public int WordsPerRow { get; }
+
+        public int CoverStride { get; }
+
+        public int DestinationTop { get; }
+
+        public IntersectionRule IntersectionRule { get; }
+
+        public RasterizationMode RasterizationMode { get; }
+
+        public float AntialiasThreshold { get; }
+
+        public bool HasStartCovers { get; }
+
+        public bool HasCoverage => this.LineCount > 0 || this.HasStartCovers;
+
+        public RasterizableBand CreateRasterizableBand(ReadOnlySpan<RasterLineData> lines, ReadOnlySpan<int> startCovers)
+        {
+            if (lines.Length < this.LineCount || startCovers.Length < this.BandHeight)
+            {
+                ThrowGeometryBandEdgeBufferTooSmall();
+            }
+
+            return new RasterizableBand(
+                lines[..this.LineCount],
+                startCovers[..this.BandHeight],
+                this.Width,
+                this.WordsPerRow,
+                this.CoverStride,
+                this.BandHeight,
+                this.DestinationTop,
+                this.IntersectionRule,
+                this.RasterizationMode,
+                this.AntialiasThreshold);
+        }
+    }
+
+    internal readonly ref struct RasterizableBand
+    {
+        public RasterizableBand(
+            ReadOnlySpan<RasterLineData> lines,
+            ReadOnlySpan<int> startCovers,
+            int width,
+            int wordsPerRow,
+            int coverStride,
+            int bandHeight,
+            int destinationTop,
+            IntersectionRule intersectionRule,
+            RasterizationMode rasterizationMode,
+            float antialiasThreshold)
+        {
+            this.Lines = lines;
+            this.StartCovers = startCovers;
+            this.Width = width;
+            this.WordsPerRow = wordsPerRow;
+            this.CoverStride = coverStride;
+            this.BandHeight = bandHeight;
+            this.DestinationTop = destinationTop;
+            this.IntersectionRule = intersectionRule;
+            this.RasterizationMode = rasterizationMode;
+            this.AntialiasThreshold = antialiasThreshold;
+        }
+
+        public ReadOnlySpan<RasterLineData> Lines { get; }
+
+        public ReadOnlySpan<int> StartCovers { get; }
+
+        public int Width { get; }
+
+        public int WordsPerRow { get; }
+
+        public int CoverStride { get; }
+
+        public int BandHeight { get; }
+
+        public int DestinationTop { get; }
+
+        public IntersectionRule IntersectionRule { get; }
+
+        public RasterizationMode RasterizationMode { get; }
+
+        public float AntialiasThreshold { get; }
+    }
 
     /// <summary>
     /// Band/tile-local scanner context that owns mutable coverage accumulation state.
@@ -1501,13 +2602,17 @@ internal static class DefaultRasterizer
         private readonly Span<byte> rowHasBits;
         private readonly Span<byte> rowTouched;
         private readonly Span<int> touchedRows;
-        private readonly int width;
-        private readonly int height;
-        private readonly int wordsPerRow;
-        private readonly int coverStride;
-        private readonly IntersectionRule intersectionRule;
-        private readonly RasterizationMode rasterizationMode;
-        private readonly float antialiasThreshold;
+        private readonly int widthCapacity;
+        private readonly int heightCapacity;
+        private readonly int wordsPerRowCapacity;
+        private readonly int coverStrideCapacity;
+        private int width;
+        private int height;
+        private int wordsPerRow;
+        private int coverStride;
+        private IntersectionRule intersectionRule;
+        private RasterizationMode rasterizationMode;
+        private float antialiasThreshold;
         private int touchedRowCount;
 
         /// <summary>
@@ -1538,6 +2643,10 @@ internal static class DefaultRasterizer
             this.rowHasBits = rowHasBits;
             this.rowTouched = rowTouched;
             this.touchedRows = touchedRows;
+            this.widthCapacity = width;
+            this.heightCapacity = height;
+            this.wordsPerRowCapacity = wordsPerRow;
+            this.coverStrideCapacity = coverStride;
             this.width = width;
             this.height = height;
             this.wordsPerRow = wordsPerRow;
@@ -1547,6 +2656,60 @@ internal static class DefaultRasterizer
             this.antialiasThreshold = antialiasThreshold;
             this.touchedRowCount = 0;
         }
+
+        public void Reconfigure(
+            int width,
+            int wordsPerRow,
+            int coverStride,
+            int height,
+            IntersectionRule intersectionRule,
+            RasterizationMode rasterizationMode,
+            float antialiasThreshold)
+        {
+            if ((uint)height > (uint)this.heightCapacity ||
+                (uint)wordsPerRow > (uint)this.wordsPerRowCapacity ||
+                (uint)coverStride > (uint)this.coverStrideCapacity ||
+                (uint)width > (uint)this.widthCapacity)
+            {
+                ThrowBandHeightExceedsScratchCapacity();
+            }
+
+            this.width = width;
+            this.height = height;
+            this.wordsPerRow = wordsPerRow;
+            this.coverStride = coverStride;
+            this.intersectionRule = intersectionRule;
+            this.rasterizationMode = rasterizationMode;
+            this.antialiasThreshold = antialiasThreshold;
+        }
+
+        public void SeedStartCovers(ReadOnlySpan<int> startCovers)
+        {
+            int count = Math.Min(this.height, startCovers.Length);
+            for (int i = 0; i < count; i++)
+            {
+                int cover = startCovers[i];
+                if (cover == 0)
+                {
+                    continue;
+                }
+
+                this.startCover[i] += cover;
+                this.MarkRowTouched(i);
+            }
+        }
+
+        public void RasterizePreparedLines(ReadOnlySpan<RasterLineData> lines)
+        {
+            for (int i = 0; i < lines.Length; i++)
+            {
+                ref readonly RasterLineData line = ref lines[i];
+                this.RasterizeLine(line.X0, line.Y0, line.X1, line.Y1);
+            }
+        }
+
+        public void RasterizeLineSegment(int x0, int y0, int x1, int y1)
+            => this.RasterizeLine(x0, y0, x1, y1);
 
         /// <summary>
         /// Rasterizes all prebuilt edges that overlap this context.
@@ -3092,6 +4255,28 @@ internal static class DefaultRasterizer
     }
 
     /// <summary>
+    /// Immutable line record stored in band-local raster coordinates.
+    /// </summary>
+    internal readonly struct RasterLineData
+    {
+        public readonly int X0;
+
+        public readonly int Y0;
+
+        public readonly int X1;
+
+        public readonly int Y1;
+
+        public RasterLineData(int x0, int y0, int x1, int y1)
+        {
+            this.X0 = x0;
+            this.Y0 = y0;
+            this.X1 = x1;
+            this.Y1 = y1;
+        }
+    }
+
+    /// <summary>
     /// Stroke centerline edge descriptor used for per-band parallel stroke expansion.
     /// </summary>
     /// <remarks>
@@ -3135,6 +4320,89 @@ internal static class DefaultRasterizer
     /// <summary>
     /// Reusable per-worker scratch buffers used by tiled and sequential band rasterization.
     /// </summary>
+    /// <summary>
+    /// Pre-built edge table with per-tile-row edge splitting.
+    /// Edges are sorted into interest-local tile rows matching the rasterizer's internal tiling.
+    /// </summary>
+    internal struct PrebuiltEdgeTable : IDisposable
+    {
+        public IMemoryOwner<EdgeData>? EdgeDataOwner;
+        public int EdgeCount;
+
+        /// <summary>Per-tile-row sorted edges. Null when EdgeCount is 0.</summary>
+        public IMemoryOwner<EdgeData>? TileSortedEdgesOwner;
+
+        /// <summary>CSR offsets into TileSortedEdges. Length = TileCount + 1.</summary>
+        public IMemoryOwner<int>? TileOffsetsOwner;
+
+        /// <summary>Number of interest-local tile rows.</summary>
+        public int TileCount;
+
+        /// <summary>Tile height in pixels (matches DefaultTileHeight).</summary>
+        public int TileHeight;
+
+        /// <summary>
+        /// Local Y offset of the first scene-aligned band relative to <see cref="InterestTop"/>.
+        /// </summary>
+        public int BandTopStart;
+
+        /// <summary>Interest width in pixels.</summary>
+        public int Width;
+
+        /// <summary>Interest height in pixels.</summary>
+        public int Height;
+
+        /// <summary>Interest top in absolute coordinates.</summary>
+        public int InterestTop;
+
+        /// <summary>Words per row for bit vectors.</summary>
+        public int WordsPerRow;
+
+        /// <summary>Cover-area stride.</summary>
+        public int CoverStride;
+
+        /// <summary>Fill rule.</summary>
+        public IntersectionRule IntersectionRule;
+
+        /// <summary>AA or aliased mode.</summary>
+        public RasterizationMode RasterizationMode;
+
+        /// <summary>Aliased threshold.</summary>
+        public float AntialiasThreshold;
+
+        public void Dispose()
+        {
+            this.EdgeDataOwner?.Dispose();
+            this.TileSortedEdgesOwner?.Dispose();
+            this.TileOffsetsOwner?.Dispose();
+        }
+    }
+
+    internal sealed class EdgeScratch : IDisposable
+    {
+        private IMemoryOwner<EdgeData>? owner;
+        private int capacity;
+
+        public Span<EdgeData> GetBuffer(MemoryAllocator allocator, int minimumCapacity)
+        {
+            if (minimumCapacity <= 0)
+            {
+                return [];
+            }
+
+            if (this.owner is null || this.capacity < minimumCapacity)
+            {
+                this.owner?.Dispose();
+                this.owner = allocator.Allocate<EdgeData>(minimumCapacity);
+                this.capacity = minimumCapacity;
+            }
+
+            return this.owner.Memory.Span;
+        }
+
+        public void Dispose() => this.owner?.Dispose();
+    }
+
     internal sealed class WorkerScratch : IDisposable
     {
         private readonly int wordsPerRow;
@@ -3191,9 +4459,9 @@ internal static class DefaultRasterizer
         /// capacity for the requested parameters, making it safe to reuse without reallocation.
         /// </summary>
         internal bool CanReuse(int requiredWordsPerRow, int requiredCoverStride, int requiredWidth, int minCapacity)
-            => this.wordsPerRow == requiredWordsPerRow
-            && this.coverStride == requiredCoverStride
-            && this.width == requiredWidth
+            => this.wordsPerRow >= requiredWordsPerRow
+            && this.coverStride >= requiredCoverStride
+            && this.width >= requiredWidth
             && this.tileCapacity >= minCapacity;
 
         /// <summary>
@@ -3233,14 +4501,37 @@ internal static class DefaultRasterizer
         /// Creates a context view over this scratch for the requested band height.
         /// </summary>
         public Context CreateContext(int bandHeight, IntersectionRule intersectionRule, RasterizationMode rasterizationMode, float antialiasThreshold)
+            => this.CreateContext(
+                this.width,
+                this.wordsPerRow,
+                this.coverStride,
+                bandHeight,
+                intersectionRule,
+                rasterizationMode,
+                antialiasThreshold);
+
+        /// <summary>
+        /// Creates a context view over a compatible prefix of this scratch for the requested geometry width.
+        /// </summary>
+        public Context CreateContext(
+            int width,
+            int wordsPerRow,
+            int coverStride,
+            int bandHeight,
+            IntersectionRule intersectionRule,
+            RasterizationMode rasterizationMode,
+            float antialiasThreshold)
         {
-            if ((uint)bandHeight > (uint)this.tileCapacity)
+            if ((uint)bandHeight > (uint)this.tileCapacity ||
+                (uint)wordsPerRow > (uint)this.wordsPerRow ||
+                (uint)coverStride > (uint)this.coverStride ||
+                (uint)width > (uint)this.width)
             {
                 ThrowBandHeightExceedsScratchCapacity();
             }
 
-            int bitVectorCount = checked(this.wordsPerRow * bandHeight);
-            int coverAreaCount = checked(this.coverStride * bandHeight);
+            int bitVectorCount = checked(wordsPerRow * bandHeight);
+            int coverAreaCount = checked(coverStride * bandHeight);
             return new Context(
                 this.bitVectorsOwner.Memory.Span[..bitVectorCount],
                 this.coverAreaOwner.Memory.Span[..coverAreaCount],
@@ -3250,10 +4541,10 @@ internal static class DefaultRasterizer
                 this.rowHasBitsOwner.Memory.Span[..bandHeight],
                 this.rowTouchedOwner.Memory.Span[..bandHeight],
                 this.touchedRowsOwner.Memory.Span[..bandHeight],
-                this.width,
+                width,
                 bandHeight,
-                this.wordsPerRow,
-                this.coverStride,
+                wordsPerRow,
+                coverStride,
                 intersectionRule,
                 rasterizationMode,
                 antialiasThreshold);

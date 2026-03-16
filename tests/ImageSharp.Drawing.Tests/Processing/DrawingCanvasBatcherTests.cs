@@ -31,7 +31,7 @@ public class DrawingCanvasBatcherTests
         canvas.Flush();
 
         Assert.True(backend.HasBatch);
-        Assert.NotNull(backend.LastBatch.Definition.Path);
+        Assert.NotNull(backend.LastBatch.Definition.Geometry);
         Assert.Equal(2, backend.LastBatch.Commands.Count);
         Assert.Same(brushA, backend.LastBatch.Commands[0].Brush);
         Assert.Same(brushB, backend.LastBatch.Commands[1].Brush);
@@ -57,7 +57,6 @@ public class DrawingCanvasBatcherTests
         canvas.Flush();
 
         Assert.Single(backend.Batches);
-        Assert.True(backend.LastBatch.Definition.IsStroke);
         Assert.Equal(2, backend.LastBatch.Commands.Count);
     }
 
@@ -134,7 +133,7 @@ public class DrawingCanvasBatcherTests
         public CompositionBatch LastBatch { get; private set; } = new(
             new CompositionCoverageDefinition(
                 0,
-                EmptyPath.ClosedPath,
+                PreparedGeometry.Empty,
                 new RasterizerOptions(
                     Rectangle.Empty,
                     IntersectionRule.NonZero,

@@ -2,14 +2,23 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
+using Xunit.Abstractions;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
 
 [GroupOutput("Drawing")]
 public partial class DrawingCanvasTests
 {
+    private readonly ITestOutputHelper output;
+
+    public DrawingCanvasTests(ITestOutputHelper output)
+    {
+        this.output = output;
+    }
+
     private static DrawingCanvas<TPixel> CreateCanvas<TPixel>(
         TestImageProvider<TPixel> provider,
         Image<TPixel> image,

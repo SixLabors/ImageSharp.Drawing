@@ -132,15 +132,15 @@ public sealed class LinearGradientBrush : GradientBrush
     }
 
     /// <inheritdoc/>
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        Buffer2DRegion<TPixel> targetRegion,
+        int canvasWidth,
         RectangleF region)
-        => new LinearGradientBrushApplicator<TPixel>(
+        => new LinearGradientBrushRenderer<TPixel>(
             configuration,
             options,
-            targetRegion,
+            canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
@@ -149,7 +149,7 @@ public sealed class LinearGradientBrush : GradientBrush
     /// Implements the gradient application logic for <see cref="LinearGradientBrush"/>.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class LinearGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
+    private sealed class LinearGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly PointF start;
@@ -158,22 +158,22 @@ public sealed class LinearGradientBrush : GradientBrush
         private readonly float alongsSquared;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="LinearGradientBrushApplicator{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="LinearGradientBrushRenderer{TPixel}"/> class.
         /// </summary>
         /// <param name="configuration">The ImageSharp configuration.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="targetRegion">The destination pixel region.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="brush">The linear gradient brush.</param>
         /// <param name="colorStops">The gradient color stops.</param>
         /// <param name="repetitionMode">Defines how the gradient repeats.</param>
-        public LinearGradientBrushApplicator(
+        public LinearGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            Buffer2DRegion<TPixel> targetRegion,
+            int canvasWidth,
             LinearGradientBrush brush,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, targetRegion, colorStops, repetitionMode)
+            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
         {
             this.start = brush.StartPoint;
 

@@ -193,7 +193,7 @@ public abstract class DrawPolygon
         => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
 
     [Benchmark]
-    public void ImageSharpWebGPUNativeSurface()
+    public void ImageSharpWebGPU()
     {
         using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, new DrawingOptions());
         canvas.Draw(this.isPen, this.imageSharpPath);

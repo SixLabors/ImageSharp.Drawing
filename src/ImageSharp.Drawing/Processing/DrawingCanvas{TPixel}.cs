@@ -421,17 +421,12 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         IPath closed = path.AsClosedPath();
 
-        Brush effectiveBrush = brush;
-        IPath effectivePath = closed;
-        if (effectiveOptions.Transform != Matrix4x4.Identity)
-        {
-            effectivePath = FlattenAndTransform(closed, effectiveOptions.Transform);
-            effectiveBrush = brush.Transform(effectiveOptions.Transform);
-        }
-
-        effectivePath = ApplyClipPaths(effectivePath, effectiveOptions.ShapeOptions, state.ClipPaths);
-
-        this.PrepareCompositionCore(effectivePath, effectiveBrush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
+        this.PrepareCompositionCore(
+            closed,
+            brush,
+            effectiveOptions,
+            RasterizerSamplingOrigin.PixelBoundary,
+            state.ClipPaths);
     }
 
     /// <inheritdoc />
@@ -460,12 +455,10 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingOptions effectiveOptions = state.Options;
 
         IPath closed = path.AsClosedPath();
-        IPath transformedPath = effectiveOptions.Transform == Matrix4x4.Identity
-            ? closed
-            : FlattenAndTransform(closed, effectiveOptions.Transform);
-        transformedPath = ApplyClipPaths(transformedPath, effectiveOptions.ShapeOptions, state.ClipPaths);
 
-        Rectangle sourceRect = ToConservativeBounds(transformedPath.Bounds);
+        RectangleF rawBounds = RectangleF.Transform(closed.Bounds, effectiveOptions.Transform);
+
+        Rectangle sourceRect = ToConservativeBounds(rawBounds);
         sourceRect = Rectangle.Intersect(this.Bounds, sourceRect);
         if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
         {
@@ -473,7 +466,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         }
 
         // Defensive guard: built-in backends should provide either direct readback (CPU/backed surface)
-        // or shadow fallback, but custom/inconsistent backend+target combinations can still fail both paths.
+        // or shadow fallback. If this fails, it indicates a backend implementation bug or an unsupported custom backend.
         if (!this.TryCreateProcessSourceImage(sourceRect, out Image<TPixel>? sourceImage))
         {
             throw new NotSupportedException("Canvas process operations require either CPU pixels, backend readback support, or shadow fallback.");
@@ -482,12 +475,17 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         sourceImage.Mutate(operation);
 
         Point brushOffset = new(
-            sourceRect.X - (int)MathF.Floor(transformedPath.Bounds.Left),
-            sourceRect.Y - (int)MathF.Floor(transformedPath.Bounds.Top));
+            sourceRect.X - (int)MathF.Floor(rawBounds.Left),
+            sourceRect.Y - (int)MathF.Floor(rawBounds.Top));
         ImageBrush brush = new(sourceImage, sourceImage.Bounds, brushOffset);
 
         this.pendingImageResources.Add(sourceImage);
-        this.PrepareCompositionCore(transformedPath, brush, effectiveOptions, RasterizerSamplingOrigin.PixelBoundary);
+        this.PrepareCompositionCore(
+            closed,
+            brush,
+            effectiveOptions,
+            RasterizerSamplingOrigin.PixelBoundary,
+            state.ClipPaths);
     }
 
     /// <inheritdoc />
@@ -543,10 +541,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
 
-        IPath transformedPath = effectiveOptions.Transform == Matrix4x4.Identity
-            ? path
-            : FlattenAndTransform(path, effectiveOptions.Transform);
-
         // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
         if (effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
         {
@@ -555,23 +549,13 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             effectiveOptions = new DrawingOptions(effectiveOptions.GraphicsOptions, shapeOptions, effectiveOptions.Transform);
         }
 
-        // When clip paths are active we must expand the stroke here so the clip
-        // boolean operation can be applied to the expanded outline geometry.
-        if (state.ClipPaths.Count > 0)
-        {
-            IPath outline = pen.GeneratePath(transformedPath);
-            outline = ApplyClipPaths(outline, effectiveOptions.ShapeOptions, state.ClipPaths);
-            this.PrepareCompositionCore(outline, pen.StrokeFill, effectiveOptions, RasterizerSamplingOrigin.PixelCenter);
-            return;
-        }
-
-        this.PrepareStrokeCompositionCore(
-            transformedPath,
+        this.PrepareCompositionCore(
+            path,
             pen.StrokeFill,
-            pen.StrokeWidth,
-            pen.StrokeOptions,
-            pen.StrokePattern,
-            effectiveOptions);
+            effectiveOptions,
+            RasterizerSamplingOrigin.PixelCenter,
+            state.ClipPaths,
+            pen);
     }
 
     /// <inheritdoc />
@@ -979,11 +963,15 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="brush">Brush used for shading.</param>
     /// <param name="options">Effective drawing options.</param>
     /// <param name="samplingOrigin">Rasterizer sampling origin.</param>
+    /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
+    /// <param name="pen">Optional pen for stroke commands.</param>
     private void PrepareCompositionCore(
         IPath path,
         Brush brush,
         DrawingOptions options,
-        RasterizerSamplingOrigin samplingOrigin)
+        RasterizerSamplingOrigin samplingOrigin,
+        IReadOnlyList<IPath>? clipPaths = null,
+        Pen? pen = null)
     {
         GraphicsOptions graphicsOptions = options.GraphicsOptions;
         ShapeOptions shapeOptions = options.ShapeOptions;
@@ -992,7 +980,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         RectangleF bounds = path.Bounds;
         if (samplingOrigin == RasterizerSamplingOrigin.PixelCenter)
         {
-            // Keep rasterizer interest aligned with center-sampled scan conversion.
             bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
         }
 
@@ -1014,66 +1001,12 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 path,
                 brush,
                 graphicsOptions,
-                rasterizerOptions,
-                this.targetFrame.Bounds.Location));
-    }
-
-    /// <summary>
-    /// Prepares a stroke composition command with the original centerline path and enqueues it.
-    /// The backend is responsible for stroke expansion or SDF evaluation.
-    /// </summary>
-    /// <param name="path">Original centerline path in target-local coordinates.</param>
-    /// <param name="brush">Brush used for shading.</param>
-    /// <param name="strokeWidth">Stroke width in pixels.</param>
-    /// <param name="strokeOptions">Stroke geometry options.</param>
-    /// <param name="strokePattern">Optional dash pattern.</param>
-    /// <param name="options">Effective drawing options.</param>
-    private void PrepareStrokeCompositionCore(
-        IPath path,
-        Brush brush,
-        float strokeWidth,
-        StrokeOptions strokeOptions,
-        ReadOnlyMemory<float> strokePattern,
-        DrawingOptions options)
-    {
-        GraphicsOptions graphicsOptions = options.GraphicsOptions;
-        ShapeOptions shapeOptions = options.ShapeOptions;
-        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
-
-        // Inflate path bounds by the maximum possible stroke extent.
-        // The miter limit caps the tip extension; the base half-width is always present.
-        float halfWidth = strokeWidth / 2f;
-        float maxExtent = halfWidth * (float)Math.Max(strokeOptions.MiterLimit, 1D);
-        RectangleF bounds = path.Bounds;
-        bounds = new RectangleF(
-            bounds.X - maxExtent + 0.5F,
-            bounds.Y - maxExtent + 0.5F,
-            bounds.Width + (maxExtent * 2f),
-            bounds.Height + (maxExtent * 2f));
-
-        Rectangle interest = Rectangle.FromLTRB(
-            (int)MathF.Floor(bounds.Left),
-            (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right),
-            (int)MathF.Ceiling(bounds.Bottom));
-
-        RasterizerOptions rasterizerOptions = new(
-            interest,
-            shapeOptions.IntersectionRule,
-            rasterizationMode,
-            RasterizerSamplingOrigin.PixelCenter,
-            graphicsOptions.AntialiasThreshold);
-
-        this.batcher.AddComposition(
-            CompositionCommand.CreateStroke(
-                path,
-                brush,
-                graphicsOptions,
-                rasterizerOptions,
-                strokeOptions,
-                strokeWidth,
-                strokePattern,
-                this.targetFrame.Bounds.Location));
+                in rasterizerOptions,
+                shapeOptions,
+                options.Transform,
+                this.targetFrame.Bounds.Location,
+                pen,
+                clipPaths));
     }
 
     /// <summary>
@@ -1097,9 +1030,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            DrawingOperation clippedOperation = operation;
-            clippedOperation.Path = ApplyClipPaths(operation.Path, drawingOptions.ShapeOptions, clipPaths);
-            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(clippedOperation, drawingOptions, definitionKeyCache)));
+            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(operation, drawingOptions, clipPaths, definitionKeyCache)));
         }
 
         entries.Sort(static (a, b) =>
@@ -1158,154 +1089,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         }
 
         return true;
-    }
-
-    /// <summary>
-    /// Flattens the path first (reusing any cached curve subdivision), then transforms
-    /// the resulting flat points. This avoids discarding cached <see cref="CubicBezierLineSegment"/>
-    /// subdivision data that <see cref="IPath.Transform"/> would throw away.
-    /// </summary>
-    /// <summary>
-    /// Flattens a path into linear segments, then transforms the resulting points in place.
-    /// This avoids redundant curve subdivision that would occur if we transformed the original
-    /// path first (which discards cached flattening) and then flattened again.
-    /// </summary>
-    /// <param name="path">The path to flatten and transform. The original path is not mutated.</param>
-    /// <param name="matrix">The transform matrix to apply to the flattened points.</param>
-    /// <returns>
-    /// A pre-flattened <see cref="IPath"/> whose points are already transformed.
-    /// The returned path owns its point buffers and may mutate them on subsequent transforms.
-    /// </returns>
-    private static IPath FlattenAndTransform(IPath path, Matrix4x4 matrix)
-    {
-        List<(PointF[] Points, RectangleF Bounds, bool IsClosed)>? subPaths = null;
-        bool allClosed = true;
-        float minX = float.MaxValue, minY = float.MaxValue;
-        float maxX = float.MinValue, maxY = float.MinValue;
-
-        foreach (ISimplePath sp in path.Flatten())
-        {
-            ReadOnlySpan<PointF> srcPoints = sp.Points.Span;
-            if (srcPoints.Length < 2)
-            {
-                continue;
-            }
-
-            PointF[] dstPoints = new PointF[srcPoints.Length];
-            float spMinX = float.MaxValue, spMinY = float.MaxValue;
-            float spMaxX = float.MinValue, spMaxY = float.MinValue;
-
-            for (int i = 0; i < srcPoints.Length; i++)
-            {
-                ref PointF dst = ref dstPoints[i];
-                dst = PointF.Transform(srcPoints[i], matrix);
-
-                if (dst.X < spMinX)
-                {
-                    spMinX = dst.X;
-                }
-
-                if (dst.Y < spMinY)
-                {
-                    spMinY = dst.Y;
-                }
-
-                if (dst.X > spMaxX)
-                {
-                    spMaxX = dst.X;
-                }
-
-                if (dst.Y > spMaxY)
-                {
-                    spMaxY = dst.Y;
-                }
-            }
-
-            RectangleF spBounds = new(spMinX, spMinY, spMaxX - spMinX, spMaxY - spMinY);
-            subPaths ??= [];
-            subPaths.Add((dstPoints, spBounds, sp.IsClosed));
-            allClosed &= sp.IsClosed;
-
-            if (spMinX < minX)
-            {
-                minX = spMinX;
-            }
-
-            if (spMinY < minY)
-            {
-                minY = spMinY;
-            }
-
-            if (spMaxX > maxX)
-            {
-                maxX = spMaxX;
-            }
-
-            if (spMaxY > maxY)
-            {
-                maxY = spMaxY;
-            }
-        }
-
-        if (subPaths is null)
-        {
-            return Path.Empty;
-        }
-
-        RectangleF totalBounds = new(minX, minY, maxX - minX, maxY - minY);
-        if (allClosed)
-        {
-            // Fill path: enforce orientation for NonZero fill rule (ring 0 positive, ring 1+ negative).
-            if (subPaths.Count == 1)
-            {
-                PolygonUtilities.EnsureOrientation(subPaths[0].Points, 1);
-                return new FlattenedPath(subPaths[0].Points, true, subPaths[0].Bounds);
-            }
-
-            FlattenedPath[] closed = new FlattenedPath[subPaths.Count];
-            for (int i = 0; i < subPaths.Count; i++)
-            {
-                PolygonUtilities.EnsureOrientation(subPaths[i].Points, i == 0 ? 1 : -1);
-                closed[i] = new FlattenedPath(subPaths[i].Points, true, subPaths[i].Bounds);
-            }
-
-            return new FlattenedCompositePath(closed, totalBounds);
-        }
-
-        // Stroke centerline: preserve open/closed as-is, no orientation enforcement.
-        if (subPaths.Count == 1)
-        {
-            (PointF[] pts, RectangleF bounds, bool isClosed) = subPaths[0];
-            return new FlattenedPath(pts, isClosed, bounds);
-        }
-
-        // Multiple sub-paths with at least one open — return as a simple wrapper.
-        // This case is rare (multi-contour stroke centerlines).
-        FlattenedPath[] parts = new FlattenedPath[subPaths.Count];
-        for (int i = 0; i < subPaths.Count; i++)
-        {
-            (PointF[] pts, RectangleF bounds, bool isClosed) = subPaths[i];
-            parts[i] = new FlattenedPath(pts, isClosed, bounds);
-        }
-
-        return new FlattenedCompositePath(parts, totalBounds);
-    }
-
-    /// <summary>
-    /// Applies all clip paths to a subject path using the provided shape options.
-    /// </summary>
-    /// <param name="subjectPath">Path to clip.</param>
-    /// <param name="shapeOptions">Shape options used for clipping.</param>
-    /// <param name="clipPaths">Clip paths to apply.</param>
-    /// <returns>The clipped path.</returns>
-    private static IPath ApplyClipPaths(IPath subjectPath, ShapeOptions shapeOptions, IReadOnlyList<IPath> clipPaths)
-    {
-        if (clipPaths.Count == 0)
-        {
-            return subjectPath;
-        }
-
-        return subjectPath.Clip(shapeOptions, clipPaths);
     }
 
     /// <inheritdoc />
@@ -1420,11 +1203,13 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// </summary>
     /// <param name="operation">The source drawing operation.</param>
     /// <param name="drawingOptions">Drawing options applied to the operation.</param>
+    /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
     /// <param name="definitionKeyCache">Optional cache used to reuse definition key computations.</param>
     /// <returns>A composition command ready for batching.</returns>
     private CompositionCommand CreateCompositionCommand(
         DrawingOperation operation,
         DrawingOptions drawingOptions,
+        IReadOnlyList<IPath>? clipPaths = null,
         Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
     {
         Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
@@ -1440,79 +1225,41 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             ? RasterizationMode.Antialiased
             : RasterizationMode.Aliased;
 
+        ShapeOptions shapeOptions = drawingOptions.ShapeOptions;
+
         Point destinationOffset = new(
             this.targetFrame.Bounds.X + operation.RenderLocation.X,
             this.targetFrame.Bounds.Y + operation.RenderLocation.Y);
 
-        if (operation.Kind == DrawingOperationKind.Draw)
-        {
-            Pen pen = operation.Pen!;
-            IPath path = operation.Path;
+        Pen? pen = operation.Kind == DrawingOperationKind.Draw ? operation.Pen : null;
 
-            // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
-            IntersectionRule intersectionRule = operation.IntersectionRule != IntersectionRule.NonZero
-                ? IntersectionRule.NonZero
-                : operation.IntersectionRule;
+        // Interest, sampling origin, and intersection rule are computed by Prepare().
+        // Placeholder rasterizer options carry only the fields Prepare() preserves.
+        IntersectionRule intersectionRule = pen is not null && operation.IntersectionRule != IntersectionRule.NonZero
+            ? IntersectionRule.NonZero
+            : operation.IntersectionRule;
 
-            float halfWidth = pen.StrokeWidth / 2f;
-            float maxExtent = halfWidth * (float)Math.Max(pen.StrokeOptions.MiterLimit, 1D);
-            RectangleF bounds = path.Bounds;
-            bounds = new RectangleF(
-                bounds.X - maxExtent + 0.5F,
-                bounds.Y - maxExtent + 0.5F,
-                bounds.Width + (maxExtent * 2f),
-                bounds.Height + (maxExtent * 2f));
+        RasterizerSamplingOrigin samplingOrigin = pen is not null
+            ? RasterizerSamplingOrigin.PixelCenter
+            : RasterizerSamplingOrigin.PixelBoundary;
 
-            Rectangle interest = Rectangle.FromLTRB(
-                (int)MathF.Floor(bounds.Left),
-                (int)MathF.Floor(bounds.Top),
-                (int)MathF.Ceiling(bounds.Right),
-                (int)MathF.Ceiling(bounds.Bottom));
+        RasterizerOptions rasterizerOptions = new(
+            default,
+            intersectionRule,
+            rasterizationMode,
+            samplingOrigin,
+            graphicsOptions.AntialiasThreshold);
 
-            RasterizerOptions rasterizerOptions = new(
-                interest,
-                intersectionRule,
-                rasterizationMode,
-                RasterizerSamplingOrigin.PixelCenter,
-                graphicsOptions.AntialiasThreshold);
-
-            return CompositionCommand.CreateStroke(
-                path,
-                compositeBrush,
-                graphicsOptions,
-                rasterizerOptions,
-                pen.StrokeOptions,
-                pen.StrokeWidth,
-                pen.StrokePattern,
-                destinationOffset,
-                definitionKeyCache);
-        }
-        else
-        {
-            IPath compositionPath = operation.Path;
-            RectangleF bounds = compositionPath.Bounds;
-
-            Rectangle interest = Rectangle.FromLTRB(
-                (int)MathF.Floor(bounds.Left),
-                (int)MathF.Floor(bounds.Top),
-                (int)MathF.Ceiling(bounds.Right),
-                (int)MathF.Ceiling(bounds.Bottom));
-
-            RasterizerOptions rasterizerOptions = new(
-                interest,
-                operation.IntersectionRule,
-                rasterizationMode,
-                RasterizerSamplingOrigin.PixelBoundary,
-                graphicsOptions.AntialiasThreshold);
-
-            return CompositionCommand.Create(
-                compositionPath,
-                compositeBrush,
-                graphicsOptions,
-                rasterizerOptions,
-                destinationOffset,
-                definitionKeyCache);
-        }
+        return CompositionCommand.Create(
+            operation.Path,
+            compositeBrush,
+            graphicsOptions,
+            in rasterizerOptions,
+            shapeOptions,
+            Matrix4x4.Identity,
+            destinationOffset,
+            pen,
+            clipPaths);
     }
 
     /// <summary>
@@ -1596,7 +1343,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         Matrix4x4 sourceToTransformedCanvas = sourceToDestination * transform;
 
         // Compute the transformed axis-aligned bounds so we know how large the output bitmap must be.
-        transformedDestinationRect = TransformRectangle(
+        transformedDestinationRect = RectangleF.Transform(
             new RectangleF(0, 0, image.Width, image.Height),
             sourceToTransformedCanvas);
 
@@ -1644,24 +1391,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <summary>
     /// Computes the axis-aligned bounding rectangle of a transformed rectangle.
     /// </summary>
-    /// <param name="rectangle">Input rectangle.</param>
-    /// <param name="matrix">Transform matrix.</param>
-    /// <returns>Axis-aligned bounds of the transformed rectangle.</returns>
-    private static RectangleF TransformRectangle(RectangleF rectangle, Matrix4x4 matrix)
-    {
-        PointF topLeft = PointF.Transform(new PointF(rectangle.Left, rectangle.Top), matrix);
-        PointF topRight = PointF.Transform(new PointF(rectangle.Right, rectangle.Top), matrix);
-        PointF bottomLeft = PointF.Transform(new PointF(rectangle.Left, rectangle.Bottom), matrix);
-        PointF bottomRight = PointF.Transform(new PointF(rectangle.Right, rectangle.Bottom), matrix);
-
-        float left = MathF.Min(MathF.Min(topLeft.X, topRight.X), MathF.Min(bottomLeft.X, bottomRight.X));
-        float top = MathF.Min(MathF.Min(topLeft.Y, topRight.Y), MathF.Min(bottomLeft.Y, bottomRight.Y));
-        float right = MathF.Max(MathF.Max(topLeft.X, topRight.X), MathF.Max(bottomLeft.X, bottomRight.X));
-        float bottom = MathF.Max(MathF.Max(topLeft.Y, topRight.Y), MathF.Max(bottomLeft.Y, bottomRight.Y));
-
-        return RectangleF.FromLTRB(left, top, right, bottom);
-    }
-
     /// <summary>
     /// Disposes image resources retained for deferred draw execution.
     /// </summary>

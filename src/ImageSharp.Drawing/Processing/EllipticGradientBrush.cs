@@ -81,21 +81,21 @@ public sealed class EllipticGradientBrush : GradientBrush
     }
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        Buffer2DRegion<TPixel> targetRegion,
+        int canvasWidth,
         RectangleF region) =>
-        new EllipticGradientBrushApplicator<TPixel>(
+        new EllipticGradientBrushRenderer<TPixel>(
             configuration,
             options,
-            targetRegion,
+            canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
 
     /// <inheritdoc />
-    private sealed class EllipticGradientBrushApplicator<TPixel> : GradientBrushApplicator<TPixel>
+    private sealed class EllipticGradientBrushRenderer<TPixel> : GradientBrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly PointF center;
@@ -109,22 +109,22 @@ public sealed class EllipticGradientBrush : GradientBrush
         private readonly float secondRadiusSquared;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="EllipticGradientBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="EllipticGradientBrushRenderer{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="targetRegion">The destination pixel region.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="brush">The elliptic gradient brush.</param>
         /// <param name="colorStops">Definition of colors.</param>
         /// <param name="repetitionMode">Defines how the gradient colors are repeated.</param>
-        public EllipticGradientBrushApplicator(
+        public EllipticGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            Buffer2DRegion<TPixel> targetRegion,
+            int canvasWidth,
             EllipticGradientBrush brush,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, targetRegion, colorStops, repetitionMode)
+            : base(configuration, options, canvasWidth, colorStops, repetitionMode)
         {
             this.center = brush.Center;
 

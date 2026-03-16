@@ -86,15 +86,15 @@ public sealed class PathGradientBrush : Brush
         => HashCode.Combine(this.edges, this.centerColor, this.hasSpecialCenterColor);
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        Buffer2DRegion<TPixel> targetRegion,
+        int canvasWidth,
         RectangleF region)
-        => new PathGradientBrushApplicator<TPixel>(
+        => new PathGradientBrushRenderer<TPixel>(
             configuration,
             options,
-            targetRegion,
+            canvasWidth,
             this.edges,
             this.centerColor,
             this.hasSpecialCenterColor);
@@ -185,7 +185,7 @@ public sealed class PathGradientBrush : Brush
     /// The path gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class PathGradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    private sealed class PathGradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly Vector2 center;
@@ -202,27 +202,23 @@ public sealed class PathGradientBrush : Brush
 
         private readonly TPixel transparentPixel;
 
-        private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
-
-        private bool isDisposed;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="PathGradientBrushApplicator{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="PathGradientBrushRenderer{TPixel}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="targetRegion">The destination pixel region.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="edges">Edges of the polygon.</param>
         /// <param name="centerColor">Color at the center of the gradient area to which the other colors converge.</param>
         /// <param name="hasSpecialCenterColor">Whether the center color is different from a smooth gradient between the edges.</param>
-        public PathGradientBrushApplicator(
+        public PathGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            Buffer2DRegion<TPixel> targetRegion,
+            int canvasWidth,
             IList<Edge> edges,
             Color centerColor,
             bool hasSpecialCenterColor)
-            : base(configuration, options, targetRegion)
+            : base(configuration, options, canvasWidth)
         {
             this.edges = edges;
             Vector2[] points = [.. edges.Select(s => s.Start)];
@@ -233,7 +229,6 @@ public sealed class PathGradientBrush : Brush
             this.centerPixel = centerColor.ToPixel<TPixel>();
             this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
             this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, targetRegion.Width);
         }
 
         internal TPixel this[int x, int y]
@@ -291,10 +286,15 @@ public sealed class PathGradientBrush : Brush
         }
 
         /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+            Span<float> amounts = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
             float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
@@ -315,28 +315,7 @@ public sealed class PathGradientBrush : Brush
                 }
             }
 
-            int localY = y - this.TargetRegion.Rectangle.Y;
-            int localX = x - this.TargetRegion.Rectangle.X;
-            Span<TPixel> destinationRow = this.TargetRegion.DangerousGetRowSpan(localY).Slice(localX, scanline.Length);
             this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
-        }
-
-        /// <inheritdoc />
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                this.blenderBuffers.Dispose();
-            }
-
-            this.isDisposed = true;
         }
 
         private (Edge Edge, Vector2 Point)? FindIntersection(

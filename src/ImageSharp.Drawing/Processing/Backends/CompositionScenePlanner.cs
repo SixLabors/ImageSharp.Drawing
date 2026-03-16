@@ -23,21 +23,23 @@ public static class CompositionScenePlanner
     {
         int commandCount = commands.Count;
         List<CompositionBatch> batches = new(EstimateBatchCapacity(commandCount));
-        int index = 0;
-        while (index < commandCount)
+        int runStart = 0;
+        while (runStart < commandCount)
         {
-            CompositionCommand definitionCommand = commands[index];
+            CompositionCommand definitionCommand = commands[runStart];
             int definitionKey = definitionCommand.DefinitionKey;
-            int remainingCount = commandCount - index;
-            List<PreparedCompositionCommand> preparedCommands = new(EstimatePreparedCommandCapacity(remainingCount));
-            for (; index < commandCount; index++)
+
+            int runEnd = runStart + 1;
+            while (runEnd < commandCount && commands[runEnd].DefinitionKey == definitionKey)
+            {
+                runEnd++;
+            }
+
+            int runLength = runEnd - runStart;
+            List<PreparedCompositionCommand> preparedCommands = new(runLength);
+            for (int index = runStart; index < runEnd; index++)
             {
                 CompositionCommand command = commands[index];
-                if (command.DefinitionKey != definitionKey)
-                {
-                    break;
-                }
-
                 if (TryPrepareCommand(in command, in targetBounds, out PreparedCompositionCommand prepared))
                 {
                     preparedCommands.Add(prepared);
@@ -46,20 +48,19 @@ public static class CompositionScenePlanner
 
             if (preparedCommands.Count == 0)
             {
+                runStart = runEnd;
                 continue;
             }
 
             CompositionCoverageDefinition definition =
                 new(
                     definitionKey,
-                    definitionCommand.Path,
+                    definitionCommand.Geometry ?? throw new InvalidOperationException("Commands must be prepared before planning."),
                     definitionCommand.RasterizerOptions,
-                    definitionCommand.DestinationOffset,
-                    definitionCommand.StrokeOptions,
-                    definitionCommand.StrokeWidth,
-                    definitionCommand.StrokePattern);
+                    definitionCommand.DestinationOffset);
 
             batches.Add(new CompositionBatch(definition, preparedCommands));
+            runStart = runEnd;
         }
 
         return batches;
@@ -86,32 +87,6 @@ public static class CompositionScenePlanner
         }
 
         return commandCount / 4;
-    }
-
-    /// <summary>
-    /// Estimates initial capacity for one contiguous prepared-command run.
-    /// </summary>
-    /// <param name="remainingCount">Commands remaining from the current scan index.</param>
-    /// <returns>Suggested initial capacity for the current prepared-command list.</returns>
-    /// <remarks>
-    /// This estimate is intentionally capped for large tails because the list is
-    /// allocated per run during scanning rather than once per scene.
-    /// </remarks>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int EstimatePreparedCommandCapacity(int remainingCount)
-    {
-        // Most adjacent commands share a definition in small-medium scenes.
-        if (remainingCount <= 16)
-        {
-            return remainingCount;
-        }
-
-        if (remainingCount <= 128)
-        {
-            return remainingCount / 2;
-        }
-
-        return 64;
     }
 
     /// <summary>
