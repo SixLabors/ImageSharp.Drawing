@@ -17,13 +17,12 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed class PreparedGeometry
 {
     private readonly PreparedLineSegment[] segments;
-    private readonly int definitionIdentity;
 
     private PreparedGeometry(PreparedLineSegment[] segments, RectangleF bounds, int definitionIdentity)
     {
         this.segments = segments;
         this.Bounds = bounds;
-        this.definitionIdentity = definitionIdentity;
+        this.DefinitionIdentity = definitionIdentity;
     }
 
     /// <summary>
@@ -49,7 +48,7 @@ public sealed class PreparedGeometry
     /// <summary>
     /// Gets the stable identity used to group coverage-equivalent prepared geometry.
     /// </summary>
-    internal int DefinitionIdentity => this.definitionIdentity;
+    internal int DefinitionIdentity { get; }
 
     /// <summary>
     /// Creates prepared geometry from an arbitrary path by flattening all contours into line segments.
@@ -152,10 +151,12 @@ public sealed class PreparedGeometry
         HashCode definitionIdentity = default;
         definitionIdentity.Add(totalSegments);
         int writeIndex = 0;
+
         for (int i = 0; i < subPaths.Count; i++)
         {
             (PointF[] points, bool isClosed) = subPaths[i];
             int segmentCount = isClosed ? points.Length : points.Length - 1;
+
             for (int j = 0; j < segmentCount; j++)
             {
                 PointF p0 = points[j];

@@ -129,7 +129,7 @@ internal sealed class FlushScene : IDisposable
         int[] bandCountBuffer = new int[commandCount];
         byte[] visibleItemFlags = new byte[commandCount];
 
-        Parallel.ForEach(Partitioner.Create(0, commandCount), range =>
+        _ = Parallel.ForEach(Partitioner.Create(0, commandCount), range =>
         {
             for (int i = range.Item1; i < range.Item2; i++)
             {
@@ -164,6 +164,7 @@ internal sealed class FlushScene : IDisposable
                 int firstBandIndex = FloorDiv(destinationInterest.Top, rowHeight);
                 int lastBandIndex = FloorDiv(destinationInterest.Bottom - 1, rowHeight);
                 int bandCount = (lastBandIndex - firstBandIndex) + 1;
+
                 if (bandCount <= 0)
                 {
                     continue;
@@ -181,6 +182,7 @@ internal sealed class FlushScene : IDisposable
         });
 
         int visibleItemCount = 0;
+
         for (int i = 0; i < visibleItemFlags.Length; i++)
         {
             visibleItemCount += visibleItemFlags[i];
@@ -201,6 +203,7 @@ internal sealed class FlushScene : IDisposable
         int[] itemBandCounts = new int[visibleItemCount];
 
         int writeIndex = 0;
+
         for (int i = 0; i < commandCount; i++)
         {
             if (visibleItemFlags[i] == 0)
@@ -235,6 +238,7 @@ internal sealed class FlushScene : IDisposable
             Rectangle interest = itemOptions.Interest;
             int width = interest.Width;
             long coverStride = (long)width * 2;
+
             if (coverStride > int.MaxValue)
             {
                 throw new InvalidOperationException("Interest bounds exceed rasterizer limits.");
@@ -272,7 +276,7 @@ internal sealed class FlushScene : IDisposable
         long totalBandSegmentRefs = 0;
 
         // Phase 4: count how many prepared segments each item contributes to each row band.
-        Parallel.ForEach(
+        _ = Parallel.ForEach(
             Partitioner.Create(0, visibleItemCount),
             () => 0L,
             (range, _, localTotal) =>
@@ -314,7 +318,7 @@ internal sealed class FlushScene : IDisposable
         int[] bandSegmentIndices = new int[runningSegmentOffset];
 
         // Phase 5: materialize the dense per-band segment index lists using the offsets computed above.
-        Parallel.ForEach(
+        _ = Parallel.ForEach(
             Partitioner.Create(0, visibleItemCount),
             () => Array.Empty<int>(),
             (range, _, bandCursorBuffer) =>
@@ -439,7 +443,7 @@ internal sealed class FlushScene : IDisposable
             Memory<int> startCoverData = startCoverOwner.Memory;
 
             // Phase 8: prebuild each row-local raster band once so execution only performs scan conversion.
-            Parallel.ForEach(Partitioner.Create(0, totalRefs), range =>
+            _ = Parallel.ForEach(Partitioner.Create(0, totalRefs), range =>
             {
                 long localLineCount = 0;
                 for (int rowPosition = range.Item1; rowPosition < range.Item2; rowPosition++)
@@ -465,7 +469,7 @@ internal sealed class FlushScene : IDisposable
                     localLineCount += rasterizableBands[rowPosition].LineCount;
                 }
 
-                Interlocked.Add(ref totalLineCount, localLineCount);
+                _ = Interlocked.Add(ref totalLineCount, localLineCount);
             });
         }
 
@@ -504,13 +508,21 @@ internal sealed class FlushScene : IDisposable
         MemoryAllocator allocator = configuration.MemoryAllocator;
         ReadOnlyMemory<DefaultRasterizer.RasterLineData> lineData =
             this.lineDataOwner?.Memory ?? Memory<DefaultRasterizer.RasterLineData>.Empty;
+
         ReadOnlyMemory<int> startCovers =
             this.startCoverOwner?.Memory ?? Memory<int>.Empty;
-        ParallelOptions options = CreateParallelOptions(this.RowCount);
+
+        ParallelOptions options = new()
+        {
+            MaxDegreeOfParallelism = Math.Min(
+                MaxParallelWorkerCount,
+                Math.Min(Environment.ProcessorCount, Math.Max(1, this.RowCount))),
+        };
+
         BrushRenderer<TPixel>[] preparedBrushes = new BrushRenderer<TPixel>[this.commands.Length];
 
         // Realize brush renderers once per command before rows begin executing in parallel.
-        Parallel.ForEach(Partitioner.Create(0, this.commands.Length), range =>
+        _ = Parallel.ForEach(Partitioner.Create(0, this.commands.Length), range =>
         {
             for (int i = range.Item1; i < range.Item2; i++)
             {
@@ -539,6 +551,7 @@ internal sealed class FlushScene : IDisposable
                 {
                     DefaultRasterizer.WorkerScratch scratch = state.Scratch
                         ?? throw new InvalidOperationException("Raster worker scratch was not initialized.");
+
                     DefaultRasterizer.Context context = scratch.CreateContext(
                         this.maxWidth,
                         this.maxWordsPerRow,
@@ -547,6 +560,7 @@ internal sealed class FlushScene : IDisposable
                         IntersectionRule.NonZero,
                         RasterizationMode.Antialiased,
                         antialiasThreshold: 0F);
+
                     int rowStart = this.rowOffsets[sceneRow];
                     int rowEnd = this.rowOffsets[sceneRow + 1];
 
@@ -556,6 +570,7 @@ internal sealed class FlushScene : IDisposable
                         ref readonly RowItem rowItem = ref this.rowItems[rowPosition];
                         int itemIndex = rowItem.ItemIndex;
                         DefaultRasterizer.RasterizableBandInfo rasterizableBandInfo = this.rasterizableBands[rowPosition];
+
                         if (!rasterizableBandInfo.HasCoverage || rowItem.DestinationRegion.Width <= 0 || rowItem.DestinationRegion.Height <= 0)
                         {
                             continue;
@@ -578,10 +593,7 @@ internal sealed class FlushScene : IDisposable
 
                     return state;
                 },
-                state =>
-                {
-                    state.Dispose();
-                });
+                state => state.Dispose());
         }
         finally
         {
@@ -630,6 +642,7 @@ internal sealed class FlushScene : IDisposable
         Span<int> bandCounts)
     {
         bandCounts.Clear();
+
         if (bandCount <= 0 || geometry.SegmentCount == 0)
         {
             return 0;
@@ -641,6 +654,7 @@ internal sealed class FlushScene : IDisposable
         int firstSceneBandIndex = FloorDiv(interest.Top, rowHeight);
         int bandTopStart = (firstSceneBandIndex * rowHeight) - interest.Top;
         int totalCount = 0;
+
         foreach (PreparedLineSegment segment in geometry.Segments)
         {
             if (!TryGetLocalBandSpan(
@@ -690,6 +704,7 @@ internal sealed class FlushScene : IDisposable
         int firstSceneBandIndex = FloorDiv(interest.Top, rowHeight);
         int bandTopStart = (firstSceneBandIndex * rowHeight) - interest.Top;
         ReadOnlySpan<PreparedLineSegment> segments = geometry.Segments;
+
         for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++)
         {
             if (!TryGetLocalBandSpan(
@@ -733,6 +748,7 @@ internal sealed class FlushScene : IDisposable
         float localMaxY = ((segment.MaxY + translateY) - interestTop) + samplingOffsetY;
         float clipMinY = MathF.Max(0F, localMinY);
         float clipMaxY = MathF.Min(interestHeight, localMaxY);
+
         if (clipMaxY <= clipMinY)
         {
             firstBandIndex = 0;
@@ -772,17 +788,6 @@ internal sealed class FlushScene : IDisposable
 
         return quotient;
     }
-
-    /// <summary>
-    /// Creates the row-level parallel execution settings for the current flush.
-    /// </summary>
-    private static ParallelOptions CreateParallelOptions(int rowCount)
-        => new()
-        {
-            MaxDegreeOfParallelism = Math.Min(
-                MaxParallelWorkerCount,
-                Math.Min(Environment.ProcessorCount, Math.Max(1, rowCount))),
-        };
 
     /// <summary>
     /// Maps an absolute destination row request to the local CPU frame slice.

@@ -47,7 +47,7 @@ internal sealed class GeometryPreparationCache
         private readonly IPath sourcePath;
         private readonly Matrix4x4 transform;
         private readonly PenGeometryKey penGeometry;
-        private readonly IPath[]? clipPaths;
+        private readonly IReadOnlyList<IPath>? clipPaths;
         private readonly BooleanOperation booleanOperation;
         private readonly IntersectionRule intersectionRule;
         private readonly bool enforceFillOrientation;
@@ -61,20 +61,22 @@ internal sealed class GeometryPreparationCache
         /// <param name="pen">The optional pen used for stroke expansion.</param>
         /// <param name="clipPaths">The clip path sequence applied during preparation.</param>
         /// <param name="shapeOptions">Options that influence clipping behavior.</param>
+        /// <param name="enforceFillOrientation">Whether preparation should normalize closed contour winding.</param>
         public GeometryPreparationKey(
             IPath sourcePath,
             Matrix4x4 transform,
             Pen? pen,
             IReadOnlyList<IPath>? clipPaths,
-            ShapeOptions shapeOptions)
+            ShapeOptions shapeOptions,
+            bool enforceFillOrientation)
         {
             this.sourcePath = sourcePath;
             this.transform = transform;
             this.penGeometry = new PenGeometryKey(pen);
-            this.clipPaths = CopyClipPaths(clipPaths);
+            this.clipPaths = clipPaths;
             this.booleanOperation = shapeOptions.BooleanOperation;
             this.intersectionRule = shapeOptions.IntersectionRule;
-            this.enforceFillOrientation = pen is null;
+            this.enforceFillOrientation = enforceFillOrientation;
 
             HashCode hash = default;
             hash.Add(RuntimeHelpers.GetHashCode(sourcePath));
@@ -86,8 +88,8 @@ internal sealed class GeometryPreparationCache
 
             if (this.clipPaths is not null)
             {
-                hash.Add(this.clipPaths.Length);
-                for (int i = 0; i < this.clipPaths.Length; i++)
+                hash.Add(this.clipPaths.Count);
+                for (int i = 0; i < this.clipPaths.Count; i++)
                 {
                     hash.Add(RuntimeHelpers.GetHashCode(this.clipPaths[i]));
                 }
@@ -119,35 +121,19 @@ internal sealed class GeometryPreparationCache
         /// <inheritdoc/>
         public override int GetHashCode() => this.hashCode;
 
-        private static IPath[]? CopyClipPaths(IReadOnlyList<IPath>? clipPaths)
-        {
-            if (clipPaths is not { Count: > 0 })
-            {
-                return null;
-            }
-
-            IPath[] copied = new IPath[clipPaths.Count];
-            for (int i = 0; i < copied.Length; i++)
-            {
-                copied[i] = clipPaths[i];
-            }
-
-            return copied;
-        }
-
-        private static bool ClipPathsEqual(IPath[]? left, IPath[]? right)
+        private static bool ClipPathsEqual(IReadOnlyList<IPath>? left, IReadOnlyList<IPath>? right)
         {
             if (left is null || right is null)
             {
                 return left is null && right is null;
             }
 
-            if (left.Length != right.Length)
+            if (left.Count != right.Count)
             {
                 return false;
             }
 
-            for (int i = 0; i < left.Length; i++)
+            for (int i = 0; i < left.Count; i++)
             {
                 if (!ReferenceEquals(left[i], right[i]))
                 {
@@ -166,7 +152,7 @@ internal sealed class GeometryPreparationCache
     {
         private readonly Type? penType;
         private readonly float strokeWidth;
-        private readonly float[]? strokePattern;
+        private readonly ReadOnlyMemory<float> strokePattern;
         private readonly double miterLimit;
         private readonly double innerMiterLimit;
         private readonly double arcDetailScale;
@@ -182,7 +168,7 @@ internal sealed class GeometryPreparationCache
             {
                 this.penType = null;
                 this.strokeWidth = 0;
-                this.strokePattern = null;
+                this.strokePattern = default;
                 this.miterLimit = 0;
                 this.innerMiterLimit = 0;
                 this.arcDetailScale = 0;
@@ -196,7 +182,7 @@ internal sealed class GeometryPreparationCache
 
             this.penType = pen.GetType();
             this.strokeWidth = pen.StrokeWidth;
-            this.strokePattern = CopyStrokePattern(pen.StrokePattern.Span);
+            this.strokePattern = pen.StrokePattern;
 
             StrokeOptions strokeOptions = pen.StrokeOptions;
             this.miterLimit = strokeOptions.MiterLimit;
@@ -218,12 +204,13 @@ internal sealed class GeometryPreparationCache
             hash.Add(this.innerJoin);
             hash.Add(this.normalizeOutput);
 
-            if (this.strokePattern is not null)
+            if (!this.strokePattern.IsEmpty)
             {
                 hash.Add(this.strokePattern.Length);
-                for (int i = 0; i < this.strokePattern.Length; i++)
+                ReadOnlySpan<float> strokePatternSpan = this.strokePattern.Span;
+                for (int i = 0; i < strokePatternSpan.Length; i++)
                 {
-                    hash.Add(this.strokePattern[i]);
+                    hash.Add(strokePatternSpan[i]);
                 }
             }
 
@@ -247,7 +234,7 @@ internal sealed class GeometryPreparationCache
                 && this.lineCap == other.lineCap
                 && this.innerJoin == other.innerJoin
                 && this.normalizeOutput == other.normalizeOutput
-                && StrokePatternsEqual(this.strokePattern, other.strokePattern);
+                && this.strokePattern.Span.SequenceEqual(other.strokePattern.Span);
         }
 
         /// <inheritdoc/>
@@ -256,27 +243,5 @@ internal sealed class GeometryPreparationCache
 
         /// <inheritdoc/>
         public override int GetHashCode() => this.hashCode;
-
-        private static float[]? CopyStrokePattern(ReadOnlySpan<float> strokePattern)
-        {
-            if (strokePattern.IsEmpty)
-            {
-                return null;
-            }
-
-            float[] copied = new float[strokePattern.Length];
-            strokePattern.CopyTo(copied);
-            return copied;
-        }
-
-        private static bool StrokePatternsEqual(float[]? left, float[]? right)
-        {
-            if (left is null || right is null)
-            {
-                return left is null && right is null;
-            }
-
-            return left.AsSpan().SequenceEqual(right);
-        }
     }
 }

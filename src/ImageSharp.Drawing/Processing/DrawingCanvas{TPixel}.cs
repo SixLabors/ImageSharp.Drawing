@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Rendering;
-using SixLabors.ImageSharp.Drawing.Helpers;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Processing.Processors.Text;
 using SixLabors.ImageSharp.Drawing.Text;
@@ -391,7 +390,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         Guard.NotNull(paths, nameof(paths));
         foreach (IPath path in paths)
         {
-            this.Fill(brush, path);
+            this.EnqueueFillPath(brush, path, enforceFillOrientation: false);
         }
     }
 
@@ -408,20 +407,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
         Guard.NotNull(brush, nameof(brush));
-
-        DrawingCanvasState state = this.ResolveState();
-        DrawingOptions effectiveOptions = state.Options;
-        DrawingOptions commandOptions = effectiveOptions;
-        IReadOnlyList<IPath> commandClipPaths = state.ClipPaths;
-
-        IPath closed = path.AsClosedPath();
-
-        this.PrepareCompositionCore(
-            closed,
-            brush,
-            effectiveOptions,
-            RasterizerSamplingOrigin.PixelBoundary,
-            state.ClipPaths);
+        this.EnqueueFillPath(brush, path, enforceFillOrientation: true);
     }
 
     /// <inheritdoc />
@@ -480,6 +466,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             brush,
             effectiveOptions,
             RasterizerSamplingOrigin.PixelBoundary,
+            enforceFillOrientation: false,
             state.ClipPaths);
     }
 
@@ -549,6 +536,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             pen.StrokeFill,
             effectiveOptions,
             RasterizerSamplingOrigin.PixelCenter,
+            enforceFillOrientation: false,
             state.ClipPaths,
             pen);
     }
@@ -954,6 +942,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 brush,
                 commandOptions,
                 RasterizerSamplingOrigin.PixelBoundary,
+                enforceFillOrientation: false,
                 commandClipPaths);
         }
         finally
@@ -973,6 +962,10 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="brush">Brush used for shading.</param>
     /// <param name="options">Effective drawing options.</param>
     /// <param name="samplingOrigin">Rasterizer sampling origin.</param>
+    /// <param name="enforceFillOrientation">
+    /// When <see langword="true"/>, preparation normalizes closed contour orientation before rasterization.
+    /// Preserving incoming contour order is required for text and other pre-authored compound paths.
+    /// </param>
     /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
     /// <param name="pen">Optional pen for stroke commands.</param>
     private void PrepareCompositionCore(
@@ -980,6 +973,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         Brush brush,
         DrawingOptions options,
         RasterizerSamplingOrigin samplingOrigin,
+        bool enforceFillOrientation,
         IReadOnlyList<IPath>? clipPaths = null,
         Pen? pen = null)
     {
@@ -1014,9 +1008,36 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 in rasterizerOptions,
                 shapeOptions,
                 options.Transform,
+                enforceFillOrientation,
                 this.targetFrame.Bounds.Location,
                 pen,
                 clipPaths));
+    }
+
+    /// <summary>
+    /// Enqueues a fill command for one path using the current canvas state.
+    /// </summary>
+    /// <param name="brush">Brush used for shading.</param>
+    /// <param name="path">Path to fill.</param>
+    /// <param name="enforceFillOrientation">
+    /// Whether preparation should normalize closed contour winding for this specific fill.
+    /// </param>
+    private void EnqueueFillPath(Brush brush, IPath path, bool enforceFillOrientation)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(path, nameof(path));
+        Guard.NotNull(brush, nameof(brush));
+
+        DrawingCanvasState state = this.ResolveState();
+        IPath closed = path.AsClosedPath();
+
+        this.PrepareCompositionCore(
+            closed,
+            brush,
+            state.Options,
+            RasterizerSamplingOrigin.PixelBoundary,
+            enforceFillOrientation,
+            state.ClipPaths);
     }
 
     /// <summary>
@@ -1269,6 +1290,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             in rasterizerOptions,
             shapeOptions,
             Matrix4x4.Identity,
+            enforceFillOrientation: false,
             destinationOffset,
             pen,
             clipPaths);
