@@ -1,295 +1,351 @@
 # DrawingCanvas
 
-This document describes the architecture, state management, and object lifecycle of `DrawingCanvas<TPixel>`.
+This document describes how `DrawingCanvas<TPixel>` records drawing commands, manages state, handles layers, and hands work off to the drawing backend.
+
+`DrawingCanvas<TPixel>` is a deferred renderer. Most public drawing calls do not rasterize immediately. They capture intent as `CompositionCommand` instances in `DrawingCanvasBatcher<TPixel>`. The real normalization work happens later, during flush, when each command is prepared and turned into backend-ready geometry.
 
 ## Overview
 
-`DrawingCanvas<TPixel>` is the high-level drawing API. It manages a state stack, command batching, layer compositing, and delegates rasterization to an `IDrawingBackend`. It implements a deferred command model—draw calls queue `CompositionCommand` objects in a batcher, which are flushed to the backend on `Flush()` or `Dispose()`.
+At a high level the canvas owns:
 
-## Class Structure
+- a target frame
+- a drawing backend
+- one active batcher
+- a stack of immutable drawing-state snapshots
+- a stack of active layer records
+- a list of temporary image resources that must stay alive until flush
 
-```text
-DrawingCanvas<TPixel> : IDrawingCanvas, IDisposable
-  Fields:
-    configuration          : Configuration
-    backend                : IDrawingBackend
-    targetFrame            : ICanvasFrame<TPixel>        (root frame, immutable)
-    batcher                : DrawingCanvasBatcher<TPixel> (reassigned on SaveLayer/Restore)
-    savedStates            : Stack<DrawingCanvasState>    (min depth 1)
-    layerDataStack         : Stack<LayerData<TPixel>>     (one per active SaveLayer)
-    pendingImageResources  : List<Image<TPixel>>          (temp images awaiting flush)
-    isDisposed             : bool
+The canvas itself is the public API surface. The batcher is the deferred command queue. The backend is the execution engine.
+
+## Core Responsibilities
+
+`DrawingCanvas<TPixel>` is responsible for:
+
+- state-stack management (`Save`, `Restore`, `SaveLayer`)
+- creating and queuing `CompositionCommand` instances
+- routing drawing to the current batcher
+- coordinating temporary image lifetimes for `DrawImage` and `Process`
+- flushing queued work and releasing temporary resources
+
+It is not responsible for:
+
+- flattening paths
+- stroke expansion
+- clip application
+- prepared geometry caching
+- rasterization
+- brush composition
+
+Those all happen downstream during flush.
+
+## State Model
+
+The active state lives in `DrawingCanvasState`:
+
+- `Options`
+- `ClipPaths`
+- `IsLayer`
+- `LayerOptions`
+- `LayerBounds`
+
+`DrawingCanvasState` is an immutable snapshot. `ResolveState()` returns the top of `savedStates`, and every drawing call reads from that active state.
+
+### Save And Restore
+
+`Save()` pushes a non-layer copy of the current state.
+
+`Save(options, clipPaths)` pushes a new snapshot with replacement options and clip paths.
+
+`Restore()` pops one state. If the popped state represents a layer, the canvas composites that layer before returning to the parent batcher.
+
+`RestoreTo(saveCount)` keeps popping until the requested save depth is reached.
+
+## Layer Lifecycle
+
+`SaveLayer` is the mechanism for isolated group rendering. The canvas flushes current work, switches batching to a temporary layer frame, records commands into that frame, then composites the layer back on restore.
+
+### SaveLayer Flow
+
+```mermaid
+flowchart TD
+    A[Save layer request] --> B[Flush current batcher]
+    B --> C[Clamp bounds to canvas]
+    C --> D[Create layer frame through backend]
+    D --> E[Create LayerData with parent batcher, layer frame, layer bounds]
+    E --> F[Push LayerData]
+    F --> G[Replace active batcher with a batcher targeting the layer frame]
+    G --> H[Push layer drawing state]
 ```
 
-## State Management
+### Restore Layer Flow
 
-### DrawingCanvasState (Immutable Snapshot)
-
-```text
-DrawingCanvasState
-  Options      : DrawingOptions   (by reference, not deep-cloned)
-  ClipPaths    : IReadOnlyList<IPath>
-  IsLayer      : bool             (init-only, default false)
-  LayerOptions : GraphicsOptions? (init-only, set for layers)
-  LayerBounds  : Rectangle?       (init-only, set for layers)
+```mermaid
+flowchart TD
+    A[Restore or RestoreTo] --> B{Popped state is a layer?}
+    B -- No --> C[Return]
+    B -- Yes --> D[Flush layer batcher]
+    D --> E[Pop LayerData]
+    E --> F[Restore parent batcher]
+    F --> G[Compose layer into parent target]
+    G --> H[Release layer frame resources]
 ```
 
-### Save / Restore
+### Important Layer Details
 
-```text
-Save()
-  -> push new DrawingCanvasState(current.Options, current.ClipPaths)
-  -> IsLayer = false (prevents spurious layer compositing on Restore)
-  -> return SaveCount
-
-Save(options, clipPaths)
-  -> Save(), then replace top state with new options/clips
-  -> return SaveCount
-
-Restore()
-  -> if SaveCount <= 1: no-op
-  -> pop top state
-  -> if state.IsLayer: CompositeAndPopLayer(state)
-
-RestoreTo(saveCount)
-  -> pop states until SaveCount == target
-  -> each layer state triggers CompositeAndPopLayer
-```
-
-`ResolveState()` returns `savedStates.Peek()`—every drawing operation reads the active state from here.
-
-## SaveLayer Lifecycle
-
-### Purpose
-
-SaveLayer enables group-level effects: rendering multiple draw commands to an isolated temporary surface, then compositing the result back with opacity, blend mode, or restricted bounds. This is the mechanism behind SVG `<g opacity="0.5">` and group blend modes.
-
-### Push Phase
-
-```text
-SaveLayer(layerOptions, bounds)
-  1. Flush() pending commands to current target
-  2. Clamp bounds to canvas (min 1x1)
-  3. Allocate transparent Image<TPixel>(width, height)
-  4. Wrap in MemoryCanvasFrame<TPixel>
-  5. Save current batcher in LayerData<TPixel>:
-       LayerData(parentBatcher, layerImage, layerFrame, layerBounds)
-  6. Push LayerData onto layerDataStack
-  7. Create new batcher targeting layer frame
-  8. Push layer state onto savedStates:
-       DrawingCanvasState { IsLayer=true, LayerOptions, LayerBounds }
-  9. Return SaveCount
-```
-
-### Draw Phase
-
-All commands between SaveLayer() and Restore() target the layer batcher, which writes to the temporary layer image. Clip paths, transforms, and drawing options apply normally within the layer's local coordinate space.
-
-### Pop Phase (Restore)
-
-```text
-CompositeAndPopLayer(layerState)
-  1. Flush() pending commands to layer surface
-  2. Pop LayerData from layerDataStack
-  3. Restore parent batcher: this.batcher = layerData.ParentBatcher
-  4. Get destination from parent batcher's target frame
-  5. backend.ComposeLayer(source=layerFrame, destination, bounds.Location, layerOptions)
-  6. layerData.Dispose() (releases temporary image)
-```
-
-### Nesting
-
-Layers nest naturally via the `layerDataStack`. When compositing a nested layer, the parent batcher still targets the intermediate layer (not root). Each Restore pops one layer and composites it to its immediate parent.
-
-### Object Lifecycle Diagram
-
-```text
-canvas.SaveLayer(options, bounds)
-  ├─ Image<TPixel> layerImage ──────────────┐ (allocated)
-  ├─ MemoryCanvasFrame layerFrame ──────────┤
-  ├─ LayerData<TPixel> ────────────────────┤
-  │   ├─ .ParentBatcher = old batcher      │
-  │   ├─ .LayerImage = layerImage          │
-  │   ├─ .LayerFrame = layerFrame          │
-  │   └─ .LayerBounds = clampedBounds      │
-  └─ new batcher → targets layerFrame      │
-                                            │
-  ... draw commands → layer batcher ...     │
-                                            │
-canvas.Restore()                            │
-  ├─ flush layer batcher                   │
-  ├─ pop LayerData                         │
-  ├─ restore parent batcher                │
-  ├─ ComposeLayer(layerFrame → parent)     │
-  └─ layerData.Dispose() ─────────────────┘ (freed)
-```
+- Layer creation is backend-driven through `IDrawingBackend.CreateLayerFrame(...)`.
+- The CPU backend returns a `MemoryCanvasFrame<TPixel>`.
+- A GPU backend may return a native frame backed by a GPU resource.
+- Explicit `Restore()` composites with the saved layer options.
+- Disposal composites any still-active layers with default `GraphicsOptions`.
 
 ## The Batcher
 
-`DrawingCanvasBatcher<TPixel>` queues `CompositionCommand` objects and flushes them to the backend.
+`DrawingCanvasBatcher<TPixel>` owns the pending command list and flush boundary.
 
-```text
-DrawingCanvasBatcher<TPixel>
-  TargetFrame    : ICanvasFrame<TPixel>  (destination for this batcher)
-  AddComposition(command)                (append to command list)
-  FlushCompositions()                    (create scene, call backend, clear list)
+Its job is narrow:
+
+- accept queued `CompositionCommand` instances
+- prepare them during flush
+- package them into a `CompositionScene`
+- call `backend.FlushCompositions(...)`
+- always clear the command queue afterward
+
+### Flush Pipeline
+
+```mermaid
+flowchart TD
+    A[Canvas flush] --> B[Batcher flush]
+    B --> C{Any commands?}
+    C -- No --> D[Return]
+    C -- Yes --> E[PrepareCommands in parallel]
+    E --> F[Create CompositionScene]
+    F --> G[Backend flush compositions]
+    G --> H[Clear command list in finally]
+    H --> I[DisposePendingImageResources]
 ```
 
-**Flush behavior:**
-1. If no commands, return (no-op).
-2. Create `CompositionScene` wrapping the command list.
-3. Call `backend.FlushCompositions(configuration, targetFrame, scene)`.
-4. Clear commands in `finally` block (always, even on failure).
+### What Preparation Does
 
-The canvas holds exactly one batcher at a time. SaveLayer swaps it for a new one targeting the layer frame; Restore swaps it back to the parent.
+`CompositionCommand.Prepare(...)` is where command normalization happens:
 
-## Drawing Operations
+- apply the queued transform to the source path
+- expand strokes to fill geometry when a `Pen` is present
+- apply clip paths
+- build or reuse `PreparedGeometry`
+- transform the brush into the prepared geometry space
+- recompute raster interest
+- recompute brush bounds
+- recompute the coverage definition key
+
+Preparation uses a flush-scoped `GeometryPreparationCache`, so repeated commands with the same geometry-affecting inputs can share one `PreparedGeometry` instance.
+
+## Command Creation
+
+Public canvas methods do not do heavy geometry work. They capture inputs and queue commands.
 
 ### Fill
 
-```text
-Fill(brush, path)
-  1. ResolveState() → options, clipPaths
-  2. path.AsClosedPath()
-  3. Apply transform: path.Transform(options.Transform), brush.Transform(options.Transform)
-  4. Apply clips: path.Clip(shapeOptions, clipPaths)
-  5. PrepareCompositionCore(path, brush, options, PixelBoundary)
-     → batcher.AddComposition(CompositionCommand.Create(...))
-```
+`Fill(brush, path)`:
 
-### Stroke (Draw)
+- resolves the active state
+- closes the path
+- computes placeholder rasterizer options from the current bounds
+- queues a `CompositionCommand`
 
-```text
-Draw(pen, path)
-  1. ResolveState() → options, clipPaths
-  2. Apply transform to path
-  3. Force NonZero winding rule (strokes self-overlap)
-  4. If clip paths present:
-     → expand stroke to outline on CPU, then clip, then fill
-  5. If no clip paths:
-     → PrepareStrokeCompositionCore(path, brush, strokeWidth, strokeOptions, ...)
-     → defers stroke expansion to backend
-  Uses PixelCenter sampling origin
-```
+The queued command still contains:
+
+- the original path reference
+- the original brush
+- the active transform
+- clip paths
+- graphics options
+- placeholder rasterizer metadata
+
+### Draw
+
+`Draw(pen, path)` follows the same pattern, but:
+
+- forces `IntersectionRule.NonZero` for stroke semantics
+- uses `RasterizerSamplingOrigin.PixelCenter`
+- stores the `Pen` so preparation can expand stroke geometry later
 
 ### Clear
 
-Executes a fill with modified `GraphicsOptions` (Src composition, no blending) inside a temporary state scope via `ExecuteWithTemporaryState()`.
-
-### DrawImage
-
-Three-phase pipeline:
-1. **Source preparation:** Crop/scale source image to destination dimensions.
-2. **Transform application:** Apply canvas transform via `image.Transform()` with composed matrix.
-3. **Deferred execution:** Transfer temp image to `pendingImageResources`, create `ImageBrush`, fill destination path.
+`Clear(...)` is implemented as a fill under a temporary state with `GraphicsOptions` modified for clear semantics.
 
 ### DrawText
 
-Renders text to glyph operations via `RichTextGlyphRenderer`, sorts by render pass (for color font layers), submits commands in sorted order.
+`DrawText(...)`:
+
+- resolves the active state
+- uses `RichTextGlyphRenderer` to build drawing operations
+- sorts operations by render pass where needed
+- converts operations to `CompositionCommand` instances
+- queues them in submission order
+
+Glyph-local paths can stay shared up to command preparation, which matters for repeated glyph bodies.
+
+### DrawImage
+
+`DrawImage(...)` is the main exception to the "queue raw intent" rule. It performs eager image work before queuing the final fill:
+
+1. crop and/or scale the source image
+2. if a canvas transform is active, bake that transform into the image pixels
+3. align the transformed bitmap to integer canvas bounds
+4. create an `ImageBrush`
+5. queue a fill for the final destination path
+
+After eager image transformation, the queued image command uses:
+
+- an identity command transform
+- clip paths already transformed into the same space as the baked image
+
+That avoids applying the canvas transform twice.
 
 ### Process
 
-Flushes current commands, reads back pixels via `backend.TryReadRegion()`, runs an `Action<IImageProcessingContext>` on the readback, then fills the result back to the canvas via `ImageBrush`.
+`Process(path, operation)` is read-modify-write:
 
-## Frame Abstraction
+1. flush queued work first
+2. compute a conservative source rectangle from the path bounds
+3. ask the backend for pixel readback
+4. mutate the readback image through `IImageProcessingContext`
+5. create an `ImageBrush` over the result
+6. queue a fill back into the canvas
 
-```text
-ICanvasFrame<TPixel>
-  Bounds                    : Rectangle
-  TryGetCpuRegion(out region)    : bool
-  TryGetNativeSurface(out surface) : bool
-```
+## Frame Model
 
-| Implementation | CPU Region | Native Surface | Usage |
-|---|---|---|---|
-| `MemoryCanvasFrame<TPixel>` | Yes | No | CPU image buffers, layers |
-| `NativeCanvasFrame<TPixel>` | No | Yes | GPU-backed surfaces |
-| `CanvasRegionFrame<TPixel>` | Delegates | Delegates | Sub-region of parent frame |
+Every batcher targets an `ICanvasFrame<TPixel>`.
 
-`CanvasRegionFrame` wraps a parent frame with a clipped rectangle, used by `CreateRegion()`.
+`ICanvasFrame<TPixel>` exposes:
+
+- `Bounds`
+- `TryGetCpuRegion(...)`
+- `TryGetNativeSurface(...)`
+
+Implementations:
+
+- `MemoryCanvasFrame<TPixel>`: CPU-backed frame
+- `NativeCanvasFrame<TPixel>`: native or GPU-backed frame
+- `CanvasRegionFrame<TPixel>`: clipped view over another frame
+
+The backend decides how to execute against the frame it receives.
 
 ## Transform Handling
 
-Transforms are stored in `DrawingOptions.Transform` as `Matrix4x4` (default: Identity). Applied per-operation, not cumulatively.
+Transforms live in `DrawingOptions.Transform`.
 
-| Target | Method |
-|---|---|
-| Paths | `path.Transform(matrix)` |
-| Brushes | `brush.Transform(matrix)` |
-| Images | `image.Transform()` with composed source→destination→canvas matrix |
+For path-based drawing, the transform is queued on the command and applied during `CompositionCommand.Prepare()`.
+
+For image drawing, the transform is baked into pixels before the command is queued.
+
+### Transform Responsibilities
+
+- paths: transformed during command preparation
+- brushes: transformed during command preparation
+- images: transformed eagerly in `DrawImageCore(...)`
 
 ## Clipping
 
-Clip paths are stored in `DrawingCanvasState.ClipPaths`. Applied during command preparation:
+Clip paths are stored on the active `DrawingCanvasState` and attached to queued commands.
+
+During preparation, clipping happens after transform and after stroke expansion:
 
 ```csharp
-effectivePath = subjectPath.Clip(shapeOptions, clipPaths);
+path = path.Clip(shapeOptions, clipPaths);
 ```
 
-For strokes with clip paths, the stroke is expanded to an outline first, then clipped, then filled—this prevents clip artifacts at stroke edges.
+For strokes, the ordering is:
+
+1. transform path
+2. expand stroke to outline
+3. apply clip
+4. build prepared fill geometry
 
 ## CreateRegion
 
-```text
-CreateRegion(region)
-  -> clamp to canvas bounds
-  -> wrap frame in CanvasRegionFrame<TPixel>
-  -> create child canvas:
-     - shares backend and batcher with parent
-     - snapshots current state
-     - local origin is (0,0) within clipped region
+`CreateRegion(region)` creates a child canvas over a clipped sub-region.
+
+```mermaid
+flowchart TD
+    A[Create region request] --> B[Clamp to canvas bounds]
+    B --> C[Wrap target frame in CanvasRegionFrame]
+    C --> D[Create child DrawingCanvas]
+    D --> E[Reuse backend]
+    D --> F[Reuse batcher]
+    D --> G[Reuse current DrawingCanvasState]
 ```
+
+The child canvas gets local bounds `(0, 0, clipped.Width, clipped.Height)`, while command offsets are still derived from the child frame location.
 
 ## Disposal
 
-```text
-Dispose()
-  Phase 1: Pop all active layers
-    -> for each layer in layerDataStack (LIFO):
-       -> Flush() to layer surface
-       -> restore parent batcher
-       -> ComposeLayer(layer → parent) with default GraphicsOptions
-       -> layerData.Dispose()
+`Dispose()` is structured, not just a final flush.
 
-  Phase 2: Final flush
-    -> batcher.FlushCompositions()
-
-  Phase 3: Cleanup (in finally)
-    -> DisposePendingImageResources()
-    -> isDisposed = true
+```mermaid
+flowchart TD
+    A[Dispose] --> B[Restore saved state stack to depth 1]
+    B --> C[Composite any active layers through the normal restore path]
+    C --> D[Final batcher flush]
+    D --> E[DisposePendingImageResources]
+    E --> F[Mark canvas disposed]
 ```
 
-Active layers that were never explicitly Restored are composited with default `GraphicsOptions` during disposal. This ensures no resource leaks, though the compositing result may differ from explicit Restore with custom options.
+Important detail:
 
-## IDrawingBackend Interface
+- `Dispose()` now unwinds active layers through the same layer-composition path used by `Restore()` and `RestoreTo(...)`
+- custom layer `GraphicsOptions` therefore remain in effect even when callers rely on implicit cleanup
 
-```text
-IDrawingBackend
-  IsSupported                → bool (default true)
-  FlushCompositions<TPixel>  (configuration, target, scene)
-  ComposeLayer<TPixel>       (configuration, source, destination, offset, options)
-  TryReadRegion<TPixel>      (configuration, target, rect, out image) → bool
-  ReleaseFrameResources<TPixel> (configuration, target)
+## Backend Touchpoints
+
+`DrawingCanvas<TPixel>` talks to the backend through these operations:
+
+- `FlushCompositions(...)`
+- `TryReadRegion(...)`
+- `ComposeLayer(...)`
+- `CreateLayerFrame(...)`
+- `ReleaseFrameResources(...)`
+
+`DefaultDrawingBackend` executes the CPU path.
+
+`WebGPUDrawingBackend` can supply native surfaces, layer frames, and GPU execution while still fitting the same canvas contract.
+
+## End-To-End Command Flow
+
+```mermaid
+flowchart TD
+    A[Public drawing call] --> B[Resolve active DrawingCanvasState]
+    B --> C[Create CompositionCommand]
+    C --> D[Queue command in batcher]
+    D --> E[More draw calls]
+    E --> F[Flush or Dispose]
+    F --> G[Batcher flush]
+    G --> H[PrepareCommands in parallel]
+    H --> I[Create CompositionScene]
+    I --> J[Backend flush compositions]
+    J --> K[CPU row first FlushScene execution]
+    J --> L[WebGPU batch planning and GPU execution]
+    K --> M[Clear command list]
+    L --> M
+    M --> N[DisposePendingImageResources]
 ```
 
-`DefaultDrawingBackend` (singleton) handles all operations on CPU. `WebGPUDrawingBackend` accelerates FlushCompositions and ComposeLayer on GPU with CPU fallback.
+## Practical Reading Guide
 
-## Command Flow Summary
+If you are tracing behavior in code, these are the most useful entry points:
 
-```text
-canvas.Fill(brush, path)
-  → transform path + brush
-  → clip path
-  → CompositionCommand.Create(path, brush, options)
-  → batcher.AddComposition(command)
-  → ... more draw calls ...
+- `DrawingCanvas{TPixel}.cs`
+- `DrawingCanvasBatcher{TPixel}.cs`
+- `CompositionCommand.cs`
+- `GeometryPreparationCache.cs`
+- `DefaultDrawingBackend.cs`
+- `FlushScene.cs`
 
-canvas.Flush() or canvas.Dispose()
-  → batcher.FlushCompositions()
-    → CompositionScene(commands)
-    → backend.FlushCompositions(config, frame, scene)
-      → CompositionScenePlanner.CreatePreparedBatches()
-      → for each batch: rasterize + apply brushes + composite
-    → commands.Clear()
-  → DisposePendingImageResources()
-```
+Start at the canvas public method, then follow:
+
+1. command creation
+2. batcher flush
+3. command preparation
+4. backend execution
+
+That path matches the real runtime behavior much more closely than the public API surface alone.

@@ -38,6 +38,28 @@ public class DrawingCanvasBatcherTests
     }
 
     [Fact]
+    public void Flush_SamePathDifferentBrushes_ReusesPreparedGeometry()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(40, 40);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+        IPath path = new RectangularPolygon(4, 6, 18, 12);
+        DrawingOptions options = new();
+        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
+
+        canvas.Fill(Brushes.Solid(Color.Red), path);
+        canvas.Fill(Brushes.Solid(Color.Blue), path);
+        canvas.Flush();
+
+        Assert.Equal(2, backend.PreparedCommands.Count);
+        Assert.NotNull(backend.PreparedCommands[0].Geometry);
+        Assert.Same(backend.PreparedCommands[0].Geometry, backend.PreparedCommands[1].Geometry);
+    }
+
+    [Fact]
     public void Flush_SamePathDifferentBrushes_Stroke_UsesSingleBatch()
     {
         Configuration configuration = new();
@@ -128,6 +150,8 @@ public class DrawingCanvasBatcherTests
     {
         public List<CompositionBatch> Batches { get; } = [];
 
+        public IReadOnlyList<CompositionCommand> PreparedCommands { get; private set; } = Array.Empty<CompositionCommand>();
+
         public bool HasBatch { get; private set; }
 
         public CompositionBatch LastBatch { get; private set; } = new(
@@ -148,7 +172,9 @@ public class DrawingCanvasBatcherTests
             CompositionScene compositionScene)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            List<CompositionBatch> batches = CompositionScenePlanner.CreatePreparedBatches(
+            this.PreparedCommands = compositionScene.Commands.ToArray();
+
+            List<CompositionBatch> batches = CompositionBatchPlanner.CreatePreparedBatches(
                 compositionScene.Commands,
                 target.Bounds);
             if (batches.Count == 0)

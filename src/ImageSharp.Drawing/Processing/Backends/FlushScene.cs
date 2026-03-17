@@ -3,7 +3,6 @@
 
 using System.Buffers;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -13,17 +12,18 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the CPU backend's SharpBlaze-style execution unit: one flush is converted into a set of
-/// destination-row-local raster items with prepared geometry and row membership lists.
+/// One flush is converted into a set of destination-row-local raster items with prepared geometry
+/// and row membership lists.
 /// </para>
 /// <para>
-/// The scene owns flush-local scheduling data plus SharpBlaze-style row-local raster payloads
-/// prebuilt in destination coordinates. Scene-row execution can then rasterize directly from those
-/// prelinearized row items.
+/// The scene owns flush-local scheduling data plus row-local raster payloads that are prebuilt in
+/// destination coordinates. Scene-row execution can then rasterize directly from those prepared
+/// row items without rebuilding coverage state for every command during composition.
 /// </para>
 /// </remarks>
 internal sealed class FlushScene : IDisposable
 {
+    // Keep row-level parallelism bounded so small scenes do not overpay in scheduling overhead.
     private const int MaxParallelWorkerCount = 12;
 
     private readonly PreparedCompositionCommand[] commands;
@@ -38,6 +38,9 @@ internal sealed class FlushScene : IDisposable
     private readonly int maxCoverStride;
     private readonly int maxBandCapacity;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FlushScene"/> class.
+    /// </summary>
     private FlushScene(
         PreparedCompositionCommand[] commands,
         int[] interestLefts,
@@ -116,6 +119,7 @@ internal sealed class FlushScene : IDisposable
             return Empty();
         }
 
+        // Phase 1: prepare and clip commands independently so later passes only work on visible items.
         PreparedCompositionCommand[] preparedCommandBuffer = new PreparedCompositionCommand[commandCount];
         PreparedGeometry?[] geometryBuffer = new PreparedGeometry[commandCount];
         RasterizerOptions[] rasterizerOptionsBuffer = new RasterizerOptions[commandCount];
@@ -130,7 +134,7 @@ internal sealed class FlushScene : IDisposable
             for (int i = range.Item1; i < range.Item2; i++)
             {
                 CompositionCommand command = commands[i];
-                if (!CompositionScenePlanner.TryPrepareCommand(in command, in sceneBounds, out PreparedCompositionCommand prepared))
+                if (!CompositionCommandPreparer.TryPrepareCommand(in command, in sceneBounds, out PreparedCompositionCommand prepared))
                 {
                     continue;
                 }
@@ -187,6 +191,7 @@ internal sealed class FlushScene : IDisposable
             return Empty();
         }
 
+        // Phase 2: compact the visible items into dense arrays so the hot path avoids branchy sparse scans.
         PreparedCompositionCommand[] preparedCommands = new PreparedCompositionCommand[visibleItemCount];
         PreparedGeometry[] geometries = new PreparedGeometry[visibleItemCount];
         RasterizerOptions[] rasterizerOptions = new RasterizerOptions[visibleItemCount];
@@ -223,6 +228,7 @@ internal sealed class FlushScene : IDisposable
         int singleBandItemCount = 0;
         int smallEdgeItemCount = 0;
 
+        // Phase 3: derive scene-wide maxima once so every worker can allocate one reusable scratch set.
         for (int i = 0; i < visibleItemCount; i++)
         {
             RasterizerOptions itemOptions = rasterizerOptions[i];
@@ -264,6 +270,8 @@ internal sealed class FlushScene : IDisposable
 
         int[] bandSegmentOffsets = new int[totalBandOffsetCount];
         long totalBandSegmentRefs = 0;
+
+        // Phase 4: count how many prepared segments each item contributes to each row band.
         Parallel.ForEach(
             Partitioner.Create(0, visibleItemCount),
             () => 0L,
@@ -304,6 +312,8 @@ internal sealed class FlushScene : IDisposable
         }
 
         int[] bandSegmentIndices = new int[runningSegmentOffset];
+
+        // Phase 5: materialize the dense per-band segment index lists using the offsets computed above.
         Parallel.ForEach(
             Partitioner.Create(0, visibleItemCount),
             () => Array.Empty<int>(),
@@ -343,6 +353,7 @@ internal sealed class FlushScene : IDisposable
         int[] rowCounts = new int[rowCount];
         int totalRefs = 0;
 
+        // Phase 6: convert item-local bands into scene-row membership counts.
         for (int i = 0; i < visibleItemCount; i++)
         {
             int itemFirstActiveRow = itemFirstBandIndices[i] - minBandIndex;
@@ -378,6 +389,8 @@ internal sealed class FlushScene : IDisposable
         PendingRowItem[] pendingRowItems = new PendingRowItem[totalRefs];
         int[] rowCursors = new int[rowCount];
         Array.Copy(rowOffsets, rowCursors, rowCount);
+
+        // Phase 7: build the row-major execution order while preserving command submission order per row.
         for (int i = 0; i < visibleItemCount; i++)
         {
             int itemFirstActiveRow = itemFirstBandIndices[i] - minBandIndex;
@@ -424,6 +437,8 @@ internal sealed class FlushScene : IDisposable
         {
             Memory<DefaultRasterizer.RasterLineData> lineData = lineDataOwner.Memory;
             Memory<int> startCoverData = startCoverOwner.Memory;
+
+            // Phase 8: prebuild each row-local raster band once so execution only performs scan conversion.
             Parallel.ForEach(Partitioner.Create(0, totalRefs), range =>
             {
                 long localLineCount = 0;
@@ -472,83 +487,21 @@ internal sealed class FlushScene : IDisposable
     }
 
     /// <summary>
-    /// Rasterizes the scene without composition for profiling.
-    /// </summary>
-    public void RasterizeNoOp(MemoryAllocator allocator)
-    {
-        if (this.RowCount == 0)
-        {
-            return;
-        }
-
-        ReadOnlyMemory<DefaultRasterizer.RasterLineData> lineData =
-            this.lineDataOwner?.Memory ?? Memory<DefaultRasterizer.RasterLineData>.Empty;
-        ReadOnlyMemory<int> startCovers =
-            this.startCoverOwner?.Memory ?? Memory<int>.Empty;
-        ParallelOptions options = CreateParallelOptions(this.RowCount);
-        _ = Parallel.For(
-            0,
-            this.RowCount,
-            options,
-            () => new RasterWorkerState(
-                allocator,
-                this.maxWordsPerRow,
-                this.maxCoverStride,
-                this.maxWidth,
-                this.maxBandCapacity),
-            (sceneRow, _, state) =>
-            {
-                DefaultRasterizer.WorkerScratch scratch = state.Scratch
-                    ?? throw new InvalidOperationException("Raster worker scratch was not initialized.");
-                DefaultRasterizer.Context context = scratch.CreateContext(
-                    this.maxWidth,
-                    this.maxWordsPerRow,
-                    this.maxCoverStride,
-                    this.maxBandCapacity,
-                    IntersectionRule.NonZero,
-                    RasterizationMode.Antialiased,
-                    antialiasThreshold: 0F);
-                for (int rowPosition = this.rowOffsets[sceneRow]; rowPosition < this.rowOffsets[sceneRow + 1]; rowPosition++)
-                {
-                    ref readonly RowItem rowItem = ref this.rowItems[rowPosition];
-                    DefaultRasterizer.RasterizableBandInfo rasterizableBandInfo = this.rasterizableBands[rowPosition];
-                    if (!rasterizableBandInfo.HasCoverage)
-                    {
-                        continue;
-                    }
-
-                    DefaultRasterizer.RasterizableBand rasterizableBand = rasterizableBandInfo.CreateRasterizableBand(
-                        lineData.Span.Slice(rowItem.LineStart, rasterizableBandInfo.LineCount),
-                        startCovers.Span.Slice(rowItem.StartCoverStart, rasterizableBandInfo.BandHeight));
-                    DefaultRasterizer.ExecuteRasterizableBand(
-                        ref context,
-                        in rasterizableBand,
-                        scratch.Scanline,
-                        static (int y, int startX, Span<float> coverage) => { });
-                }
-
-                return state;
-            },
-            static state => state.Dispose());
-    }
-
-    /// <summary>
     /// Executes the scene against a CPU destination region.
     /// </summary>
-    public ExecutionProfile Execute<TPixel>(
+    /// <param name="configuration">The configuration that supplies memory allocation and pixel operations.</param>
+    /// <param name="destinationFrame">The CPU destination region that receives the composed pixels.</param>
+    public void Execute<TPixel>(
         Configuration configuration,
         Buffer2DRegion<TPixel> destinationFrame)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         if (this.RowCount == 0)
         {
-            return default;
+            return;
         }
 
         MemoryAllocator allocator = configuration.MemoryAllocator;
-        long createApplicatorTicks;
-        long rasterizeComposeTicks = 0;
-        long disposeApplicatorTicks;
         ReadOnlyMemory<DefaultRasterizer.RasterLineData> lineData =
             this.lineDataOwner?.Memory ?? Memory<DefaultRasterizer.RasterLineData>.Empty;
         ReadOnlyMemory<int> startCovers =
@@ -556,7 +509,7 @@ internal sealed class FlushScene : IDisposable
         ParallelOptions options = CreateParallelOptions(this.RowCount);
         BrushRenderer<TPixel>[] preparedBrushes = new BrushRenderer<TPixel>[this.commands.Length];
 
-        long startTimestamp = Stopwatch.GetTimestamp();
+        // Realize brush renderers once per command before rows begin executing in parallel.
         Parallel.ForEach(Partitioner.Create(0, this.commands.Length), range =>
         {
             for (int i = range.Item1; i < range.Item2; i++)
@@ -569,7 +522,6 @@ internal sealed class FlushScene : IDisposable
                     command.BrushBounds);
             }
         });
-        createApplicatorTicks = Stopwatch.GetTimestamp() - startTimestamp;
 
         try
         {
@@ -598,6 +550,7 @@ internal sealed class FlushScene : IDisposable
                     int rowStart = this.rowOffsets[sceneRow];
                     int rowEnd = this.rowOffsets[sceneRow + 1];
 
+                    // Commands remain ordered inside a row so composition matches submission order.
                     for (int rowPosition = rowStart; rowPosition < rowEnd; rowPosition++)
                     {
                         ref readonly RowItem rowItem = ref this.rowItems[rowPosition];
@@ -616,38 +569,27 @@ internal sealed class FlushScene : IDisposable
                         DefaultRasterizer.RasterizableBand rasterizableBand = rasterizableBandInfo.CreateRasterizableBand(
                             lineData.Span.Slice(rowItem.LineStart, rasterizableBandInfo.LineCount),
                             startCovers.Span.Slice(rowItem.StartCoverStart, rasterizableBandInfo.BandHeight));
-                        long rowTimestamp = Stopwatch.GetTimestamp();
                         DefaultRasterizer.ExecuteRasterizableBand(
                             ref context,
                             in rasterizableBand,
                             scratch.Scanline,
                             operation.InvokeCoverageRow);
-                        state.RasterizeAndComposeTicks += Stopwatch.GetTimestamp() - rowTimestamp;
                     }
 
                     return state;
                 },
                 state =>
                 {
-                    Interlocked.Add(ref rasterizeComposeTicks, state.RasterizeAndComposeTicks);
                     state.Dispose();
                 });
         }
         finally
         {
-            startTimestamp = Stopwatch.GetTimestamp();
             for (int i = 0; i < preparedBrushes.Length; i++)
             {
                 preparedBrushes[i]?.Dispose();
             }
-
-            disposeApplicatorTicks = Stopwatch.GetTimestamp() - startTimestamp;
         }
-
-        return new ExecutionProfile(
-            TicksToMilliseconds(createApplicatorTicks),
-            TicksToMilliseconds(rasterizeComposeTicks),
-            TicksToMilliseconds(disposeApplicatorTicks));
     }
 
     /// <inheritdoc />
@@ -657,6 +599,9 @@ internal sealed class FlushScene : IDisposable
         this.lineDataOwner?.Dispose();
     }
 
+    /// <summary>
+    /// Creates an empty scene instance.
+    /// </summary>
     private static FlushScene Empty()
         => new(
             [],
@@ -674,6 +619,9 @@ internal sealed class FlushScene : IDisposable
             0,
             0);
 
+    /// <summary>
+    /// Counts how many references each band needs for one geometry.
+    /// </summary>
     private static int CountBandSegmentRefs(
         PreparedGeometry geometry,
         int translateY,
@@ -720,6 +668,9 @@ internal sealed class FlushScene : IDisposable
         return totalCount;
     }
 
+    /// <summary>
+    /// Fills the dense per-band segment reference table for one geometry.
+    /// </summary>
     private static void FillBandSegmentRefs(
         PreparedGeometry geometry,
         int translateY,
@@ -763,6 +714,9 @@ internal sealed class FlushScene : IDisposable
         }
     }
 
+    /// <summary>
+    /// Computes the inclusive row-band span touched by one prepared segment.
+    /// </summary>
     private static bool TryGetLocalBandSpan(
         PreparedLineSegment segment,
         int translateY,
@@ -798,9 +752,15 @@ internal sealed class FlushScene : IDisposable
         return lastBandIndex >= firstBandIndex;
     }
 
+    /// <summary>
+    /// Converts a pixel width to the number of machine-word bit vectors required per row.
+    /// </summary>
     private static int BitVectorsForMaxBitCount(int maxBitCount)
         => (maxBitCount + (nint.Size * 8) - 1) / (nint.Size * 8);
 
+    /// <summary>
+    /// Performs mathematical floor division for potentially negative coordinates.
+    /// </summary>
     private static int FloorDiv(int value, int divisor)
     {
         int quotient = value / divisor;
@@ -813,6 +773,9 @@ internal sealed class FlushScene : IDisposable
         return quotient;
     }
 
+    /// <summary>
+    /// Creates the row-level parallel execution settings for the current flush.
+    /// </summary>
     private static ParallelOptions CreateParallelOptions(int rowCount)
         => new()
         {
@@ -821,9 +784,9 @@ internal sealed class FlushScene : IDisposable
                 Math.Min(Environment.ProcessorCount, Math.Max(1, rowCount))),
         };
 
-    private static double TicksToMilliseconds(long ticks)
-        => (ticks * 1000D) / Stopwatch.Frequency;
-
+    /// <summary>
+    /// Maps an absolute destination row request to the local CPU frame slice.
+    /// </summary>
     private static Span<TPixel> GetDestinationRow<TPixel>(
         Buffer2DRegion<TPixel> destinationFrame,
         int x,
@@ -836,41 +799,51 @@ internal sealed class FlushScene : IDisposable
         return destinationFrame.DangerousGetRowSpan(localY).Slice(localX, length);
     }
 
-    internal readonly record struct ExecutionProfile(
-        double CreateApplicatorsMilliseconds,
-        double RasterizeAndComposeMilliseconds,
-        double DisposeApplicatorsMilliseconds);
-
+    /// <summary>
+    /// Bridges raster coverage callbacks to brush renderer application.
+    /// </summary>
     private readonly struct ItemRowOperation<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        private readonly BrushRenderer<TPixel> applicator;
+        private readonly BrushRenderer<TPixel> renderer;
         private readonly Buffer2DRegion<TPixel> destinationFrame;
         private readonly BrushWorkspace<TPixel> workspace;
         private readonly int interestLeft;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ItemRowOperation{TPixel}"/> struct.
+        /// </summary>
         public ItemRowOperation(
-            BrushRenderer<TPixel> applicator,
+            BrushRenderer<TPixel> renderer,
             Buffer2DRegion<TPixel> destinationFrame,
             int interestLeft,
             BrushWorkspace<TPixel> workspace)
         {
-            this.applicator = applicator;
+            this.renderer = renderer;
             this.destinationFrame = destinationFrame;
             this.interestLeft = interestLeft;
             this.workspace = workspace;
         }
 
+        /// <summary>
+        /// Applies one emitted coverage row to the destination.
+        /// </summary>
         public void InvokeCoverageRow(int y, int startX, Span<float> coverage)
         {
             int destinationX = this.interestLeft + startX;
             Span<TPixel> destinationRow = GetDestinationRow(this.destinationFrame, destinationX, y, coverage.Length);
-            this.applicator.Apply(destinationRow, coverage, destinationX, y, this.workspace);
+            this.renderer.Apply(destinationRow, coverage, destinationX, y, this.workspace);
         }
     }
 
+    /// <summary>
+    /// Row-major execution record for one prebuilt rasterizable band.
+    /// </summary>
     private readonly struct RowItem
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RowItem"/> struct.
+        /// </summary>
         public RowItem(
             int itemIndex,
             int lineStart,
@@ -892,8 +865,14 @@ internal sealed class FlushScene : IDisposable
         public Rectangle DestinationRegion { get; }
     }
 
+    /// <summary>
+    /// Intermediate row item used while the scene is being built.
+    /// </summary>
     private readonly struct PendingRowItem
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PendingRowItem"/> struct.
+        /// </summary>
         public PendingRowItem(
             int itemIndex,
             int localBandIndex,
@@ -919,10 +898,16 @@ internal sealed class FlushScene : IDisposable
         public Rectangle DestinationRegion { get; }
     }
 
+    /// <summary>
+    /// Base raster worker state shared by execution workers.
+    /// </summary>
     private class RasterWorkerState : IDisposable
     {
         private DefaultRasterizer.WorkerScratch? scratch;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RasterWorkerState"/> class.
+        /// </summary>
         public RasterWorkerState(
             MemoryAllocator allocator,
             int maxWordsPerRow,
@@ -936,8 +921,12 @@ internal sealed class FlushScene : IDisposable
                 maxWidth,
                 maxBandCapacity);
 
+        /// <summary>
+        /// Gets the reusable raster scratch for this worker.
+        /// </summary>
         public ref DefaultRasterizer.WorkerScratch? Scratch => ref this.scratch;
 
+        /// <inheritdoc />
         public void Dispose()
         {
             this.scratch?.Dispose();
@@ -945,9 +934,15 @@ internal sealed class FlushScene : IDisposable
         }
     }
 
+    /// <summary>
+    /// Execution worker state that combines raster scratch with brush workspace scratch.
+    /// </summary>
     private sealed class ExecuteWorkerState<TPixel> : RasterWorkerState
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ExecuteWorkerState{TPixel}"/> class.
+        /// </summary>
         public ExecuteWorkerState(
             MemoryAllocator allocator,
             int maxWordsPerRow,
@@ -957,10 +952,14 @@ internal sealed class FlushScene : IDisposable
             : base(allocator, maxWordsPerRow, maxCoverStride, maxWidth, maxBandCapacity)
             => this.BrushWorkspace = new BrushWorkspace<TPixel>(allocator, maxWidth);
 
+        /// <summary>
+        /// Gets the reusable brush workspace for this worker.
+        /// </summary>
         public BrushWorkspace<TPixel> BrushWorkspace { get; }
 
-        public long RasterizeAndComposeTicks { get; set; }
-
+        /// <summary>
+        /// Releases the worker-local brush workspace and raster scratch owned by this state.
+        /// </summary>
         public new void Dispose()
         {
             this.BrushWorkspace.Dispose();

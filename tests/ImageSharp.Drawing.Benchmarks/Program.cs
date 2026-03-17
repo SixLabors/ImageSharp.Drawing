@@ -56,42 +56,6 @@ public class Program
             return;
         }
 
-        if (args.Length > 0 && args[0] == "--profile")
-        {
-            string target = args.Length > 1 ? args[1] : "paris";
-            int warmupCount = TryReadPositiveIntOption(args, "--warmup", 8);
-            int iterationCount = TryReadPositiveIntOption(args, "--iterations", 5);
-            switch (target.ToLowerInvariant())
-            {
-                case "paris":
-                    Drawing.FillParis.Profile(warmupCount, iterationCount);
-                    break;
-                default:
-                    Console.WriteLine($"Unknown profile target: {target}. Use 'paris'.");
-                    break;
-            }
-
-            return;
-        }
-
         new BenchmarkSwitcher(typeof(Program).GetTypeInfo().Assembly).Run(args, new InProcessConfig());
-    }
-
-    private static int TryReadPositiveIntOption(string[] args, string optionName, int defaultValue)
-    {
-        for (int i = 0; i < args.Length - 1; i++)
-        {
-            if (!string.Equals(args[i], optionName, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (int.TryParse(args[i + 1], out int parsed) && parsed > 0)
-            {
-                return parsed;
-            }
-        }
-
-        return defaultValue;
     }
 }

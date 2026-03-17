@@ -77,16 +77,20 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
     /// <summary>
     /// Prepares all queued commands in parallel. Each command expands strokes to fills,
-    /// applies transforms, clips, and flattens its path via <see cref="CompositionCommand.Prepare"/>.
+    /// applies transforms, clips, and flattens its path via <see cref="CompositionCommand.Prepare(GeometryPreparationCache?)"/>.
     /// After this call every command is a fill with an immutable pre-flattened path.
     /// </summary>
     private void PrepareCommands()
-        => Parallel.ForEach(Partitioner.Create(0, this.commands.Count), range =>
+    {
+        GeometryPreparationCache geometryCache = new();
+
+        _ = Parallel.ForEach(Partitioner.Create(0, this.commands.Count), range =>
         {
             Span<CompositionCommand> span = CollectionsMarshal.AsSpan(this.commands);
             for (int i = range.Item1; i < range.Item2; i++)
             {
-                span[i].Prepare();
+                span[i].Prepare(geometryCache);
             }
         });
+    }
 }

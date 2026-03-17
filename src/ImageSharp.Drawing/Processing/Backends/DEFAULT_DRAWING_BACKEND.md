@@ -1,249 +1,474 @@
 # DefaultDrawingBackend
 
-This document describes the CPU-based rasterization and composition pipeline implemented by `DefaultDrawingBackend`.
+`DefaultDrawingBackend` is the CPU drawing backend for ImageSharp.Drawing. It is responsible for taking a flush worth of prepared drawing commands, converting them into row-local raster work, and composing the resulting coverage into a CPU pixel buffer.
 
-## Overview
+This document explains the current CPU backend:
 
-`DefaultDrawingBackend` is a singleton (`DefaultDrawingBackend.Instance`) implementing `IDrawingBackend`. It performs all path rasterization, brush application, and pixel compositing on the CPU using fixed-point scanline math with band-based parallelism.
+- a flush-scoped `FlushScene`
+- row-first execution
+- row-local raster payloads
+- reusable worker-local raster and brush scratch
 
-## End-to-End Flow
+The goal is to make the code readable as a system, not just as a collection of methods.
+
+## 1. What The Backend Does
+
+At a high level, the CPU backend has three jobs:
+
+1. Accept a `CompositionScene` from `DrawingCanvas`.
+2. Build a flush-scoped execution plan that is cheap to traverse in parallel.
+3. Rasterize and compose that plan into a CPU destination frame.
+
+`DefaultDrawingBackend` itself is intentionally small. Most of the real work lives in two places:
+
+- `FlushScene.cs`
+- `DefaultRasterizer.cs`
+
+That split is deliberate:
+
+- `DefaultDrawingBackend` owns backend policy.
+- `FlushScene` owns flush-local scheduling and prepared row data.
+- `DefaultRasterizer` owns scan conversion and coverage emission.
+
+## 2. End-To-End Flow
+
+The full CPU fill path looks like this:
+
+```mermaid
+flowchart TD
+    A[DrawingCanvas.Flush] --> B[DefaultDrawingBackend.FlushCompositions]
+    B --> C[target.TryGetCpuRegion]
+    B --> D[FlushScene.Create]
+    D --> E[Prepare and clip commands]
+    E --> F[Build row membership]
+    F --> G[Prebuild rasterizable row bands]
+    G --> H[FlushScene.Execute]
+    H --> I[Create BrushRenderer per command]
+    I --> J[Parallel.For over scene rows]
+    J --> K[DefaultRasterizer.ExecuteRasterizableBand]
+    K --> L[Emit coverage rows]
+    L --> M[BrushRenderer.Apply]
+    M --> N[Destination pixels updated]
+```
+
+There are two important ideas in that flow:
+
+- the execution unit is a flush-scoped row scene, not a batch of commands sharing a coverage definition
+- the rasterizer consumes row-local prepared data, not raw paths
+
+## 3. DefaultDrawingBackend.cs
+
+`DefaultDrawingBackend` is intentionally thin.
+
+### `FlushCompositions`
+
+`FlushCompositions<TPixel>()` does four things:
+
+1. It returns immediately when there are no commands.
+2. It asks the target for a CPU region.
+3. It creates a `FlushScene` from the scene commands.
+4. It executes that scene against the destination frame.
+
+In other words, the backend delegates flush-local planning and execution to `FlushScene`.
+
+### `ComposeLayer`
+
+`ComposeLayer<TPixel>()` is separate from shape rasterization. It composites one CPU frame into another using `PixelBlender<TPixel>` and a reusable `amounts` buffer filled with `BlendPercentage`.
+
+This is the backend's layer-composition path, not the path/shape fill path.
+
+### `CreateLayerFrame`, `ReleaseFrameResources`, `TryReadRegion`
+
+These methods are backend services:
+
+- allocate a CPU frame
+- release CPU-backed frame resources
+- copy a region out of a CPU target
+
+They are not part of the raster architecture, but they are part of the backend contract.
+
+## 4. The Flush Scene
+
+`FlushScene` is the real execution model for the CPU backend.
+
+It exists only for the lifetime of one flush and owns:
+
+- the visible prepared commands
+- per-command row-band membership
+- prebuilt row-local raster payloads
+- row-major execution order
+- scene-wide scratch size maxima
+
+That means the expensive, shape-dependent preparation work happens once per flush, then execution can focus on scan conversion and composition.
+
+### Why A Flush-Scoped Scene Exists
+
+Without a flush scene, the backend would have to rediscover the same facts repeatedly:
+
+- which rows a command touches
+- which segments matter for a given row band
+- how large worker scratch must be
+- how to traverse commands in row order while preserving submission order
+
+`FlushScene.Create()` centralizes that work.
+
+## 5. FlushScene.Create In Detail
+
+The builder runs in several phases. Each phase changes the shape of the data so the next phase can be cheaper.
+
+```mermaid
+flowchart LR
+    A[CompositionCommand] --> B[Prepare and clip]
+    
+    B --> C[Compact visible items]
+    C --> D[Count segment refs per band]
+    D --> E[Fill dense segment-ref table]
+    E --> F[Build row counts and row offsets]
+    F --> G[Create row-major item list]
+    G --> H[Prebuild RasterizableBandInfo + line/start-cover storage]
+    H --> I[FlushScene]
+```
+
+### Phase 1: Prepare And Clip Commands
+
+`FlushScene.Create()` calls `CompositionCommandPreparer.TryPrepareCommand(...)` for each command.
+
+Despite the type name, in the CPU path this API is used as a command-normalization helper:
+
+- reject invisible commands
+- compute clipped destination region
+- expose prepared geometry
+
+This phase is embarrassingly parallel, so it runs across command ranges with `Parallel.ForEach`.
+
+### Phase 2: Compact Visible Items
+
+The preparation pass writes into fixed-size temporary arrays indexed by original command position. The next phase compacts only visible commands into dense arrays:
+
+- `preparedCommands`
+- `geometries`
+- `rasterizerOptions`
+- destination offsets
+- band ranges
+
+This matters because the execution path should not keep paying for invisible commands through sparse scans and conditional branches.
+
+### Phase 3: Compute Scene-Wide Maxima
+
+The scene computes:
+
+- maximum item width
+- maximum bit-vector width
+- maximum cover stride
+- maximum band capacity
+
+Those values drive worker scratch sizing. Each worker can allocate once and reuse the same buffers for the whole flush.
+
+### Phase 4: Count Segment References Per Band
+
+For each visible geometry, the scene counts how many prepared line segments touch each local row band.
+
+This is not rasterization yet. It is an indexing pass.
+
+The important output is a dense offset table for:
+
+- item -> local band -> segment reference range
+
+Once that exists, later phases can read band membership directly from the dense offset table.
+
+### Phase 5: Materialize Dense Segment References
+
+The scene allocates one dense `int[]` of segment indices and fills it so each item's band range points into a contiguous slice of that array.
+
+Conceptually:
 
 ```text
-DrawingCanvasBatcher.FlushCompositions()
-  -> IDrawingBackend.FlushCompositions(configuration, target, scene)
-     -> target.TryGetCpuRegion(out region)
-     -> CompositionScenePlanner.CreatePreparedBatches(commands, targetBounds)
-        -> clip each command to target bounds
-        -> group contiguous commands by DefinitionKey
-        -> keep prepared destination/source offsets
-     -> for each CompositionBatch:
-        -> FlushPreparedBatch(configuration, region, batch)
-           -> create BrushApplicator[] for all commands in batch
-           -> create RowOperation (scanline callback)
-           -> if batch.Definition.IsStroke:
-              -> DefaultRasterizer.RasterizeStrokeRows(definition, rowHandler, allocator)
-           -> else:
-              -> DefaultRasterizer.RasterizeRows(definition, rowHandler, allocator)
-           -> dispose applicators
+item 0
+  band 0 -> segmentIndices[0..7)
+  band 1 -> segmentIndices[7..11)
+
+item 1
+  band 0 -> segmentIndices[11..14)
 ```
 
-## Scene Planning (CompositionScenePlanner)
+This is the bridge from prepared geometry to row-local raster preparation.
 
-`CompositionScenePlanner.CreatePreparedBatches()` transforms raw `CompositionCommand` lists into `CompositionBatch` groups:
+### Phase 6: Build Row Membership
 
-1. **Clip** each command's destination to target bounds; discard commands with zero-area overlap.
-2. **Group** contiguous commands sharing the same `DefinitionKey` (path identity + rasterizer options hash) into a single batch. Commands with different definitions break the batch.
-3. **Prepare** each command with clipped `DestinationRegion` and `SourceOffset` mapping rasterized coverage to the clipped region.
+The scene converts item-local band ranges into scene-row counts, then into prefix-summed `rowOffsets`.
 
-For stroke batches, after dash expansion grows the interest rect, `ReprepareBatchCommands()` re-clips all commands to the updated bounds.
+That produces a classic CSR-style row structure:
 
-## DefaultRasterizer
+- `rowOffsets[row]`
+- `rowOffsets[row + 1]`
 
-The rasterizer is a 3300-line fixed-point scanline engine in `DefaultRasterizer.cs`.
+Everything between those offsets belongs to that scene row.
 
-### Fixed-Point Representation
+### Phase 7: Build Row-Major Execution Order
 
-```
-Format:     24.8 (8 fractional bits)
-One:        256
-Sub-pixels: 256 steps per pixel
-Area scale: 512 (area-to-coverage shift = 9)
-```
+The builder creates `PendingRowItem[]` in row-major order.
 
-### Edge Table Construction
+Each pending item records:
 
-Input paths are flattened to line segments. Each segment is converted to fixed-point `EdgeData` (x0, y0, x1, y1) with:
-- Vertical Liang-Barsky clipping to the band bounds
-- Horizontal edges filtered out (fy0 == fy1)
-- Y-ordering enforced (swap if y0 > y1)
+- which command it belongs to
+- which local band it represents
+- where its segment refs begin
+- how many segment refs it owns
+- the clipped destination region for that band
 
-### Execution Modes
+Submission order is preserved inside each row. That is critical because composition still has to respect draw order.
 
-```text
-IF tileCount == 1 OR edgeCount <= 64
-   -> RasterizeSingleTileDirect (no parallelism overhead)
-ELSE IF ProcessorCount >= 2
-   -> Parallel.For across tiles (band-sorted edges)
-ELSE
-   -> Sequential band loop with reusable scratch
-```
+### Phase 8: Prebuild Rasterizable Bands
 
-**Parallel:** `MaxDegreeOfParallelism = min(12, ProcessorCount, tileCount)`. Each worker gets an isolated `WorkerScratch` instance. No shared mutable state during tile processing.
+Finally, the scene allocates flush-owned storage for:
 
-**Sequential:** Single reusable `WorkerScratch`, band loop with context reset between bands.
+- `RasterLineData`
+- start-cover seeds
+- `RasterizableBandInfo`
 
-### Band-Based Processing
+Then it calls `DefaultRasterizer.TryBuildRasterizableBand(...)` once per row item.
 
-Tile height: 16 pixels. Each band processes only edges that intersect its Y range. Edges are duplicated across all touched bands during band-sort.
+This is where the scene becomes execution-ready. After this point, row execution can consume prebuilt line lists and left-of-band winding seeds directly.
 
-### Per-Band Scan Conversion (Context)
+## 6. What A Row Item Actually Contains
 
-The `Context` ref struct holds per-band working memory:
+Each `RowItem` is small on purpose. It contains:
 
-| Buffer | Purpose |
-|---|---|
-| `bitVectors[]` | Sparse touched-column tracking (nuint[] per row) |
-| `coverArea[]` | Signed area accumulation (2 ints per pixel: delta + area) |
-| `startCover[]` | Carry cover from edges left of the band's X origin |
-| `rowMinTouchedColumn[]` | Left bound per row for sparse iteration |
-| `rowMaxTouchedColumn[]` | Right bound per row for sparse iteration |
-| `rowHasBits[]`, `rowTouched[]` | Touch flags for sparse reset |
-| `touchedRows[]` | Touched row indices for cleanup |
-| `scanline[]` | Output coverage buffer (float per pixel) |
+- `ItemIndex`
+- `LineStart`
+- `StartCoverStart`
+- `DestinationRegion`
 
-### Edge Rasterization
+The item does not own its own arrays. Instead it points into large flush-owned buffers:
 
-Bresenham-style line algorithm. For each cell an edge crosses:
-- Register signed delta at cell entry X
-- Register -delta at cell exit X
-- Update area accumulation based on cell-fraction coverage
-- Track touched rows and columns via bit vectors
+- one dense `RasterLineData` store
+- one dense start-cover store
 
-### Row Coverage Emission
+That layout reduces per-item allocation churn and keeps traversal cache-friendly.
 
-For each touched row:
-1. Iterate only set bits in the touched-column bit vector (sparse).
-2. Accumulate winding number from `startCover` + running `coverArea` deltas.
-3. Apply fill rule:
-   - **NonZero:** Clamp |winding| to [0, 1]
-   - **EvenOdd:** `(winding & mask) > CoverageStepCount ? 0 : 1`
-4. Apply antialiasing mode:
-   - **Antialiased:** Coverage = area / 512, clamped to [0, 1]
-   - **Aliased:** Coverage > threshold → 1.0, else 0.0
-5. Coalesce consecutive cells with equal coverage into spans.
-6. Emit span via `RasterizerCoverageRowHandler` callback.
+## 7. Rasterizable Bands
 
-### Memory Budget
+The fill rasterizer operates on a row-local representation rather than on a general scene-wide edge table.
 
-```
-Band memory budget: 64 MB
-Bytes per row = (wordsPerRow × pointer_size) + (coverStride × 4) + 4
-Max band rows = min(height, 64MB / bytesPerRow)
-```
+`RasterizableBandInfo` describes one band:
 
-### Sparse Reset
+- line count
+- band height
+- width
+- bit-vector width
+- cover stride
+- destination top
+- fill rule
+- raster mode
+- antialias threshold
+- whether the band has non-zero start covers
 
-After emitting all rows in a band, only touched rows are cleared—not the full scratch buffer. This avoids full-buffer clears when geometry is sparse relative to the interest rectangle.
+`RasterizableBand` is the execution view:
 
-## Stroke Processing
+- `ReadOnlySpan<RasterLineData> Lines`
+- `ReadOnlySpan<int> StartCovers`
+- the raster metadata above
 
-### Stroke Expansion
+This separation matters:
 
-For each stroke definition, the rasterizer performs per-band parallel expansion:
+- `RasterizableBandInfo` is storable
+- `RasterizableBand` is a cheap span-based view built on demand
 
-1. **Centerline collection:** Flatten path into contours with open/closed tracking.
-2. **Dash splitting (optional):** If the definition has a dash pattern, `SplitPathExtensions.GenerateDashes()` segments the centerline into open dash sub-paths.
-3. **Stroke edge descriptors:** Each contour segment produces:
-   - **Side edges** (Flags=None): Left/right offset by halfWidth along the perpendicular
-   - **Join edges** (Flags=Join): Vertex + adjacent vertex for miter/round/bevel computation
-   - **Cap edges** (CapStart/CapEnd): Endpoint + direction for butt/square/round caps
+## 8. DefaultRasterizer: Fill Path
 
-### Join Expansion
+The fill rasterizer has two distinct steps:
 
-| Join Type | Algorithm |
-|---|---|
-| Miter | Intersection of offset lines; revert to bevel if miterDist > miterLimit × halfWidth |
-| MiterRound | Blend bevel→miter at limit distance |
-| Round | Circular arc subdivided at ~0.5 × halfWidth step density |
-| Bevel | Straight diagonal between offset endpoints |
+1. build a rasterizable band
+2. execute a rasterizable band
 
-### Cap Expansion
+### 8.1 Band Building
 
-| Cap Type | Algorithm |
-|---|---|
-| Butt | Single perpendicular edge at endpoint |
-| Square | Rectangle extending halfWidth beyond endpoint |
-| Round | Semicircular arc subdivided at ~0.5 × halfWidth |
+`TryBuildRasterizableBand(...)` converts prepared line segments into row-local raster data.
 
-### Band Sorting
+For each candidate segment in the band:
 
-`TryBuildBandSortedStrokeEdges()` duplicates stroke edges into all touched bands. Expansion Y bounds include halfWidth × max(miterLimit, 1). Each band expands and rasterizes independently.
+1. translate from geometry space into interest-local coordinates
+2. apply sampling origin offset
+3. clip vertically to the band
+4. convert to 24.8 fixed point
+5. send left-of-visible-X coverage into start covers
+6. clip visible portions horizontally to the band
+7. emit a `RasterLineData` record for the visible part
 
-## Brush Application
+The key idea is step 5.
 
-After rasterization emits a coverage scanline, `RowOperation.InvokeCoverageRow()` applies brushes:
+Segments that begin left of the visible X range still affect winding. Instead of keeping those off-screen edges around forever, the builder folds their effect into `StartCovers`. Execution can then begin with the correct carry state and only process visible lines.
 
-```text
-for each command overlapping this scanline row:
-  -> clamp coverage region to command DestinationRegion
-  -> compute destination pixel coordinates
-  -> BrushApplicator[i].Apply(coverage.Slice(...), destX, destY)
-```
+### 8.2 Band Execution
 
-Each `BrushApplicator<TPixel>` (abstract base in `BrushApplicator.cs`):
-1. Samples brush color at destination coordinates
-2. Multiplies by coverage
-3. Composites into destination via `PixelBlender`
+`ExecuteRasterizableBand(...)` is the hot scan-conversion entrypoint.
 
-Concrete applicator types: Solid, LinearGradient, RadialGradient, EllipticGradient, SweepGradient, Pattern, Image, Recolor.
+It does four things:
 
-## ComposeLayer (CPU Path)
+1. `Context.Reconfigure(...)`
+2. `Context.SeedStartCovers(...)`
+3. `Context.RasterizePreparedLines(...)`
+4. `Context.EmitCoverageRows(...)`
 
-```text
-IDrawingBackend.ComposeLayer(source, destination, offset, options)
-  -> extract CPU regions from source and destination frames
-  -> clamp compositing region to both bounds
-  -> allocate float[] amounts filled with BlendPercentage
-  -> for each row y in intersection:
-     -> srcRow = sourceRegion[y].Slice(startX, width)
-     -> dstRow = destRegion[dstY].Slice(dstX, width)
-     -> PixelBlender.Blend(config, dstRow, dstRow, srcRow, amounts)
-```
+Then it resets touched rows so the same scratch can be reused for the next band.
 
-The `PixelBlender` implements the full Porter-Duff alpha composition with configurable color blend mode and per-pixel blend percentage (layer opacity).
+## 9. The Scanner Context
 
-## TryReadRegion
+`DefaultRasterizer.Context` is the mutable fixed-point scanner state. It is a `ref struct` so the hot-path spans stay stack-bound.
 
-```text
-IDrawingBackend.TryReadRegion(target, sourceRect, out image)
-  -> target.TryGetCpuRegion(out region)
-  -> create Image<TPixel> from region sub-rectangle
-  -> copy pixel rows
-```
+The important buffers are:
 
-Used by `DrawingCanvas.Process()` to read back pixels for image processing operations.
+- `bitVectors`: sparse touched-column tracking
+- `coverArea`: winding delta and area accumulation
+- `startCover`: left-of-band winding seeds
+- `rowMinTouchedColumn` / `rowMaxTouchedColumn`: row-local sparse bounds
+- `rowTouched` / `rowHasBits` / `touchedRows`: fast reset bookkeeping
 
-## Composition Pipeline
+Coverage emission works row-by-row:
 
-The full pixel composition formula (generalized Porter-Duff):
+1. find touched columns from the bit vectors
+2. accumulate winding and area
+3. resolve the fill rule
+4. apply aliased or antialiased coverage conversion
+5. coalesce spans
+6. invoke the row callback
 
-```
-Cₒᵤₜ = αₛ × BlendMode(Cₛ, Cₐ) + αₐ × Cₐ × (1 - αₛ)
-αₒᵤₜ = αₛ + αₐ × (1 - αₛ)
-```
+The fixed-point core is still the same coverage engine. What changed is the data shape feeding it.
 
-Where:
-- αₛ = source alpha (brush alpha × coverage × blend percentage)
-- αₐ = destination alpha
-- Cₛ = source color (from brush)
-- Cₐ = destination color (backdrop)
-- BlendMode = color blend operation (Normal, Multiply, Screen, Overlay, etc.)
+## 10. Brush Composition
 
-## Threading Model
+Rasterization emits coverage. It does not write colors directly.
 
-| Condition | Path |
-|---|---|
-| 1 tile OR ≤64 edges | Single-tile direct (no overhead) |
-| ProcessorCount ≥ 2, multiple tiles | Parallel.For, MaxDOP = min(12, cores, tiles) |
-| Single core | Sequential band loop |
+Composition happens in `FlushScene.Execute()`:
 
-Worker isolation: Each parallel worker owns its own `WorkerScratch`. No synchronization during tile processing. Coverage emission callbacks are inherently thread-safe because each tile covers disjoint pixel rows.
+1. create one `BrushRenderer<TPixel>` per command
+2. run `Parallel.For` over scene rows
+3. reuse one `WorkerScratch` and one `BrushWorkspace<TPixel>` per worker
+4. for each row item:
+   - build a span-based `RasterizableBand`
+   - execute the raster band
+   - route coverage rows into `ItemRowOperation.InvokeCoverageRow(...)`
 
-## Key Data Structures
+`ItemRowOperation` maps emitted coverage back to the destination slice:
 
-| Type | Purpose |
-|---|---|
-| `CompositionCommand` | Normalized draw instruction (path + brush + options) |
-| `CompositionBatch` | Commands grouped by shared coverage definition |
-| `PreparedCompositionCommand` | Command clipped to target bounds with source offset |
-| `CompositionCoverageDefinition` | Stable identity for coverage reuse (path + rasterizer state) |
-| `RasterizerOptions` | Interest rect, fill rule, rasterization mode, sampling origin, antialias threshold |
-| `WorkerScratch` | Per-worker rasterization memory (bit vectors, area buffers, scanline) |
+- convert `startX` to destination X using the command's interest left
+- slice the destination row from `Buffer2DRegion<TPixel>`
+- call `BrushRenderer.Apply(...)`
 
-## Memory Management
+That means the rasterizer never needs to know about brushes, colors, gradients, or destination frame layout.
 
-- `WorkerScratch` allocated via `MemoryAllocator` with `IMemoryOwner<T>` for pool return.
-- Sequential path reuses a single `WorkerScratch` across batches if dimensions are compatible.
-- Parallel path creates fresh worker-local scratch per `Parallel.For` iteration (discarded after).
-- `BrushApplicator` instances are disposed after each batch flush.
-- 64 MB band memory budget caps per-band allocation.
+## 11. Why BrushRenderer Is Target-Unbound
+
+`BrushRenderer<TPixel>` is target-unbound. Its `Apply(...)` method receives:
+
+- `destinationRow`
+- `coverage`
+- `x`
+- `y`
+- `BrushWorkspace<TPixel>`
+
+That separation is important for the row-first backend:
+
+- renderers can be created once per command
+- destination slicing is owned by the executor
+- worker-local scratch can be reused across many brush applications
+
+The renderer is now a row shader, not a row shader plus frame binding.
+
+## 12. Stroke Rasterization
+
+The standalone stroke API in `DefaultRasterizer` is still separate from the fill builder described above.
+
+`RasterizeStrokeRows(...)`:
+
+1. flattens contours
+2. builds `StrokeEdgeData`
+3. band-sorts those stroke descriptors
+4. expands them into outline coverage during rasterization
+
+This still uses the same fixed-point scan conversion context, but its input representation is different because strokes begin as centerlines that must be expanded into an outline.
+
+That distinction is important:
+
+- fill path: prepared geometry -> rasterizable row bands
+- stroke path: centerline descriptors -> expanded outline coverage
+
+## 13. Memory And Lifetime
+
+The CPU backend deliberately aligns ownership with work lifetime.
+
+### Flush-owned
+
+Owned by `FlushScene`:
+
+- command arrays
+- row offsets
+- row items
+- dense line data
+- dense start-cover data
+
+Disposed when the flush ends.
+
+### Worker-owned
+
+Owned per worker during execution:
+
+- `WorkerScratch`
+- `BrushWorkspace<TPixel>`
+
+Disposed when the worker completes.
+
+### Command-owned
+
+Owned per command during execution:
+
+- `BrushRenderer<TPixel>`
+
+Created once before row execution begins and disposed after the row pass finishes.
+
+That ownership model keeps allocation and disposal aligned with the real execution lifetime of the work.
+
+## 14. Other Backend Operations
+
+Two backend operations are easy to overlook because they are not part of the raster path.
+
+### `ComposeLayer`
+
+This composites one frame into another using `PixelBlender<TPixel>`. It is used for layer flattening, not for path coverage rasterization.
+
+### `TryReadRegion`
+
+This copies a rectangular region out of a CPU target into a destination buffer. It is the backend's readback path.
+
+## 15. Reading The Code In Order
+
+If you want to understand the implementation in the same order the CPU backend executes it, read the files in this order:
+
+1. `DefaultDrawingBackend.cs`
+2. `FlushScene.cs`
+3. `BrushRenderer.cs`
+4. `DefaultRasterizer.cs`
+
+Inside `DefaultRasterizer.cs`, read in this order:
+
+1. `TryBuildRasterizableBand`
+2. `ExecuteRasterizableBand`
+3. `Context`
+4. `WorkerScratch`
+
+That order mirrors the real runtime path.
+
+## 16. Summary
+
+The current CPU backend is built around one core idea:
+
+> convert a flush into row-local raster work once, then execute rows directly with reusable worker scratch
+
+Everything else supports that idea:
+
+- `FlushScene` turns commands into row-major work
+- `RasterizableBandInfo` turns geometry into row-local raster data
+- `Context` performs fixed-point scan conversion
+- `BrushRenderer` composes coverage into pixels
+
+That is the architecture to keep in mind when changing the backend or the rasterizer.

@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
@@ -34,7 +35,7 @@ public class DefaultRasterizerTests
         Rectangle interest = Rectangle.Ceiling(path.Bounds);
         RasterizerOptions options = new(interest, rule, RasterizationMode.Antialiased, RasterizerSamplingOrigin.PixelBoundary, 0.5f);
 
-        float[] expected = RasterizeSequential(path, options);
+        float[] expected = RasterizePreparedBands(path, options);
         float[] actual = Rasterize(path, options);
 
         AssertCoverageEqual(expected, actual);
@@ -52,7 +53,7 @@ public class DefaultRasterizerTests
             RasterizerSamplingOrigin.PixelCenter,
             0.5f);
 
-        float[] expected = RasterizeSequential(path, options);
+        float[] expected = RasterizePreparedBands(path, options);
         float[] actual = Rasterize(path, options);
 
         AssertCoverageEqual(expected, actual);
@@ -75,13 +76,88 @@ public class DefaultRasterizerTests
         }
     }
 
-    private static float[] RasterizeSequential(IPath path, in RasterizerOptions options)
+    private static float[] RasterizePreparedBands(IPath path, in RasterizerOptions options)
     {
         int width = options.Interest.Width;
         int height = options.Interest.Height;
         float[] coverage = new float[width * height];
         int top = options.Interest.Top;
-        DefaultRasterizer.RasterizeRowsSequential(path, options, Configuration.Default.MemoryAllocator, CaptureRow);
+
+        PreparedGeometry geometry = PreparedGeometry.Create(path);
+        if (geometry.SegmentCount == 0 || width <= 0 || height <= 0)
+        {
+            return coverage;
+        }
+
+        int[] segmentIndices = new int[geometry.SegmentCount];
+        for (int i = 0; i < segmentIndices.Length; i++)
+        {
+            segmentIndices[i] = i;
+        }
+
+        int bandHeight = DefaultRasterizer.PreferredRowHeight;
+        int firstBandIndex = FloorDiv(options.Interest.Top, bandHeight);
+        int lastBandIndex = FloorDiv(options.Interest.Bottom - 1, bandHeight);
+        int bandCount = (lastBandIndex - firstBandIndex) + 1;
+
+        using IMemoryOwner<DefaultRasterizer.RasterLineData> lineOwner =
+            Configuration.Default.MemoryAllocator.Allocate<DefaultRasterizer.RasterLineData>(geometry.SegmentCount);
+        using IMemoryOwner<int> startCoverOwner =
+            Configuration.Default.MemoryAllocator.Allocate<int>(bandHeight);
+
+        DefaultRasterizer.WorkerScratch? scratch = null;
+        try
+        {
+            for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
+            {
+                if (!DefaultRasterizer.TryBuildRasterizableBand(
+                    geometry,
+                    segmentIndices,
+                    0,
+                    0,
+                    in options,
+                    bandIndex,
+                    lineOwner.Memory.Span,
+                    startCoverOwner.Memory.Span,
+                    out DefaultRasterizer.RasterizableBandInfo rasterizableBandInfo))
+                {
+                    continue;
+                }
+
+                if (scratch is null ||
+                    !scratch.CanReuse(
+                        rasterizableBandInfo.WordsPerRow,
+                        rasterizableBandInfo.CoverStride,
+                        rasterizableBandInfo.Width,
+                        rasterizableBandInfo.BandHeight))
+                {
+                    scratch?.Dispose();
+                    scratch = DefaultRasterizer.WorkerScratch.Create(
+                        Configuration.Default.MemoryAllocator,
+                        rasterizableBandInfo.WordsPerRow,
+                        rasterizableBandInfo.CoverStride,
+                        rasterizableBandInfo.Width,
+                        rasterizableBandInfo.BandHeight);
+                }
+
+                DefaultRasterizer.RasterizableBand rasterizableBand = rasterizableBandInfo.CreateRasterizableBand(
+                    lineOwner.Memory.Span,
+                    startCoverOwner.Memory.Span);
+                DefaultRasterizer.Context context = scratch.CreateContext(
+                    rasterizableBand.Width,
+                    rasterizableBand.WordsPerRow,
+                    rasterizableBand.CoverStride,
+                    rasterizableBand.BandHeight,
+                    rasterizableBand.IntersectionRule,
+                    rasterizableBand.RasterizationMode,
+                    rasterizableBand.AntialiasThreshold);
+                DefaultRasterizer.ExecuteRasterizableBand(ref context, in rasterizableBand, scratch.Scanline, CaptureRow);
+            }
+        }
+        finally
+        {
+            scratch?.Dispose();
+        }
 
         return coverage;
 
@@ -90,6 +166,18 @@ public class DefaultRasterizerTests
             int row = y - top;
             rowCoverage.CopyTo(coverage.AsSpan((row * width) + startX, rowCoverage.Length));
         }
+    }
+
+    private static int FloorDiv(int value, int divisor)
+    {
+        int quotient = value / divisor;
+        int remainder = value % divisor;
+        if (remainder != 0 && ((remainder < 0) != (divisor < 0)))
+        {
+            quotient--;
+        }
+
+        return quotient;
     }
 
     private static void AssertCoverageEqual(ReadOnlySpan<float> expected, ReadOnlySpan<float> actual)

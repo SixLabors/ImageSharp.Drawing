@@ -339,7 +339,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
 
-        List<CompositionBatch> preparedBatches = CompositionScenePlanner.CreatePreparedBatches(
+        List<CompositionBatch> preparedBatches = CompositionBatchPlanner.CreatePreparedBatches(
             compositionScene.Commands,
             target.Bounds);
         if (preparedBatches.Count == 0)

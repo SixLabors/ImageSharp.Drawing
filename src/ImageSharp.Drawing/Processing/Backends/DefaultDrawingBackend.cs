@@ -43,7 +43,7 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             return;
         }
 
-        _ = scene.Execute(configuration, destinationFrame);
+        scene.Execute(configuration, destinationFrame);
     }
 
     /// <inheritdoc />

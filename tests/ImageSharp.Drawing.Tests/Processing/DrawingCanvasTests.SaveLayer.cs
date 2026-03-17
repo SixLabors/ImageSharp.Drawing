@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
@@ -141,6 +142,31 @@ public partial class DrawingCanvasTests
         // After dispose, the blue fill should be visible.
         Rgba32 pixel = target[16, 16];
         Assert.Equal(new Rgba32(0, 0, 255, 255), pixel);
+    }
+
+    [Fact]
+    public void SaveLayer_Dispose_UsesStoredLayerOptions()
+    {
+        TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
+        using Image<Rgba32> restoredTarget = new(64, 64);
+        using Image<Rgba32> disposedTarget = new(64, 64);
+
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, restoredTarget, new DrawingOptions()))
+        {
+            canvas.Fill(new SolidBrush(Color.White));
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
+            canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(0, 0, 32, 32));
+            canvas.Restore();
+        }
+
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, disposedTarget, new DrawingOptions()))
+        {
+            canvas.Fill(new SolidBrush(Color.White));
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
+            canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(0, 0, 32, 32));
+        }
+
+        ImageComparer.Exact.VerifySimilarity(restoredTarget, disposedTarget);
     }
 
     [Fact]

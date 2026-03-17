@@ -7,9 +7,9 @@ using System.Runtime.InteropServices;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Converts scene command streams into backend-ready prepared batches.
+/// Converts scene command streams into contiguous prepared batches for the WebGPU backend.
 /// </summary>
-public static class CompositionScenePlanner
+public static class CompositionBatchPlanner
 {
     /// <summary>
     /// Creates contiguous prepared batches grouped by coverage definition key.
@@ -40,7 +40,7 @@ public static class CompositionScenePlanner
             for (int index = runStart; index < runEnd; index++)
             {
                 CompositionCommand command = commands[index];
-                if (TryPrepareCommand(in command, in targetBounds, out PreparedCompositionCommand prepared))
+                if (CompositionCommandPreparer.TryPrepareCommand(in command, in targetBounds, out PreparedCompositionCommand prepared))
                 {
                     preparedCommands.Add(prepared);
                 }
@@ -64,29 +64,6 @@ public static class CompositionScenePlanner
         }
 
         return batches;
-    }
-
-    /// <summary>
-    /// Estimates initial capacity for the outer batch list from total scene command count.
-    /// </summary>
-    /// <param name="commandCount">Total number of scene commands.</param>
-    /// <returns>Suggested initial capacity for the batch list.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int EstimateBatchCapacity(int commandCount)
-    {
-        // Typical scenes reuse coverage definitions, so batch count is usually
-        // meaningfully lower than command count.
-        if (commandCount <= 8)
-        {
-            return commandCount;
-        }
-
-        if (commandCount <= 128)
-        {
-            return commandCount / 2;
-        }
-
-        return commandCount / 4;
     }
 
     /// <summary>
@@ -147,49 +124,23 @@ public static class CompositionScenePlanner
     }
 
     /// <summary>
-    /// Clips one scene command to target bounds and computes coverage source offset mapping.
+    /// Estimates initial capacity for the outer batch list from total scene command count.
     /// </summary>
-    /// <param name="command">The source command.</param>
-    /// <param name="targetBounds">Target frame bounds in absolute coordinates.</param>
-    /// <param name="prepared">Prepared command when clipping produces visible output.</param>
-    /// <returns><see langword="true"/> when the command has visible output in target bounds.</returns>
-    public static bool TryPrepareCommand(
-        in CompositionCommand command,
-        in Rectangle targetBounds,
-        out PreparedCompositionCommand prepared)
+    /// <param name="commandCount">Total number of scene commands.</param>
+    /// <returns>Suggested initial capacity for the batch list.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int EstimateBatchCapacity(int commandCount)
     {
-        Rectangle interest = command.RasterizerOptions.Interest;
-        Rectangle commandDestination = new(
-            command.DestinationOffset.X + interest.X,
-            command.DestinationOffset.Y + interest.Y,
-            interest.Width,
-            interest.Height);
-
-        Rectangle clippedDestination = Rectangle.Intersect(targetBounds, commandDestination);
-        if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
+        if (commandCount <= 8)
         {
-            prepared = default;
-            return false;
+            return commandCount;
         }
 
-        Rectangle destinationLocalRegion = new(
-            clippedDestination.X - targetBounds.X,
-            clippedDestination.Y - targetBounds.Y,
-            clippedDestination.Width,
-            clippedDestination.Height);
+        if (commandCount <= 128)
+        {
+            return commandCount / 2;
+        }
 
-        Point sourceOffset = new(
-            clippedDestination.X - commandDestination.X,
-            clippedDestination.Y - commandDestination.Y);
-
-        prepared = new PreparedCompositionCommand(
-            destinationLocalRegion,
-            sourceOffset,
-            command.Brush,
-            command.BrushBounds,
-            command.GraphicsOptions,
-            command.DestinationOffset);
-
-        return true;
+        return commandCount / 4;
     }
 }

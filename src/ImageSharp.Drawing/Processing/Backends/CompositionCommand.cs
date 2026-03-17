@@ -127,30 +127,13 @@ public struct CompositionCommand
     /// clips, transforms, and linearizes the source path. After this call the command
     /// is a fill with immutable prepared geometry.
     /// </summary>
-    internal void Prepare()
+    /// <param name="geometryCache">
+    /// Optional flush-scoped cache used to share prepared geometry across commands that
+    /// have identical geometry-affecting inputs.
+    /// </param>
+    internal void Prepare(GeometryPreparationCache? geometryCache = null)
     {
-        IPath path = this.sourcePath;
-
-        // Transform to world space.
-        if (!this.transform.IsIdentity)
-        {
-            path = path.Transform(this.transform);
-        }
-
-        // Stroke expansion on the transformed path.
-        if (this.pen is not null)
-        {
-            path = this.pen.GeneratePath(path);
-        }
-
-        // Clip — path and clip paths are both in world space.
-        if (this.clipPaths is { Count: > 0 })
-        {
-            path = path.Clip(this.shapeOptions, this.clipPaths);
-        }
-
-        // Line preparation happens here so backends no longer need to traverse IPath.
-        PreparedGeometry geometry = PreparedGeometry.Create(path, enforceFillOrientation: this.pen is null);
+        PreparedGeometry geometry = geometryCache?.GetOrCreate(this) ?? this.BuildPreparedGeometry();
         this.Geometry = geometry;
 
         // Transform the brush to match the path coordinate space.
@@ -191,16 +174,51 @@ public struct CompositionCommand
     }
 
     /// <summary>
+    /// Creates the flush-scoped cache key used to share prepared geometry.
+    /// </summary>
+    /// <returns>The geometry preparation cache key.</returns>
+    internal readonly GeometryPreparationCache.GeometryPreparationKey CreateGeometryPreparationKey()
+        => new(this.sourcePath, this.transform, this.pen, this.clipPaths, this.shapeOptions);
+
+    /// <summary>
+    /// Builds prepared geometry for this command without consulting any external cache.
+    /// </summary>
+    /// <returns>The prepared geometry.</returns>
+    internal readonly PreparedGeometry BuildPreparedGeometry()
+    {
+        IPath path = this.sourcePath;
+
+        // Transform to world space once so subsequent stroke and clip work operate in final coordinates.
+        if (!this.transform.IsIdentity)
+        {
+            path = path.Transform(this.transform);
+        }
+
+        // Stroke expansion runs before clipping so the clip sees the actual outline geometry.
+        if (this.pen is not null)
+        {
+            path = this.pen.GeneratePath(path);
+        }
+
+        // Clip — path and clip paths are both interpreted in the prepared command space.
+        if (this.clipPaths is { Count: > 0 })
+        {
+            path = path.Clip(this.shapeOptions, this.clipPaths);
+        }
+
+        // Line preparation happens here so backends no longer need to traverse IPath.
+        return PreparedGeometry.Create(path, enforceFillOrientation: this.pen is null);
+    }
+
+    /// <summary>
     /// Computes a coverage definition key from path identity and rasterization state.
     /// </summary>
     /// <param name="path">Path to rasterize.</param>
     /// <param name="rasterizerOptions">Rasterizer options used for coverage generation.</param>
-    /// <param name="definitionKeyCache">Unused. Retained for API compatibility.</param>
     /// <returns>A stable key for coverage-equivalent commands.</returns>
     public static int ComputeCoverageDefinitionKey(
         IPath path,
-        in RasterizerOptions rasterizerOptions,
-        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
+        in RasterizerOptions rasterizerOptions)
     {
         int pathIdentity = RuntimeHelpers.GetHashCode(path);
         int rasterState = HashCode.Combine(
@@ -215,12 +233,11 @@ public struct CompositionCommand
         PreparedGeometry geometry,
         in RasterizerOptions rasterizerOptions)
     {
-        int geometryIdentity = RuntimeHelpers.GetHashCode(geometry);
         int rasterState = HashCode.Combine(
             rasterizerOptions.Interest.Size,
             (int)rasterizerOptions.IntersectionRule,
             (int)rasterizerOptions.RasterizationMode,
             (int)rasterizerOptions.SamplingOrigin);
-        return HashCode.Combine(geometryIdentity, rasterState);
+        return HashCode.Combine(geometry.DefinitionIdentity, rasterState);
     }
 }

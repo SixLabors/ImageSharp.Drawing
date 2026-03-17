@@ -12,7 +12,7 @@ DrawingCanvasBatcher.Flush()
         -> TryGetCompositeTextureFormat<TPixel>
         -> AreAllCompositionBrushesSupported<TPixel>
         -> if unsupported: staging fallback (see Fallback Behavior)
-     -> CompositionScenePlanner.CreatePreparedBatches(commands, targetBounds)
+     -> CompositionBatchPlanner.CreatePreparedBatches(commands, targetBounds)
         -> clip each command to target bounds
         -> group contiguous commands by DefinitionKey
         -> keep prepared destination/source offsets

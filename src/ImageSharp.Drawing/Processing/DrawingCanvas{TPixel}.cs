@@ -331,14 +331,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         this.EnsureNotDisposed();
         Guard.MustBeBetweenOrEqualTo(saveCount, 1, this.savedStates.Count, nameof(saveCount));
 
-        while (this.savedStates.Count > saveCount)
-        {
-            DrawingCanvasState popped = this.savedStates.Pop();
-            if (popped.IsLayer)
-            {
-                this.CompositeAndPopLayer(popped);
-            }
-        }
+        this.RestoreToCore(saveCount);
     }
 
     /// <inheritdoc cref="IDrawingCanvas.CreateRegion(Rectangle)" />
@@ -418,6 +411,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
+        DrawingOptions commandOptions = effectiveOptions;
+        IReadOnlyList<IPath> commandClipPaths = state.ClipPaths;
 
         IPath closed = path.AsClosedPath();
 
@@ -848,6 +843,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         DrawingCanvasState state = this.ResolveState();
         DrawingOptions effectiveOptions = state.Options;
+        DrawingOptions commandOptions = effectiveOptions;
+        IReadOnlyList<IPath> commandClipPaths = state.ClipPaths;
 
         if (sourceRect.Width <= 0 ||
             sourceRect.Height <= 0 ||
@@ -912,6 +909,14 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 ownedImage = transformed;
                 brushImage = transformed;
                 brushImageRegion = transformed.Bounds;
+
+                // The image pixels and destination rect are already in transformed canvas space,
+                // so the queued fill must not apply the canvas transform a second time.
+                commandOptions = new DrawingOptions(
+                    effectiveOptions.GraphicsOptions,
+                    effectiveOptions.ShapeOptions,
+                    Matrix4x4.Identity);
+                commandClipPaths = TransformClipPaths(state.ClipPaths, effectiveOptions.Transform);
             }
 
             if (renderDestinationRect.Width <= 0 || renderDestinationRect.Height <= 0)
@@ -944,7 +949,12 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 renderDestinationRect.Width,
                 renderDestinationRect.Height);
 
-            this.Fill(brush, destinationPath);
+            this.PrepareCompositionCore(
+                destinationPath,
+                brush,
+                commandOptions,
+                RasterizerSamplingOrigin.PixelBoundary,
+                commandClipPaths);
         }
         finally
         {
@@ -1025,12 +1035,11 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         // Build composition commands and enforce render-pass ordering while preserving
         // original emission order inside each pass. This preserves overlapping color-font
         // layer compositing semantics (for example emoji mouth/teeth layers).
-        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)> definitionKeyCache = [];
         List<(byte RenderPass, int Sequence, CompositionCommand Command)> entries = new(operations.Count);
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
-            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(operation, drawingOptions, clipPaths, definitionKeyCache)));
+            entries.Add((operation.RenderPass, i, this.CreateCompositionCommand(operation, drawingOptions, clipPaths)));
         }
 
         entries.Sort(static (a, b) =>
@@ -1115,22 +1124,9 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         try
         {
-            // Composite any active layers back before final flush.
-            while (this.layerDataStack.Count > 0)
-            {
-                this.Flush();
-                LayerData<TPixel> layerData = this.layerDataStack.Pop();
-                this.batcher = layerData.ParentBatcher;
-                ICanvasFrame<TPixel> destination = this.batcher.TargetFrame;
-                this.backend.ComposeLayer(
-                    this.configuration,
-                    layerData.LayerFrame,
-                    destination,
-                    layerData.LayerBounds.Location,
-                    new GraphicsOptions());
-                this.backend.ReleaseFrameResources(this.configuration, layerData.LayerFrame);
-            }
-
+            // Dispose should finalize the same drawing state transitions as RestoreTo(1),
+            // otherwise active layers can composite with different options than an explicit restore.
+            this.RestoreToCore(1);
             this.batcher.FlushCompositions();
         }
         finally
@@ -1146,6 +1142,24 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// </summary>
     private void EnsureNotDisposed()
         => ObjectDisposedException.ThrowIf(this.isDisposed, this);
+
+    /// <summary>
+    /// Restores the saved-state stack to <paramref name="saveCount"/> without public guard checks.
+    /// Layer states are unwound through the normal compositing path so restore and disposal
+    /// preserve identical layer semantics.
+    /// </summary>
+    /// <param name="saveCount">The target stack depth to restore to.</param>
+    private void RestoreToCore(int saveCount)
+    {
+        while (this.savedStates.Count > saveCount)
+        {
+            DrawingCanvasState popped = this.savedStates.Pop();
+            if (popped.IsLayer)
+            {
+                this.CompositeAndPopLayer(popped);
+            }
+        }
+    }
 
     /// <summary>
     /// Flushes the current layer batcher, composites the layer onto its parent target,
@@ -1204,13 +1218,11 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="operation">The source drawing operation.</param>
     /// <param name="drawingOptions">Drawing options applied to the operation.</param>
     /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
-    /// <param name="definitionKeyCache">Optional cache used to reuse definition key computations.</param>
     /// <returns>A composition command ready for batching.</returns>
     private CompositionCommand CreateCompositionCommand(
         DrawingOperation operation,
         DrawingOptions drawingOptions,
-        IReadOnlyList<IPath>? clipPaths = null,
-        Dictionary<int, (IPath Path, int RasterState, int DefinitionKey)>? definitionKeyCache = null)
+        IReadOnlyList<IPath>? clipPaths = null)
     {
         Brush compositeBrush = operation.Kind == DrawingOperationKind.Fill
             ? operation.Brush!
@@ -1342,20 +1354,32 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         // source -> destination -> transformed-canvas.
         Matrix4x4 sourceToTransformedCanvas = sourceToDestination * transform;
 
-        // Compute the transformed axis-aligned bounds so we know how large the output bitmap must be.
-        transformedDestinationRect = RectangleF.Transform(
+        // Compute the transformed axis-aligned bounds in canvas space.
+        RectangleF transformedBounds = RectangleF.Transform(
             new RectangleF(0, 0, image.Width, image.Height),
             sourceToTransformedCanvas);
 
-        // The transform can produce fractional/max bounds; round up to whole pixels for target allocation.
+        // ImageBrush samples against integer pixel locations. Align the baked bitmap to integer
+        // canvas bounds so the bitmap origin and brush sampling origin agree exactly.
+        int alignedLeft = (int)MathF.Floor(transformedBounds.Left);
+        int alignedTop = (int)MathF.Floor(transformedBounds.Top);
+        int alignedRight = (int)MathF.Ceiling(transformedBounds.Right);
+        int alignedBottom = (int)MathF.Ceiling(transformedBounds.Bottom);
+
+        transformedDestinationRect = RectangleF.FromLTRB(
+            alignedLeft,
+            alignedTop,
+            alignedRight,
+            alignedBottom);
+
         Size targetSize = new(
-            Math.Max(1, (int)MathF.Ceiling(transformedDestinationRect.Width)),
-            Math.Max(1, (int)MathF.Ceiling(transformedDestinationRect.Height)));
+            Math.Max(1, alignedRight - alignedLeft),
+            Math.Max(1, alignedBottom - alignedTop));
 
         // ImageSharp.Transform expects output coordinates relative to the output bitmap origin (0,0).
-        // Shift transformed-canvas coordinates so transformedDestinationRect.Left/Top becomes 0,0.
+        // Shift transformed-canvas coordinates so the aligned integer canvas bounds become 0,0.
         Matrix4x4 sourceToTarget = sourceToTransformedCanvas
-            * Matrix4x4.CreateTranslation(-transformedDestinationRect.X, -transformedDestinationRect.Y, 0);
+            * Matrix4x4.CreateTranslation(-alignedLeft, -alignedTop, 0);
 
         // Resample source pixels into the target bitmap using the computed source->target mapping.
         return image.Clone(ctx => ctx.Transform(
@@ -1386,6 +1410,28 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         float height = clippedSourceRect.Height * scaleY;
 
         return new RectangleF(left, top, width, height);
+    }
+
+    /// <summary>
+    /// Transforms clip paths into the same coordinate space as an eagerly-transformed draw-image command.
+    /// </summary>
+    /// <param name="clipPaths">Clip paths from the current canvas state.</param>
+    /// <param name="transform">Canvas transform already applied to the image content.</param>
+    /// <returns>The transformed clip path list.</returns>
+    private static IReadOnlyList<IPath> TransformClipPaths(IReadOnlyList<IPath> clipPaths, Matrix4x4 transform)
+    {
+        if (clipPaths.Count == 0 || transform.IsIdentity)
+        {
+            return clipPaths;
+        }
+
+        IPath[] transformed = new IPath[clipPaths.Count];
+        for (int i = 0; i < transformed.Length; i++)
+        {
+            transformed[i] = clipPaths[i].Transform(transform);
+        }
+
+        return transformed;
     }
 
     /// <summary>

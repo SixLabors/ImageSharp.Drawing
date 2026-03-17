@@ -17,17 +17,19 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public sealed class PreparedGeometry
 {
     private readonly PreparedLineSegment[] segments;
+    private readonly int definitionIdentity;
 
-    private PreparedGeometry(PreparedLineSegment[] segments, RectangleF bounds)
+    private PreparedGeometry(PreparedLineSegment[] segments, RectangleF bounds, int definitionIdentity)
     {
         this.segments = segments;
         this.Bounds = bounds;
+        this.definitionIdentity = definitionIdentity;
     }
 
     /// <summary>
     /// Gets the shared empty prepared geometry instance.
     /// </summary>
-    public static PreparedGeometry Empty { get; } = new([], RectangleF.Empty);
+    public static PreparedGeometry Empty { get; } = new([], RectangleF.Empty, 0);
 
     /// <summary>
     /// Gets the prepared line segments.
@@ -43,6 +45,11 @@ public sealed class PreparedGeometry
     /// Gets the world-space bounds of the prepared geometry.
     /// </summary>
     public RectangleF Bounds { get; }
+
+    /// <summary>
+    /// Gets the stable identity used to group coverage-equivalent prepared geometry.
+    /// </summary>
+    internal int DefinitionIdentity => this.definitionIdentity;
 
     /// <summary>
     /// Creates prepared geometry from an arbitrary path by flattening all contours into line segments.
@@ -142,6 +149,8 @@ public sealed class PreparedGeometry
         }
 
         PreparedLineSegment[] segments = new PreparedLineSegment[totalSegments];
+        HashCode definitionIdentity = default;
+        definitionIdentity.Add(totalSegments);
         int writeIndex = 0;
         for (int i = 0; i < subPaths.Count; i++)
         {
@@ -152,11 +161,16 @@ public sealed class PreparedGeometry
                 PointF p0 = points[j];
                 PointF p1 = points[j + 1 == points.Length ? 0 : j + 1];
                 segments[writeIndex++] = new PreparedLineSegment(p0, p1);
+                definitionIdentity.Add(p0.X);
+                definitionIdentity.Add(p0.Y);
+                definitionIdentity.Add(p1.X);
+                definitionIdentity.Add(p1.Y);
             }
         }
 
         return new PreparedGeometry(
             segments,
-            new RectangleF(minX, minY, maxX - minX, maxY - minY));
+            new RectangleF(minX, minY, maxX - minX, maxY - minY),
+            definitionIdentity.ToHashCode());
     }
 }
