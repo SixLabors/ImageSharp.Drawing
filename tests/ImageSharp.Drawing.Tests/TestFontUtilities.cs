@@ -47,7 +47,7 @@ public static class TestFontUtilities
     /// <param name="name">The name of the font.</param>
     /// <returns>The <see cref="Font"/></returns>
     public static FontFamily GetFontFamily(FontCollection collection, string name)
-        => collection.Add(GetPath(name), CultureInfo.InvariantCulture);
+        => collection.AddWithCulture(GetPath(name), CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The formats directory.
