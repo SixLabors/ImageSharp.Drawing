@@ -121,15 +121,26 @@ internal sealed class FlushScene : IDisposable
 
         // Phase 1: materialize paths and compute band layout for visible commands.
         // Visibility clipping was already done during Prepare(), so we just skip non-visible commands.
+        // All temporary buffers are pooled via the allocator to avoid GC pressure on large command counts.
+        IMemoryOwner<int> interestLeftBufferOwner = allocator.Allocate<int>(commandCount);
+        IMemoryOwner<int> firstBandIndexBufferOwner = allocator.Allocate<int>(commandCount);
+        IMemoryOwner<int> bandCountBufferOwner = allocator.Allocate<int>(commandCount);
+        IMemoryOwner<byte> visibleItemFlagsOwner = allocator.Allocate<byte>(commandCount, AllocationOptions.Clean);
         MaterializedPath[] pathBuffer = new MaterializedPath[commandCount];
         RasterizerOptions[] rasterizerOptionsBuffer = new RasterizerOptions[commandCount];
-        int[] interestLeftBuffer = new int[commandCount];
-        int[] firstBandIndexBuffer = new int[commandCount];
-        int[] bandCountBuffer = new int[commandCount];
-        byte[] visibleItemFlags = new byte[commandCount];
+
+        Memory<int> interestLeftBuffer = interestLeftBufferOwner.Memory;
+        Memory<int> firstBandIndexBuffer = firstBandIndexBufferOwner.Memory;
+        Memory<int> bandCountBuffer = bandCountBufferOwner.Memory;
+        Memory<byte> visibleItemFlags = visibleItemFlagsOwner.Memory;
 
         _ = Parallel.ForEach(Partitioner.Create(0, commandCount), range =>
         {
+            Span<int> ilSpan = interestLeftBuffer.Span;
+            Span<int> fbSpan = firstBandIndexBuffer.Span;
+            Span<int> bcSpan = bandCountBuffer.Span;
+            Span<byte> vfSpan = visibleItemFlags.Span;
+
             for (int i = range.Item1; i < range.Item2; i++)
             {
                 CompositionCommand command = commands[i];
@@ -172,18 +183,21 @@ internal sealed class FlushScene : IDisposable
 
                 pathBuffer[i] = materializedPath;
                 rasterizerOptionsBuffer[i] = itemOptions;
-                interestLeftBuffer[i] = destinationInterest.Left;
-                firstBandIndexBuffer[i] = firstBandIndex;
-                bandCountBuffer[i] = bandCount;
-                visibleItemFlags[i] = 1;
+                ilSpan[i] = destinationInterest.Left;
+                fbSpan[i] = firstBandIndex;
+                bcSpan[i] = bandCount;
+                vfSpan[i] = 1;
             }
         });
 
         int visibleItemCount = 0;
 
-        for (int i = 0; i < visibleItemFlags.Length; i++)
+        // TODO: SIMD sum over the byte span.
+        Span<byte> flagSpan = visibleItemFlags.Span;
+
+        for (int i = 0; i < flagSpan.Length; i++)
         {
-            visibleItemCount += visibleItemFlags[i];
+            visibleItemCount += flagSpan[i];
         }
 
         if (visibleItemCount == 0)
@@ -191,31 +205,47 @@ internal sealed class FlushScene : IDisposable
             return Empty();
         }
 
-        // Phase 2: compact the visible items into dense arrays so the hot path avoids branchy sparse scans.
+        // Phase 2: compact in-place — move visible entries to the front of the Phase 1 arrays.
+        // This avoids a second allocation for MaterializedPath[] and RasterizerOptions[].
         CompositionCommand[] compactedCommands = new CompositionCommand[visibleItemCount];
-        MaterializedPath[] materializedPaths = new MaterializedPath[visibleItemCount];
-        RasterizerOptions[] rasterizerOptions = new RasterizerOptions[visibleItemCount];
         int[] interestLefts = new int[visibleItemCount];
-        int[] itemFirstBandIndices = new int[visibleItemCount];
-        int[] itemBandCounts = new int[visibleItemCount];
+        IMemoryOwner<int> itemFirstBandIndicesOwner = allocator.Allocate<int>(visibleItemCount);
+        IMemoryOwner<int> itemBandCountsOwner = allocator.Allocate<int>(visibleItemCount);
+        Memory<int> itemFirstBandIndices = itemFirstBandIndicesOwner.Memory;
+        Memory<int> itemBandCounts = itemBandCountsOwner.Memory;
 
         int writeIndex = 0;
-
-        for (int i = 0; i < commandCount; i++)
         {
-            if (visibleItemFlags[i] == 0)
-            {
-                continue;
-            }
+            Span<MaterializedPath> mpSpan = pathBuffer.AsSpan();
+            Span<RasterizerOptions> roSpan = rasterizerOptionsBuffer.AsSpan();
+            Span<int> ilSpan = interestLeftBuffer.Span;
+            Span<int> fbSrc = firstBandIndexBuffer.Span;
+            Span<int> bcSrc = bandCountBuffer.Span;
+            Span<int> fbDst = itemFirstBandIndices.Span;
+            Span<int> bcDst = itemBandCounts.Span;
 
-            compactedCommands[writeIndex] = commands[i];
-            materializedPaths[writeIndex] = pathBuffer[i]!;
-            rasterizerOptions[writeIndex] = rasterizerOptionsBuffer[i];
-            interestLefts[writeIndex] = interestLeftBuffer[i];
-            itemFirstBandIndices[writeIndex] = firstBandIndexBuffer[i];
-            itemBandCounts[writeIndex] = bandCountBuffer[i];
-            writeIndex++;
+            for (int i = 0; i < commandCount; i++)
+            {
+                if (flagSpan[i] == 0)
+                {
+                    continue;
+                }
+
+                compactedCommands[writeIndex] = commands[i];
+                mpSpan[writeIndex] = mpSpan[i];
+                roSpan[writeIndex] = roSpan[i];
+                interestLefts[writeIndex] = ilSpan[i];
+                fbDst[writeIndex] = fbSrc[i];
+                bcDst[writeIndex] = bcSrc[i];
+                writeIndex++;
+            }
         }
+
+        // Phase 1 buffers for int/byte are no longer needed — release them now.
+        bandCountBufferOwner.Dispose();
+        firstBandIndexBufferOwner.Dispose();
+        interestLeftBufferOwner.Dispose();
+        visibleItemFlagsOwner.Dispose();
 
         int minBandIndex = int.MaxValue;
         int maxBandIndex = int.MinValue;
@@ -228,47 +258,58 @@ internal sealed class FlushScene : IDisposable
         int smallEdgeItemCount = 0;
 
         // Phase 3: derive scene-wide maxima once so every worker can allocate one reusable scratch set.
-        for (int i = 0; i < visibleItemCount; i++)
         {
-            RasterizerOptions itemOptions = rasterizerOptions[i];
-            Rectangle interest = itemOptions.Interest;
-            int width = interest.Width;
-            long coverStride = (long)width * 2;
+            Span<RasterizerOptions> roSpan = rasterizerOptionsBuffer.AsSpan();
+            Span<int> fbSpan = itemFirstBandIndices.Span;
+            Span<int> bcSpan = itemBandCounts.Span;
+            Span<MaterializedPath> mpSpan = pathBuffer.AsSpan();
 
-            if (coverStride > int.MaxValue)
+            for (int i = 0; i < visibleItemCount; i++)
             {
-                throw new InvalidOperationException("Interest bounds exceed rasterizer limits.");
-            }
+                RasterizerOptions itemOptions = roSpan[i];
+                Rectangle interest = itemOptions.Interest;
+                int width = interest.Width;
+                long coverStride = (long)width * 2;
 
-            minBandIndex = Math.Min(minBandIndex, itemFirstBandIndices[i]);
-            maxBandIndex = Math.Max(maxBandIndex, itemFirstBandIndices[i] + itemBandCounts[i] - 1);
-            maxWidth = Math.Max(maxWidth, width);
-            maxWordsPerRow = Math.Max(maxWordsPerRow, BitVectorsForMaxBitCount(width));
-            maxCoverStride = Math.Max(maxCoverStride, (int)coverStride);
-            totalEdgeCount += materializedPaths[i].TotalSegmentCount;
+                if (coverStride > int.MaxValue)
+                {
+                    throw new InvalidOperationException("Interest bounds exceed rasterizer limits.");
+                }
 
-            if (itemBandCounts[i] == 1)
-            {
-                singleBandItemCount++;
-            }
+                minBandIndex = Math.Min(minBandIndex, fbSpan[i]);
+                maxBandIndex = Math.Max(maxBandIndex, fbSpan[i] + bcSpan[i] - 1);
+                maxWidth = Math.Max(maxWidth, width);
+                maxWordsPerRow = Math.Max(maxWordsPerRow, BitVectorsForMaxBitCount(width));
+                maxCoverStride = Math.Max(maxCoverStride, (int)coverStride);
+                totalEdgeCount += mpSpan[i].TotalSegmentCount;
 
-            if (materializedPaths[i].TotalSegmentCount <= 64)
-            {
-                smallEdgeItemCount++;
+                if (bcSpan[i] == 1)
+                {
+                    singleBandItemCount++;
+                }
+
+                if (mpSpan[i].TotalSegmentCount <= 64)
+                {
+                    smallEdgeItemCount++;
+                }
             }
         }
 
-        int[] itemBandOffsetStarts = new int[visibleItemCount + 1];
+        IMemoryOwner<int> itemBandOffsetStartsOwner = allocator.Allocate<int>(visibleItemCount + 1);
         int totalBandOffsetCount = 0;
-        for (int i = 0; i < visibleItemCount; i++)
         {
-            itemBandOffsetStarts[i] = totalBandOffsetCount;
-            totalBandOffsetCount += itemBandCounts[i] + 1;
+            Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
+            Span<int> bcSpan = itemBandCounts.Span;
+            for (int i = 0; i < visibleItemCount; i++)
+            {
+                offsetSpan[i] = totalBandOffsetCount;
+                totalBandOffsetCount += bcSpan[i] + 1;
+            }
+
+            offsetSpan[visibleItemCount] = totalBandOffsetCount;
         }
 
-        itemBandOffsetStarts[visibleItemCount] = totalBandOffsetCount;
-
-        int[] bandSegmentOffsets = new int[totalBandOffsetCount];
+        IMemoryOwner<int> bandSegmentOffsetsOwner = allocator.Allocate<int>(totalBandOffsetCount);
         long totalBandSegmentRefs = 0;
 
         // Phase 4: count how many prepared segments each item contributes to each row band.
@@ -277,14 +318,20 @@ internal sealed class FlushScene : IDisposable
             () => 0L,
             (range, _, localTotal) =>
             {
+                Span<MaterializedPath> mpSpan = pathBuffer.AsSpan();
+                Span<RasterizerOptions> roSpan = rasterizerOptionsBuffer.AsSpan();
+                Span<int> bcSpan = itemBandCounts.Span;
+                Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
+                Span<int> bsoSpan = bandSegmentOffsetsOwner.Memory.Span;
+
                 for (int i = range.Item1; i < range.Item2; i++)
                 {
                     localTotal += CountBandSegmentRefs(
-                        materializedPaths[i],
+                        mpSpan[i],
                         compactedCommands[i].DestinationOffset.Y,
-                        in rasterizerOptions[i],
-                        itemBandCounts[i],
-                        bandSegmentOffsets.AsSpan(itemBandOffsetStarts[i], itemBandCounts[i]));
+                        in roSpan[i],
+                        bcSpan[i],
+                        bsoSpan.Slice(offsetSpan[i], bcSpan[i]));
                 }
 
                 return localTotal;
@@ -297,21 +344,26 @@ internal sealed class FlushScene : IDisposable
         }
 
         int runningSegmentOffset = 0;
-        for (int i = 0; i < visibleItemCount; i++)
         {
-            int bandOffsetStart = itemBandOffsetStarts[i];
-            int bandCount = itemBandCounts[i];
-            for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
+            Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
+            Span<int> bcSpan = itemBandCounts.Span;
+            Span<int> bsoSpan = bandSegmentOffsetsOwner.Memory.Span;
+            for (int i = 0; i < visibleItemCount; i++)
             {
-                int segmentCount = bandSegmentOffsets[bandOffsetStart + bandIndex];
-                bandSegmentOffsets[bandOffsetStart + bandIndex] = runningSegmentOffset;
-                runningSegmentOffset += segmentCount;
-            }
+                int bandOffsetStart = offsetSpan[i];
+                int bandCount = bcSpan[i];
+                for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
+                {
+                    int segmentCount = bsoSpan[bandOffsetStart + bandIndex];
+                    bsoSpan[bandOffsetStart + bandIndex] = runningSegmentOffset;
+                    runningSegmentOffset += segmentCount;
+                }
 
-            bandSegmentOffsets[bandOffsetStart + bandCount] = runningSegmentOffset;
+                bsoSpan[bandOffsetStart + bandCount] = runningSegmentOffset;
+            }
         }
 
-        int[] bandSegmentIndices = new int[runningSegmentOffset];
+        IMemoryOwner<int> bandSegmentIndicesOwner = allocator.Allocate<int>(Math.Max(runningSegmentOffset, 1));
 
         // Phase 5: materialize the dense per-band segment index lists using the offsets computed above.
         _ = Parallel.ForEach(
@@ -319,9 +371,16 @@ internal sealed class FlushScene : IDisposable
             () => Array.Empty<int>(),
             (range, _, bandCursorBuffer) =>
             {
+                Span<MaterializedPath> mpSpan = pathBuffer.AsSpan();
+                Span<RasterizerOptions> roSpan = rasterizerOptionsBuffer.AsSpan();
+                Span<int> bcSpan = itemBandCounts.Span;
+                Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
+                Span<int> bsoSpan = bandSegmentOffsetsOwner.Memory.Span;
+                Span<int> bsiSpan = bandSegmentIndicesOwner.Memory.Span;
+
                 for (int i = range.Item1; i < range.Item2; i++)
                 {
-                    int bandCount = itemBandCounts[i];
+                    int bandCount = bcSpan[i];
                     if (bandCount <= 0)
                     {
                         continue;
@@ -332,17 +391,17 @@ internal sealed class FlushScene : IDisposable
                         bandCursorBuffer = new int[bandCount];
                     }
 
-                    ReadOnlySpan<int> bandOffsets = bandSegmentOffsets.AsSpan(itemBandOffsetStarts[i], bandCount + 1);
+                    ReadOnlySpan<int> bandOffsets = bsoSpan.Slice(offsetSpan[i], bandCount + 1);
                     Span<int> bandCursors = bandCursorBuffer.AsSpan(0, bandCount);
                     bandOffsets[..bandCount].CopyTo(bandCursors);
 
                     FillBandSegmentRefs(
-                        materializedPaths[i],
+                        mpSpan[i],
                         compactedCommands[i].DestinationOffset.Y,
-                        in rasterizerOptions[i],
+                        in roSpan[i],
                         bandCount,
                         bandCursors,
-                        bandSegmentIndices);
+                        bsiSpan);
                 }
 
                 return bandCursorBuffer;
@@ -354,25 +413,37 @@ internal sealed class FlushScene : IDisposable
         int totalRefs = 0;
 
         // Phase 6: convert item-local bands into scene-row membership counts.
-        for (int i = 0; i < visibleItemCount; i++)
         {
-            int itemFirstActiveRow = itemFirstBandIndices[i] - minBandIndex;
-            int bandOffsetStart = itemBandOffsetStarts[i];
-            for (int localBandIndex = 0; localBandIndex < itemBandCounts[i]; localBandIndex++)
-            {
-                if (bandSegmentOffsets[bandOffsetStart + localBandIndex + 1] <= bandSegmentOffsets[bandOffsetStart + localBandIndex])
-                {
-                    continue;
-                }
+            Span<int> fbSpan = itemFirstBandIndices.Span;
+            Span<int> bcSpan = itemBandCounts.Span;
+            Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
+            Span<int> bsoSpan = bandSegmentOffsetsOwner.Memory.Span;
 
-                int sceneRow = itemFirstActiveRow + localBandIndex;
-                rowCounts[sceneRow]++;
-                totalRefs++;
+            for (int i = 0; i < visibleItemCount; i++)
+            {
+                int itemFirstActiveRow = fbSpan[i] - minBandIndex;
+                int bandOffsetStart = offsetSpan[i];
+                for (int localBandIndex = 0; localBandIndex < bcSpan[i]; localBandIndex++)
+                {
+                    if (bsoSpan[bandOffsetStart + localBandIndex + 1] <= bsoSpan[bandOffsetStart + localBandIndex])
+                    {
+                        continue;
+                    }
+
+                    int sceneRow = itemFirstActiveRow + localBandIndex;
+                    rowCounts[sceneRow]++;
+                    totalRefs++;
+                }
             }
         }
 
         if (totalRefs == 0)
         {
+            itemFirstBandIndicesOwner.Dispose();
+            itemBandCountsOwner.Dispose();
+            itemBandOffsetStartsOwner.Dispose();
+            bandSegmentOffsetsOwner.Dispose();
+            bandSegmentIndicesOwner.Dispose();
             return Empty();
         }
 
@@ -391,39 +462,52 @@ internal sealed class FlushScene : IDisposable
         Array.Copy(rowOffsets, rowCursors, rowCount);
 
         // Phase 7: build the row-major execution order while preserving command submission order per row.
-        for (int i = 0; i < visibleItemCount; i++)
         {
-            int itemFirstActiveRow = itemFirstBandIndices[i] - minBandIndex;
-            int bandOffsetStart = itemBandOffsetStarts[i];
-            CompositionCommand command = compactedCommands[i];
-            for (int localBandIndex = 0; localBandIndex < itemBandCounts[i]; localBandIndex++)
-            {
-                int segmentStart = bandSegmentOffsets[bandOffsetStart + localBandIndex];
-                int segmentEnd = bandSegmentOffsets[bandOffsetStart + localBandIndex + 1];
-                int segmentCount = segmentEnd - segmentStart;
-                if (segmentCount <= 0)
-                {
-                    continue;
-                }
+            Span<int> fbSpan = itemFirstBandIndices.Span;
+            Span<int> bcSpan = itemBandCounts.Span;
+            Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
+            Span<int> bsoSpan = bandSegmentOffsetsOwner.Memory.Span;
 
-                int sceneRow = itemFirstActiveRow + localBandIndex;
-                int absoluteBandIndex = itemFirstBandIndices[i] + localBandIndex;
-                int bandTop = (absoluteBandIndex * rowHeight) - sceneBounds.Y;
-                Rectangle rowDestinationRegion = Rectangle.Intersect(
-                    command.DestinationRegion,
-                    new Rectangle(
-                        command.DestinationRegion.X,
-                        bandTop,
-                        command.DestinationRegion.Width,
-                        rowHeight));
-                pendingRowItems[rowCursors[sceneRow]++] = new PendingRowItem(
-                    i,
-                    localBandIndex,
-                    segmentStart,
-                    segmentCount,
-                    rowDestinationRegion);
+            for (int i = 0; i < visibleItemCount; i++)
+            {
+                int itemFirstActiveRow = fbSpan[i] - minBandIndex;
+                int bandOffsetStart = offsetSpan[i];
+                CompositionCommand command = compactedCommands[i];
+                for (int localBandIndex = 0; localBandIndex < bcSpan[i]; localBandIndex++)
+                {
+                    int segmentStart = bsoSpan[bandOffsetStart + localBandIndex];
+                    int segmentEnd = bsoSpan[bandOffsetStart + localBandIndex + 1];
+                    int segmentCount = segmentEnd - segmentStart;
+                    if (segmentCount <= 0)
+                    {
+                        continue;
+                    }
+
+                    int sceneRow = itemFirstActiveRow + localBandIndex;
+                    int absoluteBandIndex = fbSpan[i] + localBandIndex;
+                    int bandTop = (absoluteBandIndex * rowHeight) - sceneBounds.Y;
+                    Rectangle rowDestinationRegion = Rectangle.Intersect(
+                        command.DestinationRegion,
+                        new Rectangle(
+                            command.DestinationRegion.X,
+                            bandTop,
+                            command.DestinationRegion.Width,
+                            rowHeight));
+                    pendingRowItems[rowCursors[sceneRow]++] = new PendingRowItem(
+                        i,
+                        localBandIndex,
+                        segmentStart,
+                        segmentCount,
+                        rowDestinationRegion);
+                }
             }
         }
+
+        // Dispose band layout temporaries — no longer needed after Phase 7.
+        itemFirstBandIndicesOwner.Dispose();
+        itemBandCountsOwner.Dispose();
+        itemBandOffsetStartsOwner.Dispose();
+        bandSegmentOffsetsOwner.Dispose();
 
         IMemoryOwner<DefaultRasterizer.RasterLineData>? lineDataOwner =
             runningSegmentOffset > 0 ? allocator.Allocate<DefaultRasterizer.RasterLineData>(runningSegmentOffset) : null;
@@ -441,6 +525,10 @@ internal sealed class FlushScene : IDisposable
             // Phase 8: prebuild each row-local raster band once so execution only performs scan conversion.
             _ = Parallel.ForEach(Partitioner.Create(0, totalRefs), range =>
             {
+                Span<MaterializedPath> mpSpan = pathBuffer.AsSpan();
+                Span<RasterizerOptions> roSpan = rasterizerOptionsBuffer.AsSpan();
+                Span<int> bsiSpan = bandSegmentIndicesOwner.Memory.Span;
+
                 long localLineCount = 0;
                 for (int rowPosition = range.Item1; rowPosition < range.Item2; rowPosition++)
                 {
@@ -453,11 +541,11 @@ internal sealed class FlushScene : IDisposable
                         pendingRowItem.DestinationRegion);
 
                     _ = DefaultRasterizer.TryBuildRasterizableBand(
-                        materializedPaths[itemIndex],
-                        bandSegmentIndices.AsSpan(pendingRowItem.SegmentStart, pendingRowItem.SegmentCount),
+                        mpSpan[itemIndex],
+                        bsiSpan.Slice(pendingRowItem.SegmentStart, pendingRowItem.SegmentCount),
                         compactedCommands[itemIndex].DestinationOffset.X,
                         compactedCommands[itemIndex].DestinationOffset.Y,
-                        in rasterizerOptions[itemIndex],
+                        in roSpan[itemIndex],
                         pendingRowItem.LocalBandIndex,
                         lineData.Span.Slice(pendingRowItem.SegmentStart, pendingRowItem.SegmentCount),
                         startCoverData.Span.Slice(rowPosition * rowHeight, rowHeight),
@@ -468,6 +556,9 @@ internal sealed class FlushScene : IDisposable
                 _ = Interlocked.Add(ref totalLineCount, localLineCount);
             });
         }
+
+        // Dispose remaining temporary.
+        bandSegmentIndicesOwner.Dispose();
 
         return new FlushScene(
             compactedCommands,
@@ -689,7 +780,7 @@ internal sealed class FlushScene : IDisposable
         in RasterizerOptions options,
         int bandCount,
         Span<int> bandCursors,
-        int[] bandSegmentIndices)
+        Span<int> bandSegmentIndices)
     {
         if (bandCount <= 0 || path.TotalSegmentCount == 0)
         {
