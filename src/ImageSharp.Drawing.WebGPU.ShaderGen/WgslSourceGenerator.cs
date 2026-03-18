@@ -1,0 +1,458 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
+
+namespace SixLabors.ImageSharp.Drawing.WebGPU.ShaderGen;
+
+/// <summary>
+/// Expands the WGSL shader source tree at compile time and emits a generated C# container
+/// with one fully inlined source payload per root shader file.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Root shaders are every <c>.wgsl</c> file directly under the <c>Shaders</c> tree except files
+/// under <c>Shaders/Shared</c>. Shared files are only imported into roots.
+/// </para>
+/// <para>
+/// The generator intentionally supports a very small preprocessor surface:
+/// <c>#import</c>, <c>#ifdef</c>, <c>#ifndef</c>, <c>#else</c>, and <c>#endif</c>.
+/// That keeps the generated shader text predictable and close to the source WGSL layout.
+/// </para>
+/// </remarks>
+[Generator]
+public sealed class WgslSourceGenerator : IIncrementalGenerator
+{
+    private static readonly DiagnosticDescriptor MissingShaderPath = new(
+        id: "WGSLGEN001",
+        title: "Missing shader import",
+        messageFormat: "Could not resolve WGSL import '{0}' referenced from '{1}'",
+        category: "WGSL",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor CyclicImportPath = new(
+        id: "WGSLGEN002",
+        title: "Cyclic shader import",
+        messageFormat: "Detected a cyclic WGSL import involving '{0}'",
+        category: "WGSL",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor UnsupportedDirective = new(
+        id: "WGSLGEN003",
+        title: "Unsupported WGSL preprocessor directive",
+        messageFormat: "Unsupported WGSL preprocessor directive '{0}' in '{1}'",
+        category: "WGSL",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// Registers the WGSL <see cref="AdditionalText"/> inputs and wires them into a single
+    /// source-emission step.
+    /// </summary>
+    /// <param name="context">The Roslyn initialization context used to register incremental inputs and outputs.</param>
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        IncrementalValueProvider<ImmutableArray<ShaderFile>> shaderFiles = context.AdditionalTextsProvider
+            .Where(static file => file.Path.EndsWith(".wgsl", StringComparison.OrdinalIgnoreCase))
+            .Select((file, cancellationToken) => new ShaderFile(
+                GetRelativeShaderPath(file.Path),
+                file.GetText(cancellationToken)?.ToString() ?? string.Empty))
+            .Where(static file => file.RelativePath is not null)
+            .Select(static (file, _) => file)
+            .Collect();
+
+        context.RegisterSourceOutput(shaderFiles, static (productionContext, files) => Execute(productionContext, files));
+    }
+
+    // Keep exception handling here so the compiler gets a diagnostic instead of failing with
+    // an opaque analyzer crash.
+    private static void Execute(SourceProductionContext context, ImmutableArray<ShaderFile> files)
+    {
+        try
+        {
+            Dictionary<string, string> fileMap = files
+                .Where(static file => file.RelativePath is not null)
+                .ToDictionary(static file => NormalizePath(file.RelativePath!), static file => file.Text, StringComparer.Ordinal);
+
+            string source = GenerateSource(context, fileMap);
+            context.AddSource("GeneratedWgslShaderSources.g.cs", SourceText.From(source, Encoding.UTF8));
+        }
+        catch (Exception ex)
+        {
+            DiagnosticDescriptor descriptor = new(
+                id: "WGSLGEN999",
+                title: "WGSL generation failed",
+                messageFormat: ex.ToString(),
+                category: "WGSL",
+                defaultSeverity: DiagnosticSeverity.Error,
+                isEnabledByDefault: true);
+            context.ReportDiagnostic(Diagnostic.Create(descriptor, Location.None));
+        }
+    }
+
+    // Generates the single C# container that the runtime shader wrappers reference. Each
+    // property exposes both the expanded WGSL text and a null-terminated UTF-8 payload.
+    private static string GenerateSource(SourceProductionContext context, Dictionary<string, string> fileMap)
+    {
+        IReadOnlyList<string> rootFiles = fileMap.Keys
+            .Where(static path => !path.StartsWith("Shared/", StringComparison.Ordinal))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        StringBuilder builder = new();
+        _ = builder.AppendLine("// <auto-generated/>");
+        _ = builder.AppendLine("using System;");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("namespace SixLabors.ImageSharp.Drawing.Processing.Backends;");
+        _ = builder.AppendLine();
+        _ = builder.AppendLine("internal static class GeneratedWgslShaderSources");
+        _ = builder.AppendLine("{");
+
+        foreach (string rootFile in rootFiles)
+        {
+            foreach (ShaderVariant variant in GetVariants(rootFile))
+            {
+                string propertyName = variant.PropertySuffix.Length == 0
+                    ? ToPropertyName(rootFile)
+                    : ToPropertyName(rootFile) + variant.PropertySuffix;
+                string resolved = ResolveShader(
+                    context,
+                    fileMap,
+                    rootFile,
+                    new HashSet<string>(StringComparer.Ordinal),
+                    rootFile,
+                    variant.Defines);
+
+                string textDelimiter = GetRawStringDelimiter(resolved);
+                _ = builder.Append("    public static string ").Append(propertyName).AppendLine("Text =>");
+                _ = builder.Append("        ").Append(textDelimiter).AppendLine();
+                AppendIndentedRawStringContent(builder, resolved, "        ");
+                _ = builder.Append("        ").Append(textDelimiter).AppendLine(";");
+                _ = builder.AppendLine();
+
+                string byteDelimiter = GetRawStringDelimiter(resolved);
+                _ = builder.Append("    private static readonly byte[] ").Append(propertyName).AppendLine("CodeBytes =");
+                _ = builder.AppendLine("    [");
+                _ = builder.Append("        .. ").Append(byteDelimiter).AppendLine();
+                AppendIndentedRawStringContent(builder, resolved, "        ");
+                _ = builder.Append("        ").Append(byteDelimiter).AppendLine("u8,");
+                _ = builder.AppendLine("        0,");
+                _ = builder.AppendLine("    ];");
+                _ = builder.AppendLine();
+                _ = builder.Append("    public static ReadOnlySpan<byte> ").Append(propertyName).Append("Code => ").Append(propertyName).AppendLine("CodeBytes;");
+                _ = builder.AppendLine();
+            }
+        }
+
+        _ = builder.AppendLine("}");
+        return builder.ToString();
+    }
+
+    // Recursively expands imports while interpreting the tiny conditional subset used by the
+    // upstream shader tree. Unsupported directives are surfaced as generator diagnostics.
+    private static string ResolveShader(
+        SourceProductionContext context,
+        Dictionary<string, string> fileMap,
+        string path,
+        HashSet<string> includeStack,
+        string rootPath,
+        HashSet<string> defines)
+    {
+        if (!includeStack.Add(path))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(CyclicImportPath, Location.None, path));
+            return string.Empty;
+        }
+
+        try
+        {
+            if (!fileMap.TryGetValue(path, out string? text))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(MissingShaderPath, Location.None, path, rootPath));
+                return string.Empty;
+            }
+
+            StringBuilder builder = new();
+            Stack<ConditionalFrame> conditionalFrames = new();
+            bool isActive = true;
+            foreach (string line in EnumerateLines(text))
+            {
+                string trimmed = line.Trim();
+                if (trimmed.StartsWith("#import ", StringComparison.Ordinal))
+                {
+                    if (isActive)
+                    {
+                        string importName = trimmed.Substring("#import ".Length).Trim();
+                        string importPath = ResolveImportPath(fileMap, path, importName);
+                        if (importPath.Length == 0)
+                        {
+                            context.ReportDiagnostic(Diagnostic.Create(MissingShaderPath, Location.None, importName, path));
+                        }
+                        else
+                        {
+                            _ = builder.Append(ResolveShader(context, fileMap, importPath, includeStack, rootPath, defines));
+                        }
+                    }
+
+                    continue;
+                }
+
+                if (trimmed.StartsWith("#ifdef ", StringComparison.Ordinal))
+                {
+                    string symbol = trimmed.Substring("#ifdef ".Length).Trim();
+                    bool condition = defines.Contains(symbol);
+                    conditionalFrames.Push(new ConditionalFrame(isActive, condition));
+                    isActive = isActive && condition;
+                    continue;
+                }
+
+                if (trimmed.StartsWith("#ifndef ", StringComparison.Ordinal))
+                {
+                    string symbol = trimmed.Substring("#ifndef ".Length).Trim();
+                    bool condition = !defines.Contains(symbol);
+                    conditionalFrames.Push(new ConditionalFrame(isActive, condition));
+                    isActive = isActive && condition;
+                    continue;
+                }
+
+                if (trimmed.Equals("#else", StringComparison.Ordinal))
+                {
+                    if (conditionalFrames.Count == 0)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(UnsupportedDirective, Location.None, trimmed, path));
+                        continue;
+                    }
+
+                    ConditionalFrame frame = conditionalFrames.Pop();
+                    conditionalFrames.Push(frame);
+                    isActive = frame.ParentActive && !frame.Condition;
+                    continue;
+                }
+
+                if (trimmed.StartsWith("#endif", StringComparison.Ordinal))
+                {
+                    if (conditionalFrames.Count == 0)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(UnsupportedDirective, Location.None, trimmed, path));
+                        continue;
+                    }
+
+                    ConditionalFrame frame = conditionalFrames.Pop();
+                    isActive = frame.ParentActive;
+                    continue;
+                }
+
+                if (trimmed.StartsWith("#", StringComparison.Ordinal))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(UnsupportedDirective, Location.None, trimmed, path));
+                    continue;
+                }
+
+                if (isActive)
+                {
+                    _ = builder.Append(line);
+                    _ = builder.Append('\n');
+                }
+            }
+
+            return builder.ToString();
+        }
+        finally
+        {
+            _ = includeStack.Remove(path);
+        }
+    }
+
+    // Imports first probe the current shader directory, then fall back to Shared/ for the common
+    // include blocks used across stages.
+    private static string ResolveImportPath(Dictionary<string, string> fileMap, string currentPath, string importName)
+    {
+        string currentDirectory = currentPath.IndexOf('/') >= 0
+            ? currentPath.Substring(0, currentPath.LastIndexOf('/'))
+            : string.Empty;
+
+        string localCandidate = currentDirectory.Length == 0
+            ? $"{importName}.wgsl"
+            : $"{currentDirectory}/{importName}.wgsl";
+        if (fileMap.ContainsKey(localCandidate))
+        {
+            return localCandidate;
+        }
+
+        string sharedCandidate = $"Shared/{importName}.wgsl";
+        return fileMap.ContainsKey(sharedCandidate) ? sharedCandidate : string.Empty;
+    }
+
+    // Generates root variants for the few upstream shaders that are compiled with
+    // different preprocessor symbols.
+    private static IEnumerable<ShaderVariant> GetVariants(string rootFile)
+    {
+        yield return new ShaderVariant(string.Empty, new HashSet<string>(StringComparer.Ordinal));
+
+        if (string.Equals(rootFile, "pathtag_scan.wgsl", StringComparison.Ordinal))
+        {
+            yield return new ShaderVariant("Small", new HashSet<string>(StringComparer.Ordinal) { "small" });
+        }
+    }
+
+    // Enumerates lines without allocating a full split array, since generators run in the compiler
+    // and should avoid unnecessary per-build churn.
+    private static IEnumerable<string> EnumerateLines(string text)
+    {
+        int start = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (text[i] == '\r')
+            {
+                yield return text.Substring(start, i - start);
+                if ((i + 1) < text.Length && text[i + 1] == '\n')
+                {
+                    i++;
+                }
+
+                start = i + 1;
+            }
+            else if (text[i] == '\n')
+            {
+                yield return text.Substring(start, i - start);
+                start = i + 1;
+            }
+        }
+
+        if (start < text.Length)
+        {
+            yield return text.Substring(start);
+        }
+    }
+
+    // Raw string literals must preserve the original shader text exactly while also satisfying the
+    // indentation rules of generated C# source.
+    private static void AppendIndentedRawStringContent(StringBuilder builder, string content, string indent)
+    {
+        foreach (string line in EnumerateLines(content))
+        {
+            _ = builder.Append(indent);
+            _ = builder.Append(line);
+            _ = builder.Append('\n');
+        }
+
+        if (content.Length == 0 || content[content.Length - 1] != '\n')
+        {
+            _ = builder.Append(indent);
+            _ = builder.Append('\n');
+        }
+    }
+
+    // Choose a delimiter width that is guaranteed not to collide with the shader contents.
+    private static string GetRawStringDelimiter(string text)
+    {
+        int maxQuotes = 0;
+        int current = 0;
+        foreach (char ch in text)
+        {
+            if (ch == '"')
+            {
+                current++;
+                maxQuotes = Math.Max(maxQuotes, current);
+            }
+            else
+            {
+                current = 0;
+            }
+        }
+
+        return new string('"', Math.Max(3, maxQuotes + 1));
+    }
+
+    // Converts file names such as "path_count_setup.wgsl" into C# property names like
+    // "PathCountSetup".
+    private static string ToPropertyName(string path)
+    {
+        string fileName = path.EndsWith(".wgsl", StringComparison.OrdinalIgnoreCase)
+            ? path.Substring(0, path.Length - 5)
+            : path;
+
+        string[] segments = fileName.Split(['/', '_', '-'], StringSplitOptions.RemoveEmptyEntries);
+        StringBuilder builder = new();
+        foreach (string segment in segments)
+        {
+            _ = builder.Append(char.ToUpperInvariant(segment[0]));
+            if (segment.Length > 1)
+            {
+                _ = builder.Append(segment.Substring(1));
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    // AdditionalFiles come through as full paths. The generated API is keyed by the relative
+    // path beneath the WebGPU Shaders tree so imports remain stable across machines.
+    private static string? GetRelativeShaderPath(string path)
+    {
+        const string marker = "\\Shaders\\";
+        int index = path.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        return NormalizePath(path.Substring(index + marker.Length));
+    }
+
+    private static string NormalizePath(string path)
+        => path.Replace('\\', '/');
+
+    // Small immutable transport used while collecting AdditionalFiles into a dictionary keyed by
+    // shader-relative path.
+    private readonly struct ShaderFile
+    {
+        public ShaderFile(string? relativePath, string text)
+        {
+            this.RelativePath = relativePath;
+            this.Text = text;
+        }
+
+        public string? RelativePath { get; }
+
+        public string Text { get; }
+    }
+
+    // Tracks the active state of nested conditional blocks while expanding the supported WGSL
+    // directive subset.
+    private readonly struct ConditionalFrame
+    {
+        public ConditionalFrame(bool parentActive, bool condition)
+        {
+            this.ParentActive = parentActive;
+            this.Condition = condition;
+        }
+
+        public bool ParentActive { get; }
+
+        public bool Condition { get; }
+    }
+
+    // One generated source variant for a root shader and the symbol set that should be treated
+    // as defined while resolving its conditional blocks.
+    private readonly struct ShaderVariant
+    {
+        public ShaderVariant(string propertySuffix, HashSet<string> defines)
+        {
+            this.PropertySuffix = propertySuffix;
+            this.Defines = defines;
+        }
+
+        public string PropertySuffix { get; }
+
+        public HashSet<string> Defines { get; }
+    }
+}

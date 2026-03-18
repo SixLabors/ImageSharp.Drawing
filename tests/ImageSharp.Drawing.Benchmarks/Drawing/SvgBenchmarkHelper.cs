@@ -54,7 +54,7 @@ internal static class SvgBenchmarkHelper
             }
 
             // Parse fill color (default black per SVG spec).
-            string fillStr = pathEl.Attribute("fill")?.Value;
+            string fillStr = ResolveInheritedPresentationValue(pathEl, "fill");
             ISColor fill;
             if (fillStr is null)
             {
@@ -75,7 +75,7 @@ internal static class SvgBenchmarkHelper
 
             // Apply fill-opacity.
             if (float.TryParse(
-                    pathEl.Attribute("fill-opacity")?.Value,
+                    ResolveInheritedPresentationValue(pathEl, "fill-opacity"),
                     NumberStyles.Float,
                     CultureInfo.InvariantCulture,
                     out float fillOpacity))
@@ -98,9 +98,9 @@ internal static class SvgBenchmarkHelper
             }
 
             // Parse stroke.
-            ISColor stroke = ParseColor(pathEl.Attribute("stroke")?.Value);
+            ISColor stroke = ParseColor(ResolveInheritedPresentationValue(pathEl, "stroke"));
             float strokeWidth = float.TryParse(
-                pathEl.Attribute("stroke-width")?.Value,
+                ResolveInheritedPresentationValue(pathEl, "stroke-width"),
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out float sw) ? sw : 0f;
@@ -442,6 +442,67 @@ internal static class SvgBenchmarkHelper
         }
 
         return ISColor.TryParse(value, out ISColor color) ? color : ISColor.Transparent;
+    }
+
+    private static string ResolveInheritedPresentationValue(XElement element, string attributeName)
+    {
+        for (XElement current = element; current is not null; current = current.Parent)
+        {
+            if (TryGetPresentationValue(current, attributeName, out string value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryGetPresentationValue(XElement element, string attributeName, out string value)
+    {
+        XAttribute attribute = element.Attribute(attributeName);
+        if (attribute is not null)
+        {
+            value = attribute.Value;
+            return true;
+        }
+
+        string style = element.Attribute("style")?.Value;
+        if (TryGetStyleValue(style, attributeName, out value))
+        {
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+    private static bool TryGetStyleValue(string style, string attributeName, out string value)
+    {
+        if (string.IsNullOrWhiteSpace(style))
+        {
+            value = null;
+            return false;
+        }
+
+        foreach (string entry in style.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int separatorIndex = entry.IndexOf(':');
+            if (separatorIndex <= 0 || separatorIndex >= entry.Length - 1)
+            {
+                continue;
+            }
+
+            if (!entry[..separatorIndex].Equals(attributeName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            value = entry[(separatorIndex + 1)..].Trim();
+            return true;
+        }
+
+        value = null;
+        return false;
     }
 
     // ---- System.Drawing SVG path parser ----

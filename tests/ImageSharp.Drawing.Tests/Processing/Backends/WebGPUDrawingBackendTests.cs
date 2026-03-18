@@ -595,7 +595,7 @@ public partial class WebGPUDrawingBackendTests
                 nativeSurfaceClearCanvas.Flush();
             }
 
-            int nativeSurfaceComputeBatchesBeforeDraw = nativeSurfaceBackend.TestingComputePathBatchCount;
+            int nativeSurfaceDefinitionCountBeforeDraw = nativeSurfaceBackend.TestingComputePathDefinitionCount;
             using (DrawingCanvas<TPixel> nativeSurfaceDrawCanvas =
                    new(nativeSurfaceConfiguration, new NativeCanvasFrame<TPixel>(targetBounds, nativeSurface), drawingOptions))
             {
@@ -603,8 +603,8 @@ public partial class WebGPUDrawingBackendTests
                 nativeSurfaceDrawCanvas.Flush();
             }
 
-            int nativeSurfaceComputeBatchesFromDraw =
-                nativeSurfaceBackend.TestingComputePathBatchCount - nativeSurfaceComputeBatchesBeforeDraw;
+            int nativeSurfaceDefinitionCountFromDraw =
+                nativeSurfaceBackend.TestingComputePathDefinitionCount - nativeSurfaceDefinitionCountBeforeDraw;
 
             Assert.True(
                 WebGPUTestNativeSurfaceAllocator.TryReadTexture(
@@ -626,8 +626,8 @@ public partial class WebGPUDrawingBackendTests
             if (nativeSurfaceBackend.TestingIsGPUReady)
             {
                 Assert.True(
-                    nativeSurfaceComputeBatchesFromDraw > 0,
-                    "Expected repeated-glyph draw batch to execute via tiled compute composition on the NativeSurface pipeline.");
+                    nativeSurfaceDefinitionCountFromDraw > 0,
+                    "Expected repeated-glyph draw to execute via tiled compute composition on the NativeSurface pipeline.");
             }
         }
         finally

@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Globalization;
 using System.Reflection;
 using SixLabors.Fonts;
 using IOPath = System.IO.Path;
@@ -47,7 +46,7 @@ public static class TestFontUtilities
     /// <param name="name">The name of the font.</param>
     /// <returns>The <see cref="Font"/></returns>
     public static FontFamily GetFontFamily(FontCollection collection, string name)
-        => collection.AddWithCulture(GetPath(name), CultureInfo.InvariantCulture);
+        => collection.Add(GetPath(name));
 
     /// <summary>
     /// The formats directory.
@@ -79,10 +78,7 @@ public static class TestFontUtilities
             "../../../../TestFonts/"
         ];
 
-        directories = directories.SelectMany(x => new[]
-                                 {
-                                     IOPath.GetFullPath(x)
-                                 }).ToList();
+        directories = [.. directories.SelectMany(x => new[] { IOPath.GetFullPath(x) })];
 
         AddFormatsDirectoryFromTestAssemblyPath(directories);
 
@@ -93,7 +89,7 @@ public static class TestFontUtilities
             return directory;
         }
 
-        throw new System.Exception($"Unable to find Fonts directory at any of these locations [{string.Join(", ", directories)}]");
+        throw new IOException($"Unable to find Fonts directory at any of these locations [{string.Join(", ", directories)}]");
     }
 
     /// <summary>

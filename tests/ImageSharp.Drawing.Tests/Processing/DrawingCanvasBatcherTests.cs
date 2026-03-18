@@ -30,15 +30,15 @@ public class DrawingCanvasBatcherTests
         canvas.Fill(brushB, path);
         canvas.Flush();
 
-        Assert.True(backend.HasBatch);
-        Assert.NotNull(backend.LastBatch.Definition.Geometry);
-        Assert.Equal(2, backend.LastBatch.Commands.Count);
-        Assert.Same(brushA, backend.LastBatch.Commands[0].Brush);
-        Assert.Same(brushB, backend.LastBatch.Commands[1].Brush);
+        Assert.True(backend.HasDefinition);
+        Assert.NotNull(backend.LastDefinition.Definition.PreparedPath);
+        Assert.Equal(2, backend.LastDefinition.Commands.Count);
+        Assert.Same(brushA, backend.LastDefinition.Commands[0].Brush);
+        Assert.Same(brushB, backend.LastDefinition.Commands[1].Brush);
     }
 
     [Fact]
-    public void Flush_SamePathDifferentBrushes_ReusesPreparedGeometry()
+    public void Flush_SamePathDifferentBrushes_ReusesPreparedPath()
     {
         Configuration configuration = new();
         CapturingBackend backend = new();
@@ -55,12 +55,12 @@ public class DrawingCanvasBatcherTests
         canvas.Flush();
 
         Assert.Equal(2, backend.PreparedCommands.Count);
-        Assert.NotNull(backend.PreparedCommands[0].Geometry);
-        Assert.Same(backend.PreparedCommands[0].Geometry, backend.PreparedCommands[1].Geometry);
+        Assert.NotNull(backend.PreparedCommands[0].PreparedPath);
+        Assert.Same(backend.PreparedCommands[0].PreparedPath, backend.PreparedCommands[1].PreparedPath);
     }
 
     [Fact]
-    public void Flush_SamePathDifferentBrushes_Stroke_UsesSingleBatch()
+    public void Flush_SamePathDifferentBrushes_Stroke_UsesSingleCoverageDefinition()
     {
         Configuration configuration = new();
         CapturingBackend backend = new();
@@ -78,12 +78,12 @@ public class DrawingCanvasBatcherTests
         canvas.Draw(penB, path);
         canvas.Flush();
 
-        Assert.Single(backend.Batches);
-        Assert.Equal(2, backend.LastBatch.Commands.Count);
+        Assert.Single(backend.Definitions);
+        Assert.Equal(2, backend.LastDefinition.Commands.Count);
     }
 
     [Fact]
-    public void Flush_SamePathReusedMultipleTimes_BatchesCommands()
+    public void Flush_SamePathReusedMultipleTimes_GroupsCommandsByCoverageDefinition()
     {
         Configuration configuration = new();
         CapturingBackend backend = new();
@@ -91,7 +91,6 @@ public class DrawingCanvasBatcherTests
         using Image<Rgba32> image = new(100, 100);
         Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
 
-        // Use the same path reference 10 times with different brushes.
         IPath path = new RectangularPolygon(10, 10, 40, 40);
         DrawingOptions options = new();
         using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
@@ -103,9 +102,8 @@ public class DrawingCanvasBatcherTests
 
         canvas.Flush();
 
-        // All 10 commands share the same path reference → single batch.
-        Assert.Single(backend.Batches);
-        Assert.Equal(10, backend.Batches[0].Commands.Count);
+        Assert.Single(backend.Definitions);
+        Assert.Equal(10, backend.Definitions[0].Commands.Count);
     }
 
     [Fact]
@@ -136,28 +134,25 @@ public class DrawingCanvasBatcherTests
         canvas.DrawText(textOptions, text, brush, pen: null);
         canvas.Flush();
 
-        int totalCommands = backend.Batches.Sum(b => b.Commands.Count);
+        int totalCommands = backend.Definitions.Sum(b => b.Commands.Count);
         Assert.True(totalCommands > 0);
-
-        // The glyph renderer caches paths within 1/8th pixel sub-pixel offset,
-        // so 200 identical glyphs reuse coverage definitions across sub-pixel variants.
         Assert.True(
-            backend.Batches.Count < 200,
-            $"Expected coverage reuse but got {backend.Batches.Count} batches for 200 glyphs.");
+            backend.Definitions.Count < 200,
+            $"Expected coverage reuse but got {backend.Definitions.Count} coverage definitions for 200 glyphs.");
     }
 
     private sealed class CapturingBackend : IDrawingBackend
     {
-        public List<CompositionBatch> Batches { get; } = [];
+        public List<CapturedCoverageDefinition> Definitions { get; } = [];
 
         public IReadOnlyList<CompositionCommand> PreparedCommands { get; private set; } = Array.Empty<CompositionCommand>();
 
-        public bool HasBatch { get; private set; }
+        public bool HasDefinition { get; private set; }
 
-        public CompositionBatch LastBatch { get; private set; } = new(
+        public CapturedCoverageDefinition LastDefinition { get; private set; } = new(
             new CompositionCoverageDefinition(
                 0,
-                PreparedGeometry.Empty,
+                EmptyPath.ClosedPath,
                 new RasterizerOptions(
                     Rectangle.Empty,
                     IntersectionRule.NonZero,
@@ -174,17 +169,46 @@ public class DrawingCanvasBatcherTests
         {
             this.PreparedCommands = compositionScene.Commands.ToArray();
 
-            List<CompositionBatch> batches = CompositionBatchPlanner.CreatePreparedBatches(
-                compositionScene.Commands,
-                target.Bounds);
-            if (batches.Count == 0)
+            Dictionary<CoverageDefinitionKey, int> definitionIndices = [];
+            for (int i = 0; i < compositionScene.Commands.Count; i++)
+            {
+                CompositionCommand command = compositionScene.Commands[i];
+                if (!command.IsVisible)
+                {
+                    continue;
+                }
+
+                IPath preparedPath = command.PreparedPath
+                    ?? throw new InvalidOperationException("Composition commands must be prepared before backend flush.");
+                RasterizerOptions rasterizerOptions = command.RasterizerOptions;
+
+                CoverageDefinitionKey key = new(command);
+                if (!definitionIndices.TryGetValue(key, out int definitionIndex))
+                {
+                    definitionIndex = this.Definitions.Count;
+                    definitionIndices.Add(key, definitionIndex);
+                    this.Definitions.Add(
+                        new CapturedCoverageDefinition(
+                            new CompositionCoverageDefinition(
+                                command.DefinitionKey,
+                                preparedPath,
+                                in rasterizerOptions,
+                                command.DestinationOffset),
+                            [command]));
+                }
+                else
+                {
+                    this.Definitions[definitionIndex].Commands.Add(command);
+                }
+            }
+
+            if (this.Definitions.Count == 0)
             {
                 return;
             }
 
-            this.LastBatch = batches[^1];
-            this.HasBatch = true;
-            this.Batches.AddRange(batches);
+            this.LastDefinition = this.Definitions[^1];
+            this.HasDefinition = true;
         }
 
         public bool TryReadRegion<TPixel>(
@@ -218,6 +242,53 @@ public class DrawingCanvasBatcherTests
             ICanvasFrame<TPixel> target)
             where TPixel : unmanaged, IPixel<TPixel>
         {
+        }
+
+        public sealed class CapturedCoverageDefinition(CompositionCoverageDefinition definition, List<CompositionCommand> commands)
+        {
+            public CompositionCoverageDefinition Definition { get; } = definition;
+
+            public List<CompositionCommand> Commands { get; } = commands;
+        }
+
+        private readonly struct CoverageDefinitionKey : IEquatable<CoverageDefinitionKey>
+        {
+            private readonly int definitionKey;
+            private readonly Rectangle interest;
+            private readonly IntersectionRule intersectionRule;
+            private readonly RasterizationMode rasterizationMode;
+            private readonly RasterizerSamplingOrigin samplingOrigin;
+            private readonly int antialiasThresholdBits;
+
+            public CoverageDefinitionKey(CompositionCommand command)
+            {
+                this.definitionKey = command.DefinitionKey;
+                this.interest = command.RasterizerOptions.Interest;
+                this.intersectionRule = command.RasterizerOptions.IntersectionRule;
+                this.rasterizationMode = command.RasterizerOptions.RasterizationMode;
+                this.samplingOrigin = command.RasterizerOptions.SamplingOrigin;
+                this.antialiasThresholdBits = BitConverter.SingleToInt32Bits(command.RasterizerOptions.AntialiasThreshold);
+            }
+
+            public bool Equals(CoverageDefinitionKey other)
+                => this.definitionKey == other.definitionKey &&
+                   this.interest.Equals(other.interest) &&
+                   this.intersectionRule == other.intersectionRule &&
+                   this.rasterizationMode == other.rasterizationMode &&
+                   this.samplingOrigin == other.samplingOrigin &&
+                   this.antialiasThresholdBits == other.antialiasThresholdBits;
+
+            public override bool Equals(object? obj)
+                => obj is CoverageDefinitionKey other && this.Equals(other);
+
+            public override int GetHashCode()
+                => HashCode.Combine(
+                    this.definitionKey,
+                    this.interest,
+                    (int)this.intersectionRule,
+                    (int)this.rasterizationMode,
+                    (int)this.samplingOrigin,
+                    this.antialiasThresholdBits);
         }
     }
 }

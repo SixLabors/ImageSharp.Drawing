@@ -12,17 +12,17 @@ public readonly struct CompositionCoverageDefinition
     /// Initializes a new instance of the <see cref="CompositionCoverageDefinition"/> struct.
     /// </summary>
     /// <param name="definitionKey">The stable key for this coverage definition.</param>
-    /// <param name="geometry">The prepared geometry used to generate coverage.</param>
+    /// <param name="preparedPath">The prepared path used to generate coverage.</param>
     /// <param name="rasterizerOptions">The rasterizer options used to generate coverage.</param>
     /// <param name="destinationOffset">The absolute destination offset where coverage is composited.</param>
     public CompositionCoverageDefinition(
         int definitionKey,
-        PreparedGeometry geometry,
+        IPath preparedPath,
         in RasterizerOptions rasterizerOptions,
         Point destinationOffset = default)
     {
         this.DefinitionKey = definitionKey;
-        this.Geometry = geometry;
+        this.PreparedPath = preparedPath;
         this.RasterizerOptions = rasterizerOptions;
         this.DestinationOffset = destinationOffset;
     }
@@ -33,9 +33,9 @@ public readonly struct CompositionCoverageDefinition
     public int DefinitionKey { get; }
 
     /// <summary>
-    /// Gets the backend-neutral prepared geometry used to generate coverage.
+    /// Gets the prepared path used to generate coverage.
     /// </summary>
-    public PreparedGeometry Geometry { get; }
+    public IPath PreparedPath { get; }
 
     /// <summary>
     /// Gets the rasterizer options used to generate coverage.

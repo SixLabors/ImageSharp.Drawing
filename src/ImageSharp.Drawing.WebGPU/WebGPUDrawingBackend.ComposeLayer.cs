@@ -60,7 +60,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
 
         // TryGetCode already validates format support via TryGetInputSampleType internally.
-        _ = CompositeComputeShader.TryGetInputSampleType(textureFormat, out TextureSampleType inputSampleType);
+        _ = WebGPUTextureSampleTypeHelper.TryGetInputSampleType(textureFormat, out TextureSampleType inputSampleType);
 
         // Create a flush context against the destination surface.
         WebGPUFlushContext? flushContext = WebGPUFlushContext.Create(
@@ -134,6 +134,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
                     pipelineKey,
                     shaderCode,
+                    ComposeLayerComputeShader.EntryPoint,
                     LayoutFactory,
                     out BindGroupLayout* bindGroupLayout,
                     out ComputePipeline* pipeline,

@@ -8,32 +8,31 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Flush-scoped cache for sharing prepared geometry across commands that have identical
+/// Flush-scoped cache for sharing prepared paths across commands that have identical
 /// geometry-affecting inputs.
 /// </summary>
 /// <remarks>
 /// This cache sits above both CPU and WebGPU backends. It deduplicates the expensive
-/// transform, stroke-expansion, clip, and line-preparation work that happens during
-/// command preparation while keeping destination- and brush-specific state on each
-/// command.
+/// transform, stroke-expansion, and clip work that happens during command preparation
+/// while keeping destination- and brush-specific state on each command.
 /// </remarks>
 internal sealed class GeometryPreparationCache
 {
-    private readonly ConcurrentDictionary<GeometryPreparationKey, Lazy<PreparedGeometry>> cache = [];
+    private readonly ConcurrentDictionary<GeometryPreparationKey, Lazy<IPath>> cache = [];
 
     /// <summary>
-    /// Gets a shared prepared geometry instance for the given command.
+    /// Gets a shared prepared path instance for the given command.
     /// </summary>
     /// <param name="command">The command being prepared.</param>
-    /// <returns>A prepared geometry instance shared by equivalent commands in this flush.</returns>
-    public PreparedGeometry GetOrCreate(in CompositionCommand command)
+    /// <returns>A prepared path shared by equivalent commands in this flush.</returns>
+    public IPath GetOrCreate(in CompositionCommand command)
     {
         GeometryPreparationKey key = command.CreateGeometryPreparationKey();
         CompositionCommand commandCopy = command;
-        Lazy<PreparedGeometry> lazy = this.cache.GetOrAdd(
+        Lazy<IPath> lazy = this.cache.GetOrAdd(
             key,
-            _ => new Lazy<PreparedGeometry>(
-                () => commandCopy.BuildPreparedGeometry(),
+            _ => new Lazy<IPath>(
+                () => commandCopy.BuildPreparedPath(),
                 LazyThreadSafetyMode.ExecutionAndPublication));
 
         return lazy.Value;

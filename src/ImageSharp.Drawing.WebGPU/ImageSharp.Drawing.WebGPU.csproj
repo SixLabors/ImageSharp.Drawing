@@ -30,7 +30,7 @@
       Silk.NET WebGPU packages are currently unsigned, which triggers CS8002.
       Keep CS8002 visible as a warning, but do not fail the build for it.
     -->
-    <WarningsNotAsErrors>$(WarningsNotAsErrors);8002</WarningsNotAsErrors>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);8002;NU1900</WarningsNotAsErrors>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -78,5 +78,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
+    <ProjectReference Include="..\ImageSharp.Drawing.WebGPU.ShaderGen\ImageSharp.Drawing.WebGPU.ShaderGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="Shaders\*.wgsl" />
+    <AdditionalFiles Include="Shaders\Shared\*.wgsl" />
   </ItemGroup>
 </Project>

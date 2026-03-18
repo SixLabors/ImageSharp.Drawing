@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// One normalized composition command queued by <see cref="DrawingCanvasBatcher{TPixel}"/>.
 /// After <see cref="Prepare"/> is called by the batcher, every command is a fill
-/// with an immutable pre-flattened path ready for backend execution.
+/// with an immutable prepared path ready for backend execution.
 /// </summary>
 public struct CompositionCommand
 {
@@ -35,11 +35,14 @@ public struct CompositionCommand
     {
         this.DefinitionKey = definitionKey;
         this.sourcePath = sourcePath;
-        this.Geometry = null;
+        this.PreparedPath = null;
+        this.IsVisible = false;
         this.Brush = brush;
         this.GraphicsOptions = graphicsOptions;
         this.RasterizerOptions = rasterizerOptions;
         this.DestinationOffset = destinationOffset;
+        this.DestinationRegion = default;
+        this.SourceOffset = default;
         this.pen = pen;
         this.transform = transform;
         this.clipPaths = clipPaths;
@@ -54,10 +57,29 @@ public struct CompositionCommand
     public int DefinitionKey { get; private set; }
 
     /// <summary>
-    /// Gets the prepared backend-neutral geometry to rasterize in target-local coordinates.
-    /// This is populated by <see cref="Prepare"/>.
+    /// Gets the prepared path to rasterize in target-local coordinates.
+    /// This is the post-transform, post-stroke, post-clip path populated by <see cref="Prepare"/>.
+    /// Backends walk this path directly to produce their native rasterization format.
     /// </summary>
-    public PreparedGeometry? Geometry { get; private set; }
+    public IPath? PreparedPath { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this command is visible after clipping to target bounds.
+    /// Populated by <see cref="Prepare"/>.
+    /// </summary>
+    public bool IsVisible { get; private set; }
+
+    /// <summary>
+    /// Gets the destination region in target-local coordinates.
+    /// Populated by <see cref="Prepare"/>.
+    /// </summary>
+    public Rectangle DestinationRegion { get; private set; }
+
+    /// <summary>
+    /// Gets the source offset into the coverage map.
+    /// Populated by <see cref="Prepare"/>.
+    /// </summary>
+    public Point SourceOffset { get; private set; }
 
     /// <summary>
     /// Gets the brush used during composition.
@@ -133,17 +155,19 @@ public struct CompositionCommand
 
     /// <summary>
     /// Prepares this command for backend execution. Expands strokes to fills,
-    /// clips, transforms, and linearizes the source path. After this call the command
-    /// is a fill with immutable prepared geometry.
+    /// clips, transforms the source path, and clips to target bounds.
+    /// After this call the command is a fill with an immutable prepared path
+    /// and pre-computed visibility against the target.
     /// </summary>
+    /// <param name="targetBounds">The target frame bounds for visibility clipping.</param>
     /// <param name="geometryCache">
-    /// Optional flush-scoped cache used to share prepared geometry across commands that
+    /// Optional flush-scoped cache used to share prepared paths across commands that
     /// have identical geometry-affecting inputs.
     /// </param>
-    internal void Prepare(GeometryPreparationCache? geometryCache = null)
+    internal void Prepare(in Rectangle targetBounds, GeometryPreparationCache? geometryCache = null)
     {
-        PreparedGeometry geometry = geometryCache?.GetOrCreate(this) ?? this.BuildPreparedGeometry();
-        this.Geometry = geometry;
+        IPath preparedPath = geometryCache?.GetOrCreate(this) ?? this.BuildPreparedPath();
+        this.PreparedPath = preparedPath;
 
         // Transform the brush to match the path coordinate space.
         if (!this.transform.IsIdentity)
@@ -153,7 +177,7 @@ public struct CompositionCommand
 
         // Recompute interest, brush bounds, and definition key from the final path.
         RasterizerOptions old = this.RasterizerOptions;
-        RectangleF bounds = geometry.Bounds;
+        RectangleF bounds = preparedPath.Bounds;
         if (old.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter)
         {
             bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
@@ -179,21 +203,49 @@ public struct CompositionCommand
             interest.Height);
 
         RasterizerOptions updated = this.RasterizerOptions;
-        this.DefinitionKey = ComputeCoverageDefinitionKey(geometry, in updated);
+        this.DefinitionKey = ComputeCoverageDefinitionKey(preparedPath, in updated);
+
+        // Clip to target bounds and compute destination region.
+        Rectangle commandDestination = new(
+            this.DestinationOffset.X + interest.X,
+            this.DestinationOffset.Y + interest.Y,
+            interest.Width,
+            interest.Height);
+
+        Rectangle clippedDestination = Rectangle.Intersect(targetBounds, commandDestination);
+        if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
+        {
+            this.IsVisible = false;
+            return;
+        }
+
+        this.DestinationRegion = new Rectangle(
+            clippedDestination.X - targetBounds.X,
+            clippedDestination.Y - targetBounds.Y,
+            clippedDestination.Width,
+            clippedDestination.Height);
+
+        this.SourceOffset = new Point(
+            clippedDestination.X - commandDestination.X,
+            clippedDestination.Y - commandDestination.Y);
+
+        this.IsVisible = true;
     }
 
     /// <summary>
-    /// Creates the flush-scoped cache key used to share prepared geometry.
+    /// Creates the flush-scoped cache key used to share prepared paths.
     /// </summary>
     /// <returns>The geometry preparation cache key.</returns>
     internal readonly GeometryPreparationCache.GeometryPreparationKey CreateGeometryPreparationKey()
         => new(this.sourcePath, this.transform, this.pen, this.clipPaths, this.shapeOptions, this.enforceFillOrientation);
 
     /// <summary>
-    /// Builds prepared geometry for this command without consulting any external cache.
+    /// Builds the prepared path for this command without consulting any external cache.
+    /// Applies transform, stroke expansion, and clipping. The returned path is ready
+    /// for backends to walk directly via <see cref="IPath.Flatten"/>.
     /// </summary>
-    /// <returns>The prepared geometry.</returns>
-    internal readonly PreparedGeometry BuildPreparedGeometry()
+    /// <returns>The prepared path.</returns>
+    internal readonly IPath BuildPreparedPath()
     {
         IPath path = this.sourcePath;
 
@@ -215,8 +267,7 @@ public struct CompositionCommand
             path = path.Clip(this.shapeOptions, this.clipPaths);
         }
 
-        // Line preparation happens here so backends no longer need to traverse IPath.
-        return PreparedGeometry.Create(path, enforceFillOrientation: this.enforceFillOrientation);
+        return path;
     }
 
     /// <summary>
@@ -236,17 +287,5 @@ public struct CompositionCommand
             (int)rasterizerOptions.RasterizationMode,
             (int)rasterizerOptions.SamplingOrigin);
         return HashCode.Combine(pathIdentity, rasterState);
-    }
-
-    internal static int ComputeCoverageDefinitionKey(
-        PreparedGeometry geometry,
-        in RasterizerOptions rasterizerOptions)
-    {
-        int rasterState = HashCode.Combine(
-            rasterizerOptions.Interest.Size,
-            (int)rasterizerOptions.IntersectionRule,
-            (int)rasterizerOptions.RasterizationMode,
-            (int)rasterizerOptions.SamplingOrigin);
-        return HashCode.Combine(geometry.DefinitionIdentity, rasterState);
     }
 }

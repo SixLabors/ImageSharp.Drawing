@@ -137,6 +137,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     public RenderPassEncoder* PassEncoder { get; private set; }
 
     /// <summary>
+    /// Gets the currently open compute pass encoder, if any.
+    /// </summary>
+    public ComputePassEncoder* ComputePassEncoder { get; private set; }
+
+    /// <summary>
     /// Creates a flush context for a native WebGPU surface.
     /// Returns <see langword="null"/> when the frame does not expose a native surface
     /// or the device lacks the required feature.
@@ -270,7 +275,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return true;
         }
 
-        if (this.CommandEncoder is null || targetView is null)
+        if (this.CommandEncoder is null || targetView is null || this.ComputePassEncoder is not null)
         {
             return false;
         }
@@ -307,6 +312,42 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.Api.RenderPassEncoderEnd(this.PassEncoder);
         this.Api.RenderPassEncoderRelease(this.PassEncoder);
         this.PassEncoder = null;
+    }
+
+    /// <summary>
+    /// Begins a compute pass on the current command encoder.
+    /// </summary>
+    /// <returns><see langword="true"/> if a compute pass is available; otherwise <see langword="false"/>.</returns>
+    public bool BeginComputePass()
+    {
+        if (this.ComputePassEncoder is not null)
+        {
+            return true;
+        }
+
+        if (this.CommandEncoder is null || this.PassEncoder is not null)
+        {
+            return false;
+        }
+
+        ComputePassDescriptor descriptor = default;
+        this.ComputePassEncoder = this.Api.CommandEncoderBeginComputePass(this.CommandEncoder, in descriptor);
+        return this.ComputePassEncoder is not null;
+    }
+
+    /// <summary>
+    /// Ends and releases the current compute pass if one is active.
+    /// </summary>
+    public void EndComputePassIfOpen()
+    {
+        if (this.ComputePassEncoder is null)
+        {
+            return;
+        }
+
+        this.Api.ComputePassEncoderEnd(this.ComputePassEncoder);
+        this.Api.ComputePassEncoderRelease(this.ComputePassEncoder);
+        this.ComputePassEncoder = null;
     }
 
     /// <summary>
@@ -390,6 +431,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return;
         }
 
+        this.EndComputePassIfOpen();
         this.EndRenderPassIfOpen();
 
         if (this.CommandEncoder is not null)
@@ -621,8 +663,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         private static ReadOnlySpan<byte> CompositeFragmentEntryPoint => "fs_main\0"u8;
 
-        private static ReadOnlySpan<byte> CompositeComputeEntryPoint => "cs_main\0"u8;
-
         /// <summary>
         /// Gets the synchronization object used for shared state mutation.
         /// </summary>
@@ -764,6 +804,7 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         public bool TryGetOrCreateCompositeComputePipeline(
             string pipelineKey,
             ReadOnlySpan<byte> shaderCode,
+            ReadOnlySpan<byte> entryPoint,
             WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
             out BindGroupLayout* bindGroupLayout,
             out ComputePipeline* pipeline,
@@ -787,6 +828,12 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             if (shaderCode.IsEmpty)
             {
                 error = $"Composite compute shader code is missing for pipeline '{pipelineKey}'.";
+                return false;
+            }
+
+            if (entryPoint.IsEmpty)
+            {
+                error = $"Composite compute entry point is missing for pipeline '{pipelineKey}'.";
                 return false;
             }
 
@@ -826,7 +873,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
                 ComputePipeline* createdPipeline = this.CreateCompositeComputePipeline(
                     infrastructure.PipelineLayout,
-                    infrastructure.ShaderModule);
+                    infrastructure.ShaderModule,
+                    entryPoint);
                 if (createdPipeline is null)
                 {
                     error = $"Failed to create composite compute pipeline '{pipelineKey}'.";
@@ -1088,9 +1136,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         private ComputePipeline* CreateCompositeComputePipeline(
             PipelineLayout* pipelineLayout,
-            ShaderModule* shaderModule)
+            ShaderModule* shaderModule,
+            ReadOnlySpan<byte> entryPoint)
         {
-            ReadOnlySpan<byte> entryPoint = CompositeComputeEntryPoint;
             fixed (byte* entryPointPtr = entryPoint)
             {
                 ProgrammableStageDescriptor computeState = new()

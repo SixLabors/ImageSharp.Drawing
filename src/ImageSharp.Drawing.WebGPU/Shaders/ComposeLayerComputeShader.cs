@@ -40,7 +40,7 @@ internal static class ComposeLayerComputeShader
         __BLEND_AND_COMPOSE__
 
         @compute @workgroup_size(16, 16, 1)
-        fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+        fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
             // Output coordinates are in local output-texture space.
             let out_x = i32(gid.x);
             let out_y = i32(gid.y);
@@ -58,14 +58,16 @@ internal static class ComposeLayerComputeShader
             let src_y = out_y;
             if (u32(src_x) >= config.source_width || u32(src_y) >= config.source_height) {
                 // Outside layer bounds — pass through the backdrop.
-                let backdrop = decode_texel(__LOAD_BACKDROP__);
+                let backdrop_raw = decode_texel(__LOAD_BACKDROP__);
+                let backdrop = vec4<f32>(backdrop_raw.rgb * backdrop_raw.a, backdrop_raw.a);
                 let alpha = backdrop.a;
                 let rgb = unpremultiply(backdrop.rgb, alpha);
                 __STORE_OUTPUT__
                 return;
             }
 
-            let backdrop = decode_texel(__LOAD_BACKDROP__);
+            let backdrop_raw = decode_texel(__LOAD_BACKDROP__);
+            let backdrop = vec4<f32>(backdrop_raw.rgb * backdrop_raw.a, backdrop_raw.a);
             let source_raw = decode_texel(__LOAD_SOURCE__);
 
             // Apply layer opacity.
@@ -79,12 +81,14 @@ internal static class ComposeLayerComputeShader
         }
         """;
 
+    public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
+
     /// <summary>
     /// Gets the null-terminated WGSL source for the layer composite shader variant.
     /// </summary>
     public static bool TryGetCode(TextureFormat textureFormat, out byte[] code, out string? error)
     {
-        if (!CompositeComputeShader.TryGetInputSampleType(textureFormat, out _))
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureShaderTraits(textureFormat, out _))
         {
             code = [];
             error = $"Layer composite shader does not support texture format '{textureFormat}'.";
@@ -111,9 +115,9 @@ internal static class ComposeLayerComputeShader
                 .Replace("__LOAD_SOURCE__", traits.LoadSourceExpression, StringComparison.Ordinal)
                 .Replace("__STORE_OUTPUT__", traits.StoreOutputStatement, StringComparison.Ordinal);
 
-            byte[] sourceBytes = Encoding.UTF8.GetBytes(source);
-            code = new byte[sourceBytes.Length + 1];
-            sourceBytes.CopyTo(code, 0);
+            int byteCount = Encoding.UTF8.GetByteCount(source);
+            code = new byte[byteCount + 1];
+            _ = Encoding.UTF8.GetBytes(source, code);
             code[^1] = 0;
             ShaderCache[textureFormat] = code;
         }
@@ -124,20 +128,19 @@ internal static class ComposeLayerComputeShader
 
     private static LayerShaderTraits GetTraits(TextureFormat textureFormat)
     {
-        return textureFormat switch
+        if (!WebGPUDrawingBackend.TryGetCompositeTextureShaderTraits(textureFormat, out WebGPUDrawingBackend.CompositeTextureShaderTraits traits))
         {
-            TextureFormat.R8Unorm => CreateFloatTraits("r8unorm"),
-            TextureFormat.RG8Unorm => CreateFloatTraits("rg8unorm"),
-            TextureFormat.Rgba8Unorm => CreateFloatTraits("rgba8unorm"),
-            TextureFormat.Bgra8Unorm => CreateFloatTraits("bgra8unorm"),
-            TextureFormat.Rgb10A2Unorm => CreateFloatTraits("rgb10a2unorm"),
-            TextureFormat.R16float => CreateFloatTraits("r16float"),
-            TextureFormat.RG16float => CreateFloatTraits("rg16float"),
-            TextureFormat.Rgba16float => CreateFloatTraits("rgba16float"),
-            TextureFormat.Rgba32float => CreateFloatTraits("rgba32float"),
-            TextureFormat.RG8Snorm => CreateSnormTraits("rg8snorm"),
-            TextureFormat.Rgba8Snorm => CreateSnormTraits("rgba8snorm"),
-            _ => CreateFloatTraits("rgba8unorm"),
+            return CreateFloatTraits("rgba8unorm");
+        }
+
+        return traits.EncodingKind switch
+        {
+            WebGPUDrawingBackend.CompositeTextureEncodingKind.Float => CreateFloatTraits(traits.OutputFormat),
+            WebGPUDrawingBackend.CompositeTextureEncodingKind.Snorm => CreateSnormTraits(traits.OutputFormat),
+            WebGPUDrawingBackend.CompositeTextureEncodingKind.Uint8 => CreateUintTraits(traits.OutputFormat, 255F),
+            WebGPUDrawingBackend.CompositeTextureEncodingKind.Uint16 => CreateUintTraits(traits.OutputFormat, 65535F),
+            WebGPUDrawingBackend.CompositeTextureEncodingKind.Sint16 => CreateSintTraits(traits.OutputFormat, -32768F, 32767F),
+            _ => CreateFloatTraits(traits.OutputFormat),
         };
     }
 
@@ -187,6 +190,59 @@ internal static class ComposeLayerComputeShader
         return new LayerShaderTraits(
             outputFormat,
             "f32",
+            decodeTexel,
+            encodeOutput,
+            "textureLoad(backdrop_texture, vec2<i32>(dest_x, dest_y), 0)",
+            "textureLoad(source_texture, vec2<i32>(src_x, src_y), 0)",
+            "textureStore(output_texture, vec2<i32>(out_x, out_y), encode_output(vec4<f32>(rgb, alpha)));");
+    }
+
+    private static LayerShaderTraits CreateUintTraits(string outputFormat, float maxValue)
+    {
+        string maxVector = $"vec4<f32>({maxValue:F1}, {maxValue:F1}, {maxValue:F1}, {maxValue:F1})";
+        string decodeTexel = $@"const UINT_TEXEL_MAX: vec4<f32> = {maxVector};
+fn decode_texel(texel: vec4<u32>) -> vec4<f32> {{
+    return vec4<f32>(texel) / UINT_TEXEL_MAX;
+}}";
+        const string encodeOutput =
+            """
+            fn encode_output(color: vec4<f32>) -> vec4<u32> {
+                let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
+                return vec4<u32>(round(clamped * UINT_TEXEL_MAX));
+            }
+            """;
+
+        return new LayerShaderTraits(
+            outputFormat,
+            "u32",
+            decodeTexel,
+            encodeOutput,
+            "textureLoad(backdrop_texture, vec2<i32>(dest_x, dest_y), 0)",
+            "textureLoad(source_texture, vec2<i32>(src_x, src_y), 0)",
+            "textureStore(output_texture, vec2<i32>(out_x, out_y), encode_output(vec4<f32>(rgb, alpha)));");
+    }
+
+    private static LayerShaderTraits CreateSintTraits(string outputFormat, float minValue, float maxValue)
+    {
+        string minVector = $"vec4<f32>({minValue:F1}, {minValue:F1}, {minValue:F1}, {minValue:F1})";
+        string maxVector = $"vec4<f32>({maxValue:F1}, {maxValue:F1}, {maxValue:F1}, {maxValue:F1})";
+        string decodeTexel = $@"const SINT_TEXEL_MIN: vec4<f32> = {minVector};
+const SINT_TEXEL_MAX: vec4<f32> = {maxVector};
+const SINT_TEXEL_RANGE: vec4<f32> = SINT_TEXEL_MAX - SINT_TEXEL_MIN;
+fn decode_texel(texel: vec4<i32>) -> vec4<f32> {{
+    return (vec4<f32>(texel) - SINT_TEXEL_MIN) / SINT_TEXEL_RANGE;
+}}";
+        const string encodeOutput =
+            """
+            fn encode_output(color: vec4<f32>) -> vec4<i32> {
+                let clamped = clamp(color, vec4<f32>(0.0), vec4<f32>(1.0));
+                return vec4<i32>(round((clamped * SINT_TEXEL_RANGE) + SINT_TEXEL_MIN));
+            }
+            """;
+
+        return new LayerShaderTraits(
+            outputFormat,
+            "i32",
             decodeTexel,
             encodeOutput,
             "textureLoad(backdrop_texture, vec2<i32>(dest_x, dest_y), 0)",

@@ -4,8 +4,8 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Shared WGSL function snippets used by multiple compute shaders that perform pixel blending
-/// and alpha composition (e.g., <see cref="CompositeComputeShader"/> and <see cref="ComposeLayerComputeShader"/>).
+/// Shared WGSL function snippets used by compute shaders that perform pixel blending
+/// and alpha composition, including <see cref="ComposeLayerComputeShader"/>.
 /// </summary>
 internal static class CompositionShaderSnippets
 {
@@ -29,10 +29,10 @@ internal static class CompositionShaderSnippets
                     return backdrop * source;
                 }
                 case 2u: {
-                    return backdrop + source;
+                    return min(vec3<f32>(1.0), backdrop + source);
                 }
                 case 3u: {
-                    return backdrop - source;
+                    return max(vec3<f32>(0.0), backdrop - source);
                 }
                 case 4u: {
                     return 1.0 - ((1.0 - backdrop) * (1.0 - source));

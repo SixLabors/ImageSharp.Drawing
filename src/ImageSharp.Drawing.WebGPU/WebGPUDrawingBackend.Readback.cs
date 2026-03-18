@@ -54,8 +54,10 @@ public sealed unsafe partial class WebGPUDrawingBackend
             target.Bounds.Y + sourceRectangle.Y,
             sourceRectangle.Width,
             sourceRectangle.Height);
+
         Rectangle surfaceBounds = new(0, 0, capability.Width, capability.Height);
         Rectangle source = Rectangle.Intersect(surfaceBounds, absoluteSource);
+
         if (source.Width <= 0 || source.Height <= 0)
         {
             return false;

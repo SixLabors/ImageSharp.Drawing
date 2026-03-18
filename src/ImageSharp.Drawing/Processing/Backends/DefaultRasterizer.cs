@@ -45,175 +45,7 @@ internal static class DefaultRasterizer
     internal static int PreferredRowHeight => DefaultTileHeight;
 
     /// <summary>
-    /// Rasterizes the path into trimmed coverage rows.
-    /// </summary>
-    /// <param name="path">Path to rasterize.</param>
-    /// <param name="options">Rasterization options.</param>
-    /// <param name="allocator">Temporary buffer allocator.</param>
-    /// <param name="rowHandler">Coverage row callback invoked once per emitted row.</param>
-    public static void RasterizeRows(
-        IPath path,
-        in RasterizerOptions options,
-        MemoryAllocator allocator,
-        RasterizerCoverageRowHandler rowHandler)
-        => RasterizePreparedFillRows(PreparedGeometry.Create(path), 0, 0, options, allocator, rowHandler);
-
-    /// <summary>
-    /// Rasterizes one prepared fill geometry by rebuilding rasterizable row bands on demand.
-    /// </summary>
-    /// <param name="geometry">The prepared geometry to rasterize.</param>
-    /// <param name="translateX">The destination-space X translation.</param>
-    /// <param name="translateY">The destination-space Y translation.</param>
-    /// <param name="options">The rasterizer options that describe the interest rectangle and fill rule.</param>
-    /// <param name="allocator">The allocator used for worker-local temporary buffers.</param>
-    /// <param name="rowHandler">The callback that receives emitted coverage rows.</param>
-    /// <remarks>
-    /// The flush pipeline precomputes row membership for many commands at once. The standalone
-    /// rasterizer API only sees a single path, so it keeps the public surface smaller and rebuilds
-    /// the row-band view directly from the prepared geometry.
-    /// </remarks>
-    private static void RasterizePreparedFillRows(
-        PreparedGeometry geometry,
-        int translateX,
-        int translateY,
-        in RasterizerOptions options,
-        MemoryAllocator allocator,
-        RasterizerCoverageRowHandler rowHandler)
-    {
-        Rectangle interest = options.Interest;
-        int width = interest.Width;
-        int height = interest.Height;
-        int segmentCount = geometry.SegmentCount;
-
-        if (width <= 0 || height <= 0 || segmentCount == 0)
-        {
-            return;
-        }
-
-        long coverStride = (long)width * 2;
-
-        if (coverStride > int.MaxValue)
-        {
-            ThrowInterestBoundsTooLarge();
-        }
-
-        int firstBandIndex = FloorDiv(interest.Top, DefaultTileHeight);
-        int lastBandIndex = FloorDiv(interest.Bottom - 1, DefaultTileHeight);
-        int bandCount = (lastBandIndex - firstBandIndex) + 1;
-
-        if (bandCount <= 0)
-        {
-            return;
-        }
-
-        RasterizerOptions rasterizerOptions = options;
-        int[] segmentIndices = CreateSequentialSegmentIndices(segmentCount);
-        if (bandCount == 1 || Environment.ProcessorCount < 2)
-        {
-            using FillWorkerState worker = new(allocator, segmentCount, width, DefaultTileHeight);
-            for (int bandIndex = 0; bandIndex < bandCount; bandIndex++)
-            {
-                RasterizePreparedFillBand(
-                    geometry,
-                    segmentIndices,
-                    translateX,
-                    translateY,
-                    rasterizerOptions,
-                    bandIndex,
-                    worker,
-                    rowHandler);
-            }
-
-            return;
-        }
-
-        ParallelOptions parallelOptions = new()
-        {
-            MaxDegreeOfParallelism = Math.Min(
-                MaxParallelWorkerCount,
-                Math.Min(Environment.ProcessorCount, bandCount)),
-        };
-
-        _ = Parallel.For(
-            0,
-            bandCount,
-            parallelOptions,
-            () => new FillWorkerState(allocator, segmentCount, width, DefaultTileHeight),
-            (bandIndex, _, worker) =>
-            {
-                RasterizePreparedFillBand(
-                    geometry,
-                    segmentIndices,
-                    translateX,
-                    translateY,
-                    rasterizerOptions,
-                    bandIndex,
-                    worker,
-                    rowHandler);
-                return worker;
-            },
-            static worker => worker.Dispose());
-    }
-
-    /// <summary>
-    /// Builds and executes a single rasterizable fill band.
-    /// </summary>
-    private static void RasterizePreparedFillBand(
-        PreparedGeometry geometry,
-        ReadOnlySpan<int> segmentIndices,
-        int translateX,
-        int translateY,
-        in RasterizerOptions options,
-        int bandIndex,
-        FillWorkerState worker,
-        RasterizerCoverageRowHandler rowHandler)
-    {
-        if (!TryBuildRasterizableBand(
-            geometry,
-            segmentIndices,
-            translateX,
-            translateY,
-            in options,
-            bandIndex,
-            worker.LineBuffer,
-            worker.StartCoverBuffer,
-            out RasterizableBandInfo rasterizableBandInfo))
-        {
-            return;
-        }
-
-        RasterizableBand rasterizableBand = rasterizableBandInfo.CreateRasterizableBand(
-            worker.LineBuffer,
-            worker.StartCoverBuffer);
-
-        Context context = worker.Scratch.CreateContext(
-            rasterizableBand.Width,
-            rasterizableBand.WordsPerRow,
-            rasterizableBand.CoverStride,
-            rasterizableBand.BandHeight,
-            rasterizableBand.IntersectionRule,
-            rasterizableBand.RasterizationMode,
-            rasterizableBand.AntialiasThreshold);
-
-        ExecuteRasterizableBand(ref context, in rasterizableBand, worker.Scratch.Scanline, rowHandler);
-    }
-
-    /// <summary>
-    /// Creates a dense 0..N-1 segment index buffer.
-    /// </summary>
-    private static int[] CreateSequentialSegmentIndices(int segmentCount)
-    {
-        int[] segmentIndices = new int[segmentCount];
-        for (int i = 0; i < segmentCount; i++)
-        {
-            segmentIndices[i] = i;
-        }
-
-        return segmentIndices;
-    }
-
-    /// <summary>
-    /// Converts one row band of prepared geometry into a compact rasterizable payload.
+    /// Converts one row band of a materialized path into a compact rasterizable payload.
     /// </summary>
     /// <remarks>
     /// The builder emits two complementary data sets:
@@ -225,7 +57,7 @@ internal static class DefaultRasterizer
     /// then only walks visible lines during the actual coverage pass.
     /// </remarks>
     internal static bool TryBuildRasterizableBand(
-        PreparedGeometry geometry,
+        MaterializedPath path,
         ReadOnlySpan<int> bandSegmentIndices,
         int translateX,
         int translateY,
@@ -312,13 +144,11 @@ internal static class DefaultRasterizer
 
         int maxVisibleX = width * FixedOne;
         int lineCount = 0;
-        ReadOnlySpan<PreparedLineSegment> segments = geometry.Segments;
+        int subPathHint = 0;
 
         for (int i = 0; i < bandSegmentIndices.Length; i++)
         {
-            PreparedLineSegment segment = segments[bandSegmentIndices[i]];
-            PointF p0 = segment.P0;
-            PointF p1 = segment.P1;
+            path.GetSegment(bandSegmentIndices[i], out PointF p0, out PointF p1, ref subPathHint);
 
             float x0 = ((p0.X + translateX) - interest.Left) + samplingOffsetX;
             float y0 = ((p0.Y + translateY) - interest.Top) + samplingOffsetY;
@@ -406,6 +236,7 @@ internal static class DefaultRasterizer
             rasterizationMode,
             options.AntialiasThreshold,
             hasStartCovers);
+
         return true;
     }
 
@@ -2115,55 +1946,6 @@ internal static class DefaultRasterizer
             this.Flags = flags;
             this.AdjX = adjX;
             this.AdjY = adjY;
-        }
-    }
-
-    /// <summary>
-    /// Per-worker buffers for the standalone fill rasterization API.
-    /// </summary>
-    /// <remarks>
-    /// A single-path rasterization request does not build a flush-wide scene plan, so each worker
-    /// owns one reusable line buffer and start-cover buffer that are reused for every band it
-    /// processes.
-    /// </remarks>
-    private sealed class FillWorkerState : IDisposable
-    {
-        private readonly IMemoryOwner<RasterLineData> lineBufferOwner;
-        private readonly IMemoryOwner<int> startCoverOwner;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FillWorkerState"/> class.
-        /// </summary>
-        public FillWorkerState(MemoryAllocator allocator, int segmentCapacity, int width, int bandHeight)
-        {
-            int wordsPerRow = BitVectorsForMaxBitCount(width);
-            int coverStride = checked(width * 2);
-            this.Scratch = WorkerScratch.Create(allocator, wordsPerRow, coverStride, width, bandHeight);
-            this.lineBufferOwner = allocator.Allocate<RasterLineData>(Math.Max(segmentCapacity, 1));
-            this.startCoverOwner = allocator.Allocate<int>(bandHeight);
-        }
-
-        /// <summary>
-        /// Gets the reusable scanner scratch.
-        /// </summary>
-        public WorkerScratch Scratch { get; }
-
-        /// <summary>
-        /// Gets the reusable line buffer for the current worker.
-        /// </summary>
-        public Span<RasterLineData> LineBuffer => this.lineBufferOwner.Memory.Span;
-
-        /// <summary>
-        /// Gets the reusable start-cover buffer for the current worker.
-        /// </summary>
-        public Span<int> StartCoverBuffer => this.startCoverOwner.Memory.Span;
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            this.startCoverOwner.Dispose();
-            this.lineBufferOwner.Dispose();
-            this.Scratch.Dispose();
         }
     }
 
