@@ -8,6 +8,7 @@ using System.Numerics;
 using System.Xml.Linq;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
+using ISDrawingProcessing = SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SkiaSharp;
 using ISColor = SixLabors.ImageSharp.Color;
@@ -15,7 +16,7 @@ using SDColor = System.Drawing.Color;
 using SDPen = System.Drawing.Pen;
 using SDSolidBrush = System.Drawing.SolidBrush;
 
-namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
+namespace SixLabors.ImageSharp.Drawing.Tests;
 
 /// <summary>
 /// Shared SVG parsing and per-backend setup for SVG rendering benchmarks.
@@ -206,11 +207,11 @@ internal static class SvgBenchmarkHelper
     /// <summary>
     /// Builds pre-parsed ImageSharp elements for benchmarking.
     /// </summary>
-    internal static List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> BuildImageSharpElements(
+    internal static List<(IPath Path, ISDrawingProcessing.SolidBrush Fill, SolidPen Stroke)> BuildImageSharpElements(
         List<SvgElement> elements,
         float scale)
     {
-        List<(IPath, Processing.SolidBrush, SolidPen)> result = [];
+        List<(IPath, ISDrawingProcessing.SolidBrush, SolidPen)> result = [];
         foreach (SvgElement el in elements)
         {
             if (!Path.TryParseSvgPath(el.PathData, out IPath isPath))
@@ -229,8 +230,8 @@ internal static class SvgBenchmarkHelper
             }
 
             Rgba32 fillPixel = el.Fill.ToPixel<Rgba32>();
-            Processing.SolidBrush fill = fillPixel.A > 0
-                ? new Processing.SolidBrush(el.Fill)
+            ISDrawingProcessing.SolidBrush fill = fillPixel.A > 0
+                ? new ISDrawingProcessing.SolidBrush(el.Fill)
                 : null;
 
             Rgba32 strokePixel = el.Stroke.ToPixel<Rgba32>();

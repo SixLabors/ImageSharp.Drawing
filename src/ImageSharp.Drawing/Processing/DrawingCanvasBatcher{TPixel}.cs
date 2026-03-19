@@ -3,7 +3,6 @@
 
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -83,7 +82,6 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// </summary>
     private void PrepareCommands()
     {
-        GeometryPreparationCache geometryCache = new();
         Rectangle targetBounds = this.TargetFrame.Bounds;
 
         _ = Parallel.ForEach(Partitioner.Create(0, this.commands.Count), range =>
@@ -91,7 +89,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             Span<CompositionCommand> span = CollectionsMarshal.AsSpan(this.commands);
             for (int i = range.Item1; i < range.Item2; i++)
             {
-                span[i].Prepare(in targetBounds, geometryCache);
+                span[i].Prepare(in targetBounds);
             }
         });
     }

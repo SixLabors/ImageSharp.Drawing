@@ -137,7 +137,6 @@ flowchart TD
 - recompute brush bounds
 - recompute the coverage definition key
 
-Preparation uses a flush-scoped `GeometryPreparationCache`, so repeated commands with the same geometry-affecting inputs can share one `PreparedGeometry` instance.
 
 ## Command Creation
 
@@ -337,7 +336,6 @@ If you are tracing behavior in code, these are the most useful entry points:
 - `DrawingCanvas{TPixel}.cs`
 - `DrawingCanvasBatcher{TPixel}.cs`
 - `CompositionCommand.cs`
-- `GeometryPreparationCache.cs`
 - `DefaultDrawingBackend.cs`
 - `FlushScene.cs`
 

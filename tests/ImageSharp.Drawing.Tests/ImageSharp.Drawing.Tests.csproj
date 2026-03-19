@@ -33,6 +33,7 @@
     <PackageReference Include="Silk.NET.WebGPU.Native.WGPU" Version="2.23.0" />
 
 
+    <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Condition="'$(IsLinux)'=='true'" />
   </ItemGroup>

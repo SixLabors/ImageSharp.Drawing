@@ -257,6 +257,10 @@ internal sealed class FlushScene : IDisposable
         int singleBandItemCount = 0;
         int smallEdgeItemCount = 0;
 
+        // Segment start offsets into the band assignment cache — one entry per visible item.
+        // Used in Phases 4 and 5 to slice each item's portion of the cache.
+        int[] itemSegmentStarts = new int[visibleItemCount];
+
         // Phase 3: derive scene-wide maxima once so every worker can allocate one reusable scratch set.
         {
             Span<RasterizerOptions> roSpan = rasterizerOptionsBuffer.AsSpan();
@@ -281,6 +285,7 @@ internal sealed class FlushScene : IDisposable
                 maxWidth = Math.Max(maxWidth, width);
                 maxWordsPerRow = Math.Max(maxWordsPerRow, BitVectorsForMaxBitCount(width));
                 maxCoverStride = Math.Max(maxCoverStride, (int)coverStride);
+                itemSegmentStarts[i] = (int)totalEdgeCount;
                 totalEdgeCount += mpSpan[i].TotalSegmentCount;
 
                 if (bcSpan[i] == 1)
@@ -294,6 +299,12 @@ internal sealed class FlushScene : IDisposable
                 }
             }
         }
+
+        // Band assignment cache: stores the packed (firstBand | lastBand << 16) for each segment,
+        // or -1 if the segment falls outside the item's interest rectangle.
+        // Built during Phase 4 so Phase 5 can scatter from integers instead of re-enumerating path geometry.
+        IMemoryOwner<int> bandAssignmentCacheOwner = allocator.Allocate<int>(Math.Max((int)totalEdgeCount, 1));
+        Memory<int> bandAssignmentCache = bandAssignmentCacheOwner.Memory;
 
         IMemoryOwner<int> itemBandOffsetStartsOwner = allocator.Allocate<int>(visibleItemCount + 1);
         int totalBandOffsetCount = 0;
@@ -312,7 +323,9 @@ internal sealed class FlushScene : IDisposable
         IMemoryOwner<int> bandSegmentOffsetsOwner = allocator.Allocate<int>(totalBandOffsetCount);
         long totalBandSegmentRefs = 0;
 
-        // Phase 4: count how many prepared segments each item contributes to each row band.
+        // Phase 4: count how many prepared segments each item contributes to each row band,
+        // and record the packed band assignment for each segment in the cache so Phase 5
+        // can scatter from integers rather than re-enumerating path geometry.
         _ = Parallel.ForEach(
             Partitioner.Create(0, visibleItemCount),
             () => 0L,
@@ -323,15 +336,17 @@ internal sealed class FlushScene : IDisposable
                 Span<int> bcSpan = itemBandCounts.Span;
                 Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
                 Span<int> bsoSpan = bandSegmentOffsetsOwner.Memory.Span;
+                Span<int> bacSpan = bandAssignmentCache.Span;
 
                 for (int i = range.Item1; i < range.Item2; i++)
                 {
-                    localTotal += CountBandSegmentRefs(
+                    localTotal += CountAndStoreBandSegmentRefs(
                         mpSpan[i],
                         compactedCommands[i].DestinationOffset.Y,
                         in roSpan[i],
                         bcSpan[i],
-                        bsoSpan.Slice(offsetSpan[i], bcSpan[i]));
+                        bsoSpan.Slice(offsetSpan[i], bcSpan[i]),
+                        bacSpan.Slice(itemSegmentStarts[i], mpSpan[i].TotalSegmentCount));
                 }
 
                 return localTotal;
@@ -365,18 +380,19 @@ internal sealed class FlushScene : IDisposable
 
         IMemoryOwner<int> bandSegmentIndicesOwner = allocator.Allocate<int>(Math.Max(runningSegmentOffset, 1));
 
-        // Phase 5: materialize the dense per-band segment index lists using the offsets computed above.
+        // Phase 5: scatter segment indices into the dense per-band lists using offsets from the prefix sum.
+        // Reads the compact band assignment cache built in Phase 4 — no path geometry re-enumeration.
         _ = Parallel.ForEach(
             Partitioner.Create(0, visibleItemCount),
             () => Array.Empty<int>(),
             (range, _, bandCursorBuffer) =>
             {
                 Span<MaterializedPath> mpSpan = pathBuffer.AsSpan();
-                Span<RasterizerOptions> roSpan = rasterizerOptionsBuffer.AsSpan();
                 Span<int> bcSpan = itemBandCounts.Span;
                 Span<int> offsetSpan = itemBandOffsetStartsOwner.Memory.Span;
                 Span<int> bsoSpan = bandSegmentOffsetsOwner.Memory.Span;
                 Span<int> bsiSpan = bandSegmentIndicesOwner.Memory.Span;
+                Span<int> bacSpan = bandAssignmentCache.Span;
 
                 for (int i = range.Item1; i < range.Item2; i++)
                 {
@@ -395,11 +411,8 @@ internal sealed class FlushScene : IDisposable
                     Span<int> bandCursors = bandCursorBuffer.AsSpan(0, bandCount);
                     bandOffsets[..bandCount].CopyTo(bandCursors);
 
-                    FillBandSegmentRefs(
-                        mpSpan[i],
-                        compactedCommands[i].DestinationOffset.Y,
-                        in roSpan[i],
-                        bandCount,
+                    FillBandSegmentRefsFromCache(
+                        bacSpan.Slice(itemSegmentStarts[i], mpSpan[i].TotalSegmentCount),
                         bandCursors,
                         bsiSpan);
                 }
@@ -407,6 +420,8 @@ internal sealed class FlushScene : IDisposable
                 return bandCursorBuffer;
             },
             static _ => { });
+
+        bandAssignmentCacheOwner.Dispose();
 
         int rowCount = (maxBandIndex - minBandIndex) + 1;
         int[] rowCounts = new int[rowCount];
@@ -719,16 +734,22 @@ internal sealed class FlushScene : IDisposable
             0);
 
     /// <summary>
-    /// Counts how many references each band needs for one materialized path.
+    /// Counts how many references each band needs for one materialized path and records the packed
+    /// band assignment <c>(firstBand | lastBand &lt;&lt; 16)</c> for each segment in <paramref name="bandAssignments"/>,
+    /// or <c>-1</c> for segments that fall outside the item's interest rectangle.
+    /// The cache is consumed by <see cref="FillBandSegmentRefsFromCache"/> in Phase 5, eliminating a
+    /// second enumeration of path geometry.
     /// </summary>
-    private static int CountBandSegmentRefs(
+    private static int CountAndStoreBandSegmentRefs(
         MaterializedPath path,
         int translateY,
         in RasterizerOptions options,
         int bandCount,
-        Span<int> bandCounts)
+        Span<int> bandCounts,
+        Span<int> bandAssignments)
     {
         bandCounts.Clear();
+        bandAssignments.Fill(-1);
 
         if (bandCount <= 0 || path.TotalSegmentCount == 0)
         {
@@ -742,10 +763,11 @@ internal sealed class FlushScene : IDisposable
         int bandTopStart = (firstSceneBandIndex * rowHeight) - interest.Top;
         int totalCount = 0;
 
+        int segmentIndex = 0;
         MaterializedPath.SegmentEnumerator enumerator = path.GetSegmentEnumerator();
         while (enumerator.MoveNext())
         {
-            if (!TryGetLocalBandSpan(
+            if (TryGetLocalBandSpan(
                 enumerator.CurrentMinY,
                 enumerator.CurrentMaxY,
                 translateY,
@@ -758,68 +780,43 @@ internal sealed class FlushScene : IDisposable
                 out int firstBandIndex,
                 out int lastBandIndex))
             {
-                continue;
+                bandAssignments[segmentIndex] = firstBandIndex | (lastBandIndex << 16);
+                for (int bandIndex = firstBandIndex; bandIndex <= lastBandIndex; bandIndex++)
+                {
+                    bandCounts[bandIndex]++;
+                    totalCount++;
+                }
             }
 
-            for (int bandIndex = firstBandIndex; bandIndex <= lastBandIndex; bandIndex++)
-            {
-                bandCounts[bandIndex]++;
-                totalCount++;
-            }
+            segmentIndex++;
         }
 
         return totalCount;
     }
 
     /// <summary>
-    /// Fills the dense per-band segment reference table for one materialized path.
+    /// Scatters segment indices into the dense per-band reference table by reading the compact
+    /// band assignment cache built during Phase 4. No path geometry is accessed.
     /// </summary>
-    private static void FillBandSegmentRefs(
-        MaterializedPath path,
-        int translateY,
-        in RasterizerOptions options,
-        int bandCount,
+    private static void FillBandSegmentRefsFromCache(
+        ReadOnlySpan<int> bandAssignments,
         Span<int> bandCursors,
         Span<int> bandSegmentIndices)
     {
-        if (bandCount <= 0 || path.TotalSegmentCount == 0)
+        for (int segmentIndex = 0; segmentIndex < bandAssignments.Length; segmentIndex++)
         {
-            return;
-        }
-
-        Rectangle interest = options.Interest;
-        float samplingOffsetY = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        int rowHeight = DefaultRasterizer.PreferredRowHeight;
-        int firstSceneBandIndex = FloorDiv(interest.Top, rowHeight);
-        int bandTopStart = (firstSceneBandIndex * rowHeight) - interest.Top;
-
-        int segmentIndex = 0;
-        MaterializedPath.SegmentEnumerator enumerator = path.GetSegmentEnumerator();
-        while (enumerator.MoveNext())
-        {
-            if (!TryGetLocalBandSpan(
-                enumerator.CurrentMinY,
-                enumerator.CurrentMaxY,
-                translateY,
-                interest.Top,
-                interest.Height,
-                samplingOffsetY,
-                bandTopStart,
-                rowHeight,
-                bandCount,
-                out int firstBandIndex,
-                out int lastBandIndex))
+            int packed = bandAssignments[segmentIndex];
+            if (packed < 0)
             {
-                segmentIndex++;
                 continue;
             }
 
+            int firstBandIndex = packed & 0xFFFF;
+            int lastBandIndex = (packed >> 16) & 0xFFFF;
             for (int bandIndex = firstBandIndex; bandIndex <= lastBandIndex; bandIndex++)
             {
                 bandSegmentIndices[bandCursors[bandIndex]++] = segmentIndex;
             }
-
-            segmentIndex++;
         }
     }
 

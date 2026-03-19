@@ -160,13 +160,9 @@ public struct CompositionCommand
     /// and pre-computed visibility against the target.
     /// </summary>
     /// <param name="targetBounds">The target frame bounds for visibility clipping.</param>
-    /// <param name="geometryCache">
-    /// Optional flush-scoped cache used to share prepared paths across commands that
-    /// have identical geometry-affecting inputs.
-    /// </param>
-    internal void Prepare(in Rectangle targetBounds, GeometryPreparationCache? geometryCache = null)
+    internal void Prepare(in Rectangle targetBounds)
     {
-        IPath preparedPath = geometryCache?.GetOrCreate(this) ?? this.BuildPreparedPath();
+        IPath preparedPath = this.BuildPreparedPath();
         this.PreparedPath = preparedPath;
 
         // Transform the brush to match the path coordinate space.
@@ -231,13 +227,6 @@ public struct CompositionCommand
 
         this.IsVisible = true;
     }
-
-    /// <summary>
-    /// Creates the flush-scoped cache key used to share prepared paths.
-    /// </summary>
-    /// <returns>The geometry preparation cache key.</returns>
-    internal readonly GeometryPreparationCache.GeometryPreparationKey CreateGeometryPreparationKey()
-        => new(this.sourcePath, this.transform, this.pen, this.clipPaths, this.shapeOptions, this.enforceFillOrientation);
 
     /// <summary>
     /// Builds the prepared path for this command without consulting any external cache.
