@@ -108,8 +108,8 @@ fn main(
         }
         let dd = config.drawdata_base + m.scene_offset;
         let di = m.info_offset;
-        if tag_word == DRAWTAG_FILL_COLOR || tag_word == DRAWTAG_FILL_LIN_GRADIENT ||
-            tag_word == DRAWTAG_FILL_RAD_GRADIENT || tag_word == DRAWTAG_FILL_SWEEP_GRADIENT ||
+        if tag_word == DRAWTAG_FILL_COLOR || tag_word == DRAWTAG_FILL_RECOLOR || tag_word == DRAWTAG_FILL_LIN_GRADIENT ||
+            tag_word == DRAWTAG_FILL_RAD_GRADIENT || tag_word == DRAWTAG_FILL_ELLIPTIC_GRADIENT || tag_word == DRAWTAG_FILL_SWEEP_GRADIENT ||
             tag_word == DRAWTAG_FILL_IMAGE || tag_word == DRAWTAG_BEGIN_CLIP || tag_word == DRAWTAG_BLURRED_ROUNDED_RECT
         {
             let bbox = path_bbox[m.path_ix];
@@ -122,6 +122,7 @@ fn main(
             var transform = Transform();
             let draw_flags = bbox.draw_flags;
             if tag_word == DRAWTAG_FILL_LIN_GRADIENT || tag_word == DRAWTAG_FILL_RAD_GRADIENT ||
+                tag_word == DRAWTAG_FILL_ELLIPTIC_GRADIENT ||
                 tag_word == DRAWTAG_FILL_SWEEP_GRADIENT || tag_word == DRAWTAG_FILL_IMAGE || 
                 tag_word == DRAWTAG_BLURRED_ROUNDED_RECT
             {
@@ -129,6 +130,9 @@ fn main(
             }
             switch tag_word {
                 case DRAWTAG_FILL_COLOR: {
+                    info[di] = draw_flags;
+                }
+                case DRAWTAG_FILL_RECOLOR: {
                     info[di] = draw_flags;
                 }
                 case DRAWTAG_BEGIN_CLIP: {
@@ -231,6 +235,33 @@ fn main(
                     info[di + 8u] = bitcast<u32>(radius);
                     info[di + 9u] = bitcast<u32>((flags << 3u) | kind);
                 }
+                case DRAWTAG_FILL_ELLIPTIC_GRADIENT: {
+                    info[di] = draw_flags;
+                    var center = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
+                    var axis_end = bitcast<vec2<f32>>(vec2(scene[dd + 3u], scene[dd + 4u]));
+                    let axis_ratio = bitcast<f32>(scene[dd + 5u]);
+                    center = transform_apply(transform, center);
+                    axis_end = transform_apply(transform, axis_end);
+                    let dxy = axis_end - center;
+                    let axis = length(dxy);
+                    let inv_axis = 1.0 / axis;
+                    let inv_second_axis = inv_axis / axis_ratio;
+                    let cos_theta = dxy.x * inv_axis;
+                    let sin_theta = dxy.y * inv_axis;
+                    // Map the ellipse to the unit circle so the fill parameter is length(local_xy).
+                    let m0 = cos_theta * inv_axis;
+                    let m1 = sin_theta * inv_second_axis;
+                    let m2 = -sin_theta * inv_axis;
+                    let m3 = cos_theta * inv_second_axis;
+                    let xlat_x = -(m0 * center.x + m2 * center.y);
+                    let xlat_y = -(m1 * center.x + m3 * center.y);
+                    info[di + 1u] = bitcast<u32>(m0);
+                    info[di + 2u] = bitcast<u32>(m1);
+                    info[di + 3u] = bitcast<u32>(m2);
+                    info[di + 4u] = bitcast<u32>(m3);
+                    info[di + 5u] = bitcast<u32>(xlat_x);
+                    info[di + 6u] = bitcast<u32>(xlat_y);
+                }
                 case DRAWTAG_FILL_SWEEP_GRADIENT: {
                     info[di] = draw_flags;
                     let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
@@ -247,13 +278,12 @@ fn main(
                 }
                 case DRAWTAG_FILL_IMAGE: {
                     info[di] = draw_flags;
-                    let inv = transform_inverse(transform);
-                    info[di + 1u] = bitcast<u32>(inv.matrx.x);
-                    info[di + 2u] = bitcast<u32>(inv.matrx.y);
-                    info[di + 3u] = bitcast<u32>(inv.matrx.z);
-                    info[di + 4u] = bitcast<u32>(inv.matrx.w);
-                    info[di + 5u] = bitcast<u32>(inv.translate.x);
-                    info[di + 6u] = bitcast<u32>(inv.translate.y);
+                    info[di + 1u] = bitcast<u32>(1.0);
+                    info[di + 2u] = bitcast<u32>(0.0);
+                    info[di + 3u] = bitcast<u32>(0.0);
+                    info[di + 4u] = bitcast<u32>(1.0);
+                    info[di + 5u] = bitcast<u32>(-bitcast<f32>(scene[dd + 3u]));
+                    info[di + 6u] = bitcast<u32>(-bitcast<f32>(scene[dd + 4u]));
                     info[di + 7u] = scene[dd];
                     info[di + 8u] = scene[dd + 1u];
                     info[di + 9u] = scene[dd + 2u];

@@ -24,13 +24,13 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
-        Buffer2D<TPixel> destination)
+        Buffer2DRegion<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
         Guard.NotNull(target, nameof(target));
-        Guard.NotNull(destination, nameof(destination));
+        Guard.NotNull(destination.Buffer, nameof(destination));
 
         // Readback is only available for native WebGPU targets with valid interop handles.
         if (!target.TryGetNativeSurface(out NativeSurface? nativeSurface) ||

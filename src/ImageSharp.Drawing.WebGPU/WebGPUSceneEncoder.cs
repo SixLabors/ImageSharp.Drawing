@@ -4,6 +4,8 @@
 #pragma warning disable SA1201 // Phase-1 scene-model types are grouped together in one file for now.
 
 using System.Buffers;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -17,6 +19,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal static class WebGPUSceneEncoder
 {
+    private const int GradientWidth = 512;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
     private const int FixedShift = 8;
@@ -57,9 +60,31 @@ internal static class WebGPUSceneEncoder
         }
     }
 
+    public static bool TryValidateBrushSupport(IReadOnlyList<CompositionCommand> commands, out string? error)
+    {
+        for (int i = 0; i < commands.Count; i++)
+        {
+            CompositionCommand command = commands[i];
+            if (!command.IsVisible)
+            {
+                continue;
+            }
+
+            if (!IsSupportedBrush(command.Brush))
+            {
+                error = $"The staged WebGPU scene pipeline does not support brush type '{command.Brush.GetType().Name}'.";
+                return false;
+            }
+        }
+
+        error = null;
+        return true;
+    }
+
     private ref struct SupportedSubsetSceneEncoding
     {
         private bool hasLastStyle;
+        private bool gradientPixelsDetached;
         private uint lastStyle0;
         private uint lastStyle1;
 
@@ -71,12 +96,16 @@ internal static class WebGPUSceneEncoder
             this.DrawData = new OwnedStream<uint>(allocator, Math.Max(commandCount, 16));
             this.Transforms = new OwnedStream<uint>(allocator, 8);
             this.Styles = new OwnedStream<uint>(allocator, Math.Max(commandCount * 2, 16));
+            this.GradientPixels = new OwnedStream<uint>(allocator, Math.Max(commandCount * GradientWidth, GradientWidth));
+            this.Images = [];
             this.FillCount = 0;
             this.PathCount = 0;
             this.LineCount = 0;
             this.InfoWordCount = 0;
             this.TotalTileMembershipCount = 0;
+            this.GradientRowCount = 0;
             this.hasLastStyle = false;
+            this.gradientPixelsDetached = false;
             this.lastStyle0 = 0;
             this.lastStyle1 = 0;
 
@@ -96,6 +125,10 @@ internal static class WebGPUSceneEncoder
 
         public OwnedStream<uint> Styles;
 
+        public OwnedStream<uint> GradientPixels;
+
+        public List<GpuImageDescriptor> Images;
+
         public int FillCount { get; private set; }
 
         public int PathCount { get; private set; }
@@ -105,6 +138,8 @@ internal static class WebGPUSceneEncoder
         public int InfoWordCount { get; private set; }
 
         public int TotalTileMembershipCount { get; private set; }
+
+        public int GradientRowCount { get; private set; }
 
         public readonly bool IsEmpty => this.FillCount == 0;
 
@@ -120,6 +155,11 @@ internal static class WebGPUSceneEncoder
 
         public void Dispose()
         {
+            if (!this.gradientPixelsDetached)
+            {
+                this.GradientPixels.Dispose();
+            }
+
             this.Styles.Dispose();
             this.Transforms.Dispose();
             this.DrawData.Dispose();
@@ -127,6 +167,8 @@ internal static class WebGPUSceneEncoder
             this.PathData.Dispose();
             this.PathTags.Dispose();
         }
+
+        public void MarkGradientPixelsDetached() => this.gradientPixelsDetached = true;
 
         private void Build(IReadOnlyList<CompositionCommand> commands, in Rectangle targetBounds)
         {
@@ -182,7 +224,15 @@ internal static class WebGPUSceneEncoder
             this.LineCount += geometryLineCount;
             this.InfoWordCount += (int)drawTagMonoid.InfoOffset;
             this.DrawTags.Add(drawTag);
-            this.DrawData.Add(PackSolidColor(command.Brush));
+            int gradientRowCount = this.GradientRowCount;
+            AppendDrawData(
+                command,
+                drawTag,
+                ref this.DrawData,
+                ref this.GradientPixels,
+                this.Images,
+                ref gradientRowCount);
+            this.GradientRowCount = gradientRowCount;
 
             Rectangle destinationRegion = command.DestinationRegion;
             int tileMinX = Math.Max(0, destinationRegion.Left / TileWidth);
@@ -243,6 +293,9 @@ internal static class WebGPUSceneEncoder
                     encoding.InfoWordCount,
                     sceneDataOwner,
                     sceneWordCount,
+                    DetachGradientPixels(ref encoding),
+                    encoding.Images,
+                    encoding.GradientRowCount,
                     layout,
                     encoding.FillCount,
                     encoding.PathCount,
@@ -268,11 +321,44 @@ internal static class WebGPUSceneEncoder
                 throw;
             }
         }
+
+        private static IMemoryOwner<uint>? DetachGradientPixels(ref SupportedSubsetSceneEncoding encoding)
+        {
+            if (encoding.GradientRowCount == 0)
+            {
+                return null;
+            }
+
+            encoding.MarkGradientPixelsDetached();
+            return encoding.GradientPixels.DetachOwner();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsSupportedBrush(Brush brush)
+        => brush is SolidBrush
+            or RecolorBrush
+            or LinearGradientBrush
+            or RadialGradientBrush
+            or EllipticGradientBrush
+            or SweepGradientBrush
+            or PatternBrush
+            or ImageBrush;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetDrawTag(in CompositionCommand command)
-        => GpuSceneDrawTag.FillColor;
+        => command.Brush switch
+        {
+            SolidBrush => GpuSceneDrawTag.FillColor,
+            RecolorBrush => GpuSceneDrawTag.FillRecolor,
+            LinearGradientBrush => GpuSceneDrawTag.FillLinGradient,
+            RadialGradientBrush => GpuSceneDrawTag.FillRadGradient,
+            EllipticGradientBrush => GpuSceneDrawTag.FillEllipticGradient,
+            SweepGradientBrush => GpuSceneDrawTag.FillSweepGradient,
+            PatternBrush => GpuSceneDrawTag.FillImage,
+            ImageBrush => GpuSceneDrawTag.FillImage,
+            _ => throw new UnreachableException($"Unsupported brush type '{command.Brush.GetType().Name}' should have been rejected before scene encoding.")
+        };
 
     private static int EncodePath(
         in CompositionCommand command,
@@ -350,7 +436,7 @@ internal static class WebGPUSceneEncoder
 
             if (pathTags.Count > 0)
             {
-                pathTags[pathTags.Count - 1] |= PathTagSubpathEnd;
+                pathTags[^1] |= PathTagSubpathEnd;
             }
         }
 
@@ -364,15 +450,19 @@ internal static class WebGPUSceneEncoder
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void AppendIdentityTransform(ref OwnedStream<uint> transforms)
+    private static void AppendTransform(GpuSceneTransform transform, ref OwnedStream<uint> transforms)
     {
-        transforms.Add(BitcastSingle(1F));
-        transforms.Add(BitcastSingle(0F));
-        transforms.Add(BitcastSingle(0F));
-        transforms.Add(BitcastSingle(1F));
-        transforms.Add(BitcastSingle(0F));
-        transforms.Add(BitcastSingle(0F));
+        transforms.Add(BitcastSingle(transform.M11));
+        transforms.Add(BitcastSingle(transform.M12));
+        transforms.Add(BitcastSingle(transform.M21));
+        transforms.Add(BitcastSingle(transform.M22));
+        transforms.Add(BitcastSingle(transform.Tx));
+        transforms.Add(BitcastSingle(transform.Ty));
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AppendIdentityTransform(ref OwnedStream<uint> transforms)
+        => AppendTransform(GpuSceneTransform.Identity, ref transforms);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static (uint Style0, uint Style1) GetFillStyle(IntersectionRule intersectionRule)
@@ -443,19 +533,238 @@ internal static class WebGPUSceneEncoder
         => value + ((alignment - (value % alignment)) % alignment);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint PackSolidColor(Brush brush)
+    private static uint PackSolidColor(SolidBrush solidBrush)
     {
-        if (brush is not SolidBrush solidBrush)
-        {
-            return 0;
-        }
-
         Vector4 color = solidBrush.Color.ToScaledVector4();
         color.X *= color.W;
         color.Y *= color.W;
         color.Z *= color.W;
         return Rgba32.FromScaledVector4(color).Rgba;
     }
+
+    private static void AppendDrawData(
+        in CompositionCommand command,
+        uint drawTag,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> gradientPixels,
+        List<GpuImageDescriptor> images,
+        ref int gradientRowCount)
+    {
+        Brush brush = command.Brush;
+        switch (drawTag)
+        {
+            case GpuSceneDrawTag.FillColor:
+                drawData.Add(PackSolidColor((SolidBrush)brush));
+                break;
+            case GpuSceneDrawTag.FillRecolor:
+                AppendRecolorData((RecolorBrush)brush, ref drawData);
+                break;
+            case GpuSceneDrawTag.FillLinGradient:
+                AppendLinearGradientData((LinearGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                break;
+            case GpuSceneDrawTag.FillRadGradient:
+                AppendRadialGradientData((RadialGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                break;
+            case GpuSceneDrawTag.FillEllipticGradient:
+                AppendEllipticGradientData((EllipticGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                break;
+            case GpuSceneDrawTag.FillSweepGradient:
+                AppendSweepGradientData((SweepGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
+                break;
+            case GpuSceneDrawTag.FillImage:
+                AppendImageData(command, ref drawData, images);
+                break;
+            default:
+                throw new UnreachableException($"Unsupported draw tag '{drawTag}' reached scene draw-data encoding.");
+        }
+    }
+
+    private static void AppendRecolorData(RecolorBrush brush, ref OwnedStream<uint> drawData)
+    {
+        drawData.Add(PackPremultipliedColor(brush.SourceColor));
+        drawData.Add(PackPremultipliedColor(brush.TargetColor));
+        drawData.Add(BitcastSingle(brush.Threshold * 4F));
+    }
+
+    private static void AppendImageData(
+        in CompositionCommand command,
+        ref OwnedStream<uint> drawData,
+        List<GpuImageDescriptor> images)
+    {
+        Brush brush = command.Brush;
+
+        // The image payload words are patched once the atlas is built because the
+        // uploader is the first place that knows the concrete TPixel texture format.
+        int payloadWordOffset = drawData.Count;
+        drawData.Add(0);
+        drawData.Add(0);
+        drawData.Add(0);
+        if (brush is ImageBrush imageBrush)
+        {
+            drawData.Add(BitcastSingle(command.BrushBounds.Left + imageBrush.Offset.X));
+            drawData.Add(BitcastSingle(command.BrushBounds.Top + imageBrush.Offset.Y));
+        }
+        else
+        {
+            drawData.Add(0);
+            drawData.Add(0);
+        }
+
+        images.Add(new GpuImageDescriptor(brush, payloadWordOffset));
+    }
+
+    private static void AppendLinearGradientData(
+        LinearGradientBrush brush,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> gradientPixels,
+        ref int gradientRowCount)
+    {
+        uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
+        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        gradientRowCount++;
+
+        drawData.Add(indexMode);
+        drawData.Add(BitcastSingle(brush.StartPoint.X));
+        drawData.Add(BitcastSingle(brush.StartPoint.Y));
+        drawData.Add(BitcastSingle(brush.EndPoint.X));
+        drawData.Add(BitcastSingle(brush.EndPoint.Y));
+    }
+
+    private static void AppendRadialGradientData(
+        RadialGradientBrush brush,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> gradientPixels,
+        ref int gradientRowCount)
+    {
+        uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
+        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        gradientRowCount++;
+
+        PointF center0;
+        float radius0;
+        PointF center1;
+        float radius1;
+
+        if (brush.IsTwoCircle)
+        {
+            center0 = brush.Center0;
+            radius0 = brush.Radius0;
+            center1 = brush.Center1!.Value;
+            radius1 = brush.Radius1!.Value;
+        }
+        else
+        {
+            center0 = brush.Center0;
+            radius0 = 0F;
+            center1 = brush.Center0;
+            radius1 = brush.Radius0;
+        }
+
+        drawData.Add(indexMode);
+        drawData.Add(BitcastSingle(center0.X));
+        drawData.Add(BitcastSingle(center0.Y));
+        drawData.Add(BitcastSingle(center1.X));
+        drawData.Add(BitcastSingle(center1.Y));
+        drawData.Add(BitcastSingle(radius0));
+        drawData.Add(BitcastSingle(radius1));
+    }
+
+    private static void AppendEllipticGradientData(
+        EllipticGradientBrush brush,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> gradientPixels,
+        ref int gradientRowCount)
+    {
+        uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
+        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        gradientRowCount++;
+
+        drawData.Add(indexMode);
+        drawData.Add(BitcastSingle(brush.Center.X));
+        drawData.Add(BitcastSingle(brush.Center.Y));
+        drawData.Add(BitcastSingle(brush.ReferenceAxisEnd.X));
+        drawData.Add(BitcastSingle(brush.ReferenceAxisEnd.Y));
+        drawData.Add(BitcastSingle(brush.AxisRatio));
+    }
+
+    private static void AppendSweepGradientData(
+        SweepGradientBrush brush,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> gradientPixels,
+        ref int gradientRowCount)
+    {
+        uint indexMode = ((uint)gradientRowCount << 2) | MapExtendMode(brush.RepetitionMode);
+        AppendGradientRamp(brush.ColorStops, ref gradientPixels);
+        gradientRowCount++;
+
+        float sweepDegrees = brush.EndAngleDegrees - brush.StartAngleDegrees;
+        if (MathF.Abs(sweepDegrees) < 1e-6F)
+        {
+            sweepDegrees = 360F;
+        }
+
+        float t0 = brush.StartAngleDegrees / 360F;
+        float t1 = t0 + (sweepDegrees / 360F);
+
+        drawData.Add(indexMode);
+        drawData.Add(BitcastSingle(brush.Center.X));
+        drawData.Add(BitcastSingle(brush.Center.Y));
+        drawData.Add(BitcastSingle(t0));
+        drawData.Add(BitcastSingle(t1));
+    }
+
+    private static void AppendGradientRamp(ReadOnlySpan<ColorStop> colorStops, ref OwnedStream<uint> gradientPixels)
+    {
+        for (int x = 0; x < GradientWidth; x++)
+        {
+            float t = x / (float)(GradientWidth - 1);
+            gradientPixels.Add(EvaluateGradientColor(colorStops, t));
+        }
+    }
+
+    private static uint EvaluateGradientColor(ReadOnlySpan<ColorStop> colorStops, float t)
+    {
+        ColorStop from = colorStops[0];
+        ColorStop to = colorStops[0];
+        for (int i = 0; i < colorStops.Length; i++)
+        {
+            to = colorStops[i];
+            if (to.Ratio > t)
+            {
+                break;
+            }
+
+            from = to;
+        }
+
+        if (from.Color.Equals(to.Color) || to.Ratio == from.Ratio)
+        {
+            return PackPremultipliedColor(from.Color);
+        }
+
+        float localT = (t - from.Ratio) / (to.Ratio - from.Ratio);
+        Vector4 color = Vector4.Lerp(from.Color.ToScaledVector4(), to.Color.ToScaledVector4(), localT);
+        return PackPremultipliedColor(Color.FromScaledVector(color));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint PackPremultipliedColor(Color color)
+    {
+        Vector4 scaled = color.ToScaledVector4();
+        scaled.X *= scaled.W;
+        scaled.Y *= scaled.W;
+        scaled.Z *= scaled.W;
+        return Rgba32.FromScaledVector4(scaled).Rgba;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint MapExtendMode(GradientRepetitionMode repetitionMode)
+        => repetitionMode switch
+        {
+            GradientRepetitionMode.Repeat => 1U,
+            GradientRepetitionMode.Reflect => 2U,
+            _ => 0U
+        };
 }
 
 /// <summary>
@@ -467,6 +776,9 @@ internal sealed class WebGPUEncodedScene : IDisposable
         Size.Empty,
         0,
         null,
+        0,
+        null,
+        [],
         0,
         default,
         0,
@@ -488,6 +800,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         0);
 
     private readonly IMemoryOwner<uint>? sceneDataOwner;
+    private readonly IMemoryOwner<uint>? gradientPixelsOwner;
+    private readonly List<GpuImageDescriptor> images;
     private bool disposed;
 
     public WebGPUEncodedScene(
@@ -495,6 +809,9 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int infoWordCount,
         IMemoryOwner<uint>? sceneDataOwner,
         int sceneWordCount,
+        IMemoryOwner<uint>? gradientPixelsOwner,
+        List<GpuImageDescriptor> images,
+        int gradientRowCount,
         GpuSceneLayout layout,
         int fillCount,
         int pathCount,
@@ -517,7 +834,10 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.TargetSize = targetSize;
         this.InfoWordCount = infoWordCount;
         this.sceneDataOwner = sceneDataOwner;
+        this.gradientPixelsOwner = gradientPixelsOwner;
+        this.images = images;
         this.SceneWordCount = sceneWordCount;
+        this.GradientRowCount = gradientRowCount;
         this.Layout = layout;
         this.FillCount = fillCount;
         this.PathCount = pathCount;
@@ -543,11 +863,18 @@ internal sealed class WebGPUEncodedScene : IDisposable
     public ReadOnlyMemory<uint> SceneData
         => this.sceneDataOwner is null ? ReadOnlyMemory<uint>.Empty : this.sceneDataOwner.Memory[..this.SceneWordCount];
 
+    public ReadOnlyMemory<uint> GradientPixels
+        => this.gradientPixelsOwner is null ? ReadOnlyMemory<uint>.Empty : this.gradientPixelsOwner.Memory[..(this.GradientRowCount * 512)];
+
+    public IReadOnlyList<GpuImageDescriptor> Images => this.images;
+
     public int FillCount { get; }
 
     public int InfoWordCount { get; }
 
     public int SceneWordCount { get; }
+
+    public int GradientRowCount { get; }
 
     public int PathCount { get; }
 
@@ -585,6 +912,16 @@ internal sealed class WebGPUEncodedScene : IDisposable
 
     public GpuSceneLayout Layout { get; }
 
+    public void SetSceneWord(int index, uint value)
+    {
+        if (this.sceneDataOwner is null)
+        {
+            throw new InvalidOperationException("The scene buffer is not available.");
+        }
+
+        this.sceneDataOwner.Memory.Span[index] = value;
+    }
+
     public void Dispose()
     {
         if (this.disposed)
@@ -594,7 +931,62 @@ internal sealed class WebGPUEncodedScene : IDisposable
 
         this.disposed = true;
         this.sceneDataOwner?.Dispose();
+        this.gradientPixelsOwner?.Dispose();
     }
+}
+
+internal readonly struct GpuImageDescriptor
+{
+    public GpuImageDescriptor(Brush brush, int drawDataWordOffset)
+    {
+        this.Brush = brush;
+        this.DrawDataWordOffset = drawDataWordOffset;
+    }
+
+    public Brush Brush { get; }
+
+    public int DrawDataWordOffset { get; }
+}
+
+internal readonly struct GpuSceneTransform : IEquatable<GpuSceneTransform>
+{
+    public static readonly GpuSceneTransform Identity = new(1F, 0F, 0F, 1F, 0F, 0F);
+
+    public GpuSceneTransform(float m11, float m12, float m21, float m22, float tx, float ty)
+    {
+        this.M11 = m11;
+        this.M12 = m12;
+        this.M21 = m21;
+        this.M22 = m22;
+        this.Tx = tx;
+        this.Ty = ty;
+    }
+
+    public float M11 { get; }
+
+    public float M12 { get; }
+
+    public float M21 { get; }
+
+    public float M22 { get; }
+
+    public float Tx { get; }
+
+    public float Ty { get; }
+
+    public Vector2 Translation => new(this.Tx, this.Ty);
+
+    public bool Equals(GpuSceneTransform other)
+        => this.M11 == other.M11
+        && this.M12 == other.M12
+        && this.M21 == other.M21
+        && this.M22 == other.M22
+        && this.Tx == other.Tx
+        && this.Ty == other.Ty;
+
+    public override bool Equals(object? obj) => obj is GpuSceneTransform other && this.Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(this.M11, this.M12, this.M21, this.M22, this.Tx, this.Ty);
 }
 
 internal ref struct OwnedStream<T>
@@ -631,6 +1023,15 @@ internal ref struct OwnedStream<T>
         this.owner.Dispose();
         this.span = default;
         this.Count = 0;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IMemoryOwner<T> DetachOwner()
+    {
+        IMemoryOwner<T> detached = this.owner;
+        this.span = default;
+        this.Count = 0;
+        return detached;
     }
 
     private void EnsureCapacity(int requiredCapacity)

@@ -198,7 +198,7 @@ public partial class DrawingCanvasTests
             Configuration configuration,
             ICanvasFrame<TTargetPixel> target,
             Rectangle sourceRectangle,
-            Buffer2D<TTargetPixel> destination)
+            Buffer2DRegion<TTargetPixel> destination)
             where TTargetPixel : unmanaged, IPixel<TTargetPixel>
         {
             this.LastReadbackConfiguration = configuration;

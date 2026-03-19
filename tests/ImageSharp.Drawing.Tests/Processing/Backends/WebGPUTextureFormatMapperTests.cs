@@ -15,12 +15,8 @@ public class WebGPUTextureFormatMapperTests
         [
             (WebGPUTextureFormatId.Rgba8Unorm, TextureFormat.Rgba8Unorm),
             (WebGPUTextureFormatId.Rgba8Snorm, TextureFormat.Rgba8Snorm),
-            (WebGPUTextureFormatId.Rgba8Uint, TextureFormat.Rgba8Uint),
             (WebGPUTextureFormatId.Bgra8Unorm, TextureFormat.Bgra8Unorm),
-            (WebGPUTextureFormatId.Rgba16Uint, TextureFormat.Rgba16Uint),
-            (WebGPUTextureFormatId.Rgba16Sint, TextureFormat.Rgba16Sint),
-            (WebGPUTextureFormatId.Rgba16Float, TextureFormat.Rgba16float),
-            (WebGPUTextureFormatId.Rgba32Float, TextureFormat.Rgba32float)
+            (WebGPUTextureFormatId.Rgba16Float, TextureFormat.Rgba16float)
         ];
 
         Assert.Equal(Enum.GetValues<WebGPUTextureFormatId>().Length, mappings.Length);

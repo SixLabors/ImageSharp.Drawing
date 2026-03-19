@@ -115,6 +115,10 @@ public abstract class GradientBrush : Brush
                 float fy = y + 0.5f;
 
                 float positionOnCompleteGradient = this.PositionOnGradient(fx, fy);
+                if (float.IsNaN(positionOnCompleteGradient))
+                {
+                    return Transparent;
+                }
 
                 switch (this.repetitionMode)
                 {

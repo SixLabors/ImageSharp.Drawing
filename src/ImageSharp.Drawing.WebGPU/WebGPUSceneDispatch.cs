@@ -5,7 +5,7 @@
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using System.Threading;
+using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp.PixelFormats;
@@ -75,7 +75,13 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
+        if (!WebGPUSceneEncoder.TryValidateBrushSupport(commands, out error))
+        {
+            return false;
+        }
+
         TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
+
         WebGPUFlushContext? flushContext = WebGPUFlushContext.Create(
             target,
             textureFormat,
@@ -92,6 +98,7 @@ internal static class WebGPUSceneDispatch
         {
             encodedScene = WebGPUSceneEncoder.Encode(commands, flushContext.TargetBounds, flushContext.MemoryAllocator);
             WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene);
+            uint baseColor = 0U;
             if (!TryValidateBindingSizes(encodedScene, config, out error))
             {
                 exceedsBindingLimit = true;
@@ -108,7 +115,7 @@ internal static class WebGPUSceneDispatch
                 return true;
             }
 
-            if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, out WebGPUSceneResourceSet resources, out error))
+            if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, out WebGPUSceneResourceSet resources, out error))
             {
                 encodedScene.Dispose();
                 flushContext.Dispose();
@@ -1210,17 +1217,18 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        BindGroupEntry* entries = stackalloc BindGroupEntry[8];
+        BindGroupEntry* entries = stackalloc BindGroupEntry[9];
         entries[0] = CreateBufferBinding(0, resources.HeaderBuffer, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateBufferBinding(1, scheduling.SegmentBuffer, bufferSizes.Segments.ByteLength);
         entries[2] = CreateBufferBinding(2, scheduling.PtclBuffer, bufferSizes.Ptcl.ByteLength);
         entries[3] = CreateBufferBinding(3, resources.InfoBinDataBuffer, checked(GetBindingByteLength<uint>(encodedScene.InfoWordCount) + bufferSizes.BinData.ByteLength));
         entries[4] = CreateBufferBinding(4, scheduling.BlendBuffer, bufferSizes.BlendSpill.ByteLength);
         entries[5] = new BindGroupEntry { Binding = 5, TextureView = outputTextureView };
-        entries[6] = new BindGroupEntry { Binding = 6, TextureView = resources.AuxiliaryTextureView };
-        entries[7] = new BindGroupEntry { Binding = 7, TextureView = resources.AuxiliaryTextureView };
+        entries[6] = new BindGroupEntry { Binding = 6, TextureView = resources.GradientTextureView };
+        entries[7] = new BindGroupEntry { Binding = 7, TextureView = resources.ImageAtlasTextureView };
+        entries[8] = new BindGroupEntry { Binding = 8, TextureView = flushContext.TargetView };
 
-        if (!TryDispatchComputePass(flushContext, bindGroupLayout, pipeline, entries, 8, groupCountX, groupCountY, 1, out error))
+        if (!TryDispatchComputePass(flushContext, bindGroupLayout, pipeline, entries, 9, groupCountX, groupCountY, 1, out error))
         {
             return false;
         }
@@ -1542,28 +1550,24 @@ internal static class WebGPUSceneDispatch
         nuint size,
         out WgpuBuffer* buffer,
         out string? error)
-    {
-        return TryCreateBuffer(
+        => TryCreateBuffer(
             flushContext,
             size,
             BufferUsage.Storage | BufferUsage.CopySrc | BufferUsage.CopyDst,
             out buffer,
             out error);
-    }
 
     private static unsafe bool TryCreateIndirectStorageBuffer(
         WebGPUFlushContext flushContext,
         nuint size,
         out WgpuBuffer* buffer,
         out string? error)
-    {
-        return TryCreateBuffer(
+        => TryCreateBuffer(
             flushContext,
             size,
             BufferUsage.Storage | BufferUsage.Indirect | BufferUsage.CopyDst,
             out buffer,
             out error);
-    }
 
     private static unsafe bool TryCreateBuffer(
         WebGPUFlushContext flushContext,
@@ -1574,7 +1578,7 @@ internal static class WebGPUSceneDispatch
     {
         if (size == 0)
         {
-            size = (nuint)sizeof(uint);
+            size = sizeof(uint);
         }
 
         BufferDescriptor descriptor = new()
@@ -1659,13 +1663,12 @@ internal static class WebGPUSceneDispatch
 /// </summary>
 internal sealed unsafe class WebGPUSceneComputeRecording
 {
-    private readonly WebGPUSceneResourceRegistry resourceRegistry;
     private readonly List<WebGPUSceneComputeCommand> commands = [];
 
     public WebGPUSceneComputeRecording(WebGPUSceneResourceRegistry resourceRegistry)
-        => this.resourceRegistry = resourceRegistry;
+        => this.ResourceRegistry = resourceRegistry;
 
-    public WebGPUSceneResourceRegistry ResourceRegistry => this.resourceRegistry;
+    public WebGPUSceneResourceRegistry ResourceRegistry { get; }
 
     /// <summary>
     /// Gets the recorded compute commands in submission order.
@@ -1726,7 +1729,7 @@ internal sealed unsafe class WebGPUSceneComputeRecording
         WebGPUSceneResourceProxy[] resources = new WebGPUSceneResourceProxy[entryCount];
         for (int i = 0; i < resources.Length; i++)
         {
-            resources[i] = this.resourceRegistry.CreateProxy(entries[i]);
+            resources[i] = this.ResourceRegistry.CreateProxy(entries[i]);
         }
 
         return resources;
@@ -1809,7 +1812,7 @@ internal enum WebGPUSceneShaderId
     PathTiling = 18
 }
 
-internal readonly unsafe struct WebGPUSceneResourceProxy
+internal readonly struct WebGPUSceneResourceProxy
 {
     private WebGPUSceneResourceProxy(
         uint binding,
@@ -1880,7 +1883,8 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
         registry.RegisterBuffer(resources.DrawBboxBuffer);
         registry.RegisterBuffer(resources.PathBuffer);
         registry.RegisterBuffer(resources.LineBuffer);
-        registry.RegisterTextureView(resources.AuxiliaryTextureView);
+        registry.RegisterTextureView(resources.GradientTextureView);
+        registry.RegisterTextureView(resources.ImageAtlasTextureView);
         return registry;
     }
 

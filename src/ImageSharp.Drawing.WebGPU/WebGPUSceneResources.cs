@@ -25,6 +25,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
         WebGPUSceneConfig config,
+        uint baseColor,
         out WebGPUSceneResourceSet resources,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -45,11 +46,6 @@ internal static unsafe class WebGPUSceneResources
         }
 
         if (!TryCreateAndUploadCombinedInfoBinDataBuffer(flushContext, scene.InfoWordCount, config.BufferSizes.BinData.ByteLength, out WgpuBuffer* infoBinDataBuffer, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateAndUploadBuffer<uint>(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length, out WgpuBuffer* sceneBuffer, out error))
         {
             return false;
         }
@@ -124,7 +120,17 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        if (!TryCreateTransparentSampledTexture(flushContext, TextureFormat.Rgba8Unorm, out Texture* auxiliaryTexture, out TextureView* auxiliaryTextureView, out error))
+        if (!TryCreateGradientTexture(flushContext, scene, out TextureView* gradientTextureView, out error))
+        {
+            return false;
+        }
+
+        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, expectedTextureFormat, out TextureView* imageAtlasTextureView, out error))
+        {
+            return false;
+        }
+
+        if (!TryCreateAndUploadBuffer<uint>(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length, out WgpuBuffer* sceneBuffer, out error))
         {
             return false;
         }
@@ -134,7 +140,7 @@ internal static unsafe class WebGPUSceneResources
             (uint)scene.TileCountY,
             (uint)scene.TargetSize.Width,
             (uint)scene.TargetSize.Height,
-            0U,
+            baseColor,
             scene.Layout,
             config.BufferSizes.Lines.Length,
             config.BufferSizes.BinData.Length,
@@ -167,7 +173,241 @@ internal static unsafe class WebGPUSceneResources
             drawBboxBuffer,
             pathBuffer,
             lineBuffer,
-            auxiliaryTextureView);
+            gradientTextureView,
+            imageAtlasTextureView);
+        error = null;
+        return true;
+    }
+
+    private static bool TryCreateImageAtlasTexture<TPixel>(
+        WebGPUFlushContext flushContext,
+        WebGPUEncodedScene scene,
+        TextureFormat textureFormat,
+        out TextureView* textureView,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (scene.Images.Count == 0)
+        {
+            return TryCreateTransparentSampledTexture(flushContext, textureFormat, out _, out textureView, out error);
+        }
+
+        int atlasWidth = 1;
+        int atlasHeight = 0;
+        foreach (GpuImageDescriptor descriptor in scene.Images)
+        {
+            GetImageEntrySize(descriptor.Brush, out int width, out int height);
+            atlasWidth = Math.Max(atlasWidth, width);
+            atlasHeight += height;
+        }
+
+        if (!TryCreateTexture(flushContext, textureFormat, atlasWidth, atlasHeight, "image atlas", out Texture* texture, out textureView, out error))
+        {
+            return false;
+        }
+
+        TPixel[] rowBuffer = GC.AllocateUninitializedArray<TPixel>(atlasWidth);
+        int atlasY = 0;
+        foreach (GpuImageDescriptor descriptor in scene.Images)
+        {
+            if (!TryUploadImageEntry(
+                flushContext,
+                texture,
+                descriptor.Brush,
+                atlasY,
+                rowBuffer,
+                out int entryWidth,
+                out int entryHeight,
+                out error))
+            {
+                return false;
+            }
+
+            int sceneIndex = (int)scene.Layout.DrawDataBase + descriptor.DrawDataWordOffset;
+            scene.SetSceneWord(sceneIndex, PackImageAtlasOffset(0, atlasY));
+            scene.SetSceneWord(sceneIndex + 1, PackImageExtents(entryWidth, entryHeight));
+            scene.SetSceneWord(sceneIndex + 2, PackImageSampleInfo(textureFormat, xExtendMode: 1U, yExtendMode: 1U));
+            atlasY += entryHeight;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryCreateGradientTexture(
+        WebGPUFlushContext flushContext,
+        WebGPUEncodedScene scene,
+        out TextureView* textureView,
+        out string? error)
+    {
+        if (scene.GradientRowCount == 0)
+        {
+            return TryCreateTransparentSampledTexture(flushContext, TextureFormat.Rgba8Unorm, out _, out textureView, out error);
+        }
+
+        TextureDescriptor textureDescriptor = new()
+        {
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            Dimension = TextureDimension.Dimension2D,
+            Size = new Extent3D(512, (uint)scene.GradientRowCount, 1),
+            Format = TextureFormat.Rgba8Unorm,
+            MipLevelCount = 1,
+            SampleCount = 1
+        };
+
+        Texture* texture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in textureDescriptor);
+        if (texture is null)
+        {
+            textureView = null;
+            error = "Failed to create a gradient texture.";
+            return false;
+        }
+
+        TextureViewDescriptor textureViewDescriptor = new()
+        {
+            Format = TextureFormat.Rgba8Unorm,
+            Dimension = TextureViewDimension.Dimension2D,
+            BaseMipLevel = 0,
+            MipLevelCount = 1,
+            BaseArrayLayer = 0,
+            ArrayLayerCount = 1,
+            Aspect = TextureAspect.All
+        };
+
+        textureView = flushContext.Api.TextureCreateView(texture, in textureViewDescriptor);
+        if (textureView is null)
+        {
+            flushContext.Api.TextureRelease(texture);
+            error = "Failed to create a gradient texture view.";
+            return false;
+        }
+
+        TextureDataLayout layout = new()
+        {
+            Offset = 0,
+            BytesPerRow = 512 * 4,
+            RowsPerImage = (uint)scene.GradientRowCount
+        };
+
+        ImageCopyTexture destination = new()
+        {
+            Texture = texture,
+            MipLevel = 0,
+            Origin = new Origin3D(0, 0, 0),
+            Aspect = TextureAspect.All
+        };
+
+        fixed (uint* pixelPtr = scene.GradientPixels.Span)
+        {
+            Extent3D extent = new(512, (uint)scene.GradientRowCount, 1);
+            flushContext.Api.QueueWriteTexture(
+                flushContext.Queue,
+                in destination,
+                pixelPtr,
+                (nuint)(scene.GradientPixels.Length * sizeof(uint)),
+                in layout,
+                in extent);
+        }
+
+        flushContext.TrackTexture(texture);
+        flushContext.TrackTextureView(textureView);
+        error = null;
+        return true;
+    }
+
+    private static void GetImageEntrySize(Brush brush, out int width, out int height)
+    {
+        if (brush is PatternBrush patternBrush)
+        {
+            width = patternBrush.Pattern.Columns;
+            height = patternBrush.Pattern.Rows;
+            return;
+        }
+
+        ImageBrush imageBrush = (ImageBrush)brush;
+        Rectangle sourceRegion = Rectangle.Intersect(imageBrush.SourceImage.Bounds, (Rectangle)imageBrush.SourceRegion);
+        width = sourceRegion.Width;
+        height = sourceRegion.Height;
+    }
+
+    private static bool TryUploadImageEntry<TPixel>(
+        WebGPUFlushContext flushContext,
+        Texture* texture,
+        Brush brush,
+        int atlasY,
+        TPixel[] rowBuffer,
+        out int entryWidth,
+        out int entryHeight,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        if (brush is PatternBrush patternBrush)
+        {
+            return TryUploadPatternEntry(flushContext, texture, patternBrush, atlasY, rowBuffer, out entryWidth, out entryHeight, out error);
+        }
+
+        return TryUploadImageBrushEntry<TPixel>(flushContext, texture, (ImageBrush)brush, atlasY, out entryWidth, out entryHeight, out error);
+    }
+
+    private static bool TryUploadPatternEntry<TPixel>(
+        WebGPUFlushContext flushContext,
+        Texture* texture,
+        PatternBrush patternBrush,
+        int atlasY,
+        TPixel[] rowBuffer,
+        out int entryWidth,
+        out int entryHeight,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DenseMatrix<Color> pattern = patternBrush.Pattern;
+        entryWidth = pattern.Columns;
+        entryHeight = pattern.Rows;
+
+        for (int y = 0; y < entryHeight; y++)
+        {
+            Span<TPixel> rowPixels = rowBuffer.AsSpan(0, entryWidth);
+            for (int x = 0; x < entryWidth; x++)
+            {
+                rowPixels[x] = pattern[y, x].ToPixel<TPixel>();
+            }
+
+            if (!TryWriteTextureRegion<TPixel>(flushContext, texture, 0, atlasY + y, entryWidth, 1, rowPixels, out error))
+            {
+                return false;
+            }
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool TryUploadImageBrushEntry<TPixel>(
+        WebGPUFlushContext flushContext,
+        Texture* texture,
+        ImageBrush imageBrush,
+        int atlasY,
+        out int entryWidth,
+        out int entryHeight,
+        out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Rectangle sourceRegion = Rectangle.Intersect(imageBrush.SourceImage.Bounds, (Rectangle)imageBrush.SourceRegion);
+        entryWidth = sourceRegion.Width;
+        entryHeight = sourceRegion.Height;
+
+        Image<TPixel> sourceImage = (Image<TPixel>)imageBrush.SourceImage;
+        ImageFrame<TPixel> sourceFrame = sourceImage.Frames.RootFrame;
+        for (int y = 0; y < entryHeight; y++)
+        {
+            ReadOnlySpan<TPixel> sourceRow = sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceRegion.Y + y).Slice(sourceRegion.X, entryWidth);
+
+            if (!TryWriteTextureRegion<TPixel>(flushContext, texture, 0, atlasY + y, entryWidth, 1, sourceRow, out error))
+            {
+                return false;
+            }
+        }
+
         error = null;
         return true;
     }
@@ -273,6 +513,124 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    private static bool TryCreateTexture(
+        WebGPUFlushContext flushContext,
+        TextureFormat textureFormat,
+        int width,
+        int height,
+        string textureName,
+        out Texture* texture,
+        out TextureView* textureView,
+        out string? error)
+    {
+        TextureDescriptor textureDescriptor = new()
+        {
+            Usage = TextureUsage.TextureBinding | TextureUsage.CopyDst,
+            Dimension = TextureDimension.Dimension2D,
+            Size = new Extent3D((uint)width, (uint)height, 1),
+            Format = textureFormat,
+            MipLevelCount = 1,
+            SampleCount = 1
+        };
+
+        texture = flushContext.Api.DeviceCreateTexture(flushContext.Device, in textureDescriptor);
+        if (texture is null)
+        {
+            textureView = null;
+            error = $"Failed to create a {textureName} texture.";
+            return false;
+        }
+
+        TextureViewDescriptor textureViewDescriptor = new()
+        {
+            Format = textureFormat,
+            Dimension = TextureViewDimension.Dimension2D,
+            BaseMipLevel = 0,
+            MipLevelCount = 1,
+            BaseArrayLayer = 0,
+            ArrayLayerCount = 1,
+            Aspect = TextureAspect.All
+        };
+
+        textureView = flushContext.Api.TextureCreateView(texture, in textureViewDescriptor);
+        if (textureView is null)
+        {
+            flushContext.Api.TextureRelease(texture);
+            texture = null;
+            error = $"Failed to create a {textureName} texture view.";
+            return false;
+        }
+
+        flushContext.TrackTexture(texture);
+        flushContext.TrackTextureView(textureView);
+        error = null;
+        return true;
+    }
+
+    private static bool TryWriteTextureRegion<TPixel>(
+        WebGPUFlushContext flushContext,
+        Texture* texture,
+        int x,
+        int y,
+        int width,
+        int height,
+        ReadOnlySpan<TPixel> pixels,
+        out string? error)
+        where TPixel : unmanaged
+    {
+        TextureDataLayout layout = new()
+        {
+            Offset = 0,
+            BytesPerRow = (uint)(width * Unsafe.SizeOf<TPixel>()),
+            RowsPerImage = (uint)height
+        };
+
+        fixed (TPixel* pixelPtr = pixels)
+        {
+            ImageCopyTexture destination = new()
+            {
+                Texture = texture,
+                MipLevel = 0,
+                Origin = new Origin3D((uint)x, (uint)y, 0),
+                Aspect = TextureAspect.All
+            };
+
+            Extent3D extent = new((uint)width, (uint)height, 1);
+            flushContext.Api.QueueWriteTexture(
+                flushContext.Queue,
+                in destination,
+                pixelPtr,
+                (nuint)(pixels.Length * Unsafe.SizeOf<TPixel>()),
+                in layout,
+                in extent);
+        }
+
+        error = null;
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint PackImageAtlasOffset(int x, int y)
+        => ((uint)x << 16) | (uint)y;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint PackImageExtents(int width, int height)
+        => ((uint)width << 16) | (uint)height;
+
+    private static uint PackImageSampleInfo(TextureFormat textureFormat, uint xExtendMode, uint yExtendMode)
+    {
+        const uint alpha = 0xFFU;
+        const uint qualityLow = 0U;
+        const uint alphaTypeStraight = 0U;
+        uint format = textureFormat == TextureFormat.Bgra8Unorm ? 1U : 0U;
+        return alpha
+            | (yExtendMode << 8)
+            | (xExtendMode << 10)
+            | (qualityLow << 12)
+            | (alphaTypeStraight << 14)
+            | (format << 15);
+    }
+
     private static bool TryCreateAndUploadScalarBuffer<T>(
         WebGPUFlushContext flushContext,
         in T value,
@@ -371,7 +729,8 @@ internal readonly unsafe struct WebGPUSceneResourceSet
         WgpuBuffer* drawBboxBuffer,
         WgpuBuffer* pathBuffer,
         WgpuBuffer* lineBuffer,
-        TextureView* auxiliaryTextureView)
+        TextureView* gradientTextureView,
+        TextureView* imageAtlasTextureView)
     {
         this.HeaderBuffer = headerBuffer;
         this.SceneBuffer = sceneBuffer;
@@ -390,7 +749,8 @@ internal readonly unsafe struct WebGPUSceneResourceSet
         this.DrawBboxBuffer = drawBboxBuffer;
         this.PathBuffer = pathBuffer;
         this.LineBuffer = lineBuffer;
-        this.AuxiliaryTextureView = auxiliaryTextureView;
+        this.GradientTextureView = gradientTextureView;
+        this.ImageAtlasTextureView = imageAtlasTextureView;
     }
 
     public WgpuBuffer* HeaderBuffer { get; }
@@ -427,7 +787,9 @@ internal readonly unsafe struct WebGPUSceneResourceSet
 
     public WgpuBuffer* LineBuffer { get; }
 
-    public TextureView* AuxiliaryTextureView { get; }
+    public TextureView* GradientTextureView { get; }
+
+    public TextureView* ImageAtlasTextureView { get; }
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -680,6 +1042,12 @@ internal static class GpuSceneDrawTag
 {
     public const uint Nop = 0U;
     public const uint FillColor = 0x44U;
+    public const uint FillRecolor = 0x4CU;
+    public const uint FillLinGradient = 0x114U;
+    public const uint FillRadGradient = 0x29CU;
+    public const uint FillEllipticGradient = 0x1D8U;
+    public const uint FillSweepGradient = 0x254U;
+    public const uint FillImage = 0x294U;
     public const uint FillInfoFlagsFillRuleBit = 1U;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

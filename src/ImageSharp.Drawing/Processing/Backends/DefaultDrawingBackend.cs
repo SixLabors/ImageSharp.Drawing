@@ -133,11 +133,11 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
-        Buffer2D<TPixel> destination)
+        Buffer2DRegion<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Guard.NotNull(configuration, nameof(configuration));
-        Guard.NotNull(destination, nameof(destination));
+        Guard.NotNull(destination.Buffer, nameof(destination));
 
         // CPU backend readback is available only when the target exposes CPU pixels.
         if (!target.TryGetCpuRegion(out Buffer2DRegion<TPixel> sourceRegion))

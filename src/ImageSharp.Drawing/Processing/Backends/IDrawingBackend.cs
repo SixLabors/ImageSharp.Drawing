@@ -36,7 +36,7 @@ public interface IDrawingBackend
     /// <param name="target">The target frame.</param>
     /// <param name="sourceRectangle">Source rectangle in target-local coordinates.</param>
     /// <param name="destination">
-    /// The caller-allocated buffer to receive the pixel data.
+    /// The caller-allocated region to receive the pixel data.
     /// Must be at least as large as <paramref name="sourceRectangle"/> (clamped to target bounds).
     /// </param>
     /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
@@ -44,7 +44,7 @@ public interface IDrawingBackend
         Configuration configuration,
         ICanvasFrame<TPixel> target,
         Rectangle sourceRectangle,
-        Buffer2D<TPixel> destination)
+        Buffer2DRegion<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>

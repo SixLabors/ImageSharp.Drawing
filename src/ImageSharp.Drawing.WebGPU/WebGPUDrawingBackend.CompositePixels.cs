@@ -44,18 +44,12 @@ public sealed partial class WebGPUDrawingBackend
         // Only formats with native or feature-gated storage binding support.
         new()
         {
-            [typeof(Byte4)] = CompositePixelRegistration.Create<Byte4>(TextureFormat.Rgba8Uint, TextureSampleType.Uint),
             [typeof(NormalizedByte4)] = CompositePixelRegistration.Create<NormalizedByte4>(TextureFormat.Rgba8Snorm, TextureSampleType.Float),
 
             [typeof(HalfVector4)] = CompositePixelRegistration.Create<HalfVector4>(TextureFormat.Rgba16float, TextureSampleType.Float),
 
-            [typeof(Short4)] = CompositePixelRegistration.Create<Short4>(TextureFormat.Rgba16Sint, TextureSampleType.Sint),
-
             [typeof(Rgba32)] = CompositePixelRegistration.Create<Rgba32>(TextureFormat.Rgba8Unorm, TextureSampleType.Float),
-            [typeof(Bgra32)] = CompositePixelRegistration.Create<Bgra32>(TextureFormat.Bgra8Unorm, TextureSampleType.Float, FeatureName.Bgra8UnormStorage),
-            [typeof(RgbaVector)] = CompositePixelRegistration.Create<RgbaVector>(TextureFormat.Rgba32float, TextureSampleType.UnfilterableFloat),
-
-            [typeof(Rgba64)] = CompositePixelRegistration.Create<Rgba64>(TextureFormat.Rgba16Uint, TextureSampleType.Uint)
+            [typeof(Bgra32)] = CompositePixelRegistration.Create<Bgra32>(TextureFormat.Bgra8Unorm, TextureSampleType.Float, FeatureName.Bgra8UnormStorage)
         };
 
     /// <summary>
@@ -166,14 +160,10 @@ public sealed partial class WebGPUDrawingBackend
     private static Dictionary<TextureFormat, CompositeTextureShaderTraits> CreateCompositeTextureShaderTraits()
         => new()
         {
-            [TextureFormat.Rgba8Uint] = new CompositeTextureShaderTraits("rgba8uint", "u32", TextureSampleType.Uint, CompositeTextureEncodingKind.Uint8),
             [TextureFormat.Rgba8Snorm] = new CompositeTextureShaderTraits("rgba8snorm", "f32", TextureSampleType.Float, CompositeTextureEncodingKind.Snorm),
             [TextureFormat.Rgba16float] = new CompositeTextureShaderTraits("rgba16float", "f32", TextureSampleType.Float, CompositeTextureEncodingKind.Float),
-            [TextureFormat.Rgba16Sint] = new CompositeTextureShaderTraits("rgba16sint", "i32", TextureSampleType.Sint, CompositeTextureEncodingKind.Sint16),
             [TextureFormat.Rgba8Unorm] = new CompositeTextureShaderTraits("rgba8unorm", "f32", TextureSampleType.Float, CompositeTextureEncodingKind.Float),
-            [TextureFormat.Bgra8Unorm] = new CompositeTextureShaderTraits("bgra8unorm", "f32", TextureSampleType.Float, CompositeTextureEncodingKind.Float),
-            [TextureFormat.Rgba32float] = new CompositeTextureShaderTraits("rgba32float", "f32", TextureSampleType.UnfilterableFloat, CompositeTextureEncodingKind.Float),
-            [TextureFormat.Rgba16Uint] = new CompositeTextureShaderTraits("rgba16uint", "u32", TextureSampleType.Uint, CompositeTextureEncodingKind.Uint16)
+            [TextureFormat.Bgra8Unorm] = new CompositeTextureShaderTraits("bgra8unorm", "f32", TextureSampleType.Float, CompositeTextureEncodingKind.Float)
         };
 
     internal readonly struct CompositeTextureShaderTraits(

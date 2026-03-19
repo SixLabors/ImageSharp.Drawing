@@ -1159,10 +1159,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
 
         private ShaderModule* CreateShaderModule(ReadOnlySpan<byte> shaderCode)
         {
-            System.Diagnostics.Debug.Assert(
-                !shaderCode.IsEmpty && shaderCode[^1] == 0,
-                "WGSL shader code must be null-terminated at the call site.");
-
             fixed (byte* shaderCodePtr = shaderCode)
             {
                 ShaderModuleWGSLDescriptor wgslDescriptor = new()

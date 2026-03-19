@@ -62,7 +62,7 @@ internal static class FineAreaComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[8];
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[9];
         entries[0] = CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
         entries[1] = CreateStorageEntry(1, BufferBindingType.ReadOnlyStorage, 0);
         entries[2] = CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage, 0);
@@ -71,10 +71,11 @@ internal static class FineAreaComputeShader
         entries[5] = CreateOutputTextureEntry(5, outputTextureFormat);
         entries[6] = CreateSampledTextureEntry(6);
         entries[7] = CreateSampledTextureEntry(7);
+        entries[8] = CreateSampledTextureEntry(8);
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 8,
+            EntryCount = 9,
             Entries = entries
         };
 

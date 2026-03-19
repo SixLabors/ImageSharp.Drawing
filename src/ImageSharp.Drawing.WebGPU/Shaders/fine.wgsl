@@ -49,6 +49,9 @@ var gradients: texture_2d<f32>;
 @group(0) @binding(7)
 var image_atlas: texture_2d<f32>;
 
+@group(0) @binding(8)
+var backdrop_texture: texture_2d<f32>;
+
 // MSAA-only bindings and utilities
 #ifdef msaa
 
@@ -737,6 +740,13 @@ fn read_color(cmd_ix: u32) -> CmdColor {
     return CmdColor(rgba_color);
 }
 
+fn read_recolor(cmd_ix: u32) -> CmdRecolor {
+    let source_color = ptcl[cmd_ix + 1u];
+    let target_color = ptcl[cmd_ix + 2u];
+    let threshold = bitcast<f32>(ptcl[cmd_ix + 3u]);
+    return CmdRecolor(source_color, target_color, threshold);
+}
+
 fn read_blur_rect(cmd_ix: u32) -> CmdBlurRect {
     let info_offset = ptcl[cmd_ix + 1u];
     let rgba_color = ptcl[cmd_ix + 2u];
@@ -783,6 +793,20 @@ fn read_rad_grad(cmd_ix: u32) -> CmdRadGrad {
     let flags = flags_kind >> 3u;
     let kind = flags_kind & 0x7u;
     return CmdRadGrad(index, extend_mode, matrx, xlat, focal_x, radius, kind, flags);
+}
+
+fn read_elliptic_grad(cmd_ix: u32) -> CmdEllipticGrad {
+    let index_mode = ptcl[cmd_ix + 1u];
+    let index = index_mode >> 2u;
+    let extend_mode = index_mode & 0x3u;
+    let info_offset = ptcl[cmd_ix + 2u];
+    let m0 = bitcast<f32>(info[info_offset]);
+    let m1 = bitcast<f32>(info[info_offset + 1u]);
+    let m2 = bitcast<f32>(info[info_offset + 2u]);
+    let m3 = bitcast<f32>(info[info_offset + 3u]);
+    let matrx = vec4(m0, m1, m2, m3);
+    let xlat = vec2(bitcast<f32>(info[info_offset + 4u]), bitcast<f32>(info[info_offset + 5u]));
+    return CmdEllipticGrad(index, extend_mode, matrx, xlat);
 }
 
 fn read_sweep_grad(cmd_ix: u32) -> CmdSweepGrad {
@@ -870,10 +894,15 @@ fn extend_mode_normalized(t: f32, mode: u32) -> f32 {
             return clamp(t, 0.0, 1.0);
         }
         case EXTEND_REPEAT: {
-            return fract(t);
+            // The CPU gradient brushes do not wrap values before the first stop.
+            // They hold the first stop for t < 0 and only repeat for t >= 0.
+            return select(fract(t), 0.0, t < 0.0);
         }
         case EXTEND_REFLECT, default: {
-            return abs(t - 2.0 * round(0.5 * t));
+            // Likewise, CPU reflection clamps negative values to the first stop
+            // and only reflects once the parameter moves forward beyond 0.
+            let clamped = max(t, 0.0);
+            return abs(clamped - 2.0 * round(0.5 * clamped));
         }
     }
 }
@@ -888,6 +917,51 @@ fn extend_mode(t: f32, mode: u32, max: f32) -> f32 {
         }
         case EXTEND_REFLECT, default: {
             return extend_mode_normalized(t / max, mode) * max;
+        }
+    }
+}
+
+fn image_extend_mode_normalized(t: f32, mode: u32) -> f32 {
+    switch mode {
+        case EXTEND_PAD: {
+            return clamp(t, 0.0, 1.0);
+        }
+        case EXTEND_REPEAT: {
+            return fract(t);
+        }
+        case EXTEND_REFLECT, default: {
+            let reflected = fract(0.5 * t) * 2.0;
+            return 1.0 - abs(reflected - 1.0);
+        }
+    }
+}
+
+fn image_extend_mode(t: f32, mode: u32, max: f32) -> f32 {
+    switch mode {
+        case EXTEND_PAD: {
+            return clamp(t, 0.0, max);
+        }
+        case EXTEND_REPEAT: {
+            return image_extend_mode_normalized(t / max, mode) * max;
+        }
+        case EXTEND_REFLECT, default: {
+            return image_extend_mode_normalized(t / max, mode) * max;
+        }
+    }
+}
+
+fn image_extend_mode_i32(t: f32, mode: u32, max: i32) -> i32 {
+    switch mode {
+        case EXTEND_PAD: {
+            return clamp(i32(t), 0, max - 1);
+        }
+        case EXTEND_REPEAT: {
+            let wrapped = i32(t) % max;
+            return select(wrapped + max, wrapped, wrapped >= 0);
+        }
+        case EXTEND_REFLECT, default: {
+            let reflected = clamp(image_extend_mode(t, mode, f32(max)), 0.0, f32(max - 1));
+            return i32(reflected);
         }
     }
 }
@@ -974,11 +1048,13 @@ fn main(
     }
     let tile_ix = wg_id.y * config.width_in_tiles + wg_id.x;
     let xy = vec2(f32(global_id.x * PIXELS_PER_THREAD), f32(global_id.y));
+    let xy_uint = vec2<u32>(xy);
     let local_xy = vec2(f32(local_id.x * PIXELS_PER_THREAD), f32(local_id.y));
     var rgba: array<vec4<f32>, PIXELS_PER_THREAD>;
-    let base_color = unpack4x8unorm(config.base_color);
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-        rgba[i] = base_color;
+        let coords = vec2<i32>(xy_uint + vec2(i, 0u));
+        let backdrop_raw = textureLoad(backdrop_texture, coords, 0);
+        rgba[i] = vec4(backdrop_raw.rgb * backdrop_raw.a, backdrop_raw.a);
     }
     var blend_stack: array<array<u32, PIXELS_PER_THREAD>, BLEND_STACK_SPLIT>;
     var clip_depth = 0u;
@@ -1016,6 +1092,24 @@ fn main(
                     rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
                 }
                 cmd_ix += 2u;
+            }
+            case CMD_RECOLOR: {
+                let recolor = read_recolor(cmd_ix);
+                let source = unpack4x8unorm(recolor.source_color);
+                let target_color = unpack4x8unorm(recolor.target_color);
+                for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    let bg = rgba[i];
+                    let bg_sep = vec4(bg.rgb / max(bg.a, 1e-6), bg.a);
+                    let delta = bg_sep - source;
+                    let distance = dot(delta, delta);
+                    if distance <= recolor.threshold {
+                        let t = (recolor.threshold - distance) / recolor.threshold;
+                        let target_premul = premul_alpha(target_color);
+                        let recolored = target_premul * t + bg * (1.0 - target_color.a * t);
+                        rgba[i] = bg * (1.0 - area[i]) + recolored * area[i];
+                    }
+                }
+                cmd_ix += 4u;
             }
             case CMD_BEGIN_CLIP: {
                 if clip_depth < BLEND_STACK_SPLIT {
@@ -1124,7 +1218,7 @@ fn main(
             }
             case CMD_LIN_GRAD: {
                 let lin = read_lin_grad(cmd_ix);
-                let d = lin.line_x * xy.x + lin.line_y * xy.y + lin.line_c;
+                let d = lin.line_x * (xy.x + 0.5) + lin.line_y * (xy.y + 0.5) + lin.line_c;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
                     let my_d = d + lin.line_x * f32(i);
                     let x = i32(round(extend_mode_normalized(my_d, lin.extend_mode) * f32(GRADIENT_WIDTH - 1)));
@@ -1146,7 +1240,7 @@ fn main(
                 let less_scale = select(1.0, -1.0, is_swapped || (1.0 - focal_x) < 0.0);
                 let t_sign = sign(1.0 - focal_x);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let my_xy = vec2(xy.x + f32(i), xy.y);
+                    let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
                     let local_xy = rad.matrx.xy * my_xy.x + rad.matrx.zw * my_xy.y + rad.xlat;
                     let x = local_xy.x;
                     let y = local_xy.y;
@@ -1179,11 +1273,27 @@ fn main(
                 }
                 cmd_ix += 3u;
             }
+            case CMD_ELLIPTIC_GRAD: {
+                let elliptic = read_elliptic_grad(cmd_ix);
+                for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
+                    let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                    let local_xy = elliptic.matrx.xy * my_xy.x + elliptic.matrx.zw * my_xy.y + elliptic.xlat;
+                    let radius = length(local_xy);
+                    if radius == radius {
+                        let t = extend_mode_normalized(radius, elliptic.extend_mode);
+                        let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
+                        let fg_rgba = textureLoad(gradients, vec2(ramp_x, i32(elliptic.index)), 0);
+                        let fg_i = fg_rgba * area[i];
+                        rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                    }
+                }
+                cmd_ix += 3u;
+            }
             case CMD_SWEEP_GRAD: {
                 let sweep = read_sweep_grad(cmd_ix);
                 let scale = 1.0 / (sweep.t1 - sweep.t0);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let my_xy = vec2(xy.x + f32(i), xy.y);
+                    let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
                     let local_xy = sweep.matrx.xy * my_xy.x + sweep.matrx.zw * my_xy.y + sweep.xlat;
                     let x = local_xy.x;
                     let y = local_xy.y;
@@ -1203,6 +1313,7 @@ fn main(
                     phi = select(phi, 1.0 / 2.0 - phi, x < 0.0);
                     phi = select(phi, 1.0 - phi, y < 0.0);
                     phi = select(phi, 0.0, phi != phi); // check for NaN
+                    phi = fract(1.0 - phi);
                     phi = (phi - sweep.t0) * scale;
                     let t = extend_mode_normalized(phi, sweep.extend_mode);
                     let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
@@ -1222,13 +1333,11 @@ fn main(
                             if area[i] != 0.0 {
                                 let my_xy = vec2(xy.x + f32(i), xy.y);
                                 var atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
-                                atlas_uv.x = extend_mode(atlas_uv.x, image.x_extend_mode, image.extents.x);
-                                atlas_uv.y = extend_mode(atlas_uv.y, image.y_extend_mode, image.extents.y);
-                                atlas_uv = atlas_uv + image.atlas_offset;
-                                // TODO: If the image couldn't be added to the atlas (i.e. was too big), this isn't robust
-                                let atlas_uv_clamped = clamp(atlas_uv, image.atlas_offset, atlas_max);
+                                let atlas_ix = image_extend_mode_i32(atlas_uv.x, image.x_extend_mode, i32(image.extents.x));
+                                let atlas_iy = image_extend_mode_i32(atlas_uv.y, image.y_extend_mode, i32(image.extents.y));
+                                let atlas_uv_clamped = vec2<i32>(i32(image.atlas_offset.x) + atlas_ix, i32(image.atlas_offset.y) + atlas_iy);
                                 // Nearest neighbor sampling
-                                let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, vec2<i32>(atlas_uv_clamped), 0), image.alpha_type);
+                                let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, atlas_uv_clamped, 0), image.alpha_type);
                                 let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
                                 rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
                             }
@@ -1241,8 +1350,8 @@ fn main(
                             if area[i] != 0.0 {
                                 let my_xy = vec2(xy.x + f32(i), xy.y);
                                 var atlas_uv = image.matrx.xy * my_xy.x + image.matrx.zw * my_xy.y + image.xlat;
-                                atlas_uv.x = extend_mode(atlas_uv.x, image.x_extend_mode, image.extents.x);
-                                atlas_uv.y = extend_mode(atlas_uv.y, image.y_extend_mode, image.extents.y);
+                                atlas_uv.x = image_extend_mode(atlas_uv.x, image.x_extend_mode, image.extents.x);
+                                atlas_uv.y = image_extend_mode(atlas_uv.y, image.y_extend_mode, image.extents.y);
                                 atlas_uv = atlas_uv + image.atlas_offset - vec2(0.5);
                                 // TODO: If the image couldn't be added to the atlas (i.e. was too big), this isn't robust
                                 let atlas_uv_clamped = clamp(atlas_uv, image.atlas_offset, atlas_max);
@@ -1267,7 +1376,6 @@ fn main(
             default: {}
         }
     }
-    let xy_uint = vec2<u32>(xy);
     for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
         let coords = xy_uint + vec2(i, 0u);
         if coords.x < config.target_width && coords.y < config.target_height {

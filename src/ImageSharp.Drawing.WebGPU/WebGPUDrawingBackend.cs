@@ -288,13 +288,15 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.TestingComputePathDefinitionCount = 0;
         this.TestingComputePathTileBinEntryCount = 0;
 
-        if (!WebGPUSceneDispatch.TryCreateStagedScene<TPixel>(configuration, target, compositionScene.Commands, out bool exceedsBindingLimit, out WebGPUStagedScene stagedScene, out string? error))
+        if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene.Commands, out bool exceedsBindingLimit, out WebGPUStagedScene stagedScene, out string? error))
         {
             this.TestingLastGPUInitializationFailure = exceedsBindingLimit
                 ? error ?? "The staged WebGPU scene exceeded the current binding limits."
                 : error ?? "Failed to create the staged WebGPU scene.";
+            this.TestingPrepareCoverageCallCount += commandCount;
             this.TestingFallbackPrepareCoverageCallCount += commandCount;
             this.TestingFallbackCompositeCoverageCallCount += commandCount;
+            this.TestingReleaseCoverageCallCount += commandCount;
             this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
             return;
         }
@@ -313,8 +315,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
             if (WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, out error))
             {
+                this.TestingPrepareCoverageCallCount += stagedScene.EncodedScene.FillCount;
                 this.TestingGPUPrepareCoverageCallCount += stagedScene.EncodedScene.FillCount;
                 this.TestingGPUCompositeCoverageCallCount += stagedScene.EncodedScene.FillCount;
+                this.TestingReleaseCoverageCallCount += stagedScene.EncodedScene.FillCount;
                 return;
             }
 
@@ -326,8 +330,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             stagedScene.Dispose();
         }
 
+        this.TestingPrepareCoverageCallCount += commandCount;
         this.TestingFallbackPrepareCoverageCallCount += commandCount;
         this.TestingFallbackCompositeCoverageCallCount += commandCount;
+        this.TestingReleaseCoverageCallCount += commandCount;
         this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
     }
 
@@ -461,10 +467,19 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         Rectangle targetBounds = target.Bounds;
         using Buffer2D<TPixel> stagingBuffer =
-            configuration.MemoryAllocator.Allocate2D<TPixel>(targetBounds.Width, targetBounds.Height, AllocationOptions.Clean);
+            configuration.MemoryAllocator.Allocate2D<TPixel>(targetBounds.Right, targetBounds.Bottom, AllocationOptions.Clean);
 
-        Buffer2DRegion<TPixel> stagingRegion = new(stagingBuffer);
+        Buffer2DRegion<TPixel> stagingRegion = new(stagingBuffer, targetBounds);
         ICanvasFrame<TPixel> stagingFrame = new MemoryCanvasFrame<TPixel>(stagingRegion);
+
+        if (!this.TryReadRegion(
+                configuration,
+                target,
+                new Rectangle(0, 0, targetBounds.Width, targetBounds.Height),
+                stagingRegion))
+        {
+            return;
+        }
 
         this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
 
@@ -505,20 +520,21 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         MemoryAllocator allocator = configuration.MemoryAllocator;
 
         using Buffer2D<TPixel> destBuffer = allocator.Allocate2D<TPixel>(destination.Bounds.Width, destination.Bounds.Height);
-        if (!this.TryReadRegion(configuration, destination, destination.Bounds, destBuffer))
+        Buffer2DRegion<TPixel> destRegion = new(destBuffer);
+        if (!this.TryReadRegion(configuration, destination, destination.Bounds, destRegion))
         {
             return;
         }
 
         using Buffer2D<TPixel> srcBuffer = allocator.Allocate2D<TPixel>(source.Bounds.Width, source.Bounds.Height);
-        if (!this.TryReadRegion(configuration, source, source.Bounds, srcBuffer))
+        Buffer2DRegion<TPixel> srcRegion = new(srcBuffer);
+        if (!this.TryReadRegion(configuration, source, source.Bounds, srcRegion))
         {
             return;
         }
 
-        Buffer2DRegion<TPixel> destRegion = new(destBuffer);
         ICanvasFrame<TPixel> destFrame = new MemoryCanvasFrame<TPixel>(destRegion);
-        ICanvasFrame<TPixel> srcFrame = new MemoryCanvasFrame<TPixel>(new Buffer2DRegion<TPixel>(srcBuffer));
+        ICanvasFrame<TPixel> srcFrame = new MemoryCanvasFrame<TPixel>(srcRegion);
 
         this.fallbackBackend.ComposeLayer(configuration, srcFrame, destFrame, destinationOffset, options);
 

@@ -116,6 +116,15 @@ fn write_color(color: CmdColor) {
     cmd_offset += 2u;
 }
 
+fn write_recolor(source_color: u32, target_color: u32, threshold: u32) {
+    alloc_cmd(4u);
+    ptcl[cmd_offset] = CMD_RECOLOR;
+    ptcl[cmd_offset + 1u] = source_color;
+    ptcl[cmd_offset + 2u] = target_color;
+    ptcl[cmd_offset + 3u] = threshold;
+    cmd_offset += 4u;
+}
+
 fn write_grad(ty: u32, index: u32, info_offset: u32) {
     alloc_cmd(3u);
     ptcl[cmd_offset] = ty;
@@ -381,6 +390,10 @@ fn main(
                         let rgba_color = scene[dd];
                         write_color(CmdColor(rgba_color));
                     }
+                    case DRAWTAG_FILL_RECOLOR: {
+                        write_path(tile, tile_ix, draw_flags);
+                        write_recolor(scene[dd], scene[dd + 1u], scene[dd + 2u]);
+                    }
                     case DRAWTAG_BLURRED_ROUNDED_RECT: {
                         write_path(tile, tile_ix, draw_flags);
                         let rgba_color = scene[dd];
@@ -398,6 +411,12 @@ fn main(
                         let index = scene[dd];
                         let info_offset = di + 1u;
                         write_grad(CMD_RAD_GRAD, index, info_offset);
+                    }
+                    case DRAWTAG_FILL_ELLIPTIC_GRADIENT: {
+                        write_path(tile, tile_ix, draw_flags);
+                        let index = scene[dd];
+                        let info_offset = di + 1u;
+                        write_grad(CMD_ELLIPTIC_GRAD, index, info_offset);
                     }
                     case DRAWTAG_FILL_SWEEP_GRADIENT: {
                         write_path(tile, tile_ix, draw_flags);

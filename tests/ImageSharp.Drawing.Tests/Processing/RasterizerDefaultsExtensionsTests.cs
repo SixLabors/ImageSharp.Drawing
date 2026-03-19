@@ -59,7 +59,7 @@ public class RasterizerDefaultsExtensionsTests
             Configuration configuration,
             ICanvasFrame<TPixel> target,
             Rectangle sourceRectangle,
-            Buffer2D<TPixel> destination)
+            Buffer2DRegion<TPixel> destination)
             where TPixel : unmanaged, IPixel<TPixel>
             => false;
 

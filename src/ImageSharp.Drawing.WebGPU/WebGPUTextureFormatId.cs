@@ -23,32 +23,12 @@ public enum WebGPUTextureFormatId
     Rgba8Snorm = 0x14,
 
     /// <summary>
-    /// Four-channel 8-bit unsigned integer format.
-    /// </summary>
-    Rgba8Uint = 0x15,
-
-    /// <summary>
     /// Four-channel 8-bit normalized unsigned BGRA format.
     /// </summary>
     Bgra8Unorm = 0x17,
 
     /// <summary>
-    /// Four-channel 16-bit unsigned integer format.
-    /// </summary>
-    Rgba16Uint = 0x20,
-
-    /// <summary>
-    /// Four-channel 16-bit signed integer format.
-    /// </summary>
-    Rgba16Sint = 0x21,
-
-    /// <summary>
     /// Four-channel 16-bit floating-point format.
     /// </summary>
-    Rgba16Float = 0x22,
-
-    /// <summary>
-    /// Four-channel 32-bit floating-point format.
-    /// </summary>
-    Rgba32Float = 0x23,
+    Rgba16Float = 0x22
 }

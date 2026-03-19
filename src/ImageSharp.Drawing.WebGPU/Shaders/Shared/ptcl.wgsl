@@ -15,8 +15,10 @@ const CMD_FILL = 1u;
 const CMD_STROKE = 2u;
 const CMD_SOLID = 3u;
 const CMD_COLOR = 5u;
+const CMD_RECOLOR = 14u;
 const CMD_LIN_GRAD = 6u;
 const CMD_RAD_GRAD = 7u;
+const CMD_ELLIPTIC_GRAD = 15u;
 const CMD_SWEEP_GRAD = 8u;
 const CMD_IMAGE = 9u;
 const CMD_BEGIN_CLIP = 10u;
@@ -44,6 +46,12 @@ struct CmdJump {
 
 struct CmdColor {
     rgba_color: u32,
+}
+
+struct CmdRecolor {
+    source_color: u32,
+    target_color: u32,
+    threshold: f32,
 }
 
 struct CmdBlurRect {
@@ -81,6 +89,13 @@ struct CmdRadGrad {
     radius: f32,
     kind: u32,
     flags: u32,
+}
+
+struct CmdEllipticGrad {
+    index: u32,
+    extend_mode: u32,
+    matrx: vec4<f32>,
+    xlat: vec2<f32>,
 }
 
 struct CmdSweepGrad {

@@ -1098,7 +1098,11 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     private bool TryCreateProcessSourceImage(Rectangle sourceRect, [NotNullWhen(true)] out Image<TPixel>? sourceImage)
     {
         sourceImage = new Image<TPixel>(this.configuration, sourceRect.Width, sourceRect.Height);
-        if (!this.backend.TryReadRegion(this.configuration, this.targetFrame, sourceRect, sourceImage.Frames.RootFrame.PixelBuffer))
+        if (!this.backend.TryReadRegion(
+                this.configuration,
+                this.targetFrame,
+                sourceRect,
+                new Buffer2DRegion<TPixel>(sourceImage.Frames.RootFrame.PixelBuffer)))
         {
             sourceImage.Dispose();
             sourceImage = null;
