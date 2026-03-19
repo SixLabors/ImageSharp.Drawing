@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
-
 namespace SixLabors.ImageSharp.Drawing;
 
 /// <content>
@@ -17,7 +15,7 @@ public static partial class PathExtensions
     /// <returns>The reversed <see cref="IPath"/>.</returns>
     internal static IPath Reverse(this IPath path)
     {
-        IEnumerable<LinearLineSegment> segments = path.Flatten().Select(p => new LinearLineSegment(p.Points.ToArray().Reverse().ToArray()));
+        IEnumerable<LinearLineSegment> segments = path.Flatten().Select(p => new LinearLineSegment([.. p.Points.ToArray().Reverse()]));
         bool closed = false;
         if (path is ISimplePath sp)
         {

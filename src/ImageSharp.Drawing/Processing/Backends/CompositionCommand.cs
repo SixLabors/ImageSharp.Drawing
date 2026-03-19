@@ -18,7 +18,6 @@ public struct CompositionCommand
     private readonly Matrix4x4 transform;
     private readonly IReadOnlyList<IPath>? clipPaths;
     private readonly ShapeOptions shapeOptions;
-    private readonly bool enforceFillOrientation;
 
     private CompositionCommand(
         int definitionKey,
@@ -30,8 +29,7 @@ public struct CompositionCommand
         Pen? pen,
         Matrix4x4 transform,
         IReadOnlyList<IPath>? clipPaths,
-        ShapeOptions shapeOptions,
-        bool enforceFillOrientation)
+        ShapeOptions shapeOptions)
     {
         this.DefinitionKey = definitionKey;
         this.sourcePath = sourcePath;
@@ -47,7 +45,6 @@ public struct CompositionCommand
         this.transform = transform;
         this.clipPaths = clipPaths;
         this.shapeOptions = shapeOptions;
-        this.enforceFillOrientation = enforceFillOrientation;
     }
 
     /// <summary>
@@ -117,10 +114,6 @@ public struct CompositionCommand
     /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
     /// <param name="shapeOptions">Shape options for clip operations.</param>
     /// <param name="transform">Transform matrix to apply during preparation.</param>
-    /// <param name="enforceFillOrientation">
-    /// When <see langword="true"/>, preparation normalizes closed contour orientation before rasterization.
-    /// Callers should only enable this when they explicitly want contour winding rewritten.
-    /// </param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
     /// <param name="pen">Optional pen for stroke commands. The batcher expands strokes to fills.</param>
     /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
@@ -132,7 +125,6 @@ public struct CompositionCommand
         in RasterizerOptions rasterizerOptions,
         ShapeOptions shapeOptions,
         Matrix4x4 transform,
-        bool enforceFillOrientation,
         Point destinationOffset = default,
         Pen? pen = null,
         IReadOnlyList<IPath>? clipPaths = null)
@@ -149,8 +141,7 @@ public struct CompositionCommand
             pen,
             transform,
             clipPaths,
-            shapeOptions,
-            enforceFillOrientation);
+            shapeOptions);
     }
 
     /// <summary>
