@@ -390,7 +390,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         Guard.NotNull(paths, nameof(paths));
         foreach (IPath path in paths)
         {
-            this.EnqueueFillPath(brush, path, enforceFillOrientation: false);
+            this.EnqueueFillPath(brush, path);
         }
     }
 
@@ -407,7 +407,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
         Guard.NotNull(brush, nameof(brush));
-        this.EnqueueFillPath(brush, path, enforceFillOrientation: true);
+        this.EnqueueFillPath(brush, path);
     }
 
     /// <inheritdoc />
@@ -466,7 +466,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             brush,
             effectiveOptions,
             RasterizerSamplingOrigin.PixelBoundary,
-            enforceFillOrientation: false,
             state.ClipPaths);
     }
 
@@ -536,7 +535,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             pen.StrokeFill,
             effectiveOptions,
             RasterizerSamplingOrigin.PixelCenter,
-            enforceFillOrientation: false,
             state.ClipPaths,
             pen);
     }
@@ -942,7 +940,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 brush,
                 commandOptions,
                 RasterizerSamplingOrigin.PixelBoundary,
-                enforceFillOrientation: false,
                 commandClipPaths);
         }
         finally
@@ -962,10 +959,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="brush">Brush used for shading.</param>
     /// <param name="options">Effective drawing options.</param>
     /// <param name="samplingOrigin">Rasterizer sampling origin.</param>
-    /// <param name="enforceFillOrientation">
-    /// When <see langword="true"/>, preparation normalizes closed contour orientation before rasterization.
-    /// Preserving incoming contour order is required for text and other pre-authored compound paths.
-    /// </param>
     /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
     /// <param name="pen">Optional pen for stroke commands.</param>
     private void PrepareCompositionCore(
@@ -973,7 +966,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         Brush brush,
         DrawingOptions options,
         RasterizerSamplingOrigin samplingOrigin,
-        bool enforceFillOrientation,
         IReadOnlyList<IPath>? clipPaths = null,
         Pen? pen = null)
     {
@@ -1008,7 +1000,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
                 in rasterizerOptions,
                 shapeOptions,
                 options.Transform,
-                enforceFillOrientation,
                 this.targetFrame.Bounds.Location,
                 pen,
                 clipPaths));
@@ -1019,10 +1010,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// </summary>
     /// <param name="brush">Brush used for shading.</param>
     /// <param name="path">Path to fill.</param>
-    /// <param name="enforceFillOrientation">
-    /// Whether preparation should normalize closed contour winding for this specific fill.
-    /// </param>
-    private void EnqueueFillPath(Brush brush, IPath path, bool enforceFillOrientation)
+    private void EnqueueFillPath(Brush brush, IPath path)
     {
         this.EnsureNotDisposed();
         Guard.NotNull(path, nameof(path));
@@ -1036,7 +1024,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             brush,
             state.Options,
             RasterizerSamplingOrigin.PixelBoundary,
-            enforceFillOrientation,
             state.ClipPaths);
     }
 
@@ -1290,7 +1277,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             in rasterizerOptions,
             shapeOptions,
             Matrix4x4.Identity,
-            enforceFillOrientation: false,
             destinationOffset,
             pen,
             clipPaths);

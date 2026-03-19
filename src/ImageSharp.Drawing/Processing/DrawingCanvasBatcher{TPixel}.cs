@@ -3,6 +3,7 @@
 
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
