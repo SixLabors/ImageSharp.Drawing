@@ -182,25 +182,25 @@ public class FillParis
             }
         }));
 
-    //[Benchmark]
-    //public void ImageSharpWebGPU()
-    //{
-    //    using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, new DrawingOptions());
-    //    foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-    //    {
-    //        if (fill is not null)
-    //        {
-    //            canvas.Fill(fill, path);
-    //        }
+    [Benchmark]
+    public void ImageSharpWebGPU()
+    {
+       using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, new DrawingOptions());
+       foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
+       {
+           if (fill is not null)
+           {
+               canvas.Fill(fill, path);
+           }
 
-    //        if (stroke is not null)
-    //        {
-    //            canvas.Draw(stroke, path);
-    //        }
-    //    }
+           if (stroke is not null)
+           {
+               canvas.Draw(stroke, path);
+           }
+       }
 
-    //    canvas.Flush();
-    //}
+       canvas.Flush();
+    }
 
     internal static void VerifyOutput()
     {
@@ -210,7 +210,7 @@ public class FillParis
         //bench.SkiaSharp();
         // bench.SystemDrawing();
         bench.ImageSharp();
-        //bench.ImageSharpWebGPU();
+        bench.ImageSharpWebGPU();
         Console.WriteLine($"WebGPU diagnostic GPU composites: {bench.webGpuBackend.DiagnosticGpuCompositeCount}");
         Console.WriteLine($"WebGPU diagnostic fallback composites: {bench.webGpuBackend.DiagnosticFallbackCompositeCount}");
         Console.WriteLine($"WebGPU diagnostic last failure: {bench.webGpuBackend.DiagnosticLastSceneFailure}");

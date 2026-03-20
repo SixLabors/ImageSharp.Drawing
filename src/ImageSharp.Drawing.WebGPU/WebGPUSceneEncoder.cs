@@ -29,6 +29,10 @@ internal static class WebGPUSceneEncoder
     private const byte PathTagPath = 0x10;
     private const byte PathTagStyle = 0x40;
     private const byte PathTagSubpathEnd = 0x04;
+    private const int StyleBlendModeShift = 1;
+    private const uint StyleBlendModeMask = 0x1FFFU << StyleBlendModeShift;
+    private const int StyleBlendAlphaShift = 14;
+    private const uint StyleBlendAlphaMask = 0xFFFFU << StyleBlendAlphaShift;
     private const uint StyleFlagsFill = 0x40000000U;
 
     /// <summary>
@@ -102,6 +106,7 @@ internal static class WebGPUSceneEncoder
             this.PathCount = 0;
             this.LineCount = 0;
             this.InfoWordCount = 0;
+            this.ClipCount = 0;
             this.TotalTileMembershipCount = 0;
             this.GradientRowCount = 0;
             this.hasLastStyle = false;
@@ -136,6 +141,8 @@ internal static class WebGPUSceneEncoder
         public int LineCount { get; private set; }
 
         public int InfoWordCount { get; private set; }
+
+        public int ClipCount { get; private set; }
 
         public int TotalTileMembershipCount { get; private set; }
 
@@ -174,11 +181,11 @@ internal static class WebGPUSceneEncoder
         {
             for (int i = 0; i < commands.Count; i++)
             {
-                this.Append(commands[i], targetBounds);
+                this.Append(commands[i]);
             }
         }
 
-        private void Append(in CompositionCommand command, in Rectangle targetBounds)
+        private void Append(in CompositionCommand command)
         {
             if (!command.IsVisible)
             {
@@ -188,9 +195,14 @@ internal static class WebGPUSceneEncoder
             IPath preparedPath = command.PreparedPath
                 ?? throw new InvalidOperationException("Commands must be prepared before GPU scene encoding.");
 
+            this.AppendPlainFill(command, preparedPath);
+        }
+
+        private void AppendPlainFill(in CompositionCommand command, IPath preparedPath)
+        {
             uint drawTag = GetDrawTag(command);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1) = GetFillStyle(command.RasterizerOptions.IntersectionRule);
+            (uint style0, uint style1) = GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
 
@@ -234,12 +246,77 @@ internal static class WebGPUSceneEncoder
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
 
-            Rectangle destinationRegion = command.DestinationRegion;
-            int tileMinX = Math.Max(0, destinationRegion.Left / TileWidth);
-            int tileMinY = Math.Max(0, destinationRegion.Top / TileHeight);
-            int tileMaxX = Math.Max(tileMinX + 1, DivideRoundUp(destinationRegion.Right, TileWidth));
-            int tileMaxY = Math.Max(tileMinY + 1, DivideRoundUp(destinationRegion.Bottom, TileHeight));
-            this.TotalTileMembershipCount += (tileMaxX - tileMinX) * (tileMaxY - tileMinY);
+            this.TotalTileMembershipCount += CountTileMembership(command.DestinationRegion);
+        }
+
+        private void AppendLayeredFill(in CompositionCommand command, IPath preparedPath)
+        {
+            Rectangle layerBounds = Rectangle.Inflate(command.DestinationRegion, 1, 1);
+            (uint style0, uint style1) = GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule);
+            int pathTagCheckpoint = this.PathTags.Count;
+            int styleCheckpoint = this.Styles.Count;
+
+            if (!this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1)
+            {
+                this.PathTags.Add(PathTagStyle);
+                this.Styles.Add(style0);
+                this.Styles.Add(style1);
+            }
+
+            if (EncodeRectanglePath(layerBounds, ref this.PathTags, ref this.PathData, out int clipLineCount) == 0)
+            {
+                this.PathTags.SetCount(pathTagCheckpoint);
+                this.Styles.SetCount(styleCheckpoint);
+                return;
+            }
+
+            this.hasLastStyle = true;
+            this.lastStyle0 = style0;
+            this.lastStyle1 = style1;
+            this.PathCount++;
+            this.LineCount += clipLineCount;
+            this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
+            this.DrawTags.Add(GpuSceneDrawTag.BeginClip);
+            AppendBeginClipData(command.GraphicsOptions, ref this.DrawData);
+            this.ClipCount++;
+            this.TotalTileMembershipCount += CountTileMembership(layerBounds);
+
+            uint fillDrawTag = GetDrawTag(command);
+            GpuSceneDrawMonoid fillDrawTagMonoid = GpuSceneDrawTag.Map(fillDrawTag);
+            int encodedPathCount = EncodePath(
+                command,
+                preparedPath,
+                ref this.PathTags,
+                ref this.PathData,
+                out int geometryLineCount,
+                out _);
+
+            if (encodedPathCount == 0)
+            {
+                throw new InvalidOperationException("A visible layered command encoded an empty fill path.");
+            }
+
+            this.FillCount++;
+            this.PathCount += encodedPathCount;
+            this.LineCount += geometryLineCount;
+            this.InfoWordCount += (int)fillDrawTagMonoid.InfoOffset;
+            this.DrawTags.Add(fillDrawTag);
+            int gradientRowCount = this.GradientRowCount;
+            AppendDrawData(
+                command,
+                fillDrawTag,
+                ref this.DrawData,
+                ref this.GradientPixels,
+                this.Images,
+                ref gradientRowCount);
+            this.GradientRowCount = gradientRowCount;
+            this.TotalTileMembershipCount += CountTileMembership(command.DestinationRegion);
+
+            this.DrawTags.Add(GpuSceneDrawTag.EndClip);
+            this.PathTags.Add(PathTagPath);
+            this.PathCount++;
+            this.ClipCount++;
+            this.TotalTileMembershipCount += CountTileMembership(layerBounds);
         }
     }
 
@@ -263,9 +340,9 @@ internal static class WebGPUSceneEncoder
             int styleBase = transformBase + transformWordCount;
             int sceneWordCount = styleBase + styleWordCount;
             GpuSceneLayout layout = new(
-                (uint)encoding.FillCount,
+                (uint)drawTagCount,
                 (uint)encoding.PathCount,
-                0U,
+                (uint)encoding.ClipCount,
                 (uint)encoding.InfoWordCount,
                 0U,
                 (uint)pathTagWordCount,
@@ -307,7 +384,7 @@ internal static class WebGPUSceneEncoder
                     drawDataWordCount,
                     transformWordCount,
                     styleWordCount,
-                    0,
+                    encoding.ClipCount,
                     0,
                     0,
                     encoding.TotalTileMembershipCount,
@@ -370,7 +447,12 @@ internal static class WebGPUSceneEncoder
     {
         Rectangle interest = command.RasterizerOptions.Interest;
         float samplingOffset = command.RasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+        float translateX = command.DestinationRegion.X - command.SourceOffset.X;
         float translateY = command.DestinationRegion.Y - command.SourceOffset.Y;
+
+        // Move path points from interest-local coverage space into target-local space.
+        float pointTranslateX = translateX + samplingOffset - interest.Left;
+        float pointTranslateY = translateY + samplingOffset - interest.Top;
         pathSegmentCount = 0;
         lineCount = 0;
 
@@ -390,8 +472,8 @@ internal static class WebGPUSceneEncoder
 
             // Emit moveto for the first point of each subpath.
             PointF startPoint = points[0];
-            float firstX = startPoint.X + samplingOffset;
-            float firstY = startPoint.Y + samplingOffset;
+            float firstX = startPoint.X + pointTranslateX;
+            float firstY = startPoint.Y + pointTranslateY;
             pathData.Add(BitcastSingle(firstX));
             pathData.Add(BitcastSingle(firstY));
             float currentX = firstX;
@@ -406,8 +488,8 @@ internal static class WebGPUSceneEncoder
                     continue;
                 }
 
-                float translatedEndX = p1.X + samplingOffset;
-                float translatedEndY = p1.Y + samplingOffset;
+                float translatedEndX = p1.X + pointTranslateX;
+                float translatedEndY = p1.Y + pointTranslateY;
                 pathData.Add(BitcastSingle(translatedEndX));
                 pathData.Add(BitcastSingle(translatedEndY));
                 pathTags.Add(PathTagLineToF32);
@@ -449,6 +531,47 @@ internal static class WebGPUSceneEncoder
         return 1;
     }
 
+    private static int EncodeRectanglePath(
+        in Rectangle rectangle,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        out int lineCount)
+    {
+        lineCount = 0;
+        if (rectangle.Width <= 0 || rectangle.Height <= 0)
+        {
+            return 0;
+        }
+
+        float left = rectangle.Left;
+        float top = rectangle.Top;
+        float right = rectangle.Right;
+        float bottom = rectangle.Bottom;
+
+        pathData.Add(BitcastSingle(left));
+        pathData.Add(BitcastSingle(top));
+
+        pathData.Add(BitcastSingle(right));
+        pathData.Add(BitcastSingle(top));
+        pathTags.Add(PathTagLineToF32);
+
+        pathData.Add(BitcastSingle(right));
+        pathData.Add(BitcastSingle(bottom));
+        pathTags.Add(PathTagLineToF32);
+
+        pathData.Add(BitcastSingle(left));
+        pathData.Add(BitcastSingle(bottom));
+        pathTags.Add(PathTagLineToF32);
+
+        pathData.Add(BitcastSingle(left));
+        pathData.Add(BitcastSingle(top));
+        pathTags.Add(PathTagLineToF32 | PathTagSubpathEnd);
+
+        pathTags.Add(PathTagPath);
+        lineCount = 2;
+        return 1;
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void AppendTransform(GpuSceneTransform transform, ref OwnedStream<uint> transforms)
     {
@@ -465,8 +588,19 @@ internal static class WebGPUSceneEncoder
         => AppendTransform(GpuSceneTransform.Identity, ref transforms);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static (uint Style0, uint Style1) GetFillStyle(IntersectionRule intersectionRule)
-        => (intersectionRule == IntersectionRule.EvenOdd ? StyleFlagsFill : 0U, 0U);
+    private static (uint Style0, uint Style1) GetFillStyle(GraphicsOptions options, IntersectionRule intersectionRule)
+    {
+        uint style0 = intersectionRule == IntersectionRule.EvenOdd ? StyleFlagsFill : 0U;
+        uint packedBlendMode = PackBlendMode(options);
+        uint packedBlendAlpha = PackBlendAlpha(options.BlendPercentage);
+        style0 |= (packedBlendMode << StyleBlendModeShift) & StyleBlendModeMask;
+        style0 |= (packedBlendAlpha << StyleBlendAlphaShift) & StyleBlendAlphaMask;
+        return (style0, 0U);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint PackBlendAlpha(float blendPercentage)
+        => (uint)Math.Clamp((int)MathF.Round(Math.Clamp(blendPercentage, 0F, 1F) * 65535F), 0, 65535);
 
     private static void PackSceneData(
         GpuSceneLayout layout,
@@ -533,6 +667,16 @@ internal static class WebGPUSceneEncoder
         => value + ((alignment - (value % alignment)) % alignment);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int CountTileMembership(in Rectangle destinationRegion)
+    {
+        int tileMinX = Math.Max(0, destinationRegion.Left / TileWidth);
+        int tileMinY = Math.Max(0, destinationRegion.Top / TileHeight);
+        int tileMaxX = Math.Max(tileMinX + 1, DivideRoundUp(destinationRegion.Right, TileWidth));
+        int tileMaxY = Math.Max(tileMinY + 1, DivideRoundUp(destinationRegion.Bottom, TileHeight));
+        return (tileMaxX - tileMinX) * (tileMaxY - tileMinY);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackSolidColor(SolidBrush solidBrush)
     {
         Vector4 color = solidBrush.Color.ToScaledVector4();
@@ -553,6 +697,9 @@ internal static class WebGPUSceneEncoder
         Brush brush = command.Brush;
         switch (drawTag)
         {
+            case GpuSceneDrawTag.BeginClip:
+                AppendBeginClipData(command.GraphicsOptions, ref drawData);
+                break;
             case GpuSceneDrawTag.FillColor:
                 drawData.Add(PackSolidColor((SolidBrush)brush));
                 break;
@@ -578,6 +725,51 @@ internal static class WebGPUSceneEncoder
                 throw new UnreachableException($"Unsupported draw tag '{drawTag}' reached scene draw-data encoding.");
         }
     }
+
+    private static void AppendBeginClipData(GraphicsOptions options, ref OwnedStream<uint> drawData)
+    {
+        drawData.Add(PackBlendMode(options));
+        drawData.Add(BitcastSingle(Math.Clamp(options.BlendPercentage, 0F, 1F)));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint PackBlendMode(GraphicsOptions options)
+        => (MapColorBlendMode(options.ColorBlendingMode) << 8) | MapAlphaCompositionMode(options.AlphaCompositionMode);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint MapColorBlendMode(PixelColorBlendingMode mode)
+        => mode switch
+        {
+            PixelColorBlendingMode.Normal => 0U,
+            PixelColorBlendingMode.Multiply => 1U,
+            PixelColorBlendingMode.Add => 16U,
+            PixelColorBlendingMode.Subtract => 17U,
+            PixelColorBlendingMode.Screen => 2U,
+            PixelColorBlendingMode.Darken => 4U,
+            PixelColorBlendingMode.Lighten => 5U,
+            PixelColorBlendingMode.Overlay => 3U,
+            PixelColorBlendingMode.HardLight => 8U,
+            _ => throw new UnreachableException($"Unsupported color blending mode '{mode}'.")
+        };
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint MapAlphaCompositionMode(PixelAlphaCompositionMode mode)
+        => mode switch
+        {
+            PixelAlphaCompositionMode.SrcOver => 3U,
+            PixelAlphaCompositionMode.Src => 1U,
+            PixelAlphaCompositionMode.SrcAtop => 9U,
+            PixelAlphaCompositionMode.SrcIn => 5U,
+            PixelAlphaCompositionMode.SrcOut => 7U,
+            PixelAlphaCompositionMode.Dest => 2U,
+            PixelAlphaCompositionMode.DestAtop => 10U,
+            PixelAlphaCompositionMode.DestOver => 4U,
+            PixelAlphaCompositionMode.DestIn => 6U,
+            PixelAlphaCompositionMode.DestOut => 8U,
+            PixelAlphaCompositionMode.Clear => 0U,
+            PixelAlphaCompositionMode.Xor => 11U,
+            _ => throw new UnreachableException($"Unsupported alpha composition mode '{mode}'.")
+        };
 
     private static void AppendRecolorData(RecolorBrush brush, ref OwnedStream<uint> drawData)
     {

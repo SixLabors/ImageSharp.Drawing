@@ -1048,6 +1048,8 @@ internal static class GpuSceneDrawTag
     public const uint FillEllipticGradient = 0x1D8U;
     public const uint FillSweepGradient = 0x254U;
     public const uint FillImage = 0x294U;
+    public const uint BeginClip = 0x49U;
+    public const uint EndClip = 0x21U;
     public const uint FillInfoFlagsFillRuleBit = 1U;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

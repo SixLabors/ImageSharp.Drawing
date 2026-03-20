@@ -31,7 +31,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// </summary>
     /// <param name="segments">The segments.</param>
     public Path(IEnumerable<ILineSegment> segments)
-        : this(segments.ToArray())
+        : this(GetSegmentArray(segments))
     {
     }
 
@@ -134,6 +134,12 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
         => this.internalPathRings ??= [this.InnerPath];
+
+    private static ILineSegment[] GetSegmentArray(IEnumerable<ILineSegment> segments)
+    {
+        Guard.NotNull(segments, nameof(segments));
+        return segments as ILineSegment[] ?? [.. segments];
+    }
 
     /// <summary>
     /// Converts an SVG path string into an <see cref="IPath"/>.

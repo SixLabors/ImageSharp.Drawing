@@ -110,19 +110,21 @@ fn write_path(tile: Tile, tile_ix: u32, draw_flags: u32) {
 }
 
 fn write_color(color: CmdColor) {
-    alloc_cmd(2u);
+    alloc_cmd(3u);
     ptcl[cmd_offset] = CMD_COLOR;
     ptcl[cmd_offset + 1u] = color.rgba_color;
-    cmd_offset += 2u;
+    ptcl[cmd_offset + 2u] = color.draw_flags;
+    cmd_offset += 3u;
 }
 
-fn write_recolor(source_color: u32, target_color: u32, threshold: u32) {
-    alloc_cmd(4u);
+fn write_recolor(source_color: u32, target_color: u32, threshold: u32, draw_flags: u32) {
+    alloc_cmd(5u);
     ptcl[cmd_offset] = CMD_RECOLOR;
     ptcl[cmd_offset + 1u] = source_color;
     ptcl[cmd_offset + 2u] = target_color;
     ptcl[cmd_offset + 3u] = threshold;
-    cmd_offset += 4u;
+    ptcl[cmd_offset + 4u] = draw_flags;
+    cmd_offset += 5u;
 }
 
 fn write_grad(ty: u32, index: u32, info_offset: u32) {
@@ -388,17 +390,17 @@ fn main(
                     case DRAWTAG_FILL_COLOR: {
                         write_path(tile, tile_ix, draw_flags);
                         let rgba_color = scene[dd];
-                        write_color(CmdColor(rgba_color));
+                        write_color(CmdColor(rgba_color, draw_flags));
                     }
                     case DRAWTAG_FILL_RECOLOR: {
                         write_path(tile, tile_ix, draw_flags);
-                        write_recolor(scene[dd], scene[dd + 1u], scene[dd + 2u]);
+                        write_recolor(scene[dd], scene[dd + 1u], scene[dd + 2u], draw_flags);
                     }
                     case DRAWTAG_BLURRED_ROUNDED_RECT: {
                         write_path(tile, tile_ix, draw_flags);
                         let rgba_color = scene[dd];
                         let info_offset = di + 1u;
-                        write_blurred_rounded_rect(CmdColor(rgba_color), info_offset);
+                        write_blurred_rounded_rect(CmdColor(rgba_color, draw_flags), info_offset);
                     }
                     case DRAWTAG_FILL_LIN_GRADIENT: {
                         write_path(tile, tile_ix, draw_flags);

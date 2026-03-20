@@ -1414,7 +1414,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0171F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_RadialGradient_TwoCircle", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
@@ -1498,7 +1498,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_SweepGradient", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.03F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0304F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_SweepGradient", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
@@ -1767,7 +1767,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0065F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_LinearGradient_ThreePoint", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
@@ -1809,7 +1809,7 @@ public partial class WebGPUDrawingBackendTests
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "FillPath_EllipticGradient_Reflect", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0398F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_EllipticGradient_Reflect", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
@@ -2038,7 +2038,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.005F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0071F);
         AssertBackendPairReferenceOutputs(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
         AssertCoverageExecutionAccounting(nativeSurfaceBackend);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);

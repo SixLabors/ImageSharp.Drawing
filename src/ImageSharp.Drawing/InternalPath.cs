@@ -26,6 +26,11 @@ internal class InternalPath
     private readonly PointData[] points;
 
     /// <summary>
+    /// Materialized points projected from <see cref="points"/>.
+    /// </summary>
+    private PointF[]? materializedPoints;
+
+    /// <summary>
     /// The closed path.
     /// </summary>
     private readonly bool closedPath;
@@ -122,7 +127,7 @@ internal class InternalPath
     /// Gets the points.
     /// </summary>
     /// <returns>The <see cref="IReadOnlyCollection{PointF}"/></returns>
-    internal ReadOnlyMemory<PointF> Points() => this.points.Select(x => x.Point).ToArray();
+    internal ReadOnlyMemory<PointF> Points() => this.materializedPoints ??= this.CreatePoints();
 
     /// <summary>
     /// Calculates the point a certain distance a path.
@@ -181,6 +186,17 @@ internal class InternalPath
     // Modulo is a very slow operation.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int WrapArrayIndex(int i, int arrayLength) => i < arrayLength ? i : i - arrayLength;
+
+    private PointF[] CreatePoints()
+    {
+        PointF[] result = new PointF[this.points.Length];
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = this.points[i].Point;
+        }
+
+        return result;
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static PointOrientation CalculateOrientation(Vector2 p, Vector2 q, Vector2 r)

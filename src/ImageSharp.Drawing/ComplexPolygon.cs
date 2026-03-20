@@ -88,13 +88,13 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     /// <inheritdoc />
     public IEnumerable<ISimplePath> Flatten()
     {
-        List<ISimplePath> paths = [];
+        List<ISimplePath> paths = new(this.paths.Length);
         foreach (IPath path in this.Paths)
         {
             paths.AddRange(path.Flatten());
         }
 
-        return paths.ToArray();
+        return paths;
     }
 
     /// <inheritdoc/>

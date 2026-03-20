@@ -15,7 +15,8 @@ public static partial class PathExtensions
     /// <returns>The reversed <see cref="IPath"/>.</returns>
     internal static IPath Reverse(this IPath path)
     {
-        IEnumerable<LinearLineSegment> segments = path.Flatten().Select(p => new LinearLineSegment([.. p.Points.ToArray().Reverse()]));
+        // TODO. Make this a void. We can reverse the segments in place and then reverse the points in place as well.
+        IEnumerable<LinearLineSegment> segments = path.Flatten().Select(static p => new LinearLineSegment(ReversePoints(p.Points.Span)));
         bool closed = false;
         if (path is ISimplePath sp)
         {
@@ -23,5 +24,16 @@ public static partial class PathExtensions
         }
 
         return closed ? new Polygon(segments) : new Path(segments);
+    }
+
+    private static PointF[] ReversePoints(ReadOnlySpan<PointF> points)
+    {
+        PointF[] reversed = new PointF[points.Length];
+        for (int i = 0; i < reversed.Length; i++)
+        {
+            reversed[i] = points[points.Length - 1 - i];
+        }
+
+        return reversed;
     }
 }

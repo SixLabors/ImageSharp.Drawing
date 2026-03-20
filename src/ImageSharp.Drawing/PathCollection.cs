@@ -20,7 +20,7 @@ public class PathCollection : IPathCollection
     /// </summary>
     /// <param name="paths">The collection of paths</param>
     public PathCollection(IEnumerable<IPath> paths)
-        : this(paths.ToArray())
+        : this(GetPathArray(paths))
     {
     }
 
@@ -77,4 +77,10 @@ public class PathCollection : IPathCollection
 
     /// <inheritdoc />
     IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<IPath>)this.paths).GetEnumerator();
+
+    private static IPath[] GetPathArray(IEnumerable<IPath> paths)
+    {
+        Guard.NotNull(paths, nameof(paths));
+        return paths as IPath[] ?? [.. paths];
+    }
 }

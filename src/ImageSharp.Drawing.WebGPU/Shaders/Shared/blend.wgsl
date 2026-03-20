@@ -9,6 +9,8 @@ const MIX_SCREEN = 2u;
 const MIX_OVERLAY = 3u;
 const MIX_DARKEN = 4u;
 const MIX_LIGHTEN = 5u;
+const MIX_ADD = 16u;
+const MIX_SUBTRACT = 17u;
 const MIX_COLOR_DODGE = 6u;
 const MIX_COLOR_BURN = 7u;
 const MIX_HARD_LIGHT = 8u;
@@ -161,6 +163,12 @@ fn blend_mix(cb: vec3<f32>, cs: vec3<f32>, mode: u32) -> vec3<f32> {
         }
         case MIX_LIGHTEN: {
             b = max(cb, cs);
+        }
+        case MIX_ADD: {
+            b = min(vec3(1.0), cb + cs);
+        }
+        case MIX_SUBTRACT: {
+            b = max(vec3(0.0), cb - cs);
         }
         case MIX_COLOR_DODGE: {
             b = vec3(color_dodge(cb.x, cs.x), color_dodge(cb.y, cs.y), color_dodge(cb.z, cs.z));

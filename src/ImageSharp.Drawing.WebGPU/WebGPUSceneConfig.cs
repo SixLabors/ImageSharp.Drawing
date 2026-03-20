@@ -126,7 +126,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
 
     public static WebGPUSceneWorkgroupCounts Create(WebGPUEncodedScene scene)
     {
-        uint drawObjectCount = checked((uint)scene.FillCount);
+        uint drawObjectCount = checked((uint)scene.DrawTagCount);
         uint pathCount = checked((uint)scene.PathCount);
         uint lineCount = checked((uint)scene.LineCount);
         uint clipCount = checked((uint)scene.ClipCount);
@@ -293,7 +293,7 @@ internal readonly struct WebGPUSceneBufferSizes
         uint pathReducedScanCount = reducedSize;
         uint pathMonoidCount = pathTagWgs * 256U;
         uint pathBboxCount = checked((uint)scene.PathCount);
-        uint drawObjectCount = checked((uint)scene.FillCount);
+        uint drawObjectCount = checked((uint)scene.DrawTagCount);
         uint drawReducedCount = workgroupCounts.DrawReduceX;
         uint drawMonoidCount = drawObjectCount;
         uint infoCount = checked((uint)scene.InfoWordCount);

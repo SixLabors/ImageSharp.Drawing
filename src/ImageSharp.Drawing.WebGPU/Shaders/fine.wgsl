@@ -13,6 +13,7 @@ struct Tile {
 
 #import segment
 #import config
+#import drawtag
 
 @group(0) @binding(0)
 var<uniform> config: Config;
@@ -737,14 +738,16 @@ fn read_fill(cmd_ix: u32) -> CmdFill {
 
 fn read_color(cmd_ix: u32) -> CmdColor {
     let rgba_color = ptcl[cmd_ix + 1u];
-    return CmdColor(rgba_color);
+    let draw_flags = ptcl[cmd_ix + 2u];
+    return CmdColor(rgba_color, draw_flags);
 }
 
 fn read_recolor(cmd_ix: u32) -> CmdRecolor {
     let source_color = ptcl[cmd_ix + 1u];
     let target_color = ptcl[cmd_ix + 2u];
     let threshold = bitcast<f32>(ptcl[cmd_ix + 3u]);
-    return CmdRecolor(source_color, target_color, threshold);
+    let draw_flags = ptcl[cmd_ix + 4u];
+    return CmdRecolor(source_color, target_color, threshold, draw_flags);
 }
 
 fn read_blur_rect(cmd_ix: u32) -> CmdBlurRect {
@@ -854,6 +857,109 @@ fn read_end_clip(cmd_ix: u32) -> CmdEndClip {
     let blend = ptcl[cmd_ix + 1u];
     let alpha = bitcast<f32>(ptcl[cmd_ix + 2u]);
     return CmdEndClip(blend, alpha);
+}
+
+fn read_draw_blend_mode(draw_flags: u32) -> u32 {
+    return (draw_flags & DRAW_FLAGS_BLEND_MODE_MASK) >> DRAW_FLAGS_BLEND_MODE_SHIFT;
+}
+
+fn read_draw_mix_mode(draw_flags: u32) -> u32 {
+    return read_draw_blend_mode(draw_flags) >> 8u;
+}
+
+fn read_draw_compose_mode(draw_flags: u32) -> u32 {
+    return read_draw_blend_mode(draw_flags) & 0xffu;
+}
+
+fn read_draw_blend_alpha(draw_flags: u32) -> f32 {
+    let packed = (draw_flags & DRAW_FLAGS_BLEND_ALPHA_MASK) >> DRAW_FLAGS_BLEND_ALPHA_SHIFT;
+    return f32(packed) / 65535.0;
+}
+
+fn is_default_draw_blend(draw_flags: u32) -> bool {
+    return read_draw_blend_mode(draw_flags) == ((MIX_NORMAL << 8u) | COMPOSE_SRC_OVER)
+        && (draw_flags & DRAW_FLAGS_BLEND_ALPHA_MASK) == DRAW_FLAGS_BLEND_ALPHA_MASK;
+}
+
+fn compose_draw(backdrop: vec4<f32>, source: vec4<f32>, draw_flags: u32) -> vec4<f32> {
+    let effective_alpha = source.a * read_draw_blend_alpha(draw_flags);
+    if effective_alpha <= (0.5 / 255.0) {
+        return backdrop;
+    }
+
+    if is_default_draw_blend(draw_flags) {
+        return backdrop * (1.0 - source.a) + source;
+    }
+
+    let cb = unpremultiply(backdrop);
+    let cs = unpremultiply(source);
+    let ab = backdrop.a;
+    let as_ = effective_alpha;
+    let mix_mode = read_draw_mix_mode(draw_flags);
+    let compose_mode = read_draw_compose_mode(draw_flags);
+    let shared_alpha = as_ * ab;
+
+    switch compose_mode {
+        case COMPOSE_CLEAR: {
+            return vec4(0.0);
+        }
+        case COMPOSE_COPY: {
+            return vec4(cs * as_, as_);
+        }
+        case COMPOSE_DEST: {
+            return backdrop;
+        }
+        case COMPOSE_SRC_OVER: {
+            let blend = blend_mix(cb, cs, mix_mode);
+            let dst_weight = ab - shared_alpha;
+            let src_weight = as_ - shared_alpha;
+            let alpha = dst_weight + as_;
+            let premul = (cb * dst_weight) + (cs * src_weight) + (blend * shared_alpha);
+            return vec4(premul, alpha);
+        }
+        case COMPOSE_DEST_OVER: {
+            let blend = blend_mix(cs, cb, mix_mode);
+            let dst_weight = as_ - shared_alpha;
+            let src_weight = ab - shared_alpha;
+            let alpha = dst_weight + ab;
+            let premul = (cs * dst_weight) + (cb * src_weight) + (blend * shared_alpha);
+            return vec4(premul, alpha);
+        }
+        case COMPOSE_SRC_IN: {
+            return vec4(cs * shared_alpha, shared_alpha);
+        }
+        case COMPOSE_DEST_IN: {
+            return vec4(cb * shared_alpha, shared_alpha);
+        }
+        case COMPOSE_SRC_OUT: {
+            let alpha = as_ * (1.0 - ab);
+            return vec4(cs * alpha, alpha);
+        }
+        case COMPOSE_DEST_OUT: {
+            let alpha = ab * (1.0 - as_);
+            return vec4(cb * alpha, alpha);
+        }
+        case COMPOSE_SRC_ATOP: {
+            let blend = blend_mix(cb, cs, mix_mode);
+            let dst_weight = ab - shared_alpha;
+            let premul = (cb * dst_weight) + (blend * shared_alpha);
+            return vec4(premul, ab);
+        }
+        case COMPOSE_DEST_ATOP: {
+            let blend = blend_mix(cs, cb, mix_mode);
+            let dst_weight = as_ - shared_alpha;
+            let premul = (cs * dst_weight) + (blend * shared_alpha);
+            return vec4(premul, as_);
+        }
+        case COMPOSE_XOR: {
+            let src_weight = as_ * (1.0 - ab);
+            let dst_weight = ab * (1.0 - as_);
+            return vec4((cs * src_weight) + (cb * dst_weight), src_weight + dst_weight);
+        }
+        default: {
+            return blend_mix_compose(backdrop, source * read_draw_blend_alpha(draw_flags), read_draw_blend_mode(draw_flags));
+        }
+    }
 }
 
 const PIXEL_FORMAT_RGBA: u32 = 0u;
@@ -1088,28 +1194,33 @@ fn main(
                 let color = read_color(cmd_ix);
                 let fg = unpack4x8unorm(color.rgba_color);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let fg_i = fg * area[i];
-                    rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                    if area[i] != 0.0 {
+                        let fg_i = fg * area[i];
+                        rgba[i] = compose_draw(rgba[i], fg_i, color.draw_flags);
+                    }
                 }
-                cmd_ix += 2u;
+                cmd_ix += 3u;
             }
             case CMD_RECOLOR: {
                 let recolor = read_recolor(cmd_ix);
                 let source = unpack4x8unorm(recolor.source_color);
                 let target_color = unpack4x8unorm(recolor.target_color);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let bg = rgba[i];
-                    let bg_sep = vec4(bg.rgb / max(bg.a, 1e-6), bg.a);
-                    let delta = bg_sep - source;
-                    let distance = dot(delta, delta);
-                    if distance <= recolor.threshold {
-                        let t = (recolor.threshold - distance) / recolor.threshold;
-                        let target_premul = premul_alpha(target_color);
-                        let recolored = target_premul * t + bg * (1.0 - target_color.a * t);
-                        rgba[i] = bg * (1.0 - area[i]) + recolored * area[i];
+                    if area[i] != 0.0 {
+                        let bg = rgba[i];
+                        let bg_sep = vec4(bg.rgb / max(bg.a, 1e-6), bg.a);
+                        let delta = bg_sep - source;
+                        let distance = dot(delta, delta);
+                        if distance <= recolor.threshold {
+                            let t = (recolor.threshold - distance) / recolor.threshold;
+                            let target_premul = premul_alpha(target_color);
+                            let recolored = target_premul * t + bg * (1.0 - target_color.a * t);
+                            let fg = (recolored - bg) * area[i] + bg * area[i];
+                            rgba[i] = compose_draw(bg, fg, recolor.draw_flags);
+                        }
                     }
                 }
-                cmd_ix += 4u;
+                cmd_ix += 5u;
             }
             case CMD_BEGIN_CLIP: {
                 if clip_depth < BLEND_STACK_SPLIT {
@@ -1211,25 +1322,32 @@ fn main(
                     let alpha = scale * (erf7(inv_std_dev * (min_edge + d)) - erf7(inv_std_dev * d));
 
                     let fg_rgba = blur_rgba * alpha;
-                    let fg_i = fg_rgba * area[i];
-                    rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                    if area[i] != 0.0 {
+                        let draw_flags = info[ptcl[cmd_ix + 1u] - 1u];
+                        let fg_i = fg_rgba * area[i];
+                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                    }
                 }
                 cmd_ix += 3u;
             }
             case CMD_LIN_GRAD: {
                 let lin = read_lin_grad(cmd_ix);
+                let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 let d = lin.line_x * (xy.x + 0.5) + lin.line_y * (xy.y + 0.5) + lin.line_c;
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let my_d = d + lin.line_x * f32(i);
-                    let x = i32(round(extend_mode_normalized(my_d, lin.extend_mode) * f32(GRADIENT_WIDTH - 1)));
-                    let fg_rgba = textureLoad(gradients, vec2(x, i32(lin.index)), 0);
-                    let fg_i = fg_rgba * area[i];
-                    rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                    if area[i] != 0.0 {
+                        let my_d = d + lin.line_x * f32(i);
+                        let x = i32(round(extend_mode_normalized(my_d, lin.extend_mode) * f32(GRADIENT_WIDTH - 1)));
+                        let fg_rgba = textureLoad(gradients, vec2(x, i32(lin.index)), 0);
+                        let fg_i = fg_rgba * area[i];
+                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                    }
                 }
                 cmd_ix += 3u;
             }
             case CMD_RAD_GRAD: {
                 let rad = read_rad_grad(cmd_ix);
+                let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 let focal_x = rad.focal_x;
                 let radius = rad.radius;
                 let is_strip = rad.kind == RAD_GRAD_KIND_STRIP;
@@ -1268,63 +1386,70 @@ fn main(
                         let x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
                         let fg_rgba = textureLoad(gradients, vec2(x, i32(rad.index)), 0);
                         let fg_i = fg_rgba * area[i];
-                        rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
                     }
                 }
                 cmd_ix += 3u;
             }
             case CMD_ELLIPTIC_GRAD: {
                 let elliptic = read_elliptic_grad(cmd_ix);
+                let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
-                    let local_xy = elliptic.matrx.xy * my_xy.x + elliptic.matrx.zw * my_xy.y + elliptic.xlat;
-                    let radius = length(local_xy);
-                    if radius == radius {
-                        let t = extend_mode_normalized(radius, elliptic.extend_mode);
-                        let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
-                        let fg_rgba = textureLoad(gradients, vec2(ramp_x, i32(elliptic.index)), 0);
-                        let fg_i = fg_rgba * area[i];
-                        rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                    if area[i] != 0.0 {
+                        let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                        let local_xy = elliptic.matrx.xy * my_xy.x + elliptic.matrx.zw * my_xy.y + elliptic.xlat;
+                        let radius = length(local_xy);
+                        if radius == radius {
+                            let t = extend_mode_normalized(radius, elliptic.extend_mode);
+                            let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
+                            let fg_rgba = textureLoad(gradients, vec2(ramp_x, i32(elliptic.index)), 0);
+                            let fg_i = fg_rgba * area[i];
+                            rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                        }
                     }
                 }
                 cmd_ix += 3u;
             }
             case CMD_SWEEP_GRAD: {
                 let sweep = read_sweep_grad(cmd_ix);
+                let draw_flags = info[ptcl[cmd_ix + 2u] - 1u];
                 let scale = 1.0 / (sweep.t1 - sweep.t0);
                 for (var i = 0u; i < PIXELS_PER_THREAD; i += 1u) {
-                    let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
-                    let local_xy = sweep.matrx.xy * my_xy.x + sweep.matrx.zw * my_xy.y + sweep.xlat;
-                    let x = local_xy.x;
-                    let y = local_xy.y;
-                    // xy_to_unit_angle from Skia:
-                    // See <https://github.com/google/skia/blob/30bba741989865c157c7a997a0caebe94921276b/src/opts/SkRasterPipeline_opts.h#L5859>
-                    let xabs = abs(x);
-                    let yabs = abs(y);
-                    let slope = min(xabs, yabs) / max(xabs, yabs);
-                    let s = slope * slope;
-                    // again, from Skia:
-                    // Use a 7th degree polynomial to approximate atan.
-                    // This was generated using sollya.gforge.inria.fr.
-                    // A float optimized polynomial was generated using the following command.
-                    // P1 = fpminimax((1/(2*Pi))*atan(x),[|1,3,5,7|],[|24...|],[2^(-40),1],relative);
-                    var phi = slope * (0.15912117063999176025390625f + s * (-5.185396969318389892578125e-2f + s * (2.476101927459239959716796875e-2f + s * (-7.0547382347285747528076171875e-3f))));
-                    phi = select(phi, 1.0 / 4.0 - phi, xabs < yabs);
-                    phi = select(phi, 1.0 / 2.0 - phi, x < 0.0);
-                    phi = select(phi, 1.0 - phi, y < 0.0);
-                    phi = select(phi, 0.0, phi != phi); // check for NaN
-                    phi = fract(1.0 - phi);
-                    phi = (phi - sweep.t0) * scale;
-                    let t = extend_mode_normalized(phi, sweep.extend_mode);
-                    let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
-                    let fg_rgba = textureLoad(gradients, vec2(ramp_x, i32(sweep.index)), 0);
-                    let fg_i = fg_rgba * area[i];
-                    rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                    if area[i] != 0.0 {
+                        let my_xy = vec2(xy.x + f32(i) + 0.5, xy.y + 0.5);
+                        let local_xy = sweep.matrx.xy * my_xy.x + sweep.matrx.zw * my_xy.y + sweep.xlat;
+                        let x = local_xy.x;
+                        let y = local_xy.y;
+                        // xy_to_unit_angle from Skia:
+                        // See <https://github.com/google/skia/blob/30bba741989865c157c7a997a0caebe94921276b/src/opts/SkRasterPipeline_opts.h#L5859>
+                        let xabs = abs(x);
+                        let yabs = abs(y);
+                        let slope = min(xabs, yabs) / max(xabs, yabs);
+                        let s = slope * slope;
+                        // again, from Skia:
+                        // Use a 7th degree polynomial to approximate atan.
+                        // This was generated using sollya.gforge.inria.fr.
+                        // A float optimized polynomial was generated using the following command.
+                        // P1 = fpminimax((1/(2*Pi))*atan(x),[|1,3,5,7|],[|24...|],[2^(-40),1],relative);
+                        var phi = slope * (0.15912117063999176025390625f + s * (-5.185396969318389892578125e-2f + s * (2.476101927459239959716796875e-2f + s * (-7.0547382347285747528076171875e-3f))));
+                        phi = select(phi, 1.0 / 4.0 - phi, xabs < yabs);
+                        phi = select(phi, 1.0 / 2.0 - phi, x < 0.0);
+                        phi = select(phi, 1.0 - phi, y < 0.0);
+                        phi = select(phi, 0.0, phi != phi); // check for NaN
+                        phi = fract(1.0 - phi);
+                        phi = (phi - sweep.t0) * scale;
+                        let t = extend_mode_normalized(phi, sweep.extend_mode);
+                        let ramp_x = i32(round(t * f32(GRADIENT_WIDTH - 1)));
+                        let fg_rgba = textureLoad(gradients, vec2(ramp_x, i32(sweep.index)), 0);
+                        let fg_i = fg_rgba * area[i];
+                        rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
+                    }
                 }
                 cmd_ix += 3u;
             }
             case CMD_IMAGE: {
                 let image = read_image(cmd_ix);
+                let draw_flags = info[ptcl[cmd_ix + 1u] - 1u];
                 let atlas_max = image.atlas_offset + image.extents - vec2(1.0);
                 switch image.quality {
                     case IMAGE_QUALITY_LOW: {
@@ -1339,7 +1464,7 @@ fn main(
                                 // Nearest neighbor sampling
                                 let fg_rgba = maybe_premul_alpha(textureLoad(image_atlas, atlas_uv_clamped, 0), image.alpha_type);
                                 let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
-                                rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                                rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
                             }
                         }
                     }
@@ -1366,7 +1491,7 @@ fn main(
                                 // Bilinear sampling
                                 let fg_rgba = mix(mix(a, b, uv_frac.y), mix(c, d, uv_frac.y), uv_frac.x);
                                 let fg_i = pixel_format(fg_rgba * area[i] * image.alpha, image.format);
-                                rgba[i] = rgba[i] * (1.0 - fg_i.a) + fg_i;
+                                rgba[i] = compose_draw(rgba[i], fg_i, draw_flags);
                             }
                         }
                     }

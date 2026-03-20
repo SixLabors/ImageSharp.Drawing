@@ -46,68 +46,66 @@ public class FillParisTests
     [WebGPUFact]
     public void FillParis_ImageSharp_WebGPU()
     {
-        using WebGPUDrawingBackend backend = new();
-        Assert.True(
-            WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
-                Width,
-                Height,
-                out NativeSurface nativeSurface,
-                out nint textureHandle,
-                out nint textureViewHandle,
-                out string createError),
-            createError);
+        using FillParisWebGpuContext webGpu = new();
+        using DrawingCanvas<Rgba32> canvas = new(webGpu.Configuration, webGpu.NativeFrame, new DrawingOptions());
 
-        try
+        foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
         {
-            using Image<Rgba32> initialImage = new(Width, Height);
-            Assert.True(
-                WebGPUTestNativeSurfaceAllocator.TryWriteTexture(
-                    textureHandle,
-                    Width,
-                    Height,
-                    initialImage,
-                    out string uploadError),
-                uploadError);
-
-            Configuration configuration = Configuration.Default.Clone();
-            configuration.SetDrawingBackend(backend);
-
-            using DrawingCanvas<Rgba32> canvas =
-                new(configuration, new NativeCanvasFrame<Rgba32>(new Rectangle(0, 0, Width, Height), nativeSurface), new DrawingOptions());
-
-            foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
+            if (fill is not null)
             {
-                if (fill is not null)
-                {
-                    canvas.Fill(fill, path);
-                }
-
-                if (stroke is not null)
-                {
-                    canvas.Draw(stroke, path);
-                }
+                canvas.Fill(fill, path);
             }
 
-            canvas.Flush();
+            if (stroke is not null)
+            {
+                canvas.Draw(stroke, path);
+            }
+        }
+
+        canvas.Flush();
+
+        Assert.True(webGpu.Backend.TestingGPUInitializationAttempted);
+        Assert.True(
+            webGpu.Backend.DiagnosticGpuCompositeCount > 0,
+            webGpu.Backend.DiagnosticLastSceneFailure ?? "No GPU composites were recorded.");
+    }
+
+    private sealed class FillParisWebGpuContext : IDisposable
+    {
+        private readonly nint textureHandle;
+        private readonly nint textureViewHandle;
+
+        public FillParisWebGpuContext()
+        {
+            this.Backend = new WebGPUDrawingBackend();
+            this.Configuration = Configuration.Default.Clone();
+            this.Configuration.SetDrawingBackend(this.Backend);
 
             Assert.True(
-                WebGPUTestNativeSurfaceAllocator.TryReadTexture(
-                    textureHandle,
+                WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
                     Width,
                     Height,
-                    out Image<Rgba32> image,
-                    out string readError),
-                readError);
-            image.Dispose();
+                    out NativeSurface nativeSurface,
+                    out this.textureHandle,
+                    out this.textureViewHandle,
+                    out string createError),
+                createError);
 
-            Assert.True(backend.TestingGPUInitializationAttempted);
-            Assert.True(
-                backend.DiagnosticGpuCompositeCount > 0,
-                backend.DiagnosticLastSceneFailure ?? "No GPU composites were recorded.");
+            this.NativeFrame = new NativeCanvasFrame<Rgba32>(
+                new Rectangle(0, 0, Width, Height),
+                nativeSurface);
         }
-        finally
+
+        public WebGPUDrawingBackend Backend { get; }
+
+        public Configuration Configuration { get; }
+
+        public NativeCanvasFrame<Rgba32> NativeFrame { get; }
+
+        public void Dispose()
         {
-            WebGPUTestNativeSurfaceAllocator.Release(textureHandle, textureViewHandle);
+            WebGPUTestNativeSurfaceAllocator.Release(this.textureHandle, this.textureViewHandle);
+            this.Backend.Dispose();
         }
     }
 }

@@ -32,6 +32,10 @@ const DRAWTAG_END_CLIP = 0x21u;
 /// draw object stream but get used after the draw objects have been reduced on the GPU.
 /// 0 represents a non-zero fill. 1 represents an even-odd fill.
 const DRAW_INFO_FLAGS_FILL_RULE_BIT = 1u;
+const DRAW_FLAGS_BLEND_MODE_SHIFT = 1u;
+const DRAW_FLAGS_BLEND_MODE_MASK = 0x3ffeu;
+const DRAW_FLAGS_BLEND_ALPHA_SHIFT = 14u;
+const DRAW_FLAGS_BLEND_ALPHA_MASK = 0x3fffc000u;
 
 fn draw_monoid_identity() -> DrawMonoid {
     return DrawMonoid();

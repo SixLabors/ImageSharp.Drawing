@@ -24,7 +24,7 @@ public class Polygon : Path
     /// </summary>
     /// <param name="segments">The segments.</param>
     public Polygon(params ILineSegment[] segments)
-        : base(segments.ToArray())
+        : base(segments)
     {
     }
 

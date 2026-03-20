@@ -46,12 +46,14 @@ struct CmdJump {
 
 struct CmdColor {
     rgba_color: u32,
+    draw_flags: u32,
 }
 
 struct CmdRecolor {
     source_color: u32,
     target_color: u32,
     threshold: f32,
+    draw_flags: u32,
 }
 
 struct CmdBlurRect {
