@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
@@ -16,18 +16,18 @@ public interface ILineSegment
     /// <value>
     /// The end point.
     /// </value>
-    PointF EndPoint { get; }
+    public PointF EndPoint { get; }
 
     /// <summary>
     /// Converts the <see cref="ILineSegment" /> into a simple linear path..
     /// </summary>
     /// <returns>Returns the current <see cref="ILineSegment" /> as simple linear path.</returns>
-    ReadOnlyMemory<PointF> Flatten();
+    public ReadOnlyMemory<PointF> Flatten();
 
     /// <summary>
     /// Transforms the current LineSegment using specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>
     /// <returns>A line segment with the matrix applied to it.</returns>
-    ILineSegment Transform(Matrix4x4 matrix);
+    public ILineSegment Transform(Matrix4x4 matrix);
 }

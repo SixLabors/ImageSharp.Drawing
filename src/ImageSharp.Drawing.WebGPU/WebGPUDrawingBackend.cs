@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.Memory;
@@ -34,49 +35,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         => this.fallbackBackend = DefaultDrawingBackend.Instance;
 
     /// <summary>
-    /// Gets the testing-only diagnostic counter for total coverage preparation requests.
+    /// Gets a value indicating whether the last flush completed on the staged path.
     /// </summary>
-    internal int TestingPrepareCoverageCallCount { get; private set; }
-
-    /// <summary>
-    /// Gets the testing-only diagnostic counter for coverage preparations executed on the GPU.
-    /// </summary>
-    internal int TestingGPUPrepareCoverageCallCount { get; private set; }
-
-    /// <summary>
-    /// Gets the testing-only diagnostic counter for coverage preparations delegated to the fallback backend.
-    /// </summary>
-    internal int TestingFallbackPrepareCoverageCallCount { get; private set; }
-
-    /// <summary>
-    /// Gets the testing-only diagnostic counter for total composition requests.
-    /// </summary>
-    internal int TestingCompositeCoverageCallCount { get; private set; }
-
-    /// <summary>
-    /// Gets the testing-only diagnostic counter for compositions executed on the GPU.
-    /// </summary>
-    internal int TestingGPUCompositeCoverageCallCount { get; private set; }
-
-    /// <summary>
-    /// Gets the testing-only diagnostic counter for compositions delegated to the fallback backend.
-    /// </summary>
-    internal int TestingFallbackCompositeCoverageCallCount { get; private set; }
-
-    /// <summary>
-    /// Gets the testing-only diagnostic counter for completed prepared-coverage uses.
-    /// </summary>
-    internal int TestingReleaseCoverageCallCount { get; private set; }
-
-    /// <summary>
-    /// Gets a value indicating whether the testing-only diagnostic indicates the backend completed GPU initialization.
-    /// </summary>
-    internal bool TestingIsGPUReady { get; private set; }
-
-    /// <summary>
-    /// Gets a value indicating whether the testing-only diagnostic indicates GPU initialization has been attempted.
-    /// </summary>
-    internal bool TestingGPUInitializationAttempted { get; private set; }
+    internal bool TestingLastFlushUsedGPU { get; private set; }
 
     /// <summary>
     /// Gets the testing-only diagnostic containing the last GPU initialization failure reason, if any.
@@ -84,34 +45,9 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     internal string? TestingLastGPUInitializationFailure { get; private set; }
 
     /// <summary>
-    /// Gets the testing-only diagnostic counter for live prepared coverage handles currently in use.
+    /// Gets a value indicating whether the last flush completed on the staged path.
     /// </summary>
-    internal int TestingLiveCoverageCount { get; private set; }
-
-    /// <summary>
-    /// Gets the cumulative number of visible commands executed by the compute composition path.
-    /// </summary>
-    internal int TestingComputePathVisibleCommandCount { get; private set; }
-
-    /// <summary>
-    /// Gets the cumulative number of unique coverage definitions executed by the compute composition path.
-    /// </summary>
-    internal int TestingComputePathDefinitionCount { get; private set; }
-
-    /// <summary>
-    /// Gets the cumulative number of tile-bin command references consumed by the compute composition path.
-    /// </summary>
-    internal int TestingComputePathTileBinEntryCount { get; private set; }
-
-    /// <summary>
-    /// Gets the cumulative number of composition commands executed on the GPU.
-    /// </summary>
-    public int DiagnosticGpuCompositeCount => this.TestingGPUCompositeCoverageCallCount;
-
-    /// <summary>
-    /// Gets the cumulative number of composition commands that fell back to the CPU backend.
-    /// </summary>
-    public int DiagnosticFallbackCompositeCount => this.TestingFallbackCompositeCoverageCallCount;
+    public bool DiagnosticLastFlushUsedGPU => this.TestingLastFlushUsedGPU;
 
     /// <summary>
     /// Gets the last staged-scene creation or dispatch failure that forced CPU fallback.
@@ -278,35 +214,21 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
-        int commandCount = compositionScene.Commands.Count;
-        this.TestingCompositeCoverageCallCount += commandCount;
-        this.TestingGPUInitializationAttempted = true;
-        this.TestingIsGPUReady = false;
+        this.TestingLastFlushUsedGPU = false;
         this.TestingLastGPUInitializationFailure = null;
-        this.TestingLiveCoverageCount = 0;
-        this.TestingComputePathVisibleCommandCount = 0;
-        this.TestingComputePathDefinitionCount = 0;
-        this.TestingComputePathTileBinEntryCount = 0;
 
         if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene.Commands, out bool exceedsBindingLimit, out WebGPUStagedScene stagedScene, out string? error))
         {
             this.TestingLastGPUInitializationFailure = exceedsBindingLimit
                 ? error ?? "The staged WebGPU scene exceeded the current binding limits."
                 : error ?? "Failed to create the staged WebGPU scene.";
-            this.TestingPrepareCoverageCallCount += commandCount;
-            this.TestingFallbackPrepareCoverageCallCount += commandCount;
-            this.TestingFallbackCompositeCoverageCallCount += commandCount;
-            this.TestingReleaseCoverageCallCount += commandCount;
             this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
             return;
         }
 
         try
         {
-            this.TestingIsGPUReady = true;
-            this.TestingComputePathVisibleCommandCount += stagedScene.EncodedScene.FillCount;
-            this.TestingComputePathDefinitionCount += stagedScene.EncodedScene.UniqueDefinitionCount;
-            this.TestingComputePathTileBinEntryCount += stagedScene.EncodedScene.TotalTileMembershipCount;
+            this.TestingLastFlushUsedGPU = true;
 
             if (stagedScene.EncodedScene.FillCount == 0)
             {
@@ -315,14 +237,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
             if (WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, out error))
             {
-                this.TestingPrepareCoverageCallCount += stagedScene.EncodedScene.FillCount;
-                this.TestingGPUPrepareCoverageCallCount += stagedScene.EncodedScene.FillCount;
-                this.TestingGPUCompositeCoverageCallCount += stagedScene.EncodedScene.FillCount;
-                this.TestingReleaseCoverageCallCount += stagedScene.EncodedScene.FillCount;
                 return;
             }
 
-            this.TestingIsGPUReady = false;
+            this.TestingLastFlushUsedGPU = false;
             this.TestingLastGPUInitializationFailure = error ?? "The staged WebGPU scene dispatch failed.";
         }
         finally
@@ -330,10 +248,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             stagedScene.Dispose();
         }
 
-        this.TestingPrepareCoverageCallCount += commandCount;
-        this.TestingFallbackPrepareCoverageCallCount += commandCount;
-        this.TestingFallbackCompositeCoverageCallCount += commandCount;
-        this.TestingReleaseCoverageCallCount += commandCount;
         this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
     }
 
@@ -355,7 +269,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             WebGPU api = lease.Api;
             Device* device = (Device*)parentCapability!.Device;
 
-            WebGPUFlushContext.DeviceSharedState deviceState = WebGPUFlushContext.GetOrCreateDeviceState(api, device);
+            WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, device);
             if (requiredFeature == FeatureName.Undefined || deviceState.HasFeature(requiredFeature))
             {
                 TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
@@ -699,11 +613,8 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             return;
         }
 
-        WebGPUFlushContext.ClearDeviceStateCache();
-
-        this.TestingLiveCoverageCount = 0;
-        this.TestingIsGPUReady = false;
-        this.TestingGPUInitializationAttempted = false;
+        this.TestingLastFlushUsedGPU = false;
+        this.TestingLastGPUInitializationFailure = null;
         this.isDisposed = true;
     }
 

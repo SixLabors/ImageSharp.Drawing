@@ -51,7 +51,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         }
 
         if (requiredFeature != FeatureName.Undefined
-            && !WebGPUFlushContext.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
+            && !WebGPURuntime.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
         {
             surface = new NativeSurface(TPixel.GetPixelTypeInfo());
             textureHandle = 0;

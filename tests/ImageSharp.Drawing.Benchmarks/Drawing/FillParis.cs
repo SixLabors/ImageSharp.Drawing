@@ -211,8 +211,7 @@ public class FillParis
         // bench.SystemDrawing();
         bench.ImageSharp();
         bench.ImageSharpWebGPU();
-        Console.WriteLine($"WebGPU diagnostic GPU composites: {bench.webGpuBackend.DiagnosticGpuCompositeCount}");
-        Console.WriteLine($"WebGPU diagnostic fallback composites: {bench.webGpuBackend.DiagnosticFallbackCompositeCount}");
+        Console.WriteLine($"WebGPU diagnostic last flush used GPU: {bench.webGpuBackend.DiagnosticLastFlushUsedGPU}");
         Console.WriteLine($"WebGPU diagnostic last failure: {bench.webGpuBackend.DiagnosticLastSceneFailure}");
 
         SvgBenchmarkHelper.VerifyOutput(

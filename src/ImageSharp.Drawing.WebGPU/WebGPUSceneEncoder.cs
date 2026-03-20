@@ -385,7 +385,7 @@ internal static class WebGPUSceneEncoder
                     transformWordCount,
                     styleWordCount,
                     encoding.ClipCount,
-                    0,
+                    encoding.FillCount,
                     0,
                     encoding.TotalTileMembershipCount,
                     0,

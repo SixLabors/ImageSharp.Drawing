@@ -64,10 +64,9 @@ public class FillParisTests
 
         canvas.Flush();
 
-        Assert.True(webGpu.Backend.TestingGPUInitializationAttempted);
         Assert.True(
-            webGpu.Backend.DiagnosticGpuCompositeCount > 0,
-            webGpu.Backend.DiagnosticLastSceneFailure ?? "No GPU composites were recorded.");
+            webGpu.Backend.DiagnosticLastFlushUsedGPU,
+            webGpu.Backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
     }
 
     private sealed class FillParisWebGpuContext : IDisposable

@@ -68,7 +68,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Device* device = (Device*)capability.Device;
 
         if (requiredFeature != FeatureName.Undefined
-            && !WebGPUFlushContext.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
+            && !WebGPURuntime.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
         {
             return false;
         }

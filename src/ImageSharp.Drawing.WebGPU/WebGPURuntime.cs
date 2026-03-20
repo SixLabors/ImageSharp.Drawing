@@ -31,7 +31,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// The shutdown path is resilient to duplicate native unload attempts.
 /// </para>
 /// </remarks>
-internal static unsafe class WebGPURuntime
+internal static unsafe partial class WebGPURuntime
 {
     /// <summary>
     /// Synchronizes all runtime state transitions.
@@ -275,6 +275,8 @@ internal static unsafe class WebGPURuntime
     /// </remarks>
     private static void DisposeRuntimeCore()
     {
+        ClearDeviceStateCache();
+
         autoDeviceHandle = 0;
         autoQueueHandle = 0;
 

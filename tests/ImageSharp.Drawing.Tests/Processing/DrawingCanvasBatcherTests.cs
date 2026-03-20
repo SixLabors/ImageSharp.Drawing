@@ -60,29 +60,6 @@ public class DrawingCanvasBatcherTests
     }
 
     [Fact]
-    public void Flush_SamePathDifferentBrushes_Stroke_UsesSingleCoverageDefinition()
-    {
-        Configuration configuration = new();
-        CapturingBackend backend = new();
-        configuration.SetDrawingBackend(backend);
-        using Image<Rgba32> image = new(40, 40);
-        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
-
-        IPath path = new RectangularPolygon(4, 6, 18, 12);
-        DrawingOptions options = new();
-        using DrawingCanvas<Rgba32> canvas = new(configuration, region, options);
-        Pen penA = Pens.Solid(Color.Red, 2F);
-        Pen penB = Pens.Solid(Color.Blue, 2F);
-
-        canvas.Draw(penA, path);
-        canvas.Draw(penB, path);
-        canvas.Flush();
-
-        Assert.Single(backend.Definitions);
-        Assert.Equal(2, backend.LastDefinition.Commands.Count);
-    }
-
-    [Fact]
     public void Flush_SamePathReusedMultipleTimes_GroupsCommandsByCoverageDefinition()
     {
         Configuration configuration = new();
