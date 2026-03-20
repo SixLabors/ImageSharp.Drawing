@@ -7,12 +7,37 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
+/// Identifies the flush-time operation carried by a <see cref="CompositionCommand"/>.
+/// </summary>
+public enum CompositionCommandKind : byte
+{
+    /// <summary>
+    /// A prepared fill or stroke command.
+    /// </summary>
+    FillLayer = 0,
+
+    /// <summary>
+    /// Starts an isolated compositing layer.
+    /// </summary>
+    BeginLayer = 1,
+
+    /// <summary>
+    /// Ends the most recently opened layer.
+    /// </summary>
+    EndLayer = 2
+}
+
+/// <summary>
 /// One normalized composition command queued by <see cref="DrawingCanvasBatcher{TPixel}"/>.
-/// After <see cref="Prepare"/> is called by the batcher, every command is a fill
-/// with an immutable prepared path ready for backend execution.
+/// After <see cref="Prepare"/> is called by the batcher, every <see cref="CompositionCommandKind.FillLayer"/>
+/// command is an immutable prepared fill ready for backend execution.
 /// </summary>
 public struct CompositionCommand
 {
+    private static readonly Brush SentinelBrush = new SolidBrush(Color.Transparent);
+    private static readonly GraphicsOptions SentinelGraphicsOptions = new();
+    private static readonly ShapeOptions SentinelShapeOptions = new();
+
     private readonly Pen? pen;
     private readonly IPath sourcePath;
     private readonly Matrix4x4 transform;
@@ -20,17 +45,21 @@ public struct CompositionCommand
     private readonly ShapeOptions shapeOptions;
 
     private CompositionCommand(
+        CompositionCommandKind kind,
         int definitionKey,
         IPath sourcePath,
         Brush brush,
         GraphicsOptions graphicsOptions,
         in RasterizerOptions rasterizerOptions,
+        Rectangle targetBounds,
+        Rectangle layerBounds,
         Point destinationOffset,
         Pen? pen,
         Matrix4x4 transform,
         IReadOnlyList<IPath>? clipPaths,
         ShapeOptions shapeOptions)
     {
+        this.Kind = kind;
         this.DefinitionKey = definitionKey;
         this.sourcePath = sourcePath;
         this.PreparedPath = null;
@@ -38,6 +67,8 @@ public struct CompositionCommand
         this.Brush = brush;
         this.GraphicsOptions = graphicsOptions;
         this.RasterizerOptions = rasterizerOptions;
+        this.TargetBounds = targetBounds;
+        this.LayerBounds = layerBounds;
         this.DestinationOffset = destinationOffset;
         this.DestinationRegion = default;
         this.SourceOffset = default;
@@ -46,6 +77,11 @@ public struct CompositionCommand
         this.clipPaths = clipPaths;
         this.shapeOptions = shapeOptions;
     }
+
+    /// <summary>
+    /// Gets the command kind.
+    /// </summary>
+    public CompositionCommandKind Kind { get; }
 
     /// <summary>
     /// Gets a stable definition key used for composition-level caching.
@@ -61,10 +97,22 @@ public struct CompositionCommand
     public IPath? PreparedPath { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether this command is visible after clipping to target bounds.
+    /// Gets a value indicating whether this command is visible after clipping to its logical target.
     /// Populated by <see cref="Prepare"/>.
     /// </summary>
     public bool IsVisible { get; private set; }
+
+    /// <summary>
+    /// Gets the absolute bounds of the logical target for this command.
+    /// For fills this is the command target frame; for begin-layer commands this is the layer bounds.
+    /// </summary>
+    public Rectangle TargetBounds { get; }
+
+    /// <summary>
+    /// Gets the absolute bounds of the layer opened by this command.
+    /// Only meaningful for <see cref="CompositionCommandKind.BeginLayer"/>.
+    /// </summary>
+    public Rectangle LayerBounds { get; }
 
     /// <summary>
     /// Gets the destination region in target-local coordinates.
@@ -90,7 +138,7 @@ public struct CompositionCommand
     public Rectangle BrushBounds { get; private set; }
 
     /// <summary>
-    /// Gets graphics options used for composition.
+    /// Gets graphics options used for composition or layer compositing.
     /// </summary>
     public GraphicsOptions GraphicsOptions { get; }
 
@@ -106,7 +154,7 @@ public struct CompositionCommand
     public Point DestinationOffset { get; }
 
     /// <summary>
-    /// Creates a composition command.
+    /// Creates a fill composition command.
     /// </summary>
     /// <param name="path">Path in target-local coordinates.</param>
     /// <param name="brush">Brush used during composition.</param>
@@ -114,6 +162,7 @@ public struct CompositionCommand
     /// <param name="rasterizerOptions">Rasterizer options used to generate coverage.</param>
     /// <param name="shapeOptions">Shape options for clip operations.</param>
     /// <param name="transform">Transform matrix to apply during preparation.</param>
+    /// <param name="targetBounds">The absolute bounds of the logical target for this command.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
     /// <param name="pen">Optional pen for stroke commands. The batcher expands strokes to fills.</param>
     /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
@@ -125,6 +174,7 @@ public struct CompositionCommand
         in RasterizerOptions rasterizerOptions,
         ShapeOptions shapeOptions,
         Matrix4x4 transform,
+        Rectangle targetBounds,
         Point destinationOffset = default,
         Pen? pen = null,
         IReadOnlyList<IPath>? clipPaths = null)
@@ -132,11 +182,14 @@ public struct CompositionCommand
         int definitionKey = ComputeCoverageDefinitionKey(path, in rasterizerOptions);
 
         return new(
+            CompositionCommandKind.FillLayer,
             definitionKey,
             path,
             brush,
             graphicsOptions,
             in rasterizerOptions,
+            targetBounds,
+            default,
             destinationOffset,
             pen,
             transform,
@@ -145,14 +198,62 @@ public struct CompositionCommand
     }
 
     /// <summary>
+    /// Creates a begin-layer composition command.
+    /// </summary>
+    /// <param name="layerBounds">The absolute bounds of the layer.</param>
+    /// <param name="graphicsOptions">The compositing options used when the layer closes.</param>
+    /// <returns>The begin-layer command.</returns>
+    public static CompositionCommand CreateBeginLayer(Rectangle layerBounds, GraphicsOptions graphicsOptions)
+        => new(
+            CompositionCommandKind.BeginLayer,
+            0,
+            EmptyPath.ClosedPath,
+            SentinelBrush,
+            graphicsOptions,
+            default,
+            layerBounds,
+            layerBounds,
+            default,
+            null,
+            Matrix4x4.Identity,
+            null,
+            SentinelShapeOptions);
+
+    /// <summary>
+    /// Creates an end-layer composition command.
+    /// </summary>
+    /// <returns>The end-layer command.</returns>
+    public static CompositionCommand CreateEndLayer()
+        => new(
+            CompositionCommandKind.EndLayer,
+            0,
+            EmptyPath.ClosedPath,
+            SentinelBrush,
+            SentinelGraphicsOptions,
+            default,
+            default,
+            default,
+            default,
+            null,
+            Matrix4x4.Identity,
+            null,
+            SentinelShapeOptions);
+
+    /// <summary>
     /// Prepares this command for backend execution. Expands strokes to fills,
-    /// clips, transforms the source path, and clips to target bounds.
+    /// clips, transforms the source path, and clips to the logical target.
     /// After this call the command is a fill with an immutable prepared path
     /// and pre-computed visibility against the target.
     /// </summary>
-    /// <param name="targetBounds">The target frame bounds for visibility clipping.</param>
-    internal void Prepare(in Rectangle targetBounds)
+    internal void Prepare()
     {
+        if (this.Kind is not CompositionCommandKind.FillLayer)
+        {
+            this.IsVisible = true;
+            return;
+        }
+
+        // Expand the queued draw into the final fill geometry the backend will consume.
         IPath preparedPath = this.BuildPreparedPath();
         this.PreparedPath = preparedPath;
 
@@ -165,11 +266,14 @@ public struct CompositionCommand
         // Recompute interest, brush bounds, and definition key from the final path.
         RasterizerOptions old = this.RasterizerOptions;
         RectangleF bounds = preparedPath.Bounds;
+
+        // Pixel-center stroke sampling nudges the realized bounds by half a pixel.
         if (old.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter)
         {
             bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
         }
 
+        // Coverage is generated in path-local interest coordinates.
         Rectangle interest = Rectangle.FromLTRB(
             (int)MathF.Floor(bounds.Left),
             (int)MathF.Floor(bounds.Top),
@@ -192,23 +296,24 @@ public struct CompositionCommand
         RasterizerOptions updated = this.RasterizerOptions;
         this.DefinitionKey = ComputeCoverageDefinitionKey(preparedPath, in updated);
 
-        // Clip to target bounds and compute destination region.
+        // Move the interest rect into absolute destination space, then clip it back to the command target.
         Rectangle commandDestination = new(
             this.DestinationOffset.X + interest.X,
             this.DestinationOffset.Y + interest.Y,
             interest.Width,
             interest.Height);
 
-        Rectangle clippedDestination = Rectangle.Intersect(targetBounds, commandDestination);
+        Rectangle clippedDestination = Rectangle.Intersect(this.TargetBounds, commandDestination);
         if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
         {
             this.IsVisible = false;
             return;
         }
 
+        // DestinationRegion is target-local. SourceOffset keeps coverage aligned after clipping.
         this.DestinationRegion = new Rectangle(
-            clippedDestination.X - targetBounds.X,
-            clippedDestination.Y - targetBounds.Y,
+            clippedDestination.X - this.TargetBounds.X,
+            clippedDestination.Y - this.TargetBounds.Y,
             clippedDestination.Width,
             clippedDestination.Height);
 
@@ -235,7 +340,7 @@ public struct CompositionCommand
             path = path.Transform(this.transform);
         }
 
-        // Stroke expansion runs before clipping so the clip sees the actual outline geometry.
+        // Stroke commands are lowered to fills before clipping and rasterization.
         if (this.pen is not null)
         {
             path = this.pen.GeneratePath(path);

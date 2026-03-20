@@ -22,6 +22,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
     private readonly List<CompositionCommand> commands = [];
+    private bool hasLayers;
 
     internal DrawingCanvasBatcher(
         Configuration configuration,
@@ -43,7 +44,10 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// </summary>
     /// <param name="composition">The command to queue.</param>
     public void AddComposition(in CompositionCommand composition)
-        => this.commands.Add(composition);
+    {
+        this.commands.Add(composition);
+        this.hasLayers |= composition.Kind is not CompositionCommandKind.FillLayer;
+    }
 
     /// <summary>
     /// Flushes queued commands to the backend as one scene packet, preserving submission order.
@@ -65,13 +69,14 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             // After this, every command has an immutable prepared path and visibility state.
             this.PrepareCommands();
 
-            CompositionScene scene = new(this.commands);
+            CompositionScene scene = new(this.commands, this.hasLayers);
             this.backend.FlushCompositions(this.configuration, this.TargetFrame, scene);
         }
         finally
         {
             // Always clear the queue, even if backend flush throws.
             this.commands.Clear();
+            this.hasLayers = false;
         }
     }
 
@@ -82,16 +87,12 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// and pre-computed visibility.
     /// </summary>
     private void PrepareCommands()
-    {
-        Rectangle targetBounds = this.TargetFrame.Bounds;
-
-        _ = Parallel.ForEach(Partitioner.Create(0, this.commands.Count), range =>
+        => _ = Parallel.ForEach(Partitioner.Create(0, this.commands.Count), range =>
         {
             Span<CompositionCommand> span = CollectionsMarshal.AsSpan(this.commands);
             for (int i = range.Item1; i < range.Item2; i++)
             {
-                span[i].Prepare(in targetBounds);
+                span[i].Prepare();
             }
         });
-    }
 }

@@ -228,29 +228,5 @@ public partial class DrawingCanvasTests
 
             return true;
         }
-
-        public void ComposeLayer<TTargetPixel>(
-            Configuration configuration,
-            ICanvasFrame<TTargetPixel> source,
-            ICanvasFrame<TTargetPixel> destination,
-            Point destinationOffset,
-            GraphicsOptions options)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-            => DefaultDrawingBackend.Instance.ComposeLayer(configuration, source, destination, destinationOffset, options);
-
-        public ICanvasFrame<TTargetPixel> CreateLayerFrame<TTargetPixel>(
-            Configuration configuration,
-            ICanvasFrame<TTargetPixel> parentTarget,
-            int width,
-            int height)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-            => DefaultDrawingBackend.Instance.CreateLayerFrame(configuration, parentTarget, width, height);
-
-        public void ReleaseFrameResources<TTargetPixel>(
-            Configuration configuration,
-            ICanvasFrame<TTargetPixel> target)
-            where TTargetPixel : unmanaged, IPixel<TTargetPixel>
-        {
-        }
     }
 }

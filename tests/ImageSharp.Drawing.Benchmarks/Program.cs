@@ -56,6 +56,28 @@ public class Program
             return;
         }
 
+        if (args.Length > 0 && args[0] == "--profile")
+        {
+            string target = args.Length > 1 ? args[1] : string.Empty;
+            int iterations = args.Length > 2 && int.TryParse(args[2], out int parsedIterations)
+                ? parsedIterations
+                : 20;
+            switch (target.ToLowerInvariant())
+            {
+                case "paris-cpu":
+                    Drawing.FillParis.ProfileCpu(iterations);
+                    break;
+                case "paris-webgpu":
+                    Drawing.FillParis.ProfileWebGpu(iterations);
+                    break;
+                default:
+                    Console.WriteLine($"Unknown profile target: {target}. Use 'paris-cpu' or 'paris-webgpu'.");
+                    break;
+            }
+
+            return;
+        }
+
         new BenchmarkSwitcher(typeof(Program).GetTypeInfo().Assembly).Run(args, new InProcessConfig());
     }
 }

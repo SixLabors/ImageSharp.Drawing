@@ -268,7 +268,7 @@ public partial class ProcessWithDrawingCanvasTests
         Polygon polygon = new(new LinearLineSegment(simplePath));
 
         using Image<TPixel> brushImage = Image.Load<TPixel>(TestFile.Create(brushImageName).Bytes);
-        ImageBrush brush = new(brushImage);
+        ImageBrush<TPixel> brush = new(brushImage);
 
         provider.RunValidatingProcessorTest(
             c => c.ProcessWithCanvas(canvas => canvas.Fill(brush, polygon)),
@@ -295,7 +295,7 @@ public partial class ProcessWithDrawingCanvasTests
         float height = top * 2;
         float width = left * 2;
 
-        ImageBrush brush = new(brushImage, new RectangleF(left, top, width, height));
+        ImageBrush<TPixel> brush = new(brushImage, new RectangleF(left, top, width, height));
 
         provider.RunValidatingProcessorTest(
             c => c.ProcessWithCanvas(canvas => canvas.Fill(brush, polygon)),

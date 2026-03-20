@@ -115,7 +115,7 @@ public partial class WebGPUDrawingBackendTests
         Brush clearBrush = Brushes.Solid(Color.White);
 
         using Image<TPixel> foreground = provider.GetImage();
-        Brush brush = new ImageBrush(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
+        Brush brush = new ImageBrush<TPixel>(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
         void DrawAction(DrawingCanvas<TPixel> canvas)
         {
             canvas.Clear(clearBrush);
@@ -278,7 +278,7 @@ public partial class WebGPUDrawingBackendTests
         };
 
         using Image<TPixel> foreground = provider.GetImage();
-        Brush brush = new ImageBrush(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
+        Brush brush = new ImageBrush<TPixel>(foreground, new RectangleF(32, 24, 192, 144), new Point(13, -9));
         void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, polygon);
 
         using Image<TPixel> baseImage = provider.GetImage();

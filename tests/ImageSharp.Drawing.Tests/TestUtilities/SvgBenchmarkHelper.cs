@@ -8,10 +8,10 @@ using System.Numerics;
 using System.Xml.Linq;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
-using ISDrawingProcessing = SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using SkiaSharp;
 using ISColor = SixLabors.ImageSharp.Color;
+using ISDrawingProcessing = SixLabors.ImageSharp.Drawing.Processing;
 using SDColor = System.Drawing.Color;
 using SDPen = System.Drawing.Pen;
 using SDSolidBrush = System.Drawing.SolidBrush;
@@ -23,6 +23,8 @@ namespace SixLabors.ImageSharp.Drawing.Tests;
 /// </summary>
 internal static class SvgBenchmarkHelper
 {
+    private const float NeighborhoodPadding = 12F;
+
     /// <summary>
     /// A single parsed SVG path element with fill, stroke, and per-element transform.
     /// </summary>
@@ -298,6 +300,72 @@ internal static class SvgBenchmarkHelper
         Console.WriteLine($"Output saved to: {outDir}");
     }
 
+    /// <summary>
+    /// Writes a spatial neighborhood SVG for the requested path using the parsed SVG elements.
+    /// </summary>
+    internal static void WriteNeighborhoodSvg(
+        string name,
+        IReadOnlyList<SvgElement> elements,
+        string targetPathData,
+        int width,
+        int height)
+    {
+        string outDir = System.IO.Path.Combine(AppContext.BaseDirectory, $"{name}-verify");
+        Directory.CreateDirectory(outDir);
+
+        List<(SvgElement Element, RectangleF Bounds)> candidates = [];
+        (SvgElement Element, RectangleF Bounds)? target = null;
+
+        foreach (SvgElement element in elements)
+        {
+            if (!TryGetTransformedBounds(element, out RectangleF bounds))
+            {
+                continue;
+            }
+
+            candidates.Add((element, bounds));
+
+            if (target is null && string.Equals(element.PathData, targetPathData, StringComparison.Ordinal))
+            {
+                target = (element, bounds);
+            }
+        }
+
+        if (target is null)
+        {
+            return;
+        }
+
+        RectangleF viewport = Inflate(target.Value.Bounds, NeighborhoodPadding);
+        List<SvgElement> neighborhood = [];
+        foreach ((SvgElement element, RectangleF bounds) in candidates)
+        {
+            if (bounds.IntersectsWith(viewport))
+            {
+                neighborhood.Add(element);
+                viewport = RectangleF.Union(viewport, bounds);
+            }
+        }
+
+        viewport = RectangleF.Intersect(Inflate(viewport, NeighborhoodPadding), new RectangleF(0, 0, width, height));
+
+        XNamespace ns = "http://www.w3.org/2000/svg";
+        XElement svg = new(
+            ns + "svg",
+            new XAttribute("xmlns", ns.NamespaceName),
+            new XAttribute("viewBox", FormattableString.Invariant($"{viewport.X} {viewport.Y} {viewport.Width} {viewport.Height}")),
+            new XAttribute("width", FormattableString.Invariant($"{viewport.Width}")),
+            new XAttribute("height", FormattableString.Invariant($"{viewport.Height}")));
+
+        foreach (SvgElement element in neighborhood)
+        {
+            svg.Add(CreatePathElement(ns, element));
+        }
+
+        XDocument document = new(new XDeclaration("1.0", "utf-8", null), svg);
+        document.Save(System.IO.Path.Combine(outDir, $"{name}-neighborhood.svg"));
+    }
+
     // ---- SVG transform resolution ----
 
     private static Matrix4x4? ResolveTransform(XElement element, XNamespace ns)
@@ -504,6 +572,79 @@ internal static class SvgBenchmarkHelper
 
         value = null;
         return false;
+    }
+
+    private static XElement CreatePathElement(XNamespace ns, SvgElement element)
+    {
+        XElement path = new(
+            ns + "path",
+            new XAttribute("d", element.PathData));
+
+        Rgba32 fillPixel = element.Fill.ToPixel<Rgba32>();
+        if (fillPixel.A == 0)
+        {
+            path.SetAttributeValue("fill", "none");
+        }
+        else
+        {
+            path.SetAttributeValue("fill", ToSvgColor(fillPixel));
+            if (fillPixel.A < byte.MaxValue)
+            {
+                path.SetAttributeValue("fill-opacity", FormattableString.Invariant($"{fillPixel.A / 255F:0.######}"));
+            }
+        }
+
+        Rgba32 strokePixel = element.Stroke.ToPixel<Rgba32>();
+        if (strokePixel.A == 0 || element.StrokeWidth <= 0)
+        {
+            path.SetAttributeValue("stroke", "none");
+        }
+        else
+        {
+            path.SetAttributeValue("stroke", ToSvgColor(strokePixel));
+            path.SetAttributeValue("stroke-width", FormattableString.Invariant($"{element.StrokeWidth:0.######}"));
+            if (strokePixel.A < byte.MaxValue)
+            {
+                path.SetAttributeValue("stroke-opacity", FormattableString.Invariant($"{strokePixel.A / 255F:0.######}"));
+            }
+        }
+
+        if (element.Transform is Matrix4x4 transform)
+        {
+            path.SetAttributeValue(
+                "transform",
+                FormattableString.Invariant(
+                    $"matrix({transform.M11:0.######} {transform.M12:0.######} {transform.M21:0.######} {transform.M22:0.######} {transform.M41:0.######} {transform.M42:0.######})"));
+        }
+
+        return path;
+    }
+
+    private static RectangleF Inflate(RectangleF rectangle, float amount) =>
+        new(
+            rectangle.X - amount,
+            rectangle.Y - amount,
+            rectangle.Width + (amount * 2),
+            rectangle.Height + (amount * 2));
+
+    private static string ToSvgColor(Rgba32 pixel) =>
+        FormattableString.Invariant($"#{pixel.R:x2}{pixel.G:x2}{pixel.B:x2}");
+
+    private static bool TryGetTransformedBounds(SvgElement element, out RectangleF bounds)
+    {
+        bounds = default;
+        if (!Path.TryParseSvgPath(element.PathData, out IPath path))
+        {
+            return false;
+        }
+
+        if (element.Transform is Matrix4x4 transform)
+        {
+            path = path.Transform(transform);
+        }
+
+        bounds = path.Bounds;
+        return true;
     }
 
     // ---- System.Drawing SVG path parser ----

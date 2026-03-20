@@ -7,7 +7,6 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
 
@@ -50,72 +49,72 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, ReadOnlySpan<GpuTagMonoid>.Empty, config.BufferSizes.PathReduced.Length, out WgpuBuffer* pathReducedBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced.Length, out WgpuBuffer* pathReducedBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, ReadOnlySpan<GpuTagMonoid>.Empty, config.BufferSizes.PathReduced2.Length, out WgpuBuffer* pathReduced2Buffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReduced2.Length, out WgpuBuffer* pathReduced2Buffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, ReadOnlySpan<GpuTagMonoid>.Empty, config.BufferSizes.PathReducedScan.Length, out WgpuBuffer* pathReducedScanBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathReducedScan.Length, out WgpuBuffer* pathReducedScanBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, ReadOnlySpan<GpuTagMonoid>.Empty, config.BufferSizes.PathMonoids.Length, out WgpuBuffer* pathMonoidBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuTagMonoid>(flushContext, [], config.BufferSizes.PathMonoids.Length, out WgpuBuffer* pathMonoidBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuPathBbox>(flushContext, ReadOnlySpan<GpuPathBbox>.Empty, config.BufferSizes.PathBboxes.Length, out WgpuBuffer* pathBboxBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuPathBbox>(flushContext, [], config.BufferSizes.PathBboxes.Length, out WgpuBuffer* pathBboxBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, ReadOnlySpan<GpuSceneDrawMonoid>.Empty, config.BufferSizes.DrawReduced.Length, out WgpuBuffer* drawReducedBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawReduced.Length, out WgpuBuffer* drawReducedBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, ReadOnlySpan<GpuSceneDrawMonoid>.Empty, config.BufferSizes.DrawMonoids.Length, out WgpuBuffer* drawMonoidBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuSceneDrawMonoid>(flushContext, [], config.BufferSizes.DrawMonoids.Length, out WgpuBuffer* drawMonoidBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuClipInp>(flushContext, ReadOnlySpan<GpuClipInp>.Empty, config.BufferSizes.ClipInputs.Length, out WgpuBuffer* clipInputBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuClipInp>(flushContext, [], config.BufferSizes.ClipInputs.Length, out WgpuBuffer* clipInputBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuClipElement>(flushContext, ReadOnlySpan<GpuClipElement>.Empty, config.BufferSizes.ClipElements.Length, out WgpuBuffer* clipElementBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuClipElement>(flushContext, [], config.BufferSizes.ClipElements.Length, out WgpuBuffer* clipElementBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuBic>(flushContext, ReadOnlySpan<GpuBic>.Empty, config.BufferSizes.ClipBics.Length, out WgpuBuffer* clipBicBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuBic>(flushContext, [], config.BufferSizes.ClipBics.Length, out WgpuBuffer* clipBicBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<Vector4>(flushContext, ReadOnlySpan<Vector4>.Empty, config.BufferSizes.ClipBboxes.Length, out WgpuBuffer* clipBboxBuffer, out error))
+        if (!TryCreateAndUploadBuffer<Vector4>(flushContext, [], config.BufferSizes.ClipBboxes.Length, out WgpuBuffer* clipBboxBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuDrawBbox>(flushContext, ReadOnlySpan<GpuDrawBbox>.Empty, config.BufferSizes.DrawBboxes.Length, out WgpuBuffer* drawBboxBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuDrawBbox>(flushContext, [], config.BufferSizes.DrawBboxes.Length, out WgpuBuffer* drawBboxBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuScenePath>(flushContext, ReadOnlySpan<GpuScenePath>.Empty, config.BufferSizes.Paths.Length, out WgpuBuffer* pathBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuScenePath>(flushContext, [], config.BufferSizes.Paths.Length, out WgpuBuffer* pathBuffer, out error))
         {
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<GpuSceneLine>(flushContext, ReadOnlySpan<GpuSceneLine>.Empty, config.BufferSizes.Lines.Length, out WgpuBuffer* lineBuffer, out error))
+        if (!TryCreateAndUploadBuffer<GpuSceneLine>(flushContext, [], config.BufferSizes.Lines.Length, out WgpuBuffer* lineBuffer, out error))
         {
             return false;
         }
@@ -130,7 +129,7 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        if (!TryCreateAndUploadBuffer<uint>(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length, out WgpuBuffer* sceneBuffer, out error))
+        if (!TryCreateAndUploadBuffer(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length, out WgpuBuffer* sceneBuffer, out error))
         {
             return false;
         }
@@ -325,7 +324,7 @@ internal static unsafe class WebGPUSceneResources
         }
 
         ImageBrush imageBrush = (ImageBrush)brush;
-        Rectangle sourceRegion = Rectangle.Intersect(imageBrush.SourceImage.Bounds, (Rectangle)imageBrush.SourceRegion);
+        Rectangle sourceRegion = Rectangle.Intersect(imageBrush.UntypedImage.Bounds, (Rectangle)imageBrush.SourceRegion);
         width = sourceRegion.Width;
         height = sourceRegion.Height;
     }
@@ -346,7 +345,9 @@ internal static unsafe class WebGPUSceneResources
             return TryUploadPatternEntry(flushContext, texture, patternBrush, atlasY, rowBuffer, out entryWidth, out entryHeight, out error);
         }
 
-        return TryUploadImageBrushEntry<TPixel>(flushContext, texture, (ImageBrush)brush, atlasY, out entryWidth, out entryHeight, out error);
+        // We can safely cast the untyped image to a typed image because the type constraint is tightly
+        // controlled by the caller based on the flush context's texture format, which is determined by the pixel type.
+        return TryUploadImageBrushEntry(flushContext, texture, (ImageBrush<TPixel>)brush, atlasY, out entryWidth, out entryHeight, out error);
     }
 
     private static bool TryUploadPatternEntry<TPixel>(
@@ -385,24 +386,23 @@ internal static unsafe class WebGPUSceneResources
     private static bool TryUploadImageBrushEntry<TPixel>(
         WebGPUFlushContext flushContext,
         Texture* texture,
-        ImageBrush imageBrush,
+        ImageBrush<TPixel> imageBrush,
         int atlasY,
         out int entryWidth,
         out int entryHeight,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        Rectangle sourceRegion = Rectangle.Intersect(imageBrush.SourceImage.Bounds, (Rectangle)imageBrush.SourceRegion);
+        Rectangle sourceRegion = Rectangle.Intersect(imageBrush.UntypedImage.Bounds, (Rectangle)imageBrush.SourceRegion);
         entryWidth = sourceRegion.Width;
         entryHeight = sourceRegion.Height;
 
-        Image<TPixel> sourceImage = (Image<TPixel>)imageBrush.SourceImage;
-        ImageFrame<TPixel> sourceFrame = sourceImage.Frames.RootFrame;
+        ImageFrame<TPixel> sourceFrame = imageBrush.SourceImage.Frames.RootFrame;
         for (int y = 0; y < entryHeight; y++)
         {
             ReadOnlySpan<TPixel> sourceRow = sourceFrame.PixelBuffer.DangerousGetRowSpan(sourceRegion.Y + y).Slice(sourceRegion.X, entryWidth);
 
-            if (!TryWriteTextureRegion<TPixel>(flushContext, texture, 0, atlasY + y, entryWidth, 1, sourceRow, out error))
+            if (!TryWriteTextureRegion(flushContext, texture, 0, atlasY + y, entryWidth, 1, sourceRow, out error))
             {
                 return false;
             }
@@ -672,7 +672,7 @@ internal static unsafe class WebGPUSceneResources
         where T : unmanaged
     {
         uint elementCount = Math.Max(Math.Max((uint)values.Length, minimumLength), 1U);
-        nuint byteLength = checked((nuint)elementCount * (nuint)Unsafe.SizeOf<T>());
+        nuint byteLength = checked(elementCount * (nuint)Unsafe.SizeOf<T>());
         BufferDescriptor descriptor = new()
         {
             Usage = BufferUsage.Storage | BufferUsage.CopyDst,
@@ -899,10 +899,7 @@ internal readonly struct GpuClipElement
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuDrawBbox
 {
-    public GpuDrawBbox(Vector4 bbox)
-    {
-        this.Bbox = bbox;
-    }
+    public GpuDrawBbox(Vector4 bbox) => this.Bbox = bbox;
 
     public Vector4 Bbox { get; }
 }
@@ -1040,6 +1037,8 @@ internal readonly struct GpuSceneConfig
 
 internal static class GpuSceneDrawTag
 {
+    // TODO: Why is this not an enum?
+    // It's really hard to understand what these magic numbers mean without documentation.
     public const uint Nop = 0U;
     public const uint FillColor = 0x44U;
     public const uint FillRecolor = 0x4CU;
@@ -1054,13 +1053,13 @@ internal static class GpuSceneDrawTag
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static GpuSceneDrawMonoid Map(uint tagWord)
-    {
-        return new GpuSceneDrawMonoid(
+
+        // TODO: This needs documentation. It's unintelligable.
+        => new(
             tagWord != Nop ? 1U : 0U,
             tagWord & 1U,
             (tagWord >> 2) & 0x07U,
             (tagWord >> 6) & 0x0FU);
-    }
 }
 
 [StructLayout(LayoutKind.Sequential)]

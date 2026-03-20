@@ -324,7 +324,8 @@ public static unsafe class Program
         fpsElapsed += deltaTime;
         if (fpsElapsed >= 1.0)
         {
-            window.Title = $"ImageSharp.Drawing WebGPU Demo — {frameCount / fpsElapsed:F1} FPS | GPU: {backend.DiagnosticGpuCompositeCount} Fallback: {backend.DiagnosticFallbackCompositeCount}";
+            string flushMode = backend.DiagnosticLastFlushUsedGPU ? "GPU" : "CPU";
+            window.Title = $"ImageSharp.Drawing WebGPU Demo - {frameCount / fpsElapsed:F1} FPS | Flush: {flushMode} | Failure: {backend.DiagnosticLastSceneFailure}";
             frameCount = 0;
             fpsElapsed = 0;
         }

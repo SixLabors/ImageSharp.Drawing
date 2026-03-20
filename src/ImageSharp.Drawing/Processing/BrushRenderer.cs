@@ -47,6 +47,11 @@ public abstract class BrushRenderer<TPixel> : IDisposable
     /// </summary>
     protected int CanvasWidth { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether this renderer owns disposable resources.
+    /// </summary>
+    internal virtual bool RequiresDispose => false;
+
     /// <inheritdoc />
     public void Dispose()
     {

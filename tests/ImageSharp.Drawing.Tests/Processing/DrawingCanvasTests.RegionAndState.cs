@@ -138,6 +138,7 @@ public partial class DrawingCanvasTests
             };
 
             _ = outerRegion.Save(outerOptions, new RectangularPolygon(18, 14, 204, 128));
+
             outerRegion.Fill(Brushes.Solid(Color.MediumPurple.WithAlpha(0.35F)), new Rectangle(16, 16, 208, 124));
 
             using (DrawingCanvas<TPixel> innerRegion = outerRegion.CreateRegion(new Rectangle(52, 34, 132, 82)))
@@ -150,12 +151,14 @@ public partial class DrawingCanvasTests
                 };
 
                 _ = innerRegion.Save(innerOptions, new EllipsePolygon(new PointF(66, 41), new SizeF(102, 58)));
+
                 innerRegion.Fill(Brushes.Solid(Color.SeaGreen.WithAlpha(0.55F)), new Rectangle(0, 0, 132, 82));
                 innerRegion.DrawLine(
                     Pens.Solid(Color.DarkRed, 4F),
                     new PointF(0, 80),
                     new PointF(66, 0),
                     new PointF(132, 74));
+
                 innerRegion.Restore();
 
                 innerRegion.Draw(Pens.DashDot(Color.Black.WithAlpha(0.75F), 2F), new Rectangle(4, 4, 124, 74));
@@ -168,6 +171,7 @@ public partial class DrawingCanvasTests
         }
 
         canvas.RestoreTo(1);
+
         canvas.Draw(Pens.Solid(Color.DarkSlateGray, 3F), new Rectangle(8, 8, 304, 204));
         canvas.DrawLine(Pens.Dash(Color.Gray, 2F), new PointF(20, 200), new PointF(300, 20));
 

@@ -82,15 +82,16 @@ public partial class DrawingCanvasTests
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
-        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            // Fill background white.
+            canvas.Fill(new SolidBrush(Color.White));
 
-        // Fill background white.
-        canvas.Fill(new SolidBrush(Color.White));
-
-        // SaveLayer with full opacity, draw red rectangle, then restore.
-        canvas.SaveLayer();
-        canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 20, 20));
-        canvas.Restore();
+            // SaveLayer with full opacity, draw red rectangle, then restore.
+            canvas.SaveLayer();
+            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 20, 20));
+            canvas.Restore();
+        }
 
         // The red rectangle should be composited onto the white background.
         Rgba32 center = target[20, 20];
@@ -106,15 +107,16 @@ public partial class DrawingCanvasTests
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
-        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            // Fill background white.
+            canvas.Fill(new SolidBrush(Color.White));
 
-        // Fill background white.
-        canvas.Fill(new SolidBrush(Color.White));
-
-        // SaveLayer with 50% opacity, draw red rectangle, then restore.
-        canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
-        canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 20, 20));
-        canvas.Restore();
+            // SaveLayer with 50% opacity, draw red rectangle, then restore.
+            canvas.SaveLayer(new GraphicsOptions { BlendPercentage = 0.5f });
+            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(10, 10, 20, 20));
+            canvas.Restore();
+        }
 
         // The red should be blended at ~50% onto white, giving approximately (255, 128, 128).
         Rgba32 center = target[20, 20];
@@ -174,20 +176,21 @@ public partial class DrawingCanvasTests
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
-        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(new SolidBrush(Color.White));
 
-        canvas.Fill(new SolidBrush(Color.White));
+            // Outer layer.
+            canvas.SaveLayer();
+            canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(0, 0, 64, 64));
 
-        // Outer layer.
-        canvas.SaveLayer();
-        canvas.Fill(new SolidBrush(Color.Red), new RectangularPolygon(0, 0, 64, 64));
+            // Inner layer.
+            canvas.SaveLayer();
+            canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(16, 16, 32, 32));
+            canvas.Restore(); // Closes blue onto red.
 
-        // Inner layer.
-        canvas.SaveLayer();
-        canvas.Fill(new SolidBrush(Color.Blue), new RectangularPolygon(16, 16, 32, 32));
-        canvas.Restore(); // Composites blue onto red.
-
-        canvas.Restore(); // Composites red+blue onto white.
+            canvas.Restore(); // Closes red+blue onto white.
+        }
 
         // Center should be blue (inner layer overwrites outer).
         Rgba32 center = target[32, 32];
@@ -203,20 +206,21 @@ public partial class DrawingCanvasTests
     {
         TestImageProvider<Rgba32> provider = TestImageProvider<Rgba32>.Blank(1, 1);
         using Image<Rgba32> target = new(64, 64);
-        using DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions());
+        using (DrawingCanvas<Rgba32> canvas = CreateCanvas(provider, target, new DrawingOptions()))
+        {
+            canvas.Fill(new SolidBrush(Color.White));
 
-        canvas.Fill(new SolidBrush(Color.White));
+            canvas.Save();              // SaveCount = 2 (plain save)
+            canvas.SaveLayer();         // SaveCount = 3 (layer)
+            canvas.Save();              // SaveCount = 4 (plain save)
+            Assert.Equal(4, canvas.SaveCount);
 
-        canvas.Save();              // SaveCount = 2 (plain save)
-        canvas.SaveLayer();         // SaveCount = 3 (layer)
-        canvas.Save();              // SaveCount = 4 (plain save)
-        Assert.Equal(4, canvas.SaveCount);
+            canvas.Fill(new SolidBrush(Color.Green), new RectangularPolygon(0, 0, 64, 64));
 
-        canvas.Fill(new SolidBrush(Color.Green), new RectangularPolygon(0, 0, 64, 64));
-
-        // RestoreTo(1) should pop all states including the layer.
-        canvas.RestoreTo(1);
-        Assert.Equal(1, canvas.SaveCount);
+            // RestoreTo(1) should pop all states including the layer.
+            canvas.RestoreTo(1);
+            Assert.Equal(1, canvas.SaveCount);
+        }
 
         Rgba32 pixel = target[32, 32];
         Assert.Equal(new Rgba32(0, 128, 0, 255), pixel);

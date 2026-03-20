@@ -62,19 +62,20 @@ The active state lives in `DrawingCanvasState`:
 
 ## Layer Lifecycle
 
-`SaveLayer` is the mechanism for isolated group rendering. The canvas flushes current work, switches batching to a temporary layer frame, records commands into that frame, then composites the layer back on restore.
+`SaveLayer` is the mechanism for isolated group rendering.
+
+The canvas no longer flushes or switches to a temporary backend frame.
+Instead it records inline layer boundaries into the shared command stream and
+updates the active command target bounds for commands issued inside the layer.
 
 ### SaveLayer Flow
 
 ```mermaid
 flowchart TD
-    A[Save layer request] --> B[Flush current batcher]
-    B --> C[Clamp bounds to canvas]
-    C --> D[Create layer frame through backend]
-    D --> E[Create LayerData with parent batcher, layer frame, layer bounds]
-    E --> F[Push LayerData]
-    F --> G[Replace active batcher with a batcher targeting the layer frame]
-    G --> H[Push layer drawing state]
+    A[Save layer request] --> B[Clamp bounds to canvas]
+    B --> C[Convert layer bounds to absolute target bounds]
+    C --> D[Queue BeginLayer command]
+    D --> E[Push layer drawing state with layer target bounds]
 ```
 
 ### Restore Layer Flow
@@ -83,20 +84,16 @@ flowchart TD
 flowchart TD
     A[Restore or RestoreTo] --> B{Popped state is a layer?}
     B -- No --> C[Return]
-    B -- Yes --> D[Flush layer batcher]
-    D --> E[Pop LayerData]
-    E --> F[Restore parent batcher]
-    F --> G[Compose layer into parent target]
-    G --> H[Release layer frame resources]
+    B -- Yes --> D[Queue EndLayer command]
 ```
 
 ### Important Layer Details
 
-- Layer creation is backend-driven through `IDrawingBackend.CreateLayerFrame(...)`.
-- The CPU backend returns a `MemoryCanvasFrame<TPixel>`.
-- A GPU backend may return a native frame backed by a GPU resource.
-- Explicit `Restore()` composites with the saved layer options.
-- Disposal composites any still-active layers with default `GraphicsOptions`.
+- Layer isolation now lives in the command stream as `BeginLayer` / `EndLayer`.
+- Commands recorded inside a bounded layer use that layer's absolute target bounds.
+- The CPU backend lowers layers inline inside `FlushScene`.
+- The WebGPU backend lowers layers inline through staged clip/layer commands.
+- Explicit `Restore()` and implicit disposal both close layers by recording `EndLayer`.
 
 ## The Batcher
 
@@ -269,13 +266,16 @@ For strokes, the ordering is:
 flowchart TD
     A[Create region request] --> B[Clamp to canvas bounds]
     B --> C[Wrap target frame in CanvasRegionFrame]
-    C --> D[Create child DrawingCanvas]
-    D --> E[Reuse backend]
-    D --> F[Reuse batcher]
-    D --> G[Reuse current DrawingCanvasState]
+    C --> D[Clone current drawing state with child target bounds]
+    D --> E[Create child DrawingCanvas]
+    E --> F[Reuse backend]
+    E --> G[Reuse batcher]
+    E --> H[Reuse deferred image resource list]
 ```
 
-The child canvas gets local bounds `(0, 0, clipped.Width, clipped.Height)`, while command offsets are still derived from the child frame location.
+The child canvas gets local bounds `(0, 0, clipped.Width, clipped.Height)`.
+Commands recorded through that child use the child frame's absolute bounds as
+their target bounds and derive destination offsets from that same origin.
 
 ## Disposal
 
@@ -284,16 +284,18 @@ The child canvas gets local bounds `(0, 0, clipped.Width, clipped.Height)`, whil
 ```mermaid
 flowchart TD
     A[Dispose] --> B[Restore saved state stack to depth 1]
-    B --> C[Composite any active layers through the normal restore path]
-    C --> D[Final batcher flush]
-    D --> E[DisposePendingImageResources]
-    E --> F[Mark canvas disposed]
+    B --> C{Owns shared batcher?}
+    C -- No --> D[Mark canvas disposed]
+    C -- Yes --> E[Final batcher flush]
+    E --> F[DisposePendingImageResources]
+    F --> G[Mark canvas disposed]
 ```
 
 Important detail:
 
-- `Dispose()` now unwinds active layers through the same layer-composition path used by `Restore()` and `RestoreTo(...)`
-- custom layer `GraphicsOptions` therefore remain in effect even when callers rely on implicit cleanup
+- `Dispose()` always unwinds active saved states through the same `EndLayer` recording path used by `Restore()` and `RestoreTo(...)`
+- only the owning canvas flushes and releases the shared deferred image resources
+- child region canvases therefore do not force an early flush when they are disposed
 
 ## Backend Touchpoints
 
@@ -301,13 +303,10 @@ Important detail:
 
 - `FlushCompositions(...)`
 - `TryReadRegion(...)`
-- `ComposeLayer(...)`
-- `CreateLayerFrame(...)`
-- `ReleaseFrameResources(...)`
 
 `DefaultDrawingBackend` executes the CPU path.
 
-`WebGPUDrawingBackend` can supply native surfaces, layer frames, and GPU execution while still fitting the same canvas contract.
+`WebGPUDrawingBackend` can supply native surfaces and GPU execution while still fitting the same canvas contract.
 
 ## End-To-End Command Flow
 

@@ -251,120 +251,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
     }
 
-    /// <inheritdoc />
-    public ICanvasFrame<TPixel> CreateLayerFrame<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> parentTarget,
-        int width,
-        int height)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        this.ThrowIfDisposed();
-
-        if (TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature)
-            && parentTarget.TryGetNativeSurface(out NativeSurface? parentSurface))
-        {
-            _ = parentSurface.TryGetCapability(out WebGPUSurfaceCapability? parentCapability);
-            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-            WebGPU api = lease.Api;
-            Device* device = (Device*)parentCapability!.Device;
-
-            WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, device);
-            if (requiredFeature == FeatureName.Undefined || deviceState.HasFeature(requiredFeature))
-            {
-                TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
-                TextureDescriptor textureDescriptor = new()
-                {
-                    Usage = TextureUsage.TextureBinding | TextureUsage.StorageBinding | TextureUsage.CopySrc | TextureUsage.CopyDst,
-                    Dimension = TextureDimension.Dimension2D,
-                    Size = new Extent3D((uint)width, (uint)height, 1),
-                    Format = textureFormat,
-                    MipLevelCount = 1,
-                    SampleCount = 1
-                };
-
-                Texture* texture = api.DeviceCreateTexture(device, in textureDescriptor);
-                if (texture is not null)
-                {
-                    TextureViewDescriptor viewDescriptor = new()
-                    {
-                        Format = textureFormat,
-                        Dimension = TextureViewDimension.Dimension2D,
-                        BaseMipLevel = 0,
-                        MipLevelCount = 1,
-                        BaseArrayLayer = 0,
-                        ArrayLayerCount = 1,
-                        Aspect = TextureAspect.All
-                    };
-
-                    TextureView* textureView = api.TextureCreateView(texture, in viewDescriptor);
-                    if (textureView is not null)
-                    {
-                        NativeSurface surface = WebGPUNativeSurfaceFactory.Create<TPixel>(
-                            parentCapability.Device,
-                            parentCapability.Queue,
-                            (nint)texture,
-                            (nint)textureView,
-                            formatId,
-                            width,
-                            height);
-
-                        return new NativeCanvasFrame<TPixel>(new Rectangle(0, 0, width, height), surface);
-                    }
-
-                    api.TextureRelease(texture);
-                }
-            }
-        }
-
-        return this.fallbackBackend.CreateLayerFrame(configuration, parentTarget, width, height);
-    }
-
-    /// <inheritdoc />
-    public void ComposeLayer<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> source,
-        ICanvasFrame<TPixel> destination,
-        Point destinationOffset,
-        GraphicsOptions options)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        this.ThrowIfDisposed();
-
-        if (!destination.TryGetNativeSurface(out _))
-        {
-            this.fallbackBackend.ComposeLayer(configuration, source, destination, destinationOffset, options);
-            return;
-        }
-
-        if (this.TryComposeLayerGpu(configuration, source, destination, destinationOffset, options))
-        {
-            return;
-        }
-
-        this.ComposeLayerFallback(configuration, source, destination, destinationOffset, options);
-    }
-
-    /// <inheritdoc />
-    public void ReleaseFrameResources<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (target.TryGetNativeSurface(out NativeSurface? nativeSurface))
-        {
-            _ = nativeSurface.TryGetCapability(out WebGPUSurfaceCapability? capability);
-            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-            WebGPU api = lease.Api;
-            api.TextureViewRelease((TextureView*)capability!.TargetTextureView);
-            api.TextureRelease((Texture*)capability.TargetTexture);
-        }
-        else
-        {
-            this.fallbackBackend.ReleaseFrameResources(configuration, target);
-        }
-    }
-
     /// <summary>
     /// Executes the scene on the CPU fallback backend, then uploads the result
     /// to the native GPU surface.
@@ -450,7 +336,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         ICanvasFrame<TPixel> destFrame = new MemoryCanvasFrame<TPixel>(destRegion);
         ICanvasFrame<TPixel> srcFrame = new MemoryCanvasFrame<TPixel>(srcRegion);
 
-        this.fallbackBackend.ComposeLayer(configuration, srcFrame, destFrame, destinationOffset, options);
+        DefaultDrawingBackend.ComposeLayer(configuration, srcFrame, destFrame, destinationOffset, options);
 
         using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         WebGPUFlushContext.UploadTextureFromRegion(

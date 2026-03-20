@@ -31,7 +31,7 @@ public class Issue_270
 
         using Image<Rgba32> targetImage = new(targetImageWidth, targetImageHeight, Color.Wheat.ToPixel<Rgba32>());
         using Image<Rgba32> imageBrushImage = new(sourceImageWidth, sourceImageHeight, Color.Black.ToPixel<Rgba32>());
-        ImageBrush imageBrush = new(imageBrushImage);
+        ImageBrush<Rgba32> imageBrush = new(imageBrushImage);
 
         targetImage.Mutate(x => x.ProcessWithCanvas(canvas => canvas.DrawText(CreateTextOptions(font, targetImageWidth), text, imageBrush, pen)));
     }

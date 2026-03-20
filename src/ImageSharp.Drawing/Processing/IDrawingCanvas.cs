@@ -47,17 +47,18 @@ public interface IDrawingCanvas : IDisposable
 
     /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer.
-    /// Subsequent draw commands render to a temporary surface. When <see cref="Restore"/>
-    /// is called, the layer is composited back onto the parent using the default
-    /// <see cref="GraphicsOptions"/>.
+    /// Subsequent draw commands are recorded into an isolated logical layer. When
+    /// <see cref="Restore"/> closes the layer, that layer becomes eligible for
+    /// composition during the next <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/>.
     /// </summary>
     /// <returns>The save count after the layer state has been pushed.</returns>
     public int SaveLayer();
 
     /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer.
-    /// Subsequent draw commands render to a temporary surface. When <see cref="Restore"/>
-    /// is called, the layer is composited back onto the parent using the specified
+    /// Subsequent draw commands are recorded into an isolated logical layer. When
+    /// <see cref="Restore"/> closes the layer, that layer is composed during the next
+    /// <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/> using the specified
     /// <paramref name="layerOptions"/> (blend mode, alpha composition, opacity).
     /// </summary>
     /// <param name="layerOptions">
@@ -68,9 +69,9 @@ public interface IDrawingCanvas : IDisposable
 
     /// <summary>
     /// Saves the current drawing state and begins an isolated compositing layer
-    /// bounded to a subregion. Subsequent draw commands render to a temporary surface
-    /// sized to <paramref name="bounds"/>. When <see cref="Restore"/> is called, the
-    /// layer is composited back onto the parent using the specified
+    /// bounded to a subregion. Subsequent draw commands are recorded into that isolated
+    /// logical layer. When <see cref="Restore"/> closes the layer, it is composed during
+    /// the next <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/> using the specified
     /// <paramref name="layerOptions"/>.
     /// </summary>
     /// <param name="layerOptions">
@@ -87,8 +88,8 @@ public interface IDrawingCanvas : IDisposable
     /// </summary>
     /// <remarks>
     /// If the most recently saved state was created by a <c>SaveLayer</c> overload,
-    /// pending commands are flushed to the layer surface, the layer is composited back onto
-    /// the parent target, and the temporary layer buffer is disposed.
+    /// the layer is closed in the deferred scene. Actual composition happens during the
+    /// next <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/>.
     /// </remarks>
     public void Restore();
 
@@ -99,7 +100,8 @@ public interface IDrawingCanvas : IDisposable
     /// State frames above <paramref name="saveCount"/> are discarded,
     /// and the last discarded frame becomes the current state.
     /// If any discarded state was created by a <c>SaveLayer</c> overload,
-    /// the layer is composited and its resources disposed.
+    /// those layers are closed in the deferred scene and are composed during the next
+    /// <see cref="Flush"/> or <see cref="System.IDisposable.Dispose"/>.
     /// </remarks>
     /// <param name="saveCount">The save count to restore to.</param>
     public void RestoreTo(int saveCount);
@@ -183,7 +185,7 @@ public interface IDrawingCanvas : IDisposable
     /// Applies an image-processing operation to a path region.
     /// </summary>
     /// <remarks>
-    /// The operation is constrained to the path bounds and then composited back using an <see cref="ImageBrush"/>.
+    /// The operation is constrained to the path bounds and then composited back using an image brush.
     /// </remarks>
     /// <param name="path">The path region to process.</param>
     /// <param name="operation">The image-processing operation to apply to the region.</param>

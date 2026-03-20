@@ -196,31 +196,6 @@ public class DrawingCanvasBatcherTests
             where TPixel : unmanaged, IPixel<TPixel>
             => false;
 
-        public void ComposeLayer<TPixel>(
-            Configuration configuration,
-            ICanvasFrame<TPixel> source,
-            ICanvasFrame<TPixel> destination,
-            Point destinationOffset,
-            GraphicsOptions options)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-        }
-
-        public ICanvasFrame<TPixel> CreateLayerFrame<TPixel>(
-            Configuration configuration,
-            ICanvasFrame<TPixel> parentTarget,
-            int width,
-            int height)
-            where TPixel : unmanaged, IPixel<TPixel>
-            => DefaultDrawingBackend.Instance.CreateLayerFrame(configuration, parentTarget, width, height);
-
-        public void ReleaseFrameResources<TPixel>(
-            Configuration configuration,
-            ICanvasFrame<TPixel> target)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-        }
-
         public sealed class CapturedCoverageDefinition(CompositionCoverageDefinition definition, List<CompositionCommand> commands)
         {
             public CompositionCoverageDefinition Definition { get; } = definition;

@@ -33,6 +33,22 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets.");
         }
 
+        if (compositionScene.HasLayers)
+        {
+            using FlushScene layeredScene = FlushScene.Create(
+                compositionScene.Commands,
+                target.Bounds,
+                configuration.MemoryAllocator);
+
+            if (layeredScene.ItemCount == 0)
+            {
+                return;
+            }
+
+            layeredScene.ExecuteLayered(configuration, destinationFrame, compositionScene.Commands);
+            return;
+        }
+
         using FlushScene scene = FlushScene.Create(
             compositionScene.Commands,
             target.Bounds,
@@ -46,8 +62,16 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         scene.Execute(configuration, destinationFrame);
     }
 
-    /// <inheritdoc />
-    public void ComposeLayer<TPixel>(
+    /// <summary>
+    /// Composites one CPU-backed frame onto another using the supplied graphics options.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="source">The source frame.</param>
+    /// <param name="destination">The destination frame.</param>
+    /// <param name="destinationOffset">The destination offset relative to <paramref name="destination"/>.</param>
+    /// <param name="options">The graphics options controlling composition.</param>
+    public static void ComposeLayer<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> source,
         ICanvasFrame<TPixel> destination,
@@ -101,30 +125,6 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             Span<TPixel> dstRow = destinationRegion.DangerousGetRowSpan(dstY).Slice(dstX, width);
 
             blender.Blend(configuration, dstRow, dstRow, srcRow, amounts);
-        }
-    }
-
-    /// <inheritdoc />
-    public ICanvasFrame<TPixel> CreateLayerFrame<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> parentTarget,
-        int width,
-        int height)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        Buffer2D<TPixel> buffer = configuration.MemoryAllocator.Allocate2D<TPixel>(width, height, AllocationOptions.Clean);
-        return new MemoryCanvasFrame<TPixel>(new Buffer2DRegion<TPixel>(buffer));
-    }
-
-    /// <inheritdoc />
-    public void ReleaseFrameResources<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> target)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (target.TryGetCpuRegion(out Buffer2DRegion<TPixel> region))
-        {
-            region.Buffer.Dispose();
         }
     }
 
