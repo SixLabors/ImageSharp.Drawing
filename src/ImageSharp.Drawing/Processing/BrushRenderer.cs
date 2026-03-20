@@ -7,7 +7,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// Renders a <see cref="Brush"/> against individual coverage scanlines.
 /// </summary>
 /// <typeparam name="TPixel">The pixel format.</typeparam>
-public abstract class BrushRenderer<TPixel> : IDisposable
+public abstract class BrushRenderer<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
     /// <summary>
@@ -46,18 +46,6 @@ public abstract class BrushRenderer<TPixel> : IDisposable
     /// Gets the canvas width for the current render pass.
     /// </summary>
     protected int CanvasWidth { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether this renderer owns disposable resources.
-    /// </summary>
-    internal virtual bool RequiresDispose => false;
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        this.Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>
     /// Applies the opacity weighting for each pixel in a scanline to the target based on the

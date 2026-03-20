@@ -169,7 +169,7 @@ public abstract class ImageBrush : Brush
     /// The image brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private class ImageBrushRenderer<TPixel> : BrushRenderer<TPixel>
+    private sealed class ImageBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly ImageFrame<TPixel> sourceFrame;

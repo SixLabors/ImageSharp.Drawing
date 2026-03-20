@@ -670,61 +670,51 @@ internal sealed class FlushScene : IDisposable
             }
         });
 
-        try
-        {
-            _ = Parallel.For(
-                0,
-                this.RowCount,
-                options,
-                () => new ExecuteWorkerState<TPixel>(
-                    allocator,
+        _ = Parallel.For(
+            0,
+            this.RowCount,
+            options,
+            () => new ExecuteWorkerState<TPixel>(
+                allocator,
+                this.maxWordsPerRow,
+                this.maxCoverStride,
+                this.maxWidth,
+                this.maxBandCapacity),
+            (sceneRow, _, state) =>
+            {
+                DefaultRasterizer.WorkerScratch scratch = state.Scratch!;
+                DefaultRasterizer.Context context = scratch.CreateContext(
+                    this.maxWidth,
                     this.maxWordsPerRow,
                     this.maxCoverStride,
-                    this.maxWidth,
-                    this.maxBandCapacity),
-                (sceneRow, _, state) =>
+                    this.maxBandCapacity,
+                    IntersectionRule.NonZero,
+                    RasterizationMode.Antialiased,
+                    antialiasThreshold: 0F);
+
+                int rowStart = this.rowOffsets[sceneRow];
+                int rowEnd = this.rowOffsets[sceneRow + 1];
+                if (rowStart >= rowEnd)
                 {
-                    DefaultRasterizer.WorkerScratch scratch = state.Scratch!;
-                    DefaultRasterizer.Context context = scratch.CreateContext(
-                        this.maxWidth,
-                        this.maxWordsPerRow,
-                        this.maxCoverStride,
-                        this.maxBandCapacity,
-                        IntersectionRule.NonZero,
-                        RasterizationMode.Antialiased,
-                        antialiasThreshold: 0F);
-
-                    int rowStart = this.rowOffsets[sceneRow];
-                    int rowEnd = this.rowOffsets[sceneRow + 1];
-                    if (rowStart >= rowEnd)
-                    {
-                        return state;
-                    }
-
-                    BandTarget<TPixel> rootTarget = BandTarget<TPixel>.CreateRoot(destinationFrame);
-                    this.ExecuteBand(
-                        configuration,
-                        sourceCommands,
-                        preparedBrushes,
-                        lineData.Span,
-                        startCovers.Span,
-                        sceneRow,
-                        rowStart,
-                        rowEnd,
-                        ref context,
-                        state,
-                        rootTarget);
                     return state;
-                },
-                state => state.Dispose());
-        }
-        finally
-        {
-            for (int i = 0; i < preparedBrushes.Length; i++)
-            {
-                preparedBrushes[i].Dispose();
-            }
-        }
+                }
+
+                BandTarget<TPixel> rootTarget = BandTarget<TPixel>.CreateRoot(destinationFrame);
+                this.ExecuteBand(
+                    configuration,
+                    sourceCommands,
+                    preparedBrushes,
+                    lineData.Span,
+                    startCovers.Span,
+                    sceneRow,
+                    rowStart,
+                    rowEnd,
+                    ref context,
+                    state,
+                    rootTarget);
+                return state;
+            },
+            state => state.Dispose());
     }
 
     /// <summary>

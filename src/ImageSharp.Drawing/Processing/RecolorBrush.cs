@@ -74,7 +74,7 @@ public sealed class RecolorBrush : Brush
     /// The recolor brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private class RecolorBrushRenderer<TPixel> : BrushRenderer<TPixel>
+    private sealed class RecolorBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly Vector4 sourceColor;

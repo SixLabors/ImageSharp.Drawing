@@ -226,17 +226,16 @@ public sealed class SweepGradientBrush : GradientBrush
         Configuration configuration,
         GraphicsOptions options,
         int canvasWidth,
-        RectangleF region)
-    {
+        RectangleF region) =>
+
         // The renderer precomputes the angular interval once and then samples it per pixel.
-        return new SweepGradientBrushRenderer<TPixel>(
+        new SweepGradientBrushRenderer<TPixel>(
             configuration,
             options,
             canvasWidth,
             this,
             this.ColorStopsArray,
             this.RepetitionMode);
-    }
 
     /// <summary>
     /// The sweep (conic) gradient brush applicator.
