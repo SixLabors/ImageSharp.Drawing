@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
+<!--
+  Keep framework-selection properties local so solution builds that pass `-f` for runtime/JIT
+  coverage do not retarget this analyzer project away from its fixed netstandard TFM.
+-->
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="TargetFramework;TargetFrameworks">
   <PropertyGroup>
     <OutputType>Library</OutputType>
     <TargetFramework>netstandard2.0</TargetFramework>
