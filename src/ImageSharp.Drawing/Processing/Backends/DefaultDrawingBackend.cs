@@ -9,7 +9,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <summary>
 /// CPU backend that executes path coverage rasterization and brush composition directly against a CPU region.
 /// </summary>
-public sealed class DefaultDrawingBackend : IDrawingBackend
+public sealed partial class DefaultDrawingBackend : IDrawingBackend
 {
     /// <summary>
     /// Gets the default backend instance.
@@ -46,6 +46,14 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         ExecuteScene(configuration, destinationFrame, compositionScene.Commands, scene);
     }
 
+    /// <summary>
+    /// Executes one retained flush scene against a CPU destination frame.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="destinationFrame">The destination CPU region.</param>
+    /// <param name="commands">The original composition commands referenced by the retained scene.</param>
+    /// <param name="scene">The retained scene to execute.</param>
     private static void ExecuteScene<TPixel>(
         Configuration configuration,
         Buffer2DRegion<TPixel> destinationFrame,
@@ -59,6 +67,8 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             _ = item.GetRenderer<TPixel>(configuration, destinationFrame.Width);
         }
 
+        // Warm the cached renderers before the row loop so the hot execution path only
+        // performs retained-scene work and brush application.
         _ = Parallel.For(
             fromInclusive: 0,
             toExclusive: scene.RowCount,
@@ -81,6 +91,16 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             localFinally: static state => state.Dispose());
     }
 
+    /// <summary>
+    /// Executes one retained scene row against the destination band it overlaps.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="destinationFrame">The destination CPU region.</param>
+    /// <param name="commands">The original composition commands.</param>
+    /// <param name="scene">The retained flush scene.</param>
+    /// <param name="row">The retained scene row to execute.</param>
+    /// <param name="state">The worker-local scratch and compositing state.</param>
     private static void ExecuteSceneRow<TPixel>(
         Configuration configuration,
         Buffer2DRegion<TPixel> destinationFrame,
@@ -111,6 +131,9 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             {
                 foreach (FlushScene.SceneOperation operation in block.Items)
                 {
+                    // Each retained row contains a compact mix of layer control operations and
+                    // fill operations in original command order, so the executor can replay the
+                    // row without re-walking the full scene description.
                     switch (operation.Kind)
                     {
                         case CompositionCommandKind.BeginLayer:
@@ -154,6 +177,13 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         }
     }
 
+    /// <summary>
+    /// Computes the minimum reusable scratch width needed to execute one retained scene row.
+    /// </summary>
+    /// <param name="scene">The retained flush scene.</param>
+    /// <param name="row">The retained scene row.</param>
+    /// <param name="minimumWidth">The baseline width taken from the destination band.</param>
+    /// <returns>The scratch width required by the row.</returns>
     private static int GetRowScratchWidth(
         FlushScene scene,
         in FlushScene.SceneRow row,
@@ -180,6 +210,15 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         return width;
     }
 
+    /// <summary>
+    /// Executes one retained fill operation through the rasterizer and brush renderer.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="renderer">The memoized brush renderer for the scene item.</param>
+    /// <param name="item">The retained rasterizable row item to execute.</param>
+    /// <param name="target">The active composition target for the row.</param>
+    /// <param name="scratch">The worker-local raster scratch.</param>
+    /// <param name="state">The worker-local execution state.</param>
     private static void ExecuteFillOperation<TPixel>(
         BrushRenderer<TPixel> renderer,
         DefaultRasterizer.RasterizableItem item,
@@ -190,10 +229,6 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
     {
         DefaultRasterizer.RasterizableBandInfo bandInfo = item.Rasterizable.GetBandInfo(item.LocalRowIndex);
         DefaultRasterizer.Context context = scratch.CreateContext(
-            bandInfo.Width,
-            bandInfo.WordsPerRow,
-            bandInfo.CoverStride,
-            bandInfo.BandHeight,
             bandInfo.IntersectionRule,
             bandInfo.RasterizationMode,
             bandInfo.AntialiasThreshold);
@@ -206,6 +241,14 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             ref rowHandler);
     }
 
+    /// <summary>
+    /// Composites one temporary layer band back into its destination band.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="source">The source layer band.</param>
+    /// <param name="destination">The destination band to blend into.</param>
+    /// <param name="brushWorkspace">The worker-local amount buffer workspace.</param>
     private static void CompositeLayerBand<TPixel>(
         Configuration configuration,
         BandTarget<TPixel> source,
@@ -242,6 +285,8 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         int destinationOffsetX = overlap.X - destination.AbsoluteLeft;
         int destinationOffsetY = overlap.Y - destination.AbsoluteTop;
 
+        // Blend the overlapping rows only; the retained scene has already clipped the layer
+        // bounds so there is no need for extra per-pixel bounds logic here.
         for (int y = 0; y < overlap.Height; y++)
         {
             Span<TPixel> sourceRow = source.Region.DangerousGetRowSpan(sourceOffsetY + y).Slice(sourceOffsetX, overlap.Width);
@@ -250,121 +295,6 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
         }
     }
 
-    private readonly struct FillCoverageRowHandler<TPixel> : IRasterizerCoverageRowHandler
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly BrushRenderer<TPixel> renderer;
-        private readonly BandTarget<TPixel> target;
-        private readonly BrushWorkspace<TPixel> brushWorkspace;
-
-        public FillCoverageRowHandler(
-            BrushRenderer<TPixel> renderer,
-            BandTarget<TPixel> target,
-            BrushWorkspace<TPixel> brushWorkspace)
-        {
-            this.renderer = renderer;
-            this.target = target;
-            this.brushWorkspace = brushWorkspace;
-        }
-
-        public void Handle(int y, int startX, Span<float> coverage)
-        {
-            int localY = y - this.target.AbsoluteTop;
-            if ((uint)localY >= (uint)this.target.Region.Height)
-            {
-                return;
-            }
-
-            int clipStartX = Math.Max(startX, this.target.AbsoluteLeft);
-            int clipEndX = Math.Min(startX + coverage.Length, this.target.AbsoluteLeft + this.target.Region.Width);
-            if (clipEndX <= clipStartX)
-            {
-                return;
-            }
-
-            int coverageOffset = clipStartX - startX;
-            int clippedLength = clipEndX - clipStartX;
-            Span<TPixel> destinationRow = this.target.Region
-                .DangerousGetRowSpan(localY)
-                .Slice(clipStartX - this.target.AbsoluteLeft, clippedLength);
-            this.renderer.Apply(destinationRow, coverage.Slice(coverageOffset, clippedLength), clipStartX, y, this.brushWorkspace);
-        }
-    }
-
-    private sealed class BandTarget<TPixel> : IDisposable
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly Buffer2D<TPixel>? owner;
-
-        public BandTarget(Buffer2DRegion<TPixel> region, int absoluteLeft, int absoluteTop, GraphicsOptions? graphicsOptions)
-        {
-            this.Region = region;
-            this.AbsoluteLeft = absoluteLeft;
-            this.AbsoluteTop = absoluteTop;
-            this.GraphicsOptions = graphicsOptions;
-        }
-
-        public BandTarget(Buffer2D<TPixel> owner, Rectangle bounds, GraphicsOptions? graphicsOptions)
-        {
-            this.owner = owner;
-            this.Region = new Buffer2DRegion<TPixel>(owner);
-            this.AbsoluteLeft = bounds.X;
-            this.AbsoluteTop = bounds.Y;
-            this.GraphicsOptions = graphicsOptions;
-        }
-
-        public Buffer2DRegion<TPixel> Region { get; }
-
-        public int AbsoluteLeft { get; }
-
-        public int AbsoluteTop { get; }
-
-        public GraphicsOptions? GraphicsOptions { get; }
-
-        public void Dispose() => this.owner?.Dispose();
-    }
-
-    private sealed class WorkerState<TPixel> : IDisposable
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        private readonly MemoryAllocator allocator;
-        private DefaultRasterizer.WorkerScratch? scratch;
-
-        public WorkerState(
-            MemoryAllocator allocator,
-            int destinationWidth,
-            int layerDepth)
-        {
-            this.allocator = allocator;
-            this.BrushWorkspace = new BrushWorkspace<TPixel>(allocator, destinationWidth);
-            this.TargetStack = new BandTarget<TPixel>[layerDepth];
-        }
-
-        public BrushWorkspace<TPixel> BrushWorkspace { get; }
-
-        public BandTarget<TPixel>[] TargetStack { get; }
-
-        public DefaultRasterizer.WorkerScratch GetOrCreateScratch(int requiredWidth)
-        {
-            DefaultRasterizer.WorkerScratch? current = this.scratch;
-            if (current is not null && current.CanReuse(requiredWidth))
-            {
-                return current;
-            }
-
-            current?.Dispose();
-            this.scratch = DefaultRasterizer.CreateWorkerScratch(this.allocator, requiredWidth);
-            return this.scratch;
-        }
-
-        public void Dispose()
-        {
-            this.scratch?.Dispose();
-            this.BrushWorkspace.Dispose();
-        }
-    }
-
-#pragma warning disable SA1201 // Keep the public compose entrypoint after the worker-local helper types in this file.
     /// <summary>
     /// Composites one CPU-backed frame onto another using the supplied graphics options.
     /// </summary>
@@ -430,7 +360,6 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             blender.Blend(configuration, dstRow, dstRow, srcRow, amounts);
         }
     }
-#pragma warning restore SA1201
 
     /// <inheritdoc />
     public bool TryReadRegion<TPixel>(

@@ -8,6 +8,10 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 internal static partial class DefaultRasterizer
 {
+    /// <summary>
+    /// Base class that lowers translated geometry into retained per-row line storage.
+    /// </summary>
+    /// <typeparam name="TL">The mutable per-row line collector type.</typeparam>
     private abstract class Linearizer<TL>
         where TL : class
     {
@@ -46,42 +50,100 @@ internal static partial class DefaultRasterizer
             this.LineArrays = new TL?[rowBandCount];
         }
 
+        /// <summary>
+        /// Gets the source geometry being lowered.
+        /// </summary>
         protected LinearGeometry Geometry { get; }
 
+        /// <summary>
+        /// Gets the translated X offset applied to the geometry.
+        /// </summary>
         protected int TranslateX { get; }
 
+        /// <summary>
+        /// Gets the translated Y offset applied to the geometry.
+        /// </summary>
         protected int TranslateY { get; }
 
+        /// <summary>
+        /// Gets the minimum destination X bound after clipping.
+        /// </summary>
         protected int MinX { get; }
 
+        /// <summary>
+        /// Gets the minimum destination Y bound after clipping.
+        /// </summary>
         protected int MinY { get; }
 
+        /// <summary>
+        /// Gets the visible destination width in pixels.
+        /// </summary>
         protected int Width { get; }
 
+        /// <summary>
+        /// Gets the visible destination height in pixels.
+        /// </summary>
         protected int Height { get; }
 
+        /// <summary>
+        /// Gets the first retained row-band index touched by the geometry.
+        /// </summary>
         protected int FirstBandIndex { get; }
 
+        /// <summary>
+        /// Gets the number of retained row bands owned by the geometry.
+        /// </summary>
         protected int RowBandCount { get; }
 
+        /// <summary>
+        /// Gets the horizontal sampling offset applied before fixed-point conversion.
+        /// </summary>
         protected float SamplingOffsetX { get; }
 
+        /// <summary>
+        /// Gets the vertical sampling offset applied before fixed-point conversion.
+        /// </summary>
         protected float SamplingOffsetY { get; }
 
+        /// <summary>
+        /// Gets the allocator used for retained start-cover storage.
+        /// </summary>
         protected MemoryAllocator Allocator { get; }
 
+        /// <summary>
+        /// Gets the top offset, in whole pixels, of the first retained row band.
+        /// </summary>
         protected int BandTopStart { get; }
 
+        /// <summary>
+        /// Gets the mutable per-row line collectors used during lowering.
+        /// </summary>
         protected TL?[] LineArrays { get; }
 
+        /// <summary>
+        /// Gets the valid front-block line count for each retained row band.
+        /// </summary>
         protected int[] FirstBlockLineCounts { get; }
 
+        /// <summary>
+        /// Gets the total retained line count for each row band.
+        /// </summary>
         protected int[] LineCounts { get; }
 
+        /// <summary>
+        /// Gets the retained start-cover storage for each row band.
+        /// </summary>
         protected IMemoryOwner<int>?[] StartCoverTable { get; }
 
+        /// <summary>
+        /// Gets a value indicating whether any retained payload was produced.
+        /// </summary>
         protected ref bool HasAnyCoverage => ref this.hasAnyCoverage;
 
+        /// <summary>
+        /// Executes the linearization pass and finalizes the retained row payloads.
+        /// </summary>
+        /// <returns><see langword="true"/> when any retained coverage was produced; otherwise <see langword="false"/>.</returns>
         protected bool ProcessCore()
         {
             RectangleF translatedBounds = this.Geometry.Info.Bounds;
@@ -93,12 +155,15 @@ internal static partial class DefaultRasterizer
                 translatedBounds.Right <= this.Width &&
                 translatedBounds.Bottom <= this.Height;
 
+            // Contained geometry can skip clipping and go straight to the fixed-point band splitter.
             if (contains)
             {
                 this.ProcessContained();
             }
             else
             {
+                // Geometry that touches the interest edges needs clipping so start covers and line
+                // segments still match the destination bounds seen by the rasterizer.
                 this.ProcessUncontained();
             }
 
@@ -111,6 +176,9 @@ internal static partial class DefaultRasterizer
             return true;
         }
 
+        /// <summary>
+        /// Linearizes geometry that is fully contained inside the destination interest.
+        /// </summary>
         protected void ProcessContained()
         {
             SegmentEnumerator enumerator = this.Geometry.GetSegments();
@@ -127,6 +195,9 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Linearizes geometry that intersects the destination interest bounds and requires clipping.
+        /// </summary>
         protected void ProcessUncontained()
         {
             SegmentEnumerator enumerator = this.Geometry.GetSegments();
@@ -143,6 +214,13 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Clips one geometry line against the destination interest and adds the retained result.
+        /// </summary>
+        /// <param name="x0">The starting X coordinate in translated float space.</param>
+        /// <param name="y0">The starting Y coordinate in translated float space.</param>
+        /// <param name="x1">The ending X coordinate in translated float space.</param>
+        /// <param name="y1">The ending Y coordinate in translated float space.</param>
         protected void AddUncontainedLine(float x0, float y0, float x1, float y1)
         {
             if (y0 == y1)
@@ -173,6 +251,8 @@ internal static partial class DefaultRasterizer
 
                 if (x0c == 0)
                 {
+                    // Segments clipped fully to the left edge do not produce a visible line, but they
+                    // still change winding for rows they cross. Retain that effect as start covers.
                     this.UpdateStartCoversClipped(p0y, p1y);
                     this.hasAnyCoverage = true;
                 }
@@ -241,6 +321,7 @@ internal static partial class DefaultRasterizer
 
             if (rx0 <= 0D && rx1 <= 0D)
             {
+                // A segment that stays left of the visible band contributes winding only.
                 this.UpdateStartCoversClipped(
                     Math.Clamp(FloatToFixed24Dot8((float)ry0), 0, this.Height * FixedOne),
                     Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.Height * FixedOne));
@@ -273,6 +354,8 @@ internal static partial class DefaultRasterizer
 
                     this.UpdateStartCoversClipped(a, by);
                     this.hasAnyCoverage = true;
+
+                    // The visible portion begins exactly at x == 0 after the left-edge clip.
                     this.AddContainedLineF24Dot8(0, by, cx, cy);
                 }
                 else
@@ -304,6 +387,8 @@ internal static partial class DefaultRasterizer
                     int by = Math.Clamp(FloatToFixed24Dot8((float)(ry0 + (deltayH * t))), 0, this.Height * FixedOne);
                     int c = Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.Height * FixedOne);
 
+                    // The right-to-left case mirrors the left-edge handling above: emit the
+                    // visible portion first, then retain the winding-only tail as start covers.
                     this.AddContainedLineF24Dot8(ax, ay, 0, by);
                     this.UpdateStartCoversClipped(by, c);
                     this.hasAnyCoverage = true;
@@ -319,6 +404,13 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Adds one fully-contained line segment in 24.8 fixed-point coordinates.
+        /// </summary>
+        /// <param name="x0">The starting X coordinate.</param>
+        /// <param name="y0">The starting Y coordinate.</param>
+        /// <param name="x1">The ending X coordinate.</param>
+        /// <param name="y1">The ending Y coordinate.</param>
         protected void AddContainedLineF24Dot8(int x0, int y0, int x1, int y1)
         {
             if (y0 == y1)
@@ -383,12 +475,32 @@ internal static partial class DefaultRasterizer
             this.SplitAcrossBands(x0, y0, x1, y1);
         }
 
+        /// <summary>
+        /// Creates the mutable line collector used for one row band.
+        /// </summary>
+        /// <returns>The mutable line collector.</returns>
         protected abstract TL CreateLineArray();
 
+        /// <summary>
+        /// Appends one line segment into the retained row-band collector.
+        /// </summary>
+        /// <param name="rowIndex">The local row-band index.</param>
+        /// <param name="x0">The starting X coordinate relative to the row band.</param>
+        /// <param name="y0">The starting Y coordinate relative to the row band.</param>
+        /// <param name="x1">The ending X coordinate relative to the row band.</param>
+        /// <param name="y1">The ending Y coordinate relative to the row band.</param>
         protected abstract void AppendLine(int rowIndex, int x0, int y0, int x1, int y1);
 
+        /// <summary>
+        /// Finalizes the mutable collectors into the retained line-block representation.
+        /// </summary>
         protected abstract void FinalizeLines();
 
+        /// <summary>
+        /// Gets the mutable line collector for a row band, creating it on first use.
+        /// </summary>
+        /// <param name="rowIndex">The local row-band index.</param>
+        /// <returns>The mutable line collector.</returns>
         protected TL GetOrCreateLineArray(int rowIndex)
         {
             TL? lineArray = this.LineArrays[rowIndex];
@@ -402,10 +514,29 @@ internal static partial class DefaultRasterizer
             return lineArray;
         }
 
+        /// <summary>
+        /// Adds a downward vertical segment by delegating to the shared band-splitting path.
+        /// </summary>
+        /// <param name="x">The fixed-point X coordinate.</param>
+        /// <param name="y0">The starting fixed-point Y coordinate.</param>
+        /// <param name="y1">The ending fixed-point Y coordinate.</param>
         private void VerticalDown(int x, int y0, int y1) => this.SplitAcrossBands(x, y0, x, y1);
 
+        /// <summary>
+        /// Adds an upward vertical segment by delegating to the shared band-splitting path.
+        /// </summary>
+        /// <param name="x">The fixed-point X coordinate.</param>
+        /// <param name="y0">The starting fixed-point Y coordinate.</param>
+        /// <param name="y1">The ending fixed-point Y coordinate.</param>
         private void VerticalUp(int x, int y0, int y1) => this.SplitAcrossBands(x, y0, x, y1);
 
+        /// <summary>
+        /// Splits a contained line segment at row-band boundaries and appends each retained piece.
+        /// </summary>
+        /// <param name="x0">The starting X coordinate.</param>
+        /// <param name="y0">The starting Y coordinate.</param>
+        /// <param name="x1">The ending X coordinate.</param>
+        /// <param name="y1">The ending Y coordinate.</param>
         private void SplitAcrossBands(int x0, int y0, int x1, int y1)
         {
             int dy = y1 - y0;
@@ -425,6 +556,8 @@ internal static partial class DefaultRasterizer
                 int deltaY = bandBoundaryY - currentY;
                 int nextX = currentX + (int)(((long)dx * deltaY) / dy);
                 int rowTop = bandTopStart + (currentBand * bandHeight);
+
+                // Each retained segment is stored in the local coordinate space of its owning band.
                 this.AppendLine(currentBand, currentX, currentY - rowTop, nextX, bandBoundaryY - rowTop);
                 this.LineCounts[currentBand]++;
                 this.hasAnyCoverage = true;
@@ -444,6 +577,11 @@ internal static partial class DefaultRasterizer
             this.hasAnyCoverage = true;
         }
 
+        /// <summary>
+        /// Updates retained start-cover rows for a line that has been clipped against the visible band.
+        /// </summary>
+        /// <param name="y0">The clipped starting Y coordinate.</param>
+        /// <param name="y1">The clipped ending Y coordinate.</param>
         private void UpdateStartCoversClipped(int y0, int y1)
         {
             if (y0 == y1)
@@ -464,6 +602,7 @@ internal static partial class DefaultRasterizer
                 this.UpdateStartCovers(rowIndex0, fy0, rowIndex0 == rowIndex1 ? fy1 : bandHeight);
                 for (int i = rowIndex0 + 1; i < rowIndex1; i++)
                 {
+                    // Full interior bands receive a constant winding contribution.
                     this.FillStartCovers(i, -FixedOne);
                 }
 
@@ -485,6 +624,7 @@ internal static partial class DefaultRasterizer
                 this.UpdateStartCovers(rowIndex0, fy0, rowIndex0 == rowIndex1 ? fy1 : 0);
                 for (int i = rowIndex0 - 1; i > rowIndex1; i--)
                 {
+                    // Full interior bands receive a constant winding contribution.
                     this.FillStartCovers(i, FixedOne);
                 }
 
@@ -495,6 +635,11 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Fills an entire retained start-cover row with a constant winding value.
+        /// </summary>
+        /// <param name="localBandIndex">The local row-band index.</param>
+        /// <param name="value">The constant winding value to add.</param>
         private void FillStartCovers(int localBandIndex, int value)
         {
             IMemoryOwner<int>? owner = this.StartCoverTable[localBandIndex];
@@ -513,6 +658,12 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Updates a retained start-cover row for one clipped vertical interval.
+        /// </summary>
+        /// <param name="localBandIndex">The local row-band index.</param>
+        /// <param name="y0">The starting Y coordinate relative to the row band.</param>
+        /// <param name="y1">The ending Y coordinate relative to the row band.</param>
         private void UpdateStartCovers(int localBandIndex, int y0, int y1)
         {
             IMemoryOwner<int>? owner = this.StartCoverTable[localBandIndex];
@@ -533,6 +684,12 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Applies a downward winding contribution to one retained start-cover table.
+        /// </summary>
+        /// <param name="covers">The retained start-cover rows.</param>
+        /// <param name="y0">The starting Y coordinate relative to the row band.</param>
+        /// <param name="y1">The ending Y coordinate relative to the row band.</param>
         private static void UpdateCoverTableDown(Span<int> covers, int y0, int y1)
         {
             int rowIndex0 = y0 >> FixedShift;
@@ -555,6 +712,12 @@ internal static partial class DefaultRasterizer
             covers[rowIndex1] -= fy1;
         }
 
+        /// <summary>
+        /// Applies an upward winding contribution to one retained start-cover table.
+        /// </summary>
+        /// <param name="covers">The retained start-cover rows.</param>
+        /// <param name="y0">The starting Y coordinate relative to the row band.</param>
+        /// <param name="y1">The ending Y coordinate relative to the row band.</param>
         private static void UpdateCoverTableUp(Span<int> covers, int y0, int y1)
         {
             int rowIndex0 = (y0 - 1) >> FixedShift;
@@ -578,118 +741,14 @@ internal static partial class DefaultRasterizer
         }
     }
 
-#pragma warning disable SA1201 // Keep the finalized retained output types adjacent to the linearizer that produces them.
     /// <summary>
-    /// Retained tile-space bounds for one linearized geometry payload.
+    /// Linearizer that finalizes retained lines into the 32-bit-X encoding.
     /// </summary>
-    internal readonly struct TileBounds
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TileBounds"/> struct.
-        /// </summary>
-        public TileBounds(int x, int y, int columnCount, int rowCount)
-        {
-            this.X = x;
-            this.Y = y;
-            this.ColumnCount = columnCount;
-            this.RowCount = rowCount;
-        }
-
-        /// <summary>
-        /// Gets the tile-space left coordinate.
-        /// </summary>
-        public int X { get; }
-
-        /// <summary>
-        /// Gets the tile-space top coordinate.
-        /// </summary>
-        public int Y { get; }
-
-        /// <summary>
-        /// Gets the tile-space column count.
-        /// </summary>
-        public int ColumnCount { get; }
-
-        /// <summary>
-        /// Gets the tile-space row count.
-        /// </summary>
-        public int RowCount { get; }
-    }
-
-    /// <summary>
-    /// Contract implemented by retained line-block payloads.
-    /// </summary>
-    /// <typeparam name="TSelf">The concrete retained line-block type.</typeparam>
-    internal interface ILineBlock<TSelf>
-        where TSelf : class, ILineBlock<TSelf>
-    {
-        /// <summary>
-        /// Gets the number of lines stored in a full block.
-        /// </summary>
-        public static abstract int LineCount { get; }
-
-        /// <summary>
-        /// Gets the next block in the retained chain.
-        /// </summary>
-        public TSelf? Next { get; }
-
-        /// <summary>
-        /// Rasterizes the leading <paramref name="count"/> lines from this block.
-        /// </summary>
-        /// <param name="count">The number of leading lines to rasterize from this block.</param>
-        /// <param name="context">The mutable scan-conversion context to write into.</param>
-        public void Rasterize(int count, ref Context context);
-    }
-
-    /// <summary>
-    /// Finalized retained raster data for one concrete line-block encoding.
-    /// </summary>
-    internal sealed class LinearizedRasterData<TLineBlock>
-        where TLineBlock : class, ILineBlock<TLineBlock>
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LinearizedRasterData{TLineBlock}"/> class.
-        /// </summary>
-        public LinearizedRasterData(
-            LinearGeometry geometry,
-            TileBounds bounds,
-            TLineBlock?[] lines,
-            int[] firstBlockLineCounts,
-            IMemoryOwner<int>?[] startCoverTable)
-        {
-            this.Geometry = geometry;
-            this.Bounds = bounds;
-            this.Lines = lines;
-            this.FirstBlockLineCounts = firstBlockLineCounts;
-            this.StartCoverTable = startCoverTable;
-        }
-
-        public LinearGeometry Geometry { get; }
-
-        public TileBounds Bounds { get; }
-
-        public TLineBlock?[] Lines { get; }
-
-        public int[] FirstBlockLineCounts { get; }
-
-        public IMemoryOwner<int>?[] StartCoverTable { get; }
-
-        public void Iterate(int rowIndex, ref Context context)
-        {
-            int count = this.FirstBlockLineCounts[rowIndex];
-            TLineBlock? lineBlock = this.Lines[rowIndex];
-            while (lineBlock is not null)
-            {
-                lineBlock.Rasterize(count, ref context);
-                lineBlock = lineBlock.Next;
-                count = TLineBlock.LineCount;
-            }
-        }
-    }
-#pragma warning restore SA1201
-
     private sealed class LinearizerX32Y16 : Linearizer<LineArrayX32Y16>
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LinearizerX32Y16"/> class.
+        /// </summary>
         public LinearizerX32Y16(
             LinearGeometry geometry,
             int translateX,
@@ -706,13 +765,19 @@ internal static partial class DefaultRasterizer
             : base(geometry, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
             => this.FinalLines = new LineArrayX32Y16Block?[rowBandCount];
 
+        /// <summary>
+        /// Gets the finalized retained line blocks for each row band.
+        /// </summary>
         public LineArrayX32Y16Block?[] FinalLines { get; }
 
+        /// <inheritdoc />
         protected override LineArrayX32Y16 CreateLineArray() => new();
 
+        /// <inheritdoc />
         protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1)
-            => this.GetOrCreateLineArray(rowIndex).AppendLine(this.Allocator, x0, y0, x1, y1);
+            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1);
 
+        /// <inheritdoc />
         protected override void FinalizeLines()
         {
             for (int i = 0; i < this.RowBandCount; i++)
@@ -723,6 +788,11 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Executes the 32-bit-X linearization pass and returns the retained result.
+        /// </summary>
+        /// <param name="result">The finalized retained raster data.</param>
+        /// <returns><see langword="true"/> when retained coverage was produced; otherwise <see langword="false"/>.</returns>
         internal bool TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result)
         {
             if (!this.ProcessCore())
@@ -741,8 +811,14 @@ internal static partial class DefaultRasterizer
         }
     }
 
+    /// <summary>
+    /// Linearizer that finalizes retained lines into the packed 16-bit-X encoding.
+    /// </summary>
     private sealed class LinearizerX16Y16 : Linearizer<LineArrayX16Y16>
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LinearizerX16Y16"/> class.
+        /// </summary>
         public LinearizerX16Y16(
             LinearGeometry geometry,
             int translateX,
@@ -759,13 +835,19 @@ internal static partial class DefaultRasterizer
             : base(geometry, translateX, translateY, minX, minY, width, height, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, allocator)
             => this.FinalLines = new LineArrayX16Y16Block?[rowBandCount];
 
+        /// <summary>
+        /// Gets the finalized retained line blocks for each row band.
+        /// </summary>
         public LineArrayX16Y16Block?[] FinalLines { get; }
 
+        /// <inheritdoc />
         protected override LineArrayX16Y16 CreateLineArray() => new();
 
+        /// <inheritdoc />
         protected override void AppendLine(int rowIndex, int x0, int y0, int x1, int y1)
-            => this.GetOrCreateLineArray(rowIndex).AppendLine(this.Allocator, x0, y0, x1, y1);
+            => this.GetOrCreateLineArray(rowIndex).AppendLine(x0, y0, x1, y1);
 
+        /// <inheritdoc />
         protected override void FinalizeLines()
         {
             for (int i = 0; i < this.RowBandCount; i++)
@@ -776,6 +858,11 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Executes the 16-bit-X linearization pass and returns the retained result.
+        /// </summary>
+        /// <param name="result">The finalized retained raster data.</param>
+        /// <returns><see langword="true"/> when retained coverage was produced; otherwise <see langword="false"/>.</returns>
         internal bool TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result)
         {
             if (!this.ProcessCore())

@@ -14,5 +14,5 @@ internal interface IRasterizerCoverageRowHandler
     /// <param name="y">The destination y coordinate.</param>
     /// <param name="startX">The first x coordinate represented by <paramref name="coverage"/>.</param>
     /// <param name="coverage">Non-zero coverage values starting at <paramref name="startX"/>.</param>
-    void Handle(int y, int startX, Span<float> coverage);
+    public void Handle(int y, int startX, Span<float> coverage);
 }
