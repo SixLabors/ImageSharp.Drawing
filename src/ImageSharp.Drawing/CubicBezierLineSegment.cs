@@ -12,15 +12,12 @@ namespace SixLabors.ImageSharp.Drawing;
 /// <seealso cref="ILineSegment" />
 public sealed class CubicBezierLineSegment : ILineSegment
 {
-    // code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
+    // Code for this taken from <see href="http://devmag.org.za/2011/04/05/bzier-curves-a-tutorial/"/>
     private const float MinimumSqrDistance = 1.75f;
     private const float DivisionThreshold = -.9995f;
 
-    /// <summary>
-    /// The line points.
-    /// </summary>
+    private RectangleF? bounds;
     private PointF[]? linePoints;
-
     private readonly PointF[] controlPoints;
 
     /// <summary>
@@ -65,10 +62,28 @@ public sealed class CubicBezierLineSegment : ILineSegment
     public IReadOnlyList<PointF> ControlPoints => this.controlPoints;
 
     /// <inheritdoc/>
-    public PointF EndPoint => this.controlPoints[^1];
+    public PointF StartPoint => this.controlPoints[0];
 
     /// <inheritdoc/>
-    public ReadOnlyMemory<PointF> Flatten() => this.linePoints ??= GetDrawingPoints(this.controlPoints);
+    public PointF EndPoint => this.controlPoints[^1];
+
+    /// <inheritdoc />
+    public RectangleF Bounds => this.bounds ??= CalculateBounds(this.GetLinePoints());
+
+    /// <inheritdoc />
+    public int LinearVertexCount => this.GetLinePoints().Length;
+
+    /// <inheritdoc/>
+    public ReadOnlyMemory<PointF> Flatten() => this.GetLinePoints();
+
+    /// <inheritdoc />
+    public void CopyTo(Span<PointF> destination, bool skipFirstPoint)
+    {
+        PointF[] linePoints = this.GetLinePoints();
+        int startIndex = skipFirstPoint ? 1 : 0;
+
+        linePoints.AsSpan(startIndex).CopyTo(destination);
+    }
 
     /// <summary>
     /// Gets the control points of this curve.
@@ -102,10 +117,15 @@ public sealed class CubicBezierLineSegment : ILineSegment
     /// <inheritdoc/>
     ILineSegment ILineSegment.Transform(Matrix4x4 matrix) => this.Transform(matrix);
 
+    private PointF[] GetLinePoints()
+        => this.linePoints ??= GetDrawingPoints(this.controlPoints);
+
     private static PointF[] GetDrawingPoints(PointF[] controlPoints)
     {
-        List<PointF> drawingPoints = [];
+        // Each cubic contributes its end point plus a small number of midpoint inserts in the common case,
+        // so 4 points per curve is a cheap baseline that avoids most growth without a sizing prepass.
         int curveCount = (controlPoints.Length - 1) / 3;
+        List<PointF> drawingPoints = new(curveCount * 4);
 
         for (int curveIndex = 0; curveIndex < curveCount; curveIndex++)
         {
@@ -199,5 +219,27 @@ public sealed class CubicBezierLineSegment : ILineSegment
         p += ttt * p3; // fourth term
 
         return p;
+    }
+
+    /// <summary>
+    /// Computes the bounds for the cached linearized bezier points.
+    /// </summary>
+    private static RectangleF CalculateBounds(ReadOnlySpan<PointF> points)
+    {
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+
+        for (int i = 0; i < points.Length; i++)
+        {
+            PointF point = points[i];
+            minX = MathF.Min(minX, point.X);
+            minY = MathF.Min(minY, point.Y);
+            maxX = MathF.Max(maxX, point.X);
+            maxY = MathF.Max(maxY, point.Y);
+        }
+
+        return RectangleF.FromLTRB(minX, minY, maxX, maxY);
     }
 }

@@ -62,12 +62,4 @@ public abstract class BrushRenderer<TPixel>
         int x,
         int y,
         BrushWorkspace<TPixel> workspace);
-
-    /// <summary>
-    /// Disposes the object and frees resources for the Garbage Collector.
-    /// </summary>
-    /// <param name="disposing">Whether to dispose managed and unmanaged objects.</param>
-    protected virtual void Dispose(bool disposing)
-    {
-    }
 }

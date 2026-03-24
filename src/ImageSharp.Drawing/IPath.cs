@@ -27,6 +27,28 @@ public interface IPath
     public IEnumerable<ISimplePath> Flatten();
 
     /// <summary>
+    /// Converts this path into retained linear geometry for backend consumption.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The returned <see cref="LinearGeometry"/> is the canonical lowered representation for backend scene building.
+    /// It contains the point storage, contour metadata, and derived segment metadata needed to traverse the final
+    /// linearized geometry without repeatedly rediscovering it through <see cref="Flatten()"/>.
+    /// </para>
+    /// <para>
+    /// Closed contours are represented by contour metadata rather than by repeating the first point at the end of the
+    /// stored point run.
+    /// </para>
+    /// <para>
+    /// The returned geometry is expected to preserve the already-sanitized path shape. This method does not introduce
+    /// additional geometric simplification policy beyond the mechanical stitching required by the segment emission
+    /// contract.
+    /// </para>
+    /// </remarks>
+    /// <returns>The retained linear geometry for this path.</returns>
+    public LinearGeometry ToLinearGeometry();
+
+    /// <summary>
     /// Transforms the path using the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>

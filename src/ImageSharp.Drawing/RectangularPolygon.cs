@@ -16,6 +16,7 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     private readonly PointF[] points;
     private readonly float halfLength;
     private readonly float length;
+    private LinearGeometry? linearGeometry;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RectangularPolygon" /> class.
@@ -216,6 +217,48 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     public IEnumerable<ISimplePath> Flatten()
     {
         yield return this;
+    }
+
+    /// <inheritdoc />
+    public LinearGeometry ToLinearGeometry()
+    {
+        if (this.linearGeometry is not null)
+        {
+            return this.linearGeometry;
+        }
+
+        PointF[] points =
+        [
+            this.points[0],
+            this.points[1],
+            this.points[2],
+            this.points[3]
+        ];
+
+        LinearContour[] contours =
+        [
+            new LinearContour
+            {
+                PointStart = 0,
+                PointCount = 4,
+                SegmentStart = 0,
+                SegmentCount = 4,
+                IsClosed = true
+            }
+        ];
+
+        this.linearGeometry = new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = this.Bounds,
+                ContourCount = 1,
+                PointCount = 4,
+                SegmentCount = 4
+            },
+            contours,
+            points);
+
+        return this.linearGeometry;
     }
 
     /// <inheritdoc/>

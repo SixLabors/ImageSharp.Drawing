@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -21,7 +20,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 {
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
-    private readonly List<CompositionCommand> commands = [];
+    private CompositionCommand[] commands;
+    private int commandCount;
     private bool hasLayers;
 
     internal DrawingCanvasBatcher(
@@ -31,6 +31,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     {
         this.configuration = configuration;
         this.backend = backend;
+        this.commands = [];
         this.TargetFrame = targetFrame;
     }
 
@@ -45,7 +46,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// <param name="composition">The command to queue.</param>
     public void AddComposition(in CompositionCommand composition)
     {
-        this.commands.Add(composition);
+        this.EnsureCommandCapacity(this.commandCount + 1);
+        this.commands[this.commandCount++] = composition;
         this.hasLayers |= composition.Kind is not CompositionCommandKind.FillLayer;
     }
 
@@ -58,7 +60,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// </remarks>
     public void FlushCompositions()
     {
-        if (this.commands.Count == 0)
+        if (this.commandCount == 0)
         {
             return;
         }
@@ -69,13 +71,16 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             // After this, every command has an immutable prepared path and visibility state.
             this.PrepareCommands();
 
-            CompositionScene scene = new(this.commands, this.hasLayers);
+            CompositionScene scene = new(
+                new ArraySegment<CompositionCommand>(this.commands, 0, this.commandCount),
+                this.hasLayers);
             this.backend.FlushCompositions(this.configuration, this.TargetFrame, scene);
         }
         finally
         {
             // Always clear the queue, even if backend flush throws.
-            this.commands.Clear();
+            Array.Clear(this.commands, 0, this.commandCount);
+            this.commandCount = 0;
             this.hasLayers = false;
         }
     }
@@ -87,12 +92,32 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     /// and pre-computed visibility.
     /// </summary>
     private void PrepareCommands()
-        => _ = Parallel.ForEach(Partitioner.Create(0, this.commands.Count), range =>
+        => _ = Parallel.ForEach(Partitioner.Create(0, this.commandCount), range =>
         {
-            Span<CompositionCommand> span = CollectionsMarshal.AsSpan(this.commands);
+            Span<CompositionCommand> span = this.commands.AsSpan(0, this.commandCount);
             for (int i = range.Item1; i < range.Item2; i++)
             {
                 span[i].Prepare();
             }
         });
+
+    /// <summary>
+    /// Ensures that the command buffer can store the requested command count without reallocating.
+    /// </summary>
+    /// <param name="requiredCapacity">The required command capacity.</param>
+    private void EnsureCommandCapacity(int requiredCapacity)
+    {
+        if (requiredCapacity <= this.commands.Length)
+        {
+            return;
+        }
+
+        int nextCapacity = this.commands.Length == 0 ? 16 : this.commands.Length * 2;
+        if (nextCapacity < requiredCapacity)
+        {
+            nextCapacity = requiredCapacity;
+        }
+
+        Array.Resize(ref this.commands, nextCapacity);
+    }
 }

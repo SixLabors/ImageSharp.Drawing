@@ -10,6 +10,17 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </summary>
 public sealed class EmptyPath : IPath
 {
+    private static readonly LinearGeometry EmptyGeometry = new(
+        new LinearGeometryInfo
+        {
+            Bounds = RectangleF.Empty,
+            ContourCount = 0,
+            PointCount = 0,
+            SegmentCount = 0
+        },
+        [],
+        []);
+
     private EmptyPath(PathTypes pathType) => this.PathType = pathType;
 
     /// <summary>
@@ -33,6 +44,9 @@ public sealed class EmptyPath : IPath
 
     /// <inheritdoc />
     public IEnumerable<ISimplePath> Flatten() => [];
+
+    /// <inheritdoc />
+    public LinearGeometry ToLinearGeometry() => EmptyGeometry;
 
     /// <inheritdoc />
     public IPath Transform(Matrix4x4 matrix) => this;

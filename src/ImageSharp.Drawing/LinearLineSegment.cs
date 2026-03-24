@@ -47,7 +47,13 @@ public sealed class LinearLineSegment : ILineSegment
         this.points = points ?? throw new ArgumentNullException(nameof(points));
 
         Guard.MustBeGreaterThanOrEqualTo(this.points.Length, 2, nameof(points));
+        this.Bounds = CalculateBounds(this.points);
     }
+
+    /// <summary>
+    /// Gets the start point.
+    /// </summary>
+    public PointF StartPoint => this.points[0];
 
     /// <summary>
     /// Gets the end point.
@@ -57,6 +63,12 @@ public sealed class LinearLineSegment : ILineSegment
     /// </value>
     public PointF EndPoint => this.points[^1];
 
+    /// <inheritdoc />
+    public RectangleF Bounds { get; }
+
+    /// <inheritdoc />
+    public int LinearVertexCount => this.points.Length;
+
     /// <summary>
     /// Converts the <see cref="ILineSegment" /> into a simple linear path..
     /// </summary>
@@ -64,6 +76,14 @@ public sealed class LinearLineSegment : ILineSegment
     /// Returns the current <see cref="ILineSegment" /> as simple linear path.
     /// </returns>
     public ReadOnlyMemory<PointF> Flatten() => this.points;
+
+    /// <inheritdoc />
+    public void CopyTo(Span<PointF> destination, bool skipFirstPoint)
+    {
+        int startIndex = skipFirstPoint ? 1 : 0;
+
+        this.points.AsSpan(startIndex).CopyTo(destination);
+    }
 
     /// <summary>
     /// Transforms the current LineSegment using specified matrix.
@@ -96,4 +116,26 @@ public sealed class LinearLineSegment : ILineSegment
     /// <param name="matrix">The matrix.</param>
     /// <returns>A line segment with the matrix applied to it.</returns>
     ILineSegment ILineSegment.Transform(Matrix4x4 matrix) => this.Transform(matrix);
+
+    /// <summary>
+    /// Computes the bounds for the retained linear point run.
+    /// </summary>
+    private static RectangleF CalculateBounds(ReadOnlySpan<PointF> points)
+    {
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+
+        for (int i = 0; i < points.Length; i++)
+        {
+            PointF point = points[i];
+            minX = MathF.Min(minX, point.X);
+            minY = MathF.Min(minY, point.Y);
+            maxX = MathF.Max(maxX, point.X);
+            maxY = MathF.Max(maxY, point.Y);
+        }
+
+        return RectangleF.FromLTRB(minX, minY, maxX, maxY);
+    }
 }

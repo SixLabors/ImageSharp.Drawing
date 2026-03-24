@@ -4,6 +4,7 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -17,21 +18,14 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// Stroke rasterization uses the same fixed-point scan conversion core, but expands centerline
 /// edges into outline geometry before rasterization.
 /// </remarks>
-internal static class DefaultRasterizer
+internal static partial class DefaultRasterizer
 {
-    // Upper bound for temporary scanner buffers (bit vectors + cover/area + start-cover rows).
-    // Keeping this bounded prevents pathological full-image allocations on very large interests.
-    private const long BandMemoryBudgetBytes = 64L * 1024L * 1024L;
-
     // Tile height used by the parallel row-tiling pipeline.
-    private const int DefaultTileHeight = 16;
-
-    // Cap worker fan-out for coverage emission + composition callbacks.
-    // Higher counts increased scheduling overhead for medium geometry workloads.
-    private const int MaxParallelWorkerCount = 12;
+    internal const int DefaultTileHeight = 16;
 
     private const int FixedShift = 8;
     private const int FixedOne = 1 << FixedShift;
+    private const int MaximumDelta = 2048 << FixedShift;
     private static readonly int WordBitCount = nint.Size * 8;
     private const int AreaToCoverageShift = 9;
     private const int CoverageStepCount = 256;
@@ -45,222 +39,38 @@ internal static class DefaultRasterizer
     internal static int PreferredRowHeight => DefaultTileHeight;
 
     /// <summary>
-    /// Converts one row band of a materialized path into a compact rasterizable payload.
+    /// Executes one retained rasterizable row item against a reusable scanner context.
     /// </summary>
-    /// <remarks>
-    /// The builder emits two complementary data sets:
-    /// <list type="bullet">
-    /// <item><description><see cref="RasterLineData"/> for visible line segments inside the band.</description></item>
-    /// <item><description>Start-cover seeds for segments that begin left of the visible X range.</description></item>
-    /// </list>
-    /// That split keeps the execution hot path small: the scanner seeds left-of-band winding once,
-    /// then only walks visible lines during the actual coverage pass.
-    /// </remarks>
-    internal static bool TryBuildRasterizableBand(
-        MaterializedPath path,
-        ReadOnlySpan<int> bandSegmentIndices,
-        int translateX,
-        int translateY,
-        in RasterizerOptions options,
-        int bandIndex,
-        Span<RasterLineData> lineDestination,
-        Span<int> startCoverDestination,
-        out RasterizableBandInfo rasterizableBandInfo)
-    {
-        Rectangle interest = options.Interest;
-        int width = interest.Width;
-        int height = interest.Height;
-
-        if (width <= 0 || height <= 0 || bandSegmentIndices.Length == 0 || bandIndex < 0)
-        {
-            rasterizableBandInfo = default;
-            return false;
-        }
-
-        int tileHeight = DefaultTileHeight;
-        int firstBandIndex = FloorDiv(interest.Top, tileHeight);
-        int lastBandIndex = FloorDiv(interest.Bottom - 1, tileHeight);
-        int tileCount = (lastBandIndex - firstBandIndex) + 1;
-
-        if ((uint)bandIndex >= (uint)tileCount)
-        {
-            rasterizableBandInfo = default;
-            return false;
-        }
-
-        int bandTopStart = (firstBandIndex * tileHeight) - interest.Top;
-        int bandTop = bandTopStart + (bandIndex * tileHeight);
-        int bandHeight = tileHeight;
-
-        if (startCoverDestination.Length < bandHeight || lineDestination.Length < bandSegmentIndices.Length)
-        {
-            ThrowBandBufferTooSmall();
-        }
-
-        int wordsPerRow = BitVectorsForMaxBitCount(width);
-        long coverStrideLong = (long)width * 2;
-
-        if (coverStrideLong > int.MaxValue)
-        {
-            ThrowInterestBoundsTooLarge();
-        }
-
-        int coverStride = (int)coverStrideLong;
-        bool samplePixelCenter = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter;
-        float samplingOffsetX = samplePixelCenter ? 0.5F : 0F;
-        float samplingOffsetY = samplePixelCenter ? 0.5F : 0F;
-        float clipTop = MathF.Max(0F, bandTop);
-        float clipBottom = MathF.Min(height, bandTop + bandHeight);
-
-        if (clipBottom <= clipTop)
-        {
-            rasterizableBandInfo = default;
-            return false;
-        }
-
-        Span<int> startCovers = startCoverDestination[..bandHeight];
-        startCovers.Clear();
-        Span<int> rowMinTouchedColumn = stackalloc int[tileHeight];
-        Span<int> rowMaxTouchedColumn = stackalloc int[tileHeight];
-        Span<byte> rowHasBits = stackalloc byte[tileHeight];
-        Span<byte> rowTouched = stackalloc byte[tileHeight];
-        Span<int> touchedRows = stackalloc int[tileHeight];
-        Context startCoverContext = new(
-            [],
-            [],
-            startCovers,
-            rowMinTouchedColumn,
-            rowMaxTouchedColumn,
-            rowHasBits,
-            rowTouched,
-            touchedRows,
-            width: 0,
-            height: bandHeight,
-            wordsPerRow: 0,
-            coverStride: 0,
-            IntersectionRule.NonZero,
-            RasterizationMode.Antialiased,
-            antialiasThreshold: 0F);
-
-        int maxVisibleX = width * FixedOne;
-        int lineCount = 0;
-        int subPathHint = 0;
-
-        for (int i = 0; i < bandSegmentIndices.Length; i++)
-        {
-            path.GetSegment(bandSegmentIndices[i], out PointF p0, out PointF p1, ref subPathHint);
-
-            float x0 = ((p0.X + translateX) - interest.Left) + samplingOffsetX;
-            float y0 = ((p0.Y + translateY) - interest.Top) + samplingOffsetY;
-            float x1 = ((p1.X + translateX) - interest.Left) + samplingOffsetX;
-            float y1 = ((p1.Y + translateY) - interest.Top) + samplingOffsetY;
-            if (!float.IsFinite(x0) || !float.IsFinite(y0) || !float.IsFinite(x1) || !float.IsFinite(y1))
-            {
-                continue;
-            }
-
-            if (!ClipToVerticalBounds(ref x0, ref y0, ref x1, ref y1, clipTop, clipBottom))
-            {
-                continue;
-            }
-
-            int fx0 = FloatToFixed24Dot8(x0);
-            int fy0 = FloatToFixed24Dot8(y0 - bandTop);
-            int fx1 = FloatToFixed24Dot8(x1);
-            int fy1 = FloatToFixed24Dot8(y1 - bandTop);
-            if (fy0 == fy1)
-            {
-                continue;
-            }
-
-            int minX = Math.Min(fx0, fx1);
-            int maxX = Math.Max(fx0, fx1);
-
-            if (minX < 0)
-            {
-                startCoverContext.RasterizeLineSegment(fx0, fy0, fx1, fy1);
-            }
-
-            if (maxX < 0 || minX > maxVisibleX)
-            {
-                continue;
-            }
-
-            int clippedX0 = fx0;
-            int clippedY0 = fy0;
-            int clippedX1 = fx1;
-            int clippedY1 = fy1;
-
-            if (!ClipToHorizontalBoundsFixed(ref clippedX0, ref clippedY0, ref clippedX1, ref clippedY1, 0, maxVisibleX))
-            {
-                continue;
-            }
-
-            if (clippedY0 == clippedY1)
-            {
-                continue;
-            }
-
-            lineDestination[lineCount++] = new RasterLineData(clippedX0, clippedY0, clippedX1, clippedY1);
-        }
-
-        bool hasStartCovers = false;
-
-        for (int i = 0; i < bandHeight; i++)
-        {
-            if (startCovers[i] != 0)
-            {
-                hasStartCovers = true;
-                break;
-            }
-        }
-
-        if (lineCount <= 0 && !hasStartCovers)
-        {
-            rasterizableBandInfo = default;
-            return false;
-        }
-
-        RasterizationMode rasterizationMode = options.RasterizationMode == RasterizationMode.Antialiased
-            ? RasterizationMode.Antialiased
-            : RasterizationMode.Aliased;
-
-        rasterizableBandInfo = new RasterizableBandInfo(
-            lineCount,
-            bandHeight,
-            width,
-            wordsPerRow,
-            coverStride,
-            interest.Top + bandTop,
-            options.IntersectionRule,
-            rasterizationMode,
-            options.AntialiasThreshold,
-            hasStartCovers);
-
-        return true;
-    }
-
-    /// <summary>
-    /// Executes one rasterizable band against a reusable scanner context.
-    /// </summary>
-    internal static void ExecuteRasterizableBand(
+    internal static void ExecuteRasterizableItem<TRowHandler>(
         ref Context context,
-        in RasterizableBand rasterizableBand,
+        in RasterizableItem item,
+        in RasterizableBandInfo bandInfo,
         Span<float> scanline,
-        RasterizerCoverageRowHandler rowHandler)
+        ref TRowHandler rowHandler)
+        where TRowHandler : struct, IRasterizerCoverageRowHandler
     {
         context.Reconfigure(
-            rasterizableBand.Width,
-            rasterizableBand.WordsPerRow,
-            rasterizableBand.CoverStride,
-            rasterizableBand.BandHeight,
-            rasterizableBand.IntersectionRule,
-            rasterizableBand.RasterizationMode,
-            rasterizableBand.AntialiasThreshold);
+            bandInfo.Width,
+            bandInfo.WordsPerRow,
+            bandInfo.CoverStride,
+            bandInfo.BandHeight,
+            bandInfo.IntersectionRule,
+            bandInfo.RasterizationMode,
+            bandInfo.AntialiasThreshold);
 
-        context.SeedStartCovers(rasterizableBand.StartCovers);
-        context.RasterizePreparedLines(rasterizableBand.Lines);
-        context.EmitCoverageRows(rasterizableBand.DestinationTop, scanline, rowHandler);
+        context.SeedStartCovers(item.GetActualCovers());
+        if (item.Rasterizable.IsX16)
+        {
+            LineArrayX16Y16Block? lines = item.GetLineArrayX16();
+            lines?.Iterate(item.GetFirstBlockLineCount(), ref context);
+        }
+        else
+        {
+            LineArrayX32Y16Block? lines = item.GetLineArrayX32();
+            lines?.Iterate(item.GetFirstBlockLineCount(), ref context);
+        }
+
+        context.EmitCoverageRows(bandInfo.DestinationTop, bandInfo.DestinationLeft, scanline, ref rowHandler);
         context.ResetTouchedRows();
     }
 
@@ -270,21 +80,9 @@ internal static class DefaultRasterizer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int BitVectorsForMaxBitCount(int maxBitCount) => (maxBitCount + WordBitCount - 1) / WordBitCount;
 
-    /// <summary>
-    /// Integer floor division for potentially negative values.
-    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int FloorDiv(int value, int divisor)
-    {
-        int quotient = value / divisor;
-        int remainder = value % divisor;
-        if (remainder != 0 && ((remainder < 0) != (divisor < 0)))
-        {
-            quotient--;
-        }
-
-        return quotient;
-    }
+    internal static WorkerScratch CreateWorkerScratch(MemoryAllocator allocator, int width)
+        => WorkerScratch.Create(allocator, BitVectorsForMaxBitCount(width), checked(width << 1), width, PreferredRowHeight);
 
     /// <summary>
     /// Converts a float coordinate to signed 24.8 fixed-point.
@@ -292,163 +90,284 @@ internal static class DefaultRasterizer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int FloatToFixed24Dot8(float value) => (int)MathF.Round(value * FixedOne);
 
-    /// <summary>
-    /// Clips a fixed-point segment against horizontal bounds.
-    /// </summary>
-    private static bool ClipToHorizontalBoundsFixed(ref int x0, ref int y0, ref int x1, ref int y1, int minX, int maxX)
+    private static void VerticalDown(
+        LineArrayX32Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x,
+        int y0,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
+        => SplitAcrossBands(lineArrays, allocator, tileHeight, rowBandCount, x, y0, x, y1, lineCounts, ref hasAnyCoverage);
+
+    private static void VerticalUp(
+        LineArrayX32Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x,
+        int y0,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
+        => SplitAcrossBands(lineArrays, allocator, tileHeight, rowBandCount, x, y0, x, y1, lineCounts, ref hasAnyCoverage);
+
+    private static void VerticalDown(
+        LineArrayX16Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x,
+        int y0,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
+        => SplitAcrossBands(lineArrays, allocator, tileHeight, rowBandCount, x, y0, x, y1, lineCounts, ref hasAnyCoverage);
+
+    private static void VerticalUp(
+        LineArrayX16Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x,
+        int y0,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
+        => SplitAcrossBands(lineArrays, allocator, tileHeight, rowBandCount, x, y0, x, y1, lineCounts, ref hasAnyCoverage);
+
+    private static void AddContainedLineF24Dot8(
+        LineArrayX32Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
     {
-        double t0 = 0D;
-        double t1 = 1D;
-        int originX0 = x0;
-        int originY0 = y0;
-        long dx = (long)x1 - originX0;
-        long dy = (long)y1 - originY0;
-
-        if (!ClipTestFixed(-(double)dx, originX0 - (double)minX, ref t0, ref t1))
+        if (y0 == y1)
         {
-            return false;
+            return;
         }
 
-        if (!ClipTestFixed(dx, maxX - (double)originX0, ref t0, ref t1))
+        if (x0 == x1)
         {
-            return false;
-        }
-
-        if (t1 < 1D)
-        {
-            x1 = originX0 + (int)Math.Round(dx * t1);
-            y1 = originY0 + (int)Math.Round(dy * t1);
-        }
-
-        if (t0 > 0D)
-        {
-            x0 = originX0 + (int)Math.Round(dx * t0);
-            y0 = originY0 + (int)Math.Round(dy * t0);
-        }
-
-        return y0 != y1;
-    }
-
-    /// <summary>
-    /// Clips a segment against vertical bounds using Liang-Barsky style parametric tests.
-    /// </summary>
-    /// <param name="x0">Segment start X (updated in place).</param>
-    /// <param name="y0">Segment start Y (updated in place).</param>
-    /// <param name="x1">Segment end X (updated in place).</param>
-    /// <param name="y1">Segment end Y (updated in place).</param>
-    /// <param name="minY">Minimum Y bound.</param>
-    /// <param name="maxY">Maximum Y bound.</param>
-    /// <returns><see langword="true"/> when a non-horizontal clipped segment remains.</returns>
-    private static bool ClipToVerticalBounds(ref float x0, ref float y0, ref float x1, ref float y1, float minY, float maxY)
-    {
-        float t0 = 0F;
-        float t1 = 1F;
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-
-        if (!ClipTest(-dy, y0 - minY, ref t0, ref t1))
-        {
-            return false;
-        }
-
-        if (!ClipTest(dy, maxY - y0, ref t0, ref t1))
-        {
-            return false;
-        }
-
-        if (t1 < 1F)
-        {
-            x1 = x0 + (dx * t1);
-            y1 = y0 + (dy * t1);
-        }
-
-        if (t0 > 0F)
-        {
-            x0 += dx * t0;
-            y0 += dy * t0;
-        }
-
-        return y0 != y1;
-    }
-
-    /// <summary>
-    /// One Liang-Barsky clip test step.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool ClipTest(float p, float q, ref float t0, ref float t1)
-    {
-        if (p == 0F)
-        {
-            return q >= 0F;
-        }
-
-        float r = q / p;
-        if (p < 0F)
-        {
-            if (r > t1)
+            if (y0 < y1)
             {
-                return false;
+                VerticalDown(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, y1, lineCounts, ref hasAnyCoverage);
+            }
+            else
+            {
+                VerticalUp(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, y1, lineCounts, ref hasAnyCoverage);
             }
 
-            if (r > t0)
-            {
-                t0 = r;
-            }
+            return;
+        }
+
+        int dx = Math.Abs(x1 - x0);
+        int dy = Math.Abs(y1 - y0);
+        if (dx > MaximumDelta || dy > MaximumDelta)
+        {
+            int mx = (x0 + x1) >> 1;
+            int my = (y0 + y1) >> 1;
+            AddContainedLineF24Dot8(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, mx, my, lineCounts, ref hasAnyCoverage);
+            AddContainedLineF24Dot8(lineArrays, allocator, tileHeight, rowBandCount, mx, my, x1, y1, lineCounts, ref hasAnyCoverage);
+            return;
+        }
+
+        int rowIndex0;
+        int rowIndex1;
+        if (y0 < y1)
+        {
+            rowIndex0 = y0 / (tileHeight * FixedOne);
+            rowIndex1 = (y1 - 1) / (tileHeight * FixedOne);
         }
         else
         {
-            if (r < t0)
-            {
-                return false;
-            }
-
-            if (r < t1)
-            {
-                t1 = r;
-            }
+            rowIndex0 = (y0 - 1) / (tileHeight * FixedOne);
+            rowIndex1 = y1 / (tileHeight * FixedOne);
         }
 
-        return true;
+        if ((uint)rowIndex0 >= (uint)rowBandCount || (uint)rowIndex1 >= (uint)rowBandCount)
+        {
+            return;
+        }
+
+        if (rowIndex0 == rowIndex1)
+        {
+            int rowTop = rowIndex0 * tileHeight * FixedOne;
+            lineArrays[rowIndex0].AppendLine(allocator, x0, y0 - rowTop, x1, y1 - rowTop);
+            lineCounts[rowIndex0]++;
+            hasAnyCoverage = true;
+            return;
+        }
+
+        SplitAcrossBands(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, x1, y1, lineCounts, ref hasAnyCoverage);
     }
 
-    /// <summary>
-    /// One Liang-Barsky clip test step for fixed-point clipping.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool ClipTestFixed(double p, double q, ref double t0, ref double t1)
+    private static void AddContainedLineF24Dot8(
+        LineArrayX16Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
     {
-        if (p == 0D)
+        if (y0 == y1)
         {
-            return q >= 0D;
+            return;
         }
 
-        double r = q / p;
-        if (p < 0D)
+        if (x0 == x1)
         {
-            if (r > t1)
+            if (y0 < y1)
             {
-                return false;
+                VerticalDown(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, y1, lineCounts, ref hasAnyCoverage);
+            }
+            else
+            {
+                VerticalUp(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, y1, lineCounts, ref hasAnyCoverage);
             }
 
-            if (r > t0)
-            {
-                t0 = r;
-            }
+            return;
+        }
+
+        int dx = Math.Abs(x1 - x0);
+        int dy = Math.Abs(y1 - y0);
+        if (dx > MaximumDelta || dy > MaximumDelta)
+        {
+            int mx = (x0 + x1) >> 1;
+            int my = (y0 + y1) >> 1;
+            AddContainedLineF24Dot8(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, mx, my, lineCounts, ref hasAnyCoverage);
+            AddContainedLineF24Dot8(lineArrays, allocator, tileHeight, rowBandCount, mx, my, x1, y1, lineCounts, ref hasAnyCoverage);
+            return;
+        }
+
+        int rowIndex0;
+        int rowIndex1;
+        if (y0 < y1)
+        {
+            rowIndex0 = y0 / (tileHeight * FixedOne);
+            rowIndex1 = (y1 - 1) / (tileHeight * FixedOne);
         }
         else
         {
-            if (r < t0)
-            {
-                return false;
-            }
+            rowIndex0 = (y0 - 1) / (tileHeight * FixedOne);
+            rowIndex1 = y1 / (tileHeight * FixedOne);
+        }
 
-            if (r < t1)
+        if ((uint)rowIndex0 >= (uint)rowBandCount || (uint)rowIndex1 >= (uint)rowBandCount)
+        {
+            return;
+        }
+
+        if (rowIndex0 == rowIndex1)
+        {
+            int rowTop = rowIndex0 * tileHeight * FixedOne;
+            lineArrays[rowIndex0].AppendLine(allocator, x0, y0 - rowTop, x1, y1 - rowTop);
+            lineCounts[rowIndex0]++;
+            hasAnyCoverage = true;
+            return;
+        }
+
+        SplitAcrossBands(lineArrays, allocator, tileHeight, rowBandCount, x0, y0, x1, y1, lineCounts, ref hasAnyCoverage);
+    }
+
+    private static void SplitAcrossBands(
+        LineArrayX32Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
+    {
+        int dy = y1 - y0;
+        int dx = x1 - x0;
+        int startBand = dy > 0 ? y0 / (tileHeight * FixedOne) : (y0 - 1) / (tileHeight * FixedOne);
+        int endBand = dy > 0 ? (y1 - 1) / (tileHeight * FixedOne) : y1 / (tileHeight * FixedOne);
+        int step = dy > 0 ? 1 : -1;
+        int currentBand = startBand;
+        int currentX = x0;
+        int currentY = y0;
+        while (currentBand != endBand)
+        {
+            int bandBoundaryY = dy > 0 ? ((currentBand + 1) * tileHeight * FixedOne) : (currentBand * tileHeight * FixedOne);
+            int deltaY = bandBoundaryY - currentY;
+            int nextX = currentX + (int)(((long)dx * deltaY) / dy);
+            int rowTop = currentBand * tileHeight * FixedOne;
+            lineArrays[currentBand].AppendLine(allocator, currentX, currentY - rowTop, nextX, bandBoundaryY - rowTop);
+            lineCounts[currentBand]++;
+            hasAnyCoverage = true;
+            currentX = nextX;
+            currentY = bandBoundaryY;
+            currentBand += step;
+            if ((uint)currentBand >= (uint)rowBandCount)
             {
-                t1 = r;
+                return;
             }
         }
 
-        return true;
+        int finalRowTop = endBand * tileHeight * FixedOne;
+        lineArrays[endBand].AppendLine(allocator, currentX, currentY - finalRowTop, x1, y1 - finalRowTop);
+        lineCounts[endBand]++;
+        hasAnyCoverage = true;
+    }
+
+    private static void SplitAcrossBands(
+        LineArrayX16Y16[] lineArrays,
+        MemoryAllocator allocator,
+        int tileHeight,
+        int rowBandCount,
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        int[] lineCounts,
+        ref bool hasAnyCoverage)
+    {
+        int dy = y1 - y0;
+        int dx = x1 - x0;
+        int startBand = dy > 0 ? y0 / (tileHeight * FixedOne) : (y0 - 1) / (tileHeight * FixedOne);
+        int endBand = dy > 0 ? (y1 - 1) / (tileHeight * FixedOne) : y1 / (tileHeight * FixedOne);
+        int step = dy > 0 ? 1 : -1;
+        int currentBand = startBand;
+        int currentX = x0;
+        int currentY = y0;
+        while (currentBand != endBand)
+        {
+            int bandBoundaryY = dy > 0 ? ((currentBand + 1) * tileHeight * FixedOne) : (currentBand * tileHeight * FixedOne);
+            int deltaY = bandBoundaryY - currentY;
+            int nextX = currentX + (int)(((long)dx * deltaY) / dy);
+            int rowTop = currentBand * tileHeight * FixedOne;
+            lineArrays[currentBand].AppendLine(allocator, currentX, currentY - rowTop, nextX, bandBoundaryY - rowTop);
+            lineCounts[currentBand]++;
+            hasAnyCoverage = true;
+            currentX = nextX;
+            currentY = bandBoundaryY;
+            currentBand += step;
+            if ((uint)currentBand >= (uint)rowBandCount)
+            {
+                return;
+            }
+        }
+
+        int finalRowTop = endBand * tileHeight * FixedOne;
+        lineArrays[endBand].AppendLine(allocator, currentX, currentY - finalRowTop, x1, y1 - finalRowTop);
+        lineCounts[endBand]++;
+        hasAnyCoverage = true;
     }
 
     /// <summary>
@@ -480,19 +399,562 @@ internal static class DefaultRasterizer
         => throw new ImageProcessingException("The rasterizer interest bounds are too large for DefaultRasterizer buffers.");
 
     /// <summary>
-    /// Throws when the caller-provided band buffers are smaller than the requested raster band.
+    /// Creates retained row-local raster payload for one lowered geometry.
     /// </summary>
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ThrowBandBufferTooSmall()
-        => throw new ImageProcessingException("The destination raster band buffer is too small for the requested operation.");
+    internal static RasterizableGeometry? CreateRasterizableGeometry(
+        LinearGeometry geometry,
+        int translateX,
+        int translateY,
+        in RasterizerOptions options,
+        MemoryAllocator allocator)
+    {
+        float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+        float samplingOffsetY = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+
+        RectangleF translatedBounds = geometry.Info.Bounds;
+        translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
+
+        Rectangle geometryBounds = Rectangle.FromLTRB(
+            (int)MathF.Floor(translatedBounds.Left),
+            (int)MathF.Floor(translatedBounds.Top),
+            (int)MathF.Ceiling(translatedBounds.Right),
+            (int)MathF.Ceiling(translatedBounds.Bottom));
+
+        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, options.Interest);
+        if (clippedBounds.Width <= 0 || clippedBounds.Height <= 0)
+        {
+            return null;
+        }
+
+        int width = clippedBounds.Width;
+        int height = clippedBounds.Height;
+        int firstRowBandIndex = clippedBounds.Top / PreferredRowHeight;
+        int lastRowBandIndex = (clippedBounds.Bottom - 1) / PreferredRowHeight;
+        int rowBandCount = lastRowBandIndex - firstRowBandIndex + 1;
+        int wordsPerRow = BitVectorsForMaxBitCount(width);
+        int coverStride = checked(width << 1);
+
+        if (wordsPerRow <= 0 || coverStride <= 0)
+        {
+            ThrowInterestBoundsTooLarge();
+        }
+
+        if (width < 128)
+        {
+            LinearizerX16Y16 linearizer = new(
+                geometry,
+                translateX,
+                translateY,
+                clippedBounds.Left,
+                clippedBounds.Top,
+                width,
+                height,
+                firstRowBandIndex,
+                rowBandCount,
+                samplingOffsetX,
+                samplingOffsetY,
+                allocator);
+
+            if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
+            {
+                return null;
+            }
+
+            RasterizableBandInfo[] bandInfos = new RasterizableBandInfo[rowBandCount];
+            for (int i = 0; i < rowBandCount; i++)
+            {
+                int bandTop = (firstRowBandIndex + i) * PreferredRowHeight;
+                bool hasStartCovers = result.StartCoverTable[i] is not null;
+                bandInfos[i] = new RasterizableBandInfo(
+                    CountLines(result.Lines[i], result.FirstBlockLineCounts[i]),
+                    PreferredRowHeight,
+                    width,
+                    wordsPerRow,
+                    coverStride,
+                    clippedBounds.Left,
+                    bandTop,
+                    options.IntersectionRule,
+                    options.RasterizationMode,
+                    options.AntialiasThreshold,
+                    hasStartCovers);
+            }
+
+            return new RasterizableGeometry(
+                firstRowBandIndex,
+                rowBandCount,
+                width,
+                wordsPerRow,
+                coverStride,
+                PreferredRowHeight,
+                isX16: true,
+                bandInfos,
+                result.Lines,
+                null,
+                result.FirstBlockLineCounts,
+                result.StartCoverTable);
+        }
+        else
+        {
+            LinearizerX32Y16 linearizer = new(
+                geometry,
+                translateX,
+                translateY,
+                clippedBounds.Left,
+                clippedBounds.Top,
+                width,
+                height,
+                firstRowBandIndex,
+                rowBandCount,
+                samplingOffsetX,
+                samplingOffsetY,
+                allocator);
+
+            if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> result))
+            {
+                return null;
+            }
+
+            RasterizableBandInfo[] bandInfos = new RasterizableBandInfo[rowBandCount];
+            for (int i = 0; i < rowBandCount; i++)
+            {
+                int bandTop = (firstRowBandIndex + i) * PreferredRowHeight;
+                bool hasStartCovers = result.StartCoverTable[i] is not null;
+                bandInfos[i] = new RasterizableBandInfo(
+                    CountLines(result.Lines[i], result.FirstBlockLineCounts[i]),
+                    PreferredRowHeight,
+                    width,
+                    wordsPerRow,
+                    coverStride,
+                    clippedBounds.Left,
+                    bandTop,
+                    options.IntersectionRule,
+                    options.RasterizationMode,
+                    options.AntialiasThreshold,
+                    hasStartCovers);
+            }
+
+            return new RasterizableGeometry(
+                firstRowBandIndex,
+                rowBandCount,
+                width,
+                wordsPerRow,
+                coverStride,
+                PreferredRowHeight,
+                isX16: false,
+                bandInfos,
+                null,
+                result.Lines,
+                result.FirstBlockLineCounts,
+                result.StartCoverTable);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int CountLines<TLineBlock>(TLineBlock? firstLineBlock, int firstBlockLineCount)
+        where TLineBlock : class, ILineBlock<TLineBlock>
+    {
+        if (firstLineBlock is null)
+        {
+            return 0;
+        }
+
+        int count = firstBlockLineCount;
+        TLineBlock? block = firstLineBlock.Next;
+        while (block is not null)
+        {
+            count += TLineBlock.LineCount;
+            block = block.Next;
+        }
+
+        return count;
+    }
 
     /// <summary>
-    /// Throws when a worker scratch instance is reused for a band taller than it was allocated for.
+    /// Flush-scoped retained row-local raster payload for one prepared fill geometry.
     /// </summary>
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ThrowBandHeightExceedsScratchCapacity()
-        => throw new ImageProcessingException("Requested band height exceeds worker scratch capacity.");
+    internal sealed class RasterizableGeometry : IDisposable
+    {
+        private readonly RasterizableBandInfo[] bandInfos;
+        private readonly LineArrayX16Y16Block?[]? linesX16;
+        private readonly LineArrayX32Y16Block?[]? linesX32;
+        private readonly int[] firstBlockLineCounts;
+        private readonly IMemoryOwner<int>?[] startCoverTable;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RasterizableGeometry"/> class.
+        /// </summary>
+        public RasterizableGeometry(
+            int firstRowBandIndex,
+            int rowBandCount,
+            int width,
+            int wordsPerRow,
+            int coverStride,
+            int bandHeight,
+            bool isX16,
+            RasterizableBandInfo[] bandInfos,
+            LineArrayX16Y16Block?[]? linesX16,
+            LineArrayX32Y16Block?[]? linesX32,
+            int[] firstBlockLineCounts,
+            IMemoryOwner<int>?[] startCoverTable)
+        {
+            this.FirstRowBandIndex = firstRowBandIndex;
+            this.RowBandCount = rowBandCount;
+            this.Width = width;
+            this.WordsPerRow = wordsPerRow;
+            this.CoverStride = coverStride;
+            this.BandHeight = bandHeight;
+            this.IsX16 = isX16;
+            this.bandInfos = bandInfos;
+            this.linesX16 = linesX16;
+            this.linesX32 = linesX32;
+            this.firstBlockLineCounts = firstBlockLineCounts;
+            this.startCoverTable = startCoverTable;
+        }
+
+        /// <summary>
+        /// Gets the first absolute row-band index touched by this geometry.
+        /// </summary>
+        public int FirstRowBandIndex { get; }
+
+        /// <summary>
+        /// Gets the number of retained local row bands owned by this geometry.
+        /// </summary>
+        public int RowBandCount { get; }
+
+        /// <summary>
+        /// Gets the geometry-local visible band width in pixels.
+        /// </summary>
+        public int Width { get; }
+
+        /// <summary>
+        /// Gets the bit-vector width in machine words required by this geometry.
+        /// </summary>
+        public int WordsPerRow { get; }
+
+        /// <summary>
+        /// Gets the scanner cover/area stride required by this geometry.
+        /// </summary>
+        public int CoverStride { get; }
+
+        /// <summary>
+        /// Gets the retained row-band height in pixels.
+        /// </summary>
+        public int BandHeight { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether this geometry uses Blaze's narrow X16Y16 line arrays.
+        /// </summary>
+        public bool IsX16 { get; }
+
+        /// <summary>
+        /// Returns <see langword="true"/> when the given local row band has retained coverage payload.
+        /// </summary>
+        public bool HasCoverage(int localRowIndex) => this.bandInfos[localRowIndex].HasCoverage;
+
+        /// <summary>
+        /// Gets the retained narrow line block chain for one local row.
+        /// </summary>
+        public LineArrayX16Y16Block? GetLinesX16ForRow(int localRowIndex) => this.linesX16![localRowIndex];
+
+        /// <summary>
+        /// Gets the retained wide line block chain for one local row.
+        /// </summary>
+        public LineArrayX32Y16Block? GetLinesX32ForRow(int localRowIndex) => this.linesX32![localRowIndex];
+
+        /// <summary>
+        /// Gets the number of valid lines in the first retained block for a local row.
+        /// </summary>
+        public int GetFirstBlockLineCountForRow(int localRowIndex) => this.firstBlockLineCounts[localRowIndex];
+
+        /// <summary>
+        /// Gets the retained start-cover table entry for a local row, if one exists.
+        /// </summary>
+        public ReadOnlySpan<int> GetCoversForRow(int localRowIndex)
+        {
+            IMemoryOwner<int>? covers = this.startCoverTable[localRowIndex];
+            return covers is null ? ReadOnlySpan<int>.Empty : covers.Memory.Span[..this.BandHeight];
+        }
+
+        /// <summary>
+        /// Gets the retained start-cover row payload without further interpretation, matching Blaze naming.
+        /// </summary>
+        public ReadOnlySpan<int> GetActualCoversForRow(int localRowIndex) => this.GetCoversForRow(localRowIndex);
+
+        /// <summary>
+        /// Gets retained metadata for one local row band.
+        /// </summary>
+        public RasterizableBandInfo GetBandInfo(int localRowIndex) => this.bandInfos[localRowIndex];
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            if (this.IsX16)
+            {
+                for (int i = 0; i < this.linesX16!.Length; i++)
+                {
+                    LineArrayX16Y16Block? block = this.linesX16[i];
+                    while (block is not null)
+                    {
+                        LineArrayX16Y16Block? next = block.Next;
+                        block.Dispose();
+                        block = next;
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < this.linesX32!.Length; i++)
+                {
+                    LineArrayX32Y16Block? block = this.linesX32[i];
+                    while (block is not null)
+                    {
+                        LineArrayX32Y16Block? next = block.Next;
+                        block.Dispose();
+                        block = next;
+                    }
+                }
+            }
+
+            for (int i = 0; i < this.startCoverTable.Length; i++)
+            {
+                this.startCoverTable[i]?.Dispose();
+            }
+        }
+    }
+
+#pragma warning disable SA1201 // Keep the retained row item adjacent to the retained geometry and line storage it uses.
+    /// <summary>
+    /// Tiny retained row item that mirrors Blaze: one rasterizable plus one local row index.
+    /// </summary>
+    internal readonly struct RasterizableItem
+    {
+        public RasterizableItem(RasterizableGeometry rasterizable, int localRowIndex)
+        {
+            this.Rasterizable = rasterizable;
+            this.LocalRowIndex = localRowIndex;
+        }
+
+        public RasterizableGeometry Rasterizable { get; }
+
+        public int LocalRowIndex { get; }
+
+        public int GetFirstBlockLineCount() => this.Rasterizable.GetFirstBlockLineCountForRow(this.LocalRowIndex);
+
+        public LineArrayX16Y16Block? GetLineArrayX16() => this.Rasterizable.GetLinesX16ForRow(this.LocalRowIndex);
+
+        public LineArrayX32Y16Block? GetLineArrayX32() => this.Rasterizable.GetLinesX32ForRow(this.LocalRowIndex);
+
+        public ReadOnlySpan<int> GetActualCovers() => this.Rasterizable.GetActualCoversForRow(this.LocalRowIndex);
+    }
+#pragma warning restore SA1201
+
+    internal sealed class LineArrayX32Y16
+    {
+        private LineArrayX32Y16Block? current;
+        private int count = LineArrayX32Y16Block.LineCount;
+
+        public LineArrayX32Y16Block? GetFrontBlock() => this.current;
+
+        public int GetFrontBlockLineCount() => this.current is null ? 0 : this.count;
+
+        public void AppendLine(MemoryAllocator allocator, int x0, int y0, int x1, int y1)
+        {
+            if (y0 == y1)
+            {
+                return;
+            }
+
+            int packedY0Y1 = Pack(y0, y1);
+            LineArrayX32Y16Block? block = this.current;
+            int currentCount = this.count;
+            if (currentCount < LineArrayX32Y16Block.LineCount)
+            {
+                block!.Set(currentCount, packedY0Y1, x0, x1);
+                this.count = currentCount + 1;
+            }
+            else
+            {
+                LineArrayX32Y16Block next = new(allocator, block);
+                next.Set(0, packedY0Y1, x0, x1);
+                this.current = next;
+                this.count = 1;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int Pack(int lo, int hi) => (lo & 0xFFFF) | (hi << 16);
+    }
+
+    internal sealed class LineArrayX32Y16Block : ILineBlock<LineArrayX32Y16Block>, IDisposable
+    {
+        // These retained line blocks are one of the few places where direct native allocation
+        // consistently outperforms the upstream allocator on larger retained-fill workloads.
+        // Keep this isolated to the retained block storage rather than broadening native allocation usage.
+        private readonly unsafe PackedLineX32Y16* lines;
+
+        public unsafe LineArrayX32Y16Block(MemoryAllocator allocator, LineArrayX32Y16Block? next)
+        {
+            this.lines = (PackedLineX32Y16*)NativeMemory.Alloc((nuint)LineCount, (nuint)sizeof(PackedLineX32Y16));
+            this.Next = next;
+        }
+
+        public static int LineCount => 32;
+
+        public LineArrayX32Y16Block? Next { get; }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void Set(int index, int packedY0Y1, int x0, int x1)
+        {
+            ref PackedLineX32Y16 line = ref this.lines[index];
+            line.PackedY0Y1 = packedY0Y1;
+            line.X0 = x0;
+            line.X1 = x1;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void Rasterize(int count, ref Context context)
+        {
+            ReadOnlySpan<PackedLineX32Y16> lines = new(this.lines, LineCount);
+            for (int i = 0; i < count; i++)
+            {
+                PackedLineX32Y16 line = lines[i];
+                context.RasterizeLineSegment(line.X0, UnpackLo(line.PackedY0Y1), line.X1, UnpackHi(line.PackedY0Y1));
+            }
+        }
+
+        public void Iterate(int firstBlockLineCount, ref Context context)
+        {
+            int count = firstBlockLineCount;
+            LineArrayX32Y16Block? lineBlock = this;
+            while (lineBlock is not null)
+            {
+                lineBlock.Rasterize(count, ref context);
+                lineBlock = lineBlock.Next;
+                count = LineCount;
+            }
+        }
+
+        public unsafe void Dispose() => NativeMemory.Free(this.lines);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int UnpackLo(int packed) => (short)(packed & 0xFFFF);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int UnpackHi(int packed) => packed >> 16;
+
+        private struct PackedLineX32Y16
+        {
+            public int PackedY0Y1;
+            public int X0;
+            public int X1;
+        }
+    }
+
+    internal sealed class LineArrayX16Y16
+    {
+        private LineArrayX16Y16Block? current;
+        private int count = LineArrayX16Y16Block.LineCount;
+
+        public LineArrayX16Y16Block? GetFrontBlock() => this.current;
+
+        public int GetFrontBlockLineCount() => this.current is null ? 0 : this.count;
+
+        public void AppendLine(MemoryAllocator allocator, int x0, int y0, int x1, int y1)
+        {
+            if (y0 == y1)
+            {
+                return;
+            }
+
+            int packedY0Y1 = Pack(y0, y1);
+            int packedX0X1 = Pack(x0, x1);
+            LineArrayX16Y16Block? block = this.current;
+            int currentCount = this.count;
+            if (currentCount < LineArrayX16Y16Block.LineCount)
+            {
+                block!.Set(currentCount, packedY0Y1, packedX0X1);
+                this.count = currentCount + 1;
+            }
+            else
+            {
+                LineArrayX16Y16Block next = new(allocator, block);
+                next.Set(0, packedY0Y1, packedX0X1);
+                this.current = next;
+                this.count = 1;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int Pack(int lo, int hi) => (lo & 0xFFFF) | (hi << 16);
+    }
+
+    internal sealed class LineArrayX16Y16Block : ILineBlock<LineArrayX16Y16Block>, IDisposable
+    {
+        // Match the X32 block rationale above: this tiny retained block is hot enough that
+        // direct native backing beats allocator-owned storage on larger retained-fill workloads.
+        private readonly unsafe PackedLineX16Y16* lines;
+
+        public unsafe LineArrayX16Y16Block(MemoryAllocator allocator, LineArrayX16Y16Block? next)
+        {
+            this.lines = (PackedLineX16Y16*)NativeMemory.Alloc((nuint)LineCount, (nuint)sizeof(PackedLineX16Y16));
+            this.Next = next;
+        }
+
+        public static int LineCount => 32;
+
+        public LineArrayX16Y16Block? Next { get; }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void Set(int index, int packedY0Y1, int packedX0X1)
+        {
+            ref PackedLineX16Y16 line = ref this.lines[index];
+            line.PackedY0Y1 = packedY0Y1;
+            line.PackedX0X1 = packedX0X1;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public unsafe void Rasterize(int count, ref Context context)
+        {
+            ReadOnlySpan<PackedLineX16Y16> lines = new(this.lines, LineCount);
+            for (int i = 0; i < count; i++)
+            {
+                PackedLineX16Y16 line = lines[i];
+                context.RasterizeLineSegment(
+                    UnpackLo(line.PackedX0X1),
+                    UnpackLo(line.PackedY0Y1),
+                    UnpackHi(line.PackedX0X1),
+                    UnpackHi(line.PackedY0Y1));
+            }
+        }
+
+        public void Iterate(int firstBlockLineCount, ref Context context)
+        {
+            int count = firstBlockLineCount;
+            LineArrayX16Y16Block? lineBlock = this;
+            while (lineBlock is not null)
+            {
+                lineBlock.Rasterize(count, ref context);
+                lineBlock = lineBlock.Next;
+                count = LineCount;
+            }
+        }
+
+        public unsafe void Dispose() => NativeMemory.Free(this.lines);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int UnpackLo(int packed) => (short)(packed & 0xFFFF);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int UnpackHi(int packed) => packed >> 16;
+
+        private struct PackedLineX16Y16
+        {
+            public int PackedY0Y1;
+            public int PackedX0X1;
+        }
+    }
+
+#pragma warning disable SA1201 // Keep the lightweight band metadata adjacent to the retained geometry that owns it.
     /// <summary>
     /// Metadata that describes one prepared rasterizable band.
     /// </summary>
@@ -507,6 +969,7 @@ internal static class DefaultRasterizer
             int width,
             int wordsPerRow,
             int coverStride,
+            int destinationLeft,
             int destinationTop,
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
@@ -518,6 +981,7 @@ internal static class DefaultRasterizer
             this.Width = width;
             this.WordsPerRow = wordsPerRow;
             this.CoverStride = coverStride;
+            this.DestinationLeft = destinationLeft;
             this.DestinationTop = destinationTop;
             this.IntersectionRule = intersectionRule;
             this.RasterizationMode = rasterizationMode;
@@ -551,6 +1015,11 @@ internal static class DefaultRasterizer
         public int CoverStride { get; }
 
         /// <summary>
+        /// Gets the absolute destination X coordinate of the band's left column.
+        /// </summary>
+        public int DestinationLeft { get; }
+
+        /// <summary>
         /// Gets the absolute destination Y coordinate of the band's top row.
         /// </summary>
         public int DestinationTop { get; }
@@ -579,113 +1048,8 @@ internal static class DefaultRasterizer
         /// Gets a value indicating whether the band would emit any coverage.
         /// </summary>
         public bool HasCoverage => this.LineCount > 0 || this.HasStartCovers;
-
-        /// <summary>
-        /// Creates a lightweight band view over caller-owned line and start-cover buffers.
-        /// </summary>
-        public RasterizableBand CreateRasterizableBand(ReadOnlySpan<RasterLineData> lines, ReadOnlySpan<int> startCovers)
-        {
-            if (lines.Length < this.LineCount || startCovers.Length < this.BandHeight)
-            {
-                ThrowBandBufferTooSmall();
-            }
-
-            return new RasterizableBand(
-                lines[..this.LineCount],
-                startCovers[..this.BandHeight],
-                this.Width,
-                this.WordsPerRow,
-                this.CoverStride,
-                this.BandHeight,
-                this.DestinationTop,
-                this.IntersectionRule,
-                this.RasterizationMode,
-                this.AntialiasThreshold);
-        }
     }
-
-    /// <summary>
-    /// Prepared raster payload for one row band.
-    /// </summary>
-    internal readonly ref struct RasterizableBand
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RasterizableBand"/> struct.
-        /// </summary>
-        public RasterizableBand(
-            ReadOnlySpan<RasterLineData> lines,
-            ReadOnlySpan<int> startCovers,
-            int width,
-            int wordsPerRow,
-            int coverStride,
-            int bandHeight,
-            int destinationTop,
-            IntersectionRule intersectionRule,
-            RasterizationMode rasterizationMode,
-            float antialiasThreshold)
-        {
-            this.Lines = lines;
-            this.StartCovers = startCovers;
-            this.Width = width;
-            this.WordsPerRow = wordsPerRow;
-            this.CoverStride = coverStride;
-            this.BandHeight = bandHeight;
-            this.DestinationTop = destinationTop;
-            this.IntersectionRule = intersectionRule;
-            this.RasterizationMode = rasterizationMode;
-            this.AntialiasThreshold = antialiasThreshold;
-        }
-
-        /// <summary>
-        /// Gets the clipped line list to rasterize.
-        /// </summary>
-        public ReadOnlySpan<RasterLineData> Lines { get; }
-
-        /// <summary>
-        /// Gets the per-row start-cover seeds for off-screen left coverage.
-        /// </summary>
-        public ReadOnlySpan<int> StartCovers { get; }
-
-        /// <summary>
-        /// Gets the visible band width in pixels.
-        /// </summary>
-        public int Width { get; }
-
-        /// <summary>
-        /// Gets the bit-vector width in machine words.
-        /// </summary>
-        public int WordsPerRow { get; }
-
-        /// <summary>
-        /// Gets the scanner cover/area stride.
-        /// </summary>
-        public int CoverStride { get; }
-
-        /// <summary>
-        /// Gets the band height in pixels.
-        /// </summary>
-        public int BandHeight { get; }
-
-        /// <summary>
-        /// Gets the absolute destination Y coordinate of the band's top row.
-        /// </summary>
-        public int DestinationTop { get; }
-
-        /// <summary>
-        /// Gets the fill rule used when resolving accumulated winding.
-        /// </summary>
-        public IntersectionRule IntersectionRule { get; }
-
-        /// <summary>
-        /// Gets the coverage mode used by the band.
-        /// </summary>
-        public RasterizationMode RasterizationMode { get; }
-
-        /// <summary>
-        /// Gets the aliased threshold used when the band runs in aliased mode.
-        /// </summary>
-        public float AntialiasThreshold { get; }
-    }
+#pragma warning restore SA1201
 
     /// <summary>
     /// Band/tile-local scanner context that owns mutable coverage accumulation state.
@@ -767,14 +1131,6 @@ internal static class DefaultRasterizer
             RasterizationMode rasterizationMode,
             float antialiasThreshold)
         {
-            if ((uint)height > (uint)this.heightCapacity ||
-                (uint)wordsPerRow > (uint)this.wordsPerRowCapacity ||
-                (uint)coverStride > (uint)this.coverStrideCapacity ||
-                (uint)width > (uint)this.widthCapacity)
-            {
-                ThrowBandHeightExceedsScratchCapacity();
-            }
-
             this.width = width;
             this.height = height;
             this.wordsPerRow = wordsPerRow;
@@ -800,15 +1156,6 @@ internal static class DefaultRasterizer
             }
         }
 
-        public void RasterizePreparedLines(ReadOnlySpan<RasterLineData> lines)
-        {
-            for (int i = 0; i < lines.Length; i++)
-            {
-                ref readonly RasterLineData line = ref lines[i];
-                this.RasterizeLine(line.X0, line.Y0, line.X1, line.Y1);
-            }
-        }
-
         public void RasterizeLineSegment(int x0, int y0, int x1, int y1)
             => this.RasterizeLine(x0, y0, x1, y1);
 
@@ -816,9 +1163,15 @@ internal static class DefaultRasterizer
         /// Converts accumulated cover/area tables into non-zero coverage span callbacks.
         /// </summary>
         /// <param name="destinationTop">Absolute destination Y corresponding to row zero in this context.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero in this context.</param>
         /// <param name="scanline">Reusable scanline scratch buffer used to materialize emitted spans.</param>
         /// <param name="rowHandler">Coverage callback invoked for each emitted non-zero span.</param>
-        public readonly void EmitCoverageRows(int destinationTop, Span<float> scanline, RasterizerCoverageRowHandler rowHandler)
+        public readonly void EmitCoverageRows<TRowHandler>(
+            int destinationTop,
+            int destinationLeft,
+            Span<float> scanline,
+            ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
             // Iterate only rows that actually received coverage contributions.
             // MarkRowTouched is called from AddCell for all contributions, including
@@ -842,7 +1195,7 @@ internal static class DefaultRasterizer
                     if (coverage > 0F)
                     {
                         scanline[..this.width].Fill(coverage);
-                        rowHandler(destinationTop + row, 0, scanline[..this.width]);
+                        rowHandler.Handle(destinationTop + row, destinationLeft, scanline[..this.width]);
                     }
 
                     continue;
@@ -857,9 +1210,10 @@ internal static class DefaultRasterizer
                     rowCover,
                     minTouchedColumn,
                     maxTouchedColumn,
+                    destinationLeft,
                     destinationTop + row,
                     scanline,
-                    rowHandler);
+                    ref rowHandler);
             }
         }
 
@@ -904,18 +1258,21 @@ internal static class DefaultRasterizer
         /// <param name="cover">Initial carry cover value from x less than zero contributions.</param>
         /// <param name="minTouchedColumn">Minimum touched column index in this row.</param>
         /// <param name="maxTouchedColumn">Maximum touched column index in this row.</param>
+        /// <param name="destinationLeft">Absolute destination X corresponding to column zero in this context.</param>
         /// <param name="destinationY">Absolute destination y for this row.</param>
         /// <param name="scanline">Reusable scanline coverage buffer used for per-span materialization.</param>
         /// <param name="rowHandler">Coverage callback invoked for each emitted non-zero span.</param>
-        private readonly void EmitRowCoverage(
+        private readonly void EmitRowCoverage<TRowHandler>(
             ReadOnlySpan<nuint> rowBitVectors,
             int row,
             int cover,
             int minTouchedColumn,
             int maxTouchedColumn,
+            int destinationLeft,
             int destinationY,
             Span<float> scanline,
-            RasterizerCoverageRowHandler rowHandler)
+            ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
             int rowOffset = row * this.coverStride;
             int spanStart = 0;
@@ -953,7 +1310,7 @@ internal static class DefaultRasterizer
                         if (coverage <= 0F)
                         {
                             WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
-                            EmitRun(rowHandler, destinationY, scanline, ref runStart, ref runEnd);
+                            EmitRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
                             spanStart = x + 1;
                             spanEnd = spanStart;
                             spanCoverage = 0F;
@@ -977,7 +1334,6 @@ internal static class DefaultRasterizer
                         if (cover == 0)
                         {
                             WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
-                            EmitRun(rowHandler, destinationY, scanline, ref runStart, ref runEnd);
                             spanStart = x;
                             spanEnd = x + 1;
                             spanCoverage = coverage;
@@ -990,7 +1346,6 @@ internal static class DefaultRasterizer
                                 // Even-odd can map non-zero winding to zero coverage.
                                 // Treat this as a hard run break so we don't bridge holes.
                                 WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
-                                EmitRun(rowHandler, destinationY, scanline, ref runStart, ref runEnd);
                                 spanStart = x;
                                 spanEnd = x + 1;
                                 spanCoverage = coverage;
@@ -1032,7 +1387,7 @@ internal static class DefaultRasterizer
                 WriteSpan(scanline, spanEnd, this.width, this.AreaToCoverage(cover << AreaToCoverageShift), ref runStart, ref runEnd);
             }
 
-            EmitRun(rowHandler, destinationY, scanline, ref runStart, ref runEnd);
+            EmitRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
         }
 
         /// <summary>
@@ -1096,38 +1451,39 @@ internal static class DefaultRasterizer
                 return;
             }
 
-            scanline[start..end].Fill(coverage);
-
             if (runStart < 0)
             {
                 runStart = start;
                 runEnd = end;
-                return;
             }
-
-            if (end > runEnd)
+            else if (end > runEnd)
             {
                 runEnd = end;
             }
+
+            scanline[(start - runStart)..(end - runStart)].Fill(coverage);
         }
 
         /// <summary>
         /// Emits the currently accumulated non-zero run, if any.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void EmitRun(
-            RasterizerCoverageRowHandler rowHandler,
+        private static void EmitRun<TRowHandler>(
+            ref TRowHandler rowHandler,
             int destinationY,
+            int destinationLeft,
             Span<float> scanline,
             ref int runStart,
             ref int runEnd)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
             if (runStart < 0)
             {
                 return;
             }
 
-            rowHandler(destinationY, runStart, scanline[runStart..runEnd]);
+            rowHandler.Handle(destinationY, destinationLeft + runStart, scanline[..(runEnd - runStart)]);
+
             runStart = -1;
             runEnd = -1;
         }
@@ -1889,66 +2245,6 @@ internal static class DefaultRasterizer
     /// <summary>
     /// Immutable line record stored in band-local raster coordinates.
     /// </summary>
-    internal readonly struct RasterLineData
-    {
-        public readonly int X0;
-
-        public readonly int Y0;
-
-        public readonly int X1;
-
-        public readonly int Y1;
-
-        public RasterLineData(int x0, int y0, int x1, int y1)
-        {
-            this.X0 = x0;
-            this.Y0 = y0;
-            this.X1 = x1;
-            this.Y1 = y1;
-        }
-    }
-
-    /// <summary>
-    /// Stroke centerline edge descriptor used for per-band parallel stroke expansion.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Each descriptor represents one centerline edge with associated join/cap metadata.
-    /// During rasterization, each descriptor is expanded into outline polygon edges that
-    /// are rasterized directly via <see cref="Context.RasterizeLine"/>.
-    /// </para>
-    /// <para>
-    /// The layout mirrors the GPU <c>StrokeExpandComputeShader</c> edge format:
-    /// <list type="bullet">
-    /// <item><description>Side edge (flags=0): <c>(X0,Y0)→(X1,Y1)</c> is the centerline segment.</description></item>
-    /// <item><description>Join edge (<see cref="StrokeEdgeFlags.Join"/>): <c>(X0,Y0)</c> is the vertex, <c>(X1,Y1)</c> is the previous endpoint, <c>(AdjX,AdjY)</c> is the next endpoint.</description></item>
-    /// <item><description>Cap edge (<see cref="StrokeEdgeFlags.CapStart"/>/<see cref="StrokeEdgeFlags.CapEnd"/>): <c>(X0,Y0)</c> is the cap vertex, <c>(X1,Y1)</c> is the adjacent endpoint.</description></item>
-    /// </list>
-    /// </para>
-    /// <para>All coordinates are in scanner-local float space (relative to interest top-left with sampling offset).</para>
-    /// </remarks>
-    internal readonly struct StrokeEdgeData
-    {
-        public readonly float X0;
-        public readonly float Y0;
-        public readonly float X1;
-        public readonly float Y1;
-        public readonly float AdjX;
-        public readonly float AdjY;
-        public readonly StrokeEdgeFlags Flags;
-
-        public StrokeEdgeData(float x0, float y0, float x1, float y1, StrokeEdgeFlags flags, float adjX = 0, float adjY = 0)
-        {
-            this.X0 = x0;
-            this.Y0 = y0;
-            this.X1 = x1;
-            this.Y1 = y1;
-            this.Flags = flags;
-            this.AdjX = adjX;
-            this.AdjY = adjY;
-        }
-    }
-
     /// <summary>
     /// Reusable per-worker scratch buffers used by raster band execution.
     /// </summary>
@@ -2014,6 +2310,13 @@ internal static class DefaultRasterizer
             && this.tileCapacity >= minCapacity;
 
         /// <summary>
+        /// Returns <see langword="true"/> when this scratch can be reused for the default band configuration
+        /// at the requested width.
+        /// </summary>
+        internal bool CanReuse(int requiredWidth)
+            => this.CanReuse(BitVectorsForMaxBitCount(requiredWidth), checked(requiredWidth << 1), requiredWidth, PreferredRowHeight);
+
+        /// <summary>
         /// Allocates worker-local scratch sized for the configured tile/band capacity.
         /// </summary>
         public static WorkerScratch Create(MemoryAllocator allocator, int wordsPerRow, int coverStride, int width, int tileCapacity)
@@ -2057,34 +2360,22 @@ internal static class DefaultRasterizer
             IntersectionRule intersectionRule,
             RasterizationMode rasterizationMode,
             float antialiasThreshold)
-        {
-            if ((uint)bandHeight > (uint)this.tileCapacity ||
-                (uint)wordsPerRow > (uint)this.wordsPerRow ||
-                (uint)coverStride > (uint)this.coverStride ||
-                (uint)width > (uint)this.width)
-            {
-                ThrowBandHeightExceedsScratchCapacity();
-            }
-
-            int bitVectorCount = checked(wordsPerRow * bandHeight);
-            int coverAreaCount = checked(coverStride * bandHeight);
-            return new Context(
-                this.bitVectorsOwner.Memory.Span[..bitVectorCount],
-                this.coverAreaOwner.Memory.Span[..coverAreaCount],
-                this.startCoverOwner.Memory.Span[..bandHeight],
-                this.rowMinTouchedColumnOwner.Memory.Span[..bandHeight],
-                this.rowMaxTouchedColumnOwner.Memory.Span[..bandHeight],
-                this.rowHasBitsOwner.Memory.Span[..bandHeight],
-                this.rowTouchedOwner.Memory.Span[..bandHeight],
-                this.touchedRowsOwner.Memory.Span[..bandHeight],
-                width,
-                bandHeight,
-                wordsPerRow,
-                coverStride,
+            => new Context(
+                this.bitVectorsOwner.Memory.Span,
+                this.coverAreaOwner.Memory.Span,
+                this.startCoverOwner.Memory.Span,
+                this.rowMinTouchedColumnOwner.Memory.Span,
+                this.rowMaxTouchedColumnOwner.Memory.Span,
+                this.rowHasBitsOwner.Memory.Span,
+                this.rowTouchedOwner.Memory.Span,
+                this.touchedRowsOwner.Memory.Span,
+                this.width,
+                this.tileCapacity,
+                this.wordsPerRow,
+                this.coverStride,
                 intersectionRule,
                 rasterizationMode,
                 antialiasThreshold);
-        }
 
         /// <summary>
         /// Releases worker-local scratch buffers back to the allocator.

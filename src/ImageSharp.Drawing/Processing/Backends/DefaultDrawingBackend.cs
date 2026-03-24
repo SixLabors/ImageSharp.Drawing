@@ -33,35 +33,338 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             throw new NotSupportedException($"{nameof(DefaultDrawingBackend)} requires CPU-accessible frame targets.");
         }
 
-        if (compositionScene.HasLayers)
-        {
-            using FlushScene layeredScene = FlushScene.Create(
-                compositionScene.Commands,
-                target.Bounds,
-                configuration.MemoryAllocator);
-
-            if (layeredScene.ItemCount == 0)
-            {
-                return;
-            }
-
-            layeredScene.ExecuteLayered(configuration, destinationFrame, compositionScene.Commands);
-            return;
-        }
-
         using FlushScene scene = FlushScene.Create(
             compositionScene.Commands,
             target.Bounds,
             configuration.MemoryAllocator);
 
-        if (scene.ItemCount == 0)
+        if (scene.RowCount == 0)
         {
             return;
         }
 
-        scene.Execute(configuration, destinationFrame);
+        ExecuteScene(configuration, destinationFrame, compositionScene.Commands, scene);
     }
 
+    private static void ExecuteScene<TPixel>(
+        Configuration configuration,
+        Buffer2DRegion<TPixel> destinationFrame,
+        IReadOnlyList<CompositionCommand> commands,
+        FlushScene scene)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        for (int i = 0; i < scene.ItemCount; i++)
+        {
+            ref FlushScene.SceneItem item = ref scene.Items[i];
+            _ = item.GetRenderer<TPixel>(configuration, destinationFrame.Width);
+        }
+
+        _ = Parallel.For(
+            fromInclusive: 0,
+            toExclusive: scene.RowCount,
+            localInit: () => new WorkerState<TPixel>(
+                configuration.MemoryAllocator,
+                destinationFrame.Width,
+                scene.MaxLayerDepth + 1),
+            body: (rowIndex, _, state) =>
+            {
+                ExecuteSceneRow(
+                    configuration,
+                    destinationFrame,
+                    commands,
+                    scene,
+                    scene.Rows[rowIndex],
+                    state);
+
+                return state;
+            },
+            localFinally: static state => state.Dispose());
+    }
+
+    private static void ExecuteSceneRow<TPixel>(
+        Configuration configuration,
+        Buffer2DRegion<TPixel> destinationFrame,
+        IReadOnlyList<CompositionCommand> commands,
+        FlushScene scene,
+        in FlushScene.SceneRow row,
+        WorkerState<TPixel> state)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        int bandTop = row.RowBandIndex * DefaultRasterizer.DefaultTileHeight;
+        int localBandTop = bandTop - destinationFrame.Rectangle.Y;
+        int bandHeight = Math.Min(DefaultRasterizer.DefaultTileHeight, destinationFrame.Height - localBandTop);
+        if (bandHeight <= 0)
+        {
+            return;
+        }
+
+        Buffer2DRegion<TPixel> destinationBand = destinationFrame.GetSubRegion(0, localBandTop, destinationFrame.Width, bandHeight);
+        BandTarget<TPixel>[] targetStack = state.TargetStack;
+        int targetCount = 1;
+        targetStack[0] = new BandTarget<TPixel>(destinationBand, destinationFrame.Rectangle.X, bandTop, null);
+        int scratchWidth = GetRowScratchWidth(scene, row, destinationFrame.Width);
+        DefaultRasterizer.WorkerScratch scratch = state.GetOrCreateScratch(scratchWidth);
+
+        try
+        {
+            for (FlushScene.SceneOperationBlock? block = row.FirstBlock; block is not null; block = block.Next)
+            {
+                foreach (FlushScene.SceneOperation operation in block.Items)
+                {
+                    switch (operation.Kind)
+                    {
+                        case CompositionCommandKind.BeginLayer:
+                            targetStack[targetCount++] =
+                                new BandTarget<TPixel>(
+                                    configuration.MemoryAllocator.Allocate2D<TPixel>(operation.LayerBounds.Width, operation.LayerBounds.Height, AllocationOptions.Clean),
+                                    operation.LayerBounds,
+                                    commands[operation.CommandIndex].GraphicsOptions);
+                            break;
+
+                        case CompositionCommandKind.EndLayer:
+                            BandTarget<TPixel> source = targetStack[--targetCount];
+                            BandTarget<TPixel> destination = targetStack[targetCount - 1];
+                            CompositeLayerBand(configuration, source, destination, state.BrushWorkspace);
+                            source.Dispose();
+                            break;
+
+                        case CompositionCommandKind.FillLayer:
+                            BandTarget<TPixel> target = targetStack[targetCount - 1];
+                            ref FlushScene.SceneItem sceneItem = ref scene.Items[operation.ItemIndex];
+                            ExecuteFillOperation(
+                                sceneItem.GetRenderer<TPixel>(configuration, destinationFrame.Width),
+                                new DefaultRasterizer.RasterizableItem(sceneItem.Rasterizable, operation.LocalRowIndex),
+                                target,
+                                scratch,
+                                state);
+                            break;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            for (int i = 1; i < targetCount; i++)
+            {
+                targetStack[i].Dispose();
+                targetStack[i] = null!;
+            }
+
+            targetStack[0] = null!;
+        }
+    }
+
+    private static int GetRowScratchWidth(
+        FlushScene scene,
+        in FlushScene.SceneRow row,
+        int minimumWidth)
+    {
+        int width = minimumWidth;
+        for (FlushScene.SceneOperationBlock? block = row.FirstBlock; block is not null; block = block.Next)
+        {
+            foreach (FlushScene.SceneOperation operation in block.Items)
+            {
+                if (operation.Kind != CompositionCommandKind.FillLayer)
+                {
+                    continue;
+                }
+
+                int itemWidth = scene.Items[operation.ItemIndex].Rasterizable.Width;
+                if (itemWidth > width)
+                {
+                    width = itemWidth;
+                }
+            }
+        }
+
+        return width;
+    }
+
+    private static void ExecuteFillOperation<TPixel>(
+        BrushRenderer<TPixel> renderer,
+        DefaultRasterizer.RasterizableItem item,
+        BandTarget<TPixel> target,
+        DefaultRasterizer.WorkerScratch scratch,
+        WorkerState<TPixel> state)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DefaultRasterizer.RasterizableBandInfo bandInfo = item.Rasterizable.GetBandInfo(item.LocalRowIndex);
+        DefaultRasterizer.Context context = scratch.CreateContext(
+            bandInfo.Width,
+            bandInfo.WordsPerRow,
+            bandInfo.CoverStride,
+            bandInfo.BandHeight,
+            bandInfo.IntersectionRule,
+            bandInfo.RasterizationMode,
+            bandInfo.AntialiasThreshold);
+        FillCoverageRowHandler<TPixel> rowHandler = new(renderer, target, state.BrushWorkspace);
+        DefaultRasterizer.ExecuteRasterizableItem(
+            ref context,
+            in item,
+            in bandInfo,
+            scratch.Scanline,
+            ref rowHandler);
+    }
+
+    private static void CompositeLayerBand<TPixel>(
+        Configuration configuration,
+        BandTarget<TPixel> source,
+        BandTarget<TPixel> destination,
+        BrushWorkspace<TPixel> brushWorkspace)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        int width = source.Region.Width;
+        if (width == 0 || source.Region.Height == 0)
+        {
+            return;
+        }
+
+        Rectangle overlap = Rectangle.Intersect(
+            new Rectangle(source.AbsoluteLeft, source.AbsoluteTop, source.Region.Width, source.Region.Height),
+            new Rectangle(destination.AbsoluteLeft, destination.AbsoluteTop, destination.Region.Width, destination.Region.Height));
+
+        if (overlap.Width <= 0 || overlap.Height <= 0)
+        {
+            return;
+        }
+
+        if (source.GraphicsOptions is not GraphicsOptions graphicsOptions)
+        {
+            return;
+        }
+
+        PixelBlender<TPixel> blender = PixelOperations<TPixel>.Instance.GetPixelBlender(graphicsOptions);
+        Span<float> amounts = brushWorkspace.GetAmounts(overlap.Width);
+        amounts[..overlap.Width].Fill(graphicsOptions.BlendPercentage);
+
+        int sourceOffsetX = overlap.X - source.AbsoluteLeft;
+        int sourceOffsetY = overlap.Y - source.AbsoluteTop;
+        int destinationOffsetX = overlap.X - destination.AbsoluteLeft;
+        int destinationOffsetY = overlap.Y - destination.AbsoluteTop;
+
+        for (int y = 0; y < overlap.Height; y++)
+        {
+            Span<TPixel> sourceRow = source.Region.DangerousGetRowSpan(sourceOffsetY + y).Slice(sourceOffsetX, overlap.Width);
+            Span<TPixel> destinationRow = destination.Region.DangerousGetRowSpan(destinationOffsetY + y).Slice(destinationOffsetX, overlap.Width);
+            blender.Blend(configuration, destinationRow, destinationRow, sourceRow, amounts[..overlap.Width]);
+        }
+    }
+
+    private readonly struct FillCoverageRowHandler<TPixel> : IRasterizerCoverageRowHandler
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private readonly BrushRenderer<TPixel> renderer;
+        private readonly BandTarget<TPixel> target;
+        private readonly BrushWorkspace<TPixel> brushWorkspace;
+
+        public FillCoverageRowHandler(
+            BrushRenderer<TPixel> renderer,
+            BandTarget<TPixel> target,
+            BrushWorkspace<TPixel> brushWorkspace)
+        {
+            this.renderer = renderer;
+            this.target = target;
+            this.brushWorkspace = brushWorkspace;
+        }
+
+        public void Handle(int y, int startX, Span<float> coverage)
+        {
+            int localY = y - this.target.AbsoluteTop;
+            if ((uint)localY >= (uint)this.target.Region.Height)
+            {
+                return;
+            }
+
+            int clipStartX = Math.Max(startX, this.target.AbsoluteLeft);
+            int clipEndX = Math.Min(startX + coverage.Length, this.target.AbsoluteLeft + this.target.Region.Width);
+            if (clipEndX <= clipStartX)
+            {
+                return;
+            }
+
+            int coverageOffset = clipStartX - startX;
+            int clippedLength = clipEndX - clipStartX;
+            Span<TPixel> destinationRow = this.target.Region
+                .DangerousGetRowSpan(localY)
+                .Slice(clipStartX - this.target.AbsoluteLeft, clippedLength);
+            this.renderer.Apply(destinationRow, coverage.Slice(coverageOffset, clippedLength), clipStartX, y, this.brushWorkspace);
+        }
+    }
+
+    private sealed class BandTarget<TPixel> : IDisposable
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private readonly Buffer2D<TPixel>? owner;
+
+        public BandTarget(Buffer2DRegion<TPixel> region, int absoluteLeft, int absoluteTop, GraphicsOptions? graphicsOptions)
+        {
+            this.Region = region;
+            this.AbsoluteLeft = absoluteLeft;
+            this.AbsoluteTop = absoluteTop;
+            this.GraphicsOptions = graphicsOptions;
+        }
+
+        public BandTarget(Buffer2D<TPixel> owner, Rectangle bounds, GraphicsOptions? graphicsOptions)
+        {
+            this.owner = owner;
+            this.Region = new Buffer2DRegion<TPixel>(owner);
+            this.AbsoluteLeft = bounds.X;
+            this.AbsoluteTop = bounds.Y;
+            this.GraphicsOptions = graphicsOptions;
+        }
+
+        public Buffer2DRegion<TPixel> Region { get; }
+
+        public int AbsoluteLeft { get; }
+
+        public int AbsoluteTop { get; }
+
+        public GraphicsOptions? GraphicsOptions { get; }
+
+        public void Dispose() => this.owner?.Dispose();
+    }
+
+    private sealed class WorkerState<TPixel> : IDisposable
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        private readonly MemoryAllocator allocator;
+        private DefaultRasterizer.WorkerScratch? scratch;
+
+        public WorkerState(
+            MemoryAllocator allocator,
+            int destinationWidth,
+            int layerDepth)
+        {
+            this.allocator = allocator;
+            this.BrushWorkspace = new BrushWorkspace<TPixel>(allocator, destinationWidth);
+            this.TargetStack = new BandTarget<TPixel>[layerDepth];
+        }
+
+        public BrushWorkspace<TPixel> BrushWorkspace { get; }
+
+        public BandTarget<TPixel>[] TargetStack { get; }
+
+        public DefaultRasterizer.WorkerScratch GetOrCreateScratch(int requiredWidth)
+        {
+            DefaultRasterizer.WorkerScratch? current = this.scratch;
+            if (current is not null && current.CanReuse(requiredWidth))
+            {
+                return current;
+            }
+
+            current?.Dispose();
+            this.scratch = DefaultRasterizer.CreateWorkerScratch(this.allocator, requiredWidth);
+            return this.scratch;
+        }
+
+        public void Dispose()
+        {
+            this.scratch?.Dispose();
+            this.BrushWorkspace.Dispose();
+        }
+    }
+
+#pragma warning disable SA1201 // Keep the public compose entrypoint after the worker-local helper types in this file.
     /// <summary>
     /// Composites one CPU-backed frame onto another using the supplied graphics options.
     /// </summary>
@@ -127,6 +430,7 @@ public sealed class DefaultDrawingBackend : IDrawingBackend
             blender.Blend(configuration, dstRow, dstRow, srcRow, amounts);
         }
     }
+#pragma warning restore SA1201
 
     /// <inheritdoc />
     public bool TryReadRegion<TPixel>(

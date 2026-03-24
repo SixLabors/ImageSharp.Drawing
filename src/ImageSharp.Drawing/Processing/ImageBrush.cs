@@ -188,7 +188,6 @@ public abstract class ImageBrush : Brush
         /// The X offset.
         /// </summary>
         private readonly int offsetX;
-        private bool isDisposed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ImageBrushRenderer{TPixel}"/> class.
@@ -225,18 +224,6 @@ public abstract class ImageBrush : Brush
                 int srcY = ((y - this.offsetY) % this.sourceRegion.Height) + this.sourceRegion.Y;
                 return this.sourceFrame[srcX, srcY];
             }
-        }
-
-        /// <inheritdoc />
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            this.isDisposed = true;
-            base.Dispose(disposing);
         }
 
         /// <inheritdoc />

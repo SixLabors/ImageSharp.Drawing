@@ -17,6 +17,8 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     private List<InternalPath>? internalPaths;
     private float length;
     private RectangleF? bounds;
+    private IPath? closedPath;
+    private LinearGeometry? linearGeometry;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComplexPolygon"/> class.
@@ -97,6 +99,98 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
         return paths;
     }
 
+    /// <inheritdoc />
+    public LinearGeometry ToLinearGeometry()
+    {
+        if (this.linearGeometry is not null)
+        {
+            return this.linearGeometry;
+        }
+
+        int pointCount = 0;
+        int contourCount = 0;
+        int segmentCount = 0;
+
+        bool hasBounds = false;
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+
+        foreach (IPath path in this.paths)
+        {
+            LinearGeometry geometry = path.ToLinearGeometry();
+
+            if (geometry.Info.PointCount == 0)
+            {
+                continue;
+            }
+
+            RectangleF childBounds = geometry.Info.Bounds;
+            minX = MathF.Min(minX, childBounds.Left);
+            minY = MathF.Min(minY, childBounds.Top);
+            maxX = MathF.Max(maxX, childBounds.Right);
+            maxY = MathF.Max(maxY, childBounds.Bottom);
+            hasBounds = true;
+
+            pointCount += geometry.Info.PointCount;
+            contourCount += geometry.Info.ContourCount;
+            segmentCount += geometry.Info.SegmentCount;
+        }
+
+        PointF[] points = new PointF[pointCount];
+        LinearContour[] contours = new LinearContour[contourCount];
+        int pointStart = 0;
+        int contourStart = 0;
+        int segmentStart = 0;
+
+        foreach (IPath path in this.paths)
+        {
+            LinearGeometry geometry = path.ToLinearGeometry();
+            if (geometry.Info.PointCount == 0)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < geometry.Points.Count; i++)
+            {
+                points[pointStart + i] = geometry.Points[i];
+            }
+
+            for (int i = 0; i < geometry.Contours.Count; i++)
+            {
+                LinearContour contour = geometry.Contours[i];
+                contours[contourStart + i] = new LinearContour
+                {
+                    PointStart = pointStart + contour.PointStart,
+                    PointCount = contour.PointCount,
+                    SegmentStart = segmentStart + contour.SegmentStart,
+                    SegmentCount = contour.SegmentCount,
+                    IsClosed = contour.IsClosed
+                };
+            }
+
+            pointStart += geometry.Info.PointCount;
+            contourStart += geometry.Info.ContourCount;
+            segmentStart += geometry.Info.SegmentCount;
+        }
+
+        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
+
+        this.linearGeometry = new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = bounds,
+                ContourCount = contours.Length,
+                PointCount = points.Length,
+                SegmentCount = segmentCount
+            },
+            contours,
+            points);
+
+        return this.linearGeometry;
+    }
+
     /// <inheritdoc/>
     public IPath AsClosedPath()
     {
@@ -105,13 +199,19 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
             return this;
         }
 
+        if (this.closedPath is not null)
+        {
+            return this.closedPath;
+        }
+
         IPath[] paths = new IPath[this.paths.Length];
         for (int i = 0; i < this.paths.Length; i++)
         {
             paths[i] = this.paths[i].AsClosedPath();
         }
 
-        return new ComplexPolygon(paths);
+        this.closedPath = new ComplexPolygon(paths);
+        return this.closedPath;
     }
 
     /// <inheritdoc/>

@@ -44,6 +44,8 @@ public class ArcLineSegment : ILineSegment
         {
             this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
         }
+
+        this.Bounds = CalculateBounds(this.linePoints);
     }
 
     /// <summary>
@@ -78,15 +80,38 @@ public class ArcLineSegment : ILineSegment
         {
             this.linePoints = EllipticArcFromEndParams(from, to, radius, rotation, largeArc, sweep);
         }
+
+        this.Bounds = CalculateBounds(this.linePoints);
     }
 
-    private ArcLineSegment(PointF[] linePoints) => this.linePoints = linePoints;
+    private ArcLineSegment(PointF[] linePoints)
+    {
+        this.linePoints = linePoints;
+        this.Bounds = CalculateBounds(linePoints);
+    }
+
+    /// <inheritdoc/>
+    public PointF StartPoint => this.linePoints[0];
 
     /// <inheritdoc/>
     public PointF EndPoint => this.linePoints[^1];
 
+    /// <inheritdoc />
+    public RectangleF Bounds { get; }
+
+    /// <inheritdoc />
+    public int LinearVertexCount => this.linePoints.Length;
+
     /// <inheritdoc/>
     public ReadOnlyMemory<PointF> Flatten() => this.linePoints;
+
+    /// <inheritdoc />
+    public void CopyTo(Span<PointF> destination, bool skipFirstPoint)
+    {
+        int startIndex = skipFirstPoint ? 1 : 0;
+
+        this.linePoints.AsSpan(startIndex).CopyTo(destination);
+    }
 
     /// <summary>
     /// Transforms the current <see cref="ArcLineSegment"/> using specified matrix.
@@ -111,6 +136,28 @@ public class ArcLineSegment : ILineSegment
 
     /// <inheritdoc/>
     ILineSegment ILineSegment.Transform(Matrix4x4 matrix) => this.Transform(matrix);
+
+    /// <summary>
+    /// Computes the bounds for the retained linearized arc points.
+    /// </summary>
+    private static RectangleF CalculateBounds(ReadOnlySpan<PointF> points)
+    {
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+
+        for (int i = 0; i < points.Length; i++)
+        {
+            PointF point = points[i];
+            minX = MathF.Min(minX, point.X);
+            minY = MathF.Min(minY, point.Y);
+            maxX = MathF.Max(maxX, point.X);
+            maxY = MathF.Max(maxY, point.Y);
+        }
+
+        return RectangleF.FromLTRB(minX, minY, maxX, maxY);
+    }
 
     private static PointF[] EllipticArcFromEndParams(
         PointF from,

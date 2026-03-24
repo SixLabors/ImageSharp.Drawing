@@ -16,6 +16,9 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     private readonly ILineSegment[] lineSegments;
     private InternalPath? innerPath;
     private IReadOnlyList<InternalPath>? internalPathRings;
+    private IPath? closedPath;
+    private LinearGeometry? linearGeometry;
+    private RectangleF? bounds;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Path"/> class.
@@ -69,7 +72,7 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     public ReadOnlyMemory<PointF> Points => this.InnerPath.Points();
 
     /// <inheritdoc />
-    public RectangleF Bounds => this.InnerPath.Bounds;
+    public RectangleF Bounds => this.bounds ??= this.CalculateBounds();
 
     /// <inheritdoc />
     public PathTypes PathType => this.IsClosed ? PathTypes.Closed : PathTypes.Open;
@@ -118,13 +121,112 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
             return this;
         }
 
-        return new Polygon(this.LineSegments);
+        return this.closedPath ??= new Polygon(this.LineSegments);
     }
 
     /// <inheritdoc />
     public IEnumerable<ISimplePath> Flatten()
     {
         yield return this;
+    }
+
+    /// <inheritdoc />
+    public virtual LinearGeometry ToLinearGeometry()
+    {
+        if (this.linearGeometry is not null)
+        {
+            return this.linearGeometry;
+        }
+
+        if (this.lineSegments.Length == 0)
+        {
+            this.linearGeometry = new LinearGeometry(
+                new LinearGeometryInfo
+                {
+                    Bounds = RectangleF.Empty,
+                    ContourCount = 0,
+                    PointCount = 0,
+                    SegmentCount = 0
+                },
+                [],
+                []);
+
+            return this.linearGeometry;
+        }
+
+        PointF? lastEndPoint = null;
+        int pointCount = 0;
+
+        for (int i = 0; i < this.lineSegments.Length; i++)
+        {
+            ILineSegment segment = this.lineSegments[i];
+            bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
+            pointCount += segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
+            lastEndPoint = segment.EndPoint;
+        }
+
+        PointF[] points = new PointF[pointCount];
+        LinearContour[] contours = pointCount == 0 ? [] : new LinearContour[1];
+
+        bool hasBounds = false;
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+        int pointIndex = 0;
+        lastEndPoint = null;
+
+        for (int i = 0; i < this.lineSegments.Length; i++)
+        {
+            ILineSegment segment = this.lineSegments[i];
+            bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
+            int contributionCount = segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
+            Span<PointF> destination = points.AsSpan(pointIndex, contributionCount);
+
+            segment.CopyTo(destination, skipFirstPoint);
+            lastEndPoint = segment.EndPoint;
+
+            for (int p = 0; p < destination.Length; p++)
+            {
+                PointF point = destination[p];
+                minX = MathF.Min(minX, point.X);
+                minY = MathF.Min(minY, point.Y);
+                maxX = MathF.Max(maxX, point.X);
+                maxY = MathF.Max(maxY, point.Y);
+                hasBounds = true;
+            }
+
+            pointIndex += contributionCount;
+        }
+
+        int segmentCount = pointCount == 0 ? 0 : this.IsClosed ? pointCount : pointCount - 1;
+
+        if (pointCount > 0)
+        {
+            contours[0] = new LinearContour
+            {
+                PointStart = 0,
+                PointCount = pointCount,
+                SegmentStart = 0,
+                SegmentCount = segmentCount,
+                IsClosed = this.IsClosed
+            };
+        }
+
+        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
+
+        this.linearGeometry = new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = bounds,
+                ContourCount = contours.Length,
+                PointCount = points.Length,
+                SegmentCount = segmentCount
+            },
+            contours,
+            points);
+
+        return this.linearGeometry;
     }
 
     /// <inheritdoc/>
@@ -134,6 +236,26 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     /// <inheritdoc/>
     IReadOnlyList<InternalPath> IInternalPathOwner.GetRingsAsInternalPath()
         => this.internalPathRings ??= [this.InnerPath];
+
+    /// <summary>
+    /// Computes path bounds directly from segment bounds without materializing <see cref="InternalPath"/>.
+    /// </summary>
+    private RectangleF CalculateBounds()
+    {
+        if (this.lineSegments.Length == 0)
+        {
+            return RectangleF.Empty;
+        }
+
+        RectangleF bounds = this.lineSegments[0].Bounds;
+
+        for (int i = 1; i < this.lineSegments.Length; i++)
+        {
+            bounds = RectangleF.Union(bounds, this.lineSegments[i].Bounds);
+        }
+
+        return bounds;
+    }
 
     private static ILineSegment[] GetSegmentArray(IEnumerable<ILineSegment> segments)
     {
