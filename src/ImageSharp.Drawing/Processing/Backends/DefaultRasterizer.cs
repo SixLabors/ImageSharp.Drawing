@@ -536,6 +536,8 @@ internal static partial class DefaultRasterizer
             int spanStart = 0;
             int spanEnd = 0;
             float spanCoverage = 0F;
+            int runStart = -1;
+            int runEnd = -1;
             int minWord = minTouchedColumn / WordBitCount;
             int maxWord = maxTouchedColumn / WordBitCount;
 
@@ -565,7 +567,12 @@ internal static partial class DefaultRasterizer
                     {
                         if (coverage <= 0F)
                         {
-                            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
+                            // Zero coverage is a hard break. Everything buffered so far belongs
+                            // to the contiguous non-zero region immediately before x, and the
+                            // current pixel is outside that region. Flush now so a later non-zero
+                            // span cannot be merged across this hole into the same row callback.
+                            BufferSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+                            FlushBufferedRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
                             spanStart = x + 1;
                             spanEnd = spanStart;
                             spanCoverage = 0F;
@@ -576,7 +583,7 @@ internal static partial class DefaultRasterizer
                         }
                         else
                         {
-                            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
+                            BufferSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
                             spanStart = x;
                             spanEnd = x + 1;
                             spanCoverage = coverage;
@@ -588,7 +595,11 @@ internal static partial class DefaultRasterizer
                         // non-zero coverage and must be emitted as its own run.
                         if (cover == 0)
                         {
-                            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
+                            // A zero-coverage gap is the same kind of hard break as a zero
+                            // coverage cell above: the buffered run must end before the gap so
+                            // the next visible span starts a new contiguous non-zero interval.
+                            BufferSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+                            FlushBufferedRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
                             spanStart = x;
                             spanEnd = x + 1;
                             spanCoverage = coverage;
@@ -599,8 +610,11 @@ internal static partial class DefaultRasterizer
                             if (gapCoverage <= 0F)
                             {
                                 // Even-odd can map non-zero winding to zero coverage.
-                                // Treat this as a hard run break so we don't bridge holes.
-                                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
+                                // Treat this as a hard run break so we don't bridge across a
+                                // zero-alpha hole and emit one callback for what is really two
+                                // separate visible regions.
+                                BufferSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+                                FlushBufferedRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
                                 spanStart = x;
                                 spanEnd = x + 1;
                                 spanCoverage = coverage;
@@ -613,7 +627,7 @@ internal static partial class DefaultRasterizer
                                 }
                                 else
                                 {
-                                    EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, x, spanCoverage);
+                                    BufferSpan(scanline, spanStart, x, spanCoverage, ref runStart, ref runEnd);
                                     spanStart = x;
                                     spanEnd = x + 1;
                                     spanCoverage = coverage;
@@ -621,8 +635,8 @@ internal static partial class DefaultRasterizer
                             }
                             else
                             {
-                                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
-                                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanEnd, x, gapCoverage);
+                                BufferSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+                                BufferSpan(scanline, spanEnd, x, gapCoverage, ref runStart, ref runEnd);
                                 spanStart = x;
                                 spanEnd = x + 1;
                                 spanCoverage = coverage;
@@ -634,12 +648,18 @@ internal static partial class DefaultRasterizer
                 }
             }
 
-            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
+            BufferSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
 
             if (cover != 0 && spanEnd < this.width)
             {
-                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanEnd, this.width, this.AreaToCoverage(cover << AreaToCoverageShift));
+                BufferSpan(scanline, spanEnd, this.width, this.AreaToCoverage(cover << AreaToCoverageShift), ref runStart, ref runEnd);
             }
+
+            // At this point the buffered run, if any, represents one contiguous destination-space
+            // interval whose pixels all have non-zero coverage. Emitting that interval in one
+            // callback preserves the exact per-pixel coverage values already written into the
+            // scratch scanline while avoiding a stream of tiny span callbacks.
+            FlushBufferedRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
         }
 
         /// <summary>
@@ -687,27 +707,59 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Emits one constant-coverage span directly to the row handler.
+        /// Buffers one non-zero span into the current contiguous row run.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void EmitSpan<TRowHandler>(
-            ref TRowHandler rowHandler,
-            int destinationY,
-            int destinationLeft,
+        private static void BufferSpan(
             Span<float> scanline,
             int start,
             int end,
-            float coverage)
-            where TRowHandler : struct, IRasterizerCoverageRowHandler
+            float coverage,
+            ref int runStart,
+            ref int runEnd)
         {
             if (coverage <= 0F || end <= start)
             {
                 return;
             }
 
-            int length = end - start;
-            scanline[..length].Fill(coverage);
-            rowHandler.Handle(destinationY, destinationLeft + start, scanline[..length]);
+            if (runStart < 0)
+            {
+                runStart = start;
+                runEnd = end;
+            }
+            else if (end > runEnd)
+            {
+                runEnd = end;
+            }
+
+            // All spans in one buffered run are contiguous in destination space. That lets us
+            // pack them into one scratch slice, keep their exact per-pixel coverage values, and
+            // later hand the whole visible interval to the renderer in a single callback.
+            scanline[(start - runStart)..(end - runStart)].Fill(coverage);
+        }
+
+        /// <summary>
+        /// Emits the currently buffered contiguous run, if any.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void FlushBufferedRun<TRowHandler>(
+            ref TRowHandler rowHandler,
+            int destinationY,
+            int destinationLeft,
+            Span<float> scanline,
+            ref int runStart,
+            ref int runEnd)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
+        {
+            if (runStart < 0)
+            {
+                return;
+            }
+
+            rowHandler.Handle(destinationY, destinationLeft + runStart, scanline[..(runEnd - runStart)]);
+            runStart = -1;
+            runEnd = -1;
         }
 
         /// <summary>
