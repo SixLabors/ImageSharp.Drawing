@@ -12,70 +12,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed partial class FlushScene
 {
     /// <summary>
-    /// Holds one retained scene item.
-    /// </summary>
-    internal struct SceneItem : IDisposable
-    {
-        private object? renderer;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="SceneItem"/> struct.
-        /// </summary>
-        /// <param name="commandIndex">The source command index.</param>
-        /// <param name="command">The retained composition command.</param>
-        /// <param name="rasterizable">The retained rasterizable geometry.</param>
-        public SceneItem(int commandIndex, CompositionCommand command, DefaultRasterizer.RasterizableGeometry rasterizable)
-        {
-            this.CommandIndex = commandIndex;
-            this.Command = command;
-            this.Rasterizable = rasterizable;
-        }
-
-        /// <summary>
-        /// Gets the source command index.
-        /// </summary>
-        public int CommandIndex { get; }
-
-        /// <summary>
-        /// Gets the retained composition command.
-        /// </summary>
-        public CompositionCommand Command { get; }
-
-        /// <summary>
-        /// Gets the retained rasterizable geometry.
-        /// </summary>
-        public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
-
-        /// <summary>
-        /// Gets the memoized renderer for this scene item, creating it on first use.
-        /// </summary>
-        /// <typeparam name="TPixel">The pixel format.</typeparam>
-        /// <param name="configuration">The active processing configuration.</param>
-        /// <param name="canvasWidth">The destination canvas width.</param>
-        /// <returns>The memoized renderer for the scene item.</returns>
-        public BrushRenderer<TPixel> GetRenderer<TPixel>(Configuration configuration, int canvasWidth)
-            where TPixel : unmanaged, IPixel<TPixel>
-        {
-            if (this.renderer is BrushRenderer<TPixel> typed)
-            {
-                return typed;
-            }
-
-            typed = this.Command.Brush.CreateRenderer<TPixel>(
-                configuration,
-                this.Command.GraphicsOptions,
-                canvasWidth,
-                this.Command.BrushBounds);
-
-            this.renderer = typed;
-            return typed;
-        }
-
-        /// <inheritdoc />
-        public readonly void Dispose() => this.Rasterizable.Dispose();
-    }
-
-    /// <summary>
     /// Holds one retained row operation.
     /// </summary>
     internal readonly struct SceneOperation
@@ -336,5 +272,69 @@ internal sealed partial class FlushScene
         /// Releases the block storage.
         /// </summary>
         public void Dispose() => this.owner.Dispose();
+    }
+
+    /// <summary>
+    /// Holds one retained scene item.
+    /// </summary>
+    internal sealed class SceneItem : IDisposable
+    {
+        private object? renderer;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SceneItem"/> class.
+        /// </summary>
+        /// <param name="commandIndex">The source command index.</param>
+        /// <param name="command">The retained composition command.</param>
+        /// <param name="rasterizable">The retained rasterizable geometry.</param>
+        public SceneItem(int commandIndex, CompositionCommand command, DefaultRasterizer.RasterizableGeometry rasterizable)
+        {
+            this.CommandIndex = commandIndex;
+            this.Command = command;
+            this.Rasterizable = rasterizable;
+        }
+
+        /// <summary>
+        /// Gets the source command index.
+        /// </summary>
+        public int CommandIndex { get; }
+
+        /// <summary>
+        /// Gets the retained composition command.
+        /// </summary>
+        public CompositionCommand Command { get; }
+
+        /// <summary>
+        /// Gets the retained rasterizable geometry.
+        /// </summary>
+        public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
+
+        /// <summary>
+        /// Gets the memoized renderer for this scene item, creating it on first use.
+        /// </summary>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
+        /// <param name="configuration">The active processing configuration.</param>
+        /// <param name="canvasWidth">The destination canvas width.</param>
+        /// <returns>The memoized renderer for the scene item.</returns>
+        public BrushRenderer<TPixel> GetRenderer<TPixel>(Configuration configuration, int canvasWidth)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            if (this.renderer is BrushRenderer<TPixel> typed)
+            {
+                return typed;
+            }
+
+            typed = this.Command.Brush.CreateRenderer<TPixel>(
+                configuration,
+                this.Command.GraphicsOptions,
+                canvasWidth,
+                this.Command.BrushBounds);
+
+            this.renderer = typed;
+            return typed;
+        }
+
+        /// <inheritdoc />
+        public void Dispose() => this.Rasterizable.Dispose();
     }
 }

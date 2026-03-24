@@ -132,10 +132,12 @@ internal static partial class DefaultRasterizer
         RectangleF translatedBounds = geometry.Info.Bounds;
         translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
 
+        // The retained clipper ignores segments at the maximum X edge,
+        // so extend the right bound by one pixel to keep closing vertical edges available.
         Rectangle geometryBounds = Rectangle.FromLTRB(
             (int)MathF.Floor(translatedBounds.Left),
             (int)MathF.Floor(translatedBounds.Top),
-            (int)MathF.Ceiling(translatedBounds.Right),
+            (int)MathF.Ceiling(translatedBounds.Right) + 1,
             (int)MathF.Ceiling(translatedBounds.Bottom));
 
         Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, options.Interest);
@@ -534,8 +536,6 @@ internal static partial class DefaultRasterizer
             int spanStart = 0;
             int spanEnd = 0;
             float spanCoverage = 0F;
-            int runStart = -1;
-            int runEnd = -1;
             int minWord = minTouchedColumn / WordBitCount;
             int maxWord = maxTouchedColumn / WordBitCount;
 
@@ -565,8 +565,7 @@ internal static partial class DefaultRasterizer
                     {
                         if (coverage <= 0F)
                         {
-                            WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
-                            EmitRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
+                            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
                             spanStart = x + 1;
                             spanEnd = spanStart;
                             spanCoverage = 0F;
@@ -577,7 +576,7 @@ internal static partial class DefaultRasterizer
                         }
                         else
                         {
-                            WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+                            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
                             spanStart = x;
                             spanEnd = x + 1;
                             spanCoverage = coverage;
@@ -589,7 +588,7 @@ internal static partial class DefaultRasterizer
                         // non-zero coverage and must be emitted as its own run.
                         if (cover == 0)
                         {
-                            WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+                            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
                             spanStart = x;
                             spanEnd = x + 1;
                             spanCoverage = coverage;
@@ -601,7 +600,7 @@ internal static partial class DefaultRasterizer
                             {
                                 // Even-odd can map non-zero winding to zero coverage.
                                 // Treat this as a hard run break so we don't bridge holes.
-                                WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+                                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
                                 spanStart = x;
                                 spanEnd = x + 1;
                                 spanCoverage = coverage;
@@ -614,7 +613,7 @@ internal static partial class DefaultRasterizer
                                 }
                                 else
                                 {
-                                    WriteSpan(scanline, spanStart, x, spanCoverage, ref runStart, ref runEnd);
+                                    EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, x, spanCoverage);
                                     spanStart = x;
                                     spanEnd = x + 1;
                                     spanCoverage = coverage;
@@ -622,8 +621,8 @@ internal static partial class DefaultRasterizer
                             }
                             else
                             {
-                                WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
-                                WriteSpan(scanline, spanEnd, x, gapCoverage, ref runStart, ref runEnd);
+                                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
+                                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanEnd, x, gapCoverage);
                                 spanStart = x;
                                 spanEnd = x + 1;
                                 spanCoverage = coverage;
@@ -635,15 +634,12 @@ internal static partial class DefaultRasterizer
                 }
             }
 
-            // Flush tail run and any remaining constant-cover tail after the last touched cell.
-            WriteSpan(scanline, spanStart, spanEnd, spanCoverage, ref runStart, ref runEnd);
+            EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanStart, spanEnd, spanCoverage);
 
             if (cover != 0 && spanEnd < this.width)
             {
-                WriteSpan(scanline, spanEnd, this.width, this.AreaToCoverage(cover << AreaToCoverageShift), ref runStart, ref runEnd);
+                EmitSpan(ref rowHandler, destinationY, destinationLeft, scanline, spanEnd, this.width, this.AreaToCoverage(cover << AreaToCoverageShift));
             }
-
-            EmitRun(ref rowHandler, destinationY, destinationLeft, scanline, ref runStart, ref runEnd);
         }
 
         /// <summary>
@@ -691,57 +687,27 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Writes one non-zero coverage segment into the scanline and expands the active run.
+        /// Emits one constant-coverage span directly to the row handler.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void WriteSpan(
+        private static void EmitSpan<TRowHandler>(
+            ref TRowHandler rowHandler,
+            int destinationY,
+            int destinationLeft,
             Span<float> scanline,
             int start,
             int end,
-            float coverage,
-            ref int runStart,
-            ref int runEnd)
+            float coverage)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
             if (coverage <= 0F || end <= start)
             {
                 return;
             }
 
-            if (runStart < 0)
-            {
-                runStart = start;
-                runEnd = end;
-            }
-            else if (end > runEnd)
-            {
-                runEnd = end;
-            }
-
-            scanline[(start - runStart)..(end - runStart)].Fill(coverage);
-        }
-
-        /// <summary>
-        /// Emits the currently accumulated non-zero run, if any.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void EmitRun<TRowHandler>(
-            ref TRowHandler rowHandler,
-            int destinationY,
-            int destinationLeft,
-            Span<float> scanline,
-            ref int runStart,
-            ref int runEnd)
-            where TRowHandler : struct, IRasterizerCoverageRowHandler
-        {
-            if (runStart < 0)
-            {
-                return;
-            }
-
-            rowHandler.Handle(destinationY, destinationLeft + runStart, scanline[..(runEnd - runStart)]);
-
-            runStart = -1;
-            runEnd = -1;
+            int length = end - start;
+            scanline[..length].Fill(coverage);
+            rowHandler.Handle(destinationY, destinationLeft + start, scanline[..length]);
         }
 
         /// <summary>

@@ -222,8 +222,9 @@ public struct CompositionCommand
     /// <summary>
     /// Creates an end-layer composition command.
     /// </summary>
+    /// <param name="layerBounds">The absolute bounds of the layer being closed.</param>
     /// <returns>The end-layer command.</returns>
-    public static CompositionCommand CreateEndLayer()
+    public static CompositionCommand CreateEndLayer(Rectangle layerBounds)
         => new(
             CompositionCommandKind.EndLayer,
             0,
@@ -231,8 +232,8 @@ public struct CompositionCommand
             SentinelBrush,
             SentinelGraphicsOptions,
             default,
-            default,
-            default,
+            layerBounds,
+            layerBounds,
             default,
             null,
             Matrix4x4.Identity,
@@ -273,35 +274,40 @@ public struct CompositionCommand
             bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
         }
 
-        // Coverage is generated in path-local interest coordinates.
-        Rectangle interest = Rectangle.FromLTRB(
+        Rectangle localInterest = Rectangle.FromLTRB(
             (int)MathF.Floor(bounds.Left),
             (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right),
+            (int)MathF.Ceiling(bounds.Right) + 1,
             (int)MathF.Ceiling(bounds.Bottom));
 
+        Rectangle absoluteInterest = new(
+            localInterest.X + this.DestinationOffset.X,
+            localInterest.Y + this.DestinationOffset.Y,
+            localInterest.Width,
+            localInterest.Height);
+
         this.RasterizerOptions = new RasterizerOptions(
-            interest,
+            absoluteInterest,
             old.IntersectionRule,
             old.RasterizationMode,
             old.SamplingOrigin,
             old.AntialiasThreshold);
 
         this.BrushBounds = new Rectangle(
-            interest.X + this.DestinationOffset.X,
-            interest.Y + this.DestinationOffset.Y,
-            interest.Width,
-            interest.Height);
+            absoluteInterest.X,
+            absoluteInterest.Y,
+            absoluteInterest.Width,
+            absoluteInterest.Height);
 
         RasterizerOptions updated = this.RasterizerOptions;
         this.DefinitionKey = ComputeCoverageDefinitionKey(preparedPath, in updated);
 
         // Move the interest rect into absolute destination space, then clip it back to the command target.
         Rectangle commandDestination = new(
-            this.DestinationOffset.X + interest.X,
-            this.DestinationOffset.Y + interest.Y,
-            interest.Width,
-            interest.Height);
+            absoluteInterest.X,
+            absoluteInterest.Y,
+            absoluteInterest.Width,
+            absoluteInterest.Height);
 
         Rectangle clippedDestination = Rectangle.Intersect(this.TargetBounds, commandDestination);
         if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)

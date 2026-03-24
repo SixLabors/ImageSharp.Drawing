@@ -304,7 +304,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingCanvasState popped = this.savedStates.Pop();
         if (popped.IsLayer)
         {
-            this.batcher.AddComposition(CompositionCommand.CreateEndLayer());
+            this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds));
         }
     }
 
@@ -1197,7 +1197,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             if (popped.IsLayer)
             {
                 // Restore and Dispose unwind layers through the same command stream path.
-                this.batcher.AddComposition(CompositionCommand.CreateEndLayer());
+                this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds));
             }
         }
     }
