@@ -22,8 +22,16 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private const int CompositeTileHeight = 16;
     private const int UniformBufferOffsetAlignment = 256;
 
+    // A single flush can rerun the staged path a small number of times while the scratch
+    // buffers converge on the capacity reported by the scheduling stages.
+    private const int MaxDynamicGrowthAttempts = 3;
+
     private readonly DefaultDrawingBackend fallbackBackend;
     private static bool? isSupported;
+
+    // The staged pipeline keeps the most recently successful scratch capacities so later flushes
+    // can start closer to the scene sizes the current device has already proven it needs.
+    private WebGPUSceneBumpSizes bumpSizes = WebGPUSceneBumpSizes.Initial();
     private bool isDisposed;
 
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
@@ -216,38 +224,58 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.TestingLastFlushUsedGPU = false;
         this.TestingLastGPUInitializationFailure = null;
-
-        if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene.Commands, out bool exceedsBindingLimit, out WebGPUStagedScene stagedScene, out string? error))
+        WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
+        for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
         {
-            this.TestingLastGPUInitializationFailure = exceedsBindingLimit
-                ? error ?? "The staged WebGPU scene exceeded the current binding limits."
-                : error ?? "Failed to create the staged WebGPU scene.";
+            if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene.Commands, currentBumpSizes, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))
+            {
+                this.TestingLastGPUInitializationFailure = exceedsBindingLimit
+                    ? error ?? "The staged WebGPU scene exceeded the current binding limits."
+                    : error ?? "Failed to create the staged WebGPU scene.";
+                this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
+                return;
+            }
+
+            try
+            {
+                this.TestingLastFlushUsedGPU = true;
+
+                if (stagedScene.EncodedScene.FillCount == 0)
+                {
+                    // Empty staged scenes still establish the flush-sized scratch-capacity baseline.
+                    this.bumpSizes = stagedScene.Config.BumpSizes;
+                    return;
+                }
+
+                if (WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, out bool requiresGrowth, out WebGPUSceneBumpSizes grownBumpSizes, out error))
+                {
+                    // Persist the last successful capacities so the next flush starts from the
+                    // budget that actually worked on this device.
+                    this.bumpSizes = stagedScene.Config.BumpSizes;
+                    return;
+                }
+
+                this.TestingLastFlushUsedGPU = false;
+                if (requiresGrowth)
+                {
+                    // Scheduling reported that one or more bump allocators overflowed. Retry the
+                    // same flush with the larger capacities read back from the GPU.
+                    currentBumpSizes = grownBumpSizes;
+                    continue;
+                }
+
+                this.TestingLastGPUInitializationFailure = error ?? "The staged WebGPU scene dispatch failed.";
+            }
+            finally
+            {
+                stagedScene.Dispose();
+            }
+
             this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
             return;
         }
 
-        try
-        {
-            this.TestingLastFlushUsedGPU = true;
-
-            if (stagedScene.EncodedScene.FillCount == 0)
-            {
-                return;
-            }
-
-            if (WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, out error))
-            {
-                return;
-            }
-
-            this.TestingLastFlushUsedGPU = false;
-            this.TestingLastGPUInitializationFailure = error ?? "The staged WebGPU scene dispatch failed.";
-        }
-        finally
-        {
-            stagedScene.Dispose();
-        }
-
+        this.TestingLastGPUInitializationFailure = "The staged WebGPU scene exceeded the current dynamic growth retry budget.";
         this.FlushCompositionsFallback(configuration, target, compositionScene, compositionBounds: null);
     }
 

@@ -833,6 +833,9 @@ fn main(
     @builtin(global_invocation_id) global_id: vec3<u32>,
     @builtin(local_invocation_id) local_id: vec3<u32>,
 ) {
+    if config.cancelled != 0u {
+        return;
+    }
     let ix = global_id.x;
     pathdata_base = config.pathdata_base;
     bbox = vec4(1e31, 1e31, -1e31, -1e31);

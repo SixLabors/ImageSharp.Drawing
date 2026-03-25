@@ -14,10 +14,16 @@ internal readonly struct WebGPUSceneConfig
     /// <summary>
     /// Initializes a new instance of the <see cref="WebGPUSceneConfig"/> struct.
     /// </summary>
-    public WebGPUSceneConfig(WebGPUSceneWorkgroupCounts workgroupCounts, WebGPUSceneBufferSizes bufferSizes)
+    /// <param name="workgroupCounts">The per-pass dispatch sizes for the encoded scene.</param>
+    /// <param name="bufferSizes">The planned GPU buffer sizes for this flush.</param>
+    /// <param name="bumpSizes">The current dynamic scratch capacities to expose to the shaders.</param>
+    /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
+    public WebGPUSceneConfig(WebGPUSceneWorkgroupCounts workgroupCounts, WebGPUSceneBufferSizes bufferSizes, WebGPUSceneBumpSizes bumpSizes, WebGPUSceneChunkWindow chunkWindow)
     {
         this.WorkgroupCounts = workgroupCounts;
         this.BufferSizes = bufferSizes;
+        this.BumpSizes = bumpSizes;
+        this.ChunkWindow = chunkWindow;
     }
 
     /// <summary>
@@ -31,12 +37,224 @@ internal readonly struct WebGPUSceneConfig
     public WebGPUSceneBufferSizes BufferSizes { get; }
 
     /// <summary>
+    /// Gets the current dynamic scratch capacities that back the staged pipeline's bump allocators.
+    /// </summary>
+    public WebGPUSceneBumpSizes BumpSizes { get; }
+
+    /// <summary>
+    /// Gets the tile-row window rendered by this staged-scene attempt.
+    /// </summary>
+    public WebGPUSceneChunkWindow ChunkWindow { get; }
+
+    /// <summary>
     /// Creates the dispatch and buffer plan for one encoded scene.
     /// </summary>
-    public static WebGPUSceneConfig Create(WebGPUEncodedScene scene)
+    /// <param name="scene">The encoded scene whose dispatch sizes and buffers are being planned.</param>
+    /// <param name="bumpSizes">The current dynamic scratch capacities for the staged pipeline.</param>
+    /// <returns>A flush-scoped configuration describing dispatch sizes, buffer sizes, and scratch capacities.</returns>
+    public static WebGPUSceneConfig Create(WebGPUEncodedScene scene, WebGPUSceneBumpSizes bumpSizes)
+        => Create(scene, bumpSizes, WebGPUSceneChunkWindow.FullScene(scene));
+
+    /// <summary>
+    /// Creates the dispatch and buffer plan for one encoded scene and one tile-row render window.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose dispatch sizes and buffers are being planned.</param>
+    /// <param name="bumpSizes">The current dynamic scratch capacities for the staged pipeline.</param>
+    /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
+    /// <returns>A flush-scoped configuration describing dispatch sizes, buffer sizes, and scratch capacities.</returns>
+    public static WebGPUSceneConfig Create(WebGPUEncodedScene scene, WebGPUSceneBumpSizes bumpSizes, WebGPUSceneChunkWindow chunkWindow)
         => new(
-            WebGPUSceneWorkgroupCounts.Create(scene),
-            WebGPUSceneBufferSizes.Create(scene));
+            WebGPUSceneWorkgroupCounts.Create(scene, chunkWindow),
+            WebGPUSceneBufferSizes.Create(scene, bumpSizes, chunkWindow),
+            bumpSizes,
+            chunkWindow);
+}
+
+/// <summary>
+/// Tile-row window rendered by one staged-scene attempt.
+/// </summary>
+internal readonly struct WebGPUSceneChunkWindow
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneChunkWindow"/> struct.
+    /// </summary>
+    /// <param name="tileYStart">The first global tile row included in this attempt.</param>
+    /// <param name="tileHeight">The number of real tile rows rendered by this attempt.</param>
+    /// <param name="tileBufferHeight">The number of tile rows allocated in the scratch tile buffers for this attempt.</param>
+    public WebGPUSceneChunkWindow(uint tileYStart, uint tileHeight, uint tileBufferHeight)
+    {
+        this.TileYStart = tileYStart;
+        this.TileHeight = tileHeight;
+        this.TileBufferHeight = tileBufferHeight;
+    }
+
+    /// <summary>
+    /// Gets the first global tile row included in this attempt.
+    /// </summary>
+    public uint TileYStart { get; }
+
+    /// <summary>
+    /// Gets the number of real tile rows rendered by this attempt.
+    /// </summary>
+    public uint TileHeight { get; }
+
+    /// <summary>
+    /// Gets the tile-row height reserved in scratch buffers for this attempt.
+    /// </summary>
+    public uint TileBufferHeight { get; }
+
+    /// <summary>
+    /// Creates the full-scene render window.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose full tile height is being rendered.</param>
+    /// <returns>The tile window spanning the entire encoded scene.</returns>
+    public static WebGPUSceneChunkWindow FullScene(WebGPUEncodedScene scene)
+    {
+        uint tileHeight = checked((uint)scene.TileCountY);
+        return new WebGPUSceneChunkWindow(0U, tileHeight, tileHeight);
+    }
+}
+
+/// <summary>
+/// Flush-scoped scratch capacities for the staged scene's bump-allocated GPU buffers.
+/// </summary>
+internal readonly struct WebGPUSceneBumpSizes
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneBumpSizes"/> struct.
+    /// </summary>
+    /// <param name="lines">The flattened line buffer capacity.</param>
+    /// <param name="binning">The bin-data scratch capacity.</param>
+    /// <param name="pathTiles">The path-tile buffer capacity.</param>
+    /// <param name="segCounts">The segment-count buffer capacity.</param>
+    /// <param name="segments">The segment buffer capacity.</param>
+    /// <param name="blendSpill">The blend-spill buffer capacity.</param>
+    /// <param name="ptcl">The dynamic PTCL tail capacity.</param>
+    public WebGPUSceneBumpSizes(
+        uint lines,
+        uint binning,
+        uint pathTiles,
+        uint segCounts,
+        uint segments,
+        uint blendSpill,
+        uint ptcl)
+    {
+        this.Lines = lines;
+        this.Binning = binning;
+        this.PathTiles = pathTiles;
+        this.SegCounts = segCounts;
+        this.Segments = segments;
+        this.BlendSpill = blendSpill;
+        this.Ptcl = ptcl;
+    }
+
+    /// <summary>
+    /// Gets the flattened line buffer capacity.
+    /// </summary>
+    public uint Lines { get; }
+
+    /// <summary>
+    /// Gets the bin-data scratch capacity.
+    /// </summary>
+    public uint Binning { get; }
+
+    /// <summary>
+    /// Gets the path-tile buffer capacity.
+    /// </summary>
+    public uint PathTiles { get; }
+
+    /// <summary>
+    /// Gets the segment-count buffer capacity.
+    /// </summary>
+    public uint SegCounts { get; }
+
+    /// <summary>
+    /// Gets the segment buffer capacity.
+    /// </summary>
+    public uint Segments { get; }
+
+    /// <summary>
+    /// Gets the blend-spill buffer capacity.
+    /// </summary>
+    public uint BlendSpill { get; }
+
+    /// <summary>
+    /// Gets the PTCL buffer capacity.
+    /// </summary>
+    public uint Ptcl { get; }
+
+    /// <summary>
+    /// Creates the initial capacities for the staged scene's bump-allocated scratch buffers.
+    /// </summary>
+    /// <remarks>
+    /// These are startup sizes for the staged pipeline's transient GPU scratch memory, not fixed
+    /// correctness limits. The dynamic-memory path will grow them when an earlier run reports that
+    /// a scene needed more space.
+    /// </remarks>
+    public static WebGPUSceneBumpSizes Initial()
+        => new(
+            1U << 21,
+            1U << 18,
+            1U << 21,
+            1U << 21,
+            1U << 21,
+            1U << 20,
+            1U << 23);
+
+    /// <summary>
+    /// Raises the current capacities to the scene-derived lower bounds for one encoded scene.
+    /// </summary>
+    /// <remarks>
+    /// Several staged allocators already have reliable CPU-side counts before any GPU scheduling work starts.
+    /// Using those counts as the first attempt avoids wasting retries on scenes that are obviously larger than
+    /// the previous flush. The GPU bump allocators still provide the final correction for the dynamic cases.
+    /// </remarks>
+    /// <param name="scene">The encoded scene whose aggregate scheduling counts are already known on the CPU.</param>
+    /// <returns>The current capacities raised to this scene's known lower bounds.</returns>
+    public WebGPUSceneBumpSizes WithSceneLowerBounds(WebGPUEncodedScene scene)
+        => new(
+            MaxCapacity(this.Lines, GetSceneLinesLowerBound(scene)),
+            MaxCapacity(this.Binning, GetSceneBinningLowerBound(scene)),
+            MaxCapacity(this.PathTiles, GetSceneTileLowerBound(scene)),
+            MaxCapacity(this.SegCounts, GetSceneSegmentLowerBound(scene)),
+            MaxCapacity(this.Segments, GetSceneSegmentLowerBound(scene)),
+            this.BlendSpill,
+            this.Ptcl);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint GetSceneLinesLowerBound(WebGPUEncodedScene scene)
+        => AddSizingSlack(checked((uint)Math.Max(scene.LineCount, 1)));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint GetSceneBinningLowerBound(WebGPUEncodedScene scene)
+        => AddSizingSlack(checked((uint)Math.Max(scene.TotalBinMembershipCount, scene.DrawTagCount)));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint GetSceneTileLowerBound(WebGPUEncodedScene scene)
+        => AddSizingSlack(checked((uint)Math.Max(scene.TotalTileMembershipCount, scene.PathCount)));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint GetSceneSegmentLowerBound(WebGPUEncodedScene scene)
+
+        // The final segment buffers are driven by the path-count/path-tiling stages, not by the
+        // coarser path-tile membership count. Until the encoder carries a CPU-side line-slice total,
+        // the only safe lower bound we know here is the emitted line count.
+        => AddSizingSlack(checked((uint)Math.Max(scene.TotalLineSliceCount, scene.LineCount)));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint MaxCapacity(uint current, uint required)
+        => current >= required ? current : required;
+
+    /// <summary>
+    /// Adds a small retry margin and aligns the result so scene-derived capacities do not sit exactly on the edge.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint AddSizingSlack(uint required)
+        => AlignUp(checked(required + Math.Max(required / 8U, 1024U)), 1024U);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint AlignUp(uint value, uint alignment)
+        => value + (uint)(-(int)value & (alignment - 1U));
 }
 
 /// <summary>
@@ -205,7 +423,10 @@ internal readonly struct WebGPUSceneWorkgroupCounts
     /// <summary>
     /// Computes the workgroup counts required to run the staged-scene pipeline for one encoded scene.
     /// </summary>
-    public static WebGPUSceneWorkgroupCounts Create(WebGPUEncodedScene scene)
+    /// <param name="scene">The encoded scene whose dispatch sizes are being planned.</param>
+    /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
+    /// <returns>The per-pass workgroup counts for this encoded scene and chunk window.</returns>
+    public static WebGPUSceneWorkgroupCounts Create(WebGPUEncodedScene scene, WebGPUSceneChunkWindow chunkWindow)
     {
         uint drawObjectCount = checked((uint)scene.DrawTagCount);
         uint pathCount = checked((uint)scene.PathCount);
@@ -226,7 +447,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
         uint clipWgs = DivideRoundUp(clipCount, 256U);
         uint pathWgs = DivideRoundUp(pathCount, 256U);
         uint widthInBins = DivideRoundUp(checked((uint)scene.TileCountX), 16U);
-        uint heightInBins = DivideRoundUp(checked((uint)scene.TileCountY), 16U);
+        uint heightInBins = DivideRoundUp(chunkWindow.TileBufferHeight, 16U);
 
         return new WebGPUSceneWorkgroupCounts(
             useLargePathScan,
@@ -241,16 +462,16 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             clipReduceWgs,
             clipWgs,
             BinningComputeShader.GetDispatchX(drawObjectCount),
-            TileAllocComputeShader.GetDispatchX(drawObjectCount),
+            TileAllocComputeShader.GetDispatchX(pathCount),
             PathCountSetupComputeShader.GetDispatchX(),
             PathCountComputeShader.GetDispatchX(lineCount),
-            BackdropComputeShader.GetDispatchX(drawObjectCount),
+            BackdropComputeShader.GetDispatchX(pathCount),
             widthInBins,
             heightInBins,
             PathTilingSetupComputeShader.GetDispatchX(),
             1,
             checked((uint)scene.TileCountX),
-            checked((uint)scene.TileCountY));
+            chunkWindow.TileHeight);
     }
 
     /// <summary>
@@ -448,9 +669,13 @@ internal readonly struct WebGPUSceneBufferSizes
     /// <summary>
     /// Computes the GPU buffer sizes required by the current staged-scene pipeline.
     /// </summary>
-    public static WebGPUSceneBufferSizes Create(WebGPUEncodedScene scene)
+    /// <param name="scene">The encoded scene whose buffer plan is being computed.</param>
+    /// <param name="bumpSizes">The current dynamic scratch capacities for the staged pipeline.</param>
+    /// <param name="chunkWindow">The tile-row window rendered by this staged-scene attempt.</param>
+    /// <returns>The planned GPU buffer sizes for this encoded scene and chunk window.</returns>
+    public static WebGPUSceneBufferSizes Create(WebGPUEncodedScene scene, WebGPUSceneBumpSizes bumpSizes, WebGPUSceneChunkWindow chunkWindow)
     {
-        WebGPUSceneWorkgroupCounts workgroupCounts = WebGPUSceneWorkgroupCounts.Create(scene);
+        WebGPUSceneWorkgroupCounts workgroupCounts = WebGPUSceneWorkgroupCounts.Create(scene, chunkWindow);
         uint pathTagWgs = workgroupCounts.PathReduceX;
         uint reducedSize = workgroupCounts.UseLargePathScan ? AlignUp(pathTagWgs, 256U) : pathTagWgs;
         uint pathReducedCount = reducedSize;
@@ -470,17 +695,8 @@ internal readonly struct WebGPUSceneBufferSizes
         uint drawObjectPartitions = BinningComputeShader.GetDispatchX(drawObjectCount);
         uint binHeaderCount = checked(drawObjectPartitions * 256U);
         uint pathCount = AlignUp(checked((uint)scene.PathCount), 256U);
-
-        // These capacities mirror the current fixed scratch sizing used by the staged scene path.
-        // They intentionally leave headroom so a single flush can finish without having to grow
-        // GPU-side scratch storage while the scheduling passes are already in flight.
-        uint linesCount = 1U << 21;
-        uint binDataCount = 1U << 18;
-        uint pathTileCount = 1U << 21;
-        uint segmentCount = 1U << 21;
-        uint segmentCapacity = 1U << 21;
-        uint blendSpillCount = 1U << 20;
-        uint ptclCapacity = 1U << 23;
+        uint ptclBootstrapCount = checked((uint)scene.TileCountX * chunkWindow.TileBufferHeight * WebGPUSceneDispatch.PtclInitialAlloc);
+        uint ptclCount = checked(bumpSizes.Ptcl + ptclBootstrapCount);
 
         return new WebGPUSceneBufferSizes(
             WebGPUSceneBufferSize<GpuTagMonoid>.Create(pathReducedCount),
@@ -498,15 +714,15 @@ internal readonly struct WebGPUSceneBufferSizes
             WebGPUSceneBufferSize<GpuDrawBbox>.Create(drawBboxCount),
             WebGPUSceneBufferSize<GpuSceneBumpAllocators>.Create(1),
             WebGPUSceneBufferSize<GpuScenePath>.Create(pathCount),
-            WebGPUSceneBufferSize<GpuSceneLine>.Create(linesCount),
+            WebGPUSceneBufferSize<GpuSceneLine>.Create(bumpSizes.Lines),
             WebGPUSceneBufferSize<GpuSceneBinHeader>.Create(binHeaderCount),
-            WebGPUSceneBufferSize<uint>.Create(binDataCount),
+            WebGPUSceneBufferSize<uint>.Create(bumpSizes.Binning),
             WebGPUSceneBufferSize<GpuSceneIndirectCount>.Create(1),
-            WebGPUSceneBufferSize<GpuPathTile>.Create(pathTileCount),
-            WebGPUSceneBufferSize<GpuSegmentCount>.Create(segmentCount),
-            WebGPUSceneBufferSize<GpuPathSegment>.Create(segmentCapacity),
-            WebGPUSceneBufferSize<uint>.Create(blendSpillCount),
-            WebGPUSceneBufferSize<uint>.Create(ptclCapacity));
+            WebGPUSceneBufferSize<GpuPathTile>.Create(bumpSizes.PathTiles),
+            WebGPUSceneBufferSize<GpuSegmentCount>.Create(bumpSizes.SegCounts),
+            WebGPUSceneBufferSize<GpuPathSegment>.Create(bumpSizes.Segments),
+            WebGPUSceneBufferSize<uint>.Create(bumpSizes.BlendSpill),
+            WebGPUSceneBufferSize<uint>.Create(ptclCount));
     }
 
     /// <summary>

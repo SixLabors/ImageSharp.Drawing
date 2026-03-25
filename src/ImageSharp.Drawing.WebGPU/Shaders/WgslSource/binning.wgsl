@@ -50,6 +50,7 @@ var<workgroup> sh_bitmaps: array<array<atomic<u32>, N_TILE>, N_SLICE>;
 // store count values packed two u16's to a u32
 var<workgroup> sh_count: array<array<u32, N_TILE>, N_SUBSLICE>;
 var<workgroup> sh_chunk_offset: array<u32, N_TILE>;
+var<workgroup> sh_chunk_valid: array<u32, N_TILE>;
 var<workgroup> sh_previous_failed: u32;
 
 @compute @workgroup_size(256)
@@ -146,11 +147,14 @@ fn main(
     }
     // element_count is the number of draw objects covering this thread's bin
     var chunk_offset = atomicAdd(&bump.binning, element_count);
+    var chunk_valid = 1u;
     if chunk_offset + element_count > config.binning_size {
         chunk_offset = 0u;
+        chunk_valid = 0u;
         atomicOr(&bump.failed, STAGE_BINNING);
     }    
     sh_chunk_offset[local_id.x] = chunk_offset;
+    sh_chunk_valid[local_id.x] = chunk_valid;
     bin_header[global_id.x].element_count = element_count;
     bin_header[global_id.x].chunk_offset = chunk_offset;
     workgroupBarrier();
@@ -162,7 +166,7 @@ fn main(
         let bin_ix = y * width_in_bins + x;
         let out_mask = atomicLoad(&sh_bitmaps[my_slice][bin_ix]);
         // I think this predicate will always be true...
-        if (out_mask & my_mask) != 0u {
+        if (out_mask & my_mask) != 0u && sh_chunk_valid[bin_ix] != 0u {
             var idx = countOneBits(out_mask & (my_mask - 1u));
             if my_slice > 0u {
                 let count_ix = my_slice - 1u;

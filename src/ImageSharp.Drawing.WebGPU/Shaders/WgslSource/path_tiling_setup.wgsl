@@ -21,7 +21,6 @@ const WG_SIZE = 256u;
 fn main() {
     if atomicLoad(&bump.failed) != 0u {
         indirect.count_x = 0u;
-        // signal fine rasterizer that failure happened (it doesn't bind bump)
         ptcl[0] = ~0u;
     } else {
         let segments = atomicLoad(&bump.seg_counts);

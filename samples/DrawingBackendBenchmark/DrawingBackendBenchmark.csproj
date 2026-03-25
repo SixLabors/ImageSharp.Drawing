@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj" />
+    <ProjectReference Include="..\..\src\ImageSharp.Drawing.WebGPU\ImageSharp.Drawing.WebGPU.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" />
+  </ItemGroup>
+</Project>

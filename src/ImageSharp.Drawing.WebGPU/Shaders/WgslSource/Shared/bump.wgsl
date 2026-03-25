@@ -7,6 +7,7 @@ const STAGE_TILE_ALLOC: u32 = 0x2u;
 const STAGE_FLATTEN: u32 = 0x4u;
 const STAGE_PATH_COUNT: u32 = 0x8u;
 const STAGE_COARSE: u32 = 0x10u;
+const PREVIOUS_RUN: u32 = 0x20u;
 
 // This must be kept in sync with the struct in config.rs in the encoding crate.
 struct BumpAllocators {
@@ -17,7 +18,7 @@ struct BumpAllocators {
     tile: atomic<u32>,
     seg_counts: atomic<u32>,
     segments: atomic<u32>,
-    blend: atomic<u32>,
+    blend_spill: atomic<u32>,
     lines: atomic<u32>,
 }
 

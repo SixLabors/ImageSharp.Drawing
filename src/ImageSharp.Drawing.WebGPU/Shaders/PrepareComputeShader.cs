@@ -7,14 +7,14 @@ using Silk.NET.WebGPU;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// GPU stage that prefix-sums dynamically allocated per-path tile backdrops.
+/// GPU stage that resets bump counters and can cancel later stages when the prior run already proved the current scratch sizes are too small.
 /// </summary>
-internal static unsafe class BackdropComputeShader
+internal static unsafe class PrepareComputeShader
 {
     /// <summary>
-    /// Gets the generated WGSL source bytes for the dynamic backdrop stage.
+    /// Gets the generated WGSL source bytes for the prepare stage.
     /// </summary>
-    public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.BackdropDynCode;
+    public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.PrepareCode;
 
     /// <summary>
     /// Gets the WGSL entry point used by this shader.
@@ -22,14 +22,13 @@ internal static unsafe class BackdropComputeShader
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
     /// <summary>
-    /// Gets the X workgroup count required to process every path in the scene.
+    /// Gets the fixed X workgroup count required by the prepare stage.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static uint GetDispatchX(uint pathCount)
-        => (pathCount + 255U) / 256U;
+    public static uint GetDispatchX() => 1;
 
     /// <summary>
-    /// Creates the bind-group layout required by the dynamic backdrop stage.
+    /// Creates the bind-group layout required by the prepare stage.
     /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
@@ -37,22 +36,20 @@ internal static unsafe class BackdropComputeShader
         out BindGroupLayout* layout,
         out string? error)
     {
-        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[4];
-        entries[0] = SceneShaderBindingLayoutHelper.CreateUniformEntry(0, (nuint)sizeof(GpuSceneConfig));
+        BindGroupLayoutEntry* entries = stackalloc BindGroupLayoutEntry[2];
+        entries[0] = SceneShaderBindingLayoutHelper.CreateStorageEntry(0, BufferBindingType.Storage, (nuint)sizeof(GpuSceneConfig));
         entries[1] = SceneShaderBindingLayoutHelper.CreateStorageEntry(1, BufferBindingType.Storage, (nuint)sizeof(GpuSceneBumpAllocators));
-        entries[2] = SceneShaderBindingLayoutHelper.CreateStorageEntry(2, BufferBindingType.ReadOnlyStorage);
-        entries[3] = SceneShaderBindingLayoutHelper.CreateStorageEntry(3, BufferBindingType.Storage);
 
         BindGroupLayoutDescriptor descriptor = new()
         {
-            EntryCount = 4,
+            EntryCount = 2,
             Entries = entries
         };
 
         layout = api.DeviceCreateBindGroupLayout(device, in descriptor);
         if (layout is null)
         {
-            error = "Failed to create the WebGPU backdrop bind-group layout.";
+            error = "Failed to create the WebGPU prepare bind-group layout.";
             return false;
         }
 

@@ -1153,7 +1153,7 @@ fn main(
         return;
     }
     let tile_ix = wg_id.y * config.width_in_tiles + wg_id.x;
-    let xy = vec2(f32(global_id.x * PIXELS_PER_THREAD), f32(global_id.y));
+    let xy = vec2(f32(global_id.x * PIXELS_PER_THREAD), f32(config.chunk_tile_y_start * TILE_HEIGHT + global_id.y));
     let xy_uint = vec2<u32>(xy);
     let local_xy = vec2(f32(local_id.x * PIXELS_PER_THREAD), f32(local_id.y));
     var rgba: array<vec4<f32>, PIXELS_PER_THREAD>;

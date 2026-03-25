@@ -134,21 +134,7 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        GpuSceneConfig header = new(
-            (uint)scene.TileCountX,
-            (uint)scene.TileCountY,
-            (uint)scene.TargetSize.Width,
-            (uint)scene.TargetSize.Height,
-            baseColor,
-            scene.Layout,
-            config.BufferSizes.Lines.Length,
-            config.BufferSizes.BinData.Length,
-            config.BufferSizes.PathTiles.Length,
-            config.BufferSizes.SegCounts.Length,
-            config.BufferSizes.Segments.Length,
-            config.BufferSizes.BlendSpill.Length,
-            config.BufferSizes.Ptcl.Length,
-            scene.FineCoverageThreshold);
+        GpuSceneConfig header = CreateHeader(scene, config, baseColor);
 
         if (!TryCreateAndUploadScalarBuffer(flushContext, in header, out WgpuBuffer* headerBuffer, out error))
         {
@@ -177,6 +163,48 @@ internal static unsafe class WebGPUSceneResources
             imageAtlasTextureView);
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Creates the root config block uploaded to staged-scene shaders for one render attempt.
+    /// </summary>
+    /// <param name="scene">The encoded scene whose global layout is being rendered.</param>
+    /// <param name="config">The attempt-specific dispatch, scratch, and chunk-window configuration.</param>
+    /// <param name="baseColor">The packed base color used by the fine pass.</param>
+    /// <returns>The config block matching the WGSL <c>Config</c> layout.</returns>
+    public static GpuSceneConfig CreateHeader(WebGPUEncodedScene scene, WebGPUSceneConfig config, uint baseColor)
+    {
+        GpuSceneLayout layout = new(
+            scene.Layout.DrawObjectCount,
+            scene.Layout.PathCount,
+            scene.Layout.ClipCount,
+            scene.Layout.BinDataStart,
+            checked((uint)scene.TileCountX * config.ChunkWindow.TileBufferHeight * 64U),
+            scene.Layout.PathTagBase,
+            scene.Layout.PathDataBase,
+            scene.Layout.DrawTagBase,
+            scene.Layout.DrawDataBase,
+            scene.Layout.TransformBase,
+            scene.Layout.StyleBase);
+
+        return new GpuSceneConfig(
+            (uint)scene.TileCountX,
+            (uint)scene.TileCountY,
+            (uint)scene.TargetSize.Width,
+            (uint)scene.TargetSize.Height,
+            config.ChunkWindow.TileYStart,
+            config.ChunkWindow.TileHeight,
+            baseColor,
+            layout,
+            0U,
+            config.BufferSizes.Lines.Length,
+            config.BumpSizes.Binning,
+            config.BumpSizes.PathTiles,
+            config.BumpSizes.SegCounts,
+            config.BumpSizes.Segments,
+            config.BumpSizes.BlendSpill,
+            config.BumpSizes.Ptcl,
+            scene.FineCoverageThreshold);
     }
 
     private static bool TryCreateImageAtlasTexture<TPixel>(
@@ -899,7 +927,7 @@ internal struct GpuSceneBumpAllocators
     public uint Tile;
     public uint SegCounts;
     public uint Segments;
-    public uint Blend;
+    public uint BlendSpill;
     public uint Lines;
 }
 
@@ -1060,6 +1088,7 @@ internal readonly struct GpuSceneLayout
         uint pathCount,
         uint clipCount,
         uint binDataStart,
+        uint ptclDynamicStart,
         uint pathTagBase,
         uint pathDataBase,
         uint drawTagBase,
@@ -1071,6 +1100,7 @@ internal readonly struct GpuSceneLayout
         this.PathCount = pathCount;
         this.ClipCount = clipCount;
         this.BinDataStart = binDataStart;
+        this.PtclDynamicStart = ptclDynamicStart;
         this.PathTagBase = pathTagBase;
         this.PathDataBase = pathDataBase;
         this.DrawTagBase = drawTagBase;
@@ -1086,6 +1116,8 @@ internal readonly struct GpuSceneLayout
     public uint ClipCount { get; }
 
     public uint BinDataStart { get; }
+
+    public uint PtclDynamicStart { get; }
 
     public uint PathTagBase { get; }
 
@@ -1111,8 +1143,11 @@ internal readonly struct GpuSceneConfig
         uint heightInTiles,
         uint targetWidth,
         uint targetHeight,
+        uint chunkTileYStart,
+        uint chunkTileHeight,
         uint baseColor,
         GpuSceneLayout layout,
+        uint cancelled,
         uint linesSize,
         uint binningSize,
         uint tilesSize,
@@ -1126,8 +1161,11 @@ internal readonly struct GpuSceneConfig
         this.HeightInTiles = heightInTiles;
         this.TargetWidth = targetWidth;
         this.TargetHeight = targetHeight;
+        this.ChunkTileYStart = chunkTileYStart;
+        this.ChunkTileHeight = chunkTileHeight;
         this.BaseColor = baseColor;
         this.Layout = layout;
+        this.Cancelled = cancelled;
         this.LinesSize = linesSize;
         this.BinningSize = binningSize;
         this.TilesSize = tilesSize;
@@ -1146,9 +1184,21 @@ internal readonly struct GpuSceneConfig
 
     public uint TargetHeight { get; }
 
+    /// <summary>
+    /// Gets the first global tile row rendered by this attempt.
+    /// </summary>
+    public uint ChunkTileYStart { get; }
+
+    /// <summary>
+    /// Gets the number of real tile rows rendered by this attempt.
+    /// </summary>
+    public uint ChunkTileHeight { get; }
+
     public uint BaseColor { get; }
 
     public GpuSceneLayout Layout { get; }
+
+    public uint Cancelled { get; }
 
     public uint LinesSize { get; }
 

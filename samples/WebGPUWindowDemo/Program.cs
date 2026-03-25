@@ -53,6 +53,8 @@ public static unsafe class Program
     // FPS counter state.
     private static int frameCount;
     private static double fpsElapsed;
+    private static double fpsSum;
+    private static double fpsSumSquares;
 
     // Scrolling text state — glyph geometry is built once at startup via TextBuilder
     // and translated vertically each frame. Only glyphs whose bounds intersect the
@@ -319,15 +321,26 @@ public static unsafe class Program
             wgpu.TextureRelease(surfaceTexture.Texture);
         }
 
-        // Update FPS counter in the window title once per second.
+        // Update FPS counter in the window title once per second. The current FPS
+        // comes from the latest frame, while the mean and standard deviation are
+        // computed from the one-second sample window so the title shows both
+        // instantaneous throughput and frame-to-frame jitter.
         frameCount++;
         fpsElapsed += deltaTime;
+        double frameFps = 1D / deltaTime;
+        fpsSum += frameFps;
+        fpsSumSquares += frameFps * frameFps;
         if (fpsElapsed >= 1.0)
         {
-            string flushMode = backend.DiagnosticLastFlushUsedGPU ? "GPU" : "CPU";
-            window.Title = $"ImageSharp.Drawing WebGPU Demo - {frameCount / fpsElapsed:F1} FPS | Flush: {flushMode} | Failure: {backend.DiagnosticLastSceneFailure}";
+            double meanFps = fpsSum / frameCount;
+            double variance = Math.Max(0D, (fpsSumSquares / frameCount) - (meanFps * meanFps));
+            double stdDevFps = Math.Sqrt(variance);
+            double frameTimeMs = deltaTime * 1000D;
+            window.Title = $"ImageSharp.Drawing WebGPU Demo - Current: {frameTimeMs:F1} ms / {frameFps:F1} FPS | Mean: {meanFps:F1} FPS | StdDev: {stdDevFps:F1}";
             frameCount = 0;
             fpsElapsed = 0;
+            fpsSum = 0;
+            fpsSumSquares = 0;
         }
     }
 
@@ -351,6 +364,15 @@ public static unsafe class Program
         Matrix3x2 translation = Matrix3x2.CreateTranslation(0, y);
         RectangleF viewport = new(0, 0, w, h);
         Brush textBrush = Brushes.Solid(Color.FromPixel(new Bgra32(70, 70, 100, 255)));
+        DrawingOptions translatedOptions = new()
+        {
+            Transform = new Matrix4x4(translation),
+        };
+
+        // Keep the shared glyph paths at their startup coordinates and let the canvas
+        // carry the translation. That way the batcher applies the transform during
+        // command preparation instead of eagerly allocating a transformed path here.
+        canvas.Save(translatedOptions);
 
         // Each IPath in scrollPaths is one glyph outline. Skip any whose translated
         // bounding box doesn't intersect the visible area.
@@ -368,8 +390,10 @@ public static unsafe class Program
                 continue;
             }
 
-            canvas.Fill(textBrush, path.Transform(new Matrix4x4(translation)));
+            canvas.Fill(textBrush, path);
         }
+
+        canvas.Restore();
     }
 
     /// <summary>

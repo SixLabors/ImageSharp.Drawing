@@ -53,6 +53,7 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     internal sealed class DeviceSharedState : IDisposable
     {
+        private const nuint DefaultMaxStorageBufferBindingSize = 128U * 1024U * 1024U;
         private readonly ConcurrentDictionary<string, CompositePipelineInfrastructure> compositePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, CompositeComputePipelineInfrastructure> compositeComputePipelines = new(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, SharedBufferInfrastructure> sharedBuffers = new(StringComparer.Ordinal);
@@ -64,6 +65,7 @@ internal static unsafe partial class WebGPURuntime
             this.Api = api;
             this.Device = device;
             this.deviceFeatures = EnumerateDeviceFeatures(api, device);
+            this.MaxStorageBufferBindingSize = QueryMaxStorageBufferBindingSize(api, device);
         }
 
         /// <summary>
@@ -90,6 +92,15 @@ internal static unsafe partial class WebGPURuntime
         /// Gets the device associated with this shared state.
         /// </summary>
         public Device* Device { get; }
+
+        /// <summary>
+        /// Gets the maximum size, in bytes, that this device can bind as one storage buffer.
+        /// </summary>
+        /// <remarks>
+        /// The staged scene uses this queried device limit instead of WebGPU's guaranteed minimum so
+        /// large scenes are only rejected when the active device really cannot bind the requested buffer.
+        /// </remarks>
+        public nuint MaxStorageBufferBindingSize { get; }
 
         /// <summary>
         /// Returns whether the device has the specified feature.
@@ -125,6 +136,31 @@ internal static unsafe partial class WebGPURuntime
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Queries the device's storage-buffer binding ceiling, falling back to WebGPU's guaranteed minimum when unavailable.
+        /// </summary>
+        private static nuint QueryMaxStorageBufferBindingSize(WebGPU api, Device* device)
+        {
+            if (device is null)
+            {
+                return DefaultMaxStorageBufferBindingSize;
+            }
+
+            SupportedLimits supportedLimits = default;
+            if (!api.DeviceGetLimits(device, ref supportedLimits))
+            {
+                return DefaultMaxStorageBufferBindingSize;
+            }
+
+            ulong reported = supportedLimits.Limits.MaxStorageBufferBindingSize;
+            if (reported == 0 || reported > nuint.MaxValue)
+            {
+                return DefaultMaxStorageBufferBindingSize;
+            }
+
+            return (nuint)reported;
         }
 
         /// <summary>

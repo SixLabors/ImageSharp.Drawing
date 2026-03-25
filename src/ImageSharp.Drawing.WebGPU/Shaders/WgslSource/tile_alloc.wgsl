@@ -30,6 +30,7 @@ const WG_SIZE = 256u;
 
 var<workgroup> sh_tile_count: array<u32, WG_SIZE>;
 var<workgroup> sh_tile_offset: u32;
+var<workgroup> sh_tile_zero_count: u32;
 var<workgroup> sh_previous_failed: u32;
 
 @compute @workgroup_size(256)
@@ -74,10 +75,12 @@ fn main(
             y1 = i32(ceil(bbox.w * SY));
         }
     }
+    let chunk_y0 = i32(config.chunk_tile_y_start);
+    let chunk_y1 = chunk_y0 + i32(config.chunk_tile_height);
     let ux0 = u32(clamp(x0, 0, i32(config.width_in_tiles)));
-    let uy0 = u32(clamp(y0, 0, i32(config.height_in_tiles)));
+    let uy0 = u32(clamp(y0, chunk_y0, chunk_y1));
     let ux1 = u32(clamp(x1, 0, i32(config.width_in_tiles)));
-    let uy1 = u32(clamp(y1, 0, i32(config.height_in_tiles)));
+    let uy1 = u32(clamp(y1, chunk_y0, chunk_y1));
     let tile_count = (ux1 - ux0) * (uy1 - uy0);
     var total_tile_count = tile_count;
     sh_tile_count[local_id.x] = tile_count;
@@ -92,11 +95,14 @@ fn main(
     if local_id.x == WG_SIZE - 1u {
         let count = sh_tile_count[WG_SIZE - 1u];
         var offset = atomicAdd(&bump.tile, count);
+        var zero_count = count;
         if offset + count > config.tiles_size {
             offset = 0u;
+            zero_count = 0u;
             atomicOr(&bump.failed, STAGE_TILE_ALLOC);
         }
         paths[drawobj_ix].tiles = offset;
+        sh_tile_zero_count = zero_count;
     }    
     // Using storage barriers is a workaround for what appears to be a miscompilation
     // when a normal workgroup-shared variable is used to broadcast the value.
@@ -115,7 +121,7 @@ fn main(
     // There are two things that can be done to improve that. One would be a
     // separate (indirect) dispatch. Another would be to have each workgroup
     // process fewer draw objects than the number of threads in the wg.
-    let total_count = sh_tile_count[WG_SIZE - 1u];
+    let total_count = workgroupUniformLoad(&sh_tile_zero_count);
     for (var i = local_id.x; i < total_count; i += WG_SIZE) {
         // Note: could format output buffer as u32 for even better load balancing.
         tiles[tile_offset + i] = Tile(0, 0u);

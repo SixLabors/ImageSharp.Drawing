@@ -23,6 +23,8 @@ internal static class WebGPUSceneEncoder
     private const int GradientWidth = 512;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
+    private const int BinWidth = TileWidth * 16;
+    private const int BinHeight = TileHeight * 16;
     private const byte PathTagLineToF32 = 0x09;
     private const byte PathTagTransform = 0x20;
     private const byte PathTagPath = 0x10;
@@ -160,6 +162,7 @@ internal static class WebGPUSceneEncoder
             this.LineCount = 0;
             this.InfoWordCount = 0;
             this.ClipCount = 0;
+            this.TotalBinMembershipCount = 0;
             this.TotalTileMembershipCount = 0;
             this.GradientRowCount = 0;
             this.hasLastStyle = false;
@@ -239,6 +242,11 @@ internal static class WebGPUSceneEncoder
         /// Gets the number of emitted clip records.
         /// </summary>
         public int ClipCount { get; private set; }
+
+        /// <summary>
+        /// Gets the total bin-membership count for all emitted destination regions.
+        /// </summary>
+        public int TotalBinMembershipCount { get; private set; }
 
         /// <summary>
         /// Gets the total tile-membership count for all emitted destination regions.
@@ -414,6 +422,7 @@ internal static class WebGPUSceneEncoder
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
 
+            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(command, this.rootTargetBounds));
             this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(command, this.rootTargetBounds));
         }
 
@@ -461,6 +470,7 @@ internal static class WebGPUSceneEncoder
             this.DrawTags.Add(GpuSceneDrawTag.BeginClip);
             AppendBeginClipData(command.GraphicsOptions, ref this.DrawData);
             this.ClipCount++;
+            this.TotalBinMembershipCount += CountBinMembership(layerBounds);
             this.TotalTileMembershipCount += CountTileMembership(layerBounds);
             this.openLayerBounds ??= new List<Rectangle>(4);
             this.openLayerBounds.Add(layerBounds);
@@ -487,6 +497,7 @@ internal static class WebGPUSceneEncoder
             this.PathTags.Add(PathTagPath);
             this.PathCount++;
             this.ClipCount++;
+            this.TotalBinMembershipCount += CountBinMembership(layerBounds);
             this.TotalTileMembershipCount += CountTileMembership(layerBounds);
         }
     }
@@ -521,6 +532,7 @@ internal static class WebGPUSceneEncoder
                 (uint)encoding.PathCount,
                 (uint)encoding.ClipCount,
                 (uint)encoding.InfoWordCount,
+                0U,
                 0U,
                 (uint)pathTagWordCount,
                 (uint)drawTagBase,
@@ -563,7 +575,7 @@ internal static class WebGPUSceneEncoder
                     styleWordCount,
                     encoding.ClipCount,
                     encoding.FillCount,
-                    0,
+                    encoding.TotalBinMembershipCount,
                     encoding.TotalTileMembershipCount,
                     0,
                     DivideRoundUp(targetBounds.Width, TileWidth),
@@ -971,6 +983,19 @@ internal static class WebGPUSceneEncoder
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int AlignUp(int value, int alignment)
         => value + ((alignment - (value % alignment)) % alignment);
+
+    /// <summary>
+    /// Counts how many 256x256 bins are touched by one target-local destination rectangle.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int CountBinMembership(in Rectangle destinationRegion)
+    {
+        int binMinX = Math.Max(0, destinationRegion.Left / BinWidth);
+        int binMinY = Math.Max(0, destinationRegion.Top / BinHeight);
+        int binMaxX = Math.Max(binMinX + 1, DivideRoundUp(destinationRegion.Right, BinWidth));
+        int binMaxY = Math.Max(binMinY + 1, DivideRoundUp(destinationRegion.Bottom, BinHeight));
+        return (binMaxX - binMinX) * (binMaxY - binMinY);
+    }
 
     /// <summary>
     /// Counts how many 16x16 tiles are touched by one target-local destination rectangle.

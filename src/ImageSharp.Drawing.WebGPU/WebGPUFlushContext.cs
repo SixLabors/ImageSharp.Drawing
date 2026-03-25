@@ -171,10 +171,20 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             Device* device = (Device*)nativeCapability.Device;
             Queue* queue = (Queue*)nativeCapability.Queue;
             TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
-            Rectangle bounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
+            Rectangle bounds = frame.Bounds;
+            Rectangle nativeBounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
             WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(lease.Api, device);
 
             if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
+            {
+                lease.Dispose();
+                return null;
+            }
+
+            // Region frames expose bounds relative to their parent target. The flush context must preserve
+            // that absolute slice so later scene encoding, dispatch planning, and texture copies address
+            // the correct sub-rectangle of the native surface instead of silently expanding back to full-frame.
+            if (!nativeBounds.Contains(bounds))
             {
                 lease.Dispose();
                 return null;

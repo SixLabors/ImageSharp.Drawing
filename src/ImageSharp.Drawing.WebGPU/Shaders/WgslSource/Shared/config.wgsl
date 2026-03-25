@@ -9,6 +9,9 @@ struct Config {
     target_width: u32,
     target_height: u32,
 
+    chunk_tile_y_start: u32,
+    chunk_tile_height: u32,
+
     // The initial color applied to the pixels in a tile during the fine stage.
     // The format is packed RGBA8 in MSB order.
     base_color: u32,
@@ -20,6 +23,7 @@ struct Config {
     // To reduce the number of bindings, info and bin data are combined
     // into one buffer.
     bin_data_start: u32,
+    ptcl_dyn_start: u32,
 
     // offsets within scene buffer (in u32 units)
     pathtag_base: u32,
@@ -30,6 +34,7 @@ struct Config {
 
     transform_base: u32,
     style_base: u32,
+    cancelled: u32,
 
     // Sizes of bump allocated buffers (in element size units)
     lines_size: u32,

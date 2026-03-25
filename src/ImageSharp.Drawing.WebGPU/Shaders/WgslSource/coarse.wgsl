@@ -67,10 +67,7 @@ var<private> cmd_limit: u32;
 // Make sure there is space for a command of given size, plus a jump if needed
 fn alloc_cmd(size: u32) {
     if cmd_offset + size >= cmd_limit {
-        // We might be able to save a little bit of computation here
-        // by setting the initial value of the bump allocator.
-        let ptcl_dyn_start = config.width_in_tiles * config.height_in_tiles * PTCL_INITIAL_ALLOC;
-        var new_cmd = ptcl_dyn_start + atomicAdd(&bump.ptcl, PTCL_INCREMENT);
+        var new_cmd = atomicAdd(&bump.ptcl, PTCL_INCREMENT);
         if new_cmd + PTCL_INCREMENT > config.ptcl_size {
             // This sets us up for technical UB, as lots of threads will be writing
             // to the same locations. But I think it's fine, and predicating the
@@ -78,6 +75,7 @@ fn alloc_cmd(size: u32) {
             new_cmd = 0u;
             atomicOr(&bump.failed, STAGE_COARSE);
         }
+        new_cmd += config.ptcl_dyn_start;
         ptcl[cmd_offset] = CMD_JUMP;
         ptcl[cmd_offset + 1u] = new_cmd;
         cmd_offset = new_cmd;
@@ -173,7 +171,7 @@ fn main(
     // We need to check only prior stages, as if this stage has failed in another workgroup, 
     // we still want to know this workgroup's memory requirement.   
     if local_id.x == 0u {
-        var failed = atomicLoad(&bump.failed) & (STAGE_BINNING | STAGE_TILE_ALLOC | STAGE_FLATTEN);
+        var failed = atomicLoad(&bump.failed) & (STAGE_BINNING | STAGE_TILE_ALLOC | STAGE_FLATTEN | PREVIOUS_RUN);
         if atomicLoad(&bump.seg_counts) > config.seg_counts_size {
             failed |= STAGE_PATH_COUNT;
         }
@@ -189,16 +187,17 @@ fn main(
         return;
     }
     let width_in_bins = (config.width_in_tiles + N_TILE_X - 1u) / N_TILE_X;
-    let bin_ix = width_in_bins * wg_id.y + wg_id.x;
+    let chunk_bin_y = config.chunk_tile_y_start / N_TILE_Y;
+    let bin_ix = width_in_bins * (chunk_bin_y + wg_id.y) + wg_id.x;
     let n_partitions = (config.n_drawobj + N_TILE - 1u) / N_TILE;
 
     // Coordinates of the top left of this bin, in tiles.
     let bin_tile_x = N_TILE_X * wg_id.x;
-    let bin_tile_y = N_TILE_Y * wg_id.y;
+    let bin_tile_y = config.chunk_tile_y_start + N_TILE_Y * wg_id.y;
 
     let tile_x = local_id.x % N_TILE_X;
     let tile_y = local_id.x / N_TILE_X;
-    let this_tile_ix = (bin_tile_y + tile_y) * config.width_in_tiles + bin_tile_x + tile_x;
+    let this_tile_ix = (N_TILE_Y * wg_id.y + tile_y) * config.width_in_tiles + bin_tile_x + tile_x;
     cmd_offset = this_tile_ix * PTCL_INITIAL_ALLOC;
     cmd_limit = cmd_offset + (PTCL_INITIAL_ALLOC - PTCL_HEADROOM);
 
@@ -480,7 +479,7 @@ fn main(
         var blend_ix = 0u;
         if max_blend_depth > BLEND_STACK_SPLIT {
             let scratch_size = (max_blend_depth - BLEND_STACK_SPLIT) * TILE_WIDTH * TILE_HEIGHT;
-            blend_ix = atomicAdd(&bump.blend, scratch_size);
+            blend_ix = atomicAdd(&bump.blend_spill, scratch_size);
             if blend_ix + scratch_size > config.blend_size {
                 atomicOr(&bump.failed, STAGE_COARSE);
             }
