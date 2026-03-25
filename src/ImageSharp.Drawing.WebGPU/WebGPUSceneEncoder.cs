@@ -100,6 +100,7 @@ internal static class WebGPUSceneEncoder
         private bool gradientPixelsDetached;
         private uint lastStyle0;
         private uint lastStyle1;
+        private bool hasFineRasterizationMode;
         private readonly Rectangle rootTargetBounds;
         private List<Rectangle>? openLayerBounds;
 
@@ -130,8 +131,11 @@ internal static class WebGPUSceneEncoder
             this.gradientPixelsDetached = false;
             this.lastStyle0 = 0;
             this.lastStyle1 = 0;
+            this.hasFineRasterizationMode = false;
             this.rootTargetBounds = rootTargetBounds;
             this.openLayerBounds = null;
+            this.FineRasterizationMode = RasterizationMode.Antialiased;
+            this.FineCoverageThreshold = 0F;
 
             this.PathTags.Add(PathTagTransform);
             AppendIdentityTransform(ref this.Transforms);
@@ -213,6 +217,16 @@ internal static class WebGPUSceneEncoder
         public int GradientRowCount { get; private set; }
 
         /// <summary>
+        /// Gets the flush-wide fine rasterization mode selected while encoding visible fills.
+        /// </summary>
+        public RasterizationMode FineRasterizationMode { get; private set; }
+
+        /// <summary>
+        /// Gets the aliased coverage threshold consumed by the fine pass when aliased mode is selected.
+        /// </summary>
+        public float FineCoverageThreshold { get; private set; }
+
+        /// <summary>
         /// Gets a value indicating whether the encoding produced no fill work.
         /// </summary>
         public readonly bool IsEmpty => this.FillCount == 0;
@@ -275,6 +289,14 @@ internal static class WebGPUSceneEncoder
                     if (!command.IsVisible)
                     {
                         return;
+                    }
+
+                    RasterizerOptions options = command.RasterizerOptions;
+                    if (!this.hasFineRasterizationMode)
+                    {
+                        this.hasFineRasterizationMode = true;
+                        this.FineRasterizationMode = options.RasterizationMode;
+                        this.FineCoverageThreshold = options.AntialiasThreshold;
                     }
 
                     IPath preparedPath = command.PreparedPath!;
@@ -515,7 +537,9 @@ internal static class WebGPUSceneEncoder
                     encoding.TotalTileMembershipCount,
                     0,
                     DivideRoundUp(targetBounds.Width, TileWidth),
-                    DivideRoundUp(targetBounds.Height, TileHeight));
+                    DivideRoundUp(targetBounds.Height, TileHeight),
+                    encoding.FineRasterizationMode,
+                    encoding.FineCoverageThreshold);
             }
             catch
             {
@@ -1308,7 +1332,9 @@ internal sealed class WebGPUEncodedScene : IDisposable
         0,
         0,
         0,
-        0);
+        0,
+        RasterizationMode.Antialiased,
+        0F);
 
     private readonly IMemoryOwner<uint>? sceneDataOwner;
     private readonly IMemoryOwner<uint>? gradientPixelsOwner;
@@ -1343,7 +1369,9 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int totalTileMembershipCount,
         int totalLineSliceCount,
         int tileCountX,
-        int tileCountY)
+        int tileCountY,
+        RasterizationMode fineRasterizationMode,
+        float fineCoverageThreshold)
     {
         this.TargetSize = targetSize;
         this.InfoWordCount = infoWordCount;
@@ -1370,6 +1398,8 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.TotalLineSliceCount = totalLineSliceCount;
         this.TileCountX = tileCountX;
         this.TileCountY = tileCountY;
+        this.FineRasterizationMode = fineRasterizationMode;
+        this.FineCoverageThreshold = fineCoverageThreshold;
     }
 
     /// <summary>
@@ -1493,6 +1523,16 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// Gets the tile count on the Y axis.
     /// </summary>
     public int TileCountY { get; }
+
+    /// <summary>
+    /// Gets the fine-pass rasterization mode selected for this flush.
+    /// </summary>
+    public RasterizationMode FineRasterizationMode { get; }
+
+    /// <summary>
+    /// Gets the scene-wide aliased coverage threshold consumed by the fine pass.
+    /// </summary>
+    public float FineCoverageThreshold { get; }
 
     /// <summary>
     /// Gets the total tile count.

@@ -39,6 +39,7 @@ struct Config {
     segments_size: u32,
     blend_size: u32,
     ptcl_size: u32,
+    fine_coverage_threshold: f32,
 }
 
 // Geometry of tiles and bins

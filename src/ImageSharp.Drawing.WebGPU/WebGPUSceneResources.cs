@@ -147,7 +147,8 @@ internal static unsafe class WebGPUSceneResources
             config.BufferSizes.SegCounts.Length,
             config.BufferSizes.Segments.Length,
             config.BufferSizes.BlendSpill.Length,
-            config.BufferSizes.Ptcl.Length);
+            config.BufferSizes.Ptcl.Length,
+            scene.FineCoverageThreshold);
 
         if (!TryCreateAndUploadScalarBuffer(flushContext, in header, out WgpuBuffer* headerBuffer, out error))
         {
@@ -991,7 +992,8 @@ internal readonly struct GpuSceneConfig
         uint segCountsSize,
         uint segmentsSize,
         uint blendSize,
-        uint ptclSize)
+        uint ptclSize,
+        float fineCoverageThreshold)
     {
         this.WidthInTiles = widthInTiles;
         this.HeightInTiles = heightInTiles;
@@ -1006,6 +1008,7 @@ internal readonly struct GpuSceneConfig
         this.SegmentsSize = segmentsSize;
         this.BlendSize = blendSize;
         this.PtclSize = ptclSize;
+        this.FineCoverageThreshold = fineCoverageThreshold;
     }
 
     public uint WidthInTiles { get; }
@@ -1033,6 +1036,11 @@ internal readonly struct GpuSceneConfig
     public uint BlendSize { get; }
 
     public uint PtclSize { get; }
+
+    /// <summary>
+    /// Gets the scene-wide coverage threshold consumed by the aliased fine pass.
+    /// </summary>
+    public float FineCoverageThreshold { get; }
 }
 
 internal static class GpuSceneDrawTag

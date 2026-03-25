@@ -40,6 +40,7 @@ internal static class WebGPUSceneDispatch
     private const string PathTilingSetupPipelineKey = "scene/path-tiling-setup";
     private const string PathTilingPipelineKey = "scene/path-tiling";
     private const string FineAreaPipelineKey = "scene/fine-area";
+    private const string FineAliasedThresholdPipelineKey = "scene/fine-aliased-threshold";
 
     /// <summary>
     /// Builds the flush-scoped encoded scene and uploads its GPU resources.
@@ -1192,23 +1193,39 @@ internal static class WebGPUSceneDispatch
         uint groupCountY,
         out string? error)
     {
-        if (!FineAreaComputeShader.TryGetCode(flushContext.TextureFormat, out byte[] shaderCode, out error))
+        bool useAliasedThreshold = encodedScene.FineRasterizationMode == RasterizationMode.Aliased;
+        byte[] shaderCode;
+        if (useAliasedThreshold)
+        {
+            if (!FineAliasedThresholdComputeShader.TryGetCode(flushContext.TextureFormat, out shaderCode, out error))
+            {
+                return false;
+            }
+        }
+        else if (!FineAreaComputeShader.TryGetCode(flushContext.TextureFormat, out shaderCode, out error))
         {
             return false;
         }
 
         bool LayoutFactory(WebGPU api, Device* device, out BindGroupLayout* layout, out string? layoutError)
-            => FineAreaComputeShader.TryCreateBindGroupLayout(
-                api,
-                device,
-                flushContext.TextureFormat,
-                out layout,
-                out layoutError);
+            => useAliasedThreshold
+                ? FineAliasedThresholdComputeShader.TryCreateBindGroupLayout(
+                    api,
+                    device,
+                    flushContext.TextureFormat,
+                    out layout,
+                    out layoutError)
+                : FineAreaComputeShader.TryCreateBindGroupLayout(
+                    api,
+                    device,
+                    flushContext.TextureFormat,
+                    out layout,
+                    out layoutError);
 
         if (!flushContext.DeviceState.TryGetOrCreateCompositeComputePipeline(
-                $"{FineAreaPipelineKey}/{flushContext.TextureFormat}",
+                $"{(useAliasedThreshold ? FineAliasedThresholdPipelineKey : FineAreaPipelineKey)}/{flushContext.TextureFormat}",
                 shaderCode,
-                FineAreaComputeShader.EntryPoint,
+                useAliasedThreshold ? FineAliasedThresholdComputeShader.EntryPoint : FineAreaComputeShader.EntryPoint,
                 LayoutFactory,
                 out BindGroupLayout* bindGroupLayout,
                 out ComputePipeline* pipeline,
