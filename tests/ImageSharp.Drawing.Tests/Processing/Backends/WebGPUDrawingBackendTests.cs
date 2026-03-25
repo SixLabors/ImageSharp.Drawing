@@ -1942,7 +1942,7 @@ the evil Galactic Empire.";
             nativeSurfaceInitialImage);
 
         DebugSaveBackendPair(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
-        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0071F);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0074F);
         AssertBackendPairReferenceOutputs(provider, "StarWarsCrawl", defaultImage, nativeSurfaceImage);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }

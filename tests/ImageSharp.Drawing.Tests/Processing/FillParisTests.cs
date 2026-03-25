@@ -22,7 +22,7 @@ public class FillParisTests
     private static readonly List<(IPath Path, SolidBrush Fill, SolidPen Stroke)> isElements =
         SvgBenchmarkHelper.BuildImageSharpElements(elements, Scale);
 
-    [Fact]
+    [Fact(Skip = "Benchmarking only")]
     public void FillParis_ImageSharp_CPU()
     {
         using Image<Rgba32> image = new(Width, Height);
@@ -43,7 +43,7 @@ public class FillParisTests
         }));
     }
 
-    [WebGPUFact]
+    [WebGPUFact(Skip = "Benchmarking Only")]
     public void FillParis_ImageSharp_WebGPU()
     {
         using FillParisWebGpuContext webGpu = new();

@@ -148,22 +148,22 @@ public class FillParis
         }
     }
 
-    //[Benchmark]
-    //public void SystemDrawing()
-    //{
-    //    foreach ((GraphicsPath path, SDSolidBrush fill, SDPen stroke) in this.sdElements)
-    //    {
-    //        if (fill is not null)
-    //        {
-    //            this.sdGraphics.FillPath(fill, path);
-    //        }
+    [Benchmark]
+    public void SystemDrawing()
+    {
+        foreach ((GraphicsPath path, SDSolidBrush fill, SDPen stroke) in this.sdElements)
+        {
+            if (fill is not null)
+            {
+                this.sdGraphics.FillPath(fill, path);
+            }
 
-    //        if (stroke is not null)
-    //        {
-    //            this.sdGraphics.DrawPath(stroke, path);
-    //        }
-    //    }
-    //}
+            if (stroke is not null)
+            {
+                this.sdGraphics.DrawPath(stroke, path);
+            }
+        }
+    }
 
     [Benchmark]
     public void ImageSharp()
@@ -209,7 +209,7 @@ public class FillParis
         bench.Setup();
 
         bench.SkiaSharp();
-        // bench.SystemDrawing();
+        bench.SystemDrawing();
         bench.ImageSharp();
         bench.ImageSharpWebGPU();
         Console.WriteLine($"WebGPU diagnostic last flush used GPU: {bench.webGpuBackend.DiagnosticLastFlushUsedGPU}");
