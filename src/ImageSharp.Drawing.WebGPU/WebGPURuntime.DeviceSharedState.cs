@@ -66,8 +66,14 @@ internal static unsafe partial class WebGPURuntime
             this.deviceFeatures = EnumerateDeviceFeatures(api, device);
         }
 
+        /// <summary>
+        /// Gets the fixed entry point used by all cached composite vertex shaders.
+        /// </summary>
         private static ReadOnlySpan<byte> CompositeVertexEntryPoint => "vs_main\0"u8;
 
+        /// <summary>
+        /// Gets the fixed entry point used by all cached composite fragment shaders.
+        /// </summary>
         private static ReadOnlySpan<byte> CompositeFragmentEntryPoint => "fs_main\0"u8;
 
         /// <summary>
@@ -93,6 +99,9 @@ internal static unsafe partial class WebGPURuntime
         public bool HasFeature(FeatureName feature)
             => this.deviceFeatures.Contains(feature);
 
+        /// <summary>
+        /// Snapshots the feature set currently reported by the native device.
+        /// </summary>
         private static HashSet<FeatureName> EnumerateDeviceFeatures(WebGPU api, Device* device)
         {
             if (device is null)
@@ -414,6 +423,9 @@ internal static unsafe partial class WebGPURuntime
             this.disposed = true;
         }
 
+        /// <summary>
+        /// Creates the shared bind-group layout, pipeline layout, and shader module for one cached pipeline family.
+        /// </summary>
         private bool TryCreateCompositeInfrastructure(
             ReadOnlySpan<byte> shaderCode,
             WebGPUCompositeBindGroupLayoutFactory bindGroupLayoutFactory,
@@ -461,6 +473,9 @@ internal static unsafe partial class WebGPURuntime
             return true;
         }
 
+        /// <summary>
+        /// Creates one graphics pipeline variant for the specified output format and blend mode.
+        /// </summary>
         private RenderPipeline* CreateCompositePipeline(
             PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
@@ -484,6 +499,9 @@ internal static unsafe partial class WebGPURuntime
             }
         }
 
+        /// <summary>
+        /// Creates the underlying render pipeline once the shared shader module and entry points are fixed.
+        /// </summary>
         private RenderPipeline* CreateCompositePipelineCore(
             PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
@@ -541,6 +559,9 @@ internal static unsafe partial class WebGPURuntime
             return this.Api.DeviceCreateRenderPipeline(this.Device, in descriptor);
         }
 
+        /// <summary>
+        /// Creates the compute pipeline used by one cached composite compute shader.
+        /// </summary>
         private ComputePipeline* CreateCompositeComputePipeline(
             PipelineLayout* pipelineLayout,
             ShaderModule* shaderModule,
@@ -564,6 +585,9 @@ internal static unsafe partial class WebGPURuntime
             }
         }
 
+        /// <summary>
+        /// Creates a shader module from null-terminated WGSL source bytes.
+        /// </summary>
         private ShaderModule* CreateShaderModule(ReadOnlySpan<byte> shaderCode)
         {
             fixed (byte* shaderCodePtr = shaderCode)
@@ -583,6 +607,9 @@ internal static unsafe partial class WebGPURuntime
             }
         }
 
+        /// <summary>
+        /// Releases one cached graphics-pipeline family and every render pipeline variant it owns.
+        /// </summary>
         private void ReleaseCompositeInfrastructure(CompositePipelineInfrastructure infrastructure)
         {
             foreach (nint pipelineHandle in infrastructure.Pipelines.Values)
@@ -614,6 +641,9 @@ internal static unsafe partial class WebGPURuntime
             }
         }
 
+        /// <summary>
+        /// Releases one cached compute-pipeline family and the shared resources behind it.
+        /// </summary>
         private void ReleaseCompositeComputeInfrastructure(CompositeComputePipelineInfrastructure infrastructure)
         {
             if (infrastructure.Pipeline is not null)

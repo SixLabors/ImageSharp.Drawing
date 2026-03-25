@@ -234,6 +234,9 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    /// <summary>
+    /// Creates and uploads the packed gradient-ramp texture used by gradient draw records.
+    /// </summary>
     private static bool TryCreateGradientTexture(
         WebGPUFlushContext flushContext,
         WebGPUEncodedScene scene,
@@ -315,6 +318,9 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    /// <summary>
+    /// Gets the atlas footprint for one sampled image or pattern brush entry.
+    /// </summary>
     private static void GetImageEntrySize(Brush brush, out int width, out int height)
     {
         if (brush is PatternBrush patternBrush)
@@ -413,6 +419,9 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    /// <summary>
+    /// Creates the combined info/bin-data scratch buffer expected by the scheduling passes.
+    /// </summary>
     private static bool TryCreateAndUploadCombinedInfoBinDataBuffer(
         WebGPUFlushContext flushContext,
         int infoWordCount,
@@ -445,6 +454,9 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    /// <summary>
+    /// Creates a one-pixel transparent fallback texture so shader bindings stay valid when a scene omits that input.
+    /// </summary>
     private static bool TryCreateTransparentSampledTexture(
         WebGPUFlushContext flushContext,
         TextureFormat textureFormat,
@@ -514,6 +526,9 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    /// <summary>
+    /// Creates one sampled texture and its default 2D view.
+    /// </summary>
     private static bool TryCreateTexture(
         WebGPUFlushContext flushContext,
         TextureFormat textureFormat,
@@ -610,14 +625,23 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    /// <summary>
+    /// Packs the atlas-space origin stored in draw data for sampled image brushes.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackImageAtlasOffset(int x, int y)
         => ((uint)x << 16) | (uint)y;
 
+    /// <summary>
+    /// Packs the sampled image extents stored in draw data for sampled image brushes.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackImageExtents(int width, int height)
         => ((uint)width << 16) | (uint)height;
 
+    /// <summary>
+    /// Packs the texture-format and extend-mode bits consumed by the image sampling shader path.
+    /// </summary>
     private static uint PackImageSampleInfo(TextureFormat textureFormat, uint xExtendMode, uint yExtendMode)
     {
         const uint alpha = 0xFFU;
@@ -664,6 +688,13 @@ internal static unsafe class WebGPUSceneResources
         return true;
     }
 
+    /// <summary>
+    /// Creates one flush-scoped storage/copy buffer and uploads initial contents when present.
+    /// </summary>
+    /// <remarks>
+    /// Many staging buffers are scratch-only, so the upload branch is intentionally skipped for empty spans.
+    /// The method still creates the buffer because later GPU passes depend on the binding existing for the full flush.
+    /// </remarks>
     private static bool TryCreateAndUploadBuffer<T>(
         WebGPUFlushContext flushContext,
         ReadOnlySpan<T> values,
@@ -710,8 +741,14 @@ internal static unsafe class WebGPUSceneResources
 /// <summary>
 /// Flush-scoped GPU resources produced from one encoded scene.
 /// </summary>
+/// <summary>
+/// Flush-scoped GPU resources created for one encoded staged scene.
+/// </summary>
 internal readonly unsafe struct WebGPUSceneResourceSet
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WebGPUSceneResourceSet"/> struct.
+    /// </summary>
     public WebGPUSceneResourceSet(
         WgpuBuffer* headerBuffer,
         WgpuBuffer* sceneBuffer,
@@ -754,45 +791,105 @@ internal readonly unsafe struct WebGPUSceneResourceSet
         this.ImageAtlasTextureView = imageAtlasTextureView;
     }
 
+    /// <summary>
+    /// Gets the root scene-config buffer bound at slot zero by most staged-scene shaders.
+    /// </summary>
     public WgpuBuffer* HeaderBuffer { get; }
 
+    /// <summary>
+    /// Gets the packed scene-data buffer produced by the CPU encoder.
+    /// </summary>
     public WgpuBuffer* SceneBuffer { get; }
 
+    /// <summary>
+    /// Gets the first pathtag-reduction scratch buffer.
+    /// </summary>
     public WgpuBuffer* PathReducedBuffer { get; }
 
+    /// <summary>
+    /// Gets the second pathtag-reduction scratch buffer.
+    /// </summary>
     public WgpuBuffer* PathReduced2Buffer { get; }
 
+    /// <summary>
+    /// Gets the pathtag-scan prefix scratch buffer.
+    /// </summary>
     public WgpuBuffer* PathReducedScanBuffer { get; }
 
+    /// <summary>
+    /// Gets the final pathtag monoid buffer.
+    /// </summary>
     public WgpuBuffer* PathMonoidBuffer { get; }
 
+    /// <summary>
+    /// Gets the per-path bounding-box buffer.
+    /// </summary>
     public WgpuBuffer* PathBboxBuffer { get; }
 
+    /// <summary>
+    /// Gets the draw-reduction scratch buffer.
+    /// </summary>
     public WgpuBuffer* DrawReducedBuffer { get; }
 
+    /// <summary>
+    /// Gets the final draw monoid buffer.
+    /// </summary>
     public WgpuBuffer* DrawMonoidBuffer { get; }
 
+    /// <summary>
+    /// Gets the combined info/bin-data scratch buffer.
+    /// </summary>
     public WgpuBuffer* InfoBinDataBuffer { get; }
 
+    /// <summary>
+    /// Gets the clip input buffer.
+    /// </summary>
     public WgpuBuffer* ClipInputBuffer { get; }
 
+    /// <summary>
+    /// Gets the clip element buffer.
+    /// </summary>
     public WgpuBuffer* ClipElementBuffer { get; }
 
+    /// <summary>
+    /// Gets the clip bic reduction buffer.
+    /// </summary>
     public WgpuBuffer* ClipBicBuffer { get; }
 
+    /// <summary>
+    /// Gets the reduced clip bounding-box buffer.
+    /// </summary>
     public WgpuBuffer* ClipBboxBuffer { get; }
 
+    /// <summary>
+    /// Gets the per-draw bounding-box buffer.
+    /// </summary>
     public WgpuBuffer* DrawBboxBuffer { get; }
 
+    /// <summary>
+    /// Gets the per-path scheduling buffer.
+    /// </summary>
     public WgpuBuffer* PathBuffer { get; }
 
+    /// <summary>
+    /// Gets the flattened line buffer.
+    /// </summary>
     public WgpuBuffer* LineBuffer { get; }
 
+    /// <summary>
+    /// Gets the sampled gradient-ramp texture view.
+    /// </summary>
     public TextureView* GradientTextureView { get; }
 
+    /// <summary>
+    /// Gets the sampled image-atlas texture view.
+    /// </summary>
     public TextureView* ImageAtlasTextureView { get; }
 }
 
+/// <summary>
+/// Flush-scoped bump allocator heads shared by the staged-scene scheduling passes.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct GpuSceneBumpAllocators
 {
@@ -806,6 +903,9 @@ internal struct GpuSceneBumpAllocators
     public uint Lines;
 }
 
+/// <summary>
+/// Prefix-scan monoid emitted from the packed path-tag stream.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuTagMonoid
 {
@@ -829,6 +929,9 @@ internal readonly struct GpuTagMonoid
     public uint PathIndex { get; }
 }
 
+/// <summary>
+/// Per-path bounding box and metadata consumed by later scheduling passes.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuPathBbox
 {
@@ -855,6 +958,9 @@ internal readonly struct GpuPathBbox
     public uint TransIndex { get; }
 }
 
+/// <summary>
+/// Clip input record mapping one draw object to the path that defines its clip stack entry.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuClipInp
 {
@@ -869,6 +975,9 @@ internal readonly struct GpuClipInp
     public int PathIndex { get; }
 }
 
+/// <summary>
+/// Binary interval combination record used by the clip reduction passes.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuBic
 {
@@ -883,6 +992,9 @@ internal readonly struct GpuBic
     public uint B { get; }
 }
 
+/// <summary>
+/// Reduced clip element containing the parent link and accumulated clip bounds.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuClipElement
 {
@@ -897,6 +1009,9 @@ internal readonly struct GpuClipElement
     public Vector4 Bbox { get; }
 }
 
+/// <summary>
+/// Bounding box emitted per draw object after draw reduction.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuDrawBbox
 {
@@ -905,6 +1020,9 @@ internal readonly struct GpuDrawBbox
     public Vector4 Bbox { get; }
 }
 
+/// <summary>
+/// One bin-header entry describing how many elements belong to a scheduling chunk.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuSceneBinHeader
 {
@@ -919,6 +1037,9 @@ internal readonly struct GpuSceneBinHeader
     public uint ChunkOffset { get; }
 }
 
+/// <summary>
+/// Indirect-dispatch argument buffer layout used by later scheduling passes.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct GpuSceneIndirectCount
 {
@@ -928,6 +1049,9 @@ internal struct GpuSceneIndirectCount
     public uint Pad0;
 }
 
+/// <summary>
+/// Scene-buffer layout metadata consumed by every staged-scene shader.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuSceneLayout
 {
@@ -976,6 +1100,9 @@ internal readonly struct GpuSceneLayout
     public uint StyleBase { get; }
 }
 
+/// <summary>
+/// Root scene configuration block bound at slot zero for most staged-scene shaders.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuSceneConfig
 {
@@ -1043,10 +1170,13 @@ internal readonly struct GpuSceneConfig
     public float FineCoverageThreshold { get; }
 }
 
+/// <summary>
+/// Encoded draw-tag constants matching the staged-scene shader contract.
+/// </summary>
 internal static class GpuSceneDrawTag
 {
-    // TODO: Why is this not an enum?
-    // It's really hard to understand what these magic numbers mean without documentation.
+    // These values are not a plain enum because each word also encodes the path-count, clip-count,
+    // scene-word-count, and info-word-count increments consumed by the scan/reduction stages.
     public const uint Nop = 0U;
     public const uint FillColor = 0x44U;
     public const uint FillRecolor = 0x4CU;
@@ -1059,10 +1189,11 @@ internal static class GpuSceneDrawTag
     public const uint EndClip = 0x21U;
     public const uint FillInfoFlagsFillRuleBit = 1U;
 
+    /// <summary>
+    /// Decodes one packed draw tag into the additive monoid scanned by later scheduling passes.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static GpuSceneDrawMonoid Map(uint tagWord)
-
-        // TODO: This needs documentation. It's unintelligable.
         => new(
             tagWord != Nop ? 1U : 0U,
             tagWord & 1U,
@@ -1070,6 +1201,9 @@ internal static class GpuSceneDrawTag
             (tagWord >> 6) & 0x0FU);
 }
 
+/// <summary>
+/// Additive monoid scanned over the draw-tag stream to derive scene offsets for later stages.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuSceneDrawMonoid
 {
@@ -1089,6 +1223,9 @@ internal readonly struct GpuSceneDrawMonoid
 
     public uint InfoOffset { get; }
 
+    /// <summary>
+    /// Combines two draw monoids by adding each offset/count component independently.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static GpuSceneDrawMonoid Combine(in GpuSceneDrawMonoid a, in GpuSceneDrawMonoid b)
         => new(
@@ -1098,6 +1235,9 @@ internal readonly struct GpuSceneDrawMonoid
             a.InfoOffset + b.InfoOffset);
 }
 
+/// <summary>
+/// Per-path scheduling record used after draw and clip reduction have established final bounds.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuScenePath
 {
@@ -1128,6 +1268,9 @@ internal readonly struct GpuScenePath
     public uint Tiles { get; }
 }
 
+/// <summary>
+/// Flattened line record emitted from the path stream for segment-counting and tiling.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuSceneLine
 {
@@ -1148,6 +1291,9 @@ internal readonly struct GpuSceneLine
     public Vector2 Point1 { get; }
 }
 
+/// <summary>
+/// Per-tile path record containing the backdrop and either a segment count or a segment-list index.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal struct GpuPathTile
 {
@@ -1162,6 +1308,9 @@ internal struct GpuPathTile
     public uint SegmentCountOrIndex;
 }
 
+/// <summary>
+/// Per-line segment-count record emitted by the path-count stage.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuSegmentCount
 {
@@ -1176,6 +1325,9 @@ internal readonly struct GpuSegmentCount
     public uint Counts { get; }
 }
 
+/// <summary>
+/// Final per-segment record consumed by the fine rasterization stage.
+/// </summary>
 [StructLayout(LayoutKind.Sequential)]
 internal readonly struct GpuPathSegment
 {

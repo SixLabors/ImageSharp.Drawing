@@ -25,6 +25,9 @@ public sealed partial class WebGPUDrawingBackend
     private static readonly Lazy<Dictionary<TextureFormat, CompositeTextureShaderTraits>> CompositeTextureShaderTraitsMap =
         new(CreateCompositeTextureShaderTraits);
 
+    /// <summary>
+    /// Describes how one registered composite texture format encodes channel values in shader space.
+    /// </summary>
     internal enum CompositeTextureEncodingKind
     {
         Float,
@@ -153,10 +156,16 @@ public sealed partial class WebGPUDrawingBackend
     internal static bool TryGetCompositeTextureSampleType(TextureFormat textureFormat, out TextureSampleType sampleType)
         => CompositeTextureSampleTypes.Value.TryGetValue(textureFormat, out sampleType);
 
+    /// <summary>
+    /// Resolves the shader-side read/write traits for a registered composite texture format.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static bool TryGetCompositeTextureShaderTraits(TextureFormat textureFormat, out CompositeTextureShaderTraits traits)
         => CompositeTextureShaderTraitsMap.Value.TryGetValue(textureFormat, out traits);
 
+    /// <summary>
+    /// Builds the format-to-shader-traits lookup used when specializing composition shaders.
+    /// </summary>
     private static Dictionary<TextureFormat, CompositeTextureShaderTraits> CreateCompositeTextureShaderTraits()
         => new()
         {
@@ -166,18 +175,33 @@ public sealed partial class WebGPUDrawingBackend
             [TextureFormat.Bgra8Unorm] = new CompositeTextureShaderTraits("bgra8unorm", "f32", TextureSampleType.Float, CompositeTextureEncodingKind.Float)
         };
 
+    /// <summary>
+    /// Shader-facing traits derived from one registered composite texture format.
+    /// </summary>
     internal readonly struct CompositeTextureShaderTraits(
         string outputFormat,
         string texelType,
         TextureSampleType sampleType,
         CompositeTextureEncodingKind encodingKind)
     {
+        /// <summary>
+        /// Gets the WGSL storage-texture format token used for writes.
+        /// </summary>
         public string OutputFormat { get; } = outputFormat;
 
+        /// <summary>
+        /// Gets the WGSL sampled texel type used when reading the texture.
+        /// </summary>
         public string TexelType { get; } = texelType;
 
+        /// <summary>
+        /// Gets the WebGPU sampled texture type required by bind-group validation.
+        /// </summary>
         public TextureSampleType SampleType { get; } = sampleType;
 
+        /// <summary>
+        /// Gets the numeric encoding that the shader must apply when storing output texels.
+        /// </summary>
         public CompositeTextureEncodingKind EncodingKind { get; } = encodingKind;
     }
 

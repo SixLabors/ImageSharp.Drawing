@@ -5,14 +5,29 @@ using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// GPU stage that prefix-scans packed path tags, with both normal and small generated variants.
+/// </summary>
 internal static unsafe class PathtagScanComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the normal pathtag-scan variant.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.PathtagScanCode;
 
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the small pathtag-scan variant.
+    /// </summary>
     public static ReadOnlySpan<byte> SmallShaderCode => GeneratedWgslShaderSources.PathtagScanSmallCode;
 
+    /// <summary>
+    /// Gets the WGSL entry point shared by both pathtag-scan variants.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Creates the bind-group layout required by both pathtag-scan variants.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

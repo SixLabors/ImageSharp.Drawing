@@ -11,14 +11,26 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal static unsafe class PathCountComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the path-count stage.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.PathCountCode;
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Gets the X workgroup count required to process every emitted line.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX(uint lineCount)
         => (lineCount + 255U) / 256U;
 
+    /// <summary>
+    /// Creates the bind-group layout required by the path-count stage.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

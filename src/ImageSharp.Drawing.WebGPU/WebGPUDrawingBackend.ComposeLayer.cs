@@ -371,13 +371,44 @@ public sealed unsafe partial class WebGPUDrawingBackend
     [StructLayout(LayoutKind.Sequential)]
     private struct LayerConfigGpu
     {
+        /// <summary>
+        /// Gets or sets the source layer width in pixels.
+        /// </summary>
         public uint SourceWidth;
+
+        /// <summary>
+        /// Gets or sets the source layer height in pixels.
+        /// </summary>
         public uint SourceHeight;
+
+        /// <summary>
+        /// Gets or sets the destination-space X offset where the source layer is composited.
+        /// </summary>
         public int DestOffsetX;
+
+        /// <summary>
+        /// Gets or sets the destination-space Y offset where the source layer is composited.
+        /// </summary>
         public int DestOffsetY;
+
+        /// <summary>
+        /// Gets or sets the packed color blend mode consumed by the compute shader.
+        /// </summary>
         public uint ColorBlendMode;
+
+        /// <summary>
+        /// Gets or sets the packed alpha composition mode consumed by the compute shader.
+        /// </summary>
         public uint AlphaCompositionMode;
+
+        /// <summary>
+        /// Gets or sets the blend percentage bitcast to the shader's uniform layout.
+        /// </summary>
         public uint BlendPercentage;
+
+        /// <summary>
+        /// Gets or sets the explicit padding word required by the WGSL uniform layout.
+        /// </summary>
         public uint Padding;
     }
 }

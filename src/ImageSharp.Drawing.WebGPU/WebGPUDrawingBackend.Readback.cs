@@ -207,10 +207,23 @@ public sealed unsafe partial class WebGPUDrawingBackend
         }
     }
 
+    /// <summary>
+    /// Aligns <paramref name="value"/> up to the next multiple of <paramref name="alignment"/>.
+    /// </summary>
+    /// <param name="value">The value to align.</param>
+    /// <param name="alignment">The required alignment.</param>
+    /// <returns>The aligned value.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int Align(int value, int alignment)
         => ((value + alignment - 1) / alignment) * alignment;
 
+    /// <summary>
+    /// Waits for the asynchronous readback map callback, pumping the native device when available.
+    /// </summary>
+    /// <param name="extension">The optional native WGPU extension used for device polling.</param>
+    /// <param name="device">The device that owns the mapped buffer.</param>
+    /// <param name="signal">The event signaled by the map callback.</param>
+    /// <returns><see langword="true"/> when the callback completed before the timeout; otherwise, <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool WaitForMapSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
     {

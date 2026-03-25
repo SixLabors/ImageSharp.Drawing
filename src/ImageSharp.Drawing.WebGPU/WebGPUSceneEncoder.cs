@@ -594,7 +594,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Returns a value indicating whether the brush type can be encoded into the staged WebGPU scene format.
+    /// Returns whether the staged scene encoder knows how to lower the supplied brush type.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsSupportedBrush(Brush brush)
@@ -608,7 +608,7 @@ internal static class WebGPUSceneEncoder
             or ImageBrush;
 
     /// <summary>
-    /// Maps one prepared draw command to its WebGPU scene draw tag.
+    /// Maps one prepared fill command to the draw-tag consumed by the staged scene pipeline.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetDrawTag(in CompositionCommand command)
@@ -882,7 +882,7 @@ internal static class WebGPUSceneEncoder
             or GpuSceneDrawTag.FillSweepGradient;
 
     /// <summary>
-    /// Appends one transform record to the transform stream.
+    /// Appends one 2x3 affine transform to the packed transform stream.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void AppendTransform(GpuSceneTransform transform, ref OwnedStream<uint> transforms)
@@ -896,14 +896,14 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Appends the identity transform record.
+    /// Appends the identity transform to the packed transform stream.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void AppendIdentityTransform(ref OwnedStream<uint> transforms)
         => AppendTransform(GpuSceneTransform.Identity, ref transforms);
 
     /// <summary>
-    /// Packs the fill style words used by the GPU scene format.
+    /// Packs the two style words that describe fill behavior for one draw record.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static (uint Style0, uint Style1) GetFillStyle(GraphicsOptions options, IntersectionRule intersectionRule)
@@ -917,7 +917,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Packs the normalized blend percentage into the scene style alpha field.
+    /// Packs the blend percentage into the style word layout consumed by the staged scene shaders.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackBlendAlpha(float blendPercentage)
@@ -952,28 +952,28 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Reinterprets a single-precision floating-point value as its raw uint bit pattern.
+    /// Reinterprets one single-precision float as its raw IEEE 754 bit pattern.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint BitcastSingle(float value)
         => unchecked((uint)BitConverter.SingleToInt32Bits(value));
 
     /// <summary>
-    /// Divides a positive value and rounds the result up to the next integer.
+    /// Rounds up integer division for tile and buffer planning.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int DivideRoundUp(int value, int divisor)
         => (value + divisor - 1) / divisor;
 
     /// <summary>
-    /// Aligns a value up to the requested alignment.
+    /// Rounds <paramref name="value"/> up to the next multiple of <paramref name="alignment"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int AlignUp(int value, int alignment)
         => value + ((alignment - (value % alignment)) % alignment);
 
     /// <summary>
-    /// Counts how many fixed-size tiles intersect the destination region.
+    /// Counts how many 16x16 tiles are touched by one target-local destination rectangle.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CountTileMembership(in Rectangle destinationRegion)
@@ -986,7 +986,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Converts absolute bounds into root-target-local bounds.
+    /// Converts an absolute scene rectangle into root-target-local coordinates.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Rectangle ToTargetLocal(in Rectangle absoluteBounds, in Rectangle rootTargetBounds)
@@ -997,7 +997,7 @@ internal static class WebGPUSceneEncoder
             absoluteBounds.Height);
 
     /// <summary>
-    /// Computes the command destination region in root-target-local coordinates.
+    /// Gets the fill destination rectangle in root-target-local coordinates.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Rectangle GetTargetLocalDestination(in CompositionCommand command, in Rectangle rootTargetBounds)
@@ -1008,7 +1008,7 @@ internal static class WebGPUSceneEncoder
             command.DestinationRegion.Height);
 
     /// <summary>
-    /// Packs a solid brush color into premultiplied RGBA8 scene storage.
+    /// Packs one solid brush color into the staged scene's premultiplied RGBA8 payload format.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackSolidColor(SolidBrush solidBrush)
@@ -1069,14 +1069,14 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Packs the color blend mode and alpha composition mode into one scene word.
+    /// Packs the color and alpha composition modes into the draw-data layout consumed by the shaders.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackBlendMode(GraphicsOptions options)
         => (MapColorBlendMode(options.ColorBlendingMode) << 8) | MapAlphaCompositionMode(options.AlphaCompositionMode);
 
     /// <summary>
-    /// Maps the managed color blending mode to the GPU scene encoding.
+    /// Maps ImageSharp's color blend mode enum to the staged-scene shader contract.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint MapColorBlendMode(PixelColorBlendingMode mode)
@@ -1095,7 +1095,7 @@ internal static class WebGPUSceneEncoder
         };
 
     /// <summary>
-    /// Maps the managed alpha composition mode to the GPU scene encoding.
+    /// Maps ImageSharp's alpha composition mode enum to the staged-scene shader contract.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint MapAlphaCompositionMode(PixelAlphaCompositionMode mode)
@@ -1313,7 +1313,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Packs a color into premultiplied RGBA8 scene storage.
+    /// Packs one premultiplied color into the staged scene's RGBA8 payload format.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackPremultipliedColor(in Color color)
@@ -1327,9 +1327,8 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Pre-multiplies the "x", "y", "z" components of a vector by its "w" component leaving the "w" component intact.
+    /// Premultiplies the RGB channels of a normalized RGBA vector by its alpha channel.
     /// </summary>
-    /// <param name="source">The <see cref="Vector4"/> to premultiply</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void Premultiply(ref Vector4 source)
     {
@@ -1340,10 +1339,8 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Permutes the given vector return a new instance with all the values set to <see cref="Vector4.W"/>.
+    /// Broadcasts the W component of <paramref name="value"/> into every lane.
     /// </summary>
-    /// <param name="value">The vector.</param>
-    /// <returns>The <see cref="Vector4"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector4 PermuteW(Vector4 value)
     {
@@ -1356,11 +1353,8 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Sets the W component of the given vector <paramref name="value"/> to the given value from <paramref name="w"/>.
+    /// Replaces the W component of <paramref name="value"/> with the supplied broadcast vector.
     /// </summary>
-    /// <param name="value">The vector to set.</param>
-    /// <param name="w">The vector containing the W value.</param>
-    /// <returns>The <see cref="Vector4"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector4 WithW(Vector4 value, Vector4 w)
     {
@@ -1382,7 +1376,7 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Maps the managed gradient repetition mode to the GPU scene encoding.
+    /// Maps ImageSharp's gradient repetition mode to the staged-scene shader contract.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint MapExtendMode(GradientRepetitionMode repetitionMode)

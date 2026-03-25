@@ -19,8 +19,14 @@ internal static class FineAreaComputeShader
     private static readonly object CacheSync = new();
     private static readonly Dictionary<TextureFormat, byte[]> ShaderCache = [];
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Gets or generates the fine-pass shader specialized for the requested output texture format.
+    /// </summary>
     public static bool TryGetCode(TextureFormat textureFormat, out byte[] code, out string? error)
     {
         if (!TryGetTraits(textureFormat, out ShaderTraits traits))
@@ -55,6 +61,9 @@ internal static class FineAreaComputeShader
         return true;
     }
 
+    /// <summary>
+    /// Creates the bind-group layout required by the fine area shader.
+    /// </summary>
     public static unsafe bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

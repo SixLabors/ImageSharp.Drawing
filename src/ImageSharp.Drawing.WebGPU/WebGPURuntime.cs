@@ -307,11 +307,22 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
+    /// <summary>
+    /// Requests a high-performance adapter from the current WebGPU instance.
+    /// </summary>
+    /// <param name="api">The WebGPU API wrapper.</param>
+    /// <param name="instance">The instance that issues the request.</param>
+    /// <param name="adapter">Receives the returned adapter on success.</param>
+    /// <param name="error">Receives the failure reason when the request fails.</param>
+    /// <returns><see langword="true"/> when an adapter was acquired; otherwise, <see langword="false"/>.</returns>
     private static bool TryRequestAdapter(WebGPU api, Instance* instance, out Adapter* adapter, out string? error)
     {
         RequestAdapterStatus callbackStatus = RequestAdapterStatus.Unknown;
         Adapter* callbackAdapter = null;
         using ManualResetEventSlim callbackReady = new(false);
+
+        // The native callback completes on the runtime's thread model, so the managed side stores
+        // the result into locals and then resumes once the signal is set or the request times out.
         void Callback(RequestAdapterStatus status, Adapter* adapterPtr, byte* message, void* userData)
         {
             callbackStatus = status;
@@ -344,11 +355,22 @@ internal static unsafe partial class WebGPURuntime
         return true;
     }
 
+    /// <summary>
+    /// Requests a device from the chosen adapter, enabling optional features that the backend can use.
+    /// </summary>
+    /// <param name="api">The WebGPU API wrapper.</param>
+    /// <param name="adapter">The adapter to request the device from.</param>
+    /// <param name="device">Receives the returned device on success.</param>
+    /// <param name="error">Receives the failure reason when the request fails.</param>
+    /// <returns><see langword="true"/> when a device was acquired; otherwise, <see langword="false"/>.</returns>
     private static bool TryRequestDevice(WebGPU api, Adapter* adapter, out Device* device, out string? error)
     {
         RequestDeviceStatus callbackStatus = RequestDeviceStatus.Unknown;
         Device* callbackDevice = null;
         using ManualResetEventSlim callbackReady = new(false);
+
+        // Device creation is also callback-driven, so the request writes into locals and then
+        // the caller continues once the callback signals completion.
         void Callback(RequestDeviceStatus status, Device* devicePtr, byte* message, void* userData)
         {
             callbackStatus = status;

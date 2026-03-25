@@ -666,6 +666,9 @@ internal static class WebGPUSceneDispatch
         return WebGPUDrawingBackend.TrySubmit(flushContext);
     }
 
+    /// <summary>
+    /// Records the first pathtag reduction pass that collapses raw path tags into workgroup monoids.
+    /// </summary>
     private static unsafe bool TryDispatchPathtagReduce(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
@@ -683,6 +686,9 @@ internal static class WebGPUSceneDispatch
         return recording.TryRecord(WebGPUSceneShaderId.PathtagReduce, entries, 3, dispatchX, 1, 1, out error);
     }
 
+    /// <summary>
+    /// Records the second pathtag reduction pass used by the large-scan variant.
+    /// </summary>
     private static unsafe bool TryDispatchPathtagReduce2(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
@@ -699,6 +705,9 @@ internal static class WebGPUSceneDispatch
         return recording.TryRecord(WebGPUSceneShaderId.PathtagReduce2, entries, 2, dispatchX, 1, 1, out error);
     }
 
+    /// <summary>
+    /// Records the prefix-scan setup pass used by the large pathtag scan path.
+    /// </summary>
     private static unsafe bool TryDispatchPathtagScan1(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
@@ -717,6 +726,9 @@ internal static class WebGPUSceneDispatch
         return recording.TryRecord(WebGPUSceneShaderId.PathtagScan1, entries, 3, dispatchX, 1, 1, out error);
     }
 
+    /// <summary>
+    /// Records the final pathtag prefix-scan pass, selecting the small or large shader variant.
+    /// </summary>
     private static unsafe bool TryDispatchPathtagScan(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
@@ -898,6 +910,9 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Reads back the bump allocators after scheduling so later stages know how much scratch data was produced.
+    /// </summary>
     private static unsafe bool TryReadSchedulingStatus(
         WebGPUFlushContext flushContext,
         WgpuBuffer* bumpBuffer,
@@ -1256,6 +1271,9 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Creates a bind group and dispatches one direct compute pass immediately.
+    /// </summary>
     internal static unsafe bool TryDispatchComputePass(
         WebGPUFlushContext flushContext,
         BindGroupLayout* bindGroupLayout,
@@ -1314,6 +1332,9 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Creates a bind group and dispatches one indirect compute pass immediately.
+    /// </summary>
     internal static unsafe bool TryDispatchComputePassIndirect(
         WebGPUFlushContext flushContext,
         BindGroupLayout* bindGroupLayout,
@@ -1371,6 +1392,9 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Replays the recorded scheduling commands, resolving bind groups and pipelines just before submission.
+    /// </summary>
     private static unsafe bool TryExecuteComputeRecording(
         WebGPUFlushContext flushContext,
         WebGPUSceneComputeRecording recording,
@@ -1439,6 +1463,9 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Resolves the cached bind-group layout and compute pipeline for one staged-scene shader identifier.
+    /// </summary>
     private static unsafe bool TryResolveComputeShader(
         WebGPUFlushContext flushContext,
         WebGPUSceneShaderId shaderId,
@@ -1554,6 +1581,9 @@ internal static class WebGPUSceneDispatch
             out error);
     }
 
+    /// <summary>
+    /// Creates one buffer binding entry covering the full bound range of the target buffer.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static unsafe BindGroupEntry CreateBufferBinding(uint binding, WgpuBuffer* buffer, nuint size)
         => new()
@@ -1564,6 +1594,9 @@ internal static class WebGPUSceneDispatch
             Size = size
         };
 
+    /// <summary>
+    /// Creates a flush-scoped storage buffer that may later be read back or rewritten by staging passes.
+    /// </summary>
     private static unsafe bool TryCreateStorageBuffer(
         WebGPUFlushContext flushContext,
         nuint size,
@@ -1576,6 +1609,9 @@ internal static class WebGPUSceneDispatch
             out buffer,
             out error);
 
+    /// <summary>
+    /// Creates a flush-scoped storage buffer that can also serve as an indirect dispatch argument buffer.
+    /// </summary>
     private static unsafe bool TryCreateIndirectStorageBuffer(
         WebGPUFlushContext flushContext,
         nuint size,
@@ -1588,6 +1624,9 @@ internal static class WebGPUSceneDispatch
             out buffer,
             out error);
 
+    /// <summary>
+    /// Creates one flush-scoped buffer, promoting zero-byte requests to a one-word allocation for WebGPU validation.
+    /// </summary>
     private static unsafe bool TryCreateBuffer(
         WebGPUFlushContext flushContext,
         nuint size,
@@ -1618,6 +1657,9 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Creates one flush-scoped storage buffer and uploads a single unmanaged value into it.
+    /// </summary>
     private static unsafe bool TryCreateAndUploadStorageBuffer<T>(
         WebGPUFlushContext flushContext,
         in T value,
@@ -1640,11 +1682,17 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Gets the byte length required to bind <paramref name="count"/> unmanaged elements, preserving WebGPU's non-zero binding rule.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static nuint GetBindingByteLength<T>(int count)
         where T : unmanaged
         => checked((nuint)Math.Max(count, 1) * (nuint)Unsafe.SizeOf<T>());
 
+    /// <summary>
+    /// Checks one planned binding size against the current staged-scene storage-buffer limit.
+    /// </summary>
     private static bool TryValidateBufferSize(nuint byteLength, string bufferName, out string? error)
     {
         if (byteLength > MaxStorageBufferBindingSize)
@@ -1657,6 +1705,9 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Pumps the WebGPU device while waiting for one asynchronous map callback to signal completion.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static unsafe bool WaitForMapSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
     {
@@ -1808,6 +1859,9 @@ internal readonly unsafe struct WebGPUSceneComputeCommand
     }
 }
 
+/// <summary>
+/// Identifiers for the generated staged-scene compute shaders cached by the dispatch layer.
+/// </summary>
 internal enum WebGPUSceneShaderId
 {
     PathtagReduce = 0,
@@ -1831,6 +1885,9 @@ internal enum WebGPUSceneShaderId
     PathTiling = 18
 }
 
+/// <summary>
+/// Serializable placeholder for one buffer or texture-view binding recorded before execution.
+/// </summary>
 internal readonly struct WebGPUSceneResourceProxy
 {
     private WebGPUSceneResourceProxy(
@@ -1864,12 +1921,18 @@ internal readonly struct WebGPUSceneResourceProxy
         => new(binding, 0, 0, resourceId, WebGPUSceneResourceProxyKind.TextureView);
 }
 
+/// <summary>
+/// Distinguishes whether a recorded binding proxy resolves to a buffer or a texture view.
+/// </summary>
 internal enum WebGPUSceneResourceProxyKind
 {
     Buffer = 0,
     TextureView = 1
 }
 
+/// <summary>
+/// Assigns stable integer ids to flush-scoped resources so recorded commands can be replayed later.
+/// </summary>
 internal sealed unsafe class WebGPUSceneResourceRegistry
 {
     private uint nextResourceId = 1;
@@ -1882,6 +1945,9 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
     {
     }
 
+    /// <summary>
+    /// Creates a registry preloaded with the persistent resources owned by the staged scene.
+    /// </summary>
     public static WebGPUSceneResourceRegistry Create(WebGPUSceneResourceSet resources)
     {
         WebGPUSceneResourceRegistry registry = new();
@@ -1907,6 +1973,9 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
         return registry;
     }
 
+    /// <summary>
+    /// Registers the transient buffers produced by the scheduling passes.
+    /// </summary>
     public void RegisterSchedulingBuffers(
         WgpuBuffer* binHeaderBuffer,
         WgpuBuffer* indirectCountBuffer,
@@ -1927,11 +1996,17 @@ internal sealed unsafe class WebGPUSceneResourceRegistry
         this.RegisterBuffer(bumpBuffer);
     }
 
+    /// <summary>
+    /// Converts one live bind-group entry into a stable proxy that can be resolved later.
+    /// </summary>
     public WebGPUSceneResourceProxy CreateProxy(BindGroupEntry entry)
         => entry.TextureView is not null
             ? WebGPUSceneResourceProxy.CreateTextureView(entry.Binding, this.GetTextureViewId(entry.TextureView))
             : WebGPUSceneResourceProxy.CreateBuffer(entry.Binding, this.GetBufferId(entry.Buffer), checked((nuint)entry.Offset), checked((nuint)entry.Size));
 
+    /// <summary>
+    /// Resolves one previously recorded proxy back to the live bind-group entry for execution.
+    /// </summary>
     public BindGroupEntry Resolve(WebGPUSceneResourceProxy proxy)
         => proxy.Kind == WebGPUSceneResourceProxyKind.TextureView
             ? new BindGroupEntry { Binding = proxy.Binding, TextureView = (TextureView*)this.textureViews[proxy.ResourceId] }
@@ -2001,14 +2076,29 @@ internal readonly struct WebGPUStagedScene : IDisposable
         this.Resources = resources;
     }
 
+    /// <summary>
+    /// Gets the flush context that owns the device, queue, encoder, and tracked native resources.
+    /// </summary>
     public WebGPUFlushContext FlushContext { get; }
 
+    /// <summary>
+    /// Gets the encoded scene payload owned by this staged scene.
+    /// </summary>
     public WebGPUEncodedScene EncodedScene { get; }
 
+    /// <summary>
+    /// Gets the dispatch and buffer plan derived from <see cref="EncodedScene"/>.
+    /// </summary>
     public WebGPUSceneConfig Config { get; }
 
+    /// <summary>
+    /// Gets the flush-scoped GPU resources created for <see cref="EncodedScene"/>.
+    /// </summary>
     public WebGPUSceneResourceSet Resources { get; }
 
+    /// <summary>
+    /// Releases the encoded scene and the flush context that owns the tracked native resources.
+    /// </summary>
     public void Dispose()
     {
         this.EncodedScene.Dispose();
@@ -2041,20 +2131,44 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
         this.BumpBuffer = bumpBuffer;
     }
 
+    /// <summary>
+    /// Gets the bin-header buffer produced by the scheduling passes.
+    /// </summary>
     public WgpuBuffer* BinHeaderBuffer { get; }
 
+    /// <summary>
+    /// Gets the indirect dispatch-count buffer produced by the scheduling passes.
+    /// </summary>
     public WgpuBuffer* IndirectCountBuffer { get; }
 
+    /// <summary>
+    /// Gets the path-tile buffer produced by the scheduling passes.
+    /// </summary>
     public WgpuBuffer* PathTileBuffer { get; }
 
+    /// <summary>
+    /// Gets the segment-count buffer produced by the scheduling passes.
+    /// </summary>
     public WgpuBuffer* SegCountBuffer { get; }
 
+    /// <summary>
+    /// Gets the segment buffer produced by the scheduling passes.
+    /// </summary>
     public WgpuBuffer* SegmentBuffer { get; }
 
+    /// <summary>
+    /// Gets the blend-spill buffer produced by the scheduling passes.
+    /// </summary>
     public WgpuBuffer* BlendBuffer { get; }
 
+    /// <summary>
+    /// Gets the PTCL buffer produced by the scheduling passes.
+    /// </summary>
     public WgpuBuffer* PtclBuffer { get; }
 
+    /// <summary>
+    /// Gets the bump allocator buffer used to coordinate scratch allocation across scheduling passes.
+    /// </summary>
     public WgpuBuffer* BumpBuffer { get; }
 }
 

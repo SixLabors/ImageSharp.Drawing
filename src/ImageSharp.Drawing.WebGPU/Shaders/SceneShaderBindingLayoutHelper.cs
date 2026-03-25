@@ -8,6 +8,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 internal static class SceneShaderBindingLayoutHelper
 {
+    /// <summary>
+    /// Creates one compute-stage storage-buffer binding entry.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static BindGroupLayoutEntry CreateStorageEntry(
         uint binding,
@@ -25,6 +28,9 @@ internal static class SceneShaderBindingLayoutHelper
             }
         };
 
+    /// <summary>
+    /// Creates one compute-stage uniform-buffer binding entry.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static BindGroupLayoutEntry CreateUniformEntry(uint binding, nuint minBindingSize)
         => new()

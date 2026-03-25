@@ -5,12 +5,24 @@ using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// GPU stage that expands reduced draw metadata into concrete draw and clip inputs.
+/// </summary>
 internal static unsafe class DrawLeafComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the draw-leaf stage.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.DrawLeafCode;
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Creates the bind-group layout required by the draw-leaf stage.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

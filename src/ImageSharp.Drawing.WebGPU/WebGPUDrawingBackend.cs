@@ -445,6 +445,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     private static uint DivideRoundUp(int value, int divisor)
         => (uint)((value + divisor - 1) / divisor);
 
+    /// <summary>
+    /// Reinterprets a single-precision float as its raw unsigned 32-bit bit pattern.
+    /// </summary>
+    /// <param name="value">The value to reinterpret.</param>
+    /// <returns>The raw IEEE 754 bit pattern for <paramref name="value"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint FloatToUInt32Bits(float value)
         => unchecked((uint)BitConverter.SingleToInt32Bits(value));

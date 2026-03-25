@@ -10,6 +10,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal static class Program
 {
+    /// <summary>
+    /// Dispatches the requested probe method inside the child process.
+    /// </summary>
     private static int Main(string[] args)
     {
         if (args.Length < 1)

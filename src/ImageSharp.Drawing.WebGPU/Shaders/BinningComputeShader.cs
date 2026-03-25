@@ -11,14 +11,26 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </summary>
 internal static unsafe class BinningComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the binning stage.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.BinningCode;
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Gets the X workgroup count required to bin every draw object in the scene.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX(uint drawObjectCount)
         => (drawObjectCount + 255U) / 256U;
 
+    /// <summary>
+    /// Creates the bind-group layout required by the binning stage.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

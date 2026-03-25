@@ -5,12 +5,24 @@ using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// GPU stage that resolves clip leaves into concrete clip bounding boxes.
+/// </summary>
 internal static unsafe class ClipLeafComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the clip-leaf stage.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.ClipLeafCode;
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Creates the bind-group layout required by the clip-leaf stage.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

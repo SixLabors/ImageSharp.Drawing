@@ -57,6 +57,9 @@ public static class WebGPUNativeSurfaceFactory
         return nativeSurface;
     }
 
+    /// <summary>
+    /// Validates the shared handle and size requirements for every native-surface factory entry point.
+    /// </summary>
     private static void ValidateCommon(
         nint deviceHandle,
         nint queueHandle,

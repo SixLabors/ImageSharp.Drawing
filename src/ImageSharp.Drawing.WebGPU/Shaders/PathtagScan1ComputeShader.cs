@@ -5,12 +5,24 @@ using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// GPU stage that prepares the prefix buffer used by the large pathtag scan variant.
+/// </summary>
 internal static unsafe class PathtagScan1ComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the pathtag-scan1 stage.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.PathtagScan1Code;
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Creates the bind-group layout required by the pathtag-scan1 stage.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

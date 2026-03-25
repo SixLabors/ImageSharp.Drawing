@@ -5,12 +5,24 @@ using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// GPU stage that performs the second reduction step for the large pathtag scan path.
+/// </summary>
 internal static unsafe class PathtagReduce2ComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the pathtag-reduce2 stage.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.PathtagReduce2Code;
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Creates the bind-group layout required by the pathtag-reduce2 stage.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

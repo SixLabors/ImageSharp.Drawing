@@ -6,16 +6,31 @@ using Silk.NET.WebGPU;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
+/// <summary>
+/// GPU stage that flattens encoded paths into line records and coarse path bounds.
+/// </summary>
 internal static unsafe class FlattenComputeShader
 {
+    /// <summary>
+    /// Gets the generated WGSL source bytes for the flatten stage.
+    /// </summary>
     public static ReadOnlySpan<byte> ShaderCode => GeneratedWgslShaderSources.FlattenCode;
 
+    /// <summary>
+    /// Gets the WGSL entry point used by this shader.
+    /// </summary>
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
+    /// <summary>
+    /// Gets the X workgroup count required to cover the packed path-tag stream.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint GetDispatchX(uint pathTagCount)
         => (pathTagCount + 255U) / 256U;
 
+    /// <summary>
+    /// Creates the bind-group layout required by the flatten stage.
+    /// </summary>
     public static bool TryCreateBindGroupLayout(
         WebGPU api,
         Device* device,

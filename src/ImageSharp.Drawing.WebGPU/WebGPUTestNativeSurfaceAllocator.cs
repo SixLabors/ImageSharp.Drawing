@@ -360,10 +360,16 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         }
     }
 
+    /// <summary>
+    /// Rounds <paramref name="value"/> up to the next multiple of <paramref name="alignment"/>.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int Align(int value, int alignment)
         => ((value + alignment - 1) / alignment) * alignment;
 
+    /// <summary>
+    /// Pumps the WebGPU device while waiting for one asynchronous map callback to signal completion.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool WaitForSignal(Wgpu? extension, Device* device, ManualResetEventSlim signal)
     {

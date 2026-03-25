@@ -481,6 +481,10 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.disposed = true;
     }
 
+    /// <summary>
+    /// Adopts the texture and texture view provided by a native WebGPU surface capability.
+    /// </summary>
+    /// <param name="capability">The native surface capability describing the externally owned target.</param>
     private void InitializeNativeTarget(WebGPUSurfaceCapability capability)
     {
         this.TargetTexture = (Texture*)capability.TargetTexture;
@@ -489,6 +493,13 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ownsTargetView = false;
     }
 
+    /// <summary>
+    /// Tries to obtain a native WebGPU surface capability from the canvas frame.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel type of the canvas frame.</typeparam>
+    /// <param name="frame">The frame being flushed.</param>
+    /// <param name="expectedTextureFormat">The texture format required by the current WebGPU path.</param>
+    /// <returns>The compatible surface capability, or <see langword="null"/> when the frame cannot expose one.</returns>
     private static WebGPUSurfaceCapability? TryGetNativeSurfaceCapability<TPixel>(ICanvasFrame<TPixel> frame, TextureFormat expectedTextureFormat)
         where TPixel : unmanaged, IPixel<TPixel>
     {
@@ -518,6 +529,15 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         return capability;
     }
 
+    /// <summary>
+    /// Uploads a source region into the destination texture starting at the origin.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel type stored in the source region.</typeparam>
+    /// <param name="api">The WebGPU API used for the upload.</param>
+    /// <param name="queue">The queue that receives the upload commands.</param>
+    /// <param name="destinationTexture">The destination texture.</param>
+    /// <param name="sourceRegion">The CPU-side source region to upload.</param>
+    /// <param name="memoryAllocator">The allocator used when a packed staging copy is required.</param>
     internal static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
         Queue* queue,
@@ -527,6 +547,18 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         where TPixel : unmanaged
         => UploadTextureFromRegion(api, queue, destinationTexture, sourceRegion, memoryAllocator, 0, 0, 0);
 
+    /// <summary>
+    /// Uploads a source region into a destination texture subregion.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel type stored in the source region.</typeparam>
+    /// <param name="api">The WebGPU API used for the upload.</param>
+    /// <param name="queue">The queue that receives the upload commands.</param>
+    /// <param name="destinationTexture">The destination texture.</param>
+    /// <param name="sourceRegion">The CPU-side source region to upload.</param>
+    /// <param name="memoryAllocator">The allocator used when a packed staging copy is required.</param>
+    /// <param name="destinationX">The destination X coordinate in the texture.</param>
+    /// <param name="destinationY">The destination Y coordinate in the texture.</param>
+    /// <param name="destinationLayer">The destination array layer.</param>
     internal static void UploadTextureFromRegion<TPixel>(
         WebGPU api,
         Queue* queue,
@@ -605,6 +637,11 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         }
     }
 
+    /// <summary>
+    /// Aligns a byte count to WebGPU's 256-byte row-upload requirement.
+    /// </summary>
+    /// <param name="value">The byte count to align.</param>
+    /// <returns>The aligned byte count.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AlignTo256(uint value) => (value + 255U) & ~255U;
 }
