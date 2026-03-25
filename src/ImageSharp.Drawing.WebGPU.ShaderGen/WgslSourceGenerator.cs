@@ -393,18 +393,20 @@ public sealed class WgslSourceGenerator : IIncrementalGenerator
         return builder.ToString();
     }
 
-    // AdditionalFiles come through as full paths. The generated API is keyed by the relative
-    // path beneath the raw WGSL source tree so imports remain stable across machines.
+    // AdditionalFiles come through as full paths with the platform's native separators.
+    // Normalize first so Linux/macOS and Windows builds all resolve the same shader-relative
+    // path beneath Shaders/WgslSource.
     private static string? GetRelativeShaderPath(string path)
     {
-        const string marker = "\\Shaders\\WgslSource\\";
-        int index = path.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        string normalizedPath = NormalizePath(path);
+        const string marker = "/Shaders/WgslSource/";
+        int index = normalizedPath.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
         if (index < 0)
         {
             return null;
         }
 
-        return NormalizePath(path.Substring(index + marker.Length));
+        return normalizedPath.Substring(index + marker.Length);
     }
 
     private static string NormalizePath(string path)
