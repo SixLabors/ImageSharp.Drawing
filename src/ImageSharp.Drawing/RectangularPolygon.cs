@@ -253,7 +253,9 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
                 Bounds = this.Bounds,
                 ContourCount = 1,
                 PointCount = 4,
-                SegmentCount = 4
+                SegmentCount = 4,
+                NonHorizontalSegmentCountPixelBoundary = 2,
+                NonHorizontalSegmentCountPixelCenter = 2
             },
             contours,
             points);

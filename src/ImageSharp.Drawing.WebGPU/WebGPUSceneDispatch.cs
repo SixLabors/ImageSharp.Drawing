@@ -76,8 +76,10 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        if (!WebGPUSceneEncoder.TryValidateBrushSupport(commands, out error))
+        WebGPUSceneSupportResult support = WebGPUSceneEncoder.ValidateSceneSupport(commands);
+        if (!support.IsSupported)
         {
+            error = support.Error;
             return false;
         }
 
@@ -97,7 +99,7 @@ internal static class WebGPUSceneDispatch
 
         try
         {
-            encodedScene = WebGPUSceneEncoder.Encode(commands, flushContext.TargetBounds, flushContext.MemoryAllocator);
+            encodedScene = WebGPUSceneEncoder.Encode(commands, support, flushContext.TargetBounds, flushContext.MemoryAllocator);
             WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene);
             uint baseColor = 0U;
             if (!TryValidateBindingSizes(encodedScene, config, out error))

@@ -31,4 +31,22 @@ public readonly struct LinearGeometryInfo
     /// Gets the total number of derived linear segments across all contours.
     /// </summary>
     public required int SegmentCount { get; init; }
+
+    /// <summary>
+    /// Gets the number of derived segments that remain non-horizontal when sampled on pixel boundaries.
+    /// </summary>
+    /// <remarks>
+    /// A segment contributes to this count when its start and end sample into different rows under
+    /// pixel-boundary sampling.
+    /// </remarks>
+    public required int NonHorizontalSegmentCountPixelBoundary { get; init; }
+
+    /// <summary>
+    /// Gets the number of derived segments that remain non-horizontal when sampled at pixel centers.
+    /// </summary>
+    /// <remarks>
+    /// A segment contributes to this count when its start and end sample into different rows after the
+    /// half-pixel center-sampling offset is applied.
+    /// </remarks>
+    public required int NonHorizontalSegmentCountPixelCenter { get; init; }
 }

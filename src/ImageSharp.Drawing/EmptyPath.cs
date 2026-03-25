@@ -16,7 +16,9 @@ public sealed class EmptyPath : IPath
             Bounds = RectangleF.Empty,
             ContourCount = 0,
             PointCount = 0,
-            SegmentCount = 0
+            SegmentCount = 0,
+            NonHorizontalSegmentCountPixelBoundary = 0,
+            NonHorizontalSegmentCountPixelCenter = 0
         },
         [],
         []);

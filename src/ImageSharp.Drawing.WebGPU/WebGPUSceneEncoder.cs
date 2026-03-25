@@ -8,6 +8,8 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -21,8 +23,6 @@ internal static class WebGPUSceneEncoder
     private const int GradientWidth = 512;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
-    private const int FixedShift = 8;
-    private const int FixedOne = 1 << FixedShift;
     private const byte PathTagLineToF32 = 0x09;
     private const byte PathTagTransform = 0x20;
     private const byte PathTagPath = 0x10;
@@ -38,8 +38,13 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Encodes prepared composition commands into flush-scoped scene buffers.
     /// </summary>
+    /// <param name="commands">The prepared flush commands to encode.</param>
+    /// <param name="support">The previously validated scene-support result for the flush.</param>
+    /// <param name="targetBounds">The root target bounds used for target-local coordinate conversion.</param>
+    /// <param name="allocator">The allocator used for temporary and packed scene storage.</param>
     public static WebGPUEncodedScene Encode(
         IReadOnlyList<CompositionCommand> commands,
+        in WebGPUSceneSupportResult support,
         in Rectangle targetBounds,
         MemoryAllocator allocator)
     {
@@ -48,7 +53,7 @@ internal static class WebGPUSceneEncoder
             return WebGPUEncodedScene.Empty;
         }
 
-        SupportedSubsetSceneEncoding encoding = SupportedSubsetSceneEncoding.Create(commands, targetBounds, allocator);
+        SupportedSubsetSceneEncoding encoding = SupportedSubsetSceneEncoding.Create(commands, support, targetBounds, allocator);
         try
         {
             if (encoding.IsEmpty)
@@ -65,30 +70,56 @@ internal static class WebGPUSceneEncoder
     }
 
     /// <summary>
-    /// Validates that the visible fill commands use brush types supported by the staged WebGPU scene format.
+    /// Validates that the flush can use the staged WebGPU scene pipeline without mid-encode fallback.
     /// </summary>
     /// <param name="commands">The prepared flush commands to validate.</param>
-    /// <param name="error">Receives the first validation error when support checks fail.</param>
-    /// <returns><see langword="true"/> when all visible fill brushes are supported; otherwise, <see langword="false"/>.</returns>
-    public static bool TryValidateBrushSupport(IReadOnlyList<CompositionCommand> commands, out string? error)
+    /// <returns>The staged-scene support result for the flush.</returns>
+    public static WebGPUSceneSupportResult ValidateSceneSupport(IReadOnlyList<CompositionCommand> commands)
     {
+        bool hasVisibleFill = false;
+        int visibleFillCount = 0;
+        RasterizationMode fineRasterizationMode = RasterizationMode.Antialiased;
+        float fineCoverageThreshold = 0F;
+
         for (int i = 0; i < commands.Count; i++)
         {
             CompositionCommand command = commands[i];
-            if (command.Kind is not CompositionCommandKind.FillLayer || !command.IsVisible)
+
+            if (command.Kind is not CompositionCommandKind.FillLayer)
+            {
+                continue;
+            }
+
+            if (!command.IsVisible)
             {
                 continue;
             }
 
             if (!IsSupportedBrush(command.Brush))
             {
-                error = $"The staged WebGPU scene pipeline does not support brush type '{command.Brush.GetType().Name}'.";
-                return false;
+                return WebGPUSceneSupportResult.Unsupported($"The staged WebGPU scene pipeline does not support brush type '{command.Brush.GetType().Name}'.");
+            }
+
+            visibleFillCount++;
+            RasterizerOptions options = command.RasterizerOptions;
+            if (!hasVisibleFill)
+            {
+                hasVisibleFill = true;
+                fineRasterizationMode = options.RasterizationMode;
+                fineCoverageThreshold = options.AntialiasThreshold;
+                continue;
+            }
+
+            // The current staged fine pass is scene-wide, so every visible fill in the flush
+            // must agree on the rasterization mode and aliased threshold before we start encode.
+            if (options.RasterizationMode != fineRasterizationMode ||
+                options.AntialiasThreshold != fineCoverageThreshold)
+            {
+                return WebGPUSceneSupportResult.Unsupported("The staged WebGPU scene pipeline does not support mixed fine rasterization modes or thresholds within one flush.");
             }
         }
 
-        error = null;
-        return true;
+        return WebGPUSceneSupportResult.Supported(visibleFillCount, fineRasterizationMode, fineCoverageThreshold);
     }
 
     /// <summary>
@@ -100,7 +131,6 @@ internal static class WebGPUSceneEncoder
         private bool gradientPixelsDetached;
         private uint lastStyle0;
         private uint lastStyle1;
-        private bool hasFineRasterizationMode;
         private readonly Rectangle rootTargetBounds;
         private List<Rectangle>? openLayerBounds;
 
@@ -109,8 +139,13 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         /// <param name="allocator">The allocator used for all temporary scene streams.</param>
         /// <param name="commandCount">The total prepared command count for the flush.</param>
+        /// <param name="support">The scene-wide staged-path support result already computed for the flush.</param>
         /// <param name="rootTargetBounds">The root target bounds used for target-local coordinate conversion.</param>
-        private SupportedSubsetSceneEncoding(MemoryAllocator allocator, int commandCount, in Rectangle rootTargetBounds)
+        private SupportedSubsetSceneEncoding(
+            MemoryAllocator allocator,
+            int commandCount,
+            in WebGPUSceneSupportResult support,
+            in Rectangle rootTargetBounds)
         {
             this.PathTags = new OwnedStream<byte>(allocator, Math.Max(commandCount * 8, 256));
             this.PathData = new OwnedStream<uint>(allocator, Math.Max(commandCount * 16, 256));
@@ -131,11 +166,10 @@ internal static class WebGPUSceneEncoder
             this.gradientPixelsDetached = false;
             this.lastStyle0 = 0;
             this.lastStyle1 = 0;
-            this.hasFineRasterizationMode = false;
             this.rootTargetBounds = rootTargetBounds;
             this.openLayerBounds = null;
-            this.FineRasterizationMode = RasterizationMode.Antialiased;
-            this.FineCoverageThreshold = 0F;
+            this.FineRasterizationMode = support.FineRasterizationMode;
+            this.FineCoverageThreshold = support.FineCoverageThreshold;
 
             this.PathTags.Add(PathTagTransform);
             AppendIdentityTransform(ref this.Transforms);
@@ -219,12 +253,12 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Gets the flush-wide fine rasterization mode selected while encoding visible fills.
         /// </summary>
-        public RasterizationMode FineRasterizationMode { get; private set; }
+        public RasterizationMode FineRasterizationMode { get; }
 
         /// <summary>
         /// Gets the aliased coverage threshold consumed by the fine pass when aliased mode is selected.
         /// </summary>
-        public float FineCoverageThreshold { get; private set; }
+        public float FineCoverageThreshold { get; }
 
         /// <summary>
         /// Gets a value indicating whether the encoding produced no fill work.
@@ -234,12 +268,17 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Creates and populates the mutable encoding state for the given flush commands.
         /// </summary>
+        /// <param name="commands">The prepared flush commands to encode.</param>
+        /// <param name="support">The scene-wide staged-path support result already computed for the flush.</param>
+        /// <param name="targetBounds">The root target bounds used for target-local coordinate conversion.</param>
+        /// <param name="allocator">The allocator used for all temporary scene streams.</param>
         public static SupportedSubsetSceneEncoding Create(
             IReadOnlyList<CompositionCommand> commands,
+            in WebGPUSceneSupportResult support,
             in Rectangle targetBounds,
             MemoryAllocator allocator)
         {
-            SupportedSubsetSceneEncoding encoding = new(allocator, commands.Count, targetBounds);
+            SupportedSubsetSceneEncoding encoding = new(allocator, commands.Count, support, targetBounds);
             encoding.Build(commands);
             return encoding;
         }
@@ -289,14 +328,6 @@ internal static class WebGPUSceneEncoder
                     if (!command.IsVisible)
                     {
                         return;
-                    }
-
-                    RasterizerOptions options = command.RasterizerOptions;
-                    if (!this.hasFineRasterizationMode)
-                    {
-                        this.hasFineRasterizationMode = true;
-                        this.FineRasterizationMode = options.RasterizationMode;
-                        this.FineCoverageThreshold = options.AntialiasThreshold;
                     }
 
                     IPath preparedPath = command.PreparedPath!;
@@ -355,8 +386,7 @@ internal static class WebGPUSceneEncoder
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
-                out int geometryLineCount,
-                out _);
+                out int geometryLineCount);
 
             if (encodedPathCount == 0)
             {
@@ -604,14 +634,14 @@ internal static class WebGPUSceneEncoder
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
         ref OwnedStream<uint> pathData,
-        out int lineCount,
-        out int pathSegmentCount)
+        out int lineCount)
     {
         float samplingOffset = command.RasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
         float pointTranslateX = (command.DestinationOffset.X - rootTargetBounds.X) + samplingOffset;
         float pointTranslateY = (command.DestinationOffset.Y - rootTargetBounds.Y) + samplingOffset;
-        pathSegmentCount = 0;
-        lineCount = 0;
+        lineCount = command.RasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter
+            ? geometry.Info.NonHorizontalSegmentCountPixelCenter
+            : geometry.Info.NonHorizontalSegmentCountPixelBoundary;
 
         // Prepared path points stay in the command's own path space until backend encoding.
         // Ordinary shapes often already live in target coordinates, but text glyphs are emitted
@@ -626,13 +656,28 @@ internal static class WebGPUSceneEncoder
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
             LinearContour contour = geometry.Contours[i];
+
+            // Each contour writes one starting point, then one end point and one line tag per
+            // derived segment. Reserving the exact slice up front lets the hot loop fill the
+            // contiguous output directly instead of re-checking stream capacity per word/tag.
+            Span<uint> contourData = pathData.GetAppendSpan(2 + (contour.SegmentCount * 2));
+            Span<byte> contourTags = pathTags.GetAppendSpan(contour.SegmentCount);
+
+            // dataIndex tracks the next uint slot within this contour's reserved point payload.
+            // The tag index is just the segment index because there is exactly one emitted tag
+            // for each derived segment in the contour.
+            int dataIndex = 0;
             _ = segments.MoveNext();
             LinearSegment segment = segments.Current;
             float firstX = segment.Start.X + pointTranslateX;
             float firstY = segment.Start.Y + pointTranslateY;
-            pathData.Add(BitcastSingle(firstX));
-            pathData.Add(BitcastSingle(firstY));
+            contourData[dataIndex++] = BitcastSingle(firstX);
+            contourData[dataIndex++] = BitcastSingle(firstY);
 
+            // The first segment is already loaded so the contour can emit its initial point
+            // before the loop. After that, each iteration consumes exactly one derived segment
+            // and appends only that segment's end point because the GPU scene format rebuilds
+            // continuity from the contour start plus the ordered stream of segment end points.
             for (int j = 0; j < contour.SegmentCount; j++)
             {
                 if (j > 0)
@@ -643,28 +688,23 @@ internal static class WebGPUSceneEncoder
 
                 float translatedEndX = segment.End.X + pointTranslateX;
                 float translatedEndY = segment.End.Y + pointTranslateY;
-                pathData.Add(BitcastSingle(translatedEndX));
-                pathData.Add(BitcastSingle(translatedEndY));
-                pathTags.Add(PathTagLineToF32);
-                pathSegmentCount++;
-
-                float y0 = segment.Start.Y + pointTranslateY;
-                float y1 = segment.End.Y + pointTranslateY;
-                int fy0 = (int)MathF.Round(y0 * FixedOne);
-                int fy1 = (int)MathF.Round(y1 * FixedOne);
-                if (fy0 != fy1)
-                {
-                    lineCount++;
-                }
+                contourData[dataIndex++] = BitcastSingle(translatedEndX);
+                contourData[dataIndex++] = BitcastSingle(translatedEndY);
+                contourTags[j] = PathTagLineToF32;
             }
 
-            if (pathTags.Count > 0)
+            if (contour.SegmentCount > 0)
             {
-                pathTags[^1] |= PathTagSubpathEnd;
+                contourTags[^1] |= PathTagSubpathEnd;
             }
+
+            // The reserved slices are staged locally until the contour is complete so the stream
+            // length only advances once, after the final subpath-end marker is in place.
+            pathData.Advance(contourData.Length);
+            pathTags.Advance(contourTags.Length);
         }
 
-        if (pathSegmentCount == 0)
+        if (geometry.Info.SegmentCount == 0)
         {
             return 0;
         }
@@ -693,26 +733,31 @@ internal static class WebGPUSceneEncoder
         float right = rectangle.Right;
         float bottom = rectangle.Bottom;
 
-        pathData.Add(BitcastSingle(left));
-        pathData.Add(BitcastSingle(top));
+        Span<uint> data = pathData.GetAppendSpan(10);
+        Span<byte> tags = pathTags.GetAppendSpan(5);
+        data[0] = BitcastSingle(left);
+        data[1] = BitcastSingle(top);
 
-        pathData.Add(BitcastSingle(right));
-        pathData.Add(BitcastSingle(top));
-        pathTags.Add(PathTagLineToF32);
+        data[2] = BitcastSingle(right);
+        data[3] = BitcastSingle(top);
+        tags[0] = PathTagLineToF32;
 
-        pathData.Add(BitcastSingle(right));
-        pathData.Add(BitcastSingle(bottom));
-        pathTags.Add(PathTagLineToF32);
+        data[4] = BitcastSingle(right);
+        data[5] = BitcastSingle(bottom);
+        tags[1] = PathTagLineToF32;
 
-        pathData.Add(BitcastSingle(left));
-        pathData.Add(BitcastSingle(bottom));
-        pathTags.Add(PathTagLineToF32);
+        data[6] = BitcastSingle(left);
+        data[7] = BitcastSingle(bottom);
+        tags[2] = PathTagLineToF32;
 
-        pathData.Add(BitcastSingle(left));
-        pathData.Add(BitcastSingle(top));
-        pathTags.Add(PathTagLineToF32 | PathTagSubpathEnd);
+        data[8] = BitcastSingle(left);
+        data[9] = BitcastSingle(top);
+        tags[3] = PathTagLineToF32 | PathTagSubpathEnd;
 
-        pathTags.Add(PathTagPath);
+        tags[4] = PathTagPath;
+
+        pathData.Advance(data.Length);
+        pathTags.Advance(tags.Length);
         lineCount = 2;
         return 1;
     }
@@ -894,11 +939,11 @@ internal static class WebGPUSceneEncoder
     {
         // Path tags are byte-addressed in the front of the packed scene buffer, but the
         // overall scene layout is word-addressed. The padded prefix is therefore cleared
-        // before the written tag bytes are copied into it.
+        // only for the tail bytes that are not overwritten by the copied tag payload.
         Span<byte> sceneBytes = MemoryMarshal.Cast<uint, byte>(sceneWords);
         int paddedPathTagBytes = checked(pathTagWordCount * sizeof(uint));
-        sceneBytes[..paddedPathTagBytes].Clear();
         pathTags.CopyTo(sceneBytes);
+        sceneBytes[pathTags.Length..paddedPathTagBytes].Clear();
         pathData.CopyTo(sceneWords[(int)layout.PathDataBase..]);
         drawTags.CopyTo(sceneWords[(int)layout.DrawTagBase..]);
         drawData.CopyTo(sceneWords[(int)layout.DrawDataBase..]);
@@ -967,13 +1012,7 @@ internal static class WebGPUSceneEncoder
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackSolidColor(SolidBrush solidBrush)
-    {
-        Vector4 color = solidBrush.Color.ToScaledVector4();
-        color.X *= color.W;
-        color.Y *= color.W;
-        color.Z *= color.W;
-        return Rgba32.FromScaledVector4(color).Rgba;
-    }
+        => PackPremultipliedColor(solidBrush.Color);
 
     /// <summary>
     /// Appends the draw-data payload for one encoded draw tag.
@@ -1277,13 +1316,69 @@ internal static class WebGPUSceneEncoder
     /// Packs a color into premultiplied RGBA8 scene storage.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint PackPremultipliedColor(Color color)
+    private static uint PackPremultipliedColor(in Color color)
     {
-        Vector4 scaled = color.ToScaledVector4();
-        scaled.X *= scaled.W;
-        scaled.Y *= scaled.W;
-        scaled.Z *= scaled.W;
-        return Rgba32.FromScaledVector4(scaled).Rgba;
+        // The staged scene keeps colors as one packed RGBA8 word. That gives up precision versus
+        // carrying float channels through the scene buffer, but it keeps the encoded payload small
+        // so the CPU writes less per draw and the shader reads less per sample.
+        Vector4 vector = color.ToScaledVector4();
+        Premultiply(ref vector);
+        return Rgba32.FromScaledVector4(vector).Rgba;
+    }
+
+    /// <summary>
+    /// Pre-multiplies the "x", "y", "z" components of a vector by its "w" component leaving the "w" component intact.
+    /// </summary>
+    /// <param name="source">The <see cref="Vector4"/> to premultiply</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void Premultiply(ref Vector4 source)
+    {
+        // Load into a local variable to prevent accessing the source from memory multiple times.
+        Vector4 src = source;
+        Vector4 alpha = PermuteW(src);
+        source = WithW(src * alpha, alpha);
+    }
+
+    /// <summary>
+    /// Permutes the given vector return a new instance with all the values set to <see cref="Vector4.W"/>.
+    /// </summary>
+    /// <param name="value">The vector.</param>
+    /// <returns>The <see cref="Vector4"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector4 PermuteW(Vector4 value)
+    {
+        if (Sse.IsSupported)
+        {
+            return Sse.Shuffle(value.AsVector128(), value.AsVector128(), 0b_11_11_11_11).AsVector4();
+        }
+
+        return new Vector4(value.W);
+    }
+
+    /// <summary>
+    /// Sets the W component of the given vector <paramref name="value"/> to the given value from <paramref name="w"/>.
+    /// </summary>
+    /// <param name="value">The vector to set.</param>
+    /// <param name="w">The vector containing the W value.</param>
+    /// <returns>The <see cref="Vector4"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector4 WithW(Vector4 value, Vector4 w)
+    {
+        if (Sse41.IsSupported)
+        {
+            return Sse41.Insert(value.AsVector128(), w.AsVector128(), 0b11_11_0000).AsVector4();
+        }
+
+        if (Sse.IsSupported)
+        {
+            // Create tmp as <w[3], w[0], value[2], value[0]>
+            // Then return <value[0], value[1], tmp[2], tmp[0]> (which is <value[0], value[1], value[2], w[3]>)
+            Vector128<float> tmp = Sse.Shuffle(w.AsVector128(), value.AsVector128(), 0b00_10_00_11);
+            return Sse.Shuffle(value.AsVector128(), tmp, 0b00_10_01_00).AsVector4();
+        }
+
+        value.W = w.W;
+        return value;
     }
 
     /// <summary>
@@ -1297,6 +1392,66 @@ internal static class WebGPUSceneEncoder
             GradientRepetitionMode.Reflect => 2U,
             _ => 0U
         };
+}
+
+/// <summary>
+/// Result of the staged-scene support validation performed before WebGPU encoding begins.
+/// </summary>
+internal readonly struct WebGPUSceneSupportResult
+{
+    private WebGPUSceneSupportResult(
+        bool isSupported,
+        int visibleFillCount,
+        RasterizationMode fineRasterizationMode,
+        float fineCoverageThreshold,
+        string? error)
+    {
+        this.IsSupported = isSupported;
+        this.VisibleFillCount = visibleFillCount;
+        this.FineRasterizationMode = fineRasterizationMode;
+        this.FineCoverageThreshold = fineCoverageThreshold;
+        this.Error = error;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the current flush can use the staged WebGPU path.
+    /// </summary>
+    public bool IsSupported { get; }
+
+    /// <summary>
+    /// Gets the number of visible fills seen during scene validation.
+    /// </summary>
+    public int VisibleFillCount { get; }
+
+    /// <summary>
+    /// Gets the scene-wide fine rasterization mode selected by the visible fills in the flush.
+    /// </summary>
+    public RasterizationMode FineRasterizationMode { get; }
+
+    /// <summary>
+    /// Gets the scene-wide aliased coverage threshold selected by the visible fills in the flush.
+    /// </summary>
+    public float FineCoverageThreshold { get; }
+
+    /// <summary>
+    /// Gets the reason staged-scene validation failed, if any.
+    /// </summary>
+    public string? Error { get; }
+
+    /// <summary>
+    /// Creates a successful scene-support result.
+    /// </summary>
+    public static WebGPUSceneSupportResult Supported(
+        int visibleFillCount,
+        RasterizationMode fineRasterizationMode,
+        float fineCoverageThreshold)
+        => new(true, visibleFillCount, fineRasterizationMode, fineCoverageThreshold, null);
+
+    /// <summary>
+    /// Creates a failed scene-support result.
+    /// </summary>
+    public static WebGPUSceneSupportResult Unsupported(string error)
+        => new(false, 0, RasterizationMode.Antialiased, 0F, error);
 }
 
 /// <summary>
@@ -1717,6 +1872,17 @@ internal ref struct OwnedStream<T>
     public readonly ReadOnlySpan<T> WrittenSpan => this.span[..this.Count];
 
     /// <summary>
+    /// Gets a writable reserved append window for a caller that will populate items in place.
+    /// </summary>
+    /// <param name="count">The number of contiguous items to reserve.</param>
+    /// <returns>A writable span covering the reserved append window.</returns>
+    public Span<T> GetAppendSpan(int count)
+    {
+        this.EnsureCapacity(this.Count + count);
+        return this.span.Slice(this.Count, count);
+    }
+
+    /// <summary>
     /// Appends one item to the stream.
     /// </summary>
     /// <param name="value">The item to append.</param>
@@ -1745,6 +1911,12 @@ internal ref struct OwnedStream<T>
     /// </summary>
     /// <param name="count">The new logical item count.</param>
     public void SetCount(int count) => this.Count = count;
+
+    /// <summary>
+    /// Commits the requested number of previously reserved items to the logical stream length.
+    /// </summary>
+    /// <param name="count">The number of reserved items that were written.</param>
+    public void Advance(int count) => this.Count += count;
 
     /// <summary>
     /// Disposes the current owner and clears the stream state.
