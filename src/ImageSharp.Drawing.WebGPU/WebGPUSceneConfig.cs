@@ -160,7 +160,7 @@ internal readonly struct WebGPUSceneWorkgroupCounts
             TileAllocComputeShader.GetDispatchX(drawObjectCount),
             PathCountSetupComputeShader.GetDispatchX(),
             PathCountComputeShader.GetDispatchX(lineCount),
-            BackdropComputeShader.GetDispatchX(pathCount),
+            BackdropComputeShader.GetDispatchX(drawObjectCount),
             widthInBins,
             heightInBins,
             PathTilingSetupComputeShader.GetDispatchX(),

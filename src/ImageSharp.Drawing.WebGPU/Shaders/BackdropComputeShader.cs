@@ -16,8 +16,8 @@ internal static unsafe class BackdropComputeShader
     public static ReadOnlySpan<byte> EntryPoint => "main\0"u8;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static uint GetDispatchX(uint heightInTiles)
-        => heightInTiles;
+    public static uint GetDispatchX(uint drawObjectCount)
+        => drawObjectCount;
 
     public static bool TryCreateBindGroupLayout(
         WebGPU api,

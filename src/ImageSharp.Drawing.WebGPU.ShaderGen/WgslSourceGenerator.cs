@@ -17,8 +17,8 @@ namespace SixLabors.ImageSharp.Drawing.WebGPU.ShaderGen;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Root shaders are every <c>.wgsl</c> file directly under the <c>Shaders</c> tree except files
-/// under <c>Shaders/Shared</c>. Shared files are only imported into roots.
+/// Root shaders are every <c>.wgsl</c> file directly under the <c>Shaders/WgslSource</c> tree except files
+/// under <c>Shaders/WgslSource/Shared</c>. Shared files are only imported into roots.
 /// </para>
 /// <para>
 /// The generator intentionally supports a very small preprocessor surface:
@@ -394,10 +394,10 @@ public sealed class WgslSourceGenerator : IIncrementalGenerator
     }
 
     // AdditionalFiles come through as full paths. The generated API is keyed by the relative
-    // path beneath the WebGPU Shaders tree so imports remain stable across machines.
+    // path beneath the raw WGSL source tree so imports remain stable across machines.
     private static string? GetRelativeShaderPath(string path)
     {
-        const string marker = "\\Shaders\\";
+        const string marker = "\\Shaders\\WgslSource\\";
         int index = path.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
         if (index < 0)
         {

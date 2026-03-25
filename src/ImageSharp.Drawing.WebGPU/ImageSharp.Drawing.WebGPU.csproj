@@ -82,7 +82,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="Shaders\*.wgsl" />
-    <AdditionalFiles Include="Shaders\Shared\*.wgsl" />
+    <AdditionalFiles Include="Shaders\WgslSource\*.wgsl" />
+    <AdditionalFiles Include="Shaders\WgslSource\Shared\*.wgsl" />
   </ItemGroup>
 </Project>
