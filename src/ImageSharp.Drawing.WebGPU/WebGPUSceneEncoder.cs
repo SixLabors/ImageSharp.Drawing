@@ -583,19 +583,18 @@ internal static class WebGPUSceneEncoder
         out int lineCount,
         out int pathSegmentCount)
     {
-        Rectangle interest = command.RasterizerOptions.Interest;
         float samplingOffset = command.RasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        float targetOffsetX = command.TargetBounds.X - rootTargetBounds.X;
-        float targetOffsetY = command.TargetBounds.Y - rootTargetBounds.Y;
-        float translateX = targetOffsetX + command.DestinationRegion.X - command.SourceOffset.X;
-        float translateY = targetOffsetY + command.DestinationRegion.Y - command.SourceOffset.Y;
-
-        // Move path points from interest-local coverage space into target-local space.
-        float pointTranslateX = translateX + samplingOffset - interest.Left;
-        float pointTranslateY = translateY + samplingOffset - interest.Top;
+        float pointTranslateX = (command.DestinationOffset.X - rootTargetBounds.X) + samplingOffset;
+        float pointTranslateY = (command.DestinationOffset.Y - rootTargetBounds.Y) + samplingOffset;
         pathSegmentCount = 0;
         lineCount = 0;
 
+        // Prepared path points stay in the command's own path space until backend encoding.
+        // Ordinary shapes often already live in target coordinates, but text glyphs are emitted
+        // as local outlines plus a separate DestinationOffset. We therefore place every point by
+        // applying the command's absolute destination offset directly rather than trying to
+        // reconstruct placement from Interest/DestinationRegion/SourceOffset, which are clipping
+        // artifacts in absolute destination space and can cancel the text offset entirely.
         // The lowered geometry is already contour-ordered, so the encoder walks the segment
         // stream once and emits each contour as: starting point, then one end point per segment.
         SegmentEnumerator segments = geometry.GetSegments();
@@ -625,8 +624,8 @@ internal static class WebGPUSceneEncoder
                 pathTags.Add(PathTagLineToF32);
                 pathSegmentCount++;
 
-                float y0 = ((segment.Start.Y - interest.Top) + samplingOffset) + translateY;
-                float y1 = ((segment.End.Y - interest.Top) + samplingOffset) + translateY;
+                float y0 = segment.Start.Y + pointTranslateY;
+                float y1 = segment.End.Y + pointTranslateY;
                 int fy0 = (int)MathF.Round(y0 * FixedOne);
                 int fy1 = (int)MathF.Round(y1 * FixedOne);
                 if (fy0 != fy1)
