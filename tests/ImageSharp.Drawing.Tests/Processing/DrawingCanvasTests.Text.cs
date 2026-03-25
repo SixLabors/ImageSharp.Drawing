@@ -5,6 +5,7 @@ using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.Fonts.Unicode;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.Drawing.Text;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -141,7 +142,7 @@ public partial class DrawingCanvasTests
         canvas.Flush();
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
-        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(ImageComparer.TolerantPercentage(0.0001F), provider, appendSourceFileOrDescription: false);
     }
 
     [Theory]

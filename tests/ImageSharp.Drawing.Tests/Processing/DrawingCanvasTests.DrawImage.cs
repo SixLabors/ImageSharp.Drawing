@@ -3,6 +3,7 @@
 
 using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -34,7 +35,9 @@ public partial class DrawingCanvasTests
         canvas.Flush();
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
-        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+
+        // Ubunut with .NET10 has some minor difference due to nearest neightbor resampling, so we need to use a tolerant comparer here.
+        target.CompareToReferenceOutput(ImageComparer.TolerantPercentage(0.0080F), provider, appendSourceFileOrDescription: false);
     }
 
     [Theory]
