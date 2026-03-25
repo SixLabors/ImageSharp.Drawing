@@ -1,0 +1,36 @@
+SixLabors.ImageSharp.Drawing uses or incorporates ideas, algorithms, and/or
+implementation guidance from third-party projects that are distributed under
+licenses different from the Six Labors ImageSharp.Drawing software.
+
+The attached notices are provided for informational purposes only. Please
+review the original project repositories and license files for complete terms.
+
+================================================================================
+
+Blaze (https://github.com/aurimasg/blaze)
+License: MIT
+
+Portions of this software were developed with reference to the Blaze
+project, including rasterization and related implementation techniques.
+
+Copyright (c) 2023 Aurimas Gasiulis
+
+The Blaze project is distributed under the MIT License. The full license text
+is available in the Blaze repository LICENSE file.
+
+================================================================================
+
+Vello (https://github.com/linebender/vello)
+License: Apache-2.0 OR MIT
+
+Portions of this software were developed with reference to the Vello project,
+including GPU rasterization pipeline structure, shader stages, and related
+implementation techniques.
+
+Copyright 2020 the Vello Authors
+
+The Vello project is distributed under the Apache License, Version 2.0, or the
+MIT License. The full license texts are available in the Vello repository
+LICENSE-APACHE and LICENSE-MIT files.
+
+================================================================================
