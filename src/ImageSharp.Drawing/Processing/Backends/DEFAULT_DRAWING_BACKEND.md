@@ -1,220 +1,224 @@
-# `DefaultDrawingBackend`: The CPU Flush Executor
+# DefaultDrawingBackend
 
-`DefaultDrawingBackend` is the CPU execution backend for ImageSharp.Drawing. It receives a flush worth of prepared drawing commands, turns them into row-local work, executes that work with reusable worker scratch, and composes the resulting coverage into a CPU destination buffer.
+`DefaultDrawingBackend` is the CPU execution backend for ImageSharp.Drawing. It receives one flush worth of prepared drawing commands, turns them into row-local raster work, executes that work with reusable scratch, and writes the result into a CPU destination buffer.
 
-This document explains the current backend as an execution system rather than as a list of methods. The goal is to help a new reader understand:
+This document explains the backend as a system rather than as a list of methods. The goal is to help a newcomer understand:
 
-- why a flush-scoped scene exists
-- why work is arranged row-first instead of command-first
-- how the rasterizer and brush renderer are kept separate
-- where memory is owned and how it is reused
+- what problem the CPU backend is solving
+- why the backend is organized around a flush-scoped execution plan
+- what `FlushScene` means in this architecture
+- how rasterization, brush application, and layer composition fit together
 
-The current implementation spans these files:
+## The Main Problem
 
-- `src/ImageSharp.Drawing/Processing/Backends/DefaultDrawingBackend.cs`
-- `src/ImageSharp.Drawing/Processing/Backends/DefaultDrawingBackend.Helpers.cs`
-- `src/ImageSharp.Drawing/Processing/Backends/FlushScene.cs`
-- `src/ImageSharp.Drawing/Processing/Backends/FlushScene.RetainedTypes.cs`
-- `src/ImageSharp.Drawing/Processing/Backends/DefaultRasterizer.cs`
+By the time work reaches `DefaultDrawingBackend`, the public drawing API has already been normalized into prepared commands. That is helpful, but it does not make CPU execution trivial.
 
-## The Backend's Core Idea
+The backend still has to solve a hard scheduling problem.
 
-The backend is built around one simple idea:
+It needs to answer questions such as:
+
+- which destination rows each command touches
+- how to preserve draw order while running work in parallel
+- how to avoid re-deriving geometry information in the hot loop
+- where temporary memory should live and when it should be reused
+
+If the CPU backend executed commands directly from the incoming scene, each worker would repeatedly rediscover which rows matter, which parts of the geometry matter in those rows, and how much scratch is needed. That would push expensive planning work into the hottest part of the pipeline.
+
+So the backend takes a different approach:
+
+it turns the whole flush into a row-oriented execution plan first, then executes that plan.
+
+That decision explains most of the backend architecture.
+
+## The Core Idea
+
+The CPU backend is a flush executor, not a command-at-a-time painter.
+
+Its central idea is:
 
 > convert a flush into row-local raster work once, then execute rows directly with reusable worker-local scratch
 
-That idea explains most of the architecture.
+That is why the backend is built around `FlushScene`.
 
-If the backend tried to execute directly from raw composition commands, each worker would need to repeatedly rediscover:
+`FlushScene` is a flush-scoped execution plan. It exists only for the life of one backend flush. Its job is to take a prepared command stream and reorganize it into a form that is cheap for the row executor to consume.
 
-- which rows a command touches
-- which geometry matters in a given row band
-- how much raster scratch is needed
-- how to preserve draw order while still running work in parallel
+If that idea is clear, most of the important types fall into place.
 
-Instead, the backend creates a flush-scoped execution plan up front and uses that plan during the hot row pass.
+## The Most Important Terms
 
-## The Backend In One Diagram
+### Backend
+
+`DefaultDrawingBackend` is the top-level CPU executor. It owns backend policy and orchestration:
+
+- acquiring a writable CPU destination
+- creating the flush-scoped execution plan
+- executing that plan
+- handling CPU layer composition
+
+It does not own every detail of geometry planning or scan conversion.
+
+### Scene
+
+In the canvas architecture, the backend receives a `CompositionScene`. That scene already contains prepared commands and explicit layer boundaries.
+
+For the CPU backend, that incoming scene is the starting point, not the final execution form.
+
+### Flush Scene
+
+`FlushScene` is the most important supporting type in the CPU backend.
+
+In this codebase, `FlushScene` means:
+
+"the retained, row-oriented execution plan for one CPU flush"
+
+It owns the flush-local information needed to make execution cheap:
+
+- the visible prepared commands
+- retained rasterizable geometry
+- row membership
+- row-local execution items
+- scratch size requirements for the flush
+
+### Rasterizer
+
+`DefaultRasterizer` is the geometry-to-coverage engine.
+
+It is responsible for:
+
+- fixed-point scan conversion
+- fill-rule handling
+- coverage accumulation
+- emitting row coverage spans
+
+It is not responsible for deciding which commands should run in which rows, and it does not write final pixels directly.
+
+### Brush Renderer
+
+`BrushRenderer<TPixel>` is the coverage-to-color engine for one prepared drawing command.
+
+It receives:
+
+- a destination row slice
+- coverage data
+- destination position
+- reusable workspace
+
+and updates pixels accordingly.
+
+The important separation is:
+
+- the rasterizer decides coverage
+- the brush renderer decides color
+- the backend executor binds the two together
+
+### Worker State
+
+`WorkerState<TPixel>` is the reusable per-worker execution state.
+
+It owns worker-local scratch such as:
+
+- raster scratch
+- brush workspace
+- the coverage row handler state
+
+This is how the backend avoids allocating fresh buffers for every row item during the hot parallel pass.
+
+## The Big Picture Flow
+
+The easiest way to understand the backend is to follow one flush from entry to execution.
 
 ```mermaid
 flowchart TD
     A[DrawingCanvas flush] --> B[DefaultDrawingBackend.FlushCompositions]
-    B --> C[Target CPU region]
+    B --> C[Acquire CPU destination]
     B --> D[FlushScene.Create]
-    D --> E[Prepare visible commands]
-    E --> F[Build row-local work]
-    F --> G[Prebuild rasterizable bands]
-    G --> H[Execute rows in parallel]
-    H --> I[DefaultRasterizer emits coverage]
-    I --> J[BrushRenderer applies color]
-    J --> K[Destination frame updated]
+    D --> E[Prepare visible items]
+    E --> F[Build row-local execution plan]
+    F --> G[Execute rows in parallel]
+    G --> H[DefaultRasterizer emits coverage]
+    H --> I[BrushRenderer shades pixels]
+    I --> J[Destination frame updated]
 ```
 
 There are three major stages in that flow:
 
 1. establish the destination frame
-2. build a flush-scoped scene
-3. execute that scene row by row
+2. build the flush-scoped execution plan
+3. execute rows using that plan
 
 ## What `DefaultDrawingBackend` Owns
 
-`DefaultDrawingBackend` is intentionally smaller than its supporting types. It owns backend policy and orchestration, not every detail of preparation or scan conversion.
+`DefaultDrawingBackend` is intentionally smaller than its supporting types. It owns orchestration, not every low-level detail.
 
 Its responsibilities are:
 
-- acquire a writable CPU destination
-- create a flush scene
+- acquire a writable CPU region from the target frame
+- create a `FlushScene`
 - execute that scene
-- provide layer composition services
-- manage frame lifecycle for CPU-backed targets
+- provide CPU layer composition services
+- manage frame usage for CPU-backed targets
 
 The expensive work is delegated:
 
 - `FlushScene` owns flush-local planning
 - `DefaultRasterizer` owns scan conversion
-- `BrushRenderer<TPixel>` owns brush-specific composition
+- `BrushRenderer<TPixel>` owns brush-specific shading
 
-That split keeps the backend readable and limits how much one type needs to know at once.
+That split keeps each type focused on one class of problem.
 
-## The Flush Path
+## Building The Flush Scene
 
-The main fill path begins in `FlushCompositions<TPixel>()`.
-
-At a high level, that method:
-
-1. exits early if there is nothing to do
-2. asks the target for a CPU region
-3. builds a `FlushScene`
-4. executes the scene into the region
-
-That is intentionally compact because `FlushCompositions` is a coordinator, not the place where geometric or scan-conversion detail lives.
-
-```mermaid
-sequenceDiagram
-    participant Canvas as DrawingCanvas
-    participant Backend as DefaultDrawingBackend
-    participant Target as DrawingTarget
-    participant Scene as FlushScene
-
-    Canvas->>Backend: FlushCompositions(...)
-    Backend->>Target: TryGetCpuRegion(...)
-    Backend->>Scene: Create(...)
-    Scene-->>Backend: flush-scoped execution plan
-    Backend->>Scene: Execute(...)
-    Scene-->>Backend: rows composed into destination
-```
-
-## Why `FlushScene` Exists
-
-`FlushScene` is the most important supporting type in the CPU backend. It exists for one flush and is disposed when that flush finishes.
-
-It owns the information needed to make row execution cheap:
-
-- the visible prepared commands
-- the retained rasterizable geometry for those commands
-- the per-row list of items that must execute
-- the maximum scratch requirements for the flush
-
-Without a flush scene, row execution would need to reconstruct all of that every time a worker visited a row. That would make the hottest phase of the backend much more expensive.
-
-## Building A Flush Scene
-
-`FlushScene.Create(...)` turns a command stream into an execution plan in several phases. Each phase changes the data into a form that is cheaper for the next phase to consume.
+`FlushScene.Create(...)` turns the prepared command stream into an execution plan in several phases. Each phase changes the data into a form that is cheaper for the next phase to consume.
 
 ```mermaid
 flowchart LR
-    A[CompositionCommand] --> B[Prepare and clip]
-    B --> C[Compact visible items]
-    C --> D[Create retained geometry]
-    D --> E[Build row membership]
-    E --> F[Prebuild rasterizable row bands]
-    F --> G[FlushScene]
+    A[Prepared commands] --> B[Filter and compact visible work]
+    B --> C[Create retained raster geometry]
+    C --> D[Build row membership]
+    D --> E[Build row-local execution items]
+    E --> F[FlushScene]
 ```
 
-### 1. Prepare And Clip Commands
+### 1. Filter and compact visible work
 
-The scene builder begins by asking `CompositionCommandPreparer` to normalize commands for CPU execution.
+The scene builder begins from the incoming command stream and keeps only the work that is visible and relevant to the flush. The later phases should not pay repeatedly for invisible commands through sparse scans or conditional branching.
 
-That phase:
+### 2. Create retained raster geometry
 
-- rejects invisible work
-- computes clipped destination regions
-- exposes prepared geometry and rasterizer options
+For each visible item, the builder asks `DefaultRasterizer` to create retained rasterizable geometry. This is where prepared shape data becomes the retained line and coverage-seed data that later row execution can consume cheaply.
 
-This stage is data preparation. It is not yet rasterization.
+This step matters because it moves expensive geometry preparation out of the hot row loop.
 
-### 2. Compact Visible Items
+### 3. Build row membership
 
-Preparation initially writes into temporary arrays indexed by original command position. The builder then compacts only visible work into dense flush-local arrays.
+Once retained geometry exists, the scene builder determines which scene rows each item touches. That produces row-local membership information while preserving original submission order within every row.
 
-This matters because the rest of the pipeline should not repeatedly pay for invisible commands through sparse scans or conditional branches.
+That detail is critical. Parallel execution is allowed, but draw order must remain deterministic within each row.
 
-### 3. Create Retained Geometry
+### 4. Build row-local execution items
 
-For each visible item, the builder asks `DefaultRasterizer` to create retained rasterizable geometry.
+The scene then materializes the payload that the row executor will visit. Each row item points into flush-owned retained storage and carries just enough metadata to reconstruct a cheap `RasterizableBand` view when execution reaches that row.
 
-This is where arbitrary prepared shape data becomes:
+At that point the scene is execution-ready.
 
-- retained per-band line storage
-- retained start-cover seeds
-- compact geometry metadata that can be executed later without revisiting the original contour data
+## Why The Backend Is Row-First
 
-This step is one of the major reasons the current backend performs well on larger retained-fill workloads.
+The CPU backend executes rows, not commands.
 
-### 4. Build Row Membership
+This is one of the most important architectural choices in the whole path.
 
-Once retained geometry exists, the scene builder determines which scene rows each item touches. That produces row-local membership information while preserving original submission order inside every row.
-
-That detail is critical. Parallel execution is allowed, but draw order still must remain deterministic within each row.
-
-### 5. Prebuild Rasterizable Bands
-
-The scene then materializes the row-local execution payload. Each row item points into flush-owned retained storage and can later produce a cheap `RasterizableBand` view on demand.
-
-At this point the scene is execution-ready.
-
-## Row-First Execution
-
-The backend executes rows, not commands.
-
-This is one of the most important architectural choices in the CPU path. Brushes, destination slices, and scan-conversion scratch are all easier to manage when execution moves row-by-row through the destination.
-
-```mermaid
-flowchart TD
-    A[Scene row] --> B[Enumerate row items in draw order]
-    B --> C[Build RasterizableBand view]
-    C --> D[Execute raster band]
-    D --> E[Emit coverage row]
-    E --> F[Apply brush to destination slice]
-```
-
-Why this helps:
+Why it helps:
 
 - each worker naturally touches localized destination memory
-- raster scratch can be reused for many row items
+- scratch can be reused across many row items
 - draw order is straightforward inside a row
-- the rasterizer can stay geometry-focused while the executor handles destination layout
+- geometry planning stays out of the hottest loop
 
-## Scene Rows And Row Items
-
-Each scene row represents one vertical band of destination work.
-
-Inside a row, work is stored as a sequence of row items. Each row item is intentionally small. It does not own large arrays. Instead it points into flush-owned retained storage and carries just enough metadata to reconstruct a `RasterizableBand`.
-
-A row item answers questions like:
-
-- which retained geometry does this band belong to
-- where do its retained lines begin
-- where do its start-cover seeds begin
-- what destination region does this band map to
-
-This keeps the execution path cache-friendly and avoids per-item allocation churn.
+A row-first executor fits the actual shape of CPU rendering much better than a command-first executor would.
 
 ## The Execution Pass
 
-When `FlushScene.Execute(...)` runs, the backend prepares command-scoped brush renderers and then executes rows in parallel.
-
-The high-level execution flow looks like this:
+When `FlushScene.Execute(...)` runs, the backend prepares brush renderers and then executes scene rows in parallel.
 
 ```mermaid
 sequenceDiagram
@@ -225,117 +229,68 @@ sequenceDiagram
 
     Exec->>Brush: create one renderer per visible item
     Exec->>Worker: start parallel row pass
-    Worker->>Exec: enumerate row items
+    Worker->>Exec: enumerate row items in order
     Worker->>Raster: ExecuteRasterizableBand(...)
     Raster-->>Exec: coverage rows
     Exec->>Brush: Apply(...)
 ```
 
-There are two important ownership patterns here:
+There are two important ownership patterns in that pass:
 
-- renderers are created once per visible item before the row pass begins
-- raster scratch and brush workspace are reused per worker during the row pass
+- renderers are created once per visible item before the hot row loop
+- scratch and workspace are reused per worker during the row loop
 
-That keeps setup work out of the hottest inner loop.
+That is one of the backend's main performance properties.
 
-## `WorkerState<TPixel>` And Scratch Reuse
+## How Rasterization and Shading Stay Separate
 
-`WorkerState<TPixel>` bundles the reusable worker-local state needed during execution.
+The rasterizer and the backend solve different problems.
 
-It owns:
-
-- raster `WorkerScratch`
-- `BrushWorkspace<TPixel>`
-- the coverage row handler state used to route emitted coverage into the current destination row
-
-This state is reused as a worker moves through scene rows. The backend therefore avoids allocating fresh scan-conversion buffers or brush workspace for every row item.
-
-```mermaid
-flowchart LR
-    A[WorkerState] --> B[WorkerScratch]
-    A --> C[BrushWorkspace]
-    A --> D[Coverage row handler]
-    B --> E[Context]
-    E --> F[Coverage rows]
-    F --> D
-    D --> G[BrushRenderer.Apply]
-```
-
-The reuse model is one of the backend's most important performance properties.
-
-## How The Rasterizer And Backend Stay Separate
-
-The backend and the rasterizer solve different problems.
-
-`DefaultRasterizer` is responsible for:
-
-- fixed-point scan conversion
-- coverage accumulation
-- fill-rule handling
-- emitting row coverage spans
+`DefaultRasterizer` is responsible for geometry and coverage.
 
 `DefaultDrawingBackend` and `FlushScene` are responsible for:
 
-- which bands should execute
-- how those bands map to destination rows
-- which brush renderer should consume emitted coverage
+- which items execute
+- when they execute
+- where their coverage belongs in the destination
+- which brush renderer should consume that coverage
 
-That separation lets the same rasterizer stay focused on geometry while the backend deals with composition and target memory layout.
+That separation is intentional. It lets the rasterizer stay geometry-focused while the backend handles composition and destination layout.
 
 ## Coverage Routing
 
-The rasterizer does not write destination pixels directly. Instead it calls a row handler supplied by the backend.
+The rasterizer does not write destination pixels directly. Instead it emits row coverage through a handler supplied by the backend.
 
 The backend-side row handler:
 
-- receives emitted row coverage
-- converts band-local X coordinates back into destination coordinates
+- receives emitted coverage
+- maps band-local coordinates back into destination coordinates
 - slices the correct destination row
 - invokes the correct `BrushRenderer<TPixel>`
 
 ```mermaid
 flowchart LR
-    A[Rasterizer coverage row] --> B[ItemRowOperation]
-    B --> C[Map local X/Y to destination row slice]
+    A[Rasterizer coverage row] --> B[Row handler]
+    B --> C[Map to destination slice]
     C --> D[BrushRenderer.Apply]
     D --> E[Pixels updated]
 ```
 
-This is why the brush renderer can stay target-unbound. It receives the destination row slice and coverage row at the moment of execution rather than owning a destination frame itself.
+This is why the brush renderer can stay target-unbound. It receives the destination row slice and coverage data at execution time rather than owning the destination frame itself.
 
-## Brush Renderers
+## Layer Composition
 
-A `BrushRenderer<TPixel>` represents the color-generation side of one visible drawing command.
+CPU layer composition is a separate concern from path rasterization.
 
-It does not own row execution, and it does not discover geometry. It is created once for a command and then reused every time the executor needs to shade a coverage row belonging to that command.
+`ComposeLayer<TPixel>()` composites one CPU frame into another using `PixelBlender<TPixel>`. That path exists because compositing an already-rasterized layer is a different problem from scanning geometry into coverage.
 
-That means the renderer acts like a row shader:
+Keeping those paths separate makes the backend easier to reason about.
 
-- input: destination row slice, coverage values, destination position, reusable workspace
-- output: updated destination pixels
+## Frame And Memory Lifetime
 
-This makes the division of labor very clear:
+The backend aligns ownership with the actual execution lifetime.
 
-- rasterizer decides coverage
-- brush renderer decides color
-- executor binds the two together
-
-## Layer Composition Is Separate
-
-`ComposeLayer<TPixel>()` is part of `DefaultDrawingBackend`, but it is not part of the polygon scanning path. It composites one CPU frame into another using `PixelBlender<TPixel>`.
-
-That work is intentionally separate from path rasterization because it solves a different problem:
-
-- shape fills and strokes produce coverage from geometry
-- layer composition blends one finished frame into another
-
-Keeping those paths separate makes the fill backend easier to reason about.
-
-## Frame And Resource Lifetime
-
-The backend aligns ownership with real execution lifetime.
-
-### Flush-Owned
+### Flush-owned
 
 Owned by `FlushScene`:
 
@@ -346,7 +301,7 @@ Owned by `FlushScene`:
 
 Disposed when the flush ends.
 
-### Worker-Owned
+### Worker-owned
 
 Owned by `WorkerState<TPixel>` during execution:
 
@@ -355,17 +310,17 @@ Owned by `WorkerState<TPixel>` during execution:
 
 Disposed when the worker completes.
 
-### Item-Owned
+### Item-owned
 
 Created once per visible item during execution:
 
 - `BrushRenderer<TPixel>`
 
-Disposed after the row pass completes.
+Retained for the duration of the row pass and then released with the flush-owned scene item state.
 
-That ownership model is important because it keeps allocation and disposal aligned with the actual work lifetime.
+That ownership model keeps allocation and disposal aligned with real work lifetime.
 
-## How To Read The Code
+## Reading Guide
 
 If you are new to this backend, read the code in this order:
 
@@ -377,11 +332,7 @@ If you are new to this backend, read the code in this order:
 
 That order mirrors the runtime flow:
 
-- backend orchestration
-- flush-scoped planning
-- row-local retained structures
-- worker execution state
-- scan conversion
+backend orchestration -> flush planning -> row execution structures -> worker helpers -> scan conversion
 
 ## The Mental Model To Keep
 
@@ -393,5 +344,3 @@ If that model is clear, the major types fall into place:
 - `FlushScene` plans
 - `DefaultRasterizer` converts geometry to coverage
 - `BrushRenderer<TPixel>` converts coverage to color
-
-That is the architecture the current CPU path is built around.
