@@ -14,5 +14,7 @@
 
   <ItemGroup>
     <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" />
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
+    <PackageReference Include="SkiaSharp.Views.WindowsForms" Version="3.119.2" />
   </ItemGroup>
 </Project>
