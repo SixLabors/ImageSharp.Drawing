@@ -18,15 +18,15 @@ public class Issue_323
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = Color.RebeccaPurple;
+        PointF[] points =
+        [
+            new(5, 5),
+            new(5, 150),
+            new(190, 150),
+        ];
+
         provider.RunValidatingProcessorTest(
-            x => x.DrawPolygon(
-                color,
-                scale,
-                [
-                    new(5, 5),
-                    new(5, 150),
-                    new(190, 150),
-                ]),
+            x => x.ProcessWithCanvas(canvas => canvas.Draw(Pens.Solid(color, scale), new Polygon(points))),
             new { scale });
     }
 
@@ -40,15 +40,16 @@ public class Issue_323
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Color color = Color.RebeccaPurple;
+        PointF[] points =
+        [
+            new(5, 5),
+            new(5, 150),
+            new(190, 150),
+        ];
+
         PatternPen pen = Pens.DashDot(color, scale);
         provider.RunValidatingProcessorTest(
-                    x => x.DrawPolygon(
-                      pen,
-                      [
-                          new(5, 5),
-                          new(5, 150),
-                          new(190, 150),
-                      ]),
-                    new { scale });
+            x => x.ProcessWithCanvas(canvas => canvas.Draw(pen, new Polygon(points))),
+            new { scale });
     }
 }

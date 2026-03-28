@@ -6,7 +6,8 @@ using System.Numerics;
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
 /// <summary>
-/// Options for influencing the drawing functions.
+/// Provides options for influencing drawing operations, combining graphics rendering settings,
+/// shape fill-rule behavior, and an optional coordinate transform.
 /// </summary>
 public class DrawingOptions
 {
@@ -20,13 +21,13 @@ public class DrawingOptions
     {
         this.graphicsOptions = new GraphicsOptions();
         this.shapeOptions = new ShapeOptions();
-        this.Transform = Matrix3x2.Identity;
+        this.Transform = Matrix4x4.Identity;
     }
 
     internal DrawingOptions(
         GraphicsOptions graphicsOptions,
         ShapeOptions shapeOptions,
-        Matrix3x2 transform)
+        Matrix4x4 transform)
     {
         DebugGuard.NotNull(graphicsOptions, nameof(graphicsOptions));
         DebugGuard.NotNull(shapeOptions, nameof(shapeOptions));
@@ -37,7 +38,8 @@ public class DrawingOptions
     }
 
     /// <summary>
-    /// Gets or sets the Graphics Options.
+    /// Gets or sets the graphics rendering options that control antialiasing, blending, alpha composition,
+    /// and coverage thresholding for the drawing operation.
     /// </summary>
     public GraphicsOptions GraphicsOptions
     {
@@ -50,7 +52,7 @@ public class DrawingOptions
     }
 
     /// <summary>
-    /// Gets or sets the Shape Options.
+    /// Gets or sets the shape options that control fill-rule intersection mode and boolean clipping behavior.
     /// </summary>
     public ShapeOptions ShapeOptions
     {
@@ -63,7 +65,9 @@ public class DrawingOptions
     }
 
     /// <summary>
-    /// Gets or sets the Transform to apply during rasterization.
+    /// Gets or sets the affine transform matrix applied to vector geometry before rasterization.
+    /// Can be used to translate, rotate, scale, or skew shapes.
+    /// Defaults to <see cref="Matrix4x4.Identity"/>.
     /// </summary>
-    public Matrix3x2 Transform { get; set; }
+    public Matrix4x4 Transform { get; set; }
 }

@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -40,14 +40,15 @@ public sealed class RecolorBrush : Brush
     public Color TargetColor { get; }
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
-        RectangleF region) => new RecolorBrushApplicator<TPixel>(
+        int canvasWidth,
+        RectangleF region)
+        => new RecolorBrushRenderer<TPixel>(
             configuration,
             options,
-            source,
+            canvasWidth,
             this.SourceColor.ToPixel<TPixel>(),
             this.TargetColor.ToPixel<TPixel>(),
             this.Threshold);
@@ -73,32 +74,30 @@ public sealed class RecolorBrush : Brush
     /// The recolor brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private class RecolorBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    private sealed class RecolorBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly Vector4 sourceColor;
         private readonly float threshold;
         private readonly TPixel targetColorPixel;
-        private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
-        private bool isDisposed;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="RecolorBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="RecolorBrushRenderer{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The options</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="sourceColor">Color of the source.</param>
         /// <param name="targetColor">Color of the target.</param>
         /// <param name="threshold">The threshold .</param>
-        public RecolorBrushApplicator(
+        public RecolorBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            int canvasWidth,
             TPixel sourceColor,
             TPixel targetColor,
             float threshold)
-            : base(configuration, options, source)
+            : base(configuration, options, canvasWidth)
         {
             this.sourceColor = sourceColor.ToScaledVector4();
             this.targetColorPixel = targetColor;
@@ -108,79 +107,36 @@ public sealed class RecolorBrush : Brush
             TPixel maxColor = TPixel.FromVector4(new Vector4(float.MaxValue));
             TPixel minColor = TPixel.FromVector4(new Vector4(float.MinValue));
             this.threshold = Vector4.DistanceSquared(maxColor.ToVector4(), minColor.ToVector4()) * threshold;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
-        }
-
-        internal TPixel this[int x, int y]
-        {
-            get
-            {
-                // Offset the requested pixel by the value in the rectangle (the shapes position)
-                TPixel result = this.Target[x, y];
-                Vector4 background = result.ToVector4();
-                float distance = Vector4.DistanceSquared(background, this.sourceColor);
-                if (distance <= this.threshold)
-                {
-                    float lerpAmount = (this.threshold - distance) / this.threshold;
-                    return this.Blender.Blend(
-                        result,
-                        this.targetColorPixel,
-                        lerpAmount);
-                }
-
-                return result;
-            }
         }
 
         /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
-            if (x < 0 || y < 0 || x >= this.Target.Width || y >= this.Target.Height)
-            {
-                return;
-            }
-
-            // Limit the scanline to the bounds of the image relative to x.
-            scanline = scanline[..Math.Min(this.Target.Width - x, scanline.Length)];
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+            Span<float> amounts = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
 
             for (int i = 0; i < scanline.Length; i++)
             {
                 amounts[i] = scanline[i] * this.Options.BlendPercentage;
-
-                int offsetX = x + i;
-
-                // No doubt this one can be optimized further but I can't imagine its
-                // actually being used and can probably be removed/internalized for now
-                overlays[i] = this[offsetX, y];
+                TPixel result = destinationRow[i];
+                Vector4 background = result.ToVector4();
+                float distance = Vector4.DistanceSquared(background, this.sourceColor);
+                overlays[i] = distance <= this.threshold
+                    ? this.Blender.Blend(result, this.targetColorPixel, (this.threshold - distance) / this.threshold)
+                    : result;
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
             this.Blender.Blend(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlays,
                 amounts);
-        }
-
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                this.blenderBuffers.Dispose();
-            }
-
-            this.isDisposed = true;
         }
     }
 }

@@ -1,0 +1,11 @@
+{
+  "solution": {
+    "path": "ImageSharp.Drawing.sln",
+    "projects": [
+      "src\\ImageSharp.Drawing.WebGPU.ShaderGen\\ImageSharp.Drawing.WebGPU.ShaderGen.csproj",
+      "src\\ImageSharp.Drawing.WebGPU\\ImageSharp.Drawing.WebGPU.csproj",
+      "src\\ImageSharp.Drawing\\ImageSharp.Drawing.csproj",
+      "tests\\ImageSharp.Drawing.Tests\\ImageSharp.Drawing.Tests.csproj"
+    ]
+  }
+}

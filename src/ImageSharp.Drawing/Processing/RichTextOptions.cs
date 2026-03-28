@@ -25,7 +25,25 @@ public class RichTextOptions : TextOptions
     /// <param name="options">The options whose properties are copied into this instance.</param>
     public RichTextOptions(RichTextOptions options)
         : base(options)
-        => this.Path = options.Path;
+    {
+        this.Path = options.Path;
+        List<RichTextRun> runs = new(options.TextRuns.Count);
+        foreach (RichTextRun run in options.TextRuns)
+        {
+            runs.Add(new RichTextRun()
+            {
+                Brush = run.Brush,
+                Pen = run.Pen,
+                StrikeoutPen = run.StrikeoutPen,
+                UnderlinePen = run.UnderlinePen,
+                OverlinePen = run.OverlinePen,
+                Start = run.Start,
+                End = run.End
+            });
+        }
+
+        this.TextRuns = runs;
+    }
 
     /// <summary>
     /// Gets or sets an optional collection of text runs to apply to the body of text.

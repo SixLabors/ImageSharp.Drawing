@@ -10,7 +10,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing;
 /// </summary>
 public static class DrawingOptionsDefaultsExtensions
 {
-    private const string DrawingTransformMatrixKey = "DrawingTransformMatrix3x2";
+    private const string DrawingTransformMatrixKey = "DrawingTransformMatrix4x4";
 
     /// <summary>
     /// Gets the default shape processing options against The source image processing context.
@@ -26,7 +26,7 @@ public static class DrawingOptionsDefaultsExtensions
     /// <param name="context">The image processing context to store default against.</param>
     /// <param name="matrix">The matrix to use.</param>
     /// <returns>The passed in <paramref name="context"/> to allow chaining.</returns>
-    public static IImageProcessingContext SetDrawingTransform(this IImageProcessingContext context, Matrix3x2 matrix)
+    public static IImageProcessingContext SetDrawingTransform(this IImageProcessingContext context, Matrix4x4 matrix)
     {
         context.Properties[DrawingTransformMatrixKey] = matrix;
         return context;
@@ -37,7 +37,7 @@ public static class DrawingOptionsDefaultsExtensions
     /// </summary>
     /// <param name="configuration">The configuration to store default against.</param>
     /// <param name="matrix">The default matrix to use.</param>
-    public static void SetDrawingTransform(this Configuration configuration, Matrix3x2 matrix)
+    public static void SetDrawingTransform(this Configuration configuration, Matrix4x4 matrix)
         => configuration.Properties[DrawingTransformMatrixKey] = matrix;
 
     /// <summary>
@@ -45,9 +45,9 @@ public static class DrawingOptionsDefaultsExtensions
     /// </summary>
     /// <param name="context">The image processing context to retrieve defaults from.</param>
     /// <returns>The matrix.</returns>
-    public static Matrix3x2 GetDrawingTransform(this IImageProcessingContext context)
+    public static Matrix4x4 GetDrawingTransform(this IImageProcessingContext context)
     {
-        if (context.Properties.TryGetValue(DrawingTransformMatrixKey, out object? options) && options is Matrix3x2 go)
+        if (context.Properties.TryGetValue(DrawingTransformMatrixKey, out object? options) && options is Matrix4x4 go)
         {
             return go;
         }
@@ -62,13 +62,28 @@ public static class DrawingOptionsDefaultsExtensions
     /// </summary>
     /// <param name="configuration">The configuration to retrieve defaults from.</param>
     /// <returns>The globally configured default matrix.</returns>
-    public static Matrix3x2 GetDrawingTransform(this Configuration configuration)
+    public static Matrix4x4 GetDrawingTransform(this Configuration configuration)
     {
-        if (configuration.Properties.TryGetValue(DrawingTransformMatrixKey, out object? options) && options is Matrix3x2 go)
+        if (configuration.Properties.TryGetValue(DrawingTransformMatrixKey, out object? options) && options is Matrix4x4 go)
         {
             return go;
         }
 
-        return Matrix3x2.Identity;
+        return Matrix4x4.Identity;
+    }
+
+    /// <summary>
+    /// Clones the path graphic options and applies changes required to force clearing.
+    /// </summary>
+    /// <param name="drawingOptions">The drawing options to clone</param>
+    /// <returns>A clone of shapeOptions with ColorBlendingMode, AlphaCompositionMode, and BlendPercentage set</returns>
+    public static DrawingOptions CloneForClearOperation(this DrawingOptions drawingOptions)
+    {
+        GraphicsOptions options = drawingOptions.GraphicsOptions.DeepClone();
+        options.ColorBlendingMode = PixelColorBlendingMode.Normal;
+        options.AlphaCompositionMode = PixelAlphaCompositionMode.Src;
+        options.BlendPercentage = 1F;
+
+        return new DrawingOptions(options, drawingOptions.ShapeOptions, drawingOptions.Transform);
     }
 }

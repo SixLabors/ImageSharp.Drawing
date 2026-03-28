@@ -3,9 +3,11 @@ param(
   [string]$targetFramework
 )
 
-dotnet clean -c Release
+$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.CI.slnf"
+
+dotnet clean $solution -c Release
 
 $repositoryUrl = "https://github.com/$env:GITHUB_REPOSITORY"
 
 # Building for a specific framework.
-dotnet build -c Release -f $targetFramework /p:RepositoryUrl=$repositoryUrl
+dotnet build $solution -c Release -f $targetFramework /p:RepositoryUrl=$repositoryUrl

@@ -31,6 +31,6 @@ public class FillPathGradientBrush
 
         PathGradientBrush brush = new(points, colors, Color.White);
 
-        this.image.Mutate(x => x.Fill(brush));
+        this.image.Mutate(x => x.ProcessWithCanvas(canvas => canvas.Fill(brush)));
     }
 }

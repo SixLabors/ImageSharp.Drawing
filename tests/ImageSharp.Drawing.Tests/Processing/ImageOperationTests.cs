@@ -108,7 +108,11 @@ public class ImageOperationTests : IDisposable
         Assert.Contains(this.processorDefinition, operations.Applied.Select(x => x.NonGenericProcessor));
     }
 
-    public void Dispose() => this.image.Dispose();
+    public void Dispose()
+    {
+        this.image.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     [Fact]
     public void GenericMutate_WhenDisposed_Throws()

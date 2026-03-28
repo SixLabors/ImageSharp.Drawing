@@ -2,8 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
-using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -18,18 +16,25 @@ public abstract class GradientBrush : Brush
     protected GradientBrush(GradientRepetitionMode repetitionMode, params ColorStop[] colorStops)
     {
         this.RepetitionMode = repetitionMode;
-        this.ColorStops = colorStops;
+
+        InsertionSort(colorStops, (a, b) => a.Ratio.CompareTo(b.Ratio));
+        this.ColorStopsArray = colorStops;
     }
 
     /// <summary>
     /// Gets how the colors are repeated beyond the interval [0..1].
     /// </summary>
-    protected GradientRepetitionMode RepetitionMode { get; }
+    public GradientRepetitionMode RepetitionMode { get; }
 
     /// <summary>
-    /// Gets the list of color stops for this gradient.
+    /// Gets the color stops for this gradient.
     /// </summary>
-    protected ColorStop[] ColorStops { get; }
+    public ReadOnlySpan<ColorStop> ColorStops => this.ColorStopsArray;
+
+    /// <summary>
+    /// Gets the color stops array for use by derived applicators.
+    /// </summary>
+    protected ColorStop[] ColorStopsArray { get; }
 
     /// <inheritdoc />
     public override bool Equals(Brush? other)
@@ -37,7 +42,7 @@ public abstract class GradientBrush : Brush
         if (other is GradientBrush brush)
         {
             return this.RepetitionMode == brush.RepetitionMode
-                && this.ColorStops?.SequenceEqual(brush.ColorStops) == true;
+                && this.ColorStopsArray?.SequenceEqual(brush.ColorStopsArray) == true;
         }
 
         return false;
@@ -45,13 +50,35 @@ public abstract class GradientBrush : Brush
 
     /// <inheritdoc/>
     public override int GetHashCode()
-        => HashCode.Combine(this.RepetitionMode, this.ColorStops);
+        => HashCode.Combine(this.RepetitionMode, this.ColorStopsArray);
+
+    /// <summary>
+    /// Sorts the collection in place using a stable insertion sort.
+    /// <see cref="Array.Sort{T}(T[], Comparison{T})"/> is not stable and can reorder
+    /// equal-ratio color stops, producing non-deterministic gradient results.
+    /// </summary>
+    private static void InsertionSort<T>(T[] collection, Comparison<T> comparison)
+    {
+        int count = collection.Length;
+        for (int j = 1; j < count; j++)
+        {
+            T key = collection[j];
+
+            int i = j - 1;
+            for (; i >= 0 && comparison(collection[i], key) > 0; i--)
+            {
+                collection[i + 1] = collection[i];
+            }
+
+            collection[i + 1] = key;
+        }
+    }
 
     /// <summary>
     /// Base class for gradient brush applicators
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    internal abstract class GradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    internal abstract class GradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private static readonly TPixel Transparent = Color.Transparent.ToPixel<TPixel>();
@@ -60,45 +87,38 @@ public abstract class GradientBrush : Brush
 
         private readonly GradientRepetitionMode repetitionMode;
 
-        private readonly MemoryAllocator allocator;
-
-        private readonly int scanlineWidth;
-
-        private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
-
-        private bool isDisposed;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="GradientBrushApplicator{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="GradientBrushRenderer{TPixel}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="target">The target image.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="colorStops">An array of color stops sorted by their position.</param>
         /// <param name="repetitionMode">Defines if and how the gradient should be repeated.</param>
-        protected GradientBrushApplicator(
+        protected GradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> target,
+            int canvasWidth,
             ColorStop[] colorStops,
             GradientRepetitionMode repetitionMode)
-            : base(configuration, options, target)
+            : base(configuration, options, canvasWidth)
         {
             this.colorStops = colorStops;
-
-            // Ensure the color-stop order is correct.
-            InsertionSort(this.colorStops, (x, y) => x.Ratio.CompareTo(y.Ratio));
             this.repetitionMode = repetitionMode;
-            this.scanlineWidth = target.Width;
-            this.allocator = configuration.MemoryAllocator;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(this.allocator, this.scanlineWidth);
         }
 
         internal TPixel this[int x, int y]
         {
             get
             {
-                float positionOnCompleteGradient = this.PositionOnGradient(x + 0.5f, y + 0.5f);
+                float fx = x + 0.5f;
+                float fy = y + 0.5f;
+
+                float positionOnCompleteGradient = this.PositionOnGradient(fx, fy);
+                if (float.IsNaN(positionOnCompleteGradient))
+                {
+                    return Transparent;
+                }
 
                 switch (this.repetitionMode)
                 {
@@ -146,10 +166,15 @@ public abstract class GradientBrush : Brush
         }
 
         /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+            Span<float> amounts = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
             float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
@@ -170,7 +195,6 @@ public abstract class GradientBrush : Brush
                 }
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
             this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
         }
 
@@ -187,24 +211,6 @@ public abstract class GradientBrush : Brush
         /// e.g. for the <see cref="GradientRepetitionMode" /> enum.
         /// </returns>
         protected abstract float PositionOnGradient(float x, float y);
-
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                this.blenderBuffers.Dispose();
-            }
-
-            this.isDisposed = true;
-        }
 
         private (ColorStop From, ColorStop To) GetGradientSegment(float positionOnCompleteGradient)
         {
@@ -226,30 +232,6 @@ public abstract class GradientBrush : Brush
             }
 
             return (localGradientFrom, localGradientTo);
-        }
-
-        /// <summary>
-        /// Provides a stable sorting algorithm for the given array.
-        /// <see cref="Array.Sort(Array, System.Collections.IComparer?)"/> is not stable.
-        /// </summary>
-        /// <typeparam name="T">The type of element to sort.</typeparam>
-        /// <param name="collection">The array to sort.</param>
-        /// <param name="comparison">The comparison delegate.</param>
-        private static void InsertionSort<T>(T[] collection, Comparison<T> comparison)
-        {
-            int count = collection.Length;
-            for (int j = 1; j < count; j++)
-            {
-                T key = collection[j];
-
-                int i = j - 1;
-                for (; i >= 0 && comparison(collection[i], key) > 0; i--)
-                {
-                    collection[i + 1] = collection[i];
-                }
-
-                collection[i + 1] = key;
-            }
         }
     }
 }

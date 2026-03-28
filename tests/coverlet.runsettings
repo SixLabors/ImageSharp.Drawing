@@ -6,10 +6,11 @@
                 <Configuration>
                     <Format>lcov</Format>
                     <Include>[SixLabors.*]*</Include>
-                    <Exclude>
-                       <!-- Exclude everthing inside the namesapce "Clipper2Lib" --> 
-                       <Function>^Clipper2Lib\..*</Function> 
-                    </Exclude>  
+                    <!--
+                     Temp: Exclude everything inside the namespace "SixLabors.ImageSharp.Drawing.WebGPU"
+                     while we figure out how to stabalize in the CI.
+                      --> 
+                    <Exclude>[SixLabors.ImageSharp.Drawing.WebGPU*]*</Exclude>
                     <UseSourceLink>true</UseSourceLink>
                 </Configuration>
             </DataCollector>

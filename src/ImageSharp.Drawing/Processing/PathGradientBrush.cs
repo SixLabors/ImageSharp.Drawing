@@ -2,7 +2,8 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Drawing.Helpers;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -85,15 +86,15 @@ public sealed class PathGradientBrush : Brush
         => HashCode.Combine(this.edges, this.centerColor, this.hasSpecialCenterColor);
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
+        int canvasWidth,
         RectangleF region)
-        => new PathGradientBrushApplicator<TPixel>(
+        => new PathGradientBrushRenderer<TPixel>(
             configuration,
             options,
-            source,
+            canvasWidth,
             this.edges,
             this.centerColor,
             this.hasSpecialCenterColor);
@@ -156,7 +157,7 @@ public sealed class PathGradientBrush : Brush
             Vector2 start,
             Vector2 end,
             ref Vector2 ip) =>
-            Utilities.Intersect.LineSegmentToLineSegmentIgnoreCollinear(start, end, this.Start, this.End, ref ip);
+            PolygonUtilities.LineSegmentToLineSegmentIgnoreCollinear(start, end, this.Start, this.End, ref ip);
 
         public Vector4 ColorAt(float distance)
         {
@@ -184,7 +185,7 @@ public sealed class PathGradientBrush : Brush
     /// The path gradient brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class PathGradientBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    private sealed class PathGradientBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly Vector2 center;
@@ -201,27 +202,23 @@ public sealed class PathGradientBrush : Brush
 
         private readonly TPixel transparentPixel;
 
-        private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
-
-        private bool isDisposed;
-
         /// <summary>
-        /// Initializes a new instance of the <see cref="PathGradientBrushApplicator{TPixel}"/> class.
+        /// Initializes a new instance of the <see cref="PathGradientBrushRenderer{TPixel}"/> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="edges">Edges of the polygon.</param>
         /// <param name="centerColor">Color at the center of the gradient area to which the other colors converge.</param>
         /// <param name="hasSpecialCenterColor">Whether the center color is different from a smooth gradient between the edges.</param>
-        public PathGradientBrushApplicator(
+        public PathGradientBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            int canvasWidth,
             IList<Edge> edges,
             Color centerColor,
             bool hasSpecialCenterColor)
-            : base(configuration, options, source)
+            : base(configuration, options, canvasWidth)
         {
             this.edges = edges;
             Vector2[] points = [.. edges.Select(s => s.Start)];
@@ -232,14 +229,14 @@ public sealed class PathGradientBrush : Brush
             this.centerPixel = centerColor.ToPixel<TPixel>();
             this.maxDistance = points.Select(p => p - this.center).Max(d => d.Length());
             this.transparentPixel = Color.Transparent.ToPixel<TPixel>();
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
         }
 
         internal TPixel this[int x, int y]
         {
             get
             {
-                Vector2 point = new(x, y);
+                // Match other gradient brushes by evaluating at pixel centers.
+                Vector2 point = new(x + 0.5F, y + 0.5F);
 
                 if (point == this.center)
                 {
@@ -289,10 +286,15 @@ public sealed class PathGradientBrush : Brush
         }
 
         /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+            Span<float> amounts = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
             float blendPercentage = this.Options.BlendPercentage;
 
             // TODO: Remove bounds checks.
@@ -313,26 +315,7 @@ public sealed class PathGradientBrush : Brush
                 }
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
             this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
-        }
-
-        /// <inheritdoc />
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                this.blenderBuffers.Dispose();
-            }
-
-            this.isDisposed = true;
         }
 
         private (Edge Edge, Vector2 Point)? FindIntersection(
@@ -342,7 +325,7 @@ public sealed class PathGradientBrush : Brush
             Vector2 ip = default;
             Vector2 closestIntersection = default;
             Edge? closestEdge = null;
-            const float minDistance = float.MaxValue;
+            float minDistance = float.MaxValue;
             foreach (Edge edge in this.edges)
             {
                 if (!edge.Intersect(start, end, ref ip))
@@ -350,9 +333,10 @@ public sealed class PathGradientBrush : Brush
                     continue;
                 }
 
-                float d = Vector2.DistanceSquared(start, end);
+                float d = Vector2.DistanceSquared(start, ip);
                 if (d < minDistance)
                 {
+                    minDistance = d;
                     closestEdge = edge;
                     closestIntersection = ip;
                 }

@@ -12,12 +12,13 @@ param(
 )
 
 $netFxRegex = '^net\d+'
+$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.CI.slnf"
 
 if ($codecov -eq 'true') {
 
   # Allow toggling of profile to workaround any potential JIT errors caused by code injection.
-  dotnet clean -c $codecovProfile
-  dotnet test --collect "XPlat Code Coverage" --settings .\tests\coverlet.runsettings -c $codecovProfile -f $targetFramework /p:CodeCov=true
+  dotnet clean $solution -c $codecovProfile
+  dotnet test $solution --collect "XPlat Code Coverage" --settings .\tests\coverlet.runsettings -c $codecovProfile -f $targetFramework /p:CodeCov=true
 }
 elseif ($platform -eq '-x86' -and $targetFramework -match $netFxRegex) {
 
@@ -33,5 +34,5 @@ elseif ($platform -eq '-x86' -and $targetFramework -match $netFxRegex) {
 }
 else {
 
-  dotnet test --no-build -c Release -f $targetFramework
+  dotnet test $solution --no-build -c Release -f $targetFramework
 }
