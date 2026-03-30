@@ -60,6 +60,33 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
+    /// References one retained stroke row inside a prepared scene item.
+    /// </summary>
+    internal readonly struct StrokeRasterizableItem
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StrokeRasterizableItem"/> struct.
+        /// </summary>
+        /// <param name="rasterizable">The retained stroke rasterizable geometry.</param>
+        /// <param name="localRowIndex">The local row index within <paramref name="rasterizable"/>.</param>
+        public StrokeRasterizableItem(StrokeRasterizableGeometry rasterizable, int localRowIndex)
+        {
+            this.Rasterizable = rasterizable;
+            this.LocalRowIndex = localRowIndex;
+        }
+
+        /// <summary>
+        /// Gets the retained stroke rasterizable geometry.
+        /// </summary>
+        public StrokeRasterizableGeometry Rasterizable { get; }
+
+        /// <summary>
+        /// Gets the local row index within <see cref="Rasterizable"/>.
+        /// </summary>
+        public int LocalRowIndex { get; }
+    }
+
+    /// <summary>
     /// Metadata that describes one prepared rasterizable band.
     /// </summary>
     internal readonly struct RasterizableBandInfo

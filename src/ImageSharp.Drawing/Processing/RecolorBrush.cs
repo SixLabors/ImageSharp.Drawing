@@ -136,7 +136,8 @@ public sealed class RecolorBrush : Brush
                 destinationRow,
                 destinationRow,
                 overlays,
-                amounts);
+                amounts,
+                workspace.GetBlendScratch(scanline.Length, 3));
         }
     }
 }

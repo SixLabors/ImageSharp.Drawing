@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Runtime.CompilerServices;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -31,14 +32,14 @@ public class DrawingCanvasBatcherTests
         canvas.Flush();
 
         Assert.True(backend.HasDefinition);
-        Assert.NotNull(backend.LastDefinition.Definition.PreparedPath);
+        Assert.NotNull(backend.LastDefinition.SourcePath);
         Assert.Equal(2, backend.LastDefinition.Commands.Count);
         Assert.Same(brushA, backend.LastDefinition.Commands[0].Brush);
         Assert.Same(brushB, backend.LastDefinition.Commands[1].Brush);
     }
 
     [Fact]
-    public void Flush_SamePathDifferentBrushes_ReusesPreparedPath()
+    public void Flush_SamePathDifferentBrushes_ReusesSourcePath()
     {
         Configuration configuration = new();
         CapturingBackend backend = new();
@@ -55,8 +56,8 @@ public class DrawingCanvasBatcherTests
         canvas.Flush();
 
         Assert.Equal(2, backend.PreparedCommands.Count);
-        Assert.NotNull(backend.PreparedCommands[0].PreparedPath);
-        Assert.Same(backend.PreparedCommands[0].PreparedPath, backend.PreparedCommands[1].PreparedPath);
+        Assert.NotNull(backend.PreparedCommands[0].SourcePath);
+        Assert.Same(backend.PreparedCommands[0].SourcePath, backend.PreparedCommands[1].SourcePath);
     }
 
     [Fact]
@@ -118,6 +119,68 @@ public class DrawingCanvasBatcherTests
             $"Expected coverage reuse but got {backend.Definitions.Count} coverage definitions for 200 glyphs.");
     }
 
+    [Fact]
+    public void Flush_SupportedSolidStroke_PreparesCenterlinePath()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(80, 80);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+        using DrawingCanvas<Rgba32> canvas = new(configuration, region, new DrawingOptions());
+        canvas.DrawLine(new SolidPen(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
+        canvas.Flush();
+
+        Assert.Single(backend.PreparedCommands);
+        Assert.NotNull(backend.PreparedCommands[0].SourcePath);
+        Assert.NotNull(backend.PreparedCommands[0].Pen);
+    }
+
+    [Fact]
+    public void Flush_DashedStroke_PreparesCenterlinePath()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(80, 80);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+        using DrawingCanvas<Rgba32> canvas = new(configuration, region, new DrawingOptions());
+        canvas.DrawLine(Pens.Dash(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
+        canvas.Flush();
+
+        Assert.Single(backend.PreparedCommands);
+        Assert.NotNull(backend.PreparedCommands[0].SourcePath);
+        Assert.NotNull(backend.PreparedCommands[0].Pen);
+    }
+
+    [Fact]
+    public void Flush_MiterStroke_PreparesCenterlinePath()
+    {
+        Configuration configuration = new();
+        CapturingBackend backend = new();
+        configuration.SetDrawingBackend(backend);
+        using Image<Rgba32> image = new(80, 80);
+        Buffer2DRegion<Rgba32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+
+        PenOptions options = new(Color.Red, 5F)
+        {
+            StrokeOptions = new StrokeOptions
+            {
+                LineJoin = LineJoin.Miter
+            }
+        };
+
+        using DrawingCanvas<Rgba32> canvas = new(configuration, region, new DrawingOptions());
+        canvas.Draw(new SolidPen(options), new Path(new[] { new PointF(8, 40), new PointF(40, 8), new PointF(72, 40) }));
+        canvas.Flush();
+
+        Assert.Single(backend.PreparedCommands);
+        Assert.NotNull(backend.PreparedCommands[0].SourcePath);
+        Assert.NotNull(backend.PreparedCommands[0].Pen);
+    }
+
     private sealed class CapturingBackend : IDrawingBackend
     {
         public List<CapturedCoverageDefinition> Definitions { get; } = [];
@@ -127,15 +190,14 @@ public class DrawingCanvasBatcherTests
         public bool HasDefinition { get; private set; }
 
         public CapturedCoverageDefinition LastDefinition { get; private set; } = new(
-            new CompositionCoverageDefinition(
-                0,
-                EmptyPath.ClosedPath,
-                new RasterizerOptions(
-                    Rectangle.Empty,
-                    IntersectionRule.NonZero,
-                    RasterizationMode.Aliased,
-                    RasterizerSamplingOrigin.PixelBoundary,
-                    0.5f)),
+            EmptyPath.ClosedPath,
+            new RasterizerOptions(
+                Rectangle.Empty,
+                IntersectionRule.NonZero,
+                RasterizationMode.Aliased,
+                RasterizerSamplingOrigin.PixelBoundary,
+                0.5f),
+            default,
             []);
 
         public void FlushCompositions<TPixel>(
@@ -144,19 +206,37 @@ public class DrawingCanvasBatcherTests
             CompositionScene compositionScene)
             where TPixel : unmanaged, IPixel<TPixel>
         {
-            this.PreparedCommands = compositionScene.Commands.ToArray();
+            List<CompositionCommand> preparedCommands = [];
+            for (int i = 0; i < compositionScene.Commands.Count; i++)
+            {
+                if (compositionScene.Commands[i] is PathCompositionSceneCommand pathCommand)
+                {
+                    preparedCommands.Add(pathCommand.Command);
+                }
+            }
+
+            this.PreparedCommands = preparedCommands;
 
             Dictionary<CoverageDefinitionKey, int> definitionIndices = [];
             for (int i = 0; i < compositionScene.Commands.Count; i++)
             {
-                CompositionCommand command = compositionScene.Commands[i];
-                if (!command.IsVisible)
+                if (compositionScene.Commands[i] is not PathCompositionSceneCommand pathCommand)
                 {
                     continue;
                 }
 
-                IPath preparedPath = command.PreparedPath
-                    ?? throw new InvalidOperationException("Composition commands must be prepared before backend flush.");
+                CompositionCommand command = pathCommand.Command;
+                // if (!command.IsVisible)
+                // {
+                //     continue;
+                // }
+
+                IPath? SourcePath = command.SourcePath;
+                if (SourcePath is null)
+                {
+                    continue;
+                }
+
                 RasterizerOptions rasterizerOptions = command.RasterizerOptions;
 
                 CoverageDefinitionKey key = new(command);
@@ -166,11 +246,9 @@ public class DrawingCanvasBatcherTests
                     definitionIndices.Add(key, definitionIndex);
                     this.Definitions.Add(
                         new CapturedCoverageDefinition(
-                            new CompositionCoverageDefinition(
-                                command.DefinitionKey,
-                                preparedPath,
-                                in rasterizerOptions,
-                                command.DestinationOffset),
+                            SourcePath,
+                            rasterizerOptions,
+                            command.DestinationOffset,
                             [command]));
                 }
                 else
@@ -196,16 +274,20 @@ public class DrawingCanvasBatcherTests
             where TPixel : unmanaged, IPixel<TPixel>
             => false;
 
-        public sealed class CapturedCoverageDefinition(CompositionCoverageDefinition definition, List<CompositionCommand> commands)
+        public sealed class CapturedCoverageDefinition(IPath SourcePath, RasterizerOptions rasterizerOptions, Point destinationOffset, List<CompositionCommand> commands)
         {
-            public CompositionCoverageDefinition Definition { get; } = definition;
+            public IPath SourcePath { get; } = SourcePath;
+
+            public RasterizerOptions RasterizerOptions { get; } = rasterizerOptions;
+
+            public Point DestinationOffset { get; } = destinationOffset;
 
             public List<CompositionCommand> Commands { get; } = commands;
         }
 
         private readonly struct CoverageDefinitionKey : IEquatable<CoverageDefinitionKey>
         {
-            private readonly int definitionKey;
+            private readonly int SourcePathIdentity;
             private readonly Rectangle interest;
             private readonly IntersectionRule intersectionRule;
             private readonly RasterizationMode rasterizationMode;
@@ -214,7 +296,7 @@ public class DrawingCanvasBatcherTests
 
             public CoverageDefinitionKey(CompositionCommand command)
             {
-                this.definitionKey = command.DefinitionKey;
+                this.SourcePathIdentity = RuntimeHelpers.GetHashCode(command.SourcePath!);
                 this.interest = command.RasterizerOptions.Interest;
                 this.intersectionRule = command.RasterizerOptions.IntersectionRule;
                 this.rasterizationMode = command.RasterizerOptions.RasterizationMode;
@@ -223,7 +305,7 @@ public class DrawingCanvasBatcherTests
             }
 
             public bool Equals(CoverageDefinitionKey other)
-                => this.definitionKey == other.definitionKey &&
+                => this.SourcePathIdentity == other.SourcePathIdentity &&
                    this.interest.Equals(other.interest) &&
                    this.intersectionRule == other.intersectionRule &&
                    this.rasterizationMode == other.rasterizationMode &&
@@ -235,7 +317,7 @@ public class DrawingCanvasBatcherTests
 
             public override int GetHashCode()
                 => HashCode.Combine(
-                    this.definitionKey,
+                    this.SourcePathIdentity,
                     this.interest,
                     (int)this.intersectionRule,
                     (int)this.rasterizationMode,

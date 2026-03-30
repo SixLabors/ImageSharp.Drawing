@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#pragma warning disable SA1201 // Phase-1 staged scene types are grouped by pipeline role.
+#pragma warning disable SA1201 // Staged scene types are grouped by pipeline role.
 
 using System.Diagnostics;
 using System.IO;
@@ -100,14 +100,14 @@ internal static class WebGPUSceneDispatch
         out WebGPUStagedScene stagedScene,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
-        => TryCreateStagedScene(configuration, target, scene.Commands, bumpSizes, out _, out _, out stagedScene, out error);
+        => TryCreateStagedScene(configuration, target, scene, bumpSizes, out _, out _, out stagedScene, out error);
 
     /// <summary>
     /// Builds the flush-scoped encoded scene and uploads its GPU resources.
     /// </summary>
     /// <param name="configuration">The drawing configuration that owns allocators and backend settings.</param>
     /// <param name="target">The flush target that exposes the native WebGPU surface.</param>
-    /// <param name="commands">The prepared composition commands for this flush.</param>
+    /// <param name="scene">The prepared composition scene for this flush.</param>
     /// <param name="bumpSizes">The current dynamic scratch capacities to use for this attempt.</param>
     /// <param name="exceedsBindingLimit">Receives whether creation failed because a single WebGPU binding would be too large.</param>
     /// <param name="bindingLimitFailure">Receives the exact binding-limit failure when <paramref name="exceedsBindingLimit"/> is <see langword="true"/>.</param>
@@ -118,7 +118,7 @@ internal static class WebGPUSceneDispatch
     public static bool TryCreateStagedScene<TPixel>(
         Configuration configuration,
         ICanvasFrame<TPixel> target,
-        IReadOnlyList<CompositionCommand> commands,
+        CompositionScene scene,
         WebGPUSceneBumpSizes bumpSizes,
         out bool exceedsBindingLimit,
         out BindingLimitFailure bindingLimitFailure,
@@ -134,13 +134,6 @@ internal static class WebGPUSceneDispatch
         if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
         {
             error = $"The staged WebGPU scene pipeline does not support pixel format '{typeof(TPixel).Name}'.";
-            return false;
-        }
-
-        WebGPUSceneSupportResult support = WebGPUSceneEncoder.ValidateSceneSupport(commands);
-        if (!support.IsSupported)
-        {
-            error = support.Error;
             return false;
         }
 
@@ -160,7 +153,14 @@ internal static class WebGPUSceneDispatch
 
         try
         {
-            encodedScene = WebGPUSceneEncoder.Encode(commands, support, flushContext.TargetBounds, flushContext.MemoryAllocator);
+            if (!WebGPUSceneEncoder.TryEncode(scene, flushContext.TargetBounds, flushContext.MemoryAllocator, out WebGPUEncodedScene createdScene, out error))
+            {
+                flushContext.Dispose();
+                stagedScene = default;
+                return false;
+            }
+
+            encodedScene = createdScene;
             WebGPUSceneBumpSizes sceneBumpSizes = bumpSizes.WithSceneLowerBounds(encodedScene);
             WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, sceneBumpSizes);
             uint baseColor = 0U;

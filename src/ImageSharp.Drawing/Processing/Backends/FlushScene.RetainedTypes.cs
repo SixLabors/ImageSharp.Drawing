@@ -12,18 +12,45 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed partial class FlushScene
 {
     /// <summary>
-    /// Holds one retained row operation.
+    /// Identifies the retained row operation carried by a <see cref="SceneOperation"/>.
     /// </summary>
+    internal enum SceneOperationKind : byte
+    {
+        /// <summary>
+        /// A retained fill item.
+        /// </summary>
+        FillItem = 0,
+
+        /// <summary>
+        /// A retained stroke item.
+        /// </summary>
+        StrokeItem = 1,
+
+        /// <summary>
+        /// Starts an isolated compositing layer.
+        /// </summary>
+        BeginLayer = 2,
+
+        /// <summary>
+        /// Ends the most recently opened layer.
+        /// </summary>
+        EndLayer = 3
+    }
+
+    /// <summary>
+     /// Holds one retained row operation.
+     /// </summary>
     internal readonly struct SceneOperation
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="SceneOperation"/> struct for a fill item.
+        /// Initializes a new instance of the <see cref="SceneOperation"/> struct for a draw item.
         /// </summary>
+        /// <param name="kind">The retained draw operation kind.</param>
         /// <param name="itemIndex">The retained scene item index.</param>
         /// <param name="localRowIndex">The retained rasterizable row index.</param>
-        public SceneOperation(int itemIndex, int localRowIndex)
+        public SceneOperation(SceneOperationKind kind, int itemIndex, int localRowIndex)
         {
-            this.Kind = CompositionCommandKind.FillLayer;
+            this.Kind = kind;
             this.ItemIndex = itemIndex;
             this.LocalRowIndex = localRowIndex;
             this.CommandIndex = -1;
@@ -38,7 +65,7 @@ internal sealed partial class FlushScene
         /// <param name="layerBounds">The retained row-local layer bounds.</param>
         public SceneOperation(CompositionCommandKind kind, int commandIndex, Rectangle layerBounds)
         {
-            this.Kind = kind;
+            this.Kind = kind == CompositionCommandKind.BeginLayer ? SceneOperationKind.BeginLayer : SceneOperationKind.EndLayer;
             this.ItemIndex = -1;
             this.LocalRowIndex = -1;
             this.CommandIndex = commandIndex;
@@ -48,7 +75,7 @@ internal sealed partial class FlushScene
         /// <summary>
         /// Gets the operation kind.
         /// </summary>
-        public CompositionCommandKind Kind { get; }
+        public SceneOperationKind Kind { get; }
 
         /// <summary>
         /// Gets the retained scene item index for fill operations.
@@ -198,6 +225,33 @@ internal sealed partial class FlushScene
         }
 
         /// <summary>
+        /// Appends the retained blocks owned by <paramref name="source"/> to <paramref name="destination"/>
+        /// without copying individual operations.
+        /// </summary>
+        /// <param name="destination">The builder receiving the appended blocks.</param>
+        /// <param name="source">The builder supplying the appended blocks.</param>
+        public static void AppendBuilder(ref RowBuilder destination, ref RowBuilder source)
+        {
+            if (source.firstBlock is null)
+            {
+                return;
+            }
+
+            if (destination.firstBlock is null)
+            {
+                destination = source;
+                source = default;
+                return;
+            }
+
+            destination.lastBlock!.Next = source.firstBlock;
+            source.firstBlock.Previous = destination.lastBlock;
+            destination.lastBlock = source.lastBlock;
+            destination.count += source.count;
+            source = default;
+        }
+
+        /// <summary>
         /// Finalizes the builder into retained scene storage.
         /// </summary>
         /// <param name="rowBandIndex">The absolute row-band index represented by the row.</param>
@@ -275,34 +329,45 @@ internal sealed partial class FlushScene
     }
 
     /// <summary>
-    /// Holds one retained scene item.
+    /// Holds one retained fill scene item.
     /// </summary>
-    internal sealed class SceneItem : IDisposable
+    internal sealed class FillSceneItem : IDisposable
     {
         private object? renderer;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="SceneItem"/> class.
+        /// Initializes a new instance of the <see cref="FillSceneItem"/> class.
         /// </summary>
-        /// <param name="commandIndex">The source command index.</param>
-        /// <param name="command">The retained composition command.</param>
+        /// <param name="brush">The brush used by the fill item.</param>
+        /// <param name="graphicsOptions">The graphics options used by the fill item.</param>
+        /// <param name="brushBounds">The brush bounds used for applicator creation.</param>
         /// <param name="rasterizable">The retained rasterizable geometry.</param>
-        public SceneItem(int commandIndex, CompositionCommand command, DefaultRasterizer.RasterizableGeometry rasterizable)
+        public FillSceneItem(
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            Rectangle brushBounds,
+            DefaultRasterizer.RasterizableGeometry rasterizable)
         {
-            this.CommandIndex = commandIndex;
-            this.Command = command;
+            this.Brush = brush;
+            this.GraphicsOptions = graphicsOptions;
+            this.BrushBounds = brushBounds;
             this.Rasterizable = rasterizable;
         }
 
         /// <summary>
-        /// Gets the source command index.
+        /// Gets the brush used by the fill item.
         /// </summary>
-        public int CommandIndex { get; }
+        public Brush Brush { get; }
 
         /// <summary>
-        /// Gets the retained composition command.
+        /// Gets the graphics options used by the fill item.
         /// </summary>
-        public CompositionCommand Command { get; }
+        public GraphicsOptions GraphicsOptions { get; }
+
+        /// <summary>
+        /// Gets the brush bounds used for applicator creation.
+        /// </summary>
+        public Rectangle BrushBounds { get; }
 
         /// <summary>
         /// Gets the retained rasterizable geometry.
@@ -324,11 +389,86 @@ internal sealed partial class FlushScene
                 return typed;
             }
 
-            typed = this.Command.Brush.CreateRenderer<TPixel>(
+            typed = this.Brush.CreateRenderer<TPixel>(
                 configuration,
-                this.Command.GraphicsOptions,
+                this.GraphicsOptions,
                 canvasWidth,
-                this.Command.BrushBounds);
+                this.BrushBounds);
+
+            this.renderer = typed;
+            return typed;
+        }
+
+        /// <inheritdoc />
+        public void Dispose() => this.Rasterizable.Dispose();
+    }
+
+    /// <summary>
+    /// Holds one retained stroke scene item.
+    /// </summary>
+    internal sealed class StrokeSceneItem : IDisposable
+    {
+        private object? renderer;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StrokeSceneItem"/> class.
+        /// </summary>
+        /// <param name="brush">The prepared brush for the stroke item.</param>
+        /// <param name="graphicsOptions">The graphics options for the stroke item.</param>
+        /// <param name="brushBounds">The prepared brush bounds.</param>
+        /// <param name="rasterizable">The retained stroke rasterizable geometry.</param>
+        public StrokeSceneItem(
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            Rectangle brushBounds,
+            DefaultRasterizer.StrokeRasterizableGeometry rasterizable)
+        {
+            this.Brush = brush;
+            this.GraphicsOptions = graphicsOptions;
+            this.BrushBounds = brushBounds;
+            this.Rasterizable = rasterizable;
+        }
+
+        /// <summary>
+        /// Gets the prepared brush for the stroke item.
+        /// </summary>
+        public Brush Brush { get; }
+
+        /// <summary>
+        /// Gets the graphics options for the stroke item.
+        /// </summary>
+        public GraphicsOptions GraphicsOptions { get; }
+
+        /// <summary>
+        /// Gets the prepared brush bounds for the stroke item.
+        /// </summary>
+        public Rectangle BrushBounds { get; }
+
+        /// <summary>
+        /// Gets the retained stroke rasterizable geometry.
+        /// </summary>
+        public DefaultRasterizer.StrokeRasterizableGeometry Rasterizable { get; }
+
+        /// <summary>
+        /// Gets the memoized renderer for this scene item, creating it on first use.
+        /// </summary>
+        /// <typeparam name="TPixel">The pixel format.</typeparam>
+        /// <param name="configuration">The active processing configuration.</param>
+        /// <param name="canvasWidth">The destination canvas width.</param>
+        /// <returns>The memoized renderer for the scene item.</returns>
+        public BrushRenderer<TPixel> GetRenderer<TPixel>(Configuration configuration, int canvasWidth)
+            where TPixel : unmanaged, IPixel<TPixel>
+        {
+            if (this.renderer is BrushRenderer<TPixel> typed)
+            {
+                return typed;
+            }
+
+            typed = this.Brush.CreateRenderer<TPixel>(
+                configuration,
+                this.GraphicsOptions,
+                canvasWidth,
+                this.BrushBounds);
 
             this.renderer = typed;
             return typed;

@@ -259,7 +259,8 @@ public abstract class ImageBrush : Brush
                 destinationRow,
                 destinationRow,
                 overlaySpan,
-                amountSpan);
+                amountSpan,
+                workspace.GetBlendScratch(scanline.Length, 3));
         }
     }
 }

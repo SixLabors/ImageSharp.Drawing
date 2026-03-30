@@ -567,6 +567,11 @@ fn draw_join(
         case STYLE_FLAGS_JOIN_MITER: {
             let hypot = length(vec2f(cr, d));
             let miter_limit = unpack2x16float(style_flags & STYLE_MITER_LIMIT_MASK)[0];
+            let is_backside = cr > 0.;
+            let outer_prev = select(front0, back1, is_backside);
+            let outer_next = select(front1, back0, is_backside);
+            let inner_prev = select(back0, front0, is_backside);
+            let inner_next = select(back1, front1, is_backside);
 
             var line_ix: u32;
             // Given the two tangents `tan_prev` and `tan_next` arranged tail-to-tail, the
@@ -583,29 +588,43 @@ fn draw_join(
             if 2. * hypot < (hypot + d) * miter_limit * miter_limit
                 && abs(cr) > TANGENT_THRESH * TANGENT_THRESH
             {
-                let is_backside = cr > 0.;
-                let fp_last = select(front0, back1, is_backside);
-                let fp_this = select(front1, back0, is_backside);
-                let p = select(front0, back0, is_backside);
-
-                let v = fp_this - fp_last;
+                let v = outer_next - outer_prev;
                 let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
-                let miter_pt = fp_this - tan_next * h;
+                let miter_pt = outer_next - tan_next * h;
 
                 line_ix = atomicAdd(&bump.lines, 3u);
-                write_line_with_transform(line_ix, path_ix, p, miter_pt, transform);
-                line_ix += 1u;
-
-                if is_backside {
-                    back0 = miter_pt;
-                } else {
-                    front0 = miter_pt;
-                }
+                write_line_with_transform(line_ix, path_ix, outer_prev, miter_pt, transform);
+                write_line_with_transform(line_ix + 1u, path_ix, miter_pt, outer_next, transform);
+                write_line_with_transform(line_ix + 2u, path_ix, inner_prev, inner_next, transform);
             } else {
-                line_ix = atomicAdd(&bump.lines, 2u);
+                let use_round_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_ROUND) != 0u;
+                let use_revert_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_REVERT) != 0u;
+                if use_round_overflow {
+                    flatten_arc(path_ix, outer_prev, outer_next, p0, abs(atan2(cr, d)), transform);
+                    output_line_with_transform(path_ix, inner_prev, inner_next, transform);
+                } else if use_revert_overflow || abs(cr) <= TANGENT_THRESH * TANGENT_THRESH {
+                    output_two_lines_with_transform(path_ix, front0, front1, back0, back1, transform);
+                } else {
+                    let v = outer_next - outer_prev;
+                    let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
+                    let miter_pt = outer_next - tan_next * h;
+                    let limit = length(n_prev) * miter_limit;
+                    let bevel_distance = length(((outer_prev - p0) + (outer_next - p0)) * 0.5);
+                    let intersection_distance = distance(p0, miter_pt);
+                    if intersection_distance <= bevel_distance + TANGENT_THRESH {
+                        output_two_lines_with_transform(path_ix, front0, front1, back0, back1, transform);
+                    } else {
+                        let ratio = (limit - bevel_distance) / (intersection_distance - bevel_distance);
+                        let clipped_prev = outer_prev + ((miter_pt - outer_prev) * ratio);
+                        let clipped_next = outer_next + ((miter_pt - outer_next) * ratio);
+                        line_ix = atomicAdd(&bump.lines, 4u);
+                        write_line_with_transform(line_ix, path_ix, outer_prev, clipped_prev, transform);
+                        write_line_with_transform(line_ix + 1u, path_ix, clipped_prev, clipped_next, transform);
+                        write_line_with_transform(line_ix + 2u, path_ix, clipped_next, outer_next, transform);
+                        write_line_with_transform(line_ix + 3u, path_ix, inner_prev, inner_next, transform);
+                    }
+                }
             }
-            write_line_with_transform(line_ix, path_ix, front0, front1, transform);
-            write_line_with_transform(line_ix + 1u, path_ix, back0, back1, transform);
         }
         case STYLE_FLAGS_JOIN_ROUND: {
             var arc0: vec2f;
@@ -691,10 +710,8 @@ fn compute_tag_monoid(ix: u32) -> PathTagData {
     // TODO: this can be a read buf overflow. Conditionalize by tag byte?
     tm = combine_tag_monoid(tag_monoids[ix >> 2u], tm);
     var tag_byte = (tag_word >> shift) & 0xffu;
-    // We no longer encode an initial transform and style so these
-    // are off by one.
-    // Note: an alternative would be to adjust config.transform_base and
-    // config.style_base.
+    // The encoded streams begin after the implicit identity transform and current style,
+    // so these indices are rebased to the actual payload starts.
     tm.trans_ix -= 1u;
     tm.style_ix -= STYLE_SIZE_IN_WORDS;
     return PathTagData(tag_byte, tm);
@@ -847,10 +864,9 @@ fn main(
 
     let out = &path_bboxes[path_ix];
     let style_flags = scene[config.style_base + style_ix];
+    let style_draw_flags = scene[config.style_base + style_ix + 2u];
     let fill_rule = select(DRAW_INFO_FLAGS_FILL_RULE_BIT, 0u, (style_flags & STYLE_FLAGS_FILL) == 0u);
-    let blend_mode = ((style_flags & 0x00003ffeu) >> 1u) << DRAW_FLAGS_BLEND_MODE_SHIFT;
-    let blend_alpha = ((style_flags & 0x3fffc000u) >> 14u) << DRAW_FLAGS_BLEND_ALPHA_SHIFT;
-    let draw_flags = fill_rule | blend_mode | blend_alpha;
+    let draw_flags = style_draw_flags | fill_rule;
     if (tag.tag_byte & PATH_TAG_PATH) != 0u {
         (*out).draw_flags = draw_flags;
         (*out).trans_ix = trans_ix;

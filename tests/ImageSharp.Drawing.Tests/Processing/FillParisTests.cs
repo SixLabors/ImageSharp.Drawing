@@ -43,7 +43,7 @@ public class FillParisTests
         }));
     }
 
-    [WebGPUFact(Skip = "Benchmarking Only")]
+    [WebGPUFact]//(Skip = "Benchmarking Only")]
     public void FillParis_ImageSharp_WebGPU()
     {
         using FillParisWebGpuContext webGpu = new();

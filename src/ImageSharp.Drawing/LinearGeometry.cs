@@ -62,10 +62,92 @@ public sealed class LinearGeometry
     public IReadOnlyList<PointF> Points { get; }
 
     /// <summary>
+    /// Creates retained geometry for one open two-point polyline.
+    /// </summary>
+    /// <param name="start">The first point.</param>
+    /// <param name="end">The second point.</param>
+    /// <returns>The retained open polyline geometry.</returns>
+    public static LinearGeometry CreateOpenPolyline(PointF start, PointF end)
+        => CreateOpenPolyline([start, end]);
+
+    /// <summary>
+    /// Creates retained geometry for one open polyline.
+    /// </summary>
+    /// <param name="points">The polyline points.</param>
+    /// <returns>The retained open polyline geometry.</returns>
+    public static LinearGeometry CreateOpenPolyline(PointF[] points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        if (points.Length < 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(points), "Open polylines require at least two points.");
+        }
+
+        RectangleF bounds = GetPointBounds(points);
+        int segmentCount = points.Length - 1;
+        int nonHorizontalBoundary = 0;
+        int nonHorizontalCenter = 0;
+        for (int i = 0; i < segmentCount; i++)
+        {
+            PointF start = points[i];
+            PointF end = points[i + 1];
+            if ((int)MathF.Floor(start.Y) != (int)MathF.Floor(end.Y))
+            {
+                nonHorizontalBoundary++;
+            }
+
+            if ((int)MathF.Floor(start.Y + 0.5F) != (int)MathF.Floor(end.Y + 0.5F))
+            {
+                nonHorizontalCenter++;
+            }
+        }
+
+        return new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = bounds,
+                ContourCount = 1,
+                PointCount = points.Length,
+                SegmentCount = segmentCount,
+                NonHorizontalSegmentCountPixelBoundary = nonHorizontalBoundary,
+                NonHorizontalSegmentCountPixelCenter = nonHorizontalCenter
+            },
+            [new LinearContour
+            {
+                PointStart = 0,
+                PointCount = points.Length,
+                SegmentStart = 0,
+                SegmentCount = segmentCount,
+                IsClosed = false
+            }
+            ],
+            points);
+    }
+
+    /// <summary>
     /// Gets an enumerator for the derived linear segments represented by <see cref="Points"/> and <see cref="Contours"/>.
     /// </summary>
     /// <returns>
     /// A zero-allocation enumerator that yields the final linear segments in contour order.
     /// </returns>
     public SegmentEnumerator GetSegments() => new(this);
+
+    private static RectangleF GetPointBounds(PointF[] points)
+    {
+        float minX = points[0].X;
+        float minY = points[0].Y;
+        float maxX = minX;
+        float maxY = minY;
+
+        for (int i = 1; i < points.Length; i++)
+        {
+            PointF point = points[i];
+            minX = MathF.Min(minX, point.X);
+            minY = MathF.Min(minY, point.Y);
+            maxX = MathF.Max(maxX, point.X);
+            maxY = MathF.Max(maxY, point.Y);
+        }
+
+        return RectangleF.FromLTRB(minX, minY, maxX, maxY);
+    }
 }

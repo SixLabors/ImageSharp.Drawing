@@ -648,7 +648,6 @@ internal static class SvgBenchmarkHelper
     }
 
     // ---- System.Drawing SVG path parser ----
-
     internal static GraphicsPath SvgPathDataToGraphicsPath(string pathData, float scale, Matrix4x4? elementTransform)
     {
         GraphicsPath gp = new(FillMode.Winding);

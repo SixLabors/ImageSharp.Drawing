@@ -198,15 +198,16 @@ public partial class ProcessWithDrawingCanvasTests
         IReadOnlyList<PointF[]> points = PolygonFactory.GetGeoJsonPoints(missisipiGeom, transform);
 
         using Image<Rgba32> image = provider.GetImage();
-        SolidPen pen = new(new SolidBrush(Color.White), 1.0f);
+        SolidPen pen = new(new SolidBrush(Color.White), scale);
 
         image.Mutate(c => c.ProcessWithCanvas(canvas =>
         {
             foreach (PointF[] loop in points)
             {
-                IPath outline = pen.GeneratePath(new Path(loop).Transform(Matrix4x4.CreateTranslation(0.5F, 0.5F, 0)));
-                outline = outline.Transform(Matrix4x4.CreateScale(scale, scale, 1));
-                canvas.Fill(pen.StrokeFill, outline);
+                IPath transformed = new Path(loop).Transform(
+                    Matrix4x4.CreateTranslation(0.5F, 0.5F, 0) *
+                    Matrix4x4.CreateScale(scale, scale, 1));
+                canvas.Draw(pen, transformed);
             }
         }));
 

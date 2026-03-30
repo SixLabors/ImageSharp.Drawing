@@ -21,7 +21,7 @@ const PATH_TAG_STYLE = 0x40u;
 const PATH_TAG_SUBPATH_END = 4u;
 
 // Size of the `Style` data structure in words
-const STYLE_SIZE_IN_WORDS: u32 = 2u;
+const STYLE_SIZE_IN_WORDS: u32 = 3u;
 
 const STYLE_FLAGS_STYLE: u32 = 0x80000000u;
 const STYLE_FLAGS_FILL: u32 = 0x40000000u;
@@ -38,6 +38,8 @@ const STYLE_FLAGS_JOIN_MASK: u32 = 0x30000000u;
 const STYLE_FLAGS_JOIN_BEVEL: u32 = 0u;
 const STYLE_FLAGS_JOIN_MITER: u32 = 0x10000000u;
 const STYLE_FLAGS_JOIN_ROUND: u32 = 0x20000000u;
+const STYLE_FLAGS_JOIN_MITER_REVERT: u32 = 0x00400000u;
+const STYLE_FLAGS_JOIN_MITER_ROUND: u32 = 0x00800000u;
 
 // TODO: Declare the remaining STYLE flags here.
 

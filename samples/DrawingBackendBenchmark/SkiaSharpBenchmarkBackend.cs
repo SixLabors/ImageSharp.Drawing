@@ -24,6 +24,13 @@ internal sealed class SkiaSharpBenchmarkBackend : IBenchmarkBackend, IDisposable
 
     public bool IsGpu => this.context is not null;
 
+    /// <summary>
+    /// Renders the benchmark scene through Skia and optionally captures a readback preview.
+    /// </summary>
+    /// <remarks>
+    /// The returned duration measures submission through <c>Flush()</c>. Preview readback happens afterward, so the
+    /// reported GPU timing is a submission timing rather than a fully synchronized render-complete timing.
+    /// </remarks>
     public BenchmarkRenderResult Render(ReadOnlySpan<VisualLine> lines, int width, int height, bool capturePreview)
     {
         this.EnsureSurface(width, height);

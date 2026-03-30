@@ -73,6 +73,30 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
+    /// Executes one retained stroke row item against a reusable scanner context.
+    /// </summary>
+    internal static void ExecuteStrokeRasterizableItem<TRowHandler>(
+        ref Context context,
+        in StrokeRasterizableItem item,
+        in RasterizableBandInfo bandInfo,
+        Span<float> scanline,
+        Span<float> strokeBandCoverage,
+        ref TRowHandler rowHandler)
+        where TRowHandler : struct, IRasterizerCoverageRowHandler
+    {
+        context.Reconfigure(
+            bandInfo.Width,
+            bandInfo.WordsPerRow,
+            bandInfo.CoverStride,
+            bandInfo.BandHeight,
+            bandInfo.IntersectionRule,
+            bandInfo.RasterizationMode,
+            bandInfo.AntialiasThreshold);
+
+        item.Rasterizable.ExecuteBand(ref context, in bandInfo, scanline, strokeBandCoverage, ref rowHandler);
+    }
+
+    /// <summary>
     /// Converts bit count to the number of machine words needed to hold the bitset row.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -405,6 +429,61 @@ internal static partial class DefaultRasterizer
                 this.startCover[i] += cover;
                 this.MarkRowTouched(i);
             }
+        }
+
+        /// <summary>
+        /// Applies one clipped left-of-band winding interval directly to the current start-cover rows.
+        /// </summary>
+        /// <param name="y0">The starting Y coordinate in 24.8 fixed-point band-local space.</param>
+        /// <param name="y1">The ending Y coordinate in 24.8 fixed-point band-local space.</param>
+        public void AddClippedStartCover(int y0, int y1)
+        {
+            if (y0 == y1)
+            {
+                return;
+            }
+
+            if (y0 < y1)
+            {
+                int rowIndex0 = y0 >> FixedShift;
+                int rowIndex1 = (y1 - 1) >> FixedShift;
+                int fy0 = y0 - (rowIndex0 << FixedShift);
+                int fy1 = y1 - (rowIndex1 << FixedShift);
+
+                if (rowIndex0 == rowIndex1)
+                {
+                    this.AddStartCoverCell(rowIndex0, -(fy1 - fy0));
+                    return;
+                }
+
+                this.AddStartCoverCell(rowIndex0, -(FixedOne - fy0));
+                for (int row = rowIndex0 + 1; row < rowIndex1; row++)
+                {
+                    this.AddStartCoverCell(row, -FixedOne);
+                }
+
+                this.AddStartCoverCell(rowIndex1, -fy1);
+                return;
+            }
+
+            int upRowIndex0 = (y0 - 1) >> FixedShift;
+            int upRowIndex1 = y1 >> FixedShift;
+            int upFy0 = y0 - (upRowIndex0 << FixedShift);
+            int upFy1 = y1 - (upRowIndex1 << FixedShift);
+
+            if (upRowIndex0 == upRowIndex1)
+            {
+                this.AddStartCoverCell(upRowIndex0, upFy0 - upFy1);
+                return;
+            }
+
+            this.AddStartCoverCell(upRowIndex0, upFy0);
+            for (int row = upRowIndex0 - 1; row > upRowIndex1; row--)
+            {
+                this.AddStartCoverCell(row, FixedOne);
+            }
+
+            this.AddStartCoverCell(upRowIndex1, FixedOne - upFy1);
         }
 
         /// <summary>
@@ -842,6 +921,21 @@ internal static partial class DefaultRasterizer
                     this.rowMaxTouchedColumn[row] = column;
                 }
             }
+        }
+
+        /// <summary>
+        /// Adds one start-cover delta for a touched row.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void AddStartCoverCell(int row, int delta)
+        {
+            if (delta == 0 || (uint)row >= (uint)this.height)
+            {
+                return;
+            }
+
+            this.MarkRowTouched(row);
+            this.startCover[row] += delta;
         }
 
         /// <summary>
@@ -1528,6 +1622,7 @@ internal static partial class DefaultRasterizer
         private readonly int coverStride;
         private readonly int width;
         private readonly int tileCapacity;
+        private readonly MemoryAllocator allocator;
         private readonly IMemoryOwner<nuint> bitVectorsOwner;
         private readonly IMemoryOwner<int> coverAreaOwner;
         private readonly IMemoryOwner<int> startCoverOwner;
@@ -1537,8 +1632,10 @@ internal static partial class DefaultRasterizer
         private readonly IMemoryOwner<byte> rowTouchedOwner;
         private readonly IMemoryOwner<int> touchedRowsOwner;
         private readonly IMemoryOwner<float> scanlineOwner;
+        private IMemoryOwner<float>? strokeBandCoverageOwner;
 
         private WorkerScratch(
+            MemoryAllocator allocator,
             int wordsPerRow,
             int coverStride,
             int width,
@@ -1553,6 +1650,7 @@ internal static partial class DefaultRasterizer
             IMemoryOwner<int> touchedRowsOwner,
             IMemoryOwner<float> scanlineOwner)
         {
+            this.allocator = allocator;
             this.wordsPerRow = wordsPerRow;
             this.coverStride = coverStride;
             this.width = width;
@@ -1572,6 +1670,14 @@ internal static partial class DefaultRasterizer
         /// Gets reusable scanline scratch for this worker.
         /// </summary>
         public Span<float> Scanline => this.scanlineOwner.Memory.Span;
+
+        /// <summary>
+        /// Gets reusable per-band stroke coverage scratch for this worker.
+        /// </summary>
+        public Span<float> StrokeBandCoverage
+            => (this.strokeBandCoverageOwner ??=
+                this.allocator.Allocate<float>(checked(this.width * this.tileCapacity * DirectStrokeVerticalSampleCount)))
+                .Memory.Span;
 
         /// <summary>
         /// Returns <see langword="true"/> when this scratch has compatible dimensions and sufficient
@@ -1608,6 +1714,7 @@ internal static partial class DefaultRasterizer
             IMemoryOwner<float> scanlineOwner = allocator.Allocate<float>(width);
 
             return new WorkerScratch(
+                allocator,
                 wordsPerRow,
                 coverStride,
                 width,
@@ -1657,6 +1764,7 @@ internal static partial class DefaultRasterizer
             this.rowTouchedOwner.Dispose();
             this.touchedRowsOwner.Dispose();
             this.scanlineOwner.Dispose();
+            this.strokeBandCoverageOwner?.Dispose();
         }
     }
 }

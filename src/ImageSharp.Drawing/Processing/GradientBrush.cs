@@ -195,7 +195,13 @@ public abstract class GradientBrush : Brush
                 }
             }
 
-            this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
+            this.Blender.Blend(
+                this.Configuration,
+                destinationRow,
+                destinationRow,
+                overlays,
+                amounts,
+                workspace.GetBlendScratch(scanline.Length, 3));
         }
 
         /// <summary>

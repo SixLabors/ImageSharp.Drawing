@@ -315,7 +315,13 @@ public sealed class PathGradientBrush : Brush
                 }
             }
 
-            this.Blender.Blend(this.Configuration, destinationRow, destinationRow, overlays, amounts);
+            this.Blender.Blend(
+                this.Configuration,
+                destinationRow,
+                destinationRow,
+                overlays,
+                amounts,
+                workspace.GetBlendScratch(scanline.Length, 3));
         }
 
         private (Edge Edge, Vector2 Point)? FindIntersection(

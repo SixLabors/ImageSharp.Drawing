@@ -178,7 +178,8 @@ public sealed class PatternBrush : Brush
                 destinationRow,
                 destinationRow,
                 overlays,
-                amounts);
+                amounts,
+                workspace.GetBlendScratch(scanline.Length, 3));
         }
     }
 }

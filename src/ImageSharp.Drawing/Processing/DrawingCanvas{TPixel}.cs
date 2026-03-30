@@ -286,6 +286,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingCanvasState layerState = new(currentState.Options, currentState.ClipPaths, absoluteLayerBounds)
         {
             IsLayer = true,
+            LayerOptions = layerOptions,
         };
 
         this.savedStates.Push(layerState);
@@ -304,7 +305,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         DrawingCanvasState popped = this.savedStates.Pop();
         if (popped.IsLayer)
         {
-            this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds));
+            this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds, popped.LayerOptions!));
         }
     }
 
@@ -335,6 +336,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             new DrawingCanvasState(currentState.Options, currentState.ClipPaths, childFrame.Bounds)
             {
                 IsLayer = currentState.IsLayer,
+                LayerOptions = currentState.LayerOptions,
             },
             false);
     }
@@ -475,11 +477,81 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     public void DrawEllipse(Pen pen, PointF center, SizeF size)
         => this.Draw(pen, new EllipsePolygon(center, size));
 
+    /// <summary>
+    /// Draws a two-point line segment using the provided pen and drawing options.
+    /// </summary>
+    /// <param name="pen">Pen used to generate the line outline.</param>
+    /// <param name="start">Line start point.</param>
+    /// <param name="end">Line end point.</param>
+    public void DrawLine(Pen pen, PointF start, PointF end)
+    {
+        this.EnsureNotDisposed();
+        Guard.NotNull(pen, nameof(pen));
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
+        if (effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
+        {
+            ShapeOptions shapeOptions = effectiveOptions.ShapeOptions.DeepClone();
+            shapeOptions.IntersectionRule = IntersectionRule.NonZero;
+            effectiveOptions = new DrawingOptions(effectiveOptions.GraphicsOptions, shapeOptions, effectiveOptions.Transform);
+        }
+
+        if (state.ClipPaths.Count > 0)
+        {
+            this.PrepareCompositionCore(
+                new Path([start, end]),
+                pen.StrokeFill,
+                effectiveOptions,
+                RasterizerSamplingOrigin.PixelCenter,
+                state.ClipPaths,
+                pen);
+            return;
+        }
+
+        this.PrepareStrokeLineSegmentCompositionCore(start, end, pen.StrokeFill, effectiveOptions, pen);
+    }
+
     /// <inheritdoc />
     public void DrawLine(Pen pen, params PointF[] points)
     {
         Guard.NotNull(points, nameof(points));
-        this.Draw(pen, new Path(points));
+
+        if (points.Length == 2)
+        {
+            this.DrawLine(pen, points[0], points[1]);
+            return;
+        }
+
+        this.EnsureNotDisposed();
+        Guard.NotNull(pen, nameof(pen));
+
+        DrawingCanvasState state = this.ResolveState();
+        DrawingOptions effectiveOptions = state.Options;
+
+        // Stroke geometry can self-overlap; non-zero winding preserves stroke semantics.
+        if (effectiveOptions.ShapeOptions.IntersectionRule != IntersectionRule.NonZero)
+        {
+            ShapeOptions shapeOptions = effectiveOptions.ShapeOptions.DeepClone();
+            shapeOptions.IntersectionRule = IntersectionRule.NonZero;
+            effectiveOptions = new DrawingOptions(effectiveOptions.GraphicsOptions, shapeOptions, effectiveOptions.Transform);
+        }
+
+        if (state.ClipPaths.Count > 0)
+        {
+            this.PrepareCompositionCore(
+                new Path(points),
+                pen.StrokeFill,
+                effectiveOptions,
+                RasterizerSamplingOrigin.PixelCenter,
+                state.ClipPaths,
+                pen);
+            return;
+        }
+
+        this.PrepareStrokePolylineCompositionCore(points, pen.StrokeFill, effectiveOptions, pen);
     }
 
     /// <inheritdoc />
@@ -1004,6 +1076,88 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     }
 
     /// <summary>
+    /// Enqueues one explicit two-point stroke line-segment command using the current canvas state.
+    /// </summary>
+    private void PrepareStrokeLineSegmentCompositionCore(
+        PointF start,
+        PointF end,
+        Brush brush,
+        DrawingOptions options,
+        Pen pen)
+    {
+        brush = this.NormalizeBrush(brush);
+
+        GraphicsOptions graphicsOptions = options.GraphicsOptions;
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+        RectangleF bounds = StrokeLineSegmentCommand.GetConservativeBounds(start, end, pen);
+        Rectangle interest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right) + 1,
+            (int)MathF.Ceiling(bounds.Bottom) + 1);
+
+        RasterizerOptions rasterizerOptions = new(
+            interest,
+            options.ShapeOptions.IntersectionRule,
+            rasterizationMode,
+            RasterizerSamplingOrigin.PixelCenter,
+            graphicsOptions.AntialiasThreshold);
+
+        DrawingCanvasState state = this.ResolveState();
+        this.batcher.AddStrokeLineSegment(
+            new StrokeLineSegmentCommand(
+                start,
+                end,
+                brush,
+                graphicsOptions,
+                in rasterizerOptions,
+                state.TargetBounds,
+                state.TargetBounds.Location,
+                pen,
+                options.Transform));
+    }
+
+    /// <summary>
+    /// Enqueues one explicit stroked open polyline command using the current canvas state.
+    /// </summary>
+    private void PrepareStrokePolylineCompositionCore(
+        PointF[] points,
+        Brush brush,
+        DrawingOptions options,
+        Pen pen)
+    {
+        brush = this.NormalizeBrush(brush);
+
+        GraphicsOptions graphicsOptions = options.GraphicsOptions;
+        RasterizationMode rasterizationMode = graphicsOptions.Antialias ? RasterizationMode.Antialiased : RasterizationMode.Aliased;
+        RectangleF bounds = StrokePolylineCommand.GetConservativeBounds(points, pen);
+        Rectangle interest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right) + 1,
+            (int)MathF.Ceiling(bounds.Bottom) + 1);
+
+        RasterizerOptions rasterizerOptions = new(
+            interest,
+            options.ShapeOptions.IntersectionRule,
+            rasterizationMode,
+            RasterizerSamplingOrigin.PixelCenter,
+            graphicsOptions.AntialiasThreshold);
+
+        DrawingCanvasState state = this.ResolveState();
+        this.batcher.AddStrokePolyline(
+            new StrokePolylineCommand(
+                points,
+                brush,
+                graphicsOptions,
+                in rasterizerOptions,
+                state.TargetBounds,
+                state.TargetBounds.Location,
+                pen,
+                options.Transform));
+    }
+
+    /// <summary>
     /// Normalizes brushes that carry image sources containing the wrong pixel format exactly once.
     /// </summary>
     /// <param name="brush">The logical brush supplied by the caller.</param>
@@ -1197,7 +1351,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             if (popped.IsLayer)
             {
                 // Restore and Dispose unwind layers through the same command stream path.
-                this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds));
+                this.batcher.AddComposition(CompositionCommand.CreateEndLayer(popped.TargetBounds, popped.LayerOptions!));
             }
         }
     }
@@ -1257,8 +1411,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         Pen? pen = operation.Kind == DrawingOperationKind.Draw ? operation.Pen : null;
 
-        // Interest, sampling origin, and intersection rule are computed by Prepare().
-        // Placeholder rasterizer options carry only the fields Prepare() preserves.
+        // Explicit line commands carry only the rasterizer fields used directly by the backends.
         IntersectionRule intersectionRule = pen is not null && operation.IntersectionRule != IntersectionRule.NonZero
             ? IntersectionRule.NonZero
             : operation.IntersectionRule;

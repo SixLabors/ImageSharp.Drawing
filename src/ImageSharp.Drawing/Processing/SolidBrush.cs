@@ -86,7 +86,13 @@ public sealed class SolidBrush : Brush
             Configuration configuration = this.Configuration;
             if (this.Options.BlendPercentage == 1F)
             {
-                this.Blender.Blend(configuration, destinationRow, destinationRow, this.color, scanline);
+                this.Blender.Blend(
+                    configuration,
+                    destinationRow,
+                    destinationRow,
+                    this.color,
+                    scanline,
+                    workspace.GetBlendScratch(scanline.Length, 2));
             }
             else
             {
@@ -97,7 +103,13 @@ public sealed class SolidBrush : Brush
                     amounts[i] = scanline[i] * this.Options.BlendPercentage;
                 }
 
-                this.Blender.Blend(configuration, destinationRow, destinationRow, this.color, amounts);
+                this.Blender.Blend(
+                    configuration,
+                    destinationRow,
+                    destinationRow,
+                    this.color,
+                    amounts,
+                    workspace.GetBlendScratch(scanline.Length, 2));
             }
         }
     }

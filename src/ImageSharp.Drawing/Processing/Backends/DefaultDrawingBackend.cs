@@ -23,7 +23,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         CompositionScene compositionScene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        if (compositionScene.Commands.Count == 0)
+        if (compositionScene.CommandCount == 0)
         {
             return;
         }
@@ -34,7 +34,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         }
 
         using FlushScene scene = FlushScene.Create(
-            compositionScene.Commands,
+            compositionScene,
             target.Bounds,
             configuration.MemoryAllocator);
 
@@ -57,14 +57,30 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     private static void ExecuteScene<TPixel>(
         Configuration configuration,
         Buffer2DRegion<TPixel> destinationFrame,
-        IReadOnlyList<CompositionCommand> commands,
+        IReadOnlyList<CompositionSceneCommand> commands,
         FlushScene scene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        for (int i = 0; i < scene.ItemCount; i++)
+        if (scene.FillItemCount > 0)
         {
-            ref FlushScene.SceneItem item = ref scene.Items[i];
-            _ = item.GetRenderer<TPixel>(configuration, destinationFrame.Width);
+            for (int i = 0; i < scene.FillItems.Length; i++)
+            {
+                if (scene.FillItems[i] is FlushScene.FillSceneItem item)
+                {
+                    _ = item.GetRenderer<TPixel>(configuration, destinationFrame.Width);
+                }
+            }
+        }
+
+        if (scene.StrokeItemCount > 0)
+        {
+            for (int i = 0; i < scene.StrokeItems.Length; i++)
+            {
+                if (scene.StrokeItems[i] is FlushScene.StrokeSceneItem item)
+                {
+                    _ = item.GetRenderer<TPixel>(configuration, destinationFrame.Width);
+                }
+            }
         }
 
         // Warm the cached renderers before the row loop so the hot execution path only
@@ -104,7 +120,7 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
     private static void ExecuteSceneRow<TPixel>(
         Configuration configuration,
         Buffer2DRegion<TPixel> destinationFrame,
-        IReadOnlyList<CompositionCommand> commands,
+        IReadOnlyList<CompositionSceneCommand> commands,
         FlushScene scene,
         in FlushScene.SceneRow row,
         WorkerState<TPixel> state)
@@ -132,32 +148,43 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
                 foreach (FlushScene.SceneOperation operation in block.Items)
                 {
                     // Each retained row contains a compact mix of layer control operations and
-                    // fill operations in original command order, so the executor can replay the
+                    // draw operations in original command order, so the executor can replay the
                     // row without re-walking the full scene description.
                     switch (operation.Kind)
                     {
-                        case CompositionCommandKind.BeginLayer:
+                        case FlushScene.SceneOperationKind.BeginLayer:
                             targetStack[targetCount++] =
                                 new BandTarget<TPixel>(
                                     configuration.MemoryAllocator.Allocate2D<TPixel>(operation.LayerBounds.Width, operation.LayerBounds.Height, AllocationOptions.Clean),
                                     operation.LayerBounds,
-                                    commands[operation.CommandIndex].GraphicsOptions);
+                                    ((PathCompositionSceneCommand)commands[operation.CommandIndex]).Command.GraphicsOptions);
                             break;
 
-                        case CompositionCommandKind.EndLayer:
+                        case FlushScene.SceneOperationKind.EndLayer:
                             BandTarget<TPixel> source = targetStack[--targetCount];
                             BandTarget<TPixel> destination = targetStack[targetCount - 1];
                             CompositeLayerBand(configuration, source, destination, state.BrushWorkspace);
                             source.Dispose();
                             break;
 
-                        case CompositionCommandKind.FillLayer:
+                        case FlushScene.SceneOperationKind.FillItem:
                             BandTarget<TPixel> target = targetStack[targetCount - 1];
-                            ref FlushScene.SceneItem sceneItem = ref scene.Items[operation.ItemIndex];
+                            FlushScene.FillSceneItem sceneItem = scene.FillItems[operation.ItemIndex]!;
                             ExecuteFillOperation(
                                 sceneItem.GetRenderer<TPixel>(configuration, destinationFrame.Width),
                                 new DefaultRasterizer.RasterizableItem(sceneItem.Rasterizable, operation.LocalRowIndex),
                                 target,
+                                scratch,
+                                state);
+                            break;
+
+                        case FlushScene.SceneOperationKind.StrokeItem:
+                            BandTarget<TPixel> strokeTarget = targetStack[targetCount - 1];
+                            FlushScene.StrokeSceneItem strokeSceneItem = scene.StrokeItems[operation.ItemIndex]!;
+                            ExecuteStrokeOperation(
+                                strokeSceneItem.GetRenderer<TPixel>(configuration, destinationFrame.Width),
+                                new DefaultRasterizer.StrokeRasterizableItem(strokeSceneItem.Rasterizable, operation.LocalRowIndex),
+                                strokeTarget,
                                 scratch,
                                 state);
                             break;
@@ -194,12 +221,14 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         {
             foreach (FlushScene.SceneOperation operation in block.Items)
             {
-                if (operation.Kind != CompositionCommandKind.FillLayer)
+                if (operation.Kind is FlushScene.SceneOperationKind.BeginLayer or FlushScene.SceneOperationKind.EndLayer)
                 {
                     continue;
                 }
 
-                int itemWidth = scene.Items[operation.ItemIndex].Rasterizable.Width;
+                int itemWidth = operation.Kind == FlushScene.SceneOperationKind.FillItem
+                    ? scene.FillItems[operation.ItemIndex]!.Rasterizable.Width
+                    : scene.StrokeItems[operation.ItemIndex]!.Rasterizable.Width;
                 if (itemWidth > width)
                 {
                     width = itemWidth;
@@ -238,6 +267,39 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             in item,
             in bandInfo,
             scratch.Scanline,
+            ref rowHandler);
+    }
+
+    /// <summary>
+    /// Executes one retained stroke operation through the rasterizer and brush renderer.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="renderer">The memoized brush renderer for the scene item.</param>
+    /// <param name="item">The retained stroke rasterizable row item to execute.</param>
+    /// <param name="target">The active composition target for the row.</param>
+    /// <param name="scratch">The worker-local raster scratch.</param>
+    /// <param name="state">The worker-local execution state.</param>
+    private static void ExecuteStrokeOperation<TPixel>(
+        BrushRenderer<TPixel> renderer,
+        DefaultRasterizer.StrokeRasterizableItem item,
+        BandTarget<TPixel> target,
+        DefaultRasterizer.WorkerScratch scratch,
+        WorkerState<TPixel> state)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DefaultRasterizer.RasterizableBandInfo bandInfo = item.Rasterizable.GetBandInfo(item.LocalRowIndex);
+        DefaultRasterizer.Context context = scratch.CreateContext(
+            bandInfo.IntersectionRule,
+            bandInfo.RasterizationMode,
+            bandInfo.AntialiasThreshold);
+        FillCoverageRowHandler<TPixel> rowHandler = new(renderer, target, state.BrushWorkspace);
+        Span<float> strokeBandCoverage = item.Rasterizable.RequiresBandCoverage ? scratch.StrokeBandCoverage : [];
+        DefaultRasterizer.ExecuteStrokeRasterizableItem(
+            ref context,
+            in item,
+            in bandInfo,
+            scratch.Scanline,
+            strokeBandCoverage,
             ref rowHandler);
     }
 
@@ -291,7 +353,13 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         {
             Span<TPixel> sourceRow = source.Region.DangerousGetRowSpan(sourceOffsetY + y).Slice(sourceOffsetX, overlap.Width);
             Span<TPixel> destinationRow = destination.Region.DangerousGetRowSpan(destinationOffsetY + y).Slice(destinationOffsetX, overlap.Width);
-            blender.Blend(configuration, destinationRow, destinationRow, sourceRow, amounts[..overlap.Width]);
+            blender.Blend(
+                configuration,
+                destinationRow,
+                destinationRow,
+                sourceRow,
+                amounts[..overlap.Width],
+                brushWorkspace.GetBlendScratch(overlap.Width, 3));
         }
     }
 

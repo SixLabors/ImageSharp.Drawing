@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Buffers;
+using System.Numerics;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -15,12 +16,14 @@ public sealed class BrushWorkspace<TPixel> : IDisposable
 {
     private readonly IMemoryOwner<float> amountsOwner;
     private readonly IMemoryOwner<TPixel> overlaysOwner;
+    private readonly IMemoryOwner<Vector4> blendScratchOwner;
 
     internal BrushWorkspace(MemoryAllocator allocator, int rowWidth)
     {
         int capacity = Math.Max(1, rowWidth);
         this.amountsOwner = allocator.Allocate<float>(capacity);
         this.overlaysOwner = allocator.Allocate<TPixel>(capacity);
+        this.blendScratchOwner = allocator.Allocate<Vector4>(capacity * 3);
     }
 
     /// <summary>
@@ -45,10 +48,24 @@ public sealed class BrushWorkspace<TPixel> : IDisposable
         return this.overlaysOwner.Memory.Span[..length];
     }
 
+    /// <summary>
+    /// Gets the shared vector scratch for the requested row length and vector row count.
+    /// </summary>
+    /// <param name="length">The number of pixels in the row.</param>
+    /// <param name="vectorRows">The number of temporary vector rows required.</param>
+    /// <returns>A slice of the worker-local pooled vector scratch buffer.</returns>
+    public Span<Vector4> GetBlendScratch(int length, int vectorRows)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
+        ArgumentOutOfRangeException.ThrowIfLessThan(vectorRows, 1);
+        return this.blendScratchOwner.Memory.Span[..(length * vectorRows)];
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
         this.amountsOwner.Dispose();
         this.overlaysOwner.Dispose();
+        this.blendScratchOwner.Dispose();
     }
 }

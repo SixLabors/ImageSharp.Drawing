@@ -37,7 +37,6 @@ public abstract class DrawPolygon
 
     private IPath imageSharpPath;
 
-    private IPath strokedImageSharpPath;
     private WebGPUDrawingBackend webGpuBackend;
     private Configuration webGpuConfiguration;
     private NativeCanvasFrame<Rgba32> webGpuNativeFrame;
@@ -111,7 +110,6 @@ public abstract class DrawPolygon
 
         this.image = new Image<Rgba32>(this.Width, this.Height);
         this.isPen = new SolidPen(Color.White, this.Thickness);
-        this.strokedImageSharpPath = this.isPen.GeneratePath(this.imageSharpPath);
         this.webGpuBackend = new WebGPUDrawingBackend();
         this.webGpuConfiguration = Configuration.Default.Clone();
         this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);

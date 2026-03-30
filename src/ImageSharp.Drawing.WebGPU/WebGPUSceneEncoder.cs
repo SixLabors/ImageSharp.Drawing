@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#pragma warning disable SA1201 // Phase-1 scene-model types are grouped together in one file for now.
+#pragma warning disable SA1201 // Scene-model types are grouped together in one file.
 
 using System.Buffers;
 using System.Diagnostics;
@@ -26,102 +26,70 @@ internal static class WebGPUSceneEncoder
     private const int BinWidth = TileWidth * 16;
     private const int BinHeight = TileHeight * 16;
     private const byte PathTagLineToF32 = 0x09;
+    private const byte PathTagQuadToF32 = 0x0A;
     private const byte PathTagTransform = 0x20;
     private const byte PathTagPath = 0x10;
     private const byte PathTagStyle = 0x40;
     private const byte PathTagSubpathEnd = 0x04;
-    private const int StyleBlendModeShift = 1;
-    private const uint StyleBlendModeMask = 0x1FFFU << StyleBlendModeShift;
-    private const int StyleBlendAlphaShift = 14;
-    private const uint StyleBlendAlphaMask = 0xFFFFU << StyleBlendAlphaShift;
+    private const uint StyleFlagsStyle = 0x80000000U;
     private const uint StyleFlagsFill = 0x40000000U;
+    private const uint StyleFlagsJoinMiter = 0x10000000U;
+    private const uint StyleFlagsJoinRound = 0x20000000U;
+    private const uint StyleFlagsStartCapSquare = 0x04000000U;
+    private const uint StyleFlagsStartCapRound = 0x08000000U;
+    private const uint StyleFlagsEndCapSquare = 0x01000000U;
+    private const uint StyleFlagsEndCapRound = 0x02000000U;
+    private const uint StyleFlagsJoinMiterRevert = 0x00400000U;
+    private const uint StyleFlagsJoinMiterRound = 0x00800000U;
     private static readonly GraphicsOptions DefaultClipGraphicsOptions = new();
 
     /// <summary>
-    /// Encodes prepared composition commands into flush-scoped scene buffers.
+    /// Encodes composition commands into flush-scoped scene buffers.
     /// </summary>
-    /// <param name="commands">The prepared flush commands to encode.</param>
-    /// <param name="support">The previously validated scene-support result for the flush.</param>
+    /// <param name="scene">The scene to encode.</param>
     /// <param name="targetBounds">The root target bounds used for target-local coordinate conversion.</param>
     /// <param name="allocator">The allocator used for temporary and packed scene storage.</param>
-    public static WebGPUEncodedScene Encode(
-        IReadOnlyList<CompositionCommand> commands,
-        in WebGPUSceneSupportResult support,
+    /// <param name="encodedScene">Receives the encoded scene on success.</param>
+    /// <param name="error">Receives the staged-scene support failure reason when encoding fails.</param>
+    /// <returns><see langword="true"/> when the scene encoded successfully; otherwise, <see langword="false"/>.</returns>
+    public static bool TryEncode(
+        CompositionScene scene,
         in Rectangle targetBounds,
-        MemoryAllocator allocator)
+        MemoryAllocator allocator,
+        out WebGPUEncodedScene encodedScene,
+        out string? error)
     {
-        if (commands.Count == 0)
+        if (scene.CommandCount == 0)
         {
-            return WebGPUEncodedScene.Empty;
+            encodedScene = WebGPUEncodedScene.Empty;
+            error = null;
+            return true;
         }
 
-        SupportedSubsetSceneEncoding encoding = SupportedSubsetSceneEncoding.Create(commands, support, targetBounds, allocator);
+        SupportedSubsetSceneEncoding encoding = new(allocator, scene.CommandCount, targetBounds);
         try
         {
-            if (encoding.IsEmpty)
+            if (!encoding.TryBuild(scene, out error))
             {
-                return WebGPUEncodedScene.Empty;
+                encodedScene = WebGPUEncodedScene.Empty;
+                return false;
             }
 
-            return SupportedSubsetSceneResolver.Resolve(ref encoding, targetBounds, allocator);
+            if (encoding.IsEmpty)
+            {
+                encodedScene = WebGPUEncodedScene.Empty;
+                error = null;
+                return true;
+            }
+
+            encodedScene = SupportedSubsetSceneResolver.Resolve(encoding, targetBounds, allocator);
+            error = null;
+            return true;
         }
         finally
         {
             encoding.Dispose();
         }
-    }
-
-    /// <summary>
-    /// Validates that the flush can use the staged WebGPU scene pipeline without mid-encode fallback.
-    /// </summary>
-    /// <param name="commands">The prepared flush commands to validate.</param>
-    /// <returns>The staged-scene support result for the flush.</returns>
-    public static WebGPUSceneSupportResult ValidateSceneSupport(IReadOnlyList<CompositionCommand> commands)
-    {
-        bool hasVisibleFill = false;
-        int visibleFillCount = 0;
-        RasterizationMode fineRasterizationMode = RasterizationMode.Antialiased;
-        float fineCoverageThreshold = 0F;
-
-        for (int i = 0; i < commands.Count; i++)
-        {
-            CompositionCommand command = commands[i];
-
-            if (command.Kind is not CompositionCommandKind.FillLayer)
-            {
-                continue;
-            }
-
-            if (!command.IsVisible)
-            {
-                continue;
-            }
-
-            if (!IsSupportedBrush(command.Brush))
-            {
-                return WebGPUSceneSupportResult.Unsupported($"The staged WebGPU scene pipeline does not support brush type '{command.Brush.GetType().Name}'.");
-            }
-
-            visibleFillCount++;
-            RasterizerOptions options = command.RasterizerOptions;
-            if (!hasVisibleFill)
-            {
-                hasVisibleFill = true;
-                fineRasterizationMode = options.RasterizationMode;
-                fineCoverageThreshold = options.AntialiasThreshold;
-                continue;
-            }
-
-            // The current staged fine pass is scene-wide, so every visible fill in the flush
-            // must agree on the rasterization mode and aliased threshold before we start encode.
-            if (options.RasterizationMode != fineRasterizationMode ||
-                options.AntialiasThreshold != fineCoverageThreshold)
-            {
-                return WebGPUSceneSupportResult.Unsupported("The staged WebGPU scene pipeline does not support mixed fine rasterization modes or thresholds within one flush.");
-            }
-        }
-
-        return WebGPUSceneSupportResult.Supported(visibleFillCount, fineRasterizationMode, fineCoverageThreshold);
     }
 
     /// <summary>
@@ -133,6 +101,7 @@ internal static class WebGPUSceneEncoder
         private bool gradientPixelsDetached;
         private uint lastStyle0;
         private uint lastStyle1;
+        private uint lastStyle2;
         private readonly Rectangle rootTargetBounds;
         private List<Rectangle>? openLayerBounds;
 
@@ -141,12 +110,10 @@ internal static class WebGPUSceneEncoder
         /// </summary>
         /// <param name="allocator">The allocator used for all temporary scene streams.</param>
         /// <param name="commandCount">The total prepared command count for the flush.</param>
-        /// <param name="support">The scene-wide staged-path support result already computed for the flush.</param>
         /// <param name="rootTargetBounds">The root target bounds used for target-local coordinate conversion.</param>
-        private SupportedSubsetSceneEncoding(
+        internal SupportedSubsetSceneEncoding(
             MemoryAllocator allocator,
             int commandCount,
-            in WebGPUSceneSupportResult support,
             in Rectangle rootTargetBounds)
         {
             this.PathTags = new OwnedStream<byte>(allocator, Math.Max(commandCount * 8, 256));
@@ -169,10 +136,12 @@ internal static class WebGPUSceneEncoder
             this.gradientPixelsDetached = false;
             this.lastStyle0 = 0;
             this.lastStyle1 = 0;
+            this.lastStyle2 = 0;
             this.rootTargetBounds = rootTargetBounds;
             this.openLayerBounds = null;
-            this.FineRasterizationMode = support.FineRasterizationMode;
-            this.FineCoverageThreshold = support.FineCoverageThreshold;
+            this.VisibleFillCount = 0;
+            this.FineRasterizationMode = RasterizationMode.Antialiased;
+            this.FineCoverageThreshold = 0F;
 
             this.PathTags.Add(PathTagTransform);
             AppendIdentityTransform(ref this.Transforms);
@@ -224,6 +193,11 @@ internal static class WebGPUSceneEncoder
         public int FillCount { get; private set; }
 
         /// <summary>
+        /// Gets the number of visible fills accepted by staged-scene validation.
+        /// </summary>
+        public int VisibleFillCount { get; private set; }
+
+        /// <summary>
         /// Gets the number of emitted paths.
         /// </summary>
         public int PathCount { get; private set; }
@@ -261,35 +235,17 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Gets the flush-wide fine rasterization mode selected while encoding visible fills.
         /// </summary>
-        public RasterizationMode FineRasterizationMode { get; }
+        public RasterizationMode FineRasterizationMode { get; private set; }
 
         /// <summary>
         /// Gets the aliased coverage threshold consumed by the fine pass when aliased mode is selected.
         /// </summary>
-        public float FineCoverageThreshold { get; }
+        public float FineCoverageThreshold { get; private set; }
 
         /// <summary>
         /// Gets a value indicating whether the encoding produced no fill work.
         /// </summary>
-        public readonly bool IsEmpty => this.FillCount == 0;
-
-        /// <summary>
-        /// Creates and populates the mutable encoding state for the given flush commands.
-        /// </summary>
-        /// <param name="commands">The prepared flush commands to encode.</param>
-        /// <param name="support">The scene-wide staged-path support result already computed for the flush.</param>
-        /// <param name="targetBounds">The root target bounds used for target-local coordinate conversion.</param>
-        /// <param name="allocator">The allocator used for all temporary scene streams.</param>
-        public static SupportedSubsetSceneEncoding Create(
-            IReadOnlyList<CompositionCommand> commands,
-            in WebGPUSceneSupportResult support,
-            in Rectangle targetBounds,
-            MemoryAllocator allocator)
-        {
-            SupportedSubsetSceneEncoding encoding = new(allocator, commands.Count, support, targetBounds);
-            encoding.Build(commands);
-            return encoding;
-        }
+        public bool IsEmpty => this.FillCount == 0;
 
         /// <summary>
         /// Disposes all owned stream storage that has not already been detached.
@@ -315,58 +271,179 @@ internal static class WebGPUSceneEncoder
         public void MarkGradientPixelsDetached() => this.gradientPixelsDetached = true;
 
         /// <summary>
-        /// Appends all supported commands into the mutable scene streams.
+        /// Appends all supported scene operations into the mutable scene streams.
         /// </summary>
-        private void Build(IReadOnlyList<CompositionCommand> commands)
+        internal bool TryBuild(CompositionScene scene, out string? error)
         {
-            for (int i = 0; i < commands.Count; i++)
+            for (int i = 0; i < scene.CommandCount; i++)
             {
-                this.Append(commands[i]);
+                CompositionSceneCommand command = scene.Commands[i];
+                if (command is PathCompositionSceneCommand pathCommand)
+                {
+                    if (!this.TryAppend(pathCommand.Command, out error))
+                    {
+                        return false;
+                    }
+                }
+                else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
+                {
+                    if (!this.TryAppend(lineSegmentCommand.Command, out error))
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (!this.TryAppend(((PolylineCompositionSceneCommand)command).Command, out error))
+                    {
+                        return false;
+                    }
+                }
             }
+
+            error = null;
+            return true;
         }
 
         /// <summary>
-        /// Appends one prepared command to the scene streams when the command kind is supported.
+        /// Appends one prepared path- or layer-based command to the scene streams when the command kind is supported.
         /// </summary>
-        private void Append(in CompositionCommand command)
+        private bool TryAppend(in CompositionCommand command, out string? error)
         {
             switch (command.Kind)
             {
                 case CompositionCommandKind.FillLayer:
-                    if (!command.IsVisible)
+                    if (!TryResolveCommand(command, out ResolvedPathCommand resolved))
                     {
-                        return;
+                        error = null;
+                        return true;
                     }
 
-                    IPath preparedPath = command.PreparedPath!;
-                    this.AppendPlainFill(command, preparedPath);
-                    return;
+                    if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+                    {
+                        return false;
+                    }
+
+                    if (command.Pen is Pen pen)
+                    {
+                        this.AppendPlainStroke(resolved, pen);
+                        error = null;
+                        return true;
+                    }
+
+                    this.AppendPlainFill(resolved);
+                    error = null;
+                    return true;
 
                 case CompositionCommandKind.BeginLayer:
                     this.AppendBeginLayer(command);
-                    return;
+                    error = null;
+                    return true;
 
                 case CompositionCommandKind.EndLayer:
                     this.AppendEndLayer();
-                    return;
-
-                default:
-                    return;
+                    error = null;
+                    return true;
             }
+
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Appends one prepared explicit line-segment stroke to the scene streams.
+        /// </summary>
+        private bool TryAppend(in StrokeLineSegmentCommand command, out string? error)
+        {
+            if (!TryResolveCommand(command, out ResolvedLineSegmentCommand resolved))
+            {
+                error = null;
+                return true;
+            }
+
+            if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+            {
+                return false;
+            }
+
+            this.AppendExplicitStroke(
+                resolved.Brush,
+                resolved.GraphicsOptions,
+                resolved.RasterizerOptions,
+                resolved.DestinationOffset,
+                resolved.TargetBounds,
+                resolved.DestinationRegion,
+                resolved.BrushBounds,
+                resolved.Pen,
+                resolved.Start,
+                resolved.End);
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Appends one prepared explicit polyline stroke to the scene streams.
+        /// </summary>
+        private bool TryAppend(in StrokePolylineCommand command, out string? error)
+        {
+            if (!TryResolveCommand(command, out ResolvedPolylineCommand resolved))
+            {
+                error = null;
+                return true;
+            }
+
+            if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+            {
+                return false;
+            }
+
+            LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points);
+            this.AppendExplicitStroke(resolved.Brush, resolved.GraphicsOptions, resolved.RasterizerOptions, resolved.DestinationOffset, resolved.TargetBounds, resolved.DestinationRegion, resolved.BrushBounds, resolved.Pen, geometry);
+            error = null;
+            return true;
+        }
+
+        private bool TryRegisterVisibleFill(Brush brush, in RasterizerOptions options, out string? error)
+        {
+            if (!IsSupportedBrush(brush))
+            {
+                error = $"The staged WebGPU scene pipeline does not support brush type '{brush.GetType().Name}'.";
+                return false;
+            }
+
+            this.VisibleFillCount++;
+            if (this.VisibleFillCount == 1)
+            {
+                this.FineRasterizationMode = options.RasterizationMode;
+                this.FineCoverageThreshold = options.AntialiasThreshold;
+                error = null;
+                return true;
+            }
+
+            if (options.RasterizationMode != this.FineRasterizationMode ||
+                options.AntialiasThreshold != this.FineCoverageThreshold)
+            {
+                error = "The staged WebGPU scene pipeline does not support mixed fine rasterization modes or thresholds within one flush.";
+                return false;
+            }
+
+            error = null;
+            return true;
         }
 
         /// <summary>
         /// Encodes one visible fill command into the path, draw, style, and auxiliary payload streams.
         /// </summary>
-        private void AppendPlainFill(in CompositionCommand command, IPath preparedPath)
+        private void AppendPlainFill(in ResolvedPathCommand command)
         {
-            LinearGeometry geometry = preparedPath.ToLinearGeometry();
-            uint drawTag = GetDrawTag(command);
+            uint drawTag = GetDrawTag(command.Brush);
             GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
-            (uint style0, uint style1) = GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule);
+            (uint style0, uint style1, uint style2) = GetFillStyle(command.GraphicsOptions, command.RasterizerOptions.IntersectionRule);
             int pathTagCheckpoint = this.PathTags.Count;
+            int pathDataCheckpoint = this.PathData.Count;
             int styleCheckpoint = this.Styles.Count;
-            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1;
+            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+            LinearGeometry geometry = command.Path.ToLinearGeometry();
 
             // Reserve the exact words/tags this item can append before encoding so the
             // subsequent Add calls stay on the already-allocated contiguous spans.
@@ -386,11 +463,80 @@ internal static class WebGPUSceneEncoder
                 this.PathTags.Add(PathTagStyle);
                 this.Styles.Add(style0);
                 this.Styles.Add(style1);
+                this.Styles.Add(style2);
             }
 
             int encodedPathCount = EncodePath(
                 command,
                 geometry,
+                this.rootTargetBounds,
+                ref this.PathTags,
+                ref this.PathData,
+                out int geometryLineCount);
+
+            if (encodedPathCount == 0)
+            {
+                this.PathTags.SetCount(pathTagCheckpoint);
+                this.PathData.SetCount(pathDataCheckpoint);
+                this.Styles.SetCount(styleCheckpoint);
+                return;
+            }
+
+            this.hasLastStyle = true;
+            this.lastStyle0 = style0;
+            this.lastStyle1 = style1;
+            this.lastStyle2 = style2;
+            this.FillCount++;
+            this.PathCount += encodedPathCount;
+            this.LineCount += geometryLineCount;
+            this.InfoWordCount += (int)drawTagMonoid.InfoOffset;
+            this.DrawTags.Add(drawTag);
+            int gradientRowCount = this.GradientRowCount;
+
+            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
+            this.GradientRowCount = gradientRowCount;
+
+            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
+            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
+        }
+
+        /// <summary>
+        /// Encodes one visible stroke command into the path, draw, style, and auxiliary payload streams.
+        /// </summary>
+        private void AppendPlainStroke(in ResolvedPathCommand command, Pen pen)
+        {
+            LinearGeometry geometry = command.Path.ToLinearGeometry();
+            uint drawTag = GetDrawTag(command.Brush);
+            GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
+            (uint style0, uint style1, uint style2) = GetStrokeStyle(command.GraphicsOptions, pen);
+            int pathTagCheckpoint = this.PathTags.Count;
+            int styleCheckpoint = this.Styles.Count;
+            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+
+            ReservePlainStrokeCapacity(
+                geometry,
+                drawTag,
+                appendStyle,
+                ref this.PathTags,
+                ref this.PathData,
+                ref this.DrawTags,
+                ref this.DrawData,
+                ref this.Styles,
+                ref this.GradientPixels);
+
+            if (appendStyle)
+            {
+                this.PathTags.Add(PathTagStyle);
+                this.Styles.Add(style0);
+                this.Styles.Add(style1);
+                this.Styles.Add(style2);
+            }
+
+            int encodedPathCount = EncodeStrokePath(
+                geometry,
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                pen,
                 this.rootTargetBounds,
                 ref this.PathTags,
                 ref this.PathData,
@@ -406,6 +552,82 @@ internal static class WebGPUSceneEncoder
             this.hasLastStyle = true;
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
+            this.lastStyle2 = style2;
+            this.FillCount++;
+            this.PathCount += encodedPathCount;
+            this.LineCount += geometryLineCount;
+            this.InfoWordCount += (int)drawTagMonoid.InfoOffset;
+            this.DrawTags.Add(drawTag);
+            int gradientRowCount = this.GradientRowCount;
+
+            AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
+            this.GradientRowCount = gradientRowCount;
+
+            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
+            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
+        }
+
+        /// <summary>
+        /// Encodes one visible explicit stroke primitive into the path, draw, style, and auxiliary payload streams.
+        /// </summary>
+        private void AppendExplicitStroke(
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            RasterizerOptions rasterizerOptions,
+            Point destinationOffset,
+            Rectangle targetBounds,
+            Rectangle destinationRegion,
+            Rectangle brushBounds,
+            Pen pen,
+            LinearGeometry geometry)
+        {
+            uint drawTag = GetDrawTag(brush);
+            GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
+            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen);
+            int pathTagCheckpoint = this.PathTags.Count;
+            int styleCheckpoint = this.Styles.Count;
+            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+
+            ReservePlainStrokeCapacity(
+                geometry,
+                drawTag,
+                appendStyle,
+                ref this.PathTags,
+                ref this.PathData,
+                ref this.DrawTags,
+                ref this.DrawData,
+                ref this.Styles,
+                ref this.GradientPixels);
+
+            if (appendStyle)
+            {
+                this.PathTags.Add(PathTagStyle);
+                this.Styles.Add(style0);
+                this.Styles.Add(style1);
+                this.Styles.Add(style2);
+            }
+
+            int encodedPathCount = EncodeStrokePath(
+                geometry,
+                rasterizerOptions,
+                destinationOffset,
+                pen,
+                this.rootTargetBounds,
+                ref this.PathTags,
+                ref this.PathData,
+                out int geometryLineCount);
+
+            if (encodedPathCount == 0)
+            {
+                this.PathTags.SetCount(pathTagCheckpoint);
+                this.Styles.SetCount(styleCheckpoint);
+                return;
+            }
+
+            this.hasLastStyle = true;
+            this.lastStyle0 = style0;
+            this.lastStyle1 = style1;
+            this.lastStyle2 = style2;
             this.FillCount++;
             this.PathCount += encodedPathCount;
             this.LineCount += geometryLineCount;
@@ -414,7 +636,9 @@ internal static class WebGPUSceneEncoder
             int gradientRowCount = this.GradientRowCount;
 
             AppendDrawData(
-                command,
+                brush,
+                brushBounds,
+                graphicsOptions,
                 drawTag,
                 ref this.DrawData,
                 ref this.GradientPixels,
@@ -422,8 +646,92 @@ internal static class WebGPUSceneEncoder
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
 
-            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(command, this.rootTargetBounds));
-            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(command, this.rootTargetBounds));
+            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
+            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
+        }
+
+        /// <summary>
+        /// Encodes one visible explicit line-segment stroke primitive into the path, draw, style, and auxiliary payload streams.
+        /// </summary>
+        private void AppendExplicitStroke(
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            RasterizerOptions rasterizerOptions,
+            Point destinationOffset,
+            Rectangle targetBounds,
+            Rectangle destinationRegion,
+            Rectangle brushBounds,
+            Pen pen,
+            PointF start,
+            PointF end)
+        {
+            uint drawTag = GetDrawTag(brush);
+            GpuSceneDrawMonoid drawTagMonoid = GpuSceneDrawTag.Map(drawTag);
+            (uint style0, uint style1, uint style2) = GetStrokeStyle(graphicsOptions, pen);
+            int pathTagCheckpoint = this.PathTags.Count;
+            int styleCheckpoint = this.Styles.Count;
+            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
+
+            ReservePlainStrokeCapacityForOpenSegment(
+                drawTag,
+                appendStyle,
+                ref this.PathTags,
+                ref this.PathData,
+                ref this.DrawTags,
+                ref this.DrawData,
+                ref this.Styles,
+                ref this.GradientPixels);
+
+            if (appendStyle)
+            {
+                this.PathTags.Add(PathTagStyle);
+                this.Styles.Add(style0);
+                this.Styles.Add(style1);
+                this.Styles.Add(style2);
+            }
+
+            int encodedPathCount = EncodeOpenSegmentStrokePath(
+                start,
+                end,
+                rasterizerOptions,
+                destinationOffset,
+                pen,
+                this.rootTargetBounds,
+                ref this.PathTags,
+                ref this.PathData,
+                out int geometryLineCount);
+
+            if (encodedPathCount == 0)
+            {
+                this.PathTags.SetCount(pathTagCheckpoint);
+                this.Styles.SetCount(styleCheckpoint);
+                return;
+            }
+
+            this.hasLastStyle = true;
+            this.lastStyle0 = style0;
+            this.lastStyle1 = style1;
+            this.lastStyle2 = style2;
+            this.FillCount++;
+            this.PathCount += encodedPathCount;
+            this.LineCount += geometryLineCount;
+            this.InfoWordCount += (int)drawTagMonoid.InfoOffset;
+            this.DrawTags.Add(drawTag);
+            int gradientRowCount = this.GradientRowCount;
+
+            AppendDrawData(
+                brush,
+                brushBounds,
+                graphicsOptions,
+                drawTag,
+                ref this.DrawData,
+                ref this.GradientPixels,
+                this.Images,
+                ref gradientRowCount);
+            this.GradientRowCount = gradientRowCount;
+
+            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
+            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
         }
 
         /// <summary>
@@ -432,10 +740,10 @@ internal static class WebGPUSceneEncoder
         private void AppendBeginLayer(in CompositionCommand command)
         {
             Rectangle layerBounds = ToTargetLocal(command.LayerBounds, this.rootTargetBounds);
-            (uint style0, uint style1) = GetFillStyle(DefaultClipGraphicsOptions, IntersectionRule.NonZero);
+            (uint style0, uint style1, uint style2) = GetFillStyle(DefaultClipGraphicsOptions, IntersectionRule.NonZero);
             int pathTagCheckpoint = this.PathTags.Count;
             int styleCheckpoint = this.Styles.Count;
-            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1;
+            bool appendStyle = !this.hasLastStyle || style0 != this.lastStyle0 || style1 != this.lastStyle1 || style2 != this.lastStyle2;
 
             // Begin-layer clip emission is fixed-size: one optional style record,
             // one rectangular clip path, and one BeginClip draw record.
@@ -452,6 +760,7 @@ internal static class WebGPUSceneEncoder
                 this.PathTags.Add(PathTagStyle);
                 this.Styles.Add(style0);
                 this.Styles.Add(style1);
+                this.Styles.Add(style2);
             }
 
             if (EncodeRectanglePath(layerBounds, ref this.PathTags, ref this.PathData, out int clipLineCount) == 0)
@@ -464,6 +773,7 @@ internal static class WebGPUSceneEncoder
             this.hasLastStyle = true;
             this.lastStyle0 = style0;
             this.lastStyle1 = style1;
+            this.lastStyle2 = style2;
             this.PathCount++;
             this.LineCount += clipLineCount;
             this.InfoWordCount += (int)GpuSceneDrawTag.Map(GpuSceneDrawTag.BeginClip).InfoOffset;
@@ -511,7 +821,7 @@ internal static class WebGPUSceneEncoder
         /// Resolves the mutable encoding into the final packed scene buffers.
         /// </summary>
         public static WebGPUEncodedScene Resolve(
-            ref SupportedSubsetSceneEncoding encoding,
+            SupportedSubsetSceneEncoding encoding,
             in Rectangle targetBounds,
             MemoryAllocator allocator)
         {
@@ -559,7 +869,7 @@ internal static class WebGPUSceneEncoder
                     encoding.InfoWordCount,
                     sceneDataOwner,
                     sceneWordCount,
-                    DetachGradientPixels(ref encoding),
+                    DetachGradientPixels(encoding),
                     encoding.Images,
                     encoding.GradientRowCount,
                     layout,
@@ -593,7 +903,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Detaches the gradient pixel payload when gradients were emitted for the flush.
         /// </summary>
-        private static IMemoryOwner<uint>? DetachGradientPixels(ref SupportedSubsetSceneEncoding encoding)
+        private static IMemoryOwner<uint>? DetachGradientPixels(SupportedSubsetSceneEncoding encoding)
         {
             if (encoding.GradientRowCount == 0)
             {
@@ -622,9 +932,323 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Maps one prepared fill command to the draw-tag consumed by the staged scene pipeline.
     /// </summary>
+    private static bool TryResolveCommand(in CompositionCommand command, out ResolvedPathCommand resolved)
+    {
+        if (command.Kind is not CompositionCommandKind.FillLayer)
+        {
+            resolved = default;
+            return false;
+        }
+
+        IPath path = ResolveCommandPath(command);
+        RectangleF bounds = command.Pen is Pen pen ? GetStrokeBounds(path.Bounds, pen) : path.Bounds;
+        if (!TryResolveRasterization(
+                command.Brush,
+                bounds,
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                command.TargetBounds,
+                out Brush brush,
+                out RasterizerOptions rasterizerOptions,
+                out Rectangle destinationRegion,
+                out Rectangle brushBounds))
+        {
+            resolved = default;
+            return false;
+        }
+
+        resolved = new ResolvedPathCommand(
+            path,
+            brush,
+            command.GraphicsOptions,
+            rasterizerOptions,
+            command.DestinationOffset,
+            command.TargetBounds,
+            destinationRegion,
+            brushBounds);
+        return true;
+    }
+
+    private static bool TryResolveCommand(in StrokeLineSegmentCommand command, out ResolvedLineSegmentCommand resolved)
+    {
+        PointF start = command.SourceStart;
+        PointF end = command.SourceEnd;
+
+        if (!TryResolveRasterization(
+                command.Brush,
+                StrokeLineSegmentCommand.GetConservativeBounds(start, end, command.Pen),
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                command.TargetBounds,
+                out Brush brush,
+                out RasterizerOptions rasterizerOptions,
+                out Rectangle destinationRegion,
+                out Rectangle brushBounds))
+        {
+            resolved = default;
+            return false;
+        }
+
+        resolved = new ResolvedLineSegmentCommand(
+            start,
+            end,
+            command.Pen,
+            brush,
+            command.GraphicsOptions,
+            rasterizerOptions,
+            command.DestinationOffset,
+            command.TargetBounds,
+            destinationRegion,
+            brushBounds);
+        return true;
+    }
+
+    private static bool TryResolveCommand(in StrokePolylineCommand command, out ResolvedPolylineCommand resolved)
+    {
+        PointF[] points = command.SourcePoints;
+
+        if (!TryResolveRasterization(
+                command.Brush,
+                StrokePolylineCommand.GetConservativeBounds(points, command.Pen),
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                command.TargetBounds,
+                out Brush brush,
+                out RasterizerOptions rasterizerOptions,
+                out Rectangle destinationRegion,
+                out Rectangle brushBounds))
+        {
+            resolved = default;
+            return false;
+        }
+
+        resolved = new ResolvedPolylineCommand(
+            points,
+            command.Pen,
+            brush,
+            command.GraphicsOptions,
+            rasterizerOptions,
+            command.DestinationOffset,
+            command.TargetBounds,
+            destinationRegion,
+            brushBounds);
+        return true;
+    }
+
+    private static IPath ResolveCommandPath(in CompositionCommand command)
+    {
+        IPath path = command.SourcePath;
+
+        if (command.ClipPaths is { Count: > 0 })
+        {
+            path = path.Clip(command.ShapeOptions, command.ClipPaths);
+        }
+
+        return path;
+    }
+
+    private static bool TryResolveRasterization(
+        Brush brush,
+        RectangleF bounds,
+        in RasterizerOptions options,
+        Point destinationOffset,
+        in Rectangle targetBounds,
+        out Brush resolvedBrush,
+        out RasterizerOptions resolvedOptions,
+        out Rectangle destinationRegion,
+        out Rectangle brushBounds)
+    {
+        resolvedBrush = brush;
+
+        if (options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter)
+        {
+            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
+        }
+
+        Rectangle localInterest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right) + 1,
+            (int)MathF.Ceiling(bounds.Bottom) + 1);
+
+        Rectangle absoluteInterest = new(
+            localInterest.X + destinationOffset.X,
+            localInterest.Y + destinationOffset.Y,
+            localInterest.Width,
+            localInterest.Height);
+
+        Rectangle clippedDestination = Rectangle.Intersect(targetBounds, absoluteInterest);
+        if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
+        {
+            resolvedOptions = default;
+            destinationRegion = default;
+            brushBounds = default;
+            return false;
+        }
+
+        resolvedOptions = new RasterizerOptions(
+            absoluteInterest,
+            options.IntersectionRule,
+            options.RasterizationMode,
+            options.SamplingOrigin,
+            options.AntialiasThreshold);
+        destinationRegion = new Rectangle(
+            clippedDestination.X - targetBounds.X,
+            clippedDestination.Y - targetBounds.Y,
+            clippedDestination.Width,
+            clippedDestination.Height);
+        brushBounds = absoluteInterest;
+        return true;
+    }
+
+    private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen)
+    {
+        float halfWidth = pen.StrokeWidth * 0.5F;
+        float inflate = pen.StrokeOptions.LineJoin switch
+        {
+            LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),
+            _ => halfWidth
+        };
+
+        bounds.Inflate(new SizeF(inflate, inflate));
+        return bounds;
+    }
+
+    private readonly struct ResolvedPathCommand
+    {
+        public ResolvedPathCommand(
+            IPath path,
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            RasterizerOptions rasterizerOptions,
+            Point destinationOffset,
+            Rectangle targetBounds,
+            Rectangle destinationRegion,
+            Rectangle brushBounds)
+        {
+            this.Path = path;
+            this.Brush = brush;
+            this.GraphicsOptions = graphicsOptions;
+            this.RasterizerOptions = rasterizerOptions;
+            this.DestinationOffset = destinationOffset;
+            this.TargetBounds = targetBounds;
+            this.DestinationRegion = destinationRegion;
+            this.BrushBounds = brushBounds;
+        }
+
+        public IPath Path { get; }
+
+        public Brush Brush { get; }
+
+        public GraphicsOptions GraphicsOptions { get; }
+
+        public RasterizerOptions RasterizerOptions { get; }
+
+        public Point DestinationOffset { get; }
+
+        public Rectangle TargetBounds { get; }
+
+        public Rectangle DestinationRegion { get; }
+
+        public Rectangle BrushBounds { get; }
+    }
+
+    private readonly struct ResolvedLineSegmentCommand
+    {
+        public ResolvedLineSegmentCommand(
+            PointF start,
+            PointF end,
+            Pen pen,
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            RasterizerOptions rasterizerOptions,
+            Point destinationOffset,
+            Rectangle targetBounds,
+            Rectangle destinationRegion,
+            Rectangle brushBounds)
+        {
+            this.Start = start;
+            this.End = end;
+            this.Pen = pen;
+            this.Brush = brush;
+            this.GraphicsOptions = graphicsOptions;
+            this.RasterizerOptions = rasterizerOptions;
+            this.DestinationOffset = destinationOffset;
+            this.TargetBounds = targetBounds;
+            this.DestinationRegion = destinationRegion;
+            this.BrushBounds = brushBounds;
+        }
+
+        public PointF Start { get; }
+
+        public PointF End { get; }
+
+        public Pen Pen { get; }
+
+        public Brush Brush { get; }
+
+        public GraphicsOptions GraphicsOptions { get; }
+
+        public RasterizerOptions RasterizerOptions { get; }
+
+        public Point DestinationOffset { get; }
+
+        public Rectangle TargetBounds { get; }
+
+        public Rectangle DestinationRegion { get; }
+
+        public Rectangle BrushBounds { get; }
+    }
+
+    private readonly struct ResolvedPolylineCommand
+    {
+        public ResolvedPolylineCommand(
+            PointF[] points,
+            Pen pen,
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            RasterizerOptions rasterizerOptions,
+            Point destinationOffset,
+            Rectangle targetBounds,
+            Rectangle destinationRegion,
+            Rectangle brushBounds)
+        {
+            this.Points = points;
+            this.Pen = pen;
+            this.Brush = brush;
+            this.GraphicsOptions = graphicsOptions;
+            this.RasterizerOptions = rasterizerOptions;
+            this.DestinationOffset = destinationOffset;
+            this.TargetBounds = targetBounds;
+            this.DestinationRegion = destinationRegion;
+            this.BrushBounds = brushBounds;
+        }
+
+        public PointF[] Points { get; }
+
+        public Pen Pen { get; }
+
+        public Brush Brush { get; }
+
+        public GraphicsOptions GraphicsOptions { get; }
+
+        public RasterizerOptions RasterizerOptions { get; }
+
+        public Point DestinationOffset { get; }
+
+        public Rectangle TargetBounds { get; }
+
+        public Rectangle DestinationRegion { get; }
+
+        public Rectangle BrushBounds { get; }
+    }
+
+    /// <summary>
+    /// Maps one prepared brush to the draw-tag consumed by the staged scene pipeline.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetDrawTag(in CompositionCommand command)
-        => command.Brush switch
+    private static uint GetDrawTag(Brush brush)
+        => brush switch
         {
             SolidBrush => GpuSceneDrawTag.FillColor,
             RecolorBrush => GpuSceneDrawTag.FillRecolor,
@@ -634,14 +1258,14 @@ internal static class WebGPUSceneEncoder
             SweepGradientBrush => GpuSceneDrawTag.FillSweepGradient,
             PatternBrush => GpuSceneDrawTag.FillImage,
             ImageBrush => GpuSceneDrawTag.FillImage,
-            _ => throw new UnreachableException($"Unsupported brush type '{command.Brush.GetType().Name}' should have been rejected before scene encoding.")
+            _ => throw new UnreachableException($"Unsupported brush type '{brush.GetType().Name}' should have been rejected before scene encoding.")
         };
 
     /// <summary>
     /// Encodes a lowered path into path-tag and path-data streams in target-local space.
     /// </summary>
     private static int EncodePath(
-        in CompositionCommand command,
+        in ResolvedPathCommand command,
         LinearGeometry geometry,
         in Rectangle rootTargetBounds,
         ref OwnedStream<byte> pathTags,
@@ -654,16 +1278,6 @@ internal static class WebGPUSceneEncoder
         lineCount = command.RasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter
             ? geometry.Info.NonHorizontalSegmentCountPixelCenter
             : geometry.Info.NonHorizontalSegmentCountPixelBoundary;
-
-        // Prepared path points stay in the command's own path space until backend encoding.
-        // Ordinary shapes often already live in target coordinates, but text glyphs are emitted
-        // as local outlines plus a separate DestinationOffset. We therefore place every point by
-        // applying the command's absolute destination offset directly rather than trying to
-        // reconstruct placement from Interest/DestinationRegion/SourceOffset, which are clipping
-        // artifacts in absolute destination space and can cancel the text offset entirely.
-        // The lowered geometry is already contour-ordered, so the encoder walks the segment
-        // stream once and emits each contour as: starting point, then one end point per segment.
-        SegmentEnumerator segments = geometry.GetSegments();
 
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
@@ -679,27 +1293,18 @@ internal static class WebGPUSceneEncoder
             // The tag index is just the segment index because there is exactly one emitted tag
             // for each derived segment in the contour.
             int dataIndex = 0;
-            _ = segments.MoveNext();
-            LinearSegment segment = segments.Current;
-            float firstX = segment.Start.X + pointTranslateX;
-            float firstY = segment.Start.Y + pointTranslateY;
+            PointF firstPoint = geometry.Points[contour.PointStart];
+            float firstX = firstPoint.X + pointTranslateX;
+            float firstY = firstPoint.Y + pointTranslateY;
             contourData[dataIndex++] = BitcastSingle(firstX);
             contourData[dataIndex++] = BitcastSingle(firstY);
 
-            // The first segment is already loaded so the contour can emit its initial point
-            // before the loop. After that, each iteration consumes exactly one derived segment
-            // and appends only that segment's end point because the GPU scene format rebuilds
-            // continuity from the contour start plus the ordered stream of segment end points.
             for (int j = 0; j < contour.SegmentCount; j++)
             {
-                if (j > 0)
-                {
-                    _ = segments.MoveNext();
-                    segment = segments.Current;
-                }
-
-                float translatedEndX = segment.End.X + pointTranslateX;
-                float translatedEndY = segment.End.Y + pointTranslateY;
+                int endPointIndex = contour.PointStart + ((j + 1) == contour.PointCount ? 0 : j + 1);
+                PointF endPoint = geometry.Points[endPointIndex];
+                float translatedEndX = endPoint.X + pointTranslateX;
+                float translatedEndY = endPoint.Y + pointTranslateY;
                 contourData[dataIndex++] = BitcastSingle(translatedEndX);
                 contourData[dataIndex++] = BitcastSingle(translatedEndY);
                 contourTags[j] = PathTagLineToF32;
@@ -722,6 +1327,118 @@ internal static class WebGPUSceneEncoder
         }
 
         pathTags.Add(PathTagPath);
+        return 1;
+    }
+
+    /// <summary>
+    /// Encodes a stroke centerline into Vello-style path tags and path data in target-local space.
+    /// </summary>
+    private static int EncodeStrokePath(
+        LinearGeometry geometry,
+        in RasterizerOptions rasterizerOptions,
+        Point destinationOffset,
+        Pen pen,
+        in Rectangle rootTargetBounds,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        out int lineCount)
+    {
+        float samplingOffset = rasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+        float pointTranslateX = (destinationOffset.X - rootTargetBounds.X) + samplingOffset;
+        float pointTranslateY = (destinationOffset.Y - rootTargetBounds.Y) + samplingOffset;
+        lineCount = EstimateStrokeLineCount(geometry, pen);
+
+        for (int i = 0; i < geometry.Contours.Count; i++)
+        {
+            LinearContour contour = geometry.Contours[i];
+            if (contour.SegmentCount == 0)
+            {
+                continue;
+            }
+
+            int markerWordCount = contour.IsClosed ? 2 : 4;
+            Span<uint> contourData = pathData.GetAppendSpan(2 + (contour.SegmentCount * 2) + markerWordCount);
+            Span<byte> contourTags = pathTags.GetAppendSpan(contour.SegmentCount + 1);
+
+            int dataIndex = 0;
+            int tagIndex = 0;
+            PointF firstPoint = geometry.Points[contour.PointStart];
+            PointF firstTangentEndPoint = GetStrokeMarkerTangentPoint(geometry, contour);
+            contourData[dataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
+            contourData[dataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
+
+            for (int segmentIndex = 0; segmentIndex < contour.SegmentCount; segmentIndex++)
+            {
+                int endPointIndex = contour.PointStart + ((segmentIndex + 1) == contour.PointCount ? 0 : segmentIndex + 1);
+                PointF endPoint = geometry.Points[endPointIndex];
+                contourData[dataIndex++] = BitcastSingle(endPoint.X + pointTranslateX);
+                contourData[dataIndex++] = BitcastSingle(endPoint.Y + pointTranslateY);
+                contourTags[tagIndex++] = PathTagLineToF32;
+            }
+
+            if (!contour.IsClosed)
+            {
+                contourData[dataIndex++] = BitcastSingle(firstPoint.X + pointTranslateX);
+                contourData[dataIndex++] = BitcastSingle(firstPoint.Y + pointTranslateY);
+                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
+                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
+                contourTags[tagIndex] = PathTagQuadToF32 | PathTagSubpathEnd;
+            }
+            else
+            {
+                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
+                contourData[dataIndex++] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
+                contourTags[tagIndex] = PathTagLineToF32 | PathTagSubpathEnd;
+            }
+
+            pathData.Advance(contourData.Length);
+            pathTags.Advance(contourTags.Length);
+        }
+
+        if (geometry.Info.SegmentCount == 0)
+        {
+            return 0;
+        }
+
+        pathTags.Add(PathTagPath);
+        return 1;
+    }
+
+    /// <summary>
+    /// Encodes one explicit open two-point stroke centerline into Vello-style path tags and path data in target-local space.
+    /// </summary>
+    private static int EncodeOpenSegmentStrokePath(
+        PointF start,
+        PointF end,
+        in RasterizerOptions rasterizerOptions,
+        Point destinationOffset,
+        Pen pen,
+        in Rectangle rootTargetBounds,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        out int lineCount)
+    {
+        float samplingOffset = rasterizerOptions.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+        float pointTranslateX = (destinationOffset.X - rootTargetBounds.X) + samplingOffset;
+        float pointTranslateY = (destinationOffset.Y - rootTargetBounds.Y) + samplingOffset;
+        PointF firstTangentEndPoint = GetStrokeMarkerTangentPoint(start, end);
+
+        Span<uint> contourData = pathData.GetAppendSpan(8);
+        Span<byte> contourTags = pathTags.GetAppendSpan(2);
+        contourData[0] = BitcastSingle(start.X + pointTranslateX);
+        contourData[1] = BitcastSingle(start.Y + pointTranslateY);
+        contourData[2] = BitcastSingle(end.X + pointTranslateX);
+        contourData[3] = BitcastSingle(end.Y + pointTranslateY);
+        contourTags[0] = PathTagLineToF32;
+        contourData[4] = BitcastSingle(start.X + pointTranslateX);
+        contourData[5] = BitcastSingle(start.Y + pointTranslateY);
+        contourData[6] = BitcastSingle(firstTangentEndPoint.X + pointTranslateX);
+        contourData[7] = BitcastSingle(firstTangentEndPoint.Y + pointTranslateY);
+        contourTags[1] = PathTagQuadToF32 | PathTagSubpathEnd;
+        pathData.Advance(contourData.Length);
+        pathTags.Advance(contourTags.Length);
+        pathTags.Add(PathTagPath);
+        lineCount = EstimateStrokeLineCountForOpenSegment(pen);
         return 1;
     }
 
@@ -778,7 +1495,8 @@ internal static class WebGPUSceneEncoder
     /// Reserves the exact stream growth needed for one plain fill item.
     /// </summary>
     private static void ReservePlainFillCapacity(
-        LinearGeometryInfo geometryInfo,
+        int contourCount,
+        int segmentCount,
         uint drawTag,
         bool appendStyle,
         ref OwnedStream<byte> pathTags,
@@ -788,18 +1506,8 @@ internal static class WebGPUSceneEncoder
         ref OwnedStream<uint> styles,
         ref OwnedStream<uint> gradientPixels)
     {
-        // Path tags:
-        // - one optional PathTagStyle when the style changes
-        // - one line/curve-equivalent tag per lowered segment
-        // - one final PathTagPath item to terminate the encoded path
-        int pathTagAdd = geometryInfo.SegmentCount + 1 + (appendStyle ? 1 : 0);
-
-        // Path data words:
-        // - each contour writes its starting point once: 2 uint words (x, y)
-        // - each lowered segment writes only its end point: 2 uint words (x, y)
-        // The start points are not repeated for every segment because the stream is
-        // reconstructed incrementally by the shader/consumer.
-        int pathDataAdd = (geometryInfo.ContourCount * 2) + (geometryInfo.SegmentCount * 2);
+        int pathTagAdd = segmentCount + 1 + (appendStyle ? 1 : 0);
+        int pathDataAdd = (contourCount * 2) + (segmentCount * 2);
 
         pathTags.EnsureAdditionalCapacity(pathTagAdd);
         pathData.EnsureAdditionalCapacity(pathDataAdd);
@@ -808,16 +1516,208 @@ internal static class WebGPUSceneEncoder
 
         if (appendStyle)
         {
-            // A style record is always two packed words.
-            styles.EnsureAdditionalCapacity(2);
+            styles.EnsureAdditionalCapacity(3);
         }
 
         if (DrawTagUsesGradientRamp(drawTag))
         {
-            // Gradient draw records append exactly one packed ramp row.
             gradientPixels.EnsureAdditionalCapacity(GradientWidth);
         }
     }
+
+    /// <summary>
+    /// Reserves the exact stream growth needed for one plain fill item.
+    /// </summary>
+    private static void ReservePlainFillCapacity(
+        LinearGeometryInfo geometryInfo,
+        uint drawTag,
+        bool appendStyle,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        ref OwnedStream<uint> drawTags,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> styles,
+        ref OwnedStream<uint> gradientPixels)
+        => ReservePlainFillCapacity(
+            geometryInfo.ContourCount,
+            geometryInfo.SegmentCount,
+            drawTag,
+            appendStyle,
+            ref pathTags,
+            ref pathData,
+            ref drawTags,
+            ref drawData,
+            ref styles,
+            ref gradientPixels);
+
+    /// <summary>
+    /// Reserves the exact stream growth needed for one stroke item.
+    /// </summary>
+    private static void ReservePlainStrokeCapacity(
+        LinearGeometry geometry,
+        uint drawTag,
+        bool appendStyle,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        ref OwnedStream<uint> drawTags,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> styles,
+        ref OwnedStream<uint> gradientPixels)
+    {
+        int markerTagCount = geometry.Info.ContourCount;
+        int markerWordCount = 0;
+        for (int i = 0; i < geometry.Contours.Count; i++)
+        {
+            markerWordCount += geometry.Contours[i].IsClosed ? 2 : 4;
+        }
+
+        int pathTagAdd = geometry.Info.SegmentCount + markerTagCount + 1 + (appendStyle ? 1 : 0);
+        int pathDataAdd = (geometry.Info.ContourCount * 2) + (geometry.Info.SegmentCount * 2) + markerWordCount;
+
+        pathTags.EnsureAdditionalCapacity(pathTagAdd);
+        pathData.EnsureAdditionalCapacity(pathDataAdd);
+        drawTags.EnsureAdditionalCapacity(1);
+        drawData.EnsureAdditionalCapacity(GetDrawDataWordCount(drawTag));
+
+        if (appendStyle)
+        {
+            styles.EnsureAdditionalCapacity(3);
+        }
+
+        if (DrawTagUsesGradientRamp(drawTag))
+        {
+            gradientPixels.EnsureAdditionalCapacity(GradientWidth);
+        }
+    }
+
+    /// <summary>
+    /// Reserves the exact stream growth needed for one explicit open line segment stroke.
+    /// </summary>
+    private static void ReservePlainStrokeCapacityForOpenSegment(
+        uint drawTag,
+        bool appendStyle,
+        ref OwnedStream<byte> pathTags,
+        ref OwnedStream<uint> pathData,
+        ref OwnedStream<uint> drawTags,
+        ref OwnedStream<uint> drawData,
+        ref OwnedStream<uint> styles,
+        ref OwnedStream<uint> gradientPixels)
+    {
+        pathTags.EnsureAdditionalCapacity(3 + (appendStyle ? 1 : 0));
+        pathData.EnsureAdditionalCapacity(8);
+        drawTags.EnsureAdditionalCapacity(1);
+        drawData.EnsureAdditionalCapacity(GetDrawDataWordCount(drawTag));
+
+        if (appendStyle)
+        {
+            styles.EnsureAdditionalCapacity(3);
+        }
+
+        if (DrawTagUsesGradientRamp(drawTag))
+        {
+            gradientPixels.EnsureAdditionalCapacity(GradientWidth);
+        }
+    }
+
+    /// <summary>
+    /// Estimates the flattened line workload for one stroke.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int EstimateStrokeLineCount(LinearGeometry geometry, Pen pen)
+    {
+        int joinCost = GetStrokeJoinLineCost(pen);
+        int capCost = GetStrokeCapLineCost(pen);
+        int total = 0;
+
+        for (int i = 0; i < geometry.Contours.Count; i++)
+        {
+            LinearContour contour = geometry.Contours[i];
+            if (contour.SegmentCount == 0)
+            {
+                continue;
+            }
+
+            total += contour.SegmentCount * 2;
+            if (contour.IsClosed)
+            {
+                total += contour.SegmentCount * joinCost;
+            }
+            else
+            {
+                total += Math.Max(contour.SegmentCount - 1, 0) * joinCost;
+                total += capCost * 2;
+            }
+        }
+
+        return Math.Max(total, 1);
+    }
+
+    /// <summary>
+    /// Estimates the flattened line workload for one explicit open two-point stroke segment.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int EstimateStrokeLineCountForOpenSegment(Pen pen)
+        => Math.Max(2 + (GetStrokeCapLineCost(pen) * 2), 1);
+
+    /// <summary>
+    /// Returns the conservative flattened line cost of one stroke join.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetStrokeJoinLineCost(Pen pen)
+        => pen.StrokeOptions.LineJoin switch
+        {
+            LineJoin.Miter => 4,
+            LineJoin.MiterRound => GetStrokeArcLineCost(pen.StrokeWidth * 0.5F, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
+            LineJoin.MiterRevert => 2,
+            LineJoin.Round => GetStrokeArcLineCost(pen.StrokeWidth * 0.5F, MathF.PI, pen.StrokeOptions.ArcDetailScale) + 1,
+            _ => 2
+        };
+
+    /// <summary>
+    /// Returns the conservative flattened line cost of one stroke cap.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetStrokeCapLineCost(Pen pen)
+        => pen.StrokeOptions.LineCap switch
+        {
+            LineCap.Square => 3,
+            LineCap.Round => GetStrokeArcLineCost(pen.StrokeWidth * 0.5F, MathF.PI, pen.StrokeOptions.ArcDetailScale),
+            _ => 1
+        };
+
+    /// <summary>
+    /// Returns the conservative flattened line cost of one round arc in the stroke shaders.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetStrokeArcLineCost(float radius, float angle, double arcDetailScale)
+    {
+        float safeRadius = Math.Max(radius, 0.25F);
+        float theta = Math.Max(0.0001F, 2F * MathF.Acos(1F - (0.25F / safeRadius)));
+        return Math.Max(1, (int)MathF.Ceiling((angle / theta) * (float)Math.Max(arcDetailScale, 0.01D)));
+    }
+
+    /// <summary>
+    /// Returns the encoded tangent point used by the staged stroker's cap marker segment.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static PointF GetStrokeMarkerTangentPoint(LinearGeometry geometry, LinearContour contour)
+    {
+        PointF firstPoint = geometry.Points[contour.PointStart];
+        int nextPointIndex = contour.PointStart + (contour.PointCount > 1 ? 1 : 0);
+        PointF nextPoint = geometry.Points[nextPointIndex];
+        return new PointF(
+            firstPoint.X + ((nextPoint.X - firstPoint.X) / 3F),
+            firstPoint.Y + ((nextPoint.Y - firstPoint.Y) / 3F));
+    }
+
+    /// <summary>
+    /// Returns the encoded tangent point used by the staged stroker's cap marker segment for one explicit open line segment.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static PointF GetStrokeMarkerTangentPoint(PointF start, PointF end)
+        => new(
+            start.X + ((end.X - start.X) / 3F),
+            start.Y + ((end.Y - start.Y) / 3F));
 
     /// <summary>
     /// Reserves the exact stream growth needed for one begin-layer clip item.
@@ -847,8 +1747,8 @@ internal static class WebGPUSceneEncoder
 
         if (appendStyle)
         {
-            // A style record is always two packed words.
-            styles.EnsureAdditionalCapacity(2);
+            // A style record is always three packed words.
+            styles.EnsureAdditionalCapacity(3);
         }
     }
 
@@ -915,21 +1815,61 @@ internal static class WebGPUSceneEncoder
         => AppendTransform(GpuSceneTransform.Identity, ref transforms);
 
     /// <summary>
-    /// Packs the two style words that describe fill behavior for one draw record.
+    /// Packs the three style words that describe stroke behavior for one draw record.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static (uint Style0, uint Style1) GetFillStyle(GraphicsOptions options, IntersectionRule intersectionRule)
+    private static (uint Style0, uint Style1, uint Style2) GetStrokeStyle(GraphicsOptions options, Pen pen)
     {
-        uint style0 = intersectionRule == IntersectionRule.EvenOdd ? StyleFlagsFill : 0U;
-        uint packedBlendMode = PackBlendMode(options);
-        uint packedBlendAlpha = PackBlendAlpha(options.BlendPercentage);
-        style0 |= (packedBlendMode << StyleBlendModeShift) & StyleBlendModeMask;
-        style0 |= (packedBlendAlpha << StyleBlendAlphaShift) & StyleBlendAlphaMask;
-        return (style0, 0U);
+        uint style0 = StyleFlagsStyle | EncodeStrokeJoinFlags(pen.StrokeOptions.LineJoin) | EncodeStrokeCapFlags(pen.StrokeOptions.LineCap);
+        style0 |= BitConverter.HalfToUInt16Bits((Half)(float)pen.StrokeOptions.MiterLimit);
+        return (style0, BitcastSingle(pen.StrokeWidth), PackStyleDrawFlags(options));
     }
 
     /// <summary>
-    /// Packs the blend percentage into the style word layout consumed by the staged scene shaders.
+    /// Packs the stroke join flags consumed by the staged flatten shader.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint EncodeStrokeJoinFlags(LineJoin lineJoin)
+        => lineJoin switch
+        {
+            LineJoin.Miter => StyleFlagsJoinMiter,
+            LineJoin.MiterRevert => StyleFlagsJoinMiter | StyleFlagsJoinMiterRevert,
+            LineJoin.MiterRound => StyleFlagsJoinMiter | StyleFlagsJoinMiterRound,
+            LineJoin.Round => StyleFlagsJoinRound,
+            _ => 0U
+        };
+
+    /// <summary>
+    /// Packs the start and end cap flags consumed by the staged flatten shader.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint EncodeStrokeCapFlags(LineCap lineCap)
+        => lineCap switch
+        {
+            LineCap.Square => StyleFlagsStartCapSquare | StyleFlagsEndCapSquare,
+            LineCap.Round => StyleFlagsStartCapRound | StyleFlagsEndCapRound,
+            _ => 0U
+        };
+
+    /// <summary>
+    /// Packs the three style words that describe fill behavior for one draw record.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static (uint Style0, uint Style1, uint Style2) GetFillStyle(GraphicsOptions options, IntersectionRule intersectionRule)
+    {
+        uint style0 = intersectionRule == IntersectionRule.EvenOdd ? StyleFlagsFill : 0U;
+        return (style0, 0U, PackStyleDrawFlags(options));
+    }
+
+    /// <summary>
+    /// Packs the draw-flags word carried through flatten into coarse and fine.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static uint PackStyleDrawFlags(GraphicsOptions options)
+        => (PackBlendMode(options) << 1) | (PackBlendAlpha(options.BlendPercentage) << 14);
+
+    /// <summary>
+    /// Packs the blend percentage into the shader draw-flags alpha field.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint PackBlendAlpha(float blendPercentage)
@@ -1024,13 +1964,16 @@ internal static class WebGPUSceneEncoder
     /// <summary>
     /// Gets the fill destination rectangle in root-target-local coordinates.
     /// </summary>
+    /// <summary>
+    /// Gets one destination rectangle in root-target-local coordinates.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Rectangle GetTargetLocalDestination(in CompositionCommand command, in Rectangle rootTargetBounds)
+    private static Rectangle GetTargetLocalDestination(in Rectangle targetBounds, in Rectangle destinationRegion, in Rectangle rootTargetBounds)
         => new(
-            (command.TargetBounds.X - rootTargetBounds.X) + command.DestinationRegion.X,
-            (command.TargetBounds.Y - rootTargetBounds.Y) + command.DestinationRegion.Y,
-            command.DestinationRegion.Width,
-            command.DestinationRegion.Height);
+            (targetBounds.X - rootTargetBounds.X) + destinationRegion.X,
+            (targetBounds.Y - rootTargetBounds.Y) + destinationRegion.Y,
+            destinationRegion.Width,
+            destinationRegion.Height);
 
     /// <summary>
     /// Packs one solid brush color into the staged scene's premultiplied RGBA8 payload format.
@@ -1043,7 +1986,9 @@ internal static class WebGPUSceneEncoder
     /// Appends the draw-data payload for one encoded draw tag.
     /// </summary>
     private static void AppendDrawData(
-        in CompositionCommand command,
+        Brush brush,
+        Rectangle brushBounds,
+        GraphicsOptions graphicsOptions,
         uint drawTag,
         ref OwnedStream<uint> drawData,
         ref OwnedStream<uint> gradientPixels,
@@ -1052,11 +1997,10 @@ internal static class WebGPUSceneEncoder
     {
         // The draw tag selects the payload layout, so this switch is the single place
         // where the encoded draw-data stream shape is kept in sync with the sizing logic.
-        Brush brush = command.Brush;
         switch (drawTag)
         {
             case GpuSceneDrawTag.BeginClip:
-                AppendBeginClipData(command.GraphicsOptions, ref drawData);
+                AppendBeginClipData(graphicsOptions, ref drawData);
                 break;
             case GpuSceneDrawTag.FillColor:
                 drawData.Add(PackSolidColor((SolidBrush)brush));
@@ -1077,7 +2021,7 @@ internal static class WebGPUSceneEncoder
                 AppendSweepGradientData((SweepGradientBrush)brush, ref drawData, ref gradientPixels, ref gradientRowCount);
                 break;
             case GpuSceneDrawTag.FillImage:
-                AppendImageData(command, ref drawData, images);
+                AppendImageData(brush, brushBounds, ref drawData, images);
                 break;
             default:
                 throw new UnreachableException($"Unsupported draw tag '{drawTag}' reached scene draw-data encoding.");
@@ -1155,12 +2099,11 @@ internal static class WebGPUSceneEncoder
     /// Appends the deferred image payload placeholder and records the patch site.
     /// </summary>
     private static void AppendImageData(
-        in CompositionCommand command,
+        Brush brush,
+        Rectangle brushBounds,
         ref OwnedStream<uint> drawData,
         List<GpuImageDescriptor> images)
     {
-        Brush brush = command.Brush;
-
         // The image payload words are patched once the atlas is built because the
         // uploader is the first place that knows the concrete TPixel texture format.
         int payloadWordOffset = drawData.Count;
@@ -1169,8 +2112,8 @@ internal static class WebGPUSceneEncoder
         drawData.Add(0);
         if (brush is ImageBrush imageBrush)
         {
-            drawData.Add(BitcastSingle(command.BrushBounds.Left + imageBrush.Offset.X));
-            drawData.Add(BitcastSingle(command.BrushBounds.Top + imageBrush.Offset.Y));
+            drawData.Add(BitcastSingle(brushBounds.Left + imageBrush.Offset.X));
+            drawData.Add(BitcastSingle(brushBounds.Top + imageBrush.Offset.Y));
         }
         else
         {
@@ -1411,66 +2354,6 @@ internal static class WebGPUSceneEncoder
             GradientRepetitionMode.Reflect => 2U,
             _ => 0U
         };
-}
-
-/// <summary>
-/// Result of the staged-scene support validation performed before WebGPU encoding begins.
-/// </summary>
-internal readonly struct WebGPUSceneSupportResult
-{
-    private WebGPUSceneSupportResult(
-        bool isSupported,
-        int visibleFillCount,
-        RasterizationMode fineRasterizationMode,
-        float fineCoverageThreshold,
-        string? error)
-    {
-        this.IsSupported = isSupported;
-        this.VisibleFillCount = visibleFillCount;
-        this.FineRasterizationMode = fineRasterizationMode;
-        this.FineCoverageThreshold = fineCoverageThreshold;
-        this.Error = error;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether the current flush can use the staged WebGPU path.
-    /// </summary>
-    public bool IsSupported { get; }
-
-    /// <summary>
-    /// Gets the number of visible fills seen during scene validation.
-    /// </summary>
-    public int VisibleFillCount { get; }
-
-    /// <summary>
-    /// Gets the scene-wide fine rasterization mode selected by the visible fills in the flush.
-    /// </summary>
-    public RasterizationMode FineRasterizationMode { get; }
-
-    /// <summary>
-    /// Gets the scene-wide aliased coverage threshold selected by the visible fills in the flush.
-    /// </summary>
-    public float FineCoverageThreshold { get; }
-
-    /// <summary>
-    /// Gets the reason staged-scene validation failed, if any.
-    /// </summary>
-    public string? Error { get; }
-
-    /// <summary>
-    /// Creates a successful scene-support result.
-    /// </summary>
-    public static WebGPUSceneSupportResult Supported(
-        int visibleFillCount,
-        RasterizationMode fineRasterizationMode,
-        float fineCoverageThreshold)
-        => new(true, visibleFillCount, fineRasterizationMode, fineCoverageThreshold, null);
-
-    /// <summary>
-    /// Creates a failed scene-support result.
-    /// </summary>
-    public static WebGPUSceneSupportResult Unsupported(string error)
-        => new(false, 0, RasterizationMode.Antialiased, 0F, error);
 }
 
 /// <summary>

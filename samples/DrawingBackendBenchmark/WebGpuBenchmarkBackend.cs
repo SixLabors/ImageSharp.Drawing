@@ -63,6 +63,11 @@ internal sealed unsafe class WebGpuBenchmarkBackend : IBenchmarkBackend, IDispos
     /// <summary>
     /// Renders the benchmark scene through the WebGPU backend and optionally captures a readback preview.
     /// </summary>
+    /// <remarks>
+    /// The returned duration measures scene submission through <see cref="DrawingCanvas{TPixel}.Flush()"/>.
+    /// Readback for preview capture happens afterward, so the reported GPU timing is a submission timing rather than
+    /// a fully synchronized render-complete timing.
+    /// </remarks>
     public BenchmarkRenderResult Render(ReadOnlySpan<VisualLine> lines, int width, int height, bool capturePreview)
     {
         this.ThrowIfUnavailable();

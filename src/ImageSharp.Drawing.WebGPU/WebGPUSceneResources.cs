@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#pragma warning disable SA1201 // Phase-1 staged scene types are grouped by pipeline role.
+#pragma warning disable SA1201 // Staged scene types are grouped by pipeline role.
 
 using System.Numerics;
 using System.Runtime.CompilerServices;

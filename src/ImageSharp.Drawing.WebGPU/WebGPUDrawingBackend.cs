@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.Memory;
@@ -217,7 +216,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
-        if (compositionScene.Commands.Count == 0)
+        if (compositionScene.CommandCount == 0)
         {
             return;
         }
@@ -227,7 +226,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
         for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
         {
-            if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene.Commands, currentBumpSizes, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))
+            if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene, currentBumpSizes, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))
             {
                 this.TestingLastGPUInitializationFailure = exceedsBindingLimit
                     ? error ?? "The staged WebGPU scene exceeded the current binding limits."

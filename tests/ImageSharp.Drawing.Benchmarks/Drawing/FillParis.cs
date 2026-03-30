@@ -134,53 +134,53 @@ public class FillParis
     public void SkiaSharp()
     {
         SKCanvas canvas = this.skSurface.Canvas;
-        foreach ((SKPath path, SKPaint fillPaint, SKPaint strokePaint) in this.skElements)
-        {
-            if (fillPaint is not null)
-            {
-                canvas.DrawPath(path, fillPaint);
-            }
+        //foreach ((SKPath path, SKPaint fillPaint, SKPaint strokePaint) in this.skElements)
+        //{
+        //    if (fillPaint is not null)
+        //    {
+        //        canvas.DrawPath(path, fillPaint);
+        //    }
 
-            if (strokePaint is not null)
-            {
-                canvas.DrawPath(path, strokePaint);
-            }
-        }
+        //    if (strokePaint is not null)
+        //    {
+        //        canvas.DrawPath(path, strokePaint);
+        //    }
+        //}
     }
 
     [Benchmark]
     public void SystemDrawing()
     {
-        foreach ((GraphicsPath path, SDSolidBrush fill, SDPen stroke) in this.sdElements)
-        {
-            if (fill is not null)
-            {
-                this.sdGraphics.FillPath(fill, path);
-            }
+        //foreach ((GraphicsPath path, SDSolidBrush fill, SDPen stroke) in this.sdElements)
+        //{
+        //    if (fill is not null)
+        //    {
+        //        this.sdGraphics.FillPath(fill, path);
+        //    }
 
-            if (stroke is not null)
-            {
-                this.sdGraphics.DrawPath(stroke, path);
-            }
-        }
+        //    if (stroke is not null)
+        //    {
+        //        this.sdGraphics.DrawPath(stroke, path);
+        //    }
+        //}
     }
 
     [Benchmark]
     public void ImageSharp()
         => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
         {
-            foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
-            {
-                if (fill is not null)
-                {
-                    canvas.Fill(fill, path);
-                }
+            //foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
+            //{
+            //    if (fill is not null)
+            //    {
+            //        canvas.Fill(fill, path);
+            //    }
 
-                if (stroke is not null)
-                {
-                    canvas.Draw(stroke, path);
-                }
-            }
+            //    if (stroke is not null)
+            //    {
+            //        canvas.Draw(stroke, path);
+            //    }
+            //}
         }));
 
     [Benchmark]
@@ -256,5 +256,4 @@ public class FillParis
 
         bench.Cleanup();
     }
-
 }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
@@ -23,6 +23,11 @@ internal readonly record struct VisualLine(PointF Start, PointF End, Color Color
     /// </summary>
     public SKColor SkiaColor { get; } = ToSkiaColor(Color);
 
+    /// <summary>
+    /// Gets the pre-created ImageSharp pen for this line, avoiding one per-frame allocation in the benchmark hot path.
+    /// </summary>
+    public SolidPen Pen { get; } = new(Color, Width);
+
     private static SKColor ToSkiaColor(Color color)
     {
         Rgba32 rgba = color.ToPixel<Rgba32>();
@@ -38,7 +43,7 @@ internal readonly record struct VisualLine(PointF Start, PointF End, Color Color
         canvas.Fill(BackgroundBrush);
         foreach (VisualLine visualLine in lines)
         {
-            canvas.DrawLine(new SolidPen(visualLine.Color, visualLine.Width), [visualLine.Start, visualLine.End]);
+            canvas.DrawLine(visualLine.Pen, visualLine.Start, visualLine.End);
         }
     }
 }

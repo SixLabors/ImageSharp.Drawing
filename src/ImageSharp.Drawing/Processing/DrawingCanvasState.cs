@@ -47,4 +47,9 @@ internal sealed class DrawingCanvasState
     /// Gets a value indicating whether this state represents a compositing layer.
     /// </summary>
     public bool IsLayer { get; init; }
+
+    /// <summary>
+    /// Gets the layer compositing options when this state represents a compositing layer.
+    /// </summary>
+    public GraphicsOptions? LayerOptions { get; init; }
 }

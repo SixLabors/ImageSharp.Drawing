@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Concurrent;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -20,7 +19,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 {
     private readonly Configuration configuration;
     private readonly IDrawingBackend backend;
-    private CompositionCommand[] commands;
+    private CompositionSceneCommand[] commands;
     private int commandCount;
     private bool hasLayers;
 
@@ -47,8 +46,28 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     public void AddComposition(in CompositionCommand composition)
     {
         this.EnsureCommandCapacity(this.commandCount + 1);
-        this.commands[this.commandCount++] = composition;
+        this.commands[this.commandCount++] = new PathCompositionSceneCommand(composition);
         this.hasLayers |= composition.Kind is not CompositionCommandKind.FillLayer;
+    }
+
+    /// <summary>
+    /// Appends one explicit stroked line-segment command to the pending queue.
+    /// </summary>
+    /// <param name="command">The command to queue.</param>
+    public void AddStrokeLineSegment(in StrokeLineSegmentCommand command)
+    {
+        this.EnsureCommandCapacity(this.commandCount + 1);
+        this.commands[this.commandCount++] = new LineSegmentCompositionSceneCommand(command);
+    }
+
+    /// <summary>
+    /// Appends one explicit stroked polyline command to the pending queue.
+    /// </summary>
+    /// <param name="command">The command to queue.</param>
+    public void AddStrokePolyline(in StrokePolylineCommand command)
+    {
+        this.EnsureCommandCapacity(this.commandCount + 1);
+        this.commands[this.commandCount++] = new PolylineCompositionSceneCommand(command);
     }
 
     /// <summary>
@@ -67,39 +86,18 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         try
         {
-            // Expand stroke commands to fills and clip to target bounds in parallel.
-            // After this, every command has an immutable prepared path and visibility state.
-            this.PrepareCommands();
-
             CompositionScene scene = new(
-                new ArraySegment<CompositionCommand>(this.commands, 0, this.commandCount),
+                new ArraySegment<CompositionSceneCommand>(this.commands, 0, this.commandCount),
                 this.hasLayers);
             this.backend.FlushCompositions(this.configuration, this.TargetFrame, scene);
         }
         finally
         {
-            // Always clear the queue, even if backend flush throws.
             Array.Clear(this.commands, 0, this.commandCount);
             this.commandCount = 0;
             this.hasLayers = false;
         }
     }
-
-    /// <summary>
-    /// Prepares all queued commands in parallel. Each command expands strokes to fills,
-    /// applies transforms, clips, flattens its path, and clips to target bounds.
-    /// After this call every command is a fill with an immutable prepared path
-    /// and pre-computed visibility.
-    /// </summary>
-    private void PrepareCommands()
-        => _ = Parallel.ForEach(Partitioner.Create(0, this.commandCount), range =>
-        {
-            Span<CompositionCommand> span = this.commands.AsSpan(0, this.commandCount);
-            for (int i = range.Item1; i < range.Item2; i++)
-            {
-                span[i].Prepare();
-            }
-        });
 
     /// <summary>
     /// Ensures that the command buffer can store the requested command count without reallocating.

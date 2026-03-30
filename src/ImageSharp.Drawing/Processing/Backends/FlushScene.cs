@@ -1,9 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Buffers;
 using System.Runtime.CompilerServices;
-using System.Threading.Tasks;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -14,53 +12,71 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 internal sealed partial class FlushScene : IDisposable
 {
     private static readonly FlushScene EmptyScene = new(
-        itemCount: 0,
+        fillItemCount: 0,
+        strokeItemCount: 0,
         rowCount: 0,
         rowItemCount: 0,
         totalEdgeCount: 0,
         singleBandItemCount: 0,
         smallEdgeItemCount: 0,
         maxLayerDepth: 0,
-        items: [],
+        fillItems: [],
+        strokeItems: [],
         rows: []);
-
-    private readonly SceneItem[] items;
-    private readonly SceneRow[] rows;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FlushScene"/> class.
     /// </summary>
     private FlushScene(
-        int itemCount,
+        int fillItemCount,
+        int strokeItemCount,
         int rowCount,
         int rowItemCount,
         long totalEdgeCount,
         int singleBandItemCount,
         int smallEdgeItemCount,
         int maxLayerDepth,
-        SceneItem[] items,
+        FillSceneItem?[] fillItems,
+        StrokeSceneItem?[] strokeItems,
         SceneRow[] rows)
     {
-        this.ItemCount = itemCount;
+        this.FillItemCount = fillItemCount;
+        this.StrokeItemCount = strokeItemCount;
         this.RowCount = rowCount;
         this.RowItemCount = rowItemCount;
         this.TotalEdgeCount = totalEdgeCount;
         this.SingleBandItemCount = singleBandItemCount;
         this.SmallEdgeItemCount = smallEdgeItemCount;
         this.MaxLayerDepth = maxLayerDepth;
-        this.items = items;
-        this.rows = rows;
+        this.FillItems = fillItems;
+        this.StrokeItems = strokeItems;
+        this.Rows = rows;
     }
+
+    /// <summary>
+    /// Gets the number of visible draw items retained by the scene.
+    /// </summary>
+    public int ItemCount => this.FillItemCount + this.StrokeItemCount;
 
     /// <summary>
     /// Gets the number of visible fill items retained by the scene.
     /// </summary>
-    public int ItemCount { get; }
+    public int FillItemCount { get; }
+
+    /// <summary>
+    /// Gets the number of visible stroke items retained by the scene.
+    /// </summary>
+    public int StrokeItemCount { get; }
 
     /// <summary>
     /// Gets the retained visible scene items.
     /// </summary>
-    internal SceneItem[] Items => this.items;
+    internal FillSceneItem?[] FillItems { get; }
+
+    /// <summary>
+    /// Gets the retained visible stroke scene items.
+    /// </summary>
+    internal StrokeSceneItem?[] StrokeItems { get; }
 
     /// <summary>
     /// Gets the number of scene rows containing executable work.
@@ -70,7 +86,7 @@ internal sealed partial class FlushScene : IDisposable
     /// <summary>
     /// Gets the retained row lists.
     /// </summary>
-    internal SceneRow[] Rows => this.rows;
+    internal SceneRow[] Rows { get; }
 
     /// <summary>
     /// Gets the total number of row items retained by the scene.
@@ -98,211 +114,81 @@ internal sealed partial class FlushScene : IDisposable
     public int MaxLayerDepth { get; }
 
     /// <summary>
-    /// Creates a new scene by scheduling visible fill commands directly over retained rasterizable geometry.
+    /// Creates a new scene by scheduling visible draw operations directly over retained rasterizable geometry.
     /// </summary>
-    /// <param name="commands">The prepared composition commands.</param>
+    /// <param name="scene">The prepared composition scene.</param>
     /// <param name="targetBounds">The destination bounds of the flush.</param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
     /// <returns>A flush-ready scene.</returns>
     public static FlushScene Create(
-        IReadOnlyList<CompositionCommand> commands,
+        CompositionScene scene,
         in Rectangle targetBounds,
         MemoryAllocator allocator)
     {
-        int commandCount = commands.Count;
+        int commandCount = scene.CommandCount;
         if (commandCount == 0)
         {
             return Empty();
         }
 
-        // The scene builder writes directly into row-owned appenders while the command stream is walked.
-        // There is no compaction phase, no row count/prefix sum phase, and no late raster-band construction.
+        IReadOnlyList<CompositionSceneCommand> commands = scene.Commands;
         int firstTargetRowBandIndex = targetBounds.Top / DefaultRasterizer.DefaultTileHeight;
         int lastTargetRowBandIndex = (targetBounds.Bottom - 1) / DefaultRasterizer.DefaultTileHeight;
-        Rectangle localTargetBounds = targetBounds;
-        SceneItem[] items = new SceneItem[commandCount];
-        RowBuilder[] rowBuilders = new RowBuilder[lastTargetRowBandIndex - firstTargetRowBandIndex + 1];
-        LinearGeometry?[] preparedGeometries = new LinearGeometry?[commandCount];
-        DefaultRasterizer.RasterizableGeometry?[] preparedRasterizables = new DefaultRasterizer.RasterizableGeometry?[commandCount];
-
-        for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
+        int targetRowCount = (lastTargetRowBandIndex - firstTargetRowBandIndex) + 1;
+        Rectangle targetRectangle = targetBounds;
+        if (targetRowCount <= 0)
         {
-            CompositionCommand command = commands[commandIndex];
-            if (IsSceneFill(command))
-            {
-                // Lower each fill path once up front so the parallel rasterizable creation stage
-                // can consume cached linear geometry without repeating path lowering work.
-                preparedGeometries[commandIndex] = command.PreparedPath!.ToLinearGeometry();
-            }
+            return Empty();
         }
 
-        Parallel.For(
-            0,
-            commandCount,
-            commandIndex =>
-            {
-                CompositionCommand command = commands[commandIndex];
-                LinearGeometry? geometry = preparedGeometries[commandIndex];
-                if (geometry is null)
-                {
-                    return;
-                }
+        FillSceneItem?[] fillItems = new FillSceneItem?[commandCount];
+        StrokeSceneItem?[] strokeItems = new StrokeSceneItem?[commandCount];
+        int partitionCount = Math.Min(commandCount, Math.Min(Environment.ProcessorCount, targetRowCount));
+        PartitionState[] partitions = new PartitionState[partitionCount];
 
-                preparedRasterizables[commandIndex] = DefaultRasterizer.CreateRasterizableGeometry(
-                    geometry,
-                    command.DestinationOffset.X,
-                    command.DestinationOffset.Y,
-                    command.RasterizerOptions,
-                    allocator);
+        _ = Parallel.For(
+            fromInclusive: 0,
+            toExclusive: partitionCount,
+            body: partitionIndex =>
+            {
+                int commandStart = (partitionIndex * commandCount) / partitionCount;
+                int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+                partitions[partitionIndex] = ProcessPartition(
+                    commands,
+                    commandStart,
+                    commandEnd,
+                    targetRectangle,
+                    firstTargetRowBandIndex,
+                    targetRowCount,
+                    allocator,
+                    fillItems,
+                    strokeItems);
             });
 
-        int itemCount = 0;
+        RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
+        int fillItemCount = 0;
+        int strokeItemCount = 0;
         long totalEdgeCount = 0;
         int singleBandItemCount = 0;
         int smallEdgeItemCount = 0;
         int currentLayerDepth = 0;
         int maxLayerDepth = 0;
-        for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
+
+        for (int i = 0; i < partitionCount; i++)
         {
-            CompositionCommand command = commands[commandIndex];
-            if (TryGetLayerOperation(
-                command,
-                targetBounds,
-                firstTargetRowBandIndex,
-                out CompositionCommandKind operationKind,
-                out Rectangle layerBandBounds,
-                out int firstRowSlot,
-                out int lastRowSlot))
+            PartitionState partition = partitions[i];
+            fillItemCount += partition.FillItemCount;
+            strokeItemCount += partition.StrokeItemCount;
+            totalEdgeCount += partition.TotalEdgeCount;
+            singleBandItemCount += partition.SingleBandItemCount;
+            smallEdgeItemCount += partition.SmallEdgeItemCount;
+            maxLayerDepth = Math.Max(maxLayerDepth, currentLayerDepth + partition.MaxLayerDepth);
+            currentLayerDepth += partition.LayerDepthDelta;
+
+            for (int rowSlot = 0; rowSlot < targetRowCount; rowSlot++)
             {
-                if (operationKind == CompositionCommandKind.BeginLayer)
-                {
-                    currentLayerDepth++;
-                    if (currentLayerDepth > maxLayerDepth)
-                    {
-                        maxLayerDepth = currentLayerDepth;
-                    }
-                }
-
-                if (operationKind == CompositionCommandKind.EndLayer)
-                {
-                    currentLayerDepth--;
-                }
-
-                continue;
+                RowBuilder.AppendBuilder(ref rowBuilders[rowSlot], ref partition.RowBuilders[rowSlot]);
             }
-
-            if (!IsSceneFill(command))
-            {
-                continue;
-            }
-
-            DefaultRasterizer.RasterizableGeometry? rasterizable = preparedRasterizables[commandIndex];
-
-            if (rasterizable is null || rasterizable.RowBandCount == 0)
-            {
-                rasterizable?.Dispose();
-                continue;
-            }
-
-            int itemIndex = itemCount++;
-            items[itemIndex] = new SceneItem(commandIndex, command, rasterizable);
-
-            for (int localRowIndex = 0; localRowIndex < rasterizable.RowBandCount; localRowIndex++)
-            {
-                if (!rasterizable.HasCoverage(localRowIndex))
-                {
-                    continue;
-                }
-
-                DefaultRasterizer.RasterizableBandInfo info = rasterizable.GetBandInfo(localRowIndex);
-                totalEdgeCount += info.LineCount;
-
-                if (info.LineCount <= 8)
-                {
-                    smallEdgeItemCount++;
-                }
-            }
-
-            if (rasterizable.RowBandCount == 1)
-            {
-                singleBandItemCount++;
-            }
-        }
-
-        int targetRowCount = rowBuilders.Length;
-        if (targetRowCount > 0)
-        {
-            int iterationCount = Math.Min(Environment.ProcessorCount, targetRowCount);
-            Parallel.For(
-                0,
-                iterationCount,
-                partitionIndex =>
-                {
-                    int rowStart = (partitionIndex * targetRowCount) / iterationCount;
-                    int rowEnd = ((partitionIndex + 1) * targetRowCount) / iterationCount;
-                    int nextItemIndex = 0;
-
-                    // Each worker owns a contiguous row range and scans commands in original order.
-                    // That keeps per-row ordering deterministic while avoiding shared row-builder mutation.
-                    for (int commandIndex = 0; commandIndex < commandCount; commandIndex++)
-                    {
-                        CompositionCommand command = commands[commandIndex];
-                        if (TryGetLayerOperation(
-                            command,
-                            localTargetBounds,
-                            firstTargetRowBandIndex,
-                            out CompositionCommandKind operationKind,
-                            out Rectangle layerBandBounds,
-                            out int firstRowSlot,
-                            out int lastRowSlot))
-                        {
-                            int localFirst = Math.Max(firstRowSlot, rowStart);
-                            int localLast = Math.Min(lastRowSlot, rowEnd - 1);
-                            for (int rowSlot = localFirst; rowSlot <= localLast; rowSlot++)
-                            {
-                                ref RowBuilder builder = ref rowBuilders[rowSlot];
-                                if (!builder.IsInitialized)
-                                {
-                                    builder = new RowBuilder(allocator);
-                                }
-
-                                int rowTop = localTargetBounds.Top + (rowSlot * DefaultRasterizer.DefaultTileHeight);
-                                Rectangle rowBounds = new(localTargetBounds.Left, rowTop, localTargetBounds.Width, DefaultRasterizer.DefaultTileHeight);
-                                Rectangle rowLayerBounds = Rectangle.Intersect(layerBandBounds, rowBounds);
-                                builder.Append(new SceneOperation(operationKind, commandIndex, rowLayerBounds));
-                            }
-
-                            continue;
-                        }
-
-                        if (nextItemIndex >= itemCount || items[nextItemIndex].CommandIndex != commandIndex)
-                        {
-                            continue;
-                        }
-
-                        int itemIndex = nextItemIndex++;
-                        DefaultRasterizer.RasterizableGeometry rasterizable = items[itemIndex].Rasterizable;
-                        int localRowStart = Math.Max(0, rowStart - (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex));
-                        int localRowEnd = Math.Min(rasterizable.RowBandCount, rowEnd - (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex));
-
-                        for (int localRowIndex = localRowStart; localRowIndex < localRowEnd; localRowIndex++)
-                        {
-                            if (!rasterizable.HasCoverage(localRowIndex))
-                            {
-                                continue;
-                            }
-
-                            int rowSlot = (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex) + localRowIndex;
-                            ref RowBuilder builder = ref rowBuilders[rowSlot];
-                            if (!builder.IsInitialized)
-                            {
-                                builder = new RowBuilder(allocator);
-                            }
-
-                            builder.Append(new SceneOperation(itemIndex, localRowIndex));
-                        }
-                    }
-                });
         }
 
         int rowCount = 0;
@@ -318,23 +204,24 @@ internal sealed partial class FlushScene : IDisposable
             rowItemCount += rowBuilders[i].Count;
         }
 
-        if (itemCount == 0 || rowItemCount == 0)
+        if ((fillItemCount + strokeItemCount) == 0 || rowItemCount == 0)
         {
-            DisposeItems(items, itemCount);
             DisposeRows(rowBuilders);
             return Empty();
         }
 
         SceneRow[] sceneRows = FinalizeRows(rowBuilders, firstTargetRowBandIndex, rowCount);
         return new FlushScene(
-            itemCount,
+            fillItemCount,
+            strokeItemCount,
             rowCount,
             rowItemCount,
             totalEdgeCount,
             singleBandItemCount,
             smallEdgeItemCount,
             maxLayerDepth,
-            items,
+            fillItems,
+            strokeItems,
             sceneRows);
     }
 
@@ -343,14 +230,19 @@ internal sealed partial class FlushScene : IDisposable
     /// </summary>
     public void Dispose()
     {
-        for (int i = 0; i < this.rows.Length; i++)
+        for (int i = 0; i < this.Rows.Length; i++)
         {
-            this.rows[i].Dispose();
+            this.Rows[i].Dispose();
         }
 
-        for (int i = 0; i < this.ItemCount; i++)
+        for (int i = 0; i < this.FillItems.Length; i++)
         {
-            this.items[i].Dispose();
+            this.FillItems[i]?.Dispose();
+        }
+
+        for (int i = 0; i < this.StrokeItems.Length; i++)
+        {
+            this.StrokeItems[i]?.Dispose();
         }
     }
 
@@ -360,11 +252,135 @@ internal sealed partial class FlushScene : IDisposable
     private static FlushScene Empty() => EmptyScene;
 
     /// <summary>
-    /// Identifies whether a command contributes executable fill work to the scene.
+    /// Identifies whether a path-backed command contributes executable retained raster work to the scene.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsSceneFill(in CompositionCommand command)
-        => command.IsVisible && command.Kind == CompositionCommandKind.FillLayer && command.PreparedPath is not null;
+    private static bool IsSceneDrawable(in CompositionCommand command)
+        => command.Kind == CompositionCommandKind.FillLayer;
+
+    /// <summary>
+    /// Accumulates retained fill statistics used for scene heuristics.
+    /// </summary>
+    private static void AccumulateFillItemStats(
+        DefaultRasterizer.RasterizableGeometry rasterizable,
+        ref long totalEdgeCount,
+        ref int smallEdgeItemCount,
+        ref int singleBandItemCount)
+    {
+        for (int localRowIndex = 0; localRowIndex < rasterizable.RowBandCount; localRowIndex++)
+        {
+            if (!rasterizable.HasCoverage(localRowIndex))
+            {
+                continue;
+            }
+
+            DefaultRasterizer.RasterizableBandInfo info = rasterizable.GetBandInfo(localRowIndex);
+            totalEdgeCount += info.LineCount;
+            if (info.LineCount <= 8)
+            {
+                smallEdgeItemCount++;
+            }
+        }
+
+        if (rasterizable.RowBandCount == 1)
+        {
+            singleBandItemCount++;
+        }
+    }
+
+    /// <summary>
+    /// Accumulates retained stroke statistics used for scene heuristics.
+    /// </summary>
+    private static void AccumulateStrokeItemStats(
+        DefaultRasterizer.StrokeRasterizableGeometry rasterizable,
+        ref long totalEdgeCount,
+        ref int smallEdgeItemCount,
+        ref int singleBandItemCount)
+    {
+        for (int localRowIndex = 0; localRowIndex < rasterizable.RowBandCount; localRowIndex++)
+        {
+            if (!rasterizable.HasCoverage(localRowIndex))
+            {
+                continue;
+            }
+
+            DefaultRasterizer.RasterizableBandInfo info = rasterizable.GetBandInfo(localRowIndex);
+            totalEdgeCount += info.LineCount;
+            if (info.LineCount <= 8)
+            {
+                smallEdgeItemCount++;
+            }
+        }
+
+        if (rasterizable.RowBandCount == 1)
+        {
+            singleBandItemCount++;
+        }
+    }
+
+    /// <summary>
+    /// Appends retained fill row operations for one item into the row builders owned by the current partition.
+    /// </summary>
+    private static void AppendFillRowOperations(
+        RowBuilder[] rowBuilders,
+        int rowStart,
+        int rowEnd,
+        int firstTargetRowBandIndex,
+        int itemIndex,
+        DefaultRasterizer.RasterizableGeometry rasterizable,
+        MemoryAllocator allocator)
+    {
+        int localRowStart = Math.Max(0, rowStart - (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex));
+        int localRowEnd = Math.Min(rasterizable.RowBandCount, rowEnd - (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex));
+        for (int localRowIndex = localRowStart; localRowIndex < localRowEnd; localRowIndex++)
+        {
+            if (!rasterizable.HasCoverage(localRowIndex))
+            {
+                continue;
+            }
+
+            int rowSlot = (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex) + localRowIndex;
+            ref RowBuilder builder = ref rowBuilders[rowSlot];
+            if (!builder.IsInitialized)
+            {
+                builder = new RowBuilder(allocator);
+            }
+
+            builder.Append(new SceneOperation(SceneOperationKind.FillItem, itemIndex, localRowIndex));
+        }
+    }
+
+    /// <summary>
+    /// Appends retained stroke row operations for one item into the row builders owned by the current partition.
+    /// </summary>
+    private static void AppendStrokeRowOperations(
+        RowBuilder[] rowBuilders,
+        int rowStart,
+        int rowEnd,
+        int firstTargetRowBandIndex,
+        int itemIndex,
+        DefaultRasterizer.StrokeRasterizableGeometry rasterizable,
+        MemoryAllocator allocator)
+    {
+        int localRowStart = Math.Max(0, rowStart - (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex));
+        int localRowEnd = Math.Min(rasterizable.RowBandCount, rowEnd - (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex));
+        for (int localRowIndex = localRowStart; localRowIndex < localRowEnd; localRowIndex++)
+        {
+            if (!rasterizable.HasCoverage(localRowIndex))
+            {
+                continue;
+            }
+
+            int rowSlot = (rasterizable.FirstRowBandIndex - firstTargetRowBandIndex) + localRowIndex;
+            ref RowBuilder builder = ref rowBuilders[rowSlot];
+            if (!builder.IsInitialized)
+            {
+                builder = new RowBuilder(allocator);
+            }
+
+            builder.Append(new SceneOperation(SceneOperationKind.StrokeItem, itemIndex, localRowIndex));
+        }
+    }
 
     /// <summary>
     /// Identifies whether a command contributes retained per-row layer control operations.
@@ -382,11 +398,6 @@ internal sealed partial class FlushScene : IDisposable
         layerBounds = default;
         firstRowSlot = 0;
         lastRowSlot = -1;
-
-        if (!command.IsVisible)
-        {
-            return false;
-        }
 
         switch (command.Kind)
         {
@@ -437,17 +448,6 @@ internal sealed partial class FlushScene : IDisposable
     }
 
     /// <summary>
-    /// Disposes partially created scene items.
-    /// </summary>
-    private static void DisposeItems(SceneItem[] items, int count)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            items[i].Dispose();
-        }
-    }
-
-    /// <summary>
     /// Disposes partially created row builders.
     /// </summary>
     private static void DisposeRows(RowBuilder[] builders)
@@ -456,5 +456,545 @@ internal sealed partial class FlushScene : IDisposable
         {
             builders[i].Dispose();
         }
+    }
+
+    private static PartitionState ProcessPartition(
+        IReadOnlyList<CompositionSceneCommand> commands,
+        int commandStart,
+        int commandEnd,
+        in Rectangle targetBounds,
+        int firstTargetRowBandIndex,
+        int targetRowCount,
+        MemoryAllocator allocator,
+        FillSceneItem?[] fillItems,
+        StrokeSceneItem?[] strokeItems)
+    {
+        RowBuilder[] rowBuilders = new RowBuilder[targetRowCount];
+        int fillItemCount = 0;
+        int strokeItemCount = 0;
+        long totalEdgeCount = 0;
+        int singleBandItemCount = 0;
+        int smallEdgeItemCount = 0;
+        int currentLayerDepth = 0;
+        int maxLayerDepth = 0;
+
+        for (int commandIndex = commandStart; commandIndex < commandEnd; commandIndex++)
+        {
+            CompositionSceneCommand command = commands[commandIndex];
+            if (command is PathCompositionSceneCommand pathCommand)
+            {
+                ProcessPathCommand(
+                    pathCommand.Command,
+                    commandIndex,
+                    targetBounds,
+                    firstTargetRowBandIndex,
+                    rowBuilders,
+                    allocator,
+                    fillItems,
+                    strokeItems,
+                    ref fillItemCount,
+                    ref strokeItemCount,
+                    ref totalEdgeCount,
+                    ref singleBandItemCount,
+                    ref smallEdgeItemCount,
+                    ref currentLayerDepth,
+                    ref maxLayerDepth);
+            }
+            else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
+            {
+                ProcessLineSegmentCommand(
+                    lineSegmentCommand.Command,
+                    commandIndex,
+                    targetRowCount,
+                    firstTargetRowBandIndex,
+                    rowBuilders,
+                    allocator,
+                    strokeItems,
+                    ref strokeItemCount,
+                    ref totalEdgeCount,
+                    ref singleBandItemCount,
+                    ref smallEdgeItemCount);
+            }
+            else
+            {
+                ProcessPolylineCommand(
+                    ((PolylineCompositionSceneCommand)command).Command,
+                    commandIndex,
+                    targetRowCount,
+                    firstTargetRowBandIndex,
+                    rowBuilders,
+                    allocator,
+                    strokeItems,
+                    ref strokeItemCount,
+                    ref totalEdgeCount,
+                    ref singleBandItemCount,
+                    ref smallEdgeItemCount);
+            }
+        }
+
+        return new PartitionState(
+            fillItemCount,
+            strokeItemCount,
+            totalEdgeCount,
+            singleBandItemCount,
+            smallEdgeItemCount,
+            currentLayerDepth,
+            maxLayerDepth,
+            rowBuilders);
+    }
+
+    private static void ProcessPathCommand(
+        in CompositionCommand command,
+        int commandIndex,
+        in Rectangle targetBounds,
+        int firstTargetRowBandIndex,
+        RowBuilder[] rowBuilders,
+        MemoryAllocator allocator,
+        FillSceneItem?[] fillItems,
+        StrokeSceneItem?[] strokeItems,
+        ref int fillItemCount,
+        ref int strokeItemCount,
+        ref long totalEdgeCount,
+        ref int singleBandItemCount,
+        ref int smallEdgeItemCount,
+        ref int currentLayerDepth,
+        ref int maxLayerDepth)
+    {
+        if (TryGetLayerOperation(
+            command,
+            targetBounds,
+            firstTargetRowBandIndex,
+            out CompositionCommandKind operationKind,
+            out Rectangle layerBounds,
+            out int firstRowSlot,
+            out int lastRowSlot))
+        {
+            if (operationKind == CompositionCommandKind.BeginLayer)
+            {
+                currentLayerDepth++;
+                maxLayerDepth = Math.Max(maxLayerDepth, currentLayerDepth);
+            }
+            else
+            {
+                currentLayerDepth--;
+            }
+
+            AppendLayerOperations(rowBuilders, firstRowSlot, lastRowSlot, layerBounds, operationKind, commandIndex, targetBounds, allocator);
+            return;
+        }
+
+        if (!IsSceneDrawable(command))
+        {
+            return;
+        }
+
+        if (command.Pen is Pen pen)
+        {
+            if (!TryPrepareStrokePath(command, pen, allocator, out PreparedStrokeItem preparedStroke) ||
+                preparedStroke.Rasterizable.RowBandCount == 0)
+            {
+                return;
+            }
+
+            strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
+            strokeItemCount++;
+            AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
+            AppendStrokeRowOperations(rowBuilders, 0, rowBuilders.Length, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
+            return;
+        }
+
+        if (!TryPrepareFillPath(command, allocator, out PreparedFillItem preparedFill) ||
+            preparedFill.Rasterizable.RowBandCount == 0)
+        {
+            return;
+        }
+
+        fillItems[commandIndex] = new FillSceneItem(preparedFill.Brush, preparedFill.GraphicsOptions, preparedFill.BrushBounds, preparedFill.Rasterizable);
+        fillItemCount++;
+        AccumulateFillItemStats(preparedFill.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
+        AppendFillRowOperations(rowBuilders, 0, rowBuilders.Length, firstTargetRowBandIndex, commandIndex, preparedFill.Rasterizable, allocator);
+    }
+
+    private static void ProcessLineSegmentCommand(
+        in StrokeLineSegmentCommand command,
+        int commandIndex,
+        int targetRowCount,
+        int firstTargetRowBandIndex,
+        RowBuilder[] rowBuilders,
+        MemoryAllocator allocator,
+        StrokeSceneItem?[] strokeItems,
+        ref int strokeItemCount,
+        ref long totalEdgeCount,
+        ref int singleBandItemCount,
+        ref int smallEdgeItemCount)
+    {
+        if (!TryPrepareLineSegmentStroke(command, out PreparedStrokeItem preparedStroke) ||
+            preparedStroke.Rasterizable.RowBandCount == 0)
+        {
+            return;
+        }
+
+        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
+        strokeItemCount++;
+        AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
+        AppendStrokeRowOperations(rowBuilders, 0, targetRowCount, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
+    }
+
+    private static void ProcessPolylineCommand(
+        in StrokePolylineCommand command,
+        int commandIndex,
+        int targetRowCount,
+        int firstTargetRowBandIndex,
+        RowBuilder[] rowBuilders,
+        MemoryAllocator allocator,
+        StrokeSceneItem?[] strokeItems,
+        ref int strokeItemCount,
+        ref long totalEdgeCount,
+        ref int singleBandItemCount,
+        ref int smallEdgeItemCount)
+    {
+        if (!TryPreparePolylineStroke(command, allocator, out PreparedStrokeItem preparedStroke) ||
+            preparedStroke.Rasterizable.RowBandCount == 0)
+        {
+            return;
+        }
+
+        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
+        strokeItemCount++;
+        AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
+        AppendStrokeRowOperations(rowBuilders, 0, targetRowCount, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
+    }
+
+    private static void AppendLayerOperations(
+        RowBuilder[] rowBuilders,
+        int firstRowSlot,
+        int lastRowSlot,
+        Rectangle layerBandBounds,
+        CompositionCommandKind operationKind,
+        int commandIndex,
+        in Rectangle targetBounds,
+        MemoryAllocator allocator)
+    {
+        for (int rowSlot = firstRowSlot; rowSlot <= lastRowSlot; rowSlot++)
+        {
+            ref RowBuilder builder = ref rowBuilders[rowSlot];
+            if (!builder.IsInitialized)
+            {
+                builder = new RowBuilder(allocator);
+            }
+
+            int rowTop = targetBounds.Top + (rowSlot * DefaultRasterizer.DefaultTileHeight);
+            Rectangle rowBounds = new(targetBounds.Left, rowTop, targetBounds.Width, DefaultRasterizer.DefaultTileHeight);
+            Rectangle rowLayerBounds = Rectangle.Intersect(layerBandBounds, rowBounds);
+            builder.Append(new SceneOperation(operationKind, commandIndex, rowLayerBounds));
+        }
+    }
+
+    private static bool TryPrepareFillPath(
+        in CompositionCommand command,
+        MemoryAllocator allocator,
+        out PreparedFillItem prepared)
+    {
+        IPath path = ResolveCommandPath(command);
+        if (!TryResolveRasterization(
+                command.Brush,
+                path.Bounds,
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                command.TargetBounds,
+                out Brush brush,
+                out RasterizerOptions rasterizerOptions,
+                out Rectangle brushBounds))
+        {
+            prepared = default;
+            return false;
+        }
+
+        DefaultRasterizer.RasterizableGeometry? rasterizable = DefaultRasterizer.CreateRasterizableGeometry(
+            path.ToLinearGeometry(),
+            command.DestinationOffset.X,
+            command.DestinationOffset.Y,
+            rasterizerOptions,
+            allocator);
+        if (rasterizable is null)
+        {
+            prepared = default;
+            return false;
+        }
+
+        prepared = new PreparedFillItem(brush, command.GraphicsOptions, brushBounds, rasterizable);
+        return true;
+    }
+
+    private static bool TryPrepareStrokePath(
+        in CompositionCommand command,
+        Pen pen,
+        MemoryAllocator allocator,
+        out PreparedStrokeItem prepared)
+    {
+        IPath path = ResolveCommandPath(command);
+
+        if (!TryResolveRasterization(
+                command.Brush,
+                GetStrokeBounds(path.Bounds, pen),
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                command.TargetBounds,
+                out Brush brush,
+                out RasterizerOptions rasterizerOptions,
+                out Rectangle brushBounds))
+        {
+            prepared = default;
+            return false;
+        }
+
+        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateStrokeRasterizableGeometry(
+            path,
+            pen,
+            command.DestinationOffset.X,
+            command.DestinationOffset.Y,
+            rasterizerOptions,
+            allocator);
+        if (rasterizable is null)
+        {
+            prepared = default;
+            return false;
+        }
+
+        prepared = new PreparedStrokeItem(brush, command.GraphicsOptions, brushBounds, rasterizable);
+        return true;
+    }
+
+    private static bool TryPrepareLineSegmentStroke(
+        in StrokeLineSegmentCommand command,
+        out PreparedStrokeItem prepared)
+    {
+        PointF start = command.SourceStart;
+        PointF end = command.SourceEnd;
+
+        if (!TryResolveRasterization(
+                command.Brush,
+                StrokeLineSegmentCommand.GetConservativeBounds(start, end, command.Pen),
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                command.TargetBounds,
+                out Brush brush,
+                out RasterizerOptions rasterizerOptions,
+                out Rectangle brushBounds))
+        {
+            prepared = default;
+            return false;
+        }
+
+        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateStrokeRasterizableGeometry(
+            start,
+            end,
+            command.Pen,
+            command.DestinationOffset.X,
+            command.DestinationOffset.Y,
+            rasterizerOptions);
+        if (rasterizable is null)
+        {
+            prepared = default;
+            return false;
+        }
+
+        prepared = new PreparedStrokeItem(brush, command.GraphicsOptions, brushBounds, rasterizable);
+        return true;
+    }
+
+    private static bool TryPreparePolylineStroke(
+        in StrokePolylineCommand command,
+        MemoryAllocator allocator,
+        out PreparedStrokeItem prepared)
+    {
+        PointF[] points = command.SourcePoints;
+
+        if (!TryResolveRasterization(
+                command.Brush,
+                StrokePolylineCommand.GetConservativeBounds(points, command.Pen),
+                command.RasterizerOptions,
+                command.DestinationOffset,
+                command.TargetBounds,
+                out Brush brush,
+                out RasterizerOptions rasterizerOptions,
+                out Rectangle brushBounds))
+        {
+            prepared = default;
+            return false;
+        }
+
+        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateStrokeRasterizableGeometry(
+            points,
+            command.Pen,
+            command.DestinationOffset.X,
+            command.DestinationOffset.Y,
+            rasterizerOptions,
+            allocator);
+        if (rasterizable is null)
+        {
+            prepared = default;
+            return false;
+        }
+
+        prepared = new PreparedStrokeItem(brush, command.GraphicsOptions, brushBounds, rasterizable);
+        return true;
+    }
+
+    private static IPath ResolveCommandPath(in CompositionCommand command)
+    {
+        IPath path = command.SourcePath;
+
+        if (command.ClipPaths is { Count: > 0 })
+        {
+            path = path.Clip(command.ShapeOptions, command.ClipPaths);
+        }
+
+        return path;
+    }
+
+    private static bool TryResolveRasterization(
+        Brush brush,
+        RectangleF bounds,
+        in RasterizerOptions options,
+        Point destinationOffset,
+        in Rectangle targetBounds,
+        out Brush resolvedBrush,
+        out RasterizerOptions resolvedOptions,
+        out Rectangle brushBounds)
+    {
+        resolvedBrush = brush;
+
+        if (options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter)
+        {
+            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
+        }
+
+        Rectangle localInterest = Rectangle.FromLTRB(
+            (int)MathF.Floor(bounds.Left),
+            (int)MathF.Floor(bounds.Top),
+            (int)MathF.Ceiling(bounds.Right) + 1,
+            (int)MathF.Ceiling(bounds.Bottom) + 1);
+
+        Rectangle absoluteInterest = new(
+            localInterest.X + destinationOffset.X,
+            localInterest.Y + destinationOffset.Y,
+            localInterest.Width,
+            localInterest.Height);
+
+        Rectangle clippedDestination = Rectangle.Intersect(targetBounds, absoluteInterest);
+        if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
+        {
+            resolvedOptions = default;
+            brushBounds = default;
+            return false;
+        }
+
+        resolvedOptions = new RasterizerOptions(
+            absoluteInterest,
+            options.IntersectionRule,
+            options.RasterizationMode,
+            options.SamplingOrigin,
+            options.AntialiasThreshold);
+        brushBounds = absoluteInterest;
+        return true;
+    }
+
+    private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen)
+    {
+        float halfWidth = pen.StrokeWidth * 0.5F;
+        float inflate = pen.StrokeOptions.LineJoin switch
+        {
+            LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),
+            _ => halfWidth
+        };
+
+        bounds.Inflate(new SizeF(inflate, inflate));
+        return bounds;
+    }
+
+    private readonly struct PreparedFillItem
+    {
+        public PreparedFillItem(
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            Rectangle brushBounds,
+            DefaultRasterizer.RasterizableGeometry rasterizable)
+        {
+            this.Brush = brush;
+            this.GraphicsOptions = graphicsOptions;
+            this.BrushBounds = brushBounds;
+            this.Rasterizable = rasterizable;
+        }
+
+        public Brush Brush { get; }
+
+        public GraphicsOptions GraphicsOptions { get; }
+
+        public Rectangle BrushBounds { get; }
+
+        public DefaultRasterizer.RasterizableGeometry Rasterizable { get; }
+    }
+
+    private readonly struct PreparedStrokeItem
+    {
+        public PreparedStrokeItem(
+            Brush brush,
+            GraphicsOptions graphicsOptions,
+            Rectangle brushBounds,
+            DefaultRasterizer.StrokeRasterizableGeometry rasterizable)
+        {
+            this.Brush = brush;
+            this.GraphicsOptions = graphicsOptions;
+            this.BrushBounds = brushBounds;
+            this.Rasterizable = rasterizable;
+        }
+
+        public Brush Brush { get; }
+
+        public GraphicsOptions GraphicsOptions { get; }
+
+        public Rectangle BrushBounds { get; }
+
+        public DefaultRasterizer.StrokeRasterizableGeometry Rasterizable { get; }
+    }
+
+    private readonly struct PartitionState
+    {
+        public PartitionState(
+            int fillItemCount,
+            int strokeItemCount,
+            long totalEdgeCount,
+            int singleBandItemCount,
+            int smallEdgeItemCount,
+            int layerDepthDelta,
+            int maxLayerDepth,
+            RowBuilder[] rowBuilders)
+        {
+            this.FillItemCount = fillItemCount;
+            this.StrokeItemCount = strokeItemCount;
+            this.TotalEdgeCount = totalEdgeCount;
+            this.SingleBandItemCount = singleBandItemCount;
+            this.SmallEdgeItemCount = smallEdgeItemCount;
+            this.LayerDepthDelta = layerDepthDelta;
+            this.MaxLayerDepth = maxLayerDepth;
+            this.RowBuilders = rowBuilders;
+        }
+
+        public int FillItemCount { get; }
+
+        public int StrokeItemCount { get; }
+
+        public long TotalEdgeCount { get; }
+
+        public int SingleBandItemCount { get; }
+
+        public int SmallEdgeItemCount { get; }
+
+        public int LayerDepthDelta { get; }
+
+        public int MaxLayerDepth { get; }
+
+        public RowBuilder[] RowBuilders { get; }
     }
 }
