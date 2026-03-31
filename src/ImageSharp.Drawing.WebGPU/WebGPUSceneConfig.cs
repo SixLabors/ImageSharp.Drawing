@@ -193,13 +193,13 @@ internal readonly struct WebGPUSceneBumpSizes
     /// </remarks>
     public static WebGPUSceneBumpSizes Initial()
         => new(
-            1U << 21,
-            1U << 18,
-            1U << 21,
-            1U << 21,
-            1U << 21,
+            1U << 15,
+            1U << 12,
+            1U << 15,
+            1U << 15,
+            1U << 15,
             1U << 20,
-            1U << 23);
+            1U << 17);
 
     /// <summary>
     /// Raises the current capacities to the scene-derived lower bounds for one encoded scene.
@@ -235,11 +235,7 @@ internal readonly struct WebGPUSceneBumpSizes
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint GetSceneSegmentLowerBound(WebGPUEncodedScene scene)
-
-        // The final segment buffers are driven by the path-count/path-tiling stages, not by the
-        // coarser path-tile membership count. Until the encoder carries a CPU-side line-slice total,
-        // the only safe lower bound we know here is the emitted line count.
-        => AddSizingSlack(checked((uint)Math.Max(scene.TotalLineSliceCount, scene.LineCount)));
+        => AddSizingSlack(checked((uint)scene.LineCount));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint MaxCapacity(uint current, uint required)

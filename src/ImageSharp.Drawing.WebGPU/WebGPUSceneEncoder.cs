@@ -496,8 +496,7 @@ internal static class WebGPUSceneEncoder
             AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
 
-            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
-            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
+            this.AccumulateDestinationWorkload(command.TargetBounds, command.DestinationRegion);
         }
 
         /// <summary>
@@ -563,8 +562,7 @@ internal static class WebGPUSceneEncoder
             AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
 
-            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
-            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(command.TargetBounds, command.DestinationRegion, this.rootTargetBounds));
+            this.AccumulateDestinationWorkload(command.TargetBounds, command.DestinationRegion);
         }
 
         /// <summary>
@@ -646,8 +644,7 @@ internal static class WebGPUSceneEncoder
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
 
-            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
-            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
+            this.AccumulateDestinationWorkload(targetBounds, destinationRegion);
         }
 
         /// <summary>
@@ -730,8 +727,7 @@ internal static class WebGPUSceneEncoder
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
 
-            this.TotalBinMembershipCount += CountBinMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
-            this.TotalTileMembershipCount += CountTileMembership(GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds));
+            this.AccumulateDestinationWorkload(targetBounds, destinationRegion);
         }
 
         /// <summary>
@@ -810,6 +806,14 @@ internal static class WebGPUSceneEncoder
             this.TotalBinMembershipCount += CountBinMembership(layerBounds);
             this.TotalTileMembershipCount += CountTileMembership(layerBounds);
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void AccumulateDestinationWorkload(in Rectangle targetBounds, in Rectangle destinationRegion)
+        {
+            Rectangle targetLocalDestination = GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds);
+            this.TotalBinMembershipCount += CountBinMembership(targetLocalDestination);
+            this.TotalTileMembershipCount += CountTileMembership(targetLocalDestination);
+        }
     }
 
     /// <summary>
@@ -887,7 +891,6 @@ internal static class WebGPUSceneEncoder
                     encoding.FillCount,
                     encoding.TotalBinMembershipCount,
                     encoding.TotalTileMembershipCount,
-                    0,
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
                     encoding.FineRasterizationMode,
@@ -2389,7 +2392,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         0,
         0,
         0,
-        0,
         RasterizationMode.Antialiased,
         0F);
 
@@ -2424,7 +2426,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int uniqueDefinitionCount,
         int totalBinMembershipCount,
         int totalTileMembershipCount,
-        int totalLineSliceCount,
         int tileCountX,
         int tileCountY,
         RasterizationMode fineRasterizationMode,
@@ -2452,7 +2453,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.UniqueDefinitionCount = uniqueDefinitionCount;
         this.TotalBinMembershipCount = totalBinMembershipCount;
         this.TotalTileMembershipCount = totalTileMembershipCount;
-        this.TotalLineSliceCount = totalLineSliceCount;
         this.TileCountX = tileCountX;
         this.TileCountY = tileCountY;
         this.FineRasterizationMode = fineRasterizationMode;
@@ -2569,8 +2569,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
     /// <summary>
     /// Gets the total line-slice count.
     /// </summary>
-    public int TotalLineSliceCount { get; }
-
     /// <summary>
     /// Gets the tile count on the X axis.
     /// </summary>

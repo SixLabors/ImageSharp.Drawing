@@ -212,8 +212,6 @@ public class FillParis
         bench.SystemDrawing();
         bench.ImageSharp();
         bench.ImageSharpWebGPU();
-        Console.WriteLine($"WebGPU diagnostic last flush used GPU: {bench.webGpuBackend.DiagnosticLastFlushUsedGPU}");
-        Console.WriteLine($"WebGPU diagnostic last failure: {bench.webGpuBackend.DiagnosticLastSceneFailure}");
 
         SvgBenchmarkHelper.VerifyOutput(
             "paris",
