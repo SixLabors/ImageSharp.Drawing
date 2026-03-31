@@ -58,8 +58,8 @@ internal static unsafe class WebGPUSceneResources
         }
 
         // Compute byte lengths for the two variable-size data buffers.
-        nuint infoBinDataByteLength = checked(WebGPUSceneResourceArena.GetBindingByteLength<uint>(scene.InfoWordCount) + config.BufferSizes.BinData.ByteLength);
-        nuint sceneByteLength = WebGPUSceneResourceArena.GetBindingByteLength<uint>(scene.SceneWordCount);
+        nuint infoBinDataByteLength = checked(GetBindingByteLength<uint>(scene.InfoWordCount) + config.BufferSizes.BinData.ByteLength);
+        nuint sceneByteLength = GetBindingByteLength<uint>(scene.SceneWordCount);
 
         // Reuse arena buffers if all capacities fit this scene.
         if (arena is not null && arena.CanReuse(flushContext, config.BufferSizes, infoBinDataByteLength, sceneByteLength))
@@ -96,6 +96,7 @@ internal static unsafe class WebGPUSceneResources
                 arena.LineBuffer,
                 gradientTextureView,
                 imageAtlasTextureView);
+
             error = null;
             return true;
         }
@@ -235,6 +236,7 @@ internal static unsafe class WebGPUSceneResources
             lineBuffer,
             gradientTextureView,
             imageAtlasTextureView);
+
         error = null;
         return true;
     }
@@ -834,6 +836,15 @@ internal static unsafe class WebGPUSceneResources
         error = null;
         return true;
     }
+
+    /// <summary>
+    /// Gets the byte length required to bind <paramref name="count"/> unmanaged elements,
+    /// preserving WebGPU's non-zero binding rule.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static nuint GetBindingByteLength<T>(int count)
+        where T : unmanaged
+        => checked((nuint)Math.Max(count, 1) * (nuint)Unsafe.SizeOf<T>());
 }
 
 /// <summary>
@@ -1083,15 +1094,6 @@ internal sealed unsafe class WebGPUSceneResourceArena
     public WgpuBuffer* PathBuffer { get; }
 
     public WgpuBuffer* LineBuffer { get; }
-
-    /// <summary>
-    /// Gets the byte length required to bind <paramref name="count"/> unmanaged elements,
-    /// preserving WebGPU's non-zero binding rule.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static nuint GetBindingByteLength<T>(int count)
-        where T : unmanaged
-        => checked((nuint)Math.Max(count, 1) * (nuint)Unsafe.SizeOf<T>());
 
     /// <summary>
     /// Returns true if every buffer fits the required sizes for this scene.

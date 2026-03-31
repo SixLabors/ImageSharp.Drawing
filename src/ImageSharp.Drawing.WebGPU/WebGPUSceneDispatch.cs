@@ -728,42 +728,15 @@ internal static class WebGPUSceneDispatch
         [NotNullWhen(true)] ref WebGPUSceneSchedulingArena? arena,
         out string? error)
     {
-        if (arena is not null && CanReuseSchedulingArena(flushContext, arena, bufferSizes, readbackByteLength))
+        if (arena is not null && arena.CanReuse(flushContext, bufferSizes, readbackByteLength))
         {
             error = null;
             return true;
         }
 
-        DisposeSchedulingArena(arena);
+        WebGPUSceneSchedulingArena.Dispose(arena);
         return TryCreateSchedulingArena(flushContext, bufferSizes, readbackByteLength, ref arena, out error);
     }
-
-    /// <summary>
-    /// Returns true if every buffer in the arena fits the required sizes for this scene.
-    /// </summary>
-    private static unsafe bool CanReuseSchedulingArena(
-        WebGPUFlushContext flushContext,
-        WebGPUSceneSchedulingArena arena,
-        WebGPUSceneBufferSizes bufferSizes,
-        nuint readbackByteLength)
-        => arena.Device == flushContext.Device &&
-           arena.BinHeaderBuffer is not null &&
-           arena.IndirectCountBuffer is not null &&
-           arena.PathTileBuffer is not null &&
-           arena.SegCountBuffer is not null &&
-           arena.SegmentBuffer is not null &&
-           arena.BlendBuffer is not null &&
-           arena.PtclBuffer is not null &&
-           arena.BumpBuffer is not null &&
-           arena.ReadbackBuffer is not null &&
-           bufferSizes.BinHeaders.ByteLength <= arena.CapacitySizes.BinHeaders.ByteLength &&
-           bufferSizes.IndirectCount.ByteLength <= arena.CapacitySizes.IndirectCount.ByteLength &&
-           bufferSizes.PathTiles.ByteLength <= arena.CapacitySizes.PathTiles.ByteLength &&
-           bufferSizes.SegCounts.ByteLength <= arena.CapacitySizes.SegCounts.ByteLength &&
-           bufferSizes.Segments.ByteLength <= arena.CapacitySizes.Segments.ByteLength &&
-           bufferSizes.BlendSpill.ByteLength <= arena.CapacitySizes.BlendSpill.ByteLength &&
-           bufferSizes.Ptcl.ByteLength <= arena.CapacitySizes.Ptcl.ByteLength &&
-           readbackByteLength <= arena.ReadbackByteLength;
 
     private static unsafe bool TryCreateSchedulingArena(
         WebGPUFlushContext flushContext,
@@ -849,27 +822,6 @@ internal static class WebGPUSceneDispatch
                 ReleaseArenaBuffer(flushContext.Api, binHeaderBuffer);
             }
         }
-    }
-
-    /// <summary>
-    /// Releases one reusable scheduling arena created outside the flush-context tracking lists.
-    /// </summary>
-    public static unsafe void DisposeSchedulingArena(WebGPUSceneSchedulingArena? arena)
-    {
-        if (arena is null || arena.BinHeaderBuffer is null)
-        {
-            return;
-        }
-
-        ReleaseArenaBuffer(arena.Api, arena.ReadbackBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.BumpBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.PtclBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.BlendBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.SegmentBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.SegCountBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.PathTileBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.IndirectCountBuffer);
-        ReleaseArenaBuffer(arena.Api, arena.BinHeaderBuffer);
     }
 
     /// <summary>
@@ -3351,6 +3303,60 @@ internal sealed unsafe class WebGPUSceneSchedulingArena
     public WgpuBuffer* BumpBuffer { get; }
 
     public WgpuBuffer* ReadbackBuffer { get; }
+
+    /// <summary>
+    /// Returns true if every buffer fits the required sizes for this scene.
+    /// </summary>
+    public bool CanReuse(WebGPUFlushContext flushContext, WebGPUSceneBufferSizes bufferSizes, nuint readbackByteLength)
+        => this.Device == flushContext.Device &&
+           this.BinHeaderBuffer is not null &&
+           this.IndirectCountBuffer is not null &&
+           this.PathTileBuffer is not null &&
+           this.SegCountBuffer is not null &&
+           this.SegmentBuffer is not null &&
+           this.BlendBuffer is not null &&
+           this.PtclBuffer is not null &&
+           this.BumpBuffer is not null &&
+           this.ReadbackBuffer is not null &&
+           bufferSizes.BinHeaders.ByteLength <= this.CapacitySizes.BinHeaders.ByteLength &&
+           bufferSizes.IndirectCount.ByteLength <= this.CapacitySizes.IndirectCount.ByteLength &&
+           bufferSizes.PathTiles.ByteLength <= this.CapacitySizes.PathTiles.ByteLength &&
+           bufferSizes.SegCounts.ByteLength <= this.CapacitySizes.SegCounts.ByteLength &&
+           bufferSizes.Segments.ByteLength <= this.CapacitySizes.Segments.ByteLength &&
+           bufferSizes.BlendSpill.ByteLength <= this.CapacitySizes.BlendSpill.ByteLength &&
+           bufferSizes.Ptcl.ByteLength <= this.CapacitySizes.Ptcl.ByteLength &&
+           readbackByteLength <= this.ReadbackByteLength;
+
+    /// <summary>
+    /// Releases all GPU buffers owned by this arena.
+    /// </summary>
+    public static void Dispose(WebGPUSceneSchedulingArena? arena)
+    {
+        if (arena is null || arena.BinHeaderBuffer is null)
+        {
+            return;
+        }
+
+        WebGPU api = arena.Api;
+        ReleaseArenaBuffer(api, arena.ReadbackBuffer);
+        ReleaseArenaBuffer(api, arena.BumpBuffer);
+        ReleaseArenaBuffer(api, arena.PtclBuffer);
+        ReleaseArenaBuffer(api, arena.BlendBuffer);
+        ReleaseArenaBuffer(api, arena.SegmentBuffer);
+        ReleaseArenaBuffer(api, arena.SegCountBuffer);
+        ReleaseArenaBuffer(api, arena.PathTileBuffer);
+        ReleaseArenaBuffer(api, arena.IndirectCountBuffer);
+        ReleaseArenaBuffer(api, arena.BinHeaderBuffer);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ReleaseArenaBuffer(WebGPU api, WgpuBuffer* buffer)
+    {
+        if (buffer is not null)
+        {
+            api.BufferRelease(buffer);
+        }
+    }
 }
 
 #pragma warning restore SA1201

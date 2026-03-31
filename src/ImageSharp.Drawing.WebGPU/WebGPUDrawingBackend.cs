@@ -323,7 +323,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         {
             // Return arenas for the next flush. If another thread already returned one,
             // dispose the displaced arena (at most one survives in the cache).
-            WebGPUSceneDispatch.DisposeSchedulingArena(Interlocked.Exchange(ref this.cachedSchedulingArena, schedulingArena));
+            WebGPUSceneSchedulingArena.Dispose(Interlocked.Exchange(ref this.cachedSchedulingArena, schedulingArena));
             WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, resourceArena));
         }
     }
@@ -583,7 +583,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.TestingLastFlushUsedGPU = false;
         this.TestingLastGPUInitializationFailure = null;
-        WebGPUSceneDispatch.DisposeSchedulingArena(this.cachedSchedulingArena);
+        WebGPUSceneSchedulingArena.Dispose(this.cachedSchedulingArena);
         WebGPUSceneResourceArena.Dispose(this.cachedResourceArena);
         this.isDisposed = true;
     }
