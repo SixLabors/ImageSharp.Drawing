@@ -162,12 +162,16 @@ internal static class WebGPUSceneDispatch
 
         try
         {
+            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
             if (!WebGPUSceneEncoder.TryEncode(scene, flushContext.TargetBounds, flushContext.MemoryAllocator, out WebGPUEncodedScene createdScene, out error))
             {
                 flushContext.Dispose();
                 stagedScene = default;
                 return false;
             }
+
+            double encodeMs = sw.Elapsed.TotalMilliseconds;
+            sw.Restart();
 
             encodedScene = createdScene;
             WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, bumpSizes);
@@ -201,6 +205,9 @@ internal static class WebGPUSceneDispatch
                 stagedScene = default;
                 return false;
             }
+
+            double resourceMs = sw.Elapsed.TotalMilliseconds;
+            System.IO.File.AppendAllText("bump_debug.log", $"[TIMING] encode={encodeMs:0.000}ms resources={resourceMs:0.000}ms fills={encodedScene.FillCount} paths={encodedScene.PathCount} lines={encodedScene.LineCount}\n");
 
             stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, resources, segmentChunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
             error = null;
@@ -889,6 +896,8 @@ internal static class WebGPUSceneDispatch
             return TryRenderSegmentChunkedStagedScene(ref stagedScene, ref schedulingArena, out requiresGrowth, out grownBumpSizes, out error);
         }
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+
         if (!TryEnsureSchedulingArena(
                 stagedScene.FlushContext,
                 stagedScene.Config.BufferSizes,
@@ -899,30 +908,20 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
+        double arenaMs = sw.Elapsed.TotalMilliseconds;
+        sw.Restart();
+
         if (!TryDispatchSchedulingStages(ref stagedScene, in schedulingArena, out WebGPUSceneSchedulingResources scheduling, out error))
         {
             return false;
         }
 
-        // Submit scheduling + readback copy so the GPU starts immediately.
-        // While the GPU runs scheduling, the CPU records the fine pass below.
-        if (!TryEnqueueSchedulingStatusReadback(stagedScene.FlushContext, scheduling.BumpBuffer, schedulingArena.ReadbackBuffer, 0, out error) ||
-            !WebGPUDrawingBackend.TrySubmit(stagedScene.FlushContext))
-        {
-            return false;
-        }
+        double schedDispatchMs = sw.Elapsed.TotalMilliseconds;
+        sw.Restart();
 
-        // Record fine + output copy on a new command encoder while GPU runs scheduling.
-        // This CPU work overlaps with GPU scheduling execution.
         WebGPUFlushContext flushContext = stagedScene.FlushContext;
         int targetWidth = encodedScene.TargetSize.Width;
         int targetHeight = encodedScene.TargetSize.Height;
-
-        if (!flushContext.EnsureCommandEncoder())
-        {
-            error = "Failed to create a command encoder for the staged-scene fine pass.";
-            return false;
-        }
 
         if (!WebGPUDrawingBackend.TryCreateCompositionTexture(flushContext, targetWidth, targetHeight, out Texture* outputTexture, out TextureView* outputTextureView, out error))
         {
@@ -954,16 +953,24 @@ internal static class WebGPUSceneDispatch
             targetWidth,
             targetHeight);
 
-        // NOW sync-readback the scheduling bumps. By this point the GPU has been
-        // running scheduling while the CPU was recording fine above, so the map
-        // blocks for minimal time (scheduling is usually done or nearly done).
-        if (!TryReadSchedulingStatus(flushContext, schedulingArena.ReadbackBuffer, out GpuSceneBumpAllocators bumpAllocators, out error))
+        double fineDispatchMs = sw.Elapsed.TotalMilliseconds;
+        sw.Restart();
+
+        // Single submit: scheduling + fine + copy + readback all in one.
+        if (!TryEnqueueSchedulingStatusReadback(flushContext, scheduling.BumpBuffer, schedulingArena.ReadbackBuffer, 0, out error) ||
+            !WebGPUDrawingBackend.TrySubmit(flushContext) ||
+            !TryReadSchedulingStatus(flushContext, schedulingArena.ReadbackBuffer, out GpuSceneBumpAllocators bumpAllocators, out error))
         {
             return false;
         }
 
+        double submitReadbackMs = sw.Elapsed.TotalMilliseconds;
+        System.IO.File.AppendAllText("bump_debug.log", $"[RENDER] arena={arenaMs:0.000}ms schedDispatch={schedDispatchMs:0.000}ms fineDispatch={fineDispatchMs:0.000}ms submitReadback={submitReadbackMs:0.000}ms\n");
+
         if (RequiresScratchReallocation(in bumpAllocators, stagedScene.Config.BumpSizes))
         {
+            // Overflow detected. The fine output is garbage but all bump allocators
+            // now report the actual sizes needed. One retry with these sizes will succeed.
             requiresGrowth = true;
             grownBumpSizes = GrowBumpSizes(stagedScene.Config.BumpSizes, in bumpAllocators);
             WebGPUSceneBumpSizes cfg = stagedScene.Config.BumpSizes;
@@ -972,15 +979,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        if (string.Equals(Environment.GetEnvironmentVariable("IMAGE_SHARP_WEBGPU_DEBUG_SCHED"), "1", StringComparison.Ordinal))
-        {
-            WebGPUEncodedScene debugScene = stagedScene.EncodedScene;
-            error = $"scene fills={debugScene.FillCount} paths={debugScene.PathCount} lines={debugScene.LineCount} pathtag_bytes={debugScene.PathTagByteCount} pathtag_words={debugScene.PathTagWordCount} drawtags={debugScene.DrawTagCount} drawdata={debugScene.DrawDataWordCount} transforms={debugScene.TransformWordCount} styles={debugScene.StyleWordCount}; sched failed={bumpAllocators.Failed} binning={bumpAllocators.Binning} ptcl={bumpAllocators.Ptcl} tile={bumpAllocators.Tile} seg_counts={bumpAllocators.SegCounts} segments={bumpAllocators.Segments} blend={bumpAllocators.BlendSpill} lines={bumpAllocators.Lines}";
-            return false;
-        }
-
-        // Scheduling passed. Persist the actual GPU usage so the next flush starts
-        // from sizes that are known to work, eliminating retries for similar scenes.
+        // Persist the actual GPU usage so the next flush starts from known-good sizes.
         grownBumpSizes = new WebGPUSceneBumpSizes(
             Math.Max(bumpAllocators.Lines, stagedScene.Config.BumpSizes.Lines),
             Math.Max(bumpAllocators.Binning, stagedScene.Config.BumpSizes.Binning),
@@ -990,8 +989,7 @@ internal static class WebGPUSceneDispatch
             Math.Max(bumpAllocators.BlendSpill, stagedScene.Config.BumpSizes.BlendSpill),
             Math.Max(bumpAllocators.Ptcl, stagedScene.Config.BumpSizes.Ptcl));
 
-        // Submit the pre-recorded fine + copy. Fire-and-forget.
-        return WebGPUDrawingBackend.TrySubmit(flushContext);
+        return true;
     }
 
     /// <summary>

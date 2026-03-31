@@ -196,7 +196,6 @@ internal static unsafe class WebGPUSceneResources
             config.ChunkWindow.TileHeight,
             baseColor,
             layout,
-            0U,
             config.BufferSizes.Lines.Length,
             config.BumpSizes.Binning,
             config.BumpSizes.PathTiles,
@@ -1147,7 +1146,6 @@ internal readonly struct GpuSceneConfig
         uint chunkTileHeight,
         uint baseColor,
         GpuSceneLayout layout,
-        uint cancelled,
         uint linesSize,
         uint binningSize,
         uint tilesSize,
@@ -1165,7 +1163,6 @@ internal readonly struct GpuSceneConfig
         this.ChunkTileHeight = chunkTileHeight;
         this.BaseColor = baseColor;
         this.Layout = layout;
-        this.Cancelled = cancelled;
         this.LinesSize = linesSize;
         this.BinningSize = binningSize;
         this.TilesSize = tilesSize;
@@ -1197,8 +1194,6 @@ internal readonly struct GpuSceneConfig
     public uint BaseColor { get; }
 
     public GpuSceneLayout Layout { get; }
-
-    public uint Cancelled { get; }
 
     public uint LinesSize { get; }
 

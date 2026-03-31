@@ -23,8 +23,6 @@ internal static class WebGPUSceneEncoder
     private const int GradientWidth = 512;
     private const int TileWidth = 16;
     private const int TileHeight = 16;
-    private const int BinWidth = TileWidth * 16;
-    private const int BinHeight = TileHeight * 16;
     private const byte PathTagLineToF32 = 0x09;
     private const byte PathTagQuadToF32 = 0x0A;
     private const byte PathTagTransform = 0x20;
@@ -129,8 +127,6 @@ internal static class WebGPUSceneEncoder
             this.LineCount = 0;
             this.InfoWordCount = 0;
             this.ClipCount = 0;
-            this.TotalBinMembershipCount = 0;
-            this.TotalTileMembershipCount = 0;
             this.GradientRowCount = 0;
             this.hasLastStyle = false;
             this.gradientPixelsDetached = false;
@@ -218,16 +214,6 @@ internal static class WebGPUSceneEncoder
         public int ClipCount { get; private set; }
 
         /// <summary>
-        /// Gets the total bin-membership count for all emitted destination regions.
-        /// </summary>
-        public int TotalBinMembershipCount { get; private set; }
-
-        /// <summary>
-        /// Gets the total tile-membership count for all emitted destination regions.
-        /// </summary>
-        public int TotalTileMembershipCount { get; private set; }
-
-        /// <summary>
         /// Gets the number of emitted gradient-ramp rows.
         /// </summary>
         public int GradientRowCount { get; private set; }
@@ -245,7 +231,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Gets a value indicating whether the encoding produced no fill work.
         /// </summary>
-        public bool IsEmpty => this.FillCount == 0;
+        public readonly bool IsEmpty => this.FillCount == 0;
 
         /// <summary>
         /// Disposes all owned stream storage that has not already been detached.
@@ -371,8 +357,6 @@ internal static class WebGPUSceneEncoder
                 resolved.GraphicsOptions,
                 resolved.RasterizerOptions,
                 resolved.DestinationOffset,
-                resolved.TargetBounds,
-                resolved.DestinationRegion,
                 resolved.BrushBounds,
                 resolved.Pen,
                 resolved.Start,
@@ -398,7 +382,7 @@ internal static class WebGPUSceneEncoder
             }
 
             LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points);
-            this.AppendExplicitStroke(resolved.Brush, resolved.GraphicsOptions, resolved.RasterizerOptions, resolved.DestinationOffset, resolved.TargetBounds, resolved.DestinationRegion, resolved.BrushBounds, resolved.Pen, geometry);
+            this.AppendExplicitStroke(resolved.Brush, resolved.GraphicsOptions, resolved.RasterizerOptions, resolved.DestinationOffset, resolved.BrushBounds, resolved.Pen, geometry);
             error = null;
             return true;
         }
@@ -495,8 +479,6 @@ internal static class WebGPUSceneEncoder
 
             AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
-
-            this.AccumulateDestinationWorkload(command.TargetBounds, command.DestinationRegion);
         }
 
         /// <summary>
@@ -561,8 +543,6 @@ internal static class WebGPUSceneEncoder
 
             AppendDrawData(command.Brush, command.BrushBounds, command.GraphicsOptions, drawTag, ref this.DrawData, ref this.GradientPixels, this.Images, ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
-
-            this.AccumulateDestinationWorkload(command.TargetBounds, command.DestinationRegion);
         }
 
         /// <summary>
@@ -573,8 +553,6 @@ internal static class WebGPUSceneEncoder
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
             Point destinationOffset,
-            Rectangle targetBounds,
-            Rectangle destinationRegion,
             Rectangle brushBounds,
             Pen pen,
             LinearGeometry geometry)
@@ -643,8 +621,6 @@ internal static class WebGPUSceneEncoder
                 this.Images,
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
-
-            this.AccumulateDestinationWorkload(targetBounds, destinationRegion);
         }
 
         /// <summary>
@@ -655,8 +631,6 @@ internal static class WebGPUSceneEncoder
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
             Point destinationOffset,
-            Rectangle targetBounds,
-            Rectangle destinationRegion,
             Rectangle brushBounds,
             Pen pen,
             PointF start,
@@ -726,8 +700,6 @@ internal static class WebGPUSceneEncoder
                 this.Images,
                 ref gradientRowCount);
             this.GradientRowCount = gradientRowCount;
-
-            this.AccumulateDestinationWorkload(targetBounds, destinationRegion);
         }
 
         /// <summary>
@@ -776,8 +748,6 @@ internal static class WebGPUSceneEncoder
             this.DrawTags.Add(GpuSceneDrawTag.BeginClip);
             AppendBeginClipData(command.GraphicsOptions, ref this.DrawData);
             this.ClipCount++;
-            this.TotalBinMembershipCount += CountBinMembership(layerBounds);
-            this.TotalTileMembershipCount += CountTileMembership(layerBounds);
             this.openLayerBounds ??= new List<Rectangle>(4);
             this.openLayerBounds.Add(layerBounds);
         }
@@ -792,9 +762,7 @@ internal static class WebGPUSceneEncoder
                 return;
             }
 
-            int lastIndex = this.openLayerBounds.Count - 1;
-            Rectangle layerBounds = this.openLayerBounds[lastIndex];
-            this.openLayerBounds.RemoveAt(lastIndex);
+            this.openLayerBounds.RemoveAt(this.openLayerBounds.Count - 1);
 
             // End-layer emission is fixed-size: one EndClip draw tag and one PathTagPath
             // terminator for the zero-data end marker.
@@ -803,16 +771,6 @@ internal static class WebGPUSceneEncoder
             this.PathTags.Add(PathTagPath);
             this.PathCount++;
             this.ClipCount++;
-            this.TotalBinMembershipCount += CountBinMembership(layerBounds);
-            this.TotalTileMembershipCount += CountTileMembership(layerBounds);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void AccumulateDestinationWorkload(in Rectangle targetBounds, in Rectangle destinationRegion)
-        {
-            Rectangle targetLocalDestination = GetTargetLocalDestination(targetBounds, destinationRegion, this.rootTargetBounds);
-            this.TotalBinMembershipCount += CountBinMembership(targetLocalDestination);
-            this.TotalTileMembershipCount += CountTileMembership(targetLocalDestination);
         }
     }
 
@@ -889,8 +847,7 @@ internal static class WebGPUSceneEncoder
                     styleWordCount,
                     encoding.ClipCount,
                     encoding.FillCount,
-                    encoding.TotalBinMembershipCount,
-                    encoding.TotalTileMembershipCount,
+                    Math.Max(encoding.LineCount, encoding.PathCount),
                     DivideRoundUp(targetBounds.Width, TileWidth),
                     DivideRoundUp(targetBounds.Height, TileHeight),
                     encoding.FineRasterizationMode,
@@ -943,178 +900,41 @@ internal static class WebGPUSceneEncoder
             return false;
         }
 
-        IPath path = ResolveCommandPath(command);
-        RectangleF bounds = command.Pen is Pen pen ? GetStrokeBounds(path.Bounds, pen) : path.Bounds;
-        if (!TryResolveRasterization(
-                command.Brush,
-                bounds,
-                command.RasterizerOptions,
-                command.DestinationOffset,
-                command.TargetBounds,
-                out Brush brush,
-                out RasterizerOptions rasterizerOptions,
-                out Rectangle destinationRegion,
-                out Rectangle brushBounds))
-        {
-            resolved = default;
-            return false;
-        }
-
         resolved = new ResolvedPathCommand(
-            path,
-            brush,
+            command.SourcePath,
+            command.Brush,
             command.GraphicsOptions,
-            rasterizerOptions,
+            command.RasterizerOptions,
             command.DestinationOffset,
-            command.TargetBounds,
-            destinationRegion,
-            brushBounds);
+            command.Brush is ImageBrush img ? new Rectangle(command.DestinationOffset, img.UntypedImage.Size) : default);
         return true;
     }
 
     private static bool TryResolveCommand(in StrokeLineSegmentCommand command, out ResolvedLineSegmentCommand resolved)
     {
-        PointF start = command.SourceStart;
-        PointF end = command.SourceEnd;
-
-        if (!TryResolveRasterization(
-                command.Brush,
-                StrokeLineSegmentCommand.GetConservativeBounds(start, end, command.Pen),
-                command.RasterizerOptions,
-                command.DestinationOffset,
-                command.TargetBounds,
-                out Brush brush,
-                out RasterizerOptions rasterizerOptions,
-                out Rectangle destinationRegion,
-                out Rectangle brushBounds))
-        {
-            resolved = default;
-            return false;
-        }
-
         resolved = new ResolvedLineSegmentCommand(
-            start,
-            end,
+            command.SourceStart,
+            command.SourceEnd,
             command.Pen,
-            brush,
+            command.Brush,
             command.GraphicsOptions,
-            rasterizerOptions,
+            command.RasterizerOptions,
             command.DestinationOffset,
-            command.TargetBounds,
-            destinationRegion,
-            brushBounds);
+            command.Brush is ImageBrush img ? new Rectangle(command.DestinationOffset, img.UntypedImage.Size) : default);
         return true;
     }
 
     private static bool TryResolveCommand(in StrokePolylineCommand command, out ResolvedPolylineCommand resolved)
     {
-        PointF[] points = command.SourcePoints;
-
-        if (!TryResolveRasterization(
-                command.Brush,
-                StrokePolylineCommand.GetConservativeBounds(points, command.Pen),
-                command.RasterizerOptions,
-                command.DestinationOffset,
-                command.TargetBounds,
-                out Brush brush,
-                out RasterizerOptions rasterizerOptions,
-                out Rectangle destinationRegion,
-                out Rectangle brushBounds))
-        {
-            resolved = default;
-            return false;
-        }
-
         resolved = new ResolvedPolylineCommand(
-            points,
+            command.SourcePoints,
             command.Pen,
-            brush,
+            command.Brush,
             command.GraphicsOptions,
-            rasterizerOptions,
+            command.RasterizerOptions,
             command.DestinationOffset,
-            command.TargetBounds,
-            destinationRegion,
-            brushBounds);
+            command.Brush is ImageBrush img ? new Rectangle(command.DestinationOffset, img.UntypedImage.Size) : default);
         return true;
-    }
-
-    private static IPath ResolveCommandPath(in CompositionCommand command)
-    {
-        IPath path = command.SourcePath;
-
-        if (command.ClipPaths is { Count: > 0 })
-        {
-            path = path.Clip(command.ShapeOptions, command.ClipPaths);
-        }
-
-        return path;
-    }
-
-    private static bool TryResolveRasterization(
-        Brush brush,
-        RectangleF bounds,
-        in RasterizerOptions options,
-        Point destinationOffset,
-        in Rectangle targetBounds,
-        out Brush resolvedBrush,
-        out RasterizerOptions resolvedOptions,
-        out Rectangle destinationRegion,
-        out Rectangle brushBounds)
-    {
-        resolvedBrush = brush;
-
-        if (options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter)
-        {
-            bounds = new RectangleF(bounds.X + 0.5F, bounds.Y + 0.5F, bounds.Width, bounds.Height);
-        }
-
-        Rectangle localInterest = Rectangle.FromLTRB(
-            (int)MathF.Floor(bounds.Left),
-            (int)MathF.Floor(bounds.Top),
-            (int)MathF.Ceiling(bounds.Right) + 1,
-            (int)MathF.Ceiling(bounds.Bottom) + 1);
-
-        Rectangle absoluteInterest = new(
-            localInterest.X + destinationOffset.X,
-            localInterest.Y + destinationOffset.Y,
-            localInterest.Width,
-            localInterest.Height);
-
-        Rectangle clippedDestination = Rectangle.Intersect(targetBounds, absoluteInterest);
-        if (clippedDestination.Width <= 0 || clippedDestination.Height <= 0)
-        {
-            resolvedOptions = default;
-            destinationRegion = default;
-            brushBounds = default;
-            return false;
-        }
-
-        resolvedOptions = new RasterizerOptions(
-            absoluteInterest,
-            options.IntersectionRule,
-            options.RasterizationMode,
-            options.SamplingOrigin,
-            options.AntialiasThreshold);
-        destinationRegion = new Rectangle(
-            clippedDestination.X - targetBounds.X,
-            clippedDestination.Y - targetBounds.Y,
-            clippedDestination.Width,
-            clippedDestination.Height);
-        brushBounds = absoluteInterest;
-        return true;
-    }
-
-    private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen)
-    {
-        float halfWidth = pen.StrokeWidth * 0.5F;
-        float inflate = pen.StrokeOptions.LineJoin switch
-        {
-            LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),
-            _ => halfWidth
-        };
-
-        bounds.Inflate(new SizeF(inflate, inflate));
-        return bounds;
     }
 
     private readonly struct ResolvedPathCommand
@@ -1125,8 +945,6 @@ internal static class WebGPUSceneEncoder
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
             Point destinationOffset,
-            Rectangle targetBounds,
-            Rectangle destinationRegion,
             Rectangle brushBounds)
         {
             this.Path = path;
@@ -1134,8 +952,6 @@ internal static class WebGPUSceneEncoder
             this.GraphicsOptions = graphicsOptions;
             this.RasterizerOptions = rasterizerOptions;
             this.DestinationOffset = destinationOffset;
-            this.TargetBounds = targetBounds;
-            this.DestinationRegion = destinationRegion;
             this.BrushBounds = brushBounds;
         }
 
@@ -1148,10 +964,6 @@ internal static class WebGPUSceneEncoder
         public RasterizerOptions RasterizerOptions { get; }
 
         public Point DestinationOffset { get; }
-
-        public Rectangle TargetBounds { get; }
-
-        public Rectangle DestinationRegion { get; }
 
         public Rectangle BrushBounds { get; }
     }
@@ -1166,8 +978,6 @@ internal static class WebGPUSceneEncoder
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
             Point destinationOffset,
-            Rectangle targetBounds,
-            Rectangle destinationRegion,
             Rectangle brushBounds)
         {
             this.Start = start;
@@ -1177,8 +987,6 @@ internal static class WebGPUSceneEncoder
             this.GraphicsOptions = graphicsOptions;
             this.RasterizerOptions = rasterizerOptions;
             this.DestinationOffset = destinationOffset;
-            this.TargetBounds = targetBounds;
-            this.DestinationRegion = destinationRegion;
             this.BrushBounds = brushBounds;
         }
 
@@ -1196,10 +1004,6 @@ internal static class WebGPUSceneEncoder
 
         public Point DestinationOffset { get; }
 
-        public Rectangle TargetBounds { get; }
-
-        public Rectangle DestinationRegion { get; }
-
         public Rectangle BrushBounds { get; }
     }
 
@@ -1212,8 +1016,6 @@ internal static class WebGPUSceneEncoder
             GraphicsOptions graphicsOptions,
             RasterizerOptions rasterizerOptions,
             Point destinationOffset,
-            Rectangle targetBounds,
-            Rectangle destinationRegion,
             Rectangle brushBounds)
         {
             this.Points = points;
@@ -1222,8 +1024,6 @@ internal static class WebGPUSceneEncoder
             this.GraphicsOptions = graphicsOptions;
             this.RasterizerOptions = rasterizerOptions;
             this.DestinationOffset = destinationOffset;
-            this.TargetBounds = targetBounds;
-            this.DestinationRegion = destinationRegion;
             this.BrushBounds = brushBounds;
         }
 
@@ -1238,10 +1038,6 @@ internal static class WebGPUSceneEncoder
         public RasterizerOptions RasterizerOptions { get; }
 
         public Point DestinationOffset { get; }
-
-        public Rectangle TargetBounds { get; }
-
-        public Rectangle DestinationRegion { get; }
 
         public Rectangle BrushBounds { get; }
     }
@@ -1928,32 +1724,6 @@ internal static class WebGPUSceneEncoder
         => value + ((alignment - (value % alignment)) % alignment);
 
     /// <summary>
-    /// Counts how many 256x256 bins are touched by one target-local destination rectangle.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CountBinMembership(in Rectangle destinationRegion)
-    {
-        int binMinX = Math.Max(0, destinationRegion.Left / BinWidth);
-        int binMinY = Math.Max(0, destinationRegion.Top / BinHeight);
-        int binMaxX = Math.Max(binMinX + 1, DivideRoundUp(destinationRegion.Right, BinWidth));
-        int binMaxY = Math.Max(binMinY + 1, DivideRoundUp(destinationRegion.Bottom, BinHeight));
-        return (binMaxX - binMinX) * (binMaxY - binMinY);
-    }
-
-    /// <summary>
-    /// Counts how many 16x16 tiles are touched by one target-local destination rectangle.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CountTileMembership(in Rectangle destinationRegion)
-    {
-        int tileMinX = Math.Max(0, destinationRegion.Left / TileWidth);
-        int tileMinY = Math.Max(0, destinationRegion.Top / TileHeight);
-        int tileMaxX = Math.Max(tileMinX + 1, DivideRoundUp(destinationRegion.Right, TileWidth));
-        int tileMaxY = Math.Max(tileMinY + 1, DivideRoundUp(destinationRegion.Bottom, TileHeight));
-        return (tileMaxX - tileMinX) * (tileMaxY - tileMinY);
-    }
-
-    /// <summary>
     /// Converts an absolute scene rectangle into root-target-local coordinates.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1963,20 +1733,6 @@ internal static class WebGPUSceneEncoder
             absoluteBounds.Y - rootTargetBounds.Y,
             absoluteBounds.Width,
             absoluteBounds.Height);
-
-    /// <summary>
-    /// Gets the fill destination rectangle in root-target-local coordinates.
-    /// </summary>
-    /// <summary>
-    /// Gets one destination rectangle in root-target-local coordinates.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Rectangle GetTargetLocalDestination(in Rectangle targetBounds, in Rectangle destinationRegion, in Rectangle rootTargetBounds)
-        => new(
-            (targetBounds.X - rootTargetBounds.X) + destinationRegion.X,
-            (targetBounds.Y - rootTargetBounds.Y) + destinationRegion.Y,
-            destinationRegion.Width,
-            destinationRegion.Height);
 
     /// <summary>
     /// Packs one solid brush color into the staged scene's premultiplied RGBA8 payload format.
@@ -2391,7 +2147,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         0,
         0,
         0,
-        0,
         RasterizationMode.Antialiased,
         0F);
 
@@ -2424,7 +2179,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         int styleWordCount,
         int clipCount,
         int uniqueDefinitionCount,
-        int totalBinMembershipCount,
         int totalTileMembershipCount,
         int tileCountX,
         int tileCountY,
@@ -2451,7 +2205,6 @@ internal sealed class WebGPUEncodedScene : IDisposable
         this.StyleWordCount = styleWordCount;
         this.ClipCount = clipCount;
         this.UniqueDefinitionCount = uniqueDefinitionCount;
-        this.TotalBinMembershipCount = totalBinMembershipCount;
         this.TotalTileMembershipCount = totalTileMembershipCount;
         this.TileCountX = tileCountX;
         this.TileCountY = tileCountY;
@@ -2557,12 +2310,7 @@ internal sealed class WebGPUEncodedScene : IDisposable
     public int UniqueDefinitionCount { get; }
 
     /// <summary>
-    /// Gets the total bin-membership count.
-    /// </summary>
-    public int TotalBinMembershipCount { get; }
-
-    /// <summary>
-    /// Gets the total tile-membership count.
+    /// Gets the conservative tile-membership estimate used for chunk sizing.
     /// </summary>
     public int TotalTileMembershipCount { get; }
 
