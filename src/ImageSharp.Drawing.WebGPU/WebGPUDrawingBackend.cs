@@ -39,6 +39,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     // Cached arenas for cross-flush buffer reuse. Rented via Interlocked.Exchange at flush
     // start and returned at flush end so parallel flushes on different threads don't contend.
     private WebGPUSceneSchedulingArena? cachedSchedulingArena;
+    private WebGPUSceneResourceArena? cachedResourceArena;
     private bool isDisposed;
 
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
@@ -258,6 +259,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         // Rent the cached scheduling arena. Null on first flush or if another thread has it.
         // Returned in the finally block for the next flush to reuse.
         WebGPUSceneSchedulingArena? schedulingArena = Interlocked.Exchange(ref this.cachedSchedulingArena, null);
+        WebGPUSceneResourceArena? resourceArena = Interlocked.Exchange(ref this.cachedResourceArena, null);
         try
         {
             // Retry loop: bump allocators start small (Vello defaults) and the GPU discovers
@@ -268,7 +270,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
             // because successful sizes are persisted in this.bumpSizes.
             for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
             {
-                if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene, currentBumpSizes, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))
+                if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene, currentBumpSizes, ref resourceArena, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))
                 {
                     this.TestingLastGPUInitializationFailure = exceedsBindingLimit
                         ? error ?? "The staged WebGPU scene exceeded the current binding limits."
@@ -319,10 +321,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         }
         finally
         {
-            // Return the arena for the next flush. If another thread already returned one,
+            // Return arenas for the next flush. If another thread already returned one,
             // dispose the displaced arena (at most one survives in the cache).
-            WebGPUSceneSchedulingArena? prev = Interlocked.Exchange(ref this.cachedSchedulingArena, schedulingArena);
-            WebGPUSceneDispatch.DisposeSchedulingArena(prev);
+            WebGPUSceneDispatch.DisposeSchedulingArena(Interlocked.Exchange(ref this.cachedSchedulingArena, schedulingArena));
+            WebGPUSceneResourceArena.Dispose(Interlocked.Exchange(ref this.cachedResourceArena, resourceArena));
         }
     }
 
@@ -582,6 +584,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.TestingLastFlushUsedGPU = false;
         this.TestingLastGPUInitializationFailure = null;
         WebGPUSceneDispatch.DisposeSchedulingArena(this.cachedSchedulingArena);
+        WebGPUSceneResourceArena.Dispose(this.cachedResourceArena);
         this.isDisposed = true;
     }
 

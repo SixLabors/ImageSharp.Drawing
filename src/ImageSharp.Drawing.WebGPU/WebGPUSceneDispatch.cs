@@ -98,6 +98,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="target">The flush target that exposes the native WebGPU surface.</param>
     /// <param name="scene">The prepared composition scene to stage.</param>
     /// <param name="bumpSizes">The current dynamic scratch capacities to use for this attempt.</param>
+    /// <param name="resourceArena">Cross-flush cached scene resource buffers.</param>
     /// <param name="stagedScene">Receives the flush-scoped staged scene on success.</param>
     /// <param name="error">Receives the staging failure reason when creation fails.</param>
     /// <typeparam name="TPixel">The pixel type of the target surface.</typeparam>
@@ -107,10 +108,11 @@ internal static class WebGPUSceneDispatch
         ICanvasFrame<TPixel> target,
         CompositionScene scene,
         WebGPUSceneBumpSizes bumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
         out WebGPUStagedScene stagedScene,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
-        => TryCreateStagedScene(configuration, target, scene, bumpSizes, out _, out _, out stagedScene, out error);
+        => TryCreateStagedScene(configuration, target, scene, bumpSizes, ref resourceArena, out _, out _, out stagedScene, out error);
 
     /// <summary>
     /// Builds the flush-scoped encoded scene and uploads its GPU resources.
@@ -119,6 +121,7 @@ internal static class WebGPUSceneDispatch
     /// <param name="target">The flush target that exposes the native WebGPU surface.</param>
     /// <param name="scene">The prepared composition scene for this flush.</param>
     /// <param name="bumpSizes">The current dynamic scratch capacities to use for this attempt.</param>
+    /// <param name="resourceArena">Cross-flush cached scene resource buffers.</param>
     /// <param name="exceedsBindingLimit">Receives whether creation failed because a single WebGPU binding would be too large.</param>
     /// <param name="bindingLimitFailure">Receives the exact binding-limit failure when <paramref name="exceedsBindingLimit"/> is <see langword="true"/>.</param>
     /// <param name="stagedScene">Receives the flush-scoped staged scene on success.</param>
@@ -130,6 +133,7 @@ internal static class WebGPUSceneDispatch
         ICanvasFrame<TPixel> target,
         CompositionScene scene,
         WebGPUSceneBumpSizes bumpSizes,
+        ref WebGPUSceneResourceArena? resourceArena,
         out bool exceedsBindingLimit,
         out BindingLimitFailure bindingLimitFailure,
         out WebGPUStagedScene stagedScene,
@@ -199,7 +203,7 @@ internal static class WebGPUSceneDispatch
                 return true;
             }
 
-            if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, out WebGPUSceneResourceSet resources, out error))
+            if (!WebGPUSceneResources.TryCreate<TPixel>(flushContext, encodedScene, config, baseColor, ref resourceArena, out WebGPUSceneResourceSet resources, out error))
             {
                 encodedScene.Dispose();
                 flushContext.Dispose();

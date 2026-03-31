@@ -3,6 +3,7 @@
 
 #pragma warning disable SA1201 // Staged scene types are grouped by pipeline role.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -25,6 +26,7 @@ internal static unsafe class WebGPUSceneResources
         WebGPUEncodedScene scene,
         WebGPUSceneConfig config,
         uint baseColor,
+        [NotNullWhen(true)] ref WebGPUSceneResourceArena? arena,
         out WebGPUSceneResourceSet resources,
         out string? error)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -43,6 +45,63 @@ internal static unsafe class WebGPUSceneResources
             error = $"Scene resource texture format '{flushContext.TextureFormat}' does not match the required '{expectedTextureFormat}' for pixel type '{typeof(TPixel).Name}'.";
             return false;
         }
+
+        // Textures are scene-dependent and not pooled.
+        if (!TryCreateGradientTexture(flushContext, scene, out TextureView* gradientTextureView, out error))
+        {
+            return false;
+        }
+
+        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, expectedTextureFormat, out TextureView* imageAtlasTextureView, out error))
+        {
+            return false;
+        }
+
+        // Compute byte lengths for the two variable-size data buffers.
+        nuint infoBinDataByteLength = checked(WebGPUSceneResourceArena.GetBindingByteLength<uint>(scene.InfoWordCount) + config.BufferSizes.BinData.ByteLength);
+        nuint sceneByteLength = WebGPUSceneResourceArena.GetBindingByteLength<uint>(scene.SceneWordCount);
+
+        // Reuse arena buffers if all capacities fit this scene.
+        if (arena is not null && arena.CanReuse(flushContext, config.BufferSizes, infoBinDataByteLength, sceneByteLength))
+        {
+            System.IO.File.AppendAllText("bump_debug.log", "[RESOURCE ARENA HIT]\n");
+
+            // Upload new scene data and header into the existing arena buffers.
+            ReadOnlySpan<uint> sceneData = scene.SceneData.Span;
+            fixed (uint* sceneDataPtr = sceneData)
+            {
+                flushContext.Api.QueueWriteBuffer(flushContext.Queue, arena.SceneBuffer, 0, sceneDataPtr, (nuint)(sceneData.Length * sizeof(uint)));
+            }
+
+            GpuSceneConfig header = CreateHeader(scene, config, baseColor);
+            flushContext.Api.QueueWriteBuffer(flushContext.Queue, arena.HeaderBuffer, 0, &header, (nuint)sizeof(GpuSceneConfig));
+
+            resources = new WebGPUSceneResourceSet(
+                arena.HeaderBuffer,
+                arena.SceneBuffer,
+                arena.PathReducedBuffer,
+                arena.PathReduced2Buffer,
+                arena.PathReducedScanBuffer,
+                arena.PathMonoidBuffer,
+                arena.PathBboxBuffer,
+                arena.DrawReducedBuffer,
+                arena.DrawMonoidBuffer,
+                arena.InfoBinDataBuffer,
+                arena.ClipInputBuffer,
+                arena.ClipElementBuffer,
+                arena.ClipBicBuffer,
+                arena.ClipBboxBuffer,
+                arena.DrawBboxBuffer,
+                arena.PathBuffer,
+                arena.LineBuffer,
+                gradientTextureView,
+                imageAtlasTextureView);
+            error = null;
+            return true;
+        }
+
+        // Arena miss — create all buffers fresh and build a new arena.
+        WebGPUSceneResourceArena.Dispose(arena);
 
         if (!TryCreateAndUploadCombinedInfoBinDataBuffer(flushContext, scene.InfoWordCount, config.BufferSizes.BinData.ByteLength, out WgpuBuffer* infoBinDataBuffer, out error))
         {
@@ -119,27 +178,42 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        if (!TryCreateGradientTexture(flushContext, scene, out TextureView* gradientTextureView, out error))
-        {
-            return false;
-        }
-
-        if (!TryCreateImageAtlasTexture<TPixel>(flushContext, scene, expectedTextureFormat, out TextureView* imageAtlasTextureView, out error))
-        {
-            return false;
-        }
-
         if (!TryCreateAndUploadBuffer(flushContext, scene.SceneData.Span, (uint)scene.SceneData.Length, out WgpuBuffer* sceneBuffer, out error))
         {
             return false;
         }
 
-        GpuSceneConfig header = CreateHeader(scene, config, baseColor);
-
-        if (!TryCreateAndUploadScalarBuffer(flushContext, in header, out WgpuBuffer* headerBuffer, out error))
+        GpuSceneConfig newHeader = CreateHeader(scene, config, baseColor);
+        if (!TryCreateAndUploadScalarBuffer(flushContext, in newHeader, out WgpuBuffer* headerBuffer, out error))
         {
             return false;
         }
+
+        // Build the new arena from the freshly created buffers.
+        // These buffers are NOT tracked by the flush context — the arena owns them.
+        arena = new WebGPUSceneResourceArena(
+            flushContext.Api,
+            flushContext.Device,
+            config.BufferSizes,
+            infoBinDataByteLength,
+            sceneByteLength,
+            headerBuffer,
+            sceneBuffer,
+            pathReducedBuffer,
+            pathReduced2Buffer,
+            pathReducedScanBuffer,
+            pathMonoidBuffer,
+            pathBboxBuffer,
+            drawReducedBuffer,
+            drawMonoidBuffer,
+            infoBinDataBuffer,
+            clipInputBuffer,
+            clipElementBuffer,
+            clipBicBuffer,
+            clipBboxBuffer,
+            drawBboxBuffer,
+            pathBuffer,
+            lineBuffer);
 
         resources = new WebGPUSceneResourceSet(
             headerBuffer,
@@ -476,7 +550,6 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        flushContext.TrackBuffer(buffer);
         error = null;
         return true;
     }
@@ -704,7 +777,6 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        flushContext.TrackBuffer(buffer);
         flushContext.Api.QueueWriteBuffer(
             flushContext.Queue,
             buffer,
@@ -745,7 +817,6 @@ internal static unsafe class WebGPUSceneResources
             return false;
         }
 
-        flushContext.TrackBuffer(buffer);
         if (!values.IsEmpty)
         {
             nuint uploadByteLength = checked((nuint)values.Length * (nuint)Unsafe.SizeOf<T>());
@@ -912,6 +983,169 @@ internal readonly unsafe struct WebGPUSceneResourceSet
     /// Gets the sampled image-atlas texture view.
     /// </summary>
     public TextureView* ImageAtlasTextureView { get; }
+}
+
+/// <summary>
+/// Cross-flush reusable scene resource buffers. Cached on the backend via
+/// <c>Interlocked.Exchange</c> so repeated renders of the same scene create
+/// zero GPU buffers after the first frame. Textures are not pooled.
+/// </summary>
+internal sealed unsafe class WebGPUSceneResourceArena
+{
+    public WebGPUSceneResourceArena(
+        WebGPU api,
+        Device* device,
+        WebGPUSceneBufferSizes capacitySizes,
+        nuint infoBinDataByteCapacity,
+        nuint sceneByteCapacity,
+        WgpuBuffer* headerBuffer,
+        WgpuBuffer* sceneBuffer,
+        WgpuBuffer* pathReducedBuffer,
+        WgpuBuffer* pathReduced2Buffer,
+        WgpuBuffer* pathReducedScanBuffer,
+        WgpuBuffer* pathMonoidBuffer,
+        WgpuBuffer* pathBboxBuffer,
+        WgpuBuffer* drawReducedBuffer,
+        WgpuBuffer* drawMonoidBuffer,
+        WgpuBuffer* infoBinDataBuffer,
+        WgpuBuffer* clipInputBuffer,
+        WgpuBuffer* clipElementBuffer,
+        WgpuBuffer* clipBicBuffer,
+        WgpuBuffer* clipBboxBuffer,
+        WgpuBuffer* drawBboxBuffer,
+        WgpuBuffer* pathBuffer,
+        WgpuBuffer* lineBuffer)
+    {
+        this.Api = api;
+        this.Device = device;
+        this.CapacitySizes = capacitySizes;
+        this.InfoBinDataByteCapacity = infoBinDataByteCapacity;
+        this.SceneByteCapacity = sceneByteCapacity;
+        this.HeaderBuffer = headerBuffer;
+        this.SceneBuffer = sceneBuffer;
+        this.PathReducedBuffer = pathReducedBuffer;
+        this.PathReduced2Buffer = pathReduced2Buffer;
+        this.PathReducedScanBuffer = pathReducedScanBuffer;
+        this.PathMonoidBuffer = pathMonoidBuffer;
+        this.PathBboxBuffer = pathBboxBuffer;
+        this.DrawReducedBuffer = drawReducedBuffer;
+        this.DrawMonoidBuffer = drawMonoidBuffer;
+        this.InfoBinDataBuffer = infoBinDataBuffer;
+        this.ClipInputBuffer = clipInputBuffer;
+        this.ClipElementBuffer = clipElementBuffer;
+        this.ClipBicBuffer = clipBicBuffer;
+        this.ClipBboxBuffer = clipBboxBuffer;
+        this.DrawBboxBuffer = drawBboxBuffer;
+        this.PathBuffer = pathBuffer;
+        this.LineBuffer = lineBuffer;
+    }
+
+    public WebGPU Api { get; }
+
+    public Device* Device { get; }
+
+    public WebGPUSceneBufferSizes CapacitySizes { get; }
+
+    public nuint InfoBinDataByteCapacity { get; }
+
+    public nuint SceneByteCapacity { get; }
+
+    public WgpuBuffer* HeaderBuffer { get; }
+
+    public WgpuBuffer* SceneBuffer { get; }
+
+    public WgpuBuffer* PathReducedBuffer { get; }
+
+    public WgpuBuffer* PathReduced2Buffer { get; }
+
+    public WgpuBuffer* PathReducedScanBuffer { get; }
+
+    public WgpuBuffer* PathMonoidBuffer { get; }
+
+    public WgpuBuffer* PathBboxBuffer { get; }
+
+    public WgpuBuffer* DrawReducedBuffer { get; }
+
+    public WgpuBuffer* DrawMonoidBuffer { get; }
+
+    public WgpuBuffer* InfoBinDataBuffer { get; }
+
+    public WgpuBuffer* ClipInputBuffer { get; }
+
+    public WgpuBuffer* ClipElementBuffer { get; }
+
+    public WgpuBuffer* ClipBicBuffer { get; }
+
+    public WgpuBuffer* ClipBboxBuffer { get; }
+
+    public WgpuBuffer* DrawBboxBuffer { get; }
+
+    public WgpuBuffer* PathBuffer { get; }
+
+    public WgpuBuffer* LineBuffer { get; }
+
+    /// <summary>
+    /// Gets the byte length required to bind <paramref name="count"/> unmanaged elements,
+    /// preserving WebGPU's non-zero binding rule.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static nuint GetBindingByteLength<T>(int count)
+        where T : unmanaged
+        => checked((nuint)Math.Max(count, 1) * (nuint)Unsafe.SizeOf<T>());
+
+    /// <summary>
+    /// Returns true if every buffer fits the required sizes for this scene.
+    /// </summary>
+    public bool CanReuse(WebGPUFlushContext flushContext, WebGPUSceneBufferSizes bufferSizes, nuint infoBinDataByteLength, nuint sceneByteLength)
+        => this.Device == flushContext.Device &&
+           this.HeaderBuffer is not null &&
+           this.SceneBuffer is not null &&
+           infoBinDataByteLength <= this.InfoBinDataByteCapacity &&
+           sceneByteLength <= this.SceneByteCapacity &&
+           bufferSizes.PathReduced.ByteLength <= this.CapacitySizes.PathReduced.ByteLength &&
+           bufferSizes.PathReduced2.ByteLength <= this.CapacitySizes.PathReduced2.ByteLength &&
+           bufferSizes.PathReducedScan.ByteLength <= this.CapacitySizes.PathReducedScan.ByteLength &&
+           bufferSizes.PathMonoids.ByteLength <= this.CapacitySizes.PathMonoids.ByteLength &&
+           bufferSizes.PathBboxes.ByteLength <= this.CapacitySizes.PathBboxes.ByteLength &&
+           bufferSizes.DrawReduced.ByteLength <= this.CapacitySizes.DrawReduced.ByteLength &&
+           bufferSizes.DrawMonoids.ByteLength <= this.CapacitySizes.DrawMonoids.ByteLength &&
+           bufferSizes.ClipInputs.ByteLength <= this.CapacitySizes.ClipInputs.ByteLength &&
+           bufferSizes.ClipElements.ByteLength <= this.CapacitySizes.ClipElements.ByteLength &&
+           bufferSizes.ClipBics.ByteLength <= this.CapacitySizes.ClipBics.ByteLength &&
+           bufferSizes.ClipBboxes.ByteLength <= this.CapacitySizes.ClipBboxes.ByteLength &&
+           bufferSizes.DrawBboxes.ByteLength <= this.CapacitySizes.DrawBboxes.ByteLength &&
+           bufferSizes.Paths.ByteLength <= this.CapacitySizes.Paths.ByteLength &&
+           bufferSizes.Lines.ByteLength <= this.CapacitySizes.Lines.ByteLength;
+
+    /// <summary>
+    /// Releases all GPU buffers owned by this arena.
+    /// </summary>
+    public static void Dispose(WebGPUSceneResourceArena? arena)
+    {
+        if (arena is null || arena.HeaderBuffer is null)
+        {
+            return;
+        }
+
+        WebGPU api = arena.Api;
+        api.BufferRelease(arena.HeaderBuffer);
+        api.BufferRelease(arena.SceneBuffer);
+        api.BufferRelease(arena.PathReducedBuffer);
+        api.BufferRelease(arena.PathReduced2Buffer);
+        api.BufferRelease(arena.PathReducedScanBuffer);
+        api.BufferRelease(arena.PathMonoidBuffer);
+        api.BufferRelease(arena.PathBboxBuffer);
+        api.BufferRelease(arena.DrawReducedBuffer);
+        api.BufferRelease(arena.DrawMonoidBuffer);
+        api.BufferRelease(arena.InfoBinDataBuffer);
+        api.BufferRelease(arena.ClipInputBuffer);
+        api.BufferRelease(arena.ClipElementBuffer);
+        api.BufferRelease(arena.ClipBicBuffer);
+        api.BufferRelease(arena.ClipBboxBuffer);
+        api.BufferRelease(arena.DrawBboxBuffer);
+        api.BufferRelease(arena.PathBuffer);
+        api.BufferRelease(arena.LineBuffer);
+    }
 }
 
 /// <summary>
