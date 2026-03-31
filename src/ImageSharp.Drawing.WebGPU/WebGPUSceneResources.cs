@@ -64,8 +64,6 @@ internal static unsafe class WebGPUSceneResources
         // Reuse arena buffers if all capacities fit this scene.
         if (arena is not null && arena.CanReuse(flushContext, config.BufferSizes, infoBinDataByteLength, sceneByteLength))
         {
-            System.IO.File.AppendAllText("bump_debug.log", "[RESOURCE ARENA HIT]\n");
-
             // Upload new scene data and header into the existing arena buffers.
             ReadOnlySpan<uint> sceneData = scene.SceneData.Span;
             fixed (uint* sceneDataPtr = sceneData)

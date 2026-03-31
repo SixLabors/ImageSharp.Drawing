@@ -167,16 +167,12 @@ internal static class WebGPUSceneDispatch
 
         try
         {
-            Stopwatch sw = Stopwatch.StartNew();
             if (!WebGPUSceneEncoder.TryEncode(scene, flushContext.TargetBounds, flushContext.MemoryAllocator, out WebGPUEncodedScene createdScene, out error))
             {
                 flushContext.Dispose();
                 stagedScene = default;
                 return false;
             }
-
-            double encodeMs = sw.Elapsed.TotalMilliseconds;
-            sw.Restart();
 
             encodedScene = createdScene;
             WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, bumpSizes);
@@ -210,9 +206,6 @@ internal static class WebGPUSceneDispatch
                 stagedScene = default;
                 return false;
             }
-
-            double resourceMs = sw.Elapsed.TotalMilliseconds;
-            File.AppendAllText("bump_debug.log", $"[TIMING] encode={encodeMs:0.000}ms resources={resourceMs:0.000}ms fills={encodedScene.FillCount} paths={encodedScene.PathCount} lines={encodedScene.LineCount}\n");
 
             stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, resources, segmentChunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
             error = null;
@@ -916,8 +909,6 @@ internal static class WebGPUSceneDispatch
         {
             requiresGrowth = true;
             grownBumpSizes = GrowBumpSizes(stagedScene.Config.BumpSizes, in bumpAllocators);
-            WebGPUSceneBumpSizes cfg = stagedScene.Config.BumpSizes;
-            File.AppendAllText("bump_debug.log", $"[BUMP OVERFLOW] failed={bumpAllocators.Failed:X} | had: lines={cfg.Lines} bin={cfg.Binning} tiles={cfg.PathTiles} segc={cfg.SegCounts} segs={cfg.Segments} blend={cfg.BlendSpill} ptcl={cfg.Ptcl} | gpu: lines={bumpAllocators.Lines} bin={bumpAllocators.Binning} tiles={bumpAllocators.Tile} segc={bumpAllocators.SegCounts} segs={bumpAllocators.Segments} blend={bumpAllocators.BlendSpill} ptcl={bumpAllocators.Ptcl} | grown: lines={grownBumpSizes.Lines} bin={grownBumpSizes.Binning} tiles={grownBumpSizes.PathTiles} segc={grownBumpSizes.SegCounts} segs={grownBumpSizes.Segments} blend={grownBumpSizes.BlendSpill} ptcl={grownBumpSizes.Ptcl}\n");
             error = "The staged WebGPU scene needs larger scratch buffers and will be retried.";
             return false;
         }
@@ -1025,13 +1016,11 @@ internal static class WebGPUSceneDispatch
                 WebGPUSceneConfig chunkConfig = WebGPUSceneConfig.Create(encodedScene, chunkBumpSize, chunkWindow);
                 if (!TryValidateBindingSizes(encodedScene, chunkConfig, maxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
                 {
-                    File.AppendAllText("bump_debug.log", $"[CHUNK VALIDATION FAIL] buffer={bindingLimitFailure.Buffer} required={bindingLimitFailure.RequiredBytes} limit={bindingLimitFailure.LimitBytes} chunkTileH={requestedTileHeight} totalTileH={totalTileHeight} tiles={chunkBumpSize.PathTiles} segc={chunkBumpSize.SegCounts} segs={chunkBumpSize.Segments} srcTiles={stagedScene.Config.BumpSizes.PathTiles} srcSegc={stagedScene.Config.BumpSizes.SegCounts}\n");
                     if (IsChunkableBindingFailure(bindingLimitFailure.Buffer))
                     {
                         uint smallerTileHeight = ShrinkChunkTileHeight(requestedTileHeight, remainingTileHeight, bindingLimitFailure);
                         if (smallerTileHeight >= requestedTileHeight)
                         {
-                            File.AppendAllText("bump_debug.log", $"[CHUNK SHRINK STUCK] smallerH={smallerTileHeight} requestedH={requestedTileHeight}\n");
                             return false;
                         }
 
