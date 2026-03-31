@@ -5,6 +5,7 @@
 
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Silk.NET.WebGPU;
 using Silk.NET.WebGPU.Extensions.WGPU;
@@ -162,7 +163,7 @@ internal static class WebGPUSceneDispatch
 
         try
         {
-            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+            Stopwatch sw = Stopwatch.StartNew();
             if (!WebGPUSceneEncoder.TryEncode(scene, flushContext.TargetBounds, flushContext.MemoryAllocator, out WebGPUEncodedScene createdScene, out error))
             {
                 flushContext.Dispose();
@@ -207,7 +208,7 @@ internal static class WebGPUSceneDispatch
             }
 
             double resourceMs = sw.Elapsed.TotalMilliseconds;
-            System.IO.File.AppendAllText("bump_debug.log", $"[TIMING] encode={encodeMs:0.000}ms resources={resourceMs:0.000}ms fills={encodedScene.FillCount} paths={encodedScene.PathCount} lines={encodedScene.LineCount}\n");
+            File.AppendAllText("bump_debug.log", $"[TIMING] encode={encodeMs:0.000}ms resources={resourceMs:0.000}ms fills={encodedScene.FillCount} paths={encodedScene.PathCount} lines={encodedScene.LineCount}\n");
 
             stagedScene = new WebGPUStagedScene(flushContext, encodedScene, config, resources, segmentChunkingRequired ? bindingLimitFailure : BindingLimitFailure.None);
             error = null;
@@ -332,7 +333,7 @@ internal static class WebGPUSceneDispatch
     /// </summary>
     public static unsafe bool TryDispatchSchedulingStages(
         ref WebGPUStagedScene stagedScene,
-        in WebGPUSceneSchedulingArena arena,
+        WebGPUSceneSchedulingArena arena,
         out WebGPUSceneSchedulingResources scheduling,
         out string? error)
     {
@@ -711,26 +712,34 @@ internal static class WebGPUSceneDispatch
         return true;
     }
 
+    /// <summary>
+    /// Reuses the existing scheduling arena if every buffer is large enough for this scene,
+    /// otherwise disposes it and creates a new one. The arena is cached across flushes on
+    /// the backend so repeated renders of the same scene create zero GPU buffers.
+    /// </summary>
     private static bool TryEnsureSchedulingArena(
         WebGPUFlushContext flushContext,
         WebGPUSceneBufferSizes bufferSizes,
         nuint readbackByteLength,
-        ref WebGPUSceneSchedulingArena arena,
+        [NotNullWhen(true)] ref WebGPUSceneSchedulingArena? arena,
         out string? error)
     {
-        if (CanReuseSchedulingArena(flushContext, in arena, bufferSizes, readbackByteLength))
+        if (arena is not null && CanReuseSchedulingArena(flushContext, arena, bufferSizes, readbackByteLength))
         {
             error = null;
             return true;
         }
 
-        DisposeSchedulingArena(ref arena);
-        return TryCreateSchedulingArena(flushContext, bufferSizes, readbackByteLength, out arena, out error);
+        DisposeSchedulingArena(arena);
+        return TryCreateSchedulingArena(flushContext, bufferSizes, readbackByteLength, ref arena, out error);
     }
 
+    /// <summary>
+    /// Returns true if every buffer in the arena fits the required sizes for this scene.
+    /// </summary>
     private static unsafe bool CanReuseSchedulingArena(
         WebGPUFlushContext flushContext,
-        in WebGPUSceneSchedulingArena arena,
+        WebGPUSceneSchedulingArena arena,
         WebGPUSceneBufferSizes bufferSizes,
         nuint readbackByteLength)
         => arena.Device == flushContext.Device &&
@@ -756,10 +765,10 @@ internal static class WebGPUSceneDispatch
         WebGPUFlushContext flushContext,
         WebGPUSceneBufferSizes bufferSizes,
         nuint readbackByteLength,
-        out WebGPUSceneSchedulingArena arena,
+        [NotNullWhen(true)] ref WebGPUSceneSchedulingArena? arena,
         out string? error)
     {
-        arena = default;
+        arena = null;
         WgpuBuffer* binHeaderBuffer = null;
         WgpuBuffer* indirectCountBuffer = null;
         WgpuBuffer* pathTileBuffer = null;
@@ -817,12 +826,13 @@ internal static class WebGPUSceneDispatch
                 ptclBuffer,
                 bumpBuffer,
                 readbackBuffer);
+
             error = null;
             return true;
         }
         finally
         {
-            if (arena.BinHeaderBuffer is null)
+            if (arena is null || arena.BinHeaderBuffer is null)
             {
                 ReleaseArenaBuffer(flushContext.Api, readbackBuffer);
                 ReleaseArenaBuffer(flushContext.Api, bumpBuffer);
@@ -840,11 +850,10 @@ internal static class WebGPUSceneDispatch
     /// <summary>
     /// Releases one reusable scheduling arena created outside the flush-context tracking lists.
     /// </summary>
-    public static unsafe void DisposeSchedulingArena(ref WebGPUSceneSchedulingArena arena)
+    public static unsafe void DisposeSchedulingArena(WebGPUSceneSchedulingArena? arena)
     {
-        if (arena.BinHeaderBuffer is null)
+        if (arena is null || arena.BinHeaderBuffer is null)
         {
-            arena = default;
             return;
         }
 
@@ -857,26 +866,14 @@ internal static class WebGPUSceneDispatch
         ReleaseArenaBuffer(arena.Api, arena.PathTileBuffer);
         ReleaseArenaBuffer(arena.Api, arena.IndirectCountBuffer);
         ReleaseArenaBuffer(arena.Api, arena.BinHeaderBuffer);
-        arena = default;
     }
 
     /// <summary>
     /// Executes the staged scene pipeline against the current flush target.
     /// </summary>
-    /// <remarks>
-    /// Scheduling still runs before fine because later stages consume its outputs, but the bump
-    /// allocator status is only copied and mapped after the fine pass has already been recorded
-    /// and submitted for this attempt.
-    /// </remarks>
-    /// <param name="stagedScene">The flush-scoped scene, resources, and config for this attempt.</param>
-    /// <param name="schedulingArena">The flush-local reusable scheduling scratch and readback arena.</param>
-    /// <param name="requiresGrowth">Receives whether scheduling reported that the scratch capacities were too small.</param>
-    /// <param name="grownBumpSizes">Receives the enlarged scratch capacities to retry with when <paramref name="requiresGrowth"/> is <see langword="true"/>.</param>
-    /// <param name="error">Receives the render failure reason when the staged path cannot continue.</param>
-    /// <returns><see langword="true"/> when the staged scene rendered successfully; otherwise, <see langword="false"/>.</returns>
     public static unsafe bool TryRenderStagedScene(
         ref WebGPUStagedScene stagedScene,
-        ref WebGPUSceneSchedulingArena schedulingArena,
+        ref WebGPUSceneSchedulingArena? schedulingArena,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
         out string? error)
@@ -891,13 +888,14 @@ internal static class WebGPUSceneDispatch
             return true;
         }
 
+        // Oversized scenes that exceed the device binding limit use tile-row chunking.
+        // The chunked path ensures its own arena per chunk with chunk-local sizes.
         if (IsChunkableBindingFailure(stagedScene.BindingLimitFailure.Buffer))
         {
             return TryRenderSegmentChunkedStagedScene(ref stagedScene, ref schedulingArena, out requiresGrowth, out grownBumpSizes, out error);
         }
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-
+        // Normal path: ensure arena with full-scene sizes.
         if (!TryEnsureSchedulingArena(
                 stagedScene.FlushContext,
                 stagedScene.Config.BufferSizes,
@@ -908,16 +906,10 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        double arenaMs = sw.Elapsed.TotalMilliseconds;
-        sw.Restart();
-
-        if (!TryDispatchSchedulingStages(ref stagedScene, in schedulingArena, out WebGPUSceneSchedulingResources scheduling, out error))
+        if (!TryDispatchSchedulingStages(ref stagedScene, schedulingArena, out WebGPUSceneSchedulingResources scheduling, out error))
         {
             return false;
         }
-
-        double schedDispatchMs = sw.Elapsed.TotalMilliseconds;
-        sw.Restart();
 
         WebGPUFlushContext flushContext = stagedScene.FlushContext;
         int targetWidth = encodedScene.TargetSize.Width;
@@ -953,10 +945,8 @@ internal static class WebGPUSceneDispatch
             targetWidth,
             targetHeight);
 
-        double fineDispatchMs = sw.Elapsed.TotalMilliseconds;
-        sw.Restart();
-
-        // Single submit: scheduling + fine + copy + readback all in one.
+        // Single submit: scheduling + fine + copy + readback all in one command encoder.
+        // The readback map blocks until the GPU finishes everything.
         if (!TryEnqueueSchedulingStatusReadback(flushContext, scheduling.BumpBuffer, schedulingArena.ReadbackBuffer, 0, out error) ||
             !WebGPUDrawingBackend.TrySubmit(flushContext) ||
             !TryReadSchedulingStatus(flushContext, schedulingArena.ReadbackBuffer, out GpuSceneBumpAllocators bumpAllocators, out error))
@@ -964,22 +954,19 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        double submitReadbackMs = sw.Elapsed.TotalMilliseconds;
-        System.IO.File.AppendAllText("bump_debug.log", $"[RENDER] arena={arenaMs:0.000}ms schedDispatch={schedDispatchMs:0.000}ms fineDispatch={fineDispatchMs:0.000}ms submitReadback={submitReadbackMs:0.000}ms\n");
-
+        // Overflow: fine output is garbage but bump counters report true demand for all
+        // buffers. Prepare shader never cancels, so one retry with doubled sizes suffices.
         if (RequiresScratchReallocation(in bumpAllocators, stagedScene.Config.BumpSizes))
         {
-            // Overflow detected. The fine output is garbage but all bump allocators
-            // now report the actual sizes needed. One retry with these sizes will succeed.
             requiresGrowth = true;
             grownBumpSizes = GrowBumpSizes(stagedScene.Config.BumpSizes, in bumpAllocators);
             WebGPUSceneBumpSizes cfg = stagedScene.Config.BumpSizes;
-            System.IO.File.AppendAllText("bump_debug.log", $"[BUMP OVERFLOW] failed={bumpAllocators.Failed:X} | had: lines={cfg.Lines} bin={cfg.Binning} tiles={cfg.PathTiles} segc={cfg.SegCounts} segs={cfg.Segments} blend={cfg.BlendSpill} ptcl={cfg.Ptcl} | gpu: lines={bumpAllocators.Lines} bin={bumpAllocators.Binning} tiles={bumpAllocators.Tile} segc={bumpAllocators.SegCounts} segs={bumpAllocators.Segments} blend={bumpAllocators.BlendSpill} ptcl={bumpAllocators.Ptcl} | grown: lines={grownBumpSizes.Lines} bin={grownBumpSizes.Binning} tiles={grownBumpSizes.PathTiles} segc={grownBumpSizes.SegCounts} segs={grownBumpSizes.Segments} blend={grownBumpSizes.BlendSpill} ptcl={grownBumpSizes.Ptcl}\n");
+            File.AppendAllText("bump_debug.log", $"[BUMP OVERFLOW] failed={bumpAllocators.Failed:X} | had: lines={cfg.Lines} bin={cfg.Binning} tiles={cfg.PathTiles} segc={cfg.SegCounts} segs={cfg.Segments} blend={cfg.BlendSpill} ptcl={cfg.Ptcl} | gpu: lines={bumpAllocators.Lines} bin={bumpAllocators.Binning} tiles={bumpAllocators.Tile} segc={bumpAllocators.SegCounts} segs={bumpAllocators.Segments} blend={bumpAllocators.BlendSpill} ptcl={bumpAllocators.Ptcl} | grown: lines={grownBumpSizes.Lines} bin={grownBumpSizes.Binning} tiles={grownBumpSizes.PathTiles} segc={grownBumpSizes.SegCounts} segs={grownBumpSizes.Segments} blend={grownBumpSizes.BlendSpill} ptcl={grownBumpSizes.Ptcl}\n");
             error = "The staged WebGPU scene needs larger scratch buffers and will be retried.";
             return false;
         }
 
-        // Persist the actual GPU usage so the next flush starts from known-good sizes.
+        // Persist actual GPU usage so the next flush starts with known-good sizes.
         grownBumpSizes = new WebGPUSceneBumpSizes(
             Math.Max(bumpAllocators.Lines, stagedScene.Config.BumpSizes.Lines),
             Math.Max(bumpAllocators.Binning, stagedScene.Config.BumpSizes.Binning),
@@ -1008,7 +995,7 @@ internal static class WebGPUSceneDispatch
     /// <returns><see langword="true"/> when every chunk rendered successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryRenderSegmentChunkedStagedScene(
         ref WebGPUStagedScene stagedScene,
-        ref WebGPUSceneSchedulingArena schedulingArena,
+        ref WebGPUSceneSchedulingArena? schedulingArena,
         out bool requiresGrowth,
         out WebGPUSceneBumpSizes grownBumpSizes,
         out string? error)
@@ -1054,30 +1041,41 @@ internal static class WebGPUSceneDispatch
         uint nextChunkTileHeight = GetInitialSegmentChunkTileHeight(encodedScene, stagedScene.BindingLimitFailure);
         uint tileYStart = 0U;
         uint totalTileHeight = checked((uint)encodedScene.TileCountY);
+
+        // Readback buffer holds one BumpAllocators per chunk so we can batch-read after all chunks.
         nuint readbackByteLength = checked(Math.Max(totalTileHeight, 1U) * (uint)sizeof(GpuSceneBumpAllocators));
+
+        // Track each chunk's config sizes and tile heights for the batch readback at the end.
         using IMemoryOwner<WebGPUSceneBumpSizes> chunkBumpSizeOwner = flushContext.MemoryAllocator.Allocate<WebGPUSceneBumpSizes>(checked((int)Math.Max(totalTileHeight, 1U)));
         using IMemoryOwner<uint> chunkTileHeightOwner = flushContext.MemoryAllocator.Allocate<uint>(checked((int)Math.Max(totalTileHeight, 1U)));
         Span<WebGPUSceneBumpSizes> chunkAttemptBumpSizes = chunkBumpSizeOwner.Memory.Span;
         Span<uint> chunkAttemptTileHeights = chunkTileHeightOwner.Memory.Span;
+
         int chunkReadbackCount = 0;
+
+        // Outer loop: advance through tile rows. Each iteration renders one chunk.
         while (tileYStart < totalTileHeight)
         {
             uint remainingTileHeight = totalTileHeight - tileYStart;
             uint requestedTileHeight = Math.Min(nextChunkTileHeight, remainingTileHeight);
+
+            // Scale the full-scene bump sizes down proportionally for this chunk's tile height.
             WebGPUSceneBumpSizes chunkBumpSize = ScaleChunkBumpSizes(stagedScene.Config.BumpSizes, encodedScene, requestedTileHeight);
+
+            // Inner loop: shrink the chunk if its buffers still exceed the device binding limit.
             while (true)
             {
                 WebGPUSceneChunkWindow chunkWindow = CreateChunkWindow(tileYStart, requestedTileHeight, remainingTileHeight);
                 WebGPUSceneConfig chunkConfig = WebGPUSceneConfig.Create(encodedScene, chunkBumpSize, chunkWindow);
                 if (!TryValidateBindingSizes(encodedScene, chunkConfig, maxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
                 {
-                    System.IO.File.AppendAllText("bump_debug.log", $"[CHUNK VALIDATION FAIL] buffer={bindingLimitFailure.Buffer} required={bindingLimitFailure.RequiredBytes} limit={bindingLimitFailure.LimitBytes} chunkTileH={requestedTileHeight} totalTileH={totalTileHeight} tiles={chunkBumpSize.PathTiles} segc={chunkBumpSize.SegCounts} segs={chunkBumpSize.Segments} srcTiles={stagedScene.Config.BumpSizes.PathTiles} srcSegc={stagedScene.Config.BumpSizes.SegCounts}\n");
+                    File.AppendAllText("bump_debug.log", $"[CHUNK VALIDATION FAIL] buffer={bindingLimitFailure.Buffer} required={bindingLimitFailure.RequiredBytes} limit={bindingLimitFailure.LimitBytes} chunkTileH={requestedTileHeight} totalTileH={totalTileHeight} tiles={chunkBumpSize.PathTiles} segc={chunkBumpSize.SegCounts} segs={chunkBumpSize.Segments} srcTiles={stagedScene.Config.BumpSizes.PathTiles} srcSegc={stagedScene.Config.BumpSizes.SegCounts}\n");
                     if (IsChunkableBindingFailure(bindingLimitFailure.Buffer))
                     {
                         uint smallerTileHeight = ShrinkChunkTileHeight(requestedTileHeight, remainingTileHeight, bindingLimitFailure);
                         if (smallerTileHeight >= requestedTileHeight)
                         {
-                            System.IO.File.AppendAllText("bump_debug.log", $"[CHUNK SHRINK STUCK] smallerH={smallerTileHeight} requestedH={requestedTileHeight}\n");
+                            File.AppendAllText("bump_debug.log", $"[CHUNK SHRINK STUCK] smallerH={smallerTileHeight} requestedH={requestedTileHeight}\n");
                             return false;
                         }
 
@@ -1089,15 +1087,20 @@ internal static class WebGPUSceneDispatch
                     return false;
                 }
 
+                // Chunk fits. Re-ensure the arena for this chunk's buffer sizes (may be
+                // different from the previous chunk if the scene has non-uniform density).
                 WebGPUStagedScene chunkScene = new(flushContext, encodedScene, chunkConfig, stagedScene.Resources, BindingLimitFailure.None);
                 if (!TryEnsureSchedulingArena(flushContext, chunkConfig.BufferSizes, readbackByteLength, ref schedulingArena, out error))
                 {
                     return false;
                 }
 
+                // Render this chunk: scheduling + fine into the shared output texture.
+                // Readback is deferred — each chunk copies its bump status into a different
+                // offset in the readback buffer. All chunks are checked in one batch below.
                 if (TryRenderChunkAttempt(
                         ref chunkScene,
-                        in schedulingArena,
+                        schedulingArena,
                         outputTextureView,
                         (nuint)chunkReadbackCount * (nuint)sizeof(GpuSceneBumpAllocators),
                         out error))
@@ -1111,9 +1114,11 @@ internal static class WebGPUSceneDispatch
             }
         }
 
+        // All chunks submitted. Map the readback buffer once and check every chunk's
+        // bump allocators. If any overflowed, grow sizes and the outer retry loop re-runs.
         if (!TryReadChunkSchedulingStatuses(
                 flushContext,
-                schedulingArena.ReadbackBuffer,
+                schedulingArena,
                 chunkReadbackCount,
                 chunkAttemptBumpSizes,
                 chunkAttemptTileHeights,
@@ -1162,24 +1167,26 @@ internal static class WebGPUSceneDispatch
     /// <returns><see langword="true"/> when this chunk rendered successfully; otherwise, <see langword="false"/>.</returns>
     private static unsafe bool TryRenderChunkAttempt(
         ref WebGPUStagedScene stagedScene,
-        in WebGPUSceneSchedulingArena schedulingArena,
+        WebGPUSceneSchedulingArena schedulingArena,
         TextureView* outputTextureView,
         nuint readbackOffset,
         out string? error)
     {
         error = null;
 
+        // Zero the bump buffer so this chunk doesn't inherit the previous chunk's overflow state.
         if (!TryResetSceneBumpAllocators(stagedScene.FlushContext, schedulingArena.BumpBuffer, out error))
         {
             return false;
         }
 
+        // Upload the chunk-specific config header (tile window, buffer sizes).
         if (!TryWriteSceneHeader(stagedScene.FlushContext, stagedScene.Resources.HeaderBuffer, WebGPUSceneResources.CreateHeader(stagedScene.EncodedScene, stagedScene.Config, 0U), out error))
         {
             return false;
         }
 
-        if (!TryDispatchSchedulingStages(ref stagedScene, in schedulingArena, out WebGPUSceneSchedulingResources scheduling, out error))
+        if (!TryDispatchSchedulingStages(ref stagedScene, schedulingArena, out WebGPUSceneSchedulingResources scheduling, out error))
         {
             return false;
         }
@@ -1798,7 +1805,7 @@ internal static class WebGPUSceneDispatch
     /// </summary>
     private static unsafe bool TryReadChunkSchedulingStatuses(
         WebGPUFlushContext flushContext,
-        WgpuBuffer* readbackBuffer,
+        WebGPUSceneSchedulingArena? arena,
         int chunkCount,
         ReadOnlySpan<WebGPUSceneBumpSizes> chunkBumpSizes,
         ReadOnlySpan<uint> chunkTileHeights,
@@ -1809,6 +1816,14 @@ internal static class WebGPUSceneDispatch
     {
         requiresGrowth = false;
         grownBumpSizes = default;
+
+        if (arena is null)
+        {
+            error = "The staging arena was unexpectedly null when reading back chunk scheduling statuses.";
+            return false;
+        }
+
+        WgpuBuffer* readbackBuffer = arena.ReadbackBuffer;
 
         if (chunkCount == 0)
         {
@@ -2739,6 +2754,7 @@ internal static class WebGPUSceneDispatch
             0,
             Unsafe.AsPointer(ref Unsafe.AsRef(in value)),
             (nuint)sizeof(T));
+
         error = null;
         return true;
     }
@@ -3268,7 +3284,7 @@ internal readonly unsafe struct WebGPUSceneSchedulingResources
 /// <summary>
 /// Flush-local reusable scheduling scratch and readback buffers.
 /// </summary>
-internal readonly unsafe struct WebGPUSceneSchedulingArena
+internal sealed unsafe class WebGPUSceneSchedulingArena
 {
     public WebGPUSceneSchedulingArena(
         WebGPU api,

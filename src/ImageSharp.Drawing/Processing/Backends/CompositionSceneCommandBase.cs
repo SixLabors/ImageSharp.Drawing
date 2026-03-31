@@ -14,19 +14,19 @@ public interface ICompositionSceneCommandVisitor
     /// Visits one path- or layer-based composition command.
     /// </summary>
     /// <param name="command">The command being visited.</param>
-    void Visit(PathCompositionSceneCommand command);
+    public void Visit(PathCompositionSceneCommand command);
 
     /// <summary>
     /// Visits one explicit stroked line-segment command.
     /// </summary>
     /// <param name="command">The command being visited.</param>
-    void Visit(LineSegmentCompositionSceneCommand command);
+    public void Visit(LineSegmentCompositionSceneCommand command);
 
     /// <summary>
     /// Visits one explicit stroked polyline command.
     /// </summary>
     /// <param name="command">The command being visited.</param>
-    void Visit(PolylineCompositionSceneCommand command);
+    public void Visit(PolylineCompositionSceneCommand command);
 }
 
 /// <summary>

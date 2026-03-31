@@ -32,9 +32,7 @@ internal static partial class DefaultRasterizer
         int translateY,
         in RasterizerOptions options,
         MemoryAllocator allocator)
-    {
-        return CreateOutlineStrokeRasterizableGeometry(path, pen, translateX, translateY, in options, allocator);
-    }
+        => CreateOutlineStrokeRasterizableGeometry(path, pen, translateX, translateY, in options, allocator);
 
     /// <summary>
     /// Creates retained row-local raster payload for one stroked two-point line segment.

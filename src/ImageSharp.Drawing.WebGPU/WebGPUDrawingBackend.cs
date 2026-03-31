@@ -35,6 +35,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     // The staged pipeline keeps the most recently successful scratch capacities so later flushes
     // can start closer to the scene sizes the current device has already proven it needs.
     private WebGPUSceneBumpSizes bumpSizes = WebGPUSceneBumpSizes.Initial();
+
+    // Cached arenas for cross-flush buffer reuse. Rented via Interlocked.Exchange at flush
+    // start and returned at flush end so parallel flushes on different threads don't contend.
+    private WebGPUSceneSchedulingArena? cachedSchedulingArena;
     private bool isDisposed;
 
     private static readonly Dictionary<Type, CompositePixelRegistration> CompositePixelHandlers = CreateCompositePixelHandlers();
@@ -250,9 +254,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.TestingLastFlushUsedChunking = false;
         this.TestingLastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
         WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
-        WebGPUSceneSchedulingArena schedulingArena = default;
+
+        // Rent the cached scheduling arena. Null on first flush or if another thread has it.
+        // Returned in the finally block for the next flush to reuse.
+        WebGPUSceneSchedulingArena? schedulingArena = Interlocked.Exchange(ref this.cachedSchedulingArena, null);
         try
         {
+            // Retry loop: bump allocators start small (Vello defaults) and the GPU discovers
+            // the actual sizes needed. Each overflow grows the failing buffers. The prepare
+            // shader does not cancel on overflow so all stages report true demand per pass,
+            // but data dependencies mean later stages report zero when earlier ones overflow.
+            // Typically converges in 3-5 attempts on first use, then zero retries thereafter
+            // because successful sizes are persisted in this.bumpSizes.
             for (int attempt = 0; attempt < MaxDynamicGrowthAttempts; attempt++)
             {
                 if (!WebGPUSceneDispatch.TryCreateStagedScene(configuration, target, compositionScene, currentBumpSizes, out bool exceedsBindingLimit, out WebGPUSceneDispatch.BindingLimitFailure bindingLimitFailure, out WebGPUStagedScene stagedScene, out string? error))
@@ -277,6 +290,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
                     if (WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, ref schedulingArena, out bool requiresGrowth, out WebGPUSceneBumpSizes grownBumpSizes, out error))
                     {
+                        // Persist GPU-reported actual usage for next flush.
                         this.bumpSizes = grownBumpSizes;
                         return;
                     }
@@ -284,6 +298,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     this.TestingLastFlushUsedGPU = false;
                     if (requiresGrowth)
                     {
+                        // Bump overflow — retry with GPU-reported sizes.
                         currentBumpSizes = grownBumpSizes;
                         continue;
                     }
@@ -304,7 +319,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         }
         finally
         {
-            WebGPUSceneDispatch.DisposeSchedulingArena(ref schedulingArena);
+            // Return the arena for the next flush. If another thread already returned one,
+            // dispose the displaced arena (at most one survives in the cache).
+            WebGPUSceneSchedulingArena? prev = Interlocked.Exchange(ref this.cachedSchedulingArena, schedulingArena);
+            WebGPUSceneDispatch.DisposeSchedulingArena(prev);
         }
     }
 
@@ -563,6 +581,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.TestingLastFlushUsedGPU = false;
         this.TestingLastGPUInitializationFailure = null;
+        WebGPUSceneDispatch.DisposeSchedulingArena(this.cachedSchedulingArena);
         this.isDisposed = true;
     }
 

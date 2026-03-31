@@ -200,17 +200,6 @@ internal readonly struct WebGPUSceneBumpSizes
             1U << 15,
             1U << 20,
             1U << 17);
-
-    /// <summary>
-    /// Adds a small retry margin and aligns the result so capacities do not sit exactly on the edge.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint AddSizingSlack(uint required)
-        => AlignUp(checked(required + Math.Max(required / 8U, 1024U)), 1024U);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint AlignUp(uint value, uint alignment)
-        => value + (uint)(-(int)value & (alignment - 1U));
 }
 
 /// <summary>
