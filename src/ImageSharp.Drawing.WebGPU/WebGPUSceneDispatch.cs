@@ -170,8 +170,7 @@ internal static class WebGPUSceneDispatch
             }
 
             encodedScene = createdScene;
-            WebGPUSceneBumpSizes sceneBumpSizes = bumpSizes.WithSceneLowerBounds(encodedScene);
-            WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, sceneBumpSizes);
+            WebGPUSceneConfig config = WebGPUSceneConfig.Create(encodedScene, bumpSizes);
             uint baseColor = 0U;
             bool segmentChunkingRequired = false;
             if (!TryValidateBindingSizes(encodedScene, config, flushContext.DeviceState.MaxStorageBufferBindingSize, out bindingLimitFailure, out error))
@@ -967,6 +966,8 @@ internal static class WebGPUSceneDispatch
         {
             requiresGrowth = true;
             grownBumpSizes = GrowBumpSizes(stagedScene.Config.BumpSizes, in bumpAllocators);
+            WebGPUSceneBumpSizes cfg = stagedScene.Config.BumpSizes;
+            System.IO.File.AppendAllText("bump_debug.log", $"[BUMP OVERFLOW] failed={bumpAllocators.Failed:X} | had: lines={cfg.Lines} bin={cfg.Binning} tiles={cfg.PathTiles} segc={cfg.SegCounts} segs={cfg.Segments} blend={cfg.BlendSpill} ptcl={cfg.Ptcl} | gpu: lines={bumpAllocators.Lines} bin={bumpAllocators.Binning} tiles={bumpAllocators.Tile} segc={bumpAllocators.SegCounts} segs={bumpAllocators.Segments} blend={bumpAllocators.BlendSpill} ptcl={bumpAllocators.Ptcl} | grown: lines={grownBumpSizes.Lines} bin={grownBumpSizes.Binning} tiles={grownBumpSizes.PathTiles} segc={grownBumpSizes.SegCounts} segs={grownBumpSizes.Segments} blend={grownBumpSizes.BlendSpill} ptcl={grownBumpSizes.Ptcl}\n");
             error = "The staged WebGPU scene needs larger scratch buffers and will be retried.";
             return false;
         }
@@ -978,7 +979,18 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        // Scheduling passed. Submit the pre-recorded fine + copy. Fire-and-forget.
+        // Scheduling passed. Persist the actual GPU usage so the next flush starts
+        // from sizes that are known to work, eliminating retries for similar scenes.
+        grownBumpSizes = new WebGPUSceneBumpSizes(
+            Math.Max(bumpAllocators.Lines, stagedScene.Config.BumpSizes.Lines),
+            Math.Max(bumpAllocators.Binning, stagedScene.Config.BumpSizes.Binning),
+            Math.Max(bumpAllocators.Tile, stagedScene.Config.BumpSizes.PathTiles),
+            Math.Max(bumpAllocators.SegCounts, stagedScene.Config.BumpSizes.SegCounts),
+            Math.Max(bumpAllocators.Segments, stagedScene.Config.BumpSizes.Segments),
+            Math.Max(bumpAllocators.BlendSpill, stagedScene.Config.BumpSizes.BlendSpill),
+            Math.Max(bumpAllocators.Ptcl, stagedScene.Config.BumpSizes.Ptcl));
+
+        // Submit the pre-recorded fine + copy. Fire-and-forget.
         return WebGPUDrawingBackend.TrySubmit(flushContext);
     }
 
@@ -1061,11 +1073,13 @@ internal static class WebGPUSceneDispatch
                 WebGPUSceneConfig chunkConfig = WebGPUSceneConfig.Create(encodedScene, chunkBumpSize, chunkWindow);
                 if (!TryValidateBindingSizes(encodedScene, chunkConfig, maxStorageBufferBindingSize, out BindingLimitFailure bindingLimitFailure, out error))
                 {
+                    System.IO.File.AppendAllText("bump_debug.log", $"[CHUNK VALIDATION FAIL] buffer={bindingLimitFailure.Buffer} required={bindingLimitFailure.RequiredBytes} limit={bindingLimitFailure.LimitBytes} chunkTileH={requestedTileHeight} totalTileH={totalTileHeight} tiles={chunkBumpSize.PathTiles} segc={chunkBumpSize.SegCounts} segs={chunkBumpSize.Segments} srcTiles={stagedScene.Config.BumpSizes.PathTiles} srcSegc={stagedScene.Config.BumpSizes.SegCounts}\n");
                     if (IsChunkableBindingFailure(bindingLimitFailure.Buffer))
                     {
                         uint smallerTileHeight = ShrinkChunkTileHeight(requestedTileHeight, remainingTileHeight, bindingLimitFailure);
                         if (smallerTileHeight >= requestedTileHeight)
                         {
+                            System.IO.File.AppendAllText("bump_debug.log", $"[CHUNK SHRINK STUCK] smallerH={smallerTileHeight} requestedH={requestedTileHeight}\n");
                             return false;
                         }
 
@@ -1293,18 +1307,17 @@ internal static class WebGPUSceneDispatch
     private static WebGPUSceneBumpSizes ScaleChunkBumpSizes(WebGPUSceneBumpSizes sourceBumpSizes, WebGPUEncodedScene scene, uint chunkTileHeight)
     {
         uint fullTileHeight = checked((uint)scene.TileCountY);
-        uint chunkTileBufferHeight = AlignUp(chunkTileHeight, 16U);
-        uint pathTileFloor = AddSizingSlack(ScaleCount((uint)Math.Max(scene.TotalTileMembershipCount, scene.PathCount), chunkTileBufferHeight, fullTileHeight));
-        uint segmentFloor = AddSizingSlack(ScaleCount((uint)scene.LineCount, chunkTileBufferHeight, fullTileHeight));
+        uint pathTileFloor = AddSizingSlack(ScaleCount((uint)Math.Max(scene.TotalTileMembershipCount, scene.PathCount), chunkTileHeight, fullTileHeight));
+        uint segmentFloor = AddSizingSlack(ScaleCount((uint)scene.LineCount, chunkTileHeight, fullTileHeight));
 
         return new WebGPUSceneBumpSizes(
             sourceBumpSizes.Lines,
             sourceBumpSizes.Binning,
-            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, chunkTileBufferHeight, fullTileHeight), pathTileFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, chunkTileBufferHeight, fullTileHeight), segmentFloor),
-            Math.Max(ScaleCount(sourceBumpSizes.Segments, chunkTileBufferHeight, fullTileHeight), segmentFloor),
-            ScaleCount(sourceBumpSizes.BlendSpill, chunkTileBufferHeight, fullTileHeight),
-            ScaleCount(sourceBumpSizes.Ptcl, chunkTileBufferHeight, fullTileHeight));
+            Math.Max(ScaleCount(sourceBumpSizes.PathTiles, chunkTileHeight, fullTileHeight), pathTileFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.SegCounts, chunkTileHeight, fullTileHeight), segmentFloor),
+            Math.Max(ScaleCount(sourceBumpSizes.Segments, chunkTileHeight, fullTileHeight), segmentFloor),
+            ScaleCount(sourceBumpSizes.BlendSpill, chunkTileHeight, fullTileHeight),
+            ScaleCount(sourceBumpSizes.Ptcl, chunkTileHeight, fullTileHeight));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1448,8 +1461,8 @@ internal static class WebGPUSceneDispatch
             return currentSize;
         }
 
-        uint nextSize = checked(requiredSize + Math.Max(requiredSize / 2U, 4096U));
-        return nextSize > currentSize ? nextSize : checked(currentSize + 1U);
+        // Use the GPU-reported size doubled so one retry is always enough.
+        return checked(requiredSize * 2U);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1839,6 +1852,17 @@ internal static class WebGPUSceneDispatch
             {
                 GpuSceneBumpAllocators bumpAllocators = statuses[i];
                 WebGPUSceneBumpSizes currentSizes = chunkBumpSizes[i];
+                WebGPUSceneBumpSizes chunkActuals = new(
+                    Math.Max(bumpAllocators.Lines, currentSizes.Lines),
+                    Math.Max(bumpAllocators.Binning, currentSizes.Binning),
+                    Math.Max(bumpAllocators.Tile, currentSizes.PathTiles),
+                    Math.Max(bumpAllocators.SegCounts, currentSizes.SegCounts),
+                    Math.Max(bumpAllocators.Segments, currentSizes.Segments),
+                    Math.Max(bumpAllocators.BlendSpill, currentSizes.BlendSpill),
+                    Math.Max(bumpAllocators.Ptcl, currentSizes.Ptcl));
+                WebGPUSceneBumpSizes expandedActuals = ExpandChunkBumpSizesToSceneBudget(chunkActuals, fullTileHeight, chunkTileHeights[i]);
+                grownBumpSizes = MaxBumpSizes(grownBumpSizes, expandedActuals);
+
                 if (!RequiresScratchReallocation(in bumpAllocators, currentSizes))
                 {
                     continue;
@@ -1846,7 +1870,7 @@ internal static class WebGPUSceneDispatch
 
                 WebGPUSceneBumpSizes grownChunkBumpSizes = GrowBumpSizes(currentSizes, in bumpAllocators);
                 WebGPUSceneBumpSizes grownSourceBumpSizes = ExpandChunkBumpSizesToSceneBudget(grownChunkBumpSizes, fullTileHeight, chunkTileHeights[i]);
-                grownBumpSizes = requiresGrowth ? MaxBumpSizes(grownBumpSizes, grownSourceBumpSizes) : grownSourceBumpSizes;
+                grownBumpSizes = MaxBumpSizes(grownBumpSizes, grownSourceBumpSizes);
                 requiresGrowth = true;
             }
 

@@ -202,47 +202,7 @@ internal readonly struct WebGPUSceneBumpSizes
             1U << 17);
 
     /// <summary>
-    /// Raises the current capacities to the scene-derived lower bounds for one encoded scene.
-    /// </summary>
-    /// <remarks>
-    /// Several staged allocators already have reliable CPU-side counts before any GPU scheduling work starts.
-    /// Using those counts as the first attempt avoids wasting retries on scenes that are obviously larger than
-    /// the previous flush. The GPU bump allocators still provide the final correction for the dynamic cases.
-    /// </remarks>
-    /// <param name="scene">The encoded scene whose aggregate scheduling counts are already known on the CPU.</param>
-    /// <returns>The current capacities raised to this scene's known lower bounds.</returns>
-    public WebGPUSceneBumpSizes WithSceneLowerBounds(WebGPUEncodedScene scene)
-        => new(
-            MaxCapacity(this.Lines, GetSceneLinesLowerBound(scene)),
-            MaxCapacity(this.Binning, GetSceneBinningLowerBound(scene)),
-            MaxCapacity(this.PathTiles, GetSceneTileLowerBound(scene)),
-            MaxCapacity(this.SegCounts, GetSceneSegmentLowerBound(scene)),
-            MaxCapacity(this.Segments, GetSceneSegmentLowerBound(scene)),
-            this.BlendSpill,
-            this.Ptcl);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetSceneLinesLowerBound(WebGPUEncodedScene scene)
-        => AddSizingSlack(checked((uint)Math.Max(scene.LineCount, 1)));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetSceneBinningLowerBound(WebGPUEncodedScene scene)
-        => AddSizingSlack(checked((uint)Math.Max(scene.TotalBinMembershipCount, scene.DrawTagCount)));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetSceneTileLowerBound(WebGPUEncodedScene scene)
-        => AddSizingSlack(checked((uint)Math.Max(scene.TotalTileMembershipCount, scene.PathCount)));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint GetSceneSegmentLowerBound(WebGPUEncodedScene scene)
-        => AddSizingSlack(checked((uint)scene.LineCount));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint MaxCapacity(uint current, uint required)
-        => current >= required ? current : required;
-
-    /// <summary>
-    /// Adds a small retry margin and aligns the result so scene-derived capacities do not sit exactly on the edge.
+    /// Adds a small retry margin and aligns the result so capacities do not sit exactly on the edge.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static uint AddSizingSlack(uint required)

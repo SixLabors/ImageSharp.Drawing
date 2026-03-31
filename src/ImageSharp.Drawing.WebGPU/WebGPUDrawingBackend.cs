@@ -23,7 +23,11 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
     // A single flush can rerun the staged path a small number of times while the scratch
     // buffers converge on the capacity reported by the scheduling stages.
-    private const int MaxDynamicGrowthAttempts = 3;
+    // The prepare shader cancels early when any single buffer overflows, so each
+    // retry only discovers one new overflow. 8 attempts covers all 7 bump buffers
+    // plus the final successful run. Only needed on the first flush; subsequent
+    // flushes reuse the persisted GPU-reported sizes and need zero retries.
+    private const int MaxDynamicGrowthAttempts = 8;
 
     private readonly DefaultDrawingBackend fallbackBackend;
     private static bool? isSupported;
@@ -268,24 +272,18 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
                     if (stagedScene.EncodedScene.FillCount == 0)
                     {
-                        // Empty staged scenes still establish the flush-sized scratch-capacity baseline.
-                        this.bumpSizes = stagedScene.Config.BumpSizes;
                         return;
                     }
 
                     if (WebGPUSceneDispatch.TryRenderStagedScene(ref stagedScene, ref schedulingArena, out bool requiresGrowth, out WebGPUSceneBumpSizes grownBumpSizes, out error))
                     {
-                        // Persist the last successful capacities so the next flush starts from the
-                        // budget that actually worked on this device.
-                        this.bumpSizes = stagedScene.Config.BumpSizes;
+                        this.bumpSizes = grownBumpSizes;
                         return;
                     }
 
                     this.TestingLastFlushUsedGPU = false;
                     if (requiresGrowth)
                     {
-                        // Scheduling reported that one or more bump allocators overflowed. Retry the
-                        // same flush with the larger capacities read back from the GPU.
                         currentBumpSizes = grownBumpSizes;
                         continue;
                     }
