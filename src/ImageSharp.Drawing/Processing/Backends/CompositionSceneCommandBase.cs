@@ -56,7 +56,7 @@ public sealed class PathCompositionSceneCommand : CompositionSceneCommand
     /// <summary>
     /// Gets the wrapped composition command.
     /// </summary>
-    public CompositionCommand Command { get; }
+    public CompositionCommand Command { get; internal set; }
 
     /// <inheritdoc />
     public override void Accept(ICompositionSceneCommandVisitor visitor) => visitor.Visit(this);

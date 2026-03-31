@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
@@ -22,6 +23,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     private CompositionSceneCommand[] commands;
     private int commandCount;
     private bool hasLayers;
+    private bool hasClips;
 
     internal DrawingCanvasBatcher(
         Configuration configuration,
@@ -48,6 +50,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.EnsureCommandCapacity(this.commandCount + 1);
         this.commands[this.commandCount++] = new PathCompositionSceneCommand(composition);
         this.hasLayers |= composition.Kind is not CompositionCommandKind.FillLayer;
+        this.hasClips |= composition.ClipPaths is not null;
     }
 
     /// <summary>
@@ -86,9 +89,10 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         try
         {
-            CompositionScene scene = new(
-                new ArraySegment<CompositionSceneCommand>(this.commands, 0, this.commandCount),
-                this.hasLayers);
+            this.ApplyClipping();
+
+            CompositionScene scene = new(this.commands, this.hasLayers);
+
             this.backend.FlushCompositions(this.configuration, this.TargetFrame, scene);
         }
         finally
@@ -117,5 +121,52 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         }
 
         Array.Resize(ref this.commands, nextCapacity);
+    }
+
+    private void ApplyClipping()
+    {
+        if (!this.hasClips)
+        {
+            return;
+        }
+
+        _ = Parallel.For(0, this.commandCount, i =>
+        {
+            CompositionSceneCommand command = this.commands[i];
+            if (command is PathCompositionSceneCommand pathCommand)
+            {
+                CompositionCommand composition = pathCommand.Command;
+
+                // If clipping is present we need to apply that now before handing the command
+                // to the backend. This avoids complicating the backend with clipping logic
+                // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
+                if (composition.ClipPaths is { Count: > 0 })
+                {
+                    IPath path = composition.SourcePath;
+
+                    path = path.Transform(composition.Transform);
+
+                    if (composition.Pen is not null)
+                    {
+                        path = path.GenerateOutline(composition.Pen.StrokeWidth);
+                    }
+
+                    path = path.Clip(composition.ShapeOptions, composition.ClipPaths);
+
+                    RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
+
+                    // Update the command with the clipped path.
+                    pathCommand.Command = CompositionCommand.Create(
+                        path,
+                        composition.Brush.Transform(composition.Transform),
+                        composition.GraphicsOptions,
+                        in rasterizerOptions,
+                        composition.ShapeOptions,
+                        Matrix4x4.Identity,
+                        composition.TargetBounds,
+                        composition.DestinationOffset);
+                }
+            }
+        });
     }
 }

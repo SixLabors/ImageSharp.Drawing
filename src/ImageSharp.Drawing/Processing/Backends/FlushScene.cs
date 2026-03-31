@@ -695,7 +695,8 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator,
         out PreparedFillItem prepared)
     {
-        IPath path = ResolveCommandPath(command);
+        IPath path = command.SourcePath;
+
         if (!TryResolveRasterization(
                 command.Brush,
                 path.Bounds,
@@ -716,6 +717,7 @@ internal sealed partial class FlushScene : IDisposable
             command.DestinationOffset.Y,
             rasterizerOptions,
             allocator);
+
         if (rasterizable is null)
         {
             prepared = default;
@@ -732,7 +734,7 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator,
         out PreparedStrokeItem prepared)
     {
-        IPath path = ResolveCommandPath(command);
+        IPath path = command.SourcePath;
 
         if (!TryResolveRasterization(
                 command.Brush,
@@ -793,6 +795,7 @@ internal sealed partial class FlushScene : IDisposable
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions);
+
         if (rasterizable is null)
         {
             prepared = default;
@@ -841,18 +844,6 @@ internal sealed partial class FlushScene : IDisposable
         return true;
     }
 
-    private static IPath ResolveCommandPath(in CompositionCommand command)
-    {
-        IPath path = command.SourcePath;
-
-        if (command.ClipPaths is { Count: > 0 })
-        {
-            path = path.Clip(command.ShapeOptions, command.ClipPaths);
-        }
-
-        return path;
-    }
-
     private static bool TryResolveRasterization(
         Brush brush,
         RectangleF bounds,
@@ -896,6 +887,7 @@ internal sealed partial class FlushScene : IDisposable
             options.RasterizationMode,
             options.SamplingOrigin,
             options.AntialiasThreshold);
+
         brushBounds = absoluteInterest;
         return true;
     }
