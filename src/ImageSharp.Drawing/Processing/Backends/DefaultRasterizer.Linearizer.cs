@@ -645,7 +645,7 @@ internal static partial class DefaultRasterizer
             IMemoryOwner<int>? owner = this.StartCoverTable[localBandIndex];
             if (owner is null)
             {
-                owner = this.Allocator.Allocate<int>(PreferredRowHeight);
+                owner = this.Allocator.Allocate<int>(PreferredRowHeight, AllocationOptions.Clean);
                 this.StartCoverTable[localBandIndex] = owner;
                 owner.Memory.Span[..PreferredRowHeight].Fill(value);
                 return;
@@ -669,7 +669,7 @@ internal static partial class DefaultRasterizer
             IMemoryOwner<int>? owner = this.StartCoverTable[localBandIndex];
             if (owner is null)
             {
-                owner = this.Allocator.Allocate<int>(PreferredRowHeight);
+                owner = this.Allocator.Allocate<int>(PreferredRowHeight, AllocationOptions.Clean);
                 this.StartCoverTable[localBandIndex] = owner;
             }
 
@@ -807,6 +807,7 @@ internal static partial class DefaultRasterizer
                 this.FinalLines,
                 this.FirstBlockLineCounts,
                 this.StartCoverTable);
+
             return true;
         }
     }
@@ -877,6 +878,7 @@ internal static partial class DefaultRasterizer
                 this.FinalLines,
                 this.FirstBlockLineCounts,
                 this.StartCoverTable);
+
             return true;
         }
     }

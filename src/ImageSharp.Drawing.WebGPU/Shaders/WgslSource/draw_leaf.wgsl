@@ -35,16 +35,20 @@ var<storage, read_write> clip_inp: array<ClipInp>;
 const WG_SIZE = 256u;
 
 fn read_transform(transform_base: u32, ix: u32) -> Transform {
-    let base = transform_base + ix * 6u;
-    let c0 = bitcast<f32>(scene[base]);
-    let c1 = bitcast<f32>(scene[base + 1u]);
-    let c2 = bitcast<f32>(scene[base + 2u]);
-    let c3 = bitcast<f32>(scene[base + 3u]);
-    let c4 = bitcast<f32>(scene[base + 4u]);
-    let c5 = bitcast<f32>(scene[base + 5u]);
-    let matrx = vec4(c0, c1, c2, c3);
-    let translate = vec2(c4, c5);
-    return Transform(matrx, translate);
+    let base = transform_base + ix * 9u;
+    let mat = vec4(
+        bitcast<f32>(scene[base]),
+        bitcast<f32>(scene[base + 1u]),
+        bitcast<f32>(scene[base + 2u]),
+        bitcast<f32>(scene[base + 3u]));
+    let translate = vec2(
+        bitcast<f32>(scene[base + 4u]),
+        bitcast<f32>(scene[base + 5u]));
+    let perspective = vec3(
+        bitcast<f32>(scene[base + 6u]),
+        bitcast<f32>(scene[base + 7u]),
+        bitcast<f32>(scene[base + 8u]));
+    return Transform(mat, translate, perspective);
 }
 
 var<workgroup> sh_scratch: array<DrawMonoid, WG_SIZE>;
@@ -210,7 +214,7 @@ fn main(
                             kind = RAD_GRAD_KIND_FOCAL_ON_CIRCLE;
                             let scale = 0.5 * abs(1.0 - focal_x);
                             user_to_scaled = transform_mul(
-                                Transform(vec4(scale, 0.0, 0.0, scale), vec2(0.0)),
+                                Transform(vec4(scale, 0.0, 0.0, scale), vec2(0.0), vec3(0.0, 0.0, 1.0)),
                                 user_to_unit_line
                             );
                         } else {
@@ -219,7 +223,7 @@ fn main(
                             let scale_x = radius * scale_ratio;
                             let scale_y = sqrt(abs(a)) * scale_ratio;
                             user_to_scaled = transform_mul(
-                                Transform(vec4(scale_x, 0.0, 0.0, scale_y), vec2(0.0)),
+                                Transform(vec4(scale_x, 0.0, 0.0, scale_y), vec2(0.0), vec3(0.0, 0.0, 1.0)),
                                 user_to_unit_line
                             );
                         }
@@ -265,7 +269,7 @@ fn main(
                 case DRAWTAG_FILL_SWEEP_GRADIENT: {
                     info[di] = draw_flags;
                     let p0 = bitcast<vec2<f32>>(vec2(scene[dd + 1u], scene[dd + 2u]));
-                    let xform = transform_mul(transform, Transform(vec4(1.0, 0.0, 0.0, 1.0), p0));
+                    let xform = transform_mul(transform, Transform(vec4(1.0, 0.0, 0.0, 1.0), p0, vec3(0.0, 0.0, 1.0)));
                     let inv = transform_inverse(xform);
                     info[di + 1u] = bitcast<u32>(inv.matrx.x);
                     info[di + 2u] = bitcast<u32>(inv.matrx.y);
@@ -328,6 +332,7 @@ fn two_point_to_unit_line(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
 fn from_poly2(p0: vec2<f32>, p1: vec2<f32>) -> Transform {
     return Transform(
         vec4(p1.y - p0.y, p0.x - p1.x, p1.x - p0.x, p1.y - p0.y),
-        vec2(p0.x, p0.y)
+        vec2(p0.x, p0.y),
+        vec3(0.0, 0.0, 1.0)
     );
 }

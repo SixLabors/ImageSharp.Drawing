@@ -61,6 +61,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         FlushScene scene)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        // Warm the cached renderers before the row loop so the hot execution path only
+        // performs retained-scene work and brush application.
         if (scene.FillItemCount > 0)
         {
             for (int i = 0; i < scene.FillItems.Length; i++)
@@ -83,15 +85,10 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             }
         }
 
-        // Warm the cached renderers before the row loop so the hot execution path only
-        // performs retained-scene work and brush application.
         _ = Parallel.For(
             fromInclusive: 0,
             toExclusive: scene.RowCount,
-            localInit: () => new WorkerState<TPixel>(
-                configuration.MemoryAllocator,
-                destinationFrame.Width,
-                scene.MaxLayerDepth + 1),
+            localInit: () => new WorkerState<TPixel>(configuration.MemoryAllocator, destinationFrame.Width, scene.MaxLayerDepth + 1),
             body: (rowIndex, _, state) =>
             {
                 ExecuteSceneRow(

@@ -198,6 +198,102 @@ public sealed class ComplexPolygon : IPath, IPathInternals, IInternalPathOwner
     }
 
     /// <inheritdoc/>
+    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+    {
+        if (transform.IsIdentity)
+        {
+            return this.ToLinearGeometry();
+        }
+
+        int pointCount = 0;
+        int contourCount = 0;
+        int segmentCount = 0;
+        int nonHorizontalSegmentCountPixelBoundary = 0;
+        int nonHorizontalSegmentCountPixelCenter = 0;
+
+        bool hasBounds = false;
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+
+        foreach (IPath path in this.paths)
+        {
+            LinearGeometry geometry = path.ToLinearGeometry(transform);
+
+            if (geometry.Info.PointCount == 0)
+            {
+                continue;
+            }
+
+            RectangleF childBounds = geometry.Info.Bounds;
+            minX = MathF.Min(minX, childBounds.Left);
+            minY = MathF.Min(minY, childBounds.Top);
+            maxX = MathF.Max(maxX, childBounds.Right);
+            maxY = MathF.Max(maxY, childBounds.Bottom);
+            hasBounds = true;
+
+            pointCount += geometry.Info.PointCount;
+            contourCount += geometry.Info.ContourCount;
+            segmentCount += geometry.Info.SegmentCount;
+            nonHorizontalSegmentCountPixelBoundary += geometry.Info.NonHorizontalSegmentCountPixelBoundary;
+            nonHorizontalSegmentCountPixelCenter += geometry.Info.NonHorizontalSegmentCountPixelCenter;
+        }
+
+        PointF[] points = new PointF[pointCount];
+        LinearContour[] contours = new LinearContour[contourCount];
+        int pointStart = 0;
+        int contourStart = 0;
+        int segmentStart = 0;
+
+        foreach (IPath path in this.paths)
+        {
+            LinearGeometry geometry = path.ToLinearGeometry(transform);
+            if (geometry.Info.PointCount == 0)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < geometry.Points.Count; i++)
+            {
+                points[pointStart + i] = geometry.Points[i];
+            }
+
+            for (int i = 0; i < geometry.Contours.Count; i++)
+            {
+                LinearContour contour = geometry.Contours[i];
+                contours[contourStart + i] = new LinearContour
+                {
+                    PointStart = pointStart + contour.PointStart,
+                    PointCount = contour.PointCount,
+                    SegmentStart = segmentStart + contour.SegmentStart,
+                    SegmentCount = contour.SegmentCount,
+                    IsClosed = contour.IsClosed
+                };
+            }
+
+            pointStart += geometry.Info.PointCount;
+            contourStart += geometry.Info.ContourCount;
+            segmentStart += geometry.Info.SegmentCount;
+        }
+
+        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
+
+        return new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = bounds,
+                ContourCount = contours.Length,
+                PointCount = points.Length,
+                SegmentCount = segmentCount,
+                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
+                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+            },
+            contours,
+            points);
+    }
+
+    /// <inheritdoc/>
     public IPath AsClosedPath()
     {
         if (this.PathType == PathTypes.Closed)

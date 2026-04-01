@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using SixLabors.PolygonClipper;
 
 using PCPolygon = SixLabors.PolygonClipper.Polygon;
@@ -81,7 +82,15 @@ internal static class StrokedShapeGenerator
         }
 
         int pointCount = 0;
-        int segmentCount = 0;
+        for (int i = 0; i < result.Count; i++)
+        {
+            pointCount += result[i].Count;
+        }
+
+        PointF[] points = new PointF[pointCount];
+        LinearContour[] contours = new LinearContour[result.Count];
+        int pointStart = 0;
+        int outputContourIndex = 0;
         int nonHorizontalBoundary = 0;
         int nonHorizontalCenter = 0;
         float minX = float.MaxValue;
@@ -93,70 +102,59 @@ internal static class StrokedShapeGenerator
         {
             Contour contour = result[i];
             int contourPointCount = contour.Count;
-            if (contourPointCount == 0)
-            {
-                continue;
-            }
 
-            pointCount += contourPointCount;
-            segmentCount += contourPointCount;
+            Vertex v0 = contour[0];
+            PointF p0 = new((float)v0.X, (float)v0.Y);
+            points[pointStart] = p0;
+            minX = MathF.Min(minX, p0.X);
+            minY = MathF.Min(minY, p0.Y);
+            maxX = MathF.Max(maxX, p0.X);
+            maxY = MathF.Max(maxY, p0.Y);
 
-            for (int j = 0; j < contourPointCount; j++)
+            for (int j = 1; j < contourPointCount; j++)
             {
                 Vertex vertex = contour[j];
-                float x = (float)vertex.X;
-                float y = (float)vertex.Y;
-                minX = MathF.Min(minX, x);
-                minY = MathF.Min(minY, y);
-                maxX = MathF.Max(maxX, x);
-                maxY = MathF.Max(maxY, y);
+                PointF p = new((float)vertex.X, (float)vertex.Y);
+                points[pointStart + j] = p;
+                minX = MathF.Min(minX, p.X);
+                minY = MathF.Min(minY, p.Y);
+                maxX = MathF.Max(maxX, p.X);
+                maxY = MathF.Max(maxY, p.Y);
 
-                Vertex nextVertex = contour[(j + 1) % contourPointCount];
-                float nextY = (float)nextVertex.Y;
-                if ((int)MathF.Floor(y) != (int)MathF.Floor(nextY))
+                float prevY = points[pointStart + j - 1].Y;
+                if ((int)MathF.Floor(prevY) != (int)MathF.Floor(p.Y))
                 {
                     nonHorizontalBoundary++;
                 }
 
-                if ((int)MathF.Floor(y + 0.5F) != (int)MathF.Floor(nextY + 0.5F))
+                if ((int)MathF.Floor(prevY + 0.5F) != (int)MathF.Floor(p.Y + 0.5F))
                 {
                     nonHorizontalCenter++;
                 }
             }
-        }
 
-        PointF[] points = new PointF[pointCount];
-        LinearContour[] contours = new LinearContour[result.Count];
-        int pointStart = 0;
-        int segmentStart = 0;
-        int outputContourIndex = 0;
-
-        for (int i = 0; i < result.Count; i++)
-        {
-            Contour contour = result[i];
-            int contourPointCount = contour.Count;
-            if (contourPointCount == 0)
+            float lastY = points[pointStart + contourPointCount - 1].Y;
+            float firstY = points[pointStart].Y;
+            if ((int)MathF.Floor(lastY) != (int)MathF.Floor(firstY))
             {
-                continue;
+                nonHorizontalBoundary++;
             }
 
-            for (int j = 0; j < contourPointCount; j++)
+            if ((int)MathF.Floor(lastY + 0.5F) != (int)MathF.Floor(firstY + 0.5F))
             {
-                Vertex vertex = contour[j];
-                points[pointStart + j] = new PointF((float)vertex.X, (float)vertex.Y);
+                nonHorizontalCenter++;
             }
 
             contours[outputContourIndex++] = new LinearContour
             {
                 PointStart = pointStart,
                 PointCount = contourPointCount,
-                SegmentStart = segmentStart,
+                SegmentStart = pointStart,
                 SegmentCount = contourPointCount,
                 IsClosed = true
             };
 
             pointStart += contourPointCount;
-            segmentStart += contourPointCount;
         }
 
         if (outputContourIndex != contours.Length)
@@ -170,7 +168,168 @@ internal static class StrokedShapeGenerator
                 Bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY),
                 ContourCount = contours.Length,
                 PointCount = points.Length,
-                SegmentCount = segmentCount,
+                SegmentCount = pointCount,
+                NonHorizontalSegmentCountPixelBoundary = nonHorizontalBoundary,
+                NonHorizontalSegmentCountPixelCenter = nonHorizontalCenter
+            },
+            contours,
+            points);
+    }
+
+    /// <summary>
+    /// Strokes a path and returns a merged outline with the specified projective transform
+    /// applied to each output point during geometry construction.
+    /// </summary>
+    public static LinearGeometry GenerateStrokedGeometry(IPath path, float width, StrokeOptions options, Matrix4x4 transform)
+    {
+        PCPolygon rings = [];
+
+        foreach (ISimplePath sp in path.Flatten())
+        {
+            ReadOnlySpan<PointF> span = sp.Points.Span;
+            if (span.Length < 2)
+            {
+                continue;
+            }
+
+            Contour ring = new(span.Length);
+            for (int i = 0; i < span.Length; i++)
+            {
+                PointF p = span[i];
+                ring.Add(new Vertex(p.X, p.Y));
+            }
+
+            if (sp.IsClosed)
+            {
+                ring.Add(ring[0]);
+            }
+
+            rings.Add(ring);
+        }
+
+        if (rings.Count == 0)
+        {
+            return new LinearGeometry(
+                new LinearGeometryInfo
+                {
+                    Bounds = RectangleF.Empty,
+                    ContourCount = 0,
+                    PointCount = 0,
+                    SegmentCount = 0,
+                    NonHorizontalSegmentCountPixelBoundary = 0,
+                    NonHorizontalSegmentCountPixelCenter = 0
+                },
+                [],
+                []);
+        }
+
+        PCPolygon result = PolygonStroker.Stroke(rings, width, CreateStrokeOptions(options));
+        if (result.Count == 0)
+        {
+            return new LinearGeometry(
+                new LinearGeometryInfo
+                {
+                    Bounds = RectangleF.Empty,
+                    ContourCount = 0,
+                    PointCount = 0,
+                    SegmentCount = 0,
+                    NonHorizontalSegmentCountPixelBoundary = 0,
+                    NonHorizontalSegmentCountPixelCenter = 0
+                },
+                [],
+                []);
+        }
+
+        // First pass: count points only (no transform).
+        int pointCount = 0;
+        for (int i = 0; i < result.Count; i++)
+        {
+            pointCount += result[i].Count;
+        }
+
+        PointF[] points = new PointF[pointCount];
+        LinearContour[] contours = new LinearContour[result.Count];
+        int pointStart = 0;
+        int outputContourIndex = 0;
+        int nonHorizontalBoundary = 0;
+        int nonHorizontalCenter = 0;
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+
+        // Second pass: transform, write, bounds, and non-horizontal counts in one loop.
+        for (int i = 0; i < result.Count; i++)
+        {
+            Contour contour = result[i];
+            int contourPointCount = contour.Count;
+
+            Vertex v0 = contour[0];
+            PointF p0 = PointF.Transform(new PointF((float)v0.X, (float)v0.Y), transform);
+            points[pointStart] = p0;
+            minX = MathF.Min(minX, p0.X);
+            minY = MathF.Min(minY, p0.Y);
+            maxX = MathF.Max(maxX, p0.X);
+            maxY = MathF.Max(maxY, p0.Y);
+
+            for (int j = 1; j < contourPointCount; j++)
+            {
+                Vertex vertex = contour[j];
+                PointF p = PointF.Transform(new PointF((float)vertex.X, (float)vertex.Y), transform);
+                points[pointStart + j] = p;
+                minX = MathF.Min(minX, p.X);
+                minY = MathF.Min(minY, p.Y);
+                maxX = MathF.Max(maxX, p.X);
+                maxY = MathF.Max(maxY, p.Y);
+
+                float prevY = points[pointStart + j - 1].Y;
+                if ((int)MathF.Floor(prevY) != (int)MathF.Floor(p.Y))
+                {
+                    nonHorizontalBoundary++;
+                }
+
+                if ((int)MathF.Floor(prevY + 0.5F) != (int)MathF.Floor(p.Y + 0.5F))
+                {
+                    nonHorizontalCenter++;
+                }
+            }
+
+            float lastY = points[pointStart + contourPointCount - 1].Y;
+            float firstY = points[pointStart].Y;
+            if ((int)MathF.Floor(lastY) != (int)MathF.Floor(firstY))
+            {
+                nonHorizontalBoundary++;
+            }
+
+            if ((int)MathF.Floor(lastY + 0.5F) != (int)MathF.Floor(firstY + 0.5F))
+            {
+                nonHorizontalCenter++;
+            }
+
+            contours[outputContourIndex++] = new LinearContour
+            {
+                PointStart = pointStart,
+                PointCount = contourPointCount,
+                SegmentStart = pointStart,
+                SegmentCount = contourPointCount,
+                IsClosed = true
+            };
+
+            pointStart += contourPointCount;
+        }
+
+        if (outputContourIndex != contours.Length)
+        {
+            Array.Resize(ref contours, outputContourIndex);
+        }
+
+        return new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY),
+                ContourCount = contours.Length,
+                PointCount = points.Length,
+                SegmentCount = pointCount,
                 NonHorizontalSegmentCountPixelBoundary = nonHorizontalBoundary,
                 NonHorizontalSegmentCountPixelCenter = nonHorizontalCenter
             },

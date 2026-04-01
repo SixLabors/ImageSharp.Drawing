@@ -91,7 +91,9 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         {
             this.ApplyClipping();
 
-            CompositionScene scene = new(this.commands, this.hasLayers);
+            CompositionScene scene = new(
+                new ArraySegment<CompositionSceneCommand>(this.commands, 0, this.commandCount),
+                this.hasLayers);
 
             this.backend.FlushCompositions(this.configuration, this.TargetFrame, scene);
         }
@@ -130,43 +132,80 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             return;
         }
 
-        _ = Parallel.For(0, this.commandCount, i =>
+        int requestedParallelism = this.configuration.MaxDegreeOfParallelism;
+        int partitionCount = Math.Min(
+            this.commandCount,
+            requestedParallelism == -1 ? Environment.ProcessorCount : requestedParallelism);
+
+        if (partitionCount <= 1)
         {
-            CompositionSceneCommand command = this.commands[i];
-            if (command is PathCompositionSceneCommand pathCommand)
+            for (int i = 0; i < this.commandCount; i++)
             {
-                CompositionCommand composition = pathCommand.Command;
-
-                // If clipping is present we need to apply that now before handing the command
-                // to the backend. This avoids complicating the backend with clipping logic
-                // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
-                if (composition.ClipPaths is { Count: > 0 })
-                {
-                    IPath path = composition.SourcePath;
-
-                    path = path.Transform(composition.Transform);
-
-                    if (composition.Pen is not null)
-                    {
-                        path = path.GenerateOutline(composition.Pen.StrokeWidth);
-                    }
-
-                    path = path.Clip(composition.ShapeOptions, composition.ClipPaths);
-
-                    RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
-
-                    // Update the command with the clipped path.
-                    pathCommand.Command = CompositionCommand.Create(
-                        path,
-                        composition.Brush.Transform(composition.Transform),
-                        composition.GraphicsOptions,
-                        in rasterizerOptions,
-                        composition.ShapeOptions,
-                        Matrix4x4.Identity,
-                        composition.TargetBounds,
-                        composition.DestinationOffset);
-                }
+                ApplyClippingToCommand(ref this.commands[i]);
             }
-        });
+
+            return;
+        }
+
+        _ = Parallel.For(
+            0,
+            partitionCount,
+            new ParallelOptions() { MaxDegreeOfParallelism = partitionCount },
+            partitionIndex =>
+            {
+                // Integer division splits the commands into contiguous half-open ranges,
+                // keeping the partitions balanced while assigning each command exactly once.
+                int commandStart = (partitionIndex * this.commandCount) / partitionCount;
+                int commandEnd = ((partitionIndex + 1) * this.commandCount) / partitionCount;
+
+                for (int i = commandStart; i < commandEnd; i++)
+                {
+                    ApplyClippingToCommand(ref this.commands[i]);
+                }
+            });
+    }
+
+    private static void ApplyClippingToCommand(ref CompositionSceneCommand command)
+    {
+        if (command is PathCompositionSceneCommand pathCommand)
+        {
+            CompositionCommand composition = pathCommand.Command;
+
+            // If clipping is present we need to apply that now before handing the command
+            // to the backend. This avoids complicating the backend with clipping logic
+            // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
+            if (composition.ClipPaths is { Count: > 0 })
+            {
+                IPath path = composition.SourcePath;
+
+                // Clipped strokes must lower the pen in source space first, then transform
+                // the resulting outline, so clipped commands keep the same stroke-then-transform
+                // invariant as the unclipped CPU and GPU backends.
+                if (composition.Pen is not null)
+                {
+                    path = composition.Pen.GeneratePath(path);
+                }
+
+                if (composition.Transform != Matrix4x4.Identity)
+                {
+                    path = path.Transform(composition.Transform);
+                }
+
+                path = path.Clip(composition.ShapeOptions, composition.ClipPaths);
+
+                RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
+
+                // Update the command with the clipped path.
+                pathCommand.Command = CompositionCommand.Create(
+                    path,
+                    composition.Brush.Transform(composition.Transform),
+                    composition.GraphicsOptions,
+                    in rasterizerOptions,
+                    composition.ShapeOptions,
+                    Matrix4x4.Identity,
+                    composition.TargetBounds,
+                    composition.DestinationOffset);
+            }
+        }
     }
 }

@@ -126,6 +126,7 @@ internal sealed partial class FlushScene : IDisposable
         MemoryAllocator allocator)
     {
         int commandCount = scene.CommandCount;
+
         if (commandCount == 0)
         {
             return Empty();
@@ -136,6 +137,7 @@ internal sealed partial class FlushScene : IDisposable
         int lastTargetRowBandIndex = (targetBounds.Bottom - 1) / DefaultRasterizer.DefaultTileHeight;
         int targetRowCount = (lastTargetRowBandIndex - firstTargetRowBandIndex) + 1;
         Rectangle targetRectangle = targetBounds;
+
         if (targetRowCount <= 0)
         {
             return Empty();
@@ -147,12 +149,15 @@ internal sealed partial class FlushScene : IDisposable
         PartitionState[] partitions = new PartitionState[partitionCount];
 
         _ = Parallel.For(
-            fromInclusive: 0,
-            toExclusive: partitionCount,
-            body: partitionIndex =>
+            0,
+            partitionCount,
+            partitionIndex =>
             {
+                // Integer division splits the commands into contiguous half-open ranges,
+                // keeping the partitions balanced while assigning each command exactly once.
                 int commandStart = (partitionIndex * commandCount) / partitionCount;
                 int commandEnd = ((partitionIndex + 1) * commandCount) / partitionCount;
+
                 partitions[partitionIndex] = ProcessPartition(
                     commands,
                     commandStart,
@@ -628,7 +633,7 @@ internal sealed partial class FlushScene : IDisposable
         ref int singleBandItemCount,
         ref int smallEdgeItemCount)
     {
-        if (!TryPrepareLineSegmentStroke(command, out PreparedStrokeItem preparedStroke) ||
+        if (!TryPrepareLineSegmentStroke(command, allocator, out PreparedStrokeItem preparedStroke) ||
             preparedStroke.Rasterizable.RowBandCount == 0)
         {
             return;
@@ -696,10 +701,12 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedFillItem prepared)
     {
         IPath path = command.SourcePath;
+        bool hasTransform = !command.Transform.IsIdentity;
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
 
         if (!TryResolveRasterization(
-                command.Brush,
-                path.Bounds,
+                sourceBrush,
+                hasTransform ? RectangleF.Transform(path.Bounds, command.Transform) : path.Bounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -712,7 +719,7 @@ internal sealed partial class FlushScene : IDisposable
         }
 
         DefaultRasterizer.RasterizableGeometry? rasterizable = DefaultRasterizer.CreateRasterizableGeometry(
-            path.ToLinearGeometry(),
+            hasTransform ? path.ToLinearGeometry(command.Transform) : path.ToLinearGeometry(),
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
@@ -735,10 +742,12 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedStrokeItem prepared)
     {
         IPath path = command.SourcePath;
+        bool hasTransform = !command.Transform.IsIdentity;
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
 
         if (!TryResolveRasterization(
-                command.Brush,
-                GetStrokeBounds(path.Bounds, pen),
+                sourceBrush,
+                hasTransform ? RectangleF.Transform(GetStrokeBounds(path.Bounds, pen), command.Transform) : GetStrokeBounds(path.Bounds, pen),
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -750,12 +759,16 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateStrokeRasterizableGeometry(
+        // Retained-scene preparation chooses the stroke lowering strategy, but it does not
+        // expand the stroke itself. Path strokes stay on the outline-lowered pipeline so
+        // stroke expansion still happens before any drawing transform is applied.
+        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreatePathStrokeRasterizableGeometry(
             path,
             pen,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
+            command.Transform,
             allocator);
         if (rasterizable is null)
         {
@@ -769,14 +782,18 @@ internal sealed partial class FlushScene : IDisposable
 
     private static bool TryPrepareLineSegmentStroke(
         in StrokeLineSegmentCommand command,
+        MemoryAllocator allocator,
         out PreparedStrokeItem prepared)
     {
         PointF start = command.SourceStart;
         PointF end = command.SourceEnd;
+        bool hasTransform = !command.Transform.IsIdentity;
+        RectangleF bounds = StrokeLineSegmentCommand.GetConservativeBounds(start, end, command.Pen);
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
 
         if (!TryResolveRasterization(
-                command.Brush,
-                StrokeLineSegmentCommand.GetConservativeBounds(start, end, command.Pen),
+                sourceBrush,
+                hasTransform ? RectangleF.Transform(bounds, command.Transform) : bounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -788,13 +805,17 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateStrokeRasterizableGeometry(
+        // Explicit two-point segments may stay on the direct retained fast path, but this
+        // preparation step is still responsible for selecting that path by shape kind.
+        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateLineSegmentStrokeRasterizableGeometry(
             start,
             end,
             command.Pen,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
-            rasterizerOptions);
+            rasterizerOptions,
+            command.Transform,
+            allocator);
 
         if (rasterizable is null)
         {
@@ -812,10 +833,13 @@ internal sealed partial class FlushScene : IDisposable
         out PreparedStrokeItem prepared)
     {
         PointF[] points = command.SourcePoints;
+        bool hasTransform = !command.Transform.IsIdentity;
+        RectangleF bounds = StrokePolylineCommand.GetConservativeBounds(points, command.Pen);
+        Brush sourceBrush = hasTransform ? command.Brush.Transform(command.Transform) : command.Brush;
 
         if (!TryResolveRasterization(
-                command.Brush,
-                StrokePolylineCommand.GetConservativeBounds(points, command.Pen),
+                sourceBrush,
+                hasTransform ? RectangleF.Transform(bounds, command.Transform) : bounds,
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -827,12 +851,13 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreateStrokeRasterizableGeometry(
+        DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreatePolylineStrokeRasterizableGeometry(
             points,
             command.Pen,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,
+            command.Transform,
             allocator);
         if (rasterizable is null)
         {

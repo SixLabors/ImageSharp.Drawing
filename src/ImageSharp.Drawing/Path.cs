@@ -237,6 +237,109 @@ public class Path : IPath, ISimplePath, IPathInternals, IInternalPathOwner
     }
 
     /// <inheritdoc/>
+    public virtual LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+    {
+        if (transform.IsIdentity)
+        {
+            return this.ToLinearGeometry();
+        }
+
+        if (this.lineSegments.Length == 0)
+        {
+            return new LinearGeometry(
+                new LinearGeometryInfo
+                {
+                    Bounds = RectangleF.Empty,
+                    ContourCount = 0,
+                    PointCount = 0,
+                    SegmentCount = 0,
+                    NonHorizontalSegmentCountPixelBoundary = 0,
+                    NonHorizontalSegmentCountPixelCenter = 0
+                },
+                [],
+                []);
+        }
+
+        PointF? lastEndPoint = null;
+        int pointCount = 0;
+
+        for (int i = 0; i < this.lineSegments.Length; i++)
+        {
+            ILineSegment segment = this.lineSegments[i];
+            bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
+            pointCount += segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
+            lastEndPoint = segment.EndPoint;
+        }
+
+        PointF[] points = new PointF[pointCount];
+        LinearContour[] contours = pointCount == 0 ? [] : new LinearContour[1];
+
+        bool hasBounds = false;
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+        int nonHorizontalSegmentCountPixelBoundary = 0;
+        int nonHorizontalSegmentCountPixelCenter = 0;
+        int pointIndex = 0;
+        lastEndPoint = null;
+
+        for (int i = 0; i < this.lineSegments.Length; i++)
+        {
+            ILineSegment segment = this.lineSegments[i];
+            bool skipFirstPoint = lastEndPoint?.Equals(segment.StartPoint) == true;
+            int contributionCount = segment.LinearVertexCount - (skipFirstPoint ? 1 : 0);
+            Span<PointF> destination = points.AsSpan(pointIndex, contributionCount);
+
+            segment.CopyTo(destination, skipFirstPoint);
+            lastEndPoint = segment.EndPoint;
+
+            for (int p = 0; p < destination.Length; p++)
+            {
+                destination[p] = PointF.Transform(destination[p], transform);
+                PointF point = destination[p];
+                minX = MathF.Min(minX, point.X);
+                minY = MathF.Min(minY, point.Y);
+                maxX = MathF.Max(maxX, point.X);
+                maxY = MathF.Max(maxY, point.Y);
+                hasBounds = true;
+            }
+
+            pointIndex += contributionCount;
+        }
+
+        int segmentCount = pointCount == 0 ? 0 : this.IsClosed ? pointCount : pointCount - 1;
+        CountNonHorizontalSegments(points, pointCount, this.IsClosed, ref nonHorizontalSegmentCountPixelBoundary, ref nonHorizontalSegmentCountPixelCenter);
+
+        if (pointCount > 0)
+        {
+            contours[0] = new LinearContour
+            {
+                PointStart = 0,
+                PointCount = pointCount,
+                SegmentStart = 0,
+                SegmentCount = segmentCount,
+                IsClosed = this.IsClosed
+            };
+        }
+
+        RectangleF bounds = hasBounds ? RectangleF.FromLTRB(minX, minY, maxX, maxY) : RectangleF.Empty;
+
+        return new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = bounds,
+                ContourCount = contours.Length,
+                PointCount = points.Length,
+                SegmentCount = segmentCount,
+                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
+                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+            },
+            contours,
+            points);
+    }
+
+    /// <inheritdoc/>
     SegmentInfo IPathInternals.PointAlongPath(float distance)
        => this.InnerPath.PointAlongPath(distance);
 

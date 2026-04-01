@@ -100,6 +100,7 @@ internal static class WebGPUSceneEncoder
         private uint lastStyle0;
         private uint lastStyle1;
         private uint lastStyle2;
+        private GpuSceneTransform lastTransform;
         private readonly Rectangle rootTargetBounds;
         private List<Rectangle>? openLayerBounds;
 
@@ -134,6 +135,7 @@ internal static class WebGPUSceneEncoder
             this.lastStyle1 = 0;
             this.lastStyle2 = 0;
             this.rootTargetBounds = rootTargetBounds;
+            this.lastTransform = GpuSceneTransform.Identity;
             this.openLayerBounds = null;
             this.VisibleFillCount = 0;
             this.FineRasterizationMode = RasterizationMode.Antialiased;
@@ -310,6 +312,8 @@ internal static class WebGPUSceneEncoder
                         return false;
                     }
 
+                    this.AppendTransformIfChanged(command.Transform);
+
                     if (command.Pen is Pen pen)
                     {
                         this.AppendPlainStroke(resolved, pen);
@@ -352,6 +356,7 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
+            this.AppendTransformIfChanged(command.Transform);
             this.AppendExplicitStroke(
                 resolved.Brush,
                 resolved.GraphicsOptions,
@@ -381,6 +386,7 @@ internal static class WebGPUSceneEncoder
                 return false;
             }
 
+            this.AppendTransformIfChanged(command.Transform);
             LinearGeometry geometry = LinearGeometry.CreateOpenPolyline(resolved.Points);
             this.AppendExplicitStroke(resolved.Brush, resolved.GraphicsOptions, resolved.RasterizerOptions, resolved.DestinationOffset, resolved.BrushBounds, resolved.Pen, geometry);
             error = null;
@@ -413,6 +419,23 @@ internal static class WebGPUSceneEncoder
 
             error = null;
             return true;
+        }
+
+        /// <summary>
+        /// Emits a transform tag + data if the transform differs from the last one emitted.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void AppendTransformIfChanged(Matrix4x4 matrix)
+        {
+            GpuSceneTransform transform = GpuSceneTransform.FromMatrix4x4(matrix);
+            if (transform.Equals(this.lastTransform))
+            {
+                return;
+            }
+
+            this.PathTags.Add(PathTagTransform);
+            AppendTransform(transform, ref this.Transforms);
+            this.lastTransform = transform;
         }
 
         /// <summary>
@@ -1604,6 +1627,9 @@ internal static class WebGPUSceneEncoder
         transforms.Add(BitcastSingle(transform.M22));
         transforms.Add(BitcastSingle(transform.Tx));
         transforms.Add(BitcastSingle(transform.Ty));
+        transforms.Add(BitcastSingle(transform.M14));
+        transforms.Add(BitcastSingle(transform.M24));
+        transforms.Add(BitcastSingle(transform.M44));
     }
 
     /// <summary>
@@ -2411,12 +2437,12 @@ internal readonly struct GpuSceneTransform : IEquatable<GpuSceneTransform>
     /// <summary>
     /// Gets the identity transform.
     /// </summary>
-    public static readonly GpuSceneTransform Identity = new(1F, 0F, 0F, 1F, 0F, 0F);
+    public static readonly GpuSceneTransform Identity = new(1F, 0F, 0F, 1F, 0F, 0F, 0F, 0F, 1F);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GpuSceneTransform"/> struct.
     /// </summary>
-    public GpuSceneTransform(float m11, float m12, float m21, float m22, float tx, float ty)
+    public GpuSceneTransform(float m11, float m12, float m21, float m22, float tx, float ty, float m14, float m24, float m44)
     {
         this.M11 = m11;
         this.M12 = m12;
@@ -2424,59 +2450,74 @@ internal readonly struct GpuSceneTransform : IEquatable<GpuSceneTransform>
         this.M22 = m22;
         this.Tx = tx;
         this.Ty = ty;
+        this.M14 = m14;
+        this.M24 = m24;
+        this.M44 = m44;
     }
 
     /// <summary>
-    /// Gets the first row, first column element.
+    /// Creates a <see cref="GpuSceneTransform"/> from a <see cref="Matrix4x4"/>.
+    /// Extracts the 9 elements needed for projective 2D transformation with z=0.
     /// </summary>
+    public static GpuSceneTransform FromMatrix4x4(Matrix4x4 m)
+        => new(m.M11, m.M12, m.M21, m.M22, m.M41, m.M42, m.M14, m.M24, m.M44);
+
     public float M11 { get; }
 
-    /// <summary>
-    /// Gets the first row, second column element.
-    /// </summary>
     public float M12 { get; }
 
-    /// <summary>
-    /// Gets the second row, first column element.
-    /// </summary>
     public float M21 { get; }
 
-    /// <summary>
-    /// Gets the second row, second column element.
-    /// </summary>
     public float M22 { get; }
 
-    /// <summary>
-    /// Gets the X translation component.
-    /// </summary>
     public float Tx { get; }
 
-    /// <summary>
-    /// Gets the Y translation component.
-    /// </summary>
     public float Ty { get; }
 
     /// <summary>
-    /// Gets the translation vector.
+    /// Gets the perspective element from row 1, column 4.
     /// </summary>
-    public Vector2 Translation => new(this.Tx, this.Ty);
+    public float M14 { get; }
 
     /// <summary>
-    /// Returns a value indicating whether this transform matches another transform exactly.
+    /// Gets the perspective element from row 2, column 4.
     /// </summary>
+    public float M24 { get; }
+
+    /// <summary>
+    /// Gets the homogeneous scale element from row 4, column 4.
+    /// </summary>
+    public float M44 { get; }
+
     public bool Equals(GpuSceneTransform other)
         => this.M11 == other.M11
         && this.M12 == other.M12
         && this.M21 == other.M21
         && this.M22 == other.M22
         && this.Tx == other.Tx
-        && this.Ty == other.Ty;
+        && this.Ty == other.Ty
+        && this.M14 == other.M14
+        && this.M24 == other.M24
+        && this.M44 == other.M44;
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => obj is GpuSceneTransform other && this.Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(this.M11, this.M12, this.M21, this.M22, this.Tx, this.Ty);
+    public override int GetHashCode()
+    {
+        HashCode hash = default;
+        hash.Add(this.M11);
+        hash.Add(this.M12);
+        hash.Add(this.M21);
+        hash.Add(this.M22);
+        hash.Add(this.Tx);
+        hash.Add(this.Ty);
+        hash.Add(this.M14);
+        hash.Add(this.M24);
+        hash.Add(this.M44);
+        return hash.ToHashCode();
+    }
 }
 
 /// <summary>

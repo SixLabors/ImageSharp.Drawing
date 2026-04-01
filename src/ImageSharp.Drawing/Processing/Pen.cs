@@ -36,7 +36,7 @@ public abstract class Pen : IEquatable<Pen>
     /// Initializes a new instance of the <see cref="Pen"/> class.
     /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     protected Pen(Brush strokeFill, float strokeWidth)
         : this(strokeFill, strokeWidth, Pens.EmptyPattern)
     {
@@ -46,7 +46,7 @@ public abstract class Pen : IEquatable<Pen>
     /// Initializes a new instance of the <see cref="Pen"/> class.
     /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <param name="strokePattern">The stroke pattern.</param>
     protected Pen(Brush strokeFill, float strokeWidth, float[] strokePattern)
     {
@@ -97,7 +97,7 @@ public abstract class Pen : IEquatable<Pen>
     /// Applies the styling from the pen to a path and generate a new path with the final vector.
     /// </summary>
     /// <param name="path">The source path</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     /// <returns>The <see cref="IPath"/> with the pen styling applied.</returns>
     public abstract IPath GeneratePath(IPath path, float strokeWidth);
 

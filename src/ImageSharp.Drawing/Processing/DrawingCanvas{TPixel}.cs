@@ -499,7 +499,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             effectiveOptions = new DrawingOptions(effectiveOptions.GraphicsOptions, shapeOptions, effectiveOptions.Transform);
         }
 
-        if (state.ClipPaths.Count > 0)
+        if (state.ClipPaths.Count > 0 || !pen.StrokePattern.IsEmpty)
         {
             this.PrepareCompositionCore(
                 new Path([start, end]),

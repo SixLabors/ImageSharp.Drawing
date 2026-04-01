@@ -264,5 +264,58 @@ public sealed class RectangularPolygon : IPath, ISimplePath, IPathInternals
     }
 
     /// <inheritdoc/>
+    public LinearGeometry ToLinearGeometry(Matrix4x4 transform)
+    {
+        if (transform.IsIdentity)
+        {
+            return this.ToLinearGeometry();
+        }
+
+        PointF p0 = PointF.Transform(this.points[0], transform);
+        PointF p1 = PointF.Transform(this.points[1], transform);
+        PointF p2 = PointF.Transform(this.points[2], transform);
+        PointF p3 = PointF.Transform(this.points[3], transform);
+
+        PointF[] points = [p0, p1, p2, p3];
+
+        float minX = MathF.Min(MathF.Min(p0.X, p1.X), MathF.Min(p2.X, p3.X));
+        float minY = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
+        float maxX = MathF.Max(MathF.Max(p0.X, p1.X), MathF.Max(p2.X, p3.X));
+        float maxY = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
+
+        // After a projective transform, all 4 edges may be non-horizontal.
+        // Count conservatively by checking each edge.
+        int nonHorizontalSegmentCountPixelBoundary = 0;
+        int nonHorizontalSegmentCountPixelCenter = 0;
+        for (int i = 0; i < 4; i++)
+        {
+            PointF a = points[i];
+            PointF b = points[(i + 1) % 4];
+            if (MathF.Floor(a.Y) != MathF.Floor(b.Y))
+            {
+                nonHorizontalSegmentCountPixelBoundary++;
+            }
+
+            if (MathF.Floor(a.Y + 0.5F) != MathF.Floor(b.Y + 0.5F))
+            {
+                nonHorizontalSegmentCountPixelCenter++;
+            }
+        }
+
+        return new LinearGeometry(
+            new LinearGeometryInfo
+            {
+                Bounds = RectangleF.FromLTRB(minX, minY, maxX, maxY),
+                ContourCount = 1,
+                PointCount = 4,
+                SegmentCount = 4,
+                NonHorizontalSegmentCountPixelBoundary = nonHorizontalSegmentCountPixelBoundary,
+                NonHorizontalSegmentCountPixelCenter = nonHorizontalSegmentCountPixelCenter
+            },
+            [new LinearContour { PointStart = 0, PointCount = 4, SegmentStart = 0, SegmentCount = 4, IsClosed = true }],
+            points);
+    }
+
+    /// <inheritdoc/>
     public IPath AsClosedPath() => this;
 }

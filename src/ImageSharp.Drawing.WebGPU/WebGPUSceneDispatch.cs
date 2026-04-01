@@ -530,7 +530,8 @@ internal static class WebGPUSceneDispatch
 
         if (encodedScene.ClipCount > 0)
         {
-            if (!TryDispatchClipReduce(
+            if (workgroupCounts.ClipReduceX > 0 &&
+                !TryDispatchClipReduce(
                     recording,
                     flushContext,
                     stagedScene.Resources,
@@ -2181,6 +2182,12 @@ internal static class WebGPUSceneDispatch
         uint groupCountZ,
         out string? error)
     {
+        if (groupCountX == 0 || groupCountY == 0 || groupCountZ == 0)
+        {
+            error = null;
+            return true;
+        }
+
         BindGroupDescriptor descriptor = new()
         {
             Layout = bindGroupLayout,
@@ -2303,6 +2310,12 @@ internal static class WebGPUSceneDispatch
             {
                 error = error is null ? null : $"{error} Stage: {shaderName}.";
                 return false;
+            }
+
+            if (!command.IsIndirect &&
+                (command.GroupCountX == 0 || command.GroupCountY == 0 || command.GroupCountZ == 0))
+            {
+                continue;
             }
 
             if (!flushContext.BeginComputePass())

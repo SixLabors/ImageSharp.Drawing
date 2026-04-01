@@ -49,6 +49,14 @@ public interface IPath
     public LinearGeometry ToLinearGeometry();
 
     /// <summary>
+    /// Converts this path to a retained linear-geometry representation, applying the specified
+    /// projective transform to each point during flattening.
+    /// </summary>
+    /// <param name="transform">The transform to apply to each point.</param>
+    /// <returns>The retained linear geometry with transformed points.</returns>
+    public LinearGeometry ToLinearGeometry(Matrix4x4 transform);
+
+    /// <summary>
     /// Transforms the path using the specified matrix.
     /// </summary>
     /// <param name="matrix">The matrix.</param>

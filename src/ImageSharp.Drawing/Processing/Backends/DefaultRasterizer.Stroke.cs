@@ -23,16 +23,18 @@ internal static partial class DefaultRasterizer
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used to generate coverage.</param>
+    /// <param name="transform">The projective transform applied after stroke expansion while lowering the retained outline.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
-    internal static StrokeRasterizableGeometry? CreateStrokeRasterizableGeometry(
+    internal static StrokeRasterizableGeometry? CreatePathStrokeRasterizableGeometry(
         IPath path,
         Pen pen,
         int translateX,
         int translateY,
         in RasterizerOptions options,
+        Matrix4x4 transform,
         MemoryAllocator allocator)
-        => CreateOutlineStrokeRasterizableGeometry(path, pen, translateX, translateY, in options, allocator);
+        => CreateOutlineLoweredStrokeRasterizableGeometry(path, pen, translateX, translateY, in options, transform, allocator);
 
     /// <summary>
     /// Creates retained row-local raster payload for one stroked two-point line segment.
@@ -43,28 +45,52 @@ internal static partial class DefaultRasterizer
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used to generate coverage.</param>
+    /// <param name="transform">The projective transform applied after stroke expansion.</param>
+    /// <param name="allocator">The allocator used for temporary outline lowering when a transform is active.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
-    internal static StrokeRasterizableGeometry? CreateStrokeRasterizableGeometry(
+    internal static StrokeRasterizableGeometry? CreateLineSegmentStrokeRasterizableGeometry(
         PointF start,
         PointF end,
         Pen pen,
         int translateX,
         int translateY,
-        in RasterizerOptions options)
+        in RasterizerOptions options,
+        Matrix4x4 transform,
+        MemoryAllocator allocator)
     {
         if (pen.StrokeWidth <= 0F)
         {
             return null;
         }
 
+        if (!transform.IsIdentity)
+        {
+            // The direct segment rasterizer assumes its quad/cap geometry already lives in
+            // execution space. When a drawing transform is active we must preserve the
+            // backend-wide stroke-then-transform invariant, so lower through the outline path.
+            return CreateOutlineLoweredStrokeRasterizableGeometry(
+                new Path([start, end]),
+                pen,
+                translateX,
+                translateY,
+                in options,
+                transform,
+                allocator);
+        }
+
+        // Keep the explicit two-point optimization on the direct raster path. This path
+        // never applies a matrix transform itself; it only computes stroke-local coverage
+        // and lets the retained executor add destination translation and sampling offsets.
         StrokeStyle stroke = new(pen);
         float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
         float samplingOffsetY = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+
         RectangleF bounds = RectangleF.FromLTRB(
             MathF.Min(start.X, end.X),
             MathF.Min(start.Y, end.Y),
             MathF.Max(start.X, end.X),
             MathF.Max(start.Y, end.Y));
+
         RectangleF translatedBounds = InflateStrokeBounds(bounds, stroke);
         translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
 
@@ -139,14 +165,16 @@ internal static partial class DefaultRasterizer
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used to generate coverage.</param>
+    /// <param name="transform">The projective transform applied after stroke expansion.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
-    internal static StrokeRasterizableGeometry? CreateStrokeRasterizableGeometry(
+    internal static StrokeRasterizableGeometry? CreatePolylineStrokeRasterizableGeometry(
         PointF[] points,
         Pen pen,
         int translateX,
         int translateY,
         in RasterizerOptions options,
+        Matrix4x4 transform,
         MemoryAllocator allocator)
     {
         if (points.Length == 0 || pen.StrokeWidth <= 0F)
@@ -156,18 +184,30 @@ internal static partial class DefaultRasterizer
 
         if (points.Length == 2)
         {
-            return CreateStrokeRasterizableGeometry(points[0], points[1], pen, translateX, translateY, in options);
+            return CreateLineSegmentStrokeRasterizableGeometry(points[0], points[1], pen, translateX, translateY, in options, transform, allocator);
         }
 
-        return CreateOutlineStrokeRasterizableGeometry(new Path(points), pen, translateX, translateY, in options, allocator);
+        return CreateOutlineLoweredStrokeRasterizableGeometry(new Path(points), pen, translateX, translateY, in options, transform, allocator);
     }
 
-    private static StrokeRasterizableGeometry? CreateOutlineStrokeRasterizableGeometry(
+    /// <summary>
+    /// Lowers a stroked path to fill geometry, optionally applying the drawing transform during outline generation.
+    /// </summary>
+    /// <param name="path">The source path to stroke.</param>
+    /// <param name="pen">The stroke metadata.</param>
+    /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+    /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+    /// <param name="options">The rasterizer options used for the retained bands.</param>
+    /// <param name="transform">The drawing transform applied after stroke expansion.</param>
+    /// <param name="allocator">The allocator used for retained raster storage.</param>
+    /// <returns>The retained stroke rasterizable geometry, or <see langword="null"/> when the stroke produces no coverage.</returns>
+    private static StrokeRasterizableGeometry? CreateOutlineLoweredStrokeRasterizableGeometry(
         IPath path,
         Pen pen,
         int translateX,
         int translateY,
         in RasterizerOptions options,
+        Matrix4x4 transform,
         MemoryAllocator allocator)
     {
         if (pen.StrokeWidth <= 0F)
@@ -175,14 +215,30 @@ internal static partial class DefaultRasterizer
             return null;
         }
 
-        RasterizableGeometry? rasterizable = CreateRasterizableGeometry(
-            pen.StrokePattern.Length >= 2
+        LinearGeometry geometry;
+        if (transform.IsIdentity)
+        {
+            // With no drawing transform we can lower the stroke directly in source space.
+            geometry = pen.StrokePattern.Length >= 2
                 ? path.GenerateOutline(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokeOptions).ToLinearGeometry()
-                : StrokedShapeGenerator.GenerateStrokedGeometry(path, pen.StrokeWidth, pen.StrokeOptions),
+                : StrokedShapeGenerator.GenerateStrokedGeometry(path, pen.StrokeWidth, pen.StrokeOptions);
+        }
+        else
+        {
+            // Keep the stroke-then-transform invariant by applying the drawing transform as part
+            // of outline generation instead of transforming the centerline ahead of stroking.
+            geometry = pen.StrokePattern.Length >= 2
+                ? path.GenerateOutline(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokeOptions).ToLinearGeometry(transform)
+                : StrokedShapeGenerator.GenerateStrokedGeometry(path, pen.StrokeWidth, pen.StrokeOptions, transform);
+        }
+
+        RasterizableGeometry? rasterizable = CreateRasterizableGeometry(
+            geometry,
             translateX,
             translateY,
             options,
             allocator);
+
         if (rasterizable is null)
         {
             return null;
@@ -209,6 +265,10 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Returns the conservative retained line count used for scene statistics and scheduling heuristics.
     /// </summary>
+    /// <param name="geometry">The lowered stroke geometry.</param>
+    /// <param name="pen">The stroke metadata.</param>
+    /// <param name="options">The rasterizer options used for the retained bands.</param>
+    /// <returns>The estimated retained line count for the stroke.</returns>
     private static int EstimateStrokeBandLineCount(LinearGeometry geometry, Pen pen, in RasterizerOptions options)
     {
         if (geometry.Info.PointCount == 0 || pen.StrokeWidth <= 0F)
@@ -226,6 +286,10 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Returns the conservative retained line count used for one two-point stroke segment.
     /// </summary>
+    /// <param name="start">The stroke start point.</param>
+    /// <param name="end">The stroke end point.</param>
+    /// <param name="options">The rasterizer options used for the retained bands.</param>
+    /// <returns>The estimated retained line count for the stroke.</returns>
     private static int EstimateStrokeBandLineCount(PointF start, PointF end, in RasterizerOptions options)
     {
         float samplingOffset = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
@@ -236,6 +300,9 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Returns the conservative retained line count used for one explicit open polyline.
     /// </summary>
+    /// <param name="points">The explicit polyline points.</param>
+    /// <param name="options">The rasterizer options used for the retained bands.</param>
+    /// <returns>The estimated retained line count for the stroke.</returns>
     private static int EstimateStrokeBandLineCount(PointF[] points, in RasterizerOptions options)
     {
         float samplingOffset = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
@@ -254,6 +321,9 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Inflates centerline bounds conservatively for the current stroke style.
     /// </summary>
+    /// <param name="bounds">The centerline bounds.</param>
+    /// <param name="stroke">The stroke style used for inflation.</param>
+    /// <returns>The inflated stroke bounds.</returns>
     private static RectangleF InflateStrokeBounds(RectangleF bounds, StrokeStyle stroke)
     {
         float inflate = stroke.LineJoin switch
@@ -272,6 +342,16 @@ internal static partial class DefaultRasterizer
     /// </summary>
     internal abstract class StrokeRasterData
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StrokeRasterData"/> class.
+        /// </summary>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
+        /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         protected StrokeRasterData(
             StrokeStyle stroke,
             int translateX,
@@ -324,6 +404,15 @@ internal static partial class DefaultRasterizer
 
         public virtual bool RequiresBandCoverage => false;
 
+        /// <summary>
+        /// Rasterizes one retained row band using the derived stroke payload.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        /// <param name="bandInfo">The retained band metadata.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="strokeBandCoverage">The reusable per-band stroke coverage scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         public abstract void ExecuteBand<TRowHandler>(
             ref Context context,
             in RasterizableBandInfo bandInfo,
@@ -341,6 +430,14 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="PathStrokeRasterData"/> class.
         /// </summary>
+        /// <param name="geometry">The retained stroke centerline geometry.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
+        /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public PathStrokeRasterData(
             LinearGeometry geometry,
             StrokeStyle stroke,
@@ -361,6 +458,12 @@ internal static partial class DefaultRasterizer
         public override bool RequiresBandCoverage => true;
 
         /// <inheritdoc/>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        /// <param name="bandInfo">The retained band metadata.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="strokeBandCoverage">The reusable per-band stroke coverage scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         public override void ExecuteBand<TRowHandler>(
             ref Context context,
             in RasterizableBandInfo bandInfo,
@@ -393,6 +496,15 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="LineSegmentStrokeRasterData"/> class.
         /// </summary>
+        /// <param name="start">The retained line start point.</param>
+        /// <param name="end">The retained line end point.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
+        /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public LineSegmentStrokeRasterData(
             PointF start,
             PointF end,
@@ -420,6 +532,12 @@ internal static partial class DefaultRasterizer
         public PointF End { get; }
 
         /// <inheritdoc/>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        /// <param name="bandInfo">The retained band metadata.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="strokeBandCoverage">The reusable per-band stroke coverage scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         public override void ExecuteBand<TRowHandler>(
             ref Context context,
             in RasterizableBandInfo bandInfo,
@@ -447,6 +565,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="OutlineStrokeRasterData"/> class.
         /// </summary>
+        /// <param name="outline">The retained fill-style raster payload for the stroked outline.</param>
         public OutlineStrokeRasterData(RasterizableGeometry outline)
             : base(default, 0, 0, outline.FirstRowBandIndex, outline.RowBandCount, 0F, 0F)
             => this.Outline = outline;
@@ -457,6 +576,12 @@ internal static partial class DefaultRasterizer
         public RasterizableGeometry Outline { get; }
 
         /// <inheritdoc/>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        /// <param name="bandInfo">The retained band metadata.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="strokeBandCoverage">The reusable per-band stroke coverage scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         public override void ExecuteBand<TRowHandler>(
             ref Context context,
             in RasterizableBandInfo bandInfo,
@@ -491,6 +616,14 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="PolylineStrokeRasterData"/> class.
         /// </summary>
+        /// <param name="points">The retained polyline points.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
+        /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public PolylineStrokeRasterData(
             PointF[] points,
             StrokeStyle stroke,
@@ -511,6 +644,12 @@ internal static partial class DefaultRasterizer
         public override bool RequiresBandCoverage => true;
 
         /// <inheritdoc/>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        /// <param name="bandInfo">The retained band metadata.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="strokeBandCoverage">The reusable per-band stroke coverage scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         public override void ExecuteBand<TRowHandler>(
             ref Context context,
             in RasterizableBandInfo bandInfo,
@@ -642,6 +781,9 @@ internal static partial class DefaultRasterizer
             where TRowHandler : struct, IRasterizerCoverageRowHandler
             => this.strokeData.ExecuteBand(ref context, in bandInfo, scanline, strokeBandCoverage, ref rowHandler);
 
+        /// <summary>
+        /// Releases any retained disposable storage owned by this stroke rasterizable.
+        /// </summary>
         public void Dispose() => this.ownedDisposable?.Dispose();
     }
 
@@ -660,6 +802,17 @@ internal static partial class DefaultRasterizer
         private readonly RasterizationMode rasterizationMode;
         private readonly float antialiasThreshold;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DirectLineSegmentBandRasterizer"/> struct.
+        /// </summary>
+        /// <param name="start">The retained stroke start point.</param>
+        /// <param name="end">The retained stroke end point.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
+        /// <param name="bandInfo">The retained band metadata.</param>
         private DirectLineSegmentBandRasterizer(
             PointF start,
             PointF end,
@@ -673,6 +826,10 @@ internal static partial class DefaultRasterizer
             Vector2 translation = new(
                 (translateX - bandInfo.DestinationLeft) + samplingOffsetX,
                 (translateY - bandInfo.DestinationTop) + samplingOffsetY);
+
+            // This direct path works entirely from the stored segment endpoints. Any drawing
+            // transform must already have been handled before this rasterizer is constructed;
+            // the hot path here only remaps into band-local coordinates.
             Vector2 translatedStart = start;
             Vector2 translatedEnd = end;
             this.start = translatedStart + translation;
@@ -686,6 +843,20 @@ internal static partial class DefaultRasterizer
             this.antialiasThreshold = bandInfo.AntialiasThreshold;
         }
 
+        /// <summary>
+        /// Rasterizes one explicit line segment directly into the supplied row handler.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="start">The retained stroke start point.</param>
+        /// <param name="end">The retained stroke end point.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
+        /// <param name="bandInfo">The retained band metadata.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         public static void Rasterize<TRowHandler>(
             PointF start,
             PointF end,
@@ -708,6 +879,12 @@ internal static partial class DefaultRasterizer
                 samplingOffsetY,
                 in bandInfo).Rasterize(scanline, ref rowHandler);
 
+        /// <summary>
+        /// Rasterizes the stored segment across the active band, falling back to a point footprint for degenerate input.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         private void Rasterize<TRowHandler>(Span<float> scanline, ref TRowHandler rowHandler)
             where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
@@ -738,6 +915,13 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Rasterizes a degenerate segment as a point-like cap footprint.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="center">The band-local center point.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         private void RasterizePointLike<TRowHandler>(Vector2 center, Span<float> scanline, ref TRowHandler rowHandler)
             where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
@@ -747,6 +931,17 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Computes and emits one raster row for the stroked line body and any cap overlap.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="row">The band-local row index.</param>
+        /// <param name="p0">The first quad corner.</param>
+        /// <param name="p1">The second quad corner.</param>
+        /// <param name="p2">The third quad corner.</param>
+        /// <param name="p3">The fourth quad corner.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         private void EmitLineCoverageRow<TRowHandler>(
             int row,
             Vector2 p0,
@@ -763,6 +958,8 @@ internal static partial class DefaultRasterizer
 
             for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
             {
+                // First pass finds the tight horizontal span touched by any vertical sample so the
+                // accumulation pass only clears and updates the columns that can actually contribute.
                 float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
                 bool hasInterval = false;
 
@@ -854,6 +1051,7 @@ internal static partial class DefaultRasterizer
             float sampleWeight = 1F / DirectStrokeVerticalSampleCount;
             for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
             {
+                // Second pass accumulates weighted horizontal coverage for each vertical supersample.
                 float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
                 bool hasInterval;
 
@@ -922,6 +1120,14 @@ internal static partial class DefaultRasterizer
             this.FinalizeCoverageRow(row, startColumn, rowCoverage, ref rowHandler);
         }
 
+        /// <summary>
+        /// Computes and emits one raster row for a point-like stroke footprint.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="row">The band-local row index.</param>
+        /// <param name="center">The band-local center point.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         private void EmitPointCoverageRow<TRowHandler>(
             int row,
             Vector2 center,
@@ -996,6 +1202,14 @@ internal static partial class DefaultRasterizer
             this.FinalizeCoverageRow(row, startColumn, rowCoverage, ref rowHandler);
         }
 
+        /// <summary>
+        /// Applies the selected rasterization mode and emits the non-zero runs for one row.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="row">The band-local row index.</param>
+        /// <param name="startColumn">The first covered column in the current scanline slice.</param>
+        /// <param name="rowCoverage">The accumulated row coverage slice.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         private void FinalizeCoverageRow<TRowHandler>(
             int row,
             int startColumn,
@@ -1014,6 +1228,14 @@ internal static partial class DefaultRasterizer
             EmitCoverageRuns(rowCoverage, startColumn, this.destinationLeft, this.destinationTop + row, ref rowHandler);
         }
 
+        /// <summary>
+        /// Accumulates one horizontal sample interval into per-pixel row coverage.
+        /// </summary>
+        /// <param name="rowCoverage">The per-pixel row coverage buffer.</param>
+        /// <param name="baseColumn">The destination column corresponding to index 0 in <paramref name="rowCoverage"/>.</param>
+        /// <param name="left">The left edge of the sample interval.</param>
+        /// <param name="right">The right edge of the sample interval.</param>
+        /// <param name="sampleWeight">The contribution weight of the current vertical sample.</param>
         private static void AccumulateIntervalCoverage(
             Span<float> rowCoverage,
             int baseColumn,
@@ -1052,6 +1274,15 @@ internal static partial class DefaultRasterizer
             rowCoverage[(endPixel - 1) - baseColumn] += (clampedRight - (endPixel - 1)) * sampleWeight;
         }
 
+        /// <summary>
+        /// Emits contiguous non-zero coverage runs for one raster row.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="rowCoverage">The per-pixel row coverage buffer.</param>
+        /// <param name="startColumn">The destination column corresponding to index 0 in <paramref name="rowCoverage"/>.</param>
+        /// <param name="destinationLeft">The destination-space band left edge.</param>
+        /// <param name="destinationY">The destination-space row.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         private static void EmitCoverageRuns<TRowHandler>(
             Span<float> rowCoverage,
             int startColumn,
@@ -1088,6 +1319,17 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Intersects a horizontal sample line with an axis-aligned rectangle.
+        /// </summary>
+        /// <param name="top">The rectangle top edge.</param>
+        /// <param name="bottom">The rectangle bottom edge.</param>
+        /// <param name="left">The rectangle left edge.</param>
+        /// <param name="right">The rectangle right edge.</param>
+        /// <param name="sampleY">The sample row in band-local coordinates.</param>
+        /// <param name="intervalLeft">Receives the left intersection bound.</param>
+        /// <param name="intervalRight">Receives the right intersection bound.</param>
+        /// <returns><see langword="true"/> when the sample intersects the rectangle.</returns>
         private static bool TryGetAxisAlignedIntervalAtY(
             float top,
             float bottom,
@@ -1109,6 +1351,15 @@ internal static partial class DefaultRasterizer
             return intervalRight > intervalLeft;
         }
 
+        /// <summary>
+        /// Intersects a horizontal sample line with a circle.
+        /// </summary>
+        /// <param name="center">The circle center.</param>
+        /// <param name="radius">The circle radius.</param>
+        /// <param name="sampleY">The sample row in band-local coordinates.</param>
+        /// <param name="intervalLeft">Receives the left intersection bound.</param>
+        /// <param name="intervalRight">Receives the right intersection bound.</param>
+        /// <returns><see langword="true"/> when the sample intersects the circle.</returns>
         private static bool TryGetCircleIntervalAtY(
             Vector2 center,
             float radius,
@@ -1132,6 +1383,17 @@ internal static partial class DefaultRasterizer
             return intervalRight > intervalLeft;
         }
 
+        /// <summary>
+        /// Intersects a horizontal sample line with a convex quadrilateral.
+        /// </summary>
+        /// <param name="p0">The first quadrilateral vertex.</param>
+        /// <param name="p1">The second quadrilateral vertex.</param>
+        /// <param name="p2">The third quadrilateral vertex.</param>
+        /// <param name="p3">The fourth quadrilateral vertex.</param>
+        /// <param name="sampleY">The sample row in band-local coordinates.</param>
+        /// <param name="intervalLeft">Receives the left intersection bound.</param>
+        /// <param name="intervalRight">Receives the right intersection bound.</param>
+        /// <returns><see langword="true"/> when the sample intersects the quadrilateral.</returns>
         private static bool TryGetQuadrilateralIntervalAtY(
             Vector2 p0,
             Vector2 p1,
@@ -1151,6 +1413,15 @@ internal static partial class DefaultRasterizer
             return hasIntersection && intervalRight > intervalLeft;
         }
 
+        /// <summary>
+        /// Expands the current sample interval bounds with one polygon edge intersection.
+        /// </summary>
+        /// <param name="start">The edge start point.</param>
+        /// <param name="end">The edge end point.</param>
+        /// <param name="sampleY">The sample row in band-local coordinates.</param>
+        /// <param name="hasIntersection">Tracks whether any edge has intersected the sample row yet.</param>
+        /// <param name="intervalLeft">The running left intersection bound.</param>
+        /// <param name="intervalRight">The running right intersection bound.</param>
         private static void AppendEdgeInterval(
             Vector2 start,
             Vector2 end,
@@ -1199,6 +1470,19 @@ internal static partial class DefaultRasterizer
         private readonly RasterizationMode rasterizationMode;
         private readonly float antialiasThreshold;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DirectMultiSegmentBandRasterizer"/> struct.
+        /// </summary>
+        /// <param name="geometry">The flattened centerline geometry.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="destinationLeft">The destination-space band left edge.</param>
+        /// <param name="destinationTop">The destination-space band top edge.</param>
+        /// <param name="width">The band width in pixels.</param>
+        /// <param name="height">The band height in pixels.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public DirectMultiSegmentBandRasterizer(
             LinearGeometry geometry,
             StrokeStyle stroke,
@@ -1224,6 +1508,19 @@ internal static partial class DefaultRasterizer
             this.antialiasThreshold = 0F;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DirectMultiSegmentBandRasterizer"/> struct.
+        /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="destinationLeft">The destination-space band left edge.</param>
+        /// <param name="destinationTop">The destination-space band top edge.</param>
+        /// <param name="width">The band width in pixels.</param>
+        /// <param name="height">The band height in pixels.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public DirectMultiSegmentBandRasterizer(
             PointF[] points,
             StrokeStyle stroke,
@@ -1249,6 +1546,20 @@ internal static partial class DefaultRasterizer
             this.antialiasThreshold = 0F;
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DirectMultiSegmentBandRasterizer"/> struct.
+        /// </summary>
+        /// <param name="geometry">The flattened centerline geometry, if present.</param>
+        /// <param name="polylinePoints">The explicit polyline points, if present.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The band-local X translation.</param>
+        /// <param name="translateY">The band-local Y translation.</param>
+        /// <param name="destinationLeft">The destination-space band left edge.</param>
+        /// <param name="destinationTop">The destination-space band top edge.</param>
+        /// <param name="width">The band width in pixels.</param>
+        /// <param name="height">The band height in pixels.</param>
+        /// <param name="rasterizationMode">The rasterization mode.</param>
+        /// <param name="antialiasThreshold">The aliasing threshold used in aliased mode.</param>
         private DirectMultiSegmentBandRasterizer(
             LinearGeometry? geometry,
             PointF[]? polylinePoints,
@@ -1275,6 +1586,12 @@ internal static partial class DefaultRasterizer
             this.antialiasThreshold = antialiasThreshold;
         }
 
+        /// <summary>
+        /// Returns a copy configured for the requested rasterization mode.
+        /// </summary>
+        /// <param name="rasterizationMode">The rasterization mode.</param>
+        /// <param name="antialiasThreshold">The aliasing threshold used in aliased mode.</param>
+        /// <returns>A copy configured for the requested rasterization mode.</returns>
         public DirectMultiSegmentBandRasterizer WithRasterizationMode(RasterizationMode rasterizationMode, float antialiasThreshold)
             => new(
                 this.geometry,
@@ -1289,6 +1606,13 @@ internal static partial class DefaultRasterizer
                 rasterizationMode,
                 antialiasThreshold);
 
+        /// <summary>
+        /// Rasterizes the stored multi-segment stroke into supersampled band coverage and emits row runs.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="strokeBandCoverage">The reusable supersampled band coverage buffer.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         public void Rasterize<TRowHandler>(Span<float> strokeBandCoverage, Span<float> scanline, ref TRowHandler rowHandler)
             where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
@@ -1313,6 +1637,10 @@ internal static partial class DefaultRasterizer
             this.EmitCoverageRows(coverage, scanline, ref rowHandler);
         }
 
+        /// <summary>
+        /// Accumulates stroke coverage for flattened centerline geometry.
+        /// </summary>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateGeometry(Span<float> coverage)
         {
             LinearGeometry sourceGeometry = this.geometry!;
@@ -1335,6 +1663,11 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates stroke coverage for an explicit open polyline.
+        /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateOpenPolyline(PointF[] points, Span<float> coverage)
         {
             int pointCount = DefaultRasterizer.GetDistinctPointCount(points);
@@ -1391,6 +1724,11 @@ internal static partial class DefaultRasterizer
             this.AccumulateEndCap(lastPoint, endTangent, coverage);
         }
 
+        /// <summary>
+        /// Accumulates stroke coverage for one open contour.
+        /// </summary>
+        /// <param name="contour">The open contour.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateOpenContour(in LinearContour contour, Span<float> coverage)
         {
             int pointCount = this.GetDistinctPointCount(contour);
@@ -1447,6 +1785,11 @@ internal static partial class DefaultRasterizer
             this.AccumulateEndCap(lastPoint, endTangent, coverage);
         }
 
+        /// <summary>
+        /// Accumulates stroke coverage for one closed contour.
+        /// </summary>
+        /// <param name="contour">The closed contour.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateClosedContour(in LinearContour contour, Span<float> coverage)
         {
             int pointCount = this.GetDistinctPointCount(contour);
@@ -1518,6 +1861,12 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates the opening cap for an open contour.
+        /// </summary>
+        /// <param name="point">The contour endpoint.</param>
+        /// <param name="tangent">The normalized outgoing tangent.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateStartCap(PointF point, Vector2 tangent, Span<float> coverage)
         {
             Vector2 localPoint = this.Transform(point);
@@ -1543,6 +1892,12 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates the closing cap for an open contour.
+        /// </summary>
+        /// <param name="point">The contour endpoint.</param>
+        /// <param name="tangent">The normalized incoming tangent.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateEndCap(PointF point, Vector2 tangent, Span<float> coverage)
         {
             Vector2 localPoint = this.Transform(point);
@@ -1568,6 +1923,11 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates the cap-shaped footprint for a degenerate point-like stroke.
+        /// </summary>
+        /// <param name="point">The point-like stroke location.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulatePointLike(PointF point, Span<float> coverage)
         {
             Vector2 center = this.Transform(point);
@@ -1582,6 +1942,12 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates the rectangular body of one stroked segment.
+        /// </summary>
+        /// <param name="start">The segment start point.</param>
+        /// <param name="end">The segment end point.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateSegmentBody(PointF start, PointF end, Span<float> coverage)
         {
             if (!TryGetDirection(start, end, out Vector2 tangent, out _))
@@ -1602,6 +1968,15 @@ internal static partial class DefaultRasterizer
                 coverage);
         }
 
+        /// <summary>
+        /// Accumulates the join geometry between two consecutive segments.
+        /// </summary>
+        /// <param name="point">The join point.</param>
+        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
+        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
+        /// <param name="previousLength">The length of the previous segment.</param>
+        /// <param name="nextLength">The length of the next segment.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateJoin(
             PointF point,
             Vector2 previousTangent,
@@ -1622,6 +1997,7 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // The sign of the turn selects which offset side is visible at the join.
             float sideSign = cross > 0F ? 1F : -1F;
             Vector2 previousOffset = GetLeftNormal(previousTangent) * (this.stroke.HalfWidth * sideSign);
             Vector2 nextOffset = GetLeftNormal(nextTangent) * (this.stroke.HalfWidth * sideSign);
@@ -1651,6 +2027,17 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates one miter-family join and applies the configured miter-limit fallback when necessary.
+        /// </summary>
+        /// <param name="point">The band-local join point.</param>
+        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
+        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
+        /// <param name="previousOffset">The offset vector on the previous segment.</param>
+        /// <param name="nextOffset">The offset vector on the next segment.</param>
+        /// <param name="previousLength">The length of the previous segment.</param>
+        /// <param name="nextLength">The length of the next segment.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateMiterJoin(
             Vector2 point,
             Vector2 previousTangent,
@@ -1692,6 +2079,8 @@ internal static partial class DefaultRasterizer
                             return;
                         }
 
+                        // Truncate the miter back to the legal limit instead of dropping all the way
+                        // to a bevel so long miters still preserve the intended pointed silhouette.
                         float ratio = (limit - bevelDistance) / (intersectionDistance - bevelDistance);
                         this.AccumulateQuadrilateral(
                             previousPoint,
@@ -1725,6 +2114,12 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates a circular footprint into supersampled coverage.
+        /// </summary>
+        /// <param name="center">The circle center in band-local coordinates.</param>
+        /// <param name="radius">The circle radius.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateCircle(Vector2 center, float radius, Span<float> coverage)
         {
             if (radius <= StrokeDirectionEpsilon)
@@ -1747,6 +2142,14 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates an axis-aligned rectangle into supersampled coverage.
+        /// </summary>
+        /// <param name="left">The rectangle left edge.</param>
+        /// <param name="top">The rectangle top edge.</param>
+        /// <param name="right">The rectangle right edge.</param>
+        /// <param name="bottom">The rectangle bottom edge.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateRectangle(float left, float top, float right, float bottom, Span<float> coverage)
         {
             if (right <= left || bottom <= top)
@@ -1769,6 +2172,13 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates a triangle into supersampled coverage.
+        /// </summary>
+        /// <param name="p0">The first triangle vertex.</param>
+        /// <param name="p1">The second triangle vertex.</param>
+        /// <param name="p2">The third triangle vertex.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateTriangle(Vector2 p0, Vector2 p1, Vector2 p2, Span<float> coverage)
         {
             float minY = MathF.Min(p0.Y, MathF.Min(p1.Y, p2.Y));
@@ -1788,6 +2198,14 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates a convex quadrilateral into supersampled coverage.
+        /// </summary>
+        /// <param name="p0">The first quadrilateral vertex.</param>
+        /// <param name="p1">The second quadrilateral vertex.</param>
+        /// <param name="p2">The third quadrilateral vertex.</param>
+        /// <param name="p3">The fourth quadrilateral vertex.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateQuadrilateral(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Span<float> coverage)
         {
             float minY = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
@@ -1807,6 +2225,14 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates a circular sector into supersampled coverage.
+        /// </summary>
+        /// <param name="center">The sector center.</param>
+        /// <param name="fromOffset">The start offset from the center.</param>
+        /// <param name="toOffset">The end offset from the center.</param>
+        /// <param name="preferredDirection">The preferred outward direction used to choose the sweep.</param>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
         private void AccumulateSector(Vector2 center, Vector2 fromOffset, Vector2 toOffset, Vector2 preferredDirection, Span<float> coverage)
         {
             if (fromOffset == Vector2.Zero || toOffset == Vector2.Zero)
@@ -1851,6 +2277,13 @@ internal static partial class DefaultRasterizer
             this.AccumulateTriangle(center, previousPoint, center + toOffset, coverage);
         }
 
+        /// <summary>
+        /// Converts supersampled band coverage into row runs for the row handler.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
         private void EmitCoverageRows<TRowHandler>(Span<float> coverage, Span<float> scanline, ref TRowHandler rowHandler)
             where TRowHandler : struct, IRasterizerCoverageRowHandler
         {
@@ -1884,12 +2317,25 @@ internal static partial class DefaultRasterizer
             }
         }
 
+        /// <summary>
+        /// Accumulates one horizontal sample interval into one supersample row of coverage.
+        /// </summary>
+        /// <param name="coverage">The supersampled band coverage buffer.</param>
+        /// <param name="row">The band-local row index.</param>
+        /// <param name="sampleIndex">The vertical supersample index within the row.</param>
+        /// <param name="left">The left edge of the sample interval.</param>
+        /// <param name="right">The right edge of the sample interval.</param>
         private void AccumulateSampleInterval(Span<float> coverage, int row, int sampleIndex, float left, float right)
         {
             int sampleOffset = ((row * DirectStrokeVerticalSampleCount) + sampleIndex) * this.width;
             DefaultRasterizer.AccumulateSampleInterval(coverage.Slice(sampleOffset, this.width), left, right);
         }
 
+        /// <summary>
+        /// Maps one stroke-space point into band-local execution space.
+        /// </summary>
+        /// <param name="point">The stroke-space point.</param>
+        /// <returns>The band-local execution-space point.</returns>
         private Vector2 Transform(PointF point)
         {
             Vector2 localPoint = point;
@@ -1898,6 +2344,11 @@ internal static partial class DefaultRasterizer
             return localPoint;
         }
 
+        /// <summary>
+        /// Counts the distinct points in a contour while skipping immediate duplicates and duplicate closing points.
+        /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <returns>The number of distinct contour points.</returns>
         private int GetDistinctPointCount(in LinearContour contour)
         {
             LinearGeometry sourceGeometry = this.geometry!;
@@ -1931,6 +2382,13 @@ internal static partial class DefaultRasterizer
             return count;
         }
 
+        /// <summary>
+        /// Finds the first distinct point of a contour.
+        /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">Receives the raw point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private bool TryGetFirstDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
         {
             if (contour.PointCount == 0)
@@ -1945,6 +2403,14 @@ internal static partial class DefaultRasterizer
             return true;
         }
 
+        /// <summary>
+        /// Finds the next distinct point after the supplied contour index.
+        /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">The raw point index to advance from.</param>
+        /// <param name="nextRawIndex">Receives the next distinct raw point index.</param>
+        /// <param name="point">Receives the next distinct point.</param>
+        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
         private bool TryGetNextDistinctPoint(in LinearContour contour, int rawIndex, out int nextRawIndex, out PointF point)
         {
             IReadOnlyList<PointF> points = this.geometry!.Points;
@@ -1968,6 +2434,13 @@ internal static partial class DefaultRasterizer
             return false;
         }
 
+        /// <summary>
+        /// Finds the last distinct point of a contour.
+        /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">Receives the raw point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private bool TryGetLastDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
         {
             if (contour.PointCount == 0)
@@ -1989,6 +2462,14 @@ internal static partial class DefaultRasterizer
             return true;
         }
 
+        /// <summary>
+        /// Finds the previous distinct point before the supplied contour index.
+        /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">The raw point index to retreat from.</param>
+        /// <param name="previousRawIndex">Receives the previous distinct raw point index.</param>
+        /// <param name="point">Receives the previous distinct point.</param>
+        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
         private bool TryGetPreviousDistinctPoint(in LinearContour contour, int rawIndex, out int previousRawIndex, out PointF point)
         {
             IReadOnlyList<PointF> points = this.geometry!.Points;
@@ -2012,6 +2493,12 @@ internal static partial class DefaultRasterizer
         }
     }
 
+    /// <summary>
+    /// Accumulates one horizontal interval into a supersample row while clamping each pixel to full coverage.
+    /// </summary>
+    /// <param name="sampleRow">The supersample row coverage buffer.</param>
+    /// <param name="left">The left edge of the sample interval.</param>
+    /// <param name="right">The right edge of the sample interval.</param>
     private static void AccumulateSampleInterval(Span<float> sampleRow, float left, float right)
     {
         int width = sampleRow.Length;
@@ -2045,6 +2532,15 @@ internal static partial class DefaultRasterizer
         sampleRow[endPixelIndex] = MathF.Min(1F, sampleRow[endPixelIndex] + (clampedRight - endPixelIndex));
     }
 
+    /// <summary>
+    /// Emits contiguous non-zero coverage runs for one destination row.
+    /// </summary>
+    /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+    /// <param name="rowCoverage">The per-pixel row coverage buffer.</param>
+    /// <param name="startColumn">The destination column corresponding to index 0 in <paramref name="rowCoverage"/>.</param>
+    /// <param name="destinationLeft">The destination-space band left edge.</param>
+    /// <param name="destinationY">The destination-space row.</param>
+    /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
     private static void EmitCoverageRuns<TRowHandler>(
         Span<float> rowCoverage,
         int startColumn,
@@ -2075,6 +2571,17 @@ internal static partial class DefaultRasterizer
         }
     }
 
+    /// <summary>
+    /// Intersects a horizontal sample line with an axis-aligned rectangle.
+    /// </summary>
+    /// <param name="top">The rectangle top edge.</param>
+    /// <param name="bottom">The rectangle bottom edge.</param>
+    /// <param name="left">The rectangle left edge.</param>
+    /// <param name="right">The rectangle right edge.</param>
+    /// <param name="sampleY">The sample row.</param>
+    /// <param name="intervalLeft">Receives the left intersection bound.</param>
+    /// <param name="intervalRight">Receives the right intersection bound.</param>
+    /// <returns><see langword="true"/> when the sample intersects the rectangle.</returns>
     private static bool TryGetAxisAlignedIntervalAtY(
         float top,
         float bottom,
@@ -2096,6 +2603,15 @@ internal static partial class DefaultRasterizer
         return intervalRight > intervalLeft;
     }
 
+    /// <summary>
+    /// Intersects a horizontal sample line with a circle.
+    /// </summary>
+    /// <param name="center">The circle center.</param>
+    /// <param name="radius">The circle radius.</param>
+    /// <param name="sampleY">The sample row.</param>
+    /// <param name="intervalLeft">Receives the left intersection bound.</param>
+    /// <param name="intervalRight">Receives the right intersection bound.</param>
+    /// <returns><see langword="true"/> when the sample intersects the circle.</returns>
     private static bool TryGetCircleIntervalAtY(
         Vector2 center,
         float radius,
@@ -2119,6 +2635,16 @@ internal static partial class DefaultRasterizer
         return intervalRight > intervalLeft;
     }
 
+    /// <summary>
+    /// Intersects a horizontal sample line with a triangle.
+    /// </summary>
+    /// <param name="p0">The first triangle vertex.</param>
+    /// <param name="p1">The second triangle vertex.</param>
+    /// <param name="p2">The third triangle vertex.</param>
+    /// <param name="sampleY">The sample row.</param>
+    /// <param name="intervalLeft">Receives the left intersection bound.</param>
+    /// <param name="intervalRight">Receives the right intersection bound.</param>
+    /// <returns><see langword="true"/> when the sample intersects the triangle.</returns>
     private static bool TryGetTriangleIntervalAtY(
         Vector2 p0,
         Vector2 p1,
@@ -2136,6 +2662,17 @@ internal static partial class DefaultRasterizer
         return hasIntersection && intervalRight > intervalLeft;
     }
 
+    /// <summary>
+    /// Intersects a horizontal sample line with a convex quadrilateral.
+    /// </summary>
+    /// <param name="p0">The first quadrilateral vertex.</param>
+    /// <param name="p1">The second quadrilateral vertex.</param>
+    /// <param name="p2">The third quadrilateral vertex.</param>
+    /// <param name="p3">The fourth quadrilateral vertex.</param>
+    /// <param name="sampleY">The sample row.</param>
+    /// <param name="intervalLeft">Receives the left intersection bound.</param>
+    /// <param name="intervalRight">Receives the right intersection bound.</param>
+    /// <returns><see langword="true"/> when the sample intersects the quadrilateral.</returns>
     private static bool TryGetQuadrilateralIntervalAtY(
         Vector2 p0,
         Vector2 p1,
@@ -2155,6 +2692,15 @@ internal static partial class DefaultRasterizer
         return hasIntersection && intervalRight > intervalLeft;
     }
 
+    /// <summary>
+    /// Expands the current sample interval bounds with one polygon edge intersection.
+    /// </summary>
+    /// <param name="start">The edge start point.</param>
+    /// <param name="end">The edge end point.</param>
+    /// <param name="sampleY">The sample row.</param>
+    /// <param name="hasIntersection">Tracks whether any edge has intersected the sample row yet.</param>
+    /// <param name="intervalLeft">The running left intersection bound.</param>
+    /// <param name="intervalRight">The running right intersection bound.</param>
     private static void AppendEdgeInterval(
         Vector2 start,
         Vector2 end,
@@ -2185,6 +2731,11 @@ internal static partial class DefaultRasterizer
         hasIntersection = true;
     }
 
+    /// <summary>
+    /// Counts the distinct explicit polyline points while skipping immediate duplicates.
+    /// </summary>
+    /// <param name="points">The explicit polyline points.</param>
+    /// <returns>The number of distinct points.</returns>
     private static int GetDistinctPointCount(PointF[] points)
     {
         int count = 0;
@@ -2207,6 +2758,13 @@ internal static partial class DefaultRasterizer
         return count;
     }
 
+    /// <summary>
+    /// Finds the first distinct point of the explicit polyline.
+    /// </summary>
+    /// <param name="points">The explicit polyline points.</param>
+    /// <param name="index">Receives the distinct point index.</param>
+    /// <param name="point">Receives the distinct point.</param>
+    /// <returns><see langword="true"/> when a distinct point exists.</returns>
     private static bool TryGetFirstDistinctPoint(PointF[] points, out int index, out PointF point)
     {
         if (points.Length == 0)
@@ -2221,6 +2779,14 @@ internal static partial class DefaultRasterizer
         return true;
     }
 
+    /// <summary>
+    /// Finds the next distinct point after the supplied explicit polyline index.
+    /// </summary>
+    /// <param name="points">The explicit polyline points.</param>
+    /// <param name="index">The point index to advance from.</param>
+    /// <param name="nextIndex">Receives the next distinct point index.</param>
+    /// <param name="point">Receives the next distinct point.</param>
+    /// <returns><see langword="true"/> when a next distinct point exists.</returns>
     private static bool TryGetNextDistinctPoint(PointF[] points, int index, out int nextIndex, out PointF point)
     {
         PointF currentPoint = points[index];
@@ -2242,6 +2808,13 @@ internal static partial class DefaultRasterizer
         return false;
     }
 
+    /// <summary>
+    /// Finds the last distinct point of the explicit polyline.
+    /// </summary>
+    /// <param name="points">The explicit polyline points.</param>
+    /// <param name="index">Receives the distinct point index.</param>
+    /// <param name="point">Receives the distinct point.</param>
+    /// <returns><see langword="true"/> when a distinct point exists.</returns>
     private static bool TryGetLastDistinctPoint(PointF[] points, out int index, out PointF point)
     {
         if (points.Length == 0)
@@ -2261,6 +2834,14 @@ internal static partial class DefaultRasterizer
         return true;
     }
 
+    /// <summary>
+    /// Finds the previous distinct point before the supplied explicit polyline index.
+    /// </summary>
+    /// <param name="points">The explicit polyline points.</param>
+    /// <param name="index">The point index to retreat from.</param>
+    /// <param name="previousIndex">Receives the previous distinct point index.</param>
+    /// <param name="point">Receives the previous distinct point.</param>
+    /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
     private static bool TryGetPreviousDistinctPoint(PointF[] points, int index, out int previousIndex, out PointF point)
     {
         PointF currentPoint = points[index];
@@ -2297,6 +2878,16 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="StrokeBandRasterizer"/> struct.
         /// </summary>
+        /// <param name="geometry">The flattened centerline geometry.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="minX">The band-local minimum X coordinate.</param>
+        /// <param name="minY">The band-local minimum Y coordinate.</param>
+        /// <param name="width">The band width in pixels.</param>
+        /// <param name="height">The band height in pixels.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public StrokeBandRasterizer(
             LinearGeometry geometry,
             StrokeStyle stroke,
@@ -2329,6 +2920,17 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="StrokeBandRasterizer"/> struct for one two-point line segment.
         /// </summary>
+        /// <param name="start">The stroke start point.</param>
+        /// <param name="end">The stroke end point.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="minX">The band-local minimum X coordinate.</param>
+        /// <param name="minY">The band-local minimum Y coordinate.</param>
+        /// <param name="width">The band width in pixels.</param>
+        /// <param name="height">The band height in pixels.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public StrokeBandRasterizer(
             PointF start,
             PointF end,
@@ -2362,6 +2964,16 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="StrokeBandRasterizer"/> struct for one explicit open polyline.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="stroke">The stroke style.</param>
+        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
+        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
+        /// <param name="minX">The band-local minimum X coordinate.</param>
+        /// <param name="minY">The band-local minimum Y coordinate.</param>
+        /// <param name="width">The band width in pixels.</param>
+        /// <param name="height">The band height in pixels.</param>
+        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
+        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
         public StrokeBandRasterizer(
             PointF[] points,
             StrokeStyle stroke,
@@ -2449,6 +3061,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes one explicit line segment into the current band context.
         /// </summary>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void RasterizeSingleSegment(ref Context context)
         {
             RectangleF bounds = RectangleF.FromLTRB(
@@ -2471,6 +3084,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes one explicit open polyline into the current band context.
         /// </summary>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void RasterizeExplicitPolyline(ref Context context)
         {
             PointF[] points = this.polylinePoints!;
@@ -2525,6 +3139,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Appends one contour point to the active stroke contour.
         /// </summary>
+        /// <param name="state">The active contour state.</param>
+        /// <param name="point">The point to append.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void AppendContourPoint(ref ContourState state, PointF point, bool contained, ref Context context)
         {
             if (!state.HasPoint)
@@ -2547,6 +3165,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Closes the active stroke contour.
         /// </summary>
+        /// <param name="state">The active contour state.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void CloseContour(ref ContourState state, bool contained, ref Context context)
         {
             if (!state.HasPoint || state.PreviousPoint == state.FirstPoint)
@@ -2561,10 +3182,15 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Processes one centerline contour.
         /// </summary>
+        /// <param name="contour">The contour to process.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void ProcessContour(in LinearContour contour, bool contained, ref Context context)
         {
             if (this.geometry.Points is PointF[] geometryPoints)
             {
+                // Reuse contiguous point storage directly when available so we can walk spans
+                // without paying repeated IReadOnlyList indexing costs in the hot contour path.
                 ReadOnlySpan<PointF> contourPoints = geometryPoints.AsSpan(contour.PointStart, contour.PointCount);
                 int distinctPointCount = GetDistinctPointCount(contourPoints, contour.IsClosed);
                 if (distinctPointCount == 0)
@@ -2657,6 +3283,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one distinct two-point contour without creating a temporary point buffer.
         /// </summary>
+        /// <param name="contour">The contour to emit.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitDistinctSegmentContour(in LinearContour contour, bool contained, ref Context context)
         {
             if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF start) ||
@@ -2677,6 +3306,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one distinct two-point contour from contiguous point storage without creating a temporary point buffer.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitDistinctSegmentContour(ReadOnlySpan<PointF> contourPoints, bool contained, ref Context context)
         {
             if (!TryGetFirstDistinctPoint(contourPoints, out int firstIndex, out PointF start) ||
@@ -2697,6 +3329,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one distinct two-point explicit polyline without creating a temporary point buffer.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitDistinctSegmentContour(PointF[] points, bool contained, ref Context context)
         {
             if (!TryGetFirstDistinctPoint(points, out int firstIndex, out PointF start) ||
@@ -2717,6 +3352,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one stroked open segment.
         /// </summary>
+        /// <param name="start">The segment start point.</param>
+        /// <param name="end">The segment end point.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitOpenSegmentStrokeContour(PointF start, PointF end, bool contained, ref Context context)
         {
             if (!TryGetDirection(start, end, out Vector2 tangent, out _))
@@ -2759,6 +3398,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one stroked open multi-segment contour.
         /// </summary>
+        /// <param name="contour">The open contour.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitOpenStrokeContour(in LinearContour contour, bool contained, ref Context context)
         {
             if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF firstPoint) ||
@@ -2868,6 +3510,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one stroked open multi-segment contour from contiguous point storage.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitOpenStrokeContour(ReadOnlySpan<PointF> contourPoints, bool contained, ref Context context)
         {
             if (!TryGetFirstDistinctPoint(contourPoints, out int firstIndex, out PointF firstPoint) ||
@@ -2977,6 +3622,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one stroked explicit open multi-segment polyline.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitOpenStrokeContour(PointF[] points, bool contained, ref Context context)
         {
             if (!TryGetFirstDistinctPoint(points, out int firstIndex, out PointF firstPoint) ||
@@ -3086,6 +3734,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits the two stroked contours for a closed centerline contour.
         /// </summary>
+        /// <param name="contour">The closed contour.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitClosedStrokeContour(in LinearContour contour, bool contained, ref Context context)
         {
             if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF firstPoint) ||
@@ -3182,6 +3833,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits the two stroked contours for a closed contour from contiguous point storage.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitClosedStrokeContour(ReadOnlySpan<PointF> contourPoints, bool contained, ref Context context)
         {
             if (!TryGetFirstDistinctPoint(contourPoints, out int firstIndex, out PointF firstPoint) ||
@@ -3278,6 +3932,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits a point-like stroke as a cap contour.
         /// </summary>
+        /// <param name="point">The point-like stroke location.</param>
+        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitPointStrokeContour(PointF point, bool contained, ref Context context)
         {
             Vector2 center = point;
@@ -3303,6 +3960,12 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one round cap or join arc directly into the active band context.
         /// </summary>
+        /// <param name="center">The arc center.</param>
+        /// <param name="fromOffset">The start offset from the center.</param>
+        /// <param name="toOffset">The end offset from the center.</param>
+        /// <param name="preferredDirection">The preferred outward direction used to choose the sweep.</param>
+        /// <param name="contained">Indicates whether the arc is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitDirectedArcContour(
             Vector2 center,
             Vector2 fromOffset,
@@ -3357,6 +4020,13 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Appends a contour arc directly to the active stroke contour.
         /// </summary>
+        /// <param name="contour">The active contour state.</param>
+        /// <param name="center">The arc center.</param>
+        /// <param name="fromOffset">The start offset from the center.</param>
+        /// <param name="toOffset">The end offset from the center.</param>
+        /// <param name="preferredDirection">The preferred outward direction used to choose the sweep.</param>
+        /// <param name="contained">Indicates whether the arc is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void AppendDirectedArcContour(
             ref ContourState contour,
             Vector2 center,
@@ -3413,6 +4083,15 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Appends one side join point sequence directly to the active stroke contour.
         /// </summary>
+        /// <param name="contour">The active contour state.</param>
+        /// <param name="point">The join point.</param>
+        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
+        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
+        /// <param name="previousLength">The length of the previous segment.</param>
+        /// <param name="nextLength">The length of the next segment.</param>
+        /// <param name="sideSign">The side selector for the contour being emitted.</param>
+        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void AppendSideJoinContour(
             ref ContourState contour,
             Vector2 point,
@@ -3434,6 +4113,8 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
+            // The cross product, adjusted by the contour side, tells us whether this contour is
+            // traversing the visible outer corner or the collapsed inner corner of the join.
             bool isOuterJoin = cross * sideSign > 0F;
             if (!isOuterJoin)
             {
@@ -3465,6 +4146,14 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Appends one outer join directly to the active stroke contour.
         /// </summary>
+        /// <param name="contour">The active contour state.</param>
+        /// <param name="point">The join point.</param>
+        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
+        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
+        /// <param name="previousOffset">The offset vector on the previous segment.</param>
+        /// <param name="nextOffset">The offset vector on the next segment.</param>
+        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void AppendOuterJoinContour(
             ref ContourState contour,
             Vector2 point,
@@ -3515,6 +4204,16 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Appends one inner join directly to the active stroke contour.
         /// </summary>
+        /// <param name="contour">The active contour state.</param>
+        /// <param name="point">The join point.</param>
+        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
+        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
+        /// <param name="previousOffset">The offset vector on the previous segment.</param>
+        /// <param name="nextOffset">The offset vector on the next segment.</param>
+        /// <param name="previousLength">The length of the previous segment.</param>
+        /// <param name="nextLength">The length of the next segment.</param>
+        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void AppendInnerJoinContour(
             ref ContourState contour,
             Vector2 point,
@@ -3598,6 +4297,16 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Appends one miter-family join directly to the active stroke contour.
         /// </summary>
+        /// <param name="contour">The active contour state.</param>
+        /// <param name="point">The join point.</param>
+        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
+        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
+        /// <param name="previousOffset">The offset vector on the previous segment.</param>
+        /// <param name="nextOffset">The offset vector on the next segment.</param>
+        /// <param name="lineJoin">The miter-family join behavior to apply.</param>
+        /// <param name="miterLimit">The effective miter limit.</param>
+        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void AppendMiterJoinContour(
             ref ContourState contour,
             Vector2 point,
@@ -3686,6 +4395,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Emits one stroked boundary edge into the active band context.
         /// </summary>
+        /// <param name="start">The edge start point.</param>
+        /// <param name="end">The edge end point.</param>
+        /// <param name="contained">Indicates whether the edge is fully contained within the active band.</param>
+        /// <param name="context">The mutable scan-conversion context.</param>
         private void EmitLine(PointF start, PointF end, bool contained, ref Context context)
         {
             if (contained)
@@ -3711,6 +4424,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Rasterizes one fully contained line in 24.8 fixed-point band-local coordinates.
         /// </summary>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        /// <param name="x0">The fixed-point X coordinate of the start point.</param>
+        /// <param name="y0">The fixed-point Y coordinate of the start point.</param>
+        /// <param name="x1">The fixed-point X coordinate of the end point.</param>
+        /// <param name="y1">The fixed-point Y coordinate of the end point.</param>
         private static void RasterizeContainedLineF24Dot8(ref Context context, int x0, int y0, int x1, int y1)
         {
             if (y0 == y1)
@@ -3735,6 +4453,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Clips one edge to the active band and rasterizes the visible portion.
         /// </summary>
+        /// <param name="context">The mutable scan-conversion context.</param>
+        /// <param name="x0">The band-local X coordinate of the start point.</param>
+        /// <param name="y0">The band-local Y coordinate of the start point.</param>
+        /// <param name="x1">The band-local X coordinate of the end point.</param>
+        /// <param name="y1">The band-local Y coordinate of the end point.</param>
         private void AddUncontainedLine(ref Context context, float x0, float y0, float x1, float y1)
         {
             if (y0 == y1)
@@ -3913,6 +4636,8 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Counts the distinct contour points while skipping immediate duplicates.
         /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <returns>The number of distinct contour points.</returns>
         private int GetDistinctPointCount(in LinearContour contour)
         {
             int pointEnd = contour.PointStart + contour.PointCount;
@@ -3948,6 +4673,9 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Counts the distinct contour points in contiguous point storage while skipping immediate duplicates.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="isClosed">Indicates whether the contour is closed.</param>
+        /// <returns>The number of distinct contour points.</returns>
         private static int GetDistinctPointCount(ReadOnlySpan<PointF> contourPoints, bool isClosed)
         {
             int count = 0;
@@ -3982,6 +4710,8 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Counts the distinct explicit polyline points while skipping immediate duplicates.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <returns>The number of distinct points.</returns>
         private static int GetDistinctPointCount(PointF[] points)
         {
             int count = 0;
@@ -4007,6 +4737,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the first distinct point of the contour.
         /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">Receives the raw point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private bool TryGetFirstDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
         {
             if (contour.PointCount == 0)
@@ -4024,6 +4758,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the next distinct point after the supplied raw index.
         /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">The raw point index to advance from.</param>
+        /// <param name="nextRawIndex">Receives the next distinct raw point index.</param>
+        /// <param name="point">Receives the next distinct point.</param>
+        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
         private bool TryGetNextDistinctPoint(in LinearContour contour, int rawIndex, out int nextRawIndex, out PointF point)
         {
             PointF currentPoint = this.geometry.Points[rawIndex];
@@ -4049,6 +4788,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the last distinct point of the contour.
         /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">Receives the raw point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private bool TryGetLastDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
         {
             if (contour.PointCount == 0)
@@ -4072,6 +4815,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the previous distinct point before the supplied raw index.
         /// </summary>
+        /// <param name="contour">The contour to inspect.</param>
+        /// <param name="rawIndex">The raw point index to retreat from.</param>
+        /// <param name="previousRawIndex">Receives the previous distinct raw point index.</param>
+        /// <param name="point">Receives the previous distinct point.</param>
+        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
         private bool TryGetPreviousDistinctPoint(in LinearContour contour, int rawIndex, out int previousRawIndex, out PointF point)
         {
             PointF currentPoint = this.geometry.Points[rawIndex];
@@ -4096,6 +4844,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the first distinct point of the explicit polyline.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="index">Receives the distinct point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private static bool TryGetFirstDistinctPoint(PointF[] points, out int index, out PointF point)
         {
             if (points.Length == 0)
@@ -4113,6 +4865,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the next distinct point after the supplied explicit polyline index.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="index">The point index to advance from.</param>
+        /// <param name="nextIndex">Receives the next distinct point index.</param>
+        /// <param name="point">Receives the next distinct point.</param>
+        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
         private static bool TryGetNextDistinctPoint(PointF[] points, int index, out int nextIndex, out PointF point)
         {
             PointF currentPoint = points[index];
@@ -4137,6 +4894,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the last distinct point of the explicit polyline.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="index">Receives the distinct point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private static bool TryGetLastDistinctPoint(PointF[] points, out int index, out PointF point)
         {
             if (points.Length == 0)
@@ -4159,6 +4920,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the previous distinct point before the supplied explicit polyline index.
         /// </summary>
+        /// <param name="points">The explicit polyline points.</param>
+        /// <param name="index">The point index to retreat from.</param>
+        /// <param name="previousIndex">Receives the previous distinct point index.</param>
+        /// <param name="point">Receives the previous distinct point.</param>
+        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
         private static bool TryGetPreviousDistinctPoint(PointF[] points, int index, out int previousIndex, out PointF point)
         {
             PointF currentPoint = points[index];
@@ -4183,6 +4949,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the first distinct point of the contiguous contour point run.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="index">Receives the distinct point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private static bool TryGetFirstDistinctPoint(ReadOnlySpan<PointF> contourPoints, out int index, out PointF point)
         {
             if (contourPoints.IsEmpty)
@@ -4200,6 +4970,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the next distinct point after the supplied contiguous contour index.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="index">The point index to advance from.</param>
+        /// <param name="nextIndex">Receives the next distinct point index.</param>
+        /// <param name="point">Receives the next distinct point.</param>
+        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
         private static bool TryGetNextDistinctPoint(ReadOnlySpan<PointF> contourPoints, int index, out int nextIndex, out PointF point)
         {
             PointF currentPoint = contourPoints[index];
@@ -4224,6 +4999,10 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the last distinct point of the contiguous contour point run.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="index">Receives the distinct point index.</param>
+        /// <param name="point">Receives the distinct point.</param>
+        /// <returns><see langword="true"/> when a distinct point exists.</returns>
         private static bool TryGetLastDistinctPoint(ReadOnlySpan<PointF> contourPoints, out int index, out PointF point)
         {
             if (contourPoints.IsEmpty)
@@ -4246,6 +5025,11 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Finds the previous distinct point before the supplied contiguous contour index.
         /// </summary>
+        /// <param name="contourPoints">The contiguous contour points.</param>
+        /// <param name="index">The point index to retreat from.</param>
+        /// <param name="previousIndex">Receives the previous distinct point index.</param>
+        /// <param name="point">Receives the previous distinct point.</param>
+        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
         private static bool TryGetPreviousDistinctPoint(ReadOnlySpan<PointF> contourPoints, int index, out int previousIndex, out PointF point)
         {
             PointF currentPoint = contourPoints[index];
@@ -4271,6 +5055,11 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Chooses the arc sweep whose midpoint best matches the preferred outward direction.
     /// </summary>
+    /// <param name="startAngle">The start angle in radians.</param>
+    /// <param name="counterClockwiseSweep">The counter-clockwise sweep candidate.</param>
+    /// <param name="clockwiseSweep">The clockwise sweep candidate.</param>
+    /// <param name="preferredDirection">The preferred outward direction.</param>
+    /// <returns>The chosen sweep.</returns>
     private static double ChooseArcSweep(
         double startAngle,
         double counterClockwiseSweep,
@@ -4287,6 +5076,10 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Returns the tessellation segment count used for one round join or cap arc.
     /// </summary>
+    /// <param name="radius">The arc radius.</param>
+    /// <param name="angle">The arc sweep angle in radians.</param>
+    /// <param name="arcDetailScale">The tessellation detail scale.</param>
+    /// <returns>The number of intermediate tessellation points.</returns>
     private static int GetArcSubdivisionCount(float radius, double angle, double arcDetailScale)
     {
         double safeRadius = Math.Max(radius, 0.25F);
@@ -4298,6 +5091,9 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Returns the preferred outward direction used to pick between the clockwise and counter-clockwise arc sweeps.
     /// </summary>
+    /// <param name="fromOffset">The start offset from the arc center.</param>
+    /// <param name="toOffset">The end offset from the arc center.</param>
+    /// <returns>The preferred outward direction.</returns>
     private static Vector2 GetPreferredArcDirection(Vector2 fromOffset, Vector2 toOffset)
     {
         Vector2 direction = fromOffset + toOffset;
@@ -4312,11 +5108,18 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Returns the left-side unit normal for a normalized tangent.
     /// </summary>
+    /// <param name="tangent">The normalized tangent.</param>
+    /// <returns>The left-side unit normal.</returns>
     private static Vector2 GetLeftNormal(Vector2 tangent) => new(-tangent.Y, tangent.X);
 
     /// <summary>
     /// Attempts to normalize the direction from <paramref name="start"/> to <paramref name="end"/>.
     /// </summary>
+    /// <param name="start">The segment start point.</param>
+    /// <param name="end">The segment end point.</param>
+    /// <param name="direction">Receives the normalized direction.</param>
+    /// <param name="length">Receives the segment length.</param>
+    /// <returns><see langword="true"/> when the segment has non-zero length.</returns>
     private static bool TryGetDirection(PointF start, PointF end, out Vector2 direction, out float length)
     {
         Vector2 delta = end - start;
@@ -4336,6 +5139,13 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Attempts to intersect the two infinite offset support lines used by a join.
     /// </summary>
+    /// <param name="point">The join point.</param>
+    /// <param name="previousOffset">The offset vector on the previous segment.</param>
+    /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
+    /// <param name="nextOffset">The offset vector on the next segment.</param>
+    /// <param name="nextTangent">The normalized tangent of the next segment.</param>
+    /// <param name="intersection">Receives the line intersection when one exists.</param>
+    /// <returns><see langword="true"/> when the offset lines intersect.</returns>
     private static bool TryIntersectOffsetLines(
         Vector2 point,
         Vector2 previousOffset,
@@ -4361,11 +5171,16 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Returns the 2D cross product scalar of the supplied vectors.
     /// </summary>
+    /// <param name="left">The left operand.</param>
+    /// <param name="right">The right operand.</param>
+    /// <returns>The 2D cross product scalar.</returns>
     private static float Cross(Vector2 left, Vector2 right) => (left.X * right.Y) - (left.Y * right.X);
 
     /// <summary>
     /// Normalizes an angle into the inclusive-exclusive range [0, 2π).
     /// </summary>
+    /// <param name="angle">The angle to normalize.</param>
+    /// <returns>The normalized angle.</returns>
     private static double NormalizePositiveAngle(double angle)
     {
         double fullTurn = Math.PI * 2D;
@@ -4390,6 +5205,7 @@ internal static partial class DefaultRasterizer
         /// <summary>
         /// Initializes a new instance of the <see cref="StrokeStyle"/> struct.
         /// </summary>
+        /// <param name="pen">The source pen.</param>
         public StrokeStyle(Pen pen)
         {
             this.Width = pen.StrokeWidth;
@@ -4402,12 +5218,12 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
-        /// Gets the stroke width in destination-space pixels.
+        /// Gets the stroke width in stroke-local units before any drawing transform is applied.
         /// </summary>
         public float Width { get; }
 
         /// <summary>
-        /// Gets half the stroke width in destination-space pixels.
+        /// Gets half the stroke width in stroke-local units before any drawing transform is applied.
         /// </summary>
         public float HalfWidth => this.Width * 0.5F;
 

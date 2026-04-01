@@ -665,29 +665,35 @@ fn read_i16_point(ix: u32) -> vec2f {
 struct Transform {
     mat: vec4f,
     translate: vec2f,
+    perspective: vec3f,
 }
 
 fn transform_identity() -> Transform {
-    return Transform(vec4(1., 0., 0., 1.), vec2(0.));
+    return Transform(vec4(1., 0., 0., 1.), vec2(0.), vec3(0., 0., 1.));
 }
 
 fn read_transform(transform_base: u32, ix: u32) -> Transform {
-    let base = transform_base + ix * 6u;
-    let c0 = bitcast<f32>(scene[base]);
-    let c1 = bitcast<f32>(scene[base + 1u]);
-    let c2 = bitcast<f32>(scene[base + 2u]);
-    let c3 = bitcast<f32>(scene[base + 3u]);
-    let c4 = bitcast<f32>(scene[base + 4u]);
-    let c5 = bitcast<f32>(scene[base + 5u]);
-    let mat = vec4(c0, c1, c2, c3);
-    let translate = vec2(c4, c5);
-    return Transform(mat, translate);
+    let base = transform_base + ix * 9u;
+    let mat = vec4(
+        bitcast<f32>(scene[base]),
+        bitcast<f32>(scene[base + 1u]),
+        bitcast<f32>(scene[base + 2u]),
+        bitcast<f32>(scene[base + 3u]));
+    let translate = vec2(
+        bitcast<f32>(scene[base + 4u]),
+        bitcast<f32>(scene[base + 5u]));
+    let perspective = vec3(
+        bitcast<f32>(scene[base + 6u]),
+        bitcast<f32>(scene[base + 7u]),
+        bitcast<f32>(scene[base + 8u]));
+    return Transform(mat, translate, perspective);
 }
 
 fn transform_apply(transform: Transform, p: vec2f) -> vec2f {
     let px = fma(transform.mat.x, p.x, fma(transform.mat.z, p.y, transform.translate.x));
     let py = fma(transform.mat.y, p.x, fma(transform.mat.w, p.y, transform.translate.y));
-    return vec2(px, py);
+    let w = fma(transform.perspective.x, p.x, fma(transform.perspective.y, p.y, transform.perspective.z));
+    return vec2(px, py) / max(w, 0.0000001);
 }
 
 fn round_down(x: f32) -> i32 {
