@@ -40,6 +40,6 @@ public class BrushWorkspaceTests
 
         workspace.Dispose();
 
-        Assert.Equal(2, this.memoryAllocator.ReturnLog.Count);
+        Assert.Equal(3, this.memoryAllocator.ReturnLog.Count);
     }
 }
