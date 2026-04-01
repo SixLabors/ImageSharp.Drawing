@@ -929,7 +929,7 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush img ? new Rectangle(command.DestinationOffset, img.UntypedImage.Size) : default);
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
         return true;
     }
 
@@ -943,7 +943,7 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush img ? new Rectangle(command.DestinationOffset, img.UntypedImage.Size) : default);
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
         return true;
     }
 
@@ -956,7 +956,7 @@ internal static class WebGPUSceneEncoder
             command.GraphicsOptions,
             command.RasterizerOptions,
             command.DestinationOffset,
-            command.Brush is ImageBrush img ? new Rectangle(command.DestinationOffset, img.UntypedImage.Size) : default);
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
         return true;
     }
 

@@ -588,19 +588,34 @@ fn draw_join(
             if 2. * hypot < (hypot + d) * miter_limit * miter_limit
                 && abs(cr) > TANGENT_THRESH * TANGENT_THRESH
             {
-                let v = outer_next - outer_prev;
+                let fp_last = select(front0, back1, is_backside);
+                let fp_this = select(front1, back0, is_backside);
+                let p = select(front0, back0, is_backside);
+
+                let v = fp_this - fp_last;
                 let h = (tan_prev.x * v.y - tan_prev.y * v.x) / cr;
-                let miter_pt = outer_next - tan_next * h;
+                let miter_pt = fp_this - tan_next * h;
 
                 line_ix = atomicAdd(&bump.lines, 3u);
-                write_line_with_transform(line_ix, path_ix, outer_prev, miter_pt, transform);
-                write_line_with_transform(line_ix + 1u, path_ix, miter_pt, outer_next, transform);
-                write_line_with_transform(line_ix + 2u, path_ix, inner_prev, inner_next, transform);
+                write_line_with_transform(line_ix, path_ix, p, miter_pt, transform);
+
+                // Preserve the contour winding on backside turns by stitching the outer
+                // edge as back0 -> miter -> back1 rather than reversing the join wedge.
+                if is_backside {
+                    back0 = miter_pt;
+                } else {
+                    front0 = miter_pt;
+                }
+
+                write_line_with_transform(line_ix + 1u, path_ix, front0, front1, transform);
+                write_line_with_transform(line_ix + 2u, path_ix, back0, back1, transform);
             } else {
                 let use_round_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_ROUND) != 0u;
                 let use_revert_overflow = (style_flags & STYLE_FLAGS_JOIN_MITER_REVERT) != 0u;
                 if use_round_overflow {
-                    flatten_arc(path_ix, outer_prev, outer_next, p0, abs(atan2(cr, d)), transform);
+                    let arc_start = select(outer_prev, outer_next, is_backside);
+                    let arc_end = select(outer_next, outer_prev, is_backside);
+                    flatten_arc(path_ix, arc_start, arc_end, p0, abs(atan2(cr, d)), transform);
                     output_line_with_transform(path_ix, inner_prev, inner_next, transform);
                 } else if use_revert_overflow || abs(cr) <= TANGENT_THRESH * TANGENT_THRESH {
                     output_two_lines_with_transform(path_ix, front0, front1, back0, back1, transform);
@@ -617,10 +632,14 @@ fn draw_join(
                         let ratio = (limit - bevel_distance) / (intersection_distance - bevel_distance);
                         let clipped_prev = outer_prev + ((miter_pt - outer_prev) * ratio);
                         let clipped_next = outer_next + ((miter_pt - outer_next) * ratio);
+                        let outer_start = select(outer_prev, outer_next, is_backside);
+                        let clipped_start = select(clipped_prev, clipped_next, is_backside);
+                        let clipped_end = select(clipped_next, clipped_prev, is_backside);
+                        let outer_end = select(outer_next, outer_prev, is_backside);
                         line_ix = atomicAdd(&bump.lines, 4u);
-                        write_line_with_transform(line_ix, path_ix, outer_prev, clipped_prev, transform);
-                        write_line_with_transform(line_ix + 1u, path_ix, clipped_prev, clipped_next, transform);
-                        write_line_with_transform(line_ix + 2u, path_ix, clipped_next, outer_next, transform);
+                        write_line_with_transform(line_ix, path_ix, outer_start, clipped_start, transform);
+                        write_line_with_transform(line_ix + 1u, path_ix, clipped_start, clipped_end, transform);
+                        write_line_with_transform(line_ix + 2u, path_ix, clipped_end, outer_end, transform);
                         write_line_with_transform(line_ix + 3u, path_ix, inner_prev, inner_next, transform);
                     }
                 }
