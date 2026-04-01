@@ -80,7 +80,7 @@ internal static class WebGPUSceneEncoder
                 return true;
             }
 
-            encodedScene = SupportedSubsetSceneResolver.Resolve(encoding, targetBounds, allocator);
+            encodedScene = SupportedSubsetSceneResolver.Resolve(ref encoding, targetBounds, allocator);
             error = null;
             return true;
         }
@@ -806,7 +806,7 @@ internal static class WebGPUSceneEncoder
         /// Resolves the mutable encoding into the final packed scene buffers.
         /// </summary>
         public static WebGPUEncodedScene Resolve(
-            SupportedSubsetSceneEncoding encoding,
+            ref SupportedSubsetSceneEncoding encoding,
             in Rectangle targetBounds,
             MemoryAllocator allocator)
         {
@@ -854,7 +854,7 @@ internal static class WebGPUSceneEncoder
                     encoding.InfoWordCount,
                     sceneDataOwner,
                     sceneWordCount,
-                    DetachGradientPixels(encoding),
+                    DetachGradientPixels(ref encoding),
                     encoding.Images,
                     encoding.GradientRowCount,
                     layout,
@@ -886,7 +886,7 @@ internal static class WebGPUSceneEncoder
         /// <summary>
         /// Detaches the gradient pixel payload when gradients were emitted for the flush.
         /// </summary>
-        private static IMemoryOwner<uint>? DetachGradientPixels(SupportedSubsetSceneEncoding encoding)
+        private static IMemoryOwner<uint>? DetachGradientPixels(ref SupportedSubsetSceneEncoding encoding)
         {
             if (encoding.GradientRowCount == 0)
             {
