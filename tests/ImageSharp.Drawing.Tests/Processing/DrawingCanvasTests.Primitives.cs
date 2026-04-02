@@ -166,4 +166,50 @@ public partial class DrawingCanvasTests
         target.DebugSave(provider, appendSourceFileOrDescription: false);
         target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
     }
+
+    [Theory]
+    [WithBlankImage(240, 160, PixelTypes.Rgba32)]
+    public void FillPrimitiveHelpers_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        canvas.Clear(Brushes.Solid(Color.White));
+
+        canvas.FillArc(
+            Brushes.Solid(Color.CornflowerBlue),
+            new PointF(78, 58),
+            new SizeF(48, 34),
+            rotation: 15,
+            startAngle: -30,
+            sweepAngle: 240);
+
+        canvas.FillPie(Brushes.Solid(Color.Goldenrod), new PointF(150, 70), new SizeF(36, 36), startAngle: 20, sweepAngle: 240);
+        canvas.FillPie(Brushes.Solid(Color.MediumSeaGreen), new PointF(184, 107), new SizeF(30, 21), startAngle: -35, sweepAngle: 220);
+
+        canvas.Flush();
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
+
+    [Theory]
+    [WithBlankImage(240, 160, PixelTypes.Rgba32)]
+    public void DrawPieHelpers_MatchesReference<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        using Image<TPixel> target = provider.GetImage();
+        using DrawingCanvas<TPixel> canvas = CreateCanvas(provider, target, new DrawingOptions());
+
+        canvas.Clear(Brushes.Solid(Color.White));
+
+        canvas.DrawPie(Pens.Solid(Color.DarkSlateBlue, 6), new PointF(77, 75), new SizeF(43, 43), startAngle: -40, sweepAngle: 250);
+        canvas.DrawPie(Pens.Solid(Color.OrangeRed, 4), new PointF(167, 70), new SizeF(35, 26), startAngle: 35, sweepAngle: -210);
+
+        canvas.Flush();
+
+        target.DebugSave(provider, appendSourceFileOrDescription: false);
+        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+    }
 }

@@ -140,27 +140,6 @@ public interface IDrawingCanvas : IDisposable
     public void Fill(Brush brush);
 
     /// <summary>
-    /// Fills a local region using the given brush.
-    /// </summary>
-    /// <param name="brush">Brush used to shade destination pixels.</param>
-    /// <param name="region">Region to fill in local coordinates.</param>
-    public void Fill(Brush brush, Rectangle region);
-
-    /// <summary>
-    /// Fills all paths in a collection using the given brush and drawing options.
-    /// </summary>
-    /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="paths">Path collection to fill.</param>
-    public void Fill(Brush brush, IPathCollection paths);
-
-    /// <summary>
-    /// Fills a path built by the provided builder using the given brush.
-    /// </summary>
-    /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="pathBuilder">The path builder describing the fill region.</param>
-    public void Fill(Brush brush, PathBuilder pathBuilder);
-
-    /// <summary>
     /// Fills a path in local coordinates using the given brush.
     /// </summary>
     /// <param name="brush">Brush used to shade covered pixels.</param>
@@ -192,58 +171,11 @@ public interface IDrawingCanvas : IDisposable
     public void Process(IPath path, Action<IImageProcessingContext> operation);
 
     /// <summary>
-    /// Draws an arc outline using the provided pen and drawing options.
-    /// </summary>
-    /// <param name="pen">Pen used to generate the arc outline.</param>
-    /// <param name="center">Arc center point in local coordinates.</param>
-    /// <param name="radius">Arc radii in local coordinates.</param>
-    /// <param name="rotation">Ellipse rotation in degrees.</param>
-    /// <param name="startAngle">Arc start angle in degrees.</param>
-    /// <param name="sweepAngle">Arc sweep angle in degrees.</param>
-    public void DrawArc(Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle);
-
-    /// <summary>
-    /// Draws a cubic bezier outline using the provided pen and drawing options.
-    /// </summary>
-    /// <param name="pen">Pen used to generate the bezier outline.</param>
-    /// <param name="points">Bezier control points.</param>
-    public void DrawBezier(Pen pen, params PointF[] points);
-
-    /// <summary>
-    /// Draws an ellipse outline using the provided pen and drawing options.
-    /// </summary>
-    /// <param name="pen">Pen used to generate the ellipse outline.</param>
-    /// <param name="center">Ellipse center point in local coordinates.</param>
-    /// <param name="size">Ellipse width and height in local coordinates.</param>
-    public void DrawEllipse(Pen pen, PointF center, SizeF size);
-
-    /// <summary>
     /// Draws a polyline outline using the provided pen and drawing options.
     /// </summary>
     /// <param name="pen">Pen used to generate the line outline.</param>
     /// <param name="points">Polyline points.</param>
     public void DrawLine(Pen pen, params PointF[] points);
-
-    /// <summary>
-    /// Draws a rectangular outline using the provided pen and drawing options.
-    /// </summary>
-    /// <param name="pen">Pen used to generate the rectangle outline.</param>
-    /// <param name="region">Rectangle region to stroke.</param>
-    public void Draw(Pen pen, Rectangle region);
-
-    /// <summary>
-    /// Draws all paths in a collection using the provided pen and drawing options.
-    /// </summary>
-    /// <param name="pen">Pen used to generate outlines.</param>
-    /// <param name="paths">Path collection to stroke.</param>
-    public void Draw(Pen pen, IPathCollection paths);
-
-    /// <summary>
-    /// Draws a path outline built by the provided builder using the given pen.
-    /// </summary>
-    /// <param name="pen">Pen used to generate the outline fill path.</param>
-    /// <param name="pathBuilder">The path builder describing the path to stroke.</param>
-    public void Draw(Pen pen, PathBuilder pathBuilder);
 
     /// <summary>
     /// Draws a path outline in local coordinates using the given pen.

@@ -305,28 +305,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
     /// <inheritdoc />
     public void Fill(Brush brush)
-        => this.Fill(brush, this.Bounds);
-
-    /// <inheritdoc />
-    public void Fill(Brush brush, Rectangle region)
-        => this.Fill(brush, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
-
-    /// <inheritdoc />
-    public void Fill(Brush brush, IPathCollection paths)
-    {
-        Guard.NotNull(paths, nameof(paths));
-        foreach (IPath path in paths)
-        {
-            this.EnqueueFillPath(brush, path);
-        }
-    }
-
-    /// <inheritdoc />
-    public void Fill(Brush brush, PathBuilder pathBuilder)
-    {
-        Guard.NotNull(pathBuilder, nameof(pathBuilder));
-        this.Fill(brush, pathBuilder.Build());
-    }
+        => this.Fill(brush, new RectangularPolygon(this.Bounds.X, this.Bounds.Y, this.Bounds.Width, this.Bounds.Height));
 
     /// <inheritdoc />
     public void Fill(Brush brush, IPath path)
@@ -395,21 +374,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             RasterizerSamplingOrigin.PixelBoundary,
             state.ClipPaths);
     }
-
-    /// <inheritdoc />
-    public void DrawArc(Pen pen, PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
-        => this.Draw(pen, new Path(new ArcLineSegment(center, radius, rotation, startAngle, sweepAngle)));
-
-    /// <inheritdoc />
-    public void DrawBezier(Pen pen, params PointF[] points)
-    {
-        Guard.NotNull(points, nameof(points));
-        this.Draw(pen, new Path(new CubicBezierLineSegment(points)));
-    }
-
-    /// <inheritdoc />
-    public void DrawEllipse(Pen pen, PointF center, SizeF size)
-        => this.Draw(pen, new EllipsePolygon(center, size));
 
     /// <summary>
     /// Draws a two-point line segment using the provided pen and drawing options.
@@ -486,27 +450,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         }
 
         this.PrepareStrokePolylineCompositionCore(points, pen.StrokeFill, effectiveOptions, pen);
-    }
-
-    /// <inheritdoc />
-    public void Draw(Pen pen, Rectangle region)
-        => this.Draw(pen, new RectangularPolygon(region.X, region.Y, region.Width, region.Height));
-
-    /// <inheritdoc />
-    public void Draw(Pen pen, IPathCollection paths)
-    {
-        Guard.NotNull(paths, nameof(paths));
-        foreach (IPath path in paths)
-        {
-            this.Draw(pen, path);
-        }
-    }
-
-    /// <inheritdoc />
-    public void Draw(Pen pen, PathBuilder pathBuilder)
-    {
-        Guard.NotNull(pathBuilder, nameof(pathBuilder));
-        this.Draw(pen, pathBuilder.Build());
     }
 
     /// <inheritdoc />
