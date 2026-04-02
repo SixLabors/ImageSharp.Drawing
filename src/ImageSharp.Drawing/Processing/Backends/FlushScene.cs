@@ -119,11 +119,15 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="scene">The prepared composition scene.</param>
     /// <param name="targetBounds">The destination bounds of the flush.</param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
+    /// <param name="maxDegreeOfParallelism">
+    /// The maximum degree of parallelism to use when building the scene, or -1 to use the default number of processors.
+    /// </param>
     /// <returns>A flush-ready scene.</returns>
     public static FlushScene Create(
         CompositionScene scene,
         in Rectangle targetBounds,
-        MemoryAllocator allocator)
+        MemoryAllocator allocator,
+        int maxDegreeOfParallelism)
     {
         int commandCount = scene.CommandCount;
 
@@ -145,12 +149,14 @@ internal sealed partial class FlushScene : IDisposable
 
         FillSceneItem?[] fillItems = new FillSceneItem?[commandCount];
         StrokeSceneItem?[] strokeItems = new StrokeSceneItem?[commandCount];
-        int partitionCount = Math.Min(commandCount, Math.Min(Environment.ProcessorCount, targetRowCount));
+        int availableParallelism = maxDegreeOfParallelism == -1 ? Environment.ProcessorCount : maxDegreeOfParallelism;
+        int partitionCount = Math.Min(commandCount, Math.Min(availableParallelism, targetRowCount));
         PartitionState[] partitions = new PartitionState[partitionCount];
 
         _ = Parallel.For(
             0,
             partitionCount,
+            new ParallelOptions { MaxDegreeOfParallelism = partitionCount },
             partitionIndex =>
             {
                 // Integer division splits the commands into contiguous half-open ranges,

@@ -36,7 +36,8 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
         using FlushScene scene = FlushScene.Create(
             compositionScene,
             target.Bounds,
-            configuration.MemoryAllocator);
+            configuration.MemoryAllocator,
+            configuration.MaxDegreeOfParallelism);
 
         if (scene.RowCount == 0)
         {
@@ -85,9 +86,15 @@ public sealed partial class DefaultDrawingBackend : IDrawingBackend
             }
         }
 
+        int requestedParallelism = configuration.MaxDegreeOfParallelism;
+        int partitionCount = Math.Min(
+            scene.RowCount,
+            requestedParallelism == -1 ? Environment.ProcessorCount : requestedParallelism);
+
         _ = Parallel.For(
             fromInclusive: 0,
             toExclusive: scene.RowCount,
+            parallelOptions: new ParallelOptions { MaxDegreeOfParallelism = partitionCount },
             localInit: () => new WorkerState<TPixel>(configuration.MemoryAllocator, destinationFrame.Width, scene.MaxLayerDepth + 1),
             body: (rowIndex, _, state) =>
             {
