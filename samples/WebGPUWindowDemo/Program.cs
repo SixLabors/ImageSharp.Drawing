@@ -28,7 +28,7 @@ public static unsafe class Program
 {
     private const int WindowWidth = 800;
     private const int WindowHeight = 600;
-    private const int BallCount = 500;
+    private const int BallCount = 1000;
 
     // Silk.NET WebGPU API and windowing handles.
     private static WebGPU wgpu;

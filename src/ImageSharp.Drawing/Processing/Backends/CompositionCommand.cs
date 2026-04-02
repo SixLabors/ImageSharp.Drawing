@@ -11,7 +11,7 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public enum CompositionCommandKind : byte
 {
     /// <summary>
-    /// A fill or stroked-path command.
+    /// A fill-path command.
     /// </summary>
     FillLayer = 0,
 
@@ -27,14 +27,13 @@ public enum CompositionCommandKind : byte
 }
 
 /// <summary>
-/// One normalized path- or layer-based composition command queued by <see cref="DrawingCanvasBatcher{TPixel}"/>.
+/// One normalized fill-path or layer-based composition command queued by <see cref="DrawingCanvasBatcher{TPixel}"/>.
 /// </summary>
 /// <remarks>
-/// This type carries path-backed draw commands plus inline layer boundaries.
+/// This type carries fill-path commands plus inline layer boundaries.
 /// </remarks>
 public readonly struct CompositionCommand
 {
-    private readonly Pen? pen;
     private readonly IPath? sourcePath;
     private readonly Brush? brush;
     private readonly Matrix4x4 transform;
@@ -50,7 +49,6 @@ public readonly struct CompositionCommand
         Rectangle targetBounds,
         Rectangle layerBounds,
         Point destinationOffset,
-        Pen? pen,
         Matrix4x4 transform,
         IReadOnlyList<IPath>? clipPaths,
         ShapeOptions? shapeOptions)
@@ -63,7 +61,6 @@ public readonly struct CompositionCommand
         this.TargetBounds = targetBounds;
         this.LayerBounds = layerBounds;
         this.DestinationOffset = destinationOffset;
-        this.pen = pen;
         this.transform = transform;
         this.clipPaths = clipPaths;
         this.shapeOptions = shapeOptions;
@@ -73,11 +70,6 @@ public readonly struct CompositionCommand
     /// Gets the command kind.
     /// </summary>
     public CompositionCommandKind Kind { get; }
-
-    /// <summary>
-    /// Gets the stroke metadata for stroke commands.
-    /// </summary>
-    public readonly Pen? Pen => this.pen;
 
     /// <summary>
     /// Gets the absolute bounds of the logical target for this command.
@@ -134,7 +126,7 @@ public readonly struct CompositionCommand
     public ShapeOptions ShapeOptions => this.shapeOptions ?? throw new InvalidOperationException("Layer commands do not carry shape options.");
 
     /// <summary>
-    /// Creates a path-backed composition command.
+    /// Creates a fill-path composition command.
     /// </summary>
     /// <param name="path">Path in target-local coordinates.</param>
     /// <param name="brush">Brush used during composition.</param>
@@ -144,7 +136,6 @@ public readonly struct CompositionCommand
     /// <param name="transform">Transform matrix supplied with the command.</param>
     /// <param name="targetBounds">The absolute bounds of the logical target for this command.</param>
     /// <param name="destinationOffset">Absolute destination offset where coverage is composited.</param>
-    /// <param name="pen">Optional pen for stroked-path commands.</param>
     /// <param name="clipPaths">Optional clip paths supplied with the command.</param>
     /// <returns>The composition command.</returns>
     public static CompositionCommand Create(
@@ -156,7 +147,6 @@ public readonly struct CompositionCommand
         Matrix4x4 transform,
         Rectangle targetBounds,
         Point destinationOffset = default,
-        Pen? pen = null,
         IReadOnlyList<IPath>? clipPaths = null)
         => new(
             CompositionCommandKind.FillLayer,
@@ -167,7 +157,6 @@ public readonly struct CompositionCommand
             targetBounds,
             default,
             destinationOffset,
-            pen,
             transform,
             clipPaths,
             shapeOptions);
@@ -188,7 +177,6 @@ public readonly struct CompositionCommand
             layerBounds,
             layerBounds,
             default,
-            null,
             Matrix4x4.Identity,
             null,
             null);
@@ -209,7 +197,6 @@ public readonly struct CompositionCommand
             layerBounds,
             layerBounds,
             default,
-            null,
             Matrix4x4.Identity,
             null,
             null);

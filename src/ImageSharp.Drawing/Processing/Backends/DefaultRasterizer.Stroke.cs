@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.PolygonGeometry;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -23,7 +22,7 @@ internal static partial class DefaultRasterizer
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used to generate coverage.</param>
-    /// <param name="transform">The projective transform applied after stroke expansion while lowering the retained outline.</param>
+    /// <param name="transform">The projective transform applied after stroke expansion.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
     internal static StrokeRasterizableGeometry? CreatePathStrokeRasterizableGeometry(
@@ -34,7 +33,22 @@ internal static partial class DefaultRasterizer
         in RasterizerOptions options,
         Matrix4x4 transform,
         MemoryAllocator allocator)
-        => CreateOutlineLoweredStrokeRasterizableGeometry(path, pen, translateX, translateY, in options, transform, allocator);
+    {
+        if (pen.StrokeWidth <= 0F)
+        {
+            return null;
+        }
+
+        LinearGeometry geometry = path.ToLinearGeometry();
+        return CreateRetainedStrokeRasterizableGeometry(
+            geometry,
+            new StrokeStyle(pen),
+            translateX,
+            translateY,
+            in options,
+            transform,
+            allocator);
+    }
 
     /// <summary>
     /// Creates retained row-local raster payload for one stroked two-point line segment.
@@ -46,7 +60,7 @@ internal static partial class DefaultRasterizer
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used to generate coverage.</param>
     /// <param name="transform">The projective transform applied after stroke expansion.</param>
-    /// <param name="allocator">The allocator used for temporary outline lowering when a transform is active.</param>
+    /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained rasterizable geometry for the stroke, or <see langword="null"/> when the stroke produces no coverage.</returns>
     internal static StrokeRasterizableGeometry? CreateLineSegmentStrokeRasterizableGeometry(
         PointF start,
@@ -63,27 +77,8 @@ internal static partial class DefaultRasterizer
             return null;
         }
 
-        if (!transform.IsIdentity)
-        {
-            // The direct segment rasterizer assumes its quad/cap geometry already lives in
-            // execution space. When a drawing transform is active we must preserve the
-            // backend-wide stroke-then-transform invariant, so lower through the outline path.
-            return CreateOutlineLoweredStrokeRasterizableGeometry(
-                new Path([start, end]),
-                pen,
-                translateX,
-                translateY,
-                in options,
-                transform,
-                allocator);
-        }
-
-        // Keep the explicit two-point optimization on the direct raster path. This path
-        // never applies a matrix transform itself; it only computes stroke-local coverage
-        // and lets the retained executor add destination translation and sampling offsets.
-        StrokeStyle stroke = new(pen);
-        float samplingOffsetX = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        float samplingOffsetY = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+        float samplingOffsetX = 0.5F;
+        float samplingOffsetY = 0.5F;
 
         RectangleF bounds = RectangleF.FromLTRB(
             MathF.Min(start.X, end.X),
@@ -91,7 +86,12 @@ internal static partial class DefaultRasterizer
             MathF.Max(start.X, end.X),
             MathF.Max(start.Y, end.Y));
 
-        RectangleF translatedBounds = InflateStrokeBounds(bounds, stroke);
+        RectangleF translatedBounds = InflateStrokeBounds(bounds, new StrokeStyle(pen));
+        if (!transform.IsIdentity)
+        {
+            translatedBounds = RectangleF.Transform(translatedBounds, transform);
+        }
+
         translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
 
         Rectangle geometryBounds = Rectangle.FromLTRB(
@@ -119,7 +119,7 @@ internal static partial class DefaultRasterizer
         }
 
         RasterizableBandInfo[] bandInfos = new RasterizableBandInfo[rowBandCount];
-        int estimatedLineCount = EstimateStrokeBandLineCount(start, end, in options);
+        int estimatedLineCount = EstimateStrokeBandLineCount(start, end);
         for (int i = 0; i < rowBandCount; i++)
         {
             int bandTop = (firstRowBandIndex + i) * PreferredRowHeight;
@@ -148,13 +148,14 @@ internal static partial class DefaultRasterizer
             new LineSegmentStrokeRasterData(
                 start,
                 end,
-                stroke,
+                new StrokeStyle(pen),
                 translateX,
                 translateY,
                 firstRowBandIndex,
                 rowBandCount,
                 samplingOffsetX,
-                samplingOffsetY));
+                samplingOffsetY,
+                transform));
     }
 
     /// <summary>
@@ -187,100 +188,257 @@ internal static partial class DefaultRasterizer
             return CreateLineSegmentStrokeRasterizableGeometry(points[0], points[1], pen, translateX, translateY, in options, transform, allocator);
         }
 
-        return CreateOutlineLoweredStrokeRasterizableGeometry(new Path(points), pen, translateX, translateY, in options, transform, allocator);
+        return CreateRetainedStrokeRasterizableGeometry(
+            LinearGeometry.CreateOpenPolyline(points),
+            new StrokeStyle(pen),
+            translateX,
+            translateY,
+            in options,
+            transform,
+            allocator);
     }
 
     /// <summary>
-    /// Lowers a stroked path to fill geometry, optionally applying the drawing transform during outline generation.
+    /// Expands one stroked centerline geometry once into retained per-band line storage.
     /// </summary>
-    /// <param name="path">The source path to stroke.</param>
-    /// <param name="pen">The stroke metadata.</param>
+    /// <param name="geometry">The retained stroke centerline geometry.</param>
+    /// <param name="stroke">The stroke style.</param>
     /// <param name="translateX">The destination-space X translation applied at composition time.</param>
     /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
     /// <param name="options">The rasterizer options used for the retained bands.</param>
     /// <param name="transform">The drawing transform applied after stroke expansion.</param>
     /// <param name="allocator">The allocator used for retained raster storage.</param>
     /// <returns>The retained stroke rasterizable geometry, or <see langword="null"/> when the stroke produces no coverage.</returns>
-    private static StrokeRasterizableGeometry? CreateOutlineLoweredStrokeRasterizableGeometry(
-        IPath path,
-        Pen pen,
+    private static StrokeRasterizableGeometry? CreateRetainedStrokeRasterizableGeometry(
+        LinearGeometry geometry,
+        in StrokeStyle stroke,
         int translateX,
         int translateY,
         in RasterizerOptions options,
         Matrix4x4 transform,
         MemoryAllocator allocator)
     {
-        if (pen.StrokeWidth <= 0F)
+        if (geometry.Info.PointCount == 0)
         {
             return null;
         }
 
-        LinearGeometry geometry;
-        if (transform.IsIdentity)
+        float samplingOffsetX = 0.5F;
+        float samplingOffsetY = 0.5F;
+
+        RectangleF translatedBounds = InflateStrokeBounds(geometry.Info.Bounds, stroke);
+        if (!transform.IsIdentity)
         {
-            // With no drawing transform we can lower the stroke directly in source space.
-            geometry = pen.StrokePattern.Length >= 2
-                ? path.GenerateOutline(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokeOptions).ToLinearGeometry()
-                : StrokedShapeGenerator.GenerateStrokedGeometry(path, pen.StrokeWidth, pen.StrokeOptions);
-        }
-        else
-        {
-            // Keep the stroke-then-transform invariant by applying the drawing transform as part
-            // of outline generation instead of transforming the centerline ahead of stroking.
-            geometry = pen.StrokePattern.Length >= 2
-                ? path.GenerateOutline(pen.StrokeWidth, pen.StrokePattern.Span, pen.StrokeOptions).ToLinearGeometry(transform)
-                : StrokedShapeGenerator.GenerateStrokedGeometry(path, pen.StrokeWidth, pen.StrokeOptions, transform);
+            translatedBounds = RectangleF.Transform(translatedBounds, transform);
         }
 
-        RasterizableGeometry? rasterizable = CreateRasterizableGeometry(
+        translatedBounds.Offset(translateX + samplingOffsetX, translateY + samplingOffsetY);
+
+        Rectangle geometryBounds = Rectangle.FromLTRB(
+            (int)MathF.Floor(translatedBounds.Left),
+            (int)MathF.Floor(translatedBounds.Top),
+            (int)MathF.Ceiling(translatedBounds.Right) + 1,
+            (int)MathF.Ceiling(translatedBounds.Bottom) + 1);
+
+        Rectangle clippedBounds = Rectangle.Intersect(geometryBounds, options.Interest);
+        if (clippedBounds.Width <= 0 || clippedBounds.Height <= 0)
+        {
+            return null;
+        }
+
+        int width = clippedBounds.Width;
+        int height = clippedBounds.Height;
+        int firstRowBandIndex = clippedBounds.Top / PreferredRowHeight;
+        int lastRowBandIndex = (clippedBounds.Bottom - 1) / PreferredRowHeight;
+        int rowBandCount = lastRowBandIndex - firstRowBandIndex + 1;
+        int wordsPerRow = BitVectorsForMaxBitCount(width);
+        int coverStride = checked(width << 1);
+
+        if (wordsPerRow <= 0 || coverStride <= 0)
+        {
+            ThrowInterestBoundsTooLarge();
+        }
+
+        if (width < 128)
+        {
+            StrokeLinearizerX16Y16 linearizer = new(
+                geometry,
+                stroke,
+                translateX,
+                translateY,
+                clippedBounds.Left,
+                clippedBounds.Top,
+                width,
+                height,
+                firstRowBandIndex,
+                rowBandCount,
+                samplingOffsetX,
+                samplingOffsetY,
+                transform,
+                allocator);
+
+            if (!linearizer.TryProcess(out LinearizedRasterData<LineArrayX16Y16Block> result))
+            {
+                return null;
+            }
+
+            return CreateRetainedStrokeRasterizableGeometry(
+                firstRowBandIndex,
+                rowBandCount,
+                width,
+                wordsPerRow,
+                coverStride,
+                clippedBounds.Left,
+                options,
+                result);
+        }
+
+        StrokeLinearizerX32Y16 wideLinearizer = new(
             geometry,
+            stroke,
             translateX,
             translateY,
-            options,
+            clippedBounds.Left,
+            clippedBounds.Top,
+            width,
+            height,
+            firstRowBandIndex,
+            rowBandCount,
+            samplingOffsetX,
+            samplingOffsetY,
+            transform,
             allocator);
 
-        if (rasterizable is null)
+        if (!wideLinearizer.TryProcess(out LinearizedRasterData<LineArrayX32Y16Block> wideResult))
         {
             return null;
         }
 
-        RasterizableBandInfo[] bandInfos = new RasterizableBandInfo[rasterizable.RowBandCount];
-        for (int i = 0; i < bandInfos.Length; i++)
-        {
-            bandInfos[i] = rasterizable.GetBandInfo(i);
-        }
-
-        return new StrokeRasterizableGeometry(
-            rasterizable.FirstRowBandIndex,
-            rasterizable.RowBandCount,
-            rasterizable.Width,
-            rasterizable.WordsPerRow,
-            rasterizable.CoverStride,
-            rasterizable.BandHeight,
-            bandInfos,
-            new OutlineStrokeRasterData(rasterizable),
-            rasterizable);
+        return CreateRetainedStrokeRasterizableGeometry(
+            firstRowBandIndex,
+            rowBandCount,
+            width,
+            wordsPerRow,
+            coverStride,
+            clippedBounds.Left,
+            options,
+            wideResult);
     }
 
     /// <summary>
-    /// Returns the conservative retained line count used for scene statistics and scheduling heuristics.
+    /// Wraps finalized retained stroke line storage in the normal stroke rasterizable payload.
     /// </summary>
-    /// <param name="geometry">The lowered stroke geometry.</param>
-    /// <param name="pen">The stroke metadata.</param>
-    /// <param name="options">The rasterizer options used for the retained bands.</param>
-    /// <returns>The estimated retained line count for the stroke.</returns>
-    private static int EstimateStrokeBandLineCount(LinearGeometry geometry, Pen pen, in RasterizerOptions options)
+    private static StrokeRasterizableGeometry CreateRetainedStrokeRasterizableGeometry(
+        int firstRowBandIndex,
+        int rowBandCount,
+        int width,
+        int wordsPerRow,
+        int coverStride,
+        int destinationLeft,
+        in RasterizerOptions options,
+        LinearizedRasterData<LineArrayX16Y16Block> result)
     {
-        if (geometry.Info.PointCount == 0 || pen.StrokeWidth <= 0F)
+        RasterizableBandInfo[] bandInfos = new RasterizableBandInfo[rowBandCount];
+        for (int i = 0; i < rowBandCount; i++)
         {
-            return 0;
+            int bandTop = (firstRowBandIndex + i) * PreferredRowHeight;
+            bool hasStartCovers = result.StartCoverTable[i] is not null;
+            bandInfos[i] = new RasterizableBandInfo(
+                CountLines(result.Lines[i], result.FirstBlockLineCounts[i]),
+                PreferredRowHeight,
+                width,
+                wordsPerRow,
+                coverStride,
+                destinationLeft,
+                bandTop,
+                options.IntersectionRule,
+                options.RasterizationMode,
+                options.AntialiasThreshold,
+                hasStartCovers);
         }
 
-        int segmentCount = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter
-            ? geometry.Info.NonHorizontalSegmentCountPixelCenter
-            : geometry.Info.NonHorizontalSegmentCountPixelBoundary;
+        RasterizableGeometry retained = new(
+            firstRowBandIndex,
+            rowBandCount,
+            width,
+            wordsPerRow,
+            coverStride,
+            PreferredRowHeight,
+            isX16: true,
+            bandInfos,
+            result.Lines,
+            null,
+            result.FirstBlockLineCounts,
+            result.StartCoverTable);
 
-        return Math.Max(segmentCount * 4, 1);
+        return new StrokeRasterizableGeometry(
+            retained.FirstRowBandIndex,
+            retained.RowBandCount,
+            retained.Width,
+            retained.WordsPerRow,
+            retained.CoverStride,
+            retained.BandHeight,
+            bandInfos,
+            new RetainedStrokeRasterData(retained),
+            retained);
+    }
+
+    /// <summary>
+    /// Wraps finalized retained wide stroke line storage in the normal stroke rasterizable payload.
+    /// </summary>
+    private static StrokeRasterizableGeometry CreateRetainedStrokeRasterizableGeometry(
+        int firstRowBandIndex,
+        int rowBandCount,
+        int width,
+        int wordsPerRow,
+        int coverStride,
+        int destinationLeft,
+        in RasterizerOptions options,
+        LinearizedRasterData<LineArrayX32Y16Block> result)
+    {
+        RasterizableBandInfo[] bandInfos = new RasterizableBandInfo[rowBandCount];
+        for (int i = 0; i < rowBandCount; i++)
+        {
+            int bandTop = (firstRowBandIndex + i) * PreferredRowHeight;
+            bool hasStartCovers = result.StartCoverTable[i] is not null;
+            bandInfos[i] = new RasterizableBandInfo(
+                CountLines(result.Lines[i], result.FirstBlockLineCounts[i]),
+                PreferredRowHeight,
+                width,
+                wordsPerRow,
+                coverStride,
+                destinationLeft,
+                bandTop,
+                options.IntersectionRule,
+                options.RasterizationMode,
+                options.AntialiasThreshold,
+                hasStartCovers);
+        }
+
+        RasterizableGeometry retained = new(
+            firstRowBandIndex,
+            rowBandCount,
+            width,
+            wordsPerRow,
+            coverStride,
+            PreferredRowHeight,
+            isX16: false,
+            bandInfos,
+            null,
+            result.Lines,
+            result.FirstBlockLineCounts,
+            result.StartCoverTable);
+
+        return new StrokeRasterizableGeometry(
+            retained.FirstRowBandIndex,
+            retained.RowBandCount,
+            retained.Width,
+            retained.WordsPerRow,
+            retained.CoverStride,
+            retained.BandHeight,
+            bandInfos,
+            new RetainedStrokeRasterData(retained),
+            retained);
     }
 
     /// <summary>
@@ -288,33 +446,11 @@ internal static partial class DefaultRasterizer
     /// </summary>
     /// <param name="start">The stroke start point.</param>
     /// <param name="end">The stroke end point.</param>
-    /// <param name="options">The rasterizer options used for the retained bands.</param>
     /// <returns>The estimated retained line count for the stroke.</returns>
-    private static int EstimateStrokeBandLineCount(PointF start, PointF end, in RasterizerOptions options)
+    private static int EstimateStrokeBandLineCount(PointF start, PointF end)
     {
-        float samplingOffset = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
+        float samplingOffset = 0.5F;
         int segmentCount = (int)MathF.Floor(start.Y + samplingOffset) != (int)MathF.Floor(end.Y + samplingOffset) ? 1 : 0;
-        return Math.Max(segmentCount * 4, 1);
-    }
-
-    /// <summary>
-    /// Returns the conservative retained line count used for one explicit open polyline.
-    /// </summary>
-    /// <param name="points">The explicit polyline points.</param>
-    /// <param name="options">The rasterizer options used for the retained bands.</param>
-    /// <returns>The estimated retained line count for the stroke.</returns>
-    private static int EstimateStrokeBandLineCount(PointF[] points, in RasterizerOptions options)
-    {
-        float samplingOffset = options.SamplingOrigin == RasterizerSamplingOrigin.PixelCenter ? 0.5F : 0F;
-        int segmentCount = 0;
-        for (int i = 1; i < points.Length; i++)
-        {
-            if ((int)MathF.Floor(points[i - 1].Y + samplingOffset) != (int)MathF.Floor(points[i].Y + samplingOffset))
-            {
-                segmentCount++;
-            }
-        }
-
         return Math.Max(segmentCount * 4, 1);
     }
 
@@ -324,14 +460,20 @@ internal static partial class DefaultRasterizer
     /// <param name="bounds">The centerline bounds.</param>
     /// <param name="stroke">The stroke style used for inflation.</param>
     /// <returns>The inflated stroke bounds.</returns>
-    private static RectangleF InflateStrokeBounds(RectangleF bounds, StrokeStyle stroke)
+    private static RectangleF InflateStrokeBounds(RectangleF bounds, in StrokeStyle stroke)
     {
-        float inflate = stroke.LineJoin switch
+        float joinInflate = stroke.LineJoin switch
         {
             LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound
-                => stroke.HalfWidth * (float)Math.Max(stroke.MiterLimit, 1D),
+            => stroke.HalfWidth * (float)Math.Max(stroke.MiterLimit, 1D),
             _ => stroke.HalfWidth
         };
+
+        float capInflate = stroke.LineCap == LineCap.Square
+            ? stroke.HalfWidth * MathF.Sqrt(2F)
+            : stroke.HalfWidth;
+
+        float inflate = MathF.Max(joinInflate, capInflate);
 
         bounds.Inflate(new SizeF(inflate, inflate));
         return bounds;
@@ -352,6 +494,7 @@ internal static partial class DefaultRasterizer
         /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
+        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         protected StrokeRasterData(
             StrokeStyle stroke,
             int translateX,
@@ -359,7 +502,8 @@ internal static partial class DefaultRasterizer
             int firstBandIndex,
             int rowBandCount,
             float samplingOffsetX,
-            float samplingOffsetY)
+            float samplingOffsetY,
+            Matrix4x4 transform)
         {
             this.Stroke = stroke;
             this.TranslateX = translateX;
@@ -368,6 +512,7 @@ internal static partial class DefaultRasterizer
             this.RowBandCount = rowBandCount;
             this.SamplingOffsetX = samplingOffsetX;
             this.SamplingOffsetY = samplingOffsetY;
+            this.Transform = transform;
         }
 
         public StrokeStyle Stroke { get; }
@@ -402,6 +547,11 @@ internal static partial class DefaultRasterizer
         /// </summary>
         public float SamplingOffsetY { get; }
 
+        /// <summary>
+        /// Gets the drawing transform applied after stroke expansion.
+        /// </summary>
+        public Matrix4x4 Transform { get; }
+
         public virtual bool RequiresBandCoverage => false;
 
         /// <summary>
@@ -423,72 +573,6 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
-    /// Retained stroke source data for flattened path geometry.
-    /// </summary>
-    internal sealed class PathStrokeRasterData : StrokeRasterData
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PathStrokeRasterData"/> class.
-        /// </summary>
-        /// <param name="geometry">The retained stroke centerline geometry.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
-        /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        public PathStrokeRasterData(
-            LinearGeometry geometry,
-            StrokeStyle stroke,
-            int translateX,
-            int translateY,
-            int firstBandIndex,
-            int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY)
-            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY)
-            => this.Geometry = geometry;
-
-        /// <summary>
-        /// Gets the retained stroke centerline geometry.
-        /// </summary>
-        public LinearGeometry Geometry { get; }
-
-        public override bool RequiresBandCoverage => true;
-
-        /// <inheritdoc/>
-        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        /// <param name="bandInfo">The retained band metadata.</param>
-        /// <param name="scanline">The reusable scanline scratch buffer.</param>
-        /// <param name="strokeBandCoverage">The reusable per-band stroke coverage scratch buffer.</param>
-        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-        public override void ExecuteBand<TRowHandler>(
-            ref Context context,
-            in RasterizableBandInfo bandInfo,
-            Span<float> scanline,
-            Span<float> strokeBandCoverage,
-            ref TRowHandler rowHandler)
-        {
-            DirectMultiSegmentBandRasterizer rasterizer = new DirectMultiSegmentBandRasterizer(
-                this.Geometry,
-                this.Stroke,
-                this.TranslateX,
-                this.TranslateY,
-                bandInfo.DestinationLeft,
-                bandInfo.DestinationTop,
-                bandInfo.Width,
-                bandInfo.BandHeight,
-                this.SamplingOffsetX,
-                this.SamplingOffsetY)
-                .WithRasterizationMode(bandInfo.RasterizationMode, bandInfo.AntialiasThreshold);
-
-            rasterizer.Rasterize(strokeBandCoverage, scanline, ref rowHandler);
-        }
-    }
-
-    /// <summary>
     /// Retained stroke source data for one explicit two-point line segment.
     /// </summary>
     internal sealed class LineSegmentStrokeRasterData : StrokeRasterData
@@ -505,6 +589,7 @@ internal static partial class DefaultRasterizer
         /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
+        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         public LineSegmentStrokeRasterData(
             PointF start,
             PointF end,
@@ -514,8 +599,9 @@ internal static partial class DefaultRasterizer
             int firstBandIndex,
             int rowBandCount,
             float samplingOffsetX,
-            float samplingOffsetY)
-            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY)
+            float samplingOffsetY,
+            Matrix4x4 transform)
+            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY, transform)
         {
             this.Start = start;
             this.End = end;
@@ -552,6 +638,7 @@ internal static partial class DefaultRasterizer
                 this.TranslateY,
                 this.SamplingOffsetX,
                 this.SamplingOffsetY,
+                this.Transform,
                 in bandInfo,
                 scanline,
                 ref rowHandler);
@@ -560,14 +647,14 @@ internal static partial class DefaultRasterizer
     /// <summary>
     /// Retained stroke source data backed by one-time outline linearization.
     /// </summary>
-    internal sealed class OutlineStrokeRasterData : StrokeRasterData
+    internal sealed class RetainedStrokeRasterData : StrokeRasterData
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="OutlineStrokeRasterData"/> class.
+        /// Initializes a new instance of the <see cref="RetainedStrokeRasterData"/> class.
         /// </summary>
-        /// <param name="outline">The retained fill-style raster payload for the stroked outline.</param>
-        public OutlineStrokeRasterData(RasterizableGeometry outline)
-            : base(default, 0, 0, outline.FirstRowBandIndex, outline.RowBandCount, 0F, 0F)
+        /// <param name="outline">The retained fill-style raster payload replayed for the stroke.</param>
+        public RetainedStrokeRasterData(RasterizableGeometry outline)
+            : base(default, 0, 0, outline.FirstRowBandIndex, outline.RowBandCount, 0F, 0F, Matrix4x4.Identity)
             => this.Outline = outline;
 
         /// <summary>
@@ -605,72 +692,6 @@ internal static partial class DefaultRasterizer
 
             context.EmitCoverageRows(bandInfo.DestinationTop, bandInfo.DestinationLeft, scanline, ref rowHandler);
             context.ResetTouchedRows();
-        }
-    }
-
-    /// <summary>
-    /// Retained stroke source data for one explicit open polyline.
-    /// </summary>
-    internal sealed class PolylineStrokeRasterData : StrokeRasterData
-    {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="PolylineStrokeRasterData"/> class.
-        /// </summary>
-        /// <param name="points">The retained polyline points.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="firstBandIndex">The first retained row-band index touched by the stroke.</param>
-        /// <param name="rowBandCount">The number of retained row bands touched by the stroke.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        public PolylineStrokeRasterData(
-            PointF[] points,
-            StrokeStyle stroke,
-            int translateX,
-            int translateY,
-            int firstBandIndex,
-            int rowBandCount,
-            float samplingOffsetX,
-            float samplingOffsetY)
-            : base(stroke, translateX, translateY, firstBandIndex, rowBandCount, samplingOffsetX, samplingOffsetY)
-            => this.Points = points;
-
-        /// <summary>
-        /// Gets the retained polyline points.
-        /// </summary>
-        public PointF[] Points { get; }
-
-        public override bool RequiresBandCoverage => true;
-
-        /// <inheritdoc/>
-        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        /// <param name="bandInfo">The retained band metadata.</param>
-        /// <param name="scanline">The reusable scanline scratch buffer.</param>
-        /// <param name="strokeBandCoverage">The reusable per-band stroke coverage scratch buffer.</param>
-        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-        public override void ExecuteBand<TRowHandler>(
-            ref Context context,
-            in RasterizableBandInfo bandInfo,
-            Span<float> scanline,
-            Span<float> strokeBandCoverage,
-            ref TRowHandler rowHandler)
-        {
-            DirectMultiSegmentBandRasterizer rasterizer = new DirectMultiSegmentBandRasterizer(
-                this.Points,
-                this.Stroke,
-                this.TranslateX,
-                this.TranslateY,
-                bandInfo.DestinationLeft,
-                bandInfo.DestinationTop,
-                bandInfo.Width,
-                bandInfo.BandHeight,
-                this.SamplingOffsetX,
-                this.SamplingOffsetY)
-                .WithRasterizationMode(bandInfo.RasterizationMode, bandInfo.AntialiasThreshold);
-
-            rasterizer.Rasterize(strokeBandCoverage, scanline, ref rowHandler);
         }
     }
 
@@ -794,7 +815,10 @@ internal static partial class DefaultRasterizer
     {
         private readonly Vector2 start;
         private readonly Vector2 end;
+        private readonly Vector2 translation;
         private readonly StrokeStyle stroke;
+        private readonly Matrix4x4 transform;
+        private readonly bool hasTransform;
         private readonly int width;
         private readonly int height;
         private readonly int destinationLeft;
@@ -812,6 +836,7 @@ internal static partial class DefaultRasterizer
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
+        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         /// <param name="bandInfo">The retained band metadata.</param>
         private DirectLineSegmentBandRasterizer(
             PointF start,
@@ -821,20 +846,18 @@ internal static partial class DefaultRasterizer
             int translateY,
             float samplingOffsetX,
             float samplingOffsetY,
+            Matrix4x4 transform,
             in RasterizableBandInfo bandInfo)
         {
-            Vector2 translation = new(
+            this.translation = new(
                 (translateX - bandInfo.DestinationLeft) + samplingOffsetX,
                 (translateY - bandInfo.DestinationTop) + samplingOffsetY);
 
-            // This direct path works entirely from the stored segment endpoints. Any drawing
-            // transform must already have been handled before this rasterizer is constructed;
-            // the hot path here only remaps into band-local coordinates.
-            Vector2 translatedStart = start;
-            Vector2 translatedEnd = end;
-            this.start = translatedStart + translation;
-            this.end = translatedEnd + translation;
+            this.start = start;
+            this.end = end;
             this.stroke = stroke;
+            this.transform = transform;
+            this.hasTransform = !transform.IsIdentity;
             this.width = bandInfo.Width;
             this.height = bandInfo.BandHeight;
             this.destinationLeft = bandInfo.DestinationLeft;
@@ -854,6 +877,7 @@ internal static partial class DefaultRasterizer
         /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
         /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
         /// <param name="samplingOffsetY">The vertical sampling offset.</param>
+        /// <param name="transform">The drawing transform applied after stroke expansion.</param>
         /// <param name="bandInfo">The retained band metadata.</param>
         /// <param name="scanline">The reusable scanline scratch buffer.</param>
         /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
@@ -865,6 +889,7 @@ internal static partial class DefaultRasterizer
             int translateY,
             float samplingOffsetX,
             float samplingOffsetY,
+            Matrix4x4 transform,
             in RasterizableBandInfo bandInfo,
             Span<float> scanline,
             ref TRowHandler rowHandler)
@@ -877,6 +902,7 @@ internal static partial class DefaultRasterizer
                 translateY,
                 samplingOffsetX,
                 samplingOffsetY,
+                transform,
                 in bandInfo).Rasterize(scanline, ref rowHandler);
 
         /// <summary>
@@ -893,25 +919,87 @@ internal static partial class DefaultRasterizer
                 return;
             }
 
-            PointF translatedStart = this.start;
-            PointF translatedEnd = this.end;
+            if (this.hasTransform)
+            {
+                this.RasterizeTransformed(scanline, ref rowHandler);
+                return;
+            }
+
+            Vector2 translatedStart = this.start + this.translation;
+            Vector2 translatedEnd = this.end + this.translation;
             if (!TryGetDirection(translatedStart, translatedEnd, out Vector2 tangent, out _))
             {
-                this.RasterizePointLike(this.start, scanline, ref rowHandler);
+                this.RasterizePointLike(translatedStart, scanline, ref rowHandler);
                 return;
             }
 
             float halfWidth = this.stroke.HalfWidth;
-            Vector2 normal = GetLeftNormal(tangent) * halfWidth;
+            Vector2 normal = GetStrokeOffsetNormal(tangent) * halfWidth;
+            Vector2 extension = this.stroke.LineCap == LineCap.Square ? tangent * halfWidth : Vector2.Zero;
+            Vector2 p0 = translatedStart + normal - extension;
+            Vector2 p1 = translatedEnd + normal + extension;
+            Vector2 p2 = translatedEnd - normal + extension;
+            Vector2 p3 = translatedStart - normal - extension;
+
+            for (int row = 0; row < this.height; row++)
+            {
+                this.EmitLineCoverageRow(row, p0, p1, p2, p3, scanline, ref rowHandler);
+            }
+        }
+
+        /// <summary>
+        /// Rasterizes the stored segment after applying the drawing transform to the stroked segment geometry.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
+        private void RasterizeTransformed<TRowHandler>(Span<float> scanline, ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
+        {
+            if (!TryGetDirection(this.start, this.end, out Vector2 tangent, out _))
+            {
+                this.RasterizeTransformedPointLike(scanline, ref rowHandler);
+                return;
+            }
+
+            float halfWidth = this.stroke.HalfWidth;
+            Vector2 normal = GetStrokeOffsetNormal(tangent) * halfWidth;
             Vector2 extension = this.stroke.LineCap == LineCap.Square ? tangent * halfWidth : Vector2.Zero;
             Vector2 p0 = this.start + normal - extension;
             Vector2 p1 = this.end + normal + extension;
             Vector2 p2 = this.end - normal + extension;
             Vector2 p3 = this.start - normal - extension;
 
+            if (this.stroke.LineCap != LineCap.Round)
+            {
+                Vector2[] polygon =
+                [
+                    this.TransformAndTranslate(p0),
+                    this.TransformAndTranslate(p1),
+                    this.TransformAndTranslate(p2),
+                    this.TransformAndTranslate(p3)
+                ];
+
+                for (int row = 0; row < this.height; row++)
+                {
+                    this.EmitPolygonCoverageRow(row, polygon, scanline, ref rowHandler);
+                }
+
+                return;
+            }
+
+            int capSubdivisionCount = GetArcSubdivisionCount(halfWidth, Math.PI, this.stroke.ArcDetailScale);
+            Vector2[] contourPoints = new Vector2[4 + (capSubdivisionCount * 2)];
+            int contourPointCount = 0;
+            contourPoints[contourPointCount++] = this.TransformAndTranslate(p0);
+            contourPoints[contourPointCount++] = this.TransformAndTranslate(p1);
+            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, this.end, normal, -normal, includeEndpoint: true);
+            contourPoints[contourPointCount++] = this.TransformAndTranslate(p3);
+            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, this.start, -normal, normal, includeEndpoint: false);
+
             for (int row = 0; row < this.height; row++)
             {
-                this.EmitLineCoverageRow(row, p0, p1, p2, p3, scanline, ref rowHandler);
+                this.EmitPolygonCoverageRow(row, contourPoints.AsSpan(0, contourPointCount), scanline, ref rowHandler);
             }
         }
 
@@ -1203,6 +1291,175 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
+        /// Rasterizes a transformed point-like stroke footprint as a transformed convex polygon.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
+        private void RasterizeTransformedPointLike<TRowHandler>(Span<float> scanline, ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
+        {
+            Vector2 center = this.start;
+            float halfWidth = this.stroke.HalfWidth;
+
+            if (this.stroke.LineCap != LineCap.Round)
+            {
+                Vector2[] polygon =
+                [
+                    this.TransformAndTranslate(center + new Vector2(-halfWidth, -halfWidth)),
+                    this.TransformAndTranslate(center + new Vector2(halfWidth, -halfWidth)),
+                    this.TransformAndTranslate(center + new Vector2(halfWidth, halfWidth)),
+                    this.TransformAndTranslate(center + new Vector2(-halfWidth, halfWidth))
+                ];
+
+                for (int row = 0; row < this.height; row++)
+                {
+                    this.EmitPolygonCoverageRow(row, polygon, scanline, ref rowHandler);
+                }
+
+                return;
+            }
+
+            Vector2 startOffset = new(halfWidth, 0F);
+            int arcSubdivisionCount = GetArcSubdivisionCount(halfWidth, Math.PI, this.stroke.ArcDetailScale);
+            Vector2[] contourPoints = new Vector2[2 + (arcSubdivisionCount * 2)];
+            int contourPointCount = 0;
+            contourPoints[contourPointCount++] = this.TransformAndTranslate(center + startOffset);
+            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, center, startOffset, -startOffset, includeEndpoint: true);
+            this.AppendTransformedArcPoints(contourPoints, ref contourPointCount, center, -startOffset, startOffset, includeEndpoint: false);
+
+            for (int row = 0; row < this.height; row++)
+            {
+                this.EmitPolygonCoverageRow(row, contourPoints.AsSpan(0, contourPointCount), scanline, ref rowHandler);
+            }
+        }
+
+        /// <summary>
+        /// Computes and emits one raster row for a transformed convex stroke contour.
+        /// </summary>
+        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
+        /// <param name="row">The band-local row index.</param>
+        /// <param name="polygonPoints">The transformed contour points.</param>
+        /// <param name="scanline">The reusable scanline scratch buffer.</param>
+        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
+        private void EmitPolygonCoverageRow<TRowHandler>(
+            int row,
+            ReadOnlySpan<Vector2> polygonPoints,
+            Span<float> scanline,
+            ref TRowHandler rowHandler)
+            where TRowHandler : struct, IRasterizerCoverageRowHandler
+        {
+            float globalLeft = float.PositiveInfinity;
+            float globalRight = float.NegativeInfinity;
+            int sampleCount = 0;
+
+            for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
+            {
+                float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
+                if (!TryGetPolygonIntervalAtY(polygonPoints, sampleY, out float left, out float right))
+                {
+                    continue;
+                }
+
+                globalLeft = MathF.Min(globalLeft, left);
+                globalRight = MathF.Max(globalRight, right);
+                sampleCount++;
+            }
+
+            if (sampleCount == 0)
+            {
+                return;
+            }
+
+            int startColumn = Math.Max(0, (int)MathF.Floor(globalLeft));
+            int endColumn = Math.Min(this.width, (int)MathF.Ceiling(globalRight));
+            if (endColumn <= startColumn)
+            {
+                return;
+            }
+
+            Span<float> rowCoverage = scanline[startColumn..endColumn];
+            rowCoverage.Clear();
+
+            float sampleWeight = 1F / DirectStrokeVerticalSampleCount;
+            for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
+            {
+                float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
+                if (TryGetPolygonIntervalAtY(polygonPoints, sampleY, out float left, out float right))
+                {
+                    AccumulateIntervalCoverage(rowCoverage, startColumn, left, right, sampleWeight);
+                }
+            }
+
+            this.FinalizeCoverageRow(row, startColumn, rowCoverage, ref rowHandler);
+        }
+
+        /// <summary>
+        /// Applies the stored drawing transform and destination translation to one stroke boundary point.
+        /// </summary>
+        /// <param name="point">The stroke-local boundary point.</param>
+        /// <returns>The transformed band-local point.</returns>
+        private Vector2 TransformAndTranslate(Vector2 point)
+            => (Vector2)PointF.Transform((PointF)point, this.transform) + this.translation;
+
+        /// <summary>
+        /// Appends transformed arc points to the supplied contour point buffer.
+        /// </summary>
+        /// <param name="contourPoints">The destination contour point buffer.</param>
+        /// <param name="contourPointCount">The running contour point count.</param>
+        /// <param name="center">The arc center.</param>
+        /// <param name="fromOffset">The start offset from the center.</param>
+        /// <param name="toOffset">The end offset from the center.</param>
+        /// <param name="includeEndpoint">Indicates whether to append the arc endpoint.</param>
+        private void AppendTransformedArcPoints(
+            Span<Vector2> contourPoints,
+            ref int contourPointCount,
+            Vector2 center,
+            Vector2 fromOffset,
+            Vector2 toOffset,
+            bool includeEndpoint)
+        {
+            if (fromOffset == Vector2.Zero || toOffset == Vector2.Zero)
+            {
+                if (includeEndpoint)
+                {
+                    contourPoints[contourPointCount++] = this.TransformAndTranslate(center + toOffset);
+                }
+
+                return;
+            }
+
+            float radius = fromOffset.Length();
+            if (radius <= StrokeDirectionEpsilon)
+            {
+                if (includeEndpoint)
+                {
+                    contourPoints[contourPointCount++] = this.TransformAndTranslate(center + toOffset);
+                }
+
+                return;
+            }
+
+            double startAngle = Math.Atan2(fromOffset.Y, fromOffset.X);
+            double endAngle = Math.Atan2(toOffset.Y, toOffset.X);
+            double sweep = NormalizePositiveAngle(endAngle - startAngle);
+            int subdivisionCount = GetArcSubdivisionCount(radius, sweep, this.stroke.ArcDetailScale);
+            double step = sweep / (subdivisionCount + 1);
+
+            for (int i = 1; i <= subdivisionCount; i++)
+            {
+                float angle = (float)(startAngle + (step * i));
+                contourPoints[contourPointCount++] = this.TransformAndTranslate(
+                    center + new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius));
+            }
+
+            if (includeEndpoint)
+            {
+                contourPoints[contourPointCount++] = this.TransformAndTranslate(center + toOffset);
+            }
+        }
+
+        /// <summary>
         /// Applies the selected rasterization mode and emits the non-zero runs for one row.
         /// </summary>
         /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
@@ -1414,6 +1671,35 @@ internal static partial class DefaultRasterizer
         }
 
         /// <summary>
+        /// Intersects a horizontal sample line with a convex polygon.
+        /// </summary>
+        /// <param name="polygonPoints">The convex polygon points in contour order.</param>
+        /// <param name="sampleY">The sample row in band-local coordinates.</param>
+        /// <param name="intervalLeft">Receives the left intersection bound.</param>
+        /// <param name="intervalRight">Receives the right intersection bound.</param>
+        /// <returns><see langword="true"/> when the sample intersects the polygon.</returns>
+        private static bool TryGetPolygonIntervalAtY(
+            ReadOnlySpan<Vector2> polygonPoints,
+            float sampleY,
+            out float intervalLeft,
+            out float intervalRight)
+        {
+            intervalLeft = float.PositiveInfinity;
+            intervalRight = float.NegativeInfinity;
+            bool hasIntersection = false;
+
+            Vector2 previousPoint = polygonPoints[^1];
+            for (int i = 0; i < polygonPoints.Length; i++)
+            {
+                Vector2 point = polygonPoints[i];
+                AppendEdgeInterval(previousPoint, point, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
+                previousPoint = point;
+            }
+
+            return hasIntersection && intervalRight > intervalLeft;
+        }
+
+        /// <summary>
         /// Expands the current sample interval bounds with one polygon edge intersection.
         /// </summary>
         /// <param name="start">The edge start point.</param>
@@ -1454,3626 +1740,6 @@ internal static partial class DefaultRasterizer
     }
 
     /// <summary>
-    /// Direct execution-time rasterizer for one stroked path or explicit polyline.
-    /// </summary>
-    private readonly struct DirectMultiSegmentBandRasterizer
-    {
-        private readonly LinearGeometry? geometry;
-        private readonly PointF[]? polylinePoints;
-        private readonly StrokeStyle stroke;
-        private readonly float translateX;
-        private readonly float translateY;
-        private readonly int width;
-        private readonly int height;
-        private readonly int destinationLeft;
-        private readonly int destinationTop;
-        private readonly RasterizationMode rasterizationMode;
-        private readonly float antialiasThreshold;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DirectMultiSegmentBandRasterizer"/> struct.
-        /// </summary>
-        /// <param name="geometry">The flattened centerline geometry.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="destinationLeft">The destination-space band left edge.</param>
-        /// <param name="destinationTop">The destination-space band top edge.</param>
-        /// <param name="width">The band width in pixels.</param>
-        /// <param name="height">The band height in pixels.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        public DirectMultiSegmentBandRasterizer(
-            LinearGeometry geometry,
-            StrokeStyle stroke,
-            int translateX,
-            int translateY,
-            int destinationLeft,
-            int destinationTop,
-            int width,
-            int height,
-            float samplingOffsetX,
-            float samplingOffsetY)
-        {
-            this.geometry = geometry;
-            this.polylinePoints = null;
-            this.stroke = stroke;
-            this.translateX = (translateX - destinationLeft) + samplingOffsetX;
-            this.translateY = (translateY - destinationTop) + samplingOffsetY;
-            this.width = width;
-            this.height = height;
-            this.destinationLeft = destinationLeft;
-            this.destinationTop = destinationTop;
-            this.rasterizationMode = RasterizationMode.Antialiased;
-            this.antialiasThreshold = 0F;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DirectMultiSegmentBandRasterizer"/> struct.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="destinationLeft">The destination-space band left edge.</param>
-        /// <param name="destinationTop">The destination-space band top edge.</param>
-        /// <param name="width">The band width in pixels.</param>
-        /// <param name="height">The band height in pixels.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        public DirectMultiSegmentBandRasterizer(
-            PointF[] points,
-            StrokeStyle stroke,
-            int translateX,
-            int translateY,
-            int destinationLeft,
-            int destinationTop,
-            int width,
-            int height,
-            float samplingOffsetX,
-            float samplingOffsetY)
-        {
-            this.geometry = null;
-            this.polylinePoints = points;
-            this.stroke = stroke;
-            this.translateX = (translateX - destinationLeft) + samplingOffsetX;
-            this.translateY = (translateY - destinationTop) + samplingOffsetY;
-            this.width = width;
-            this.height = height;
-            this.destinationLeft = destinationLeft;
-            this.destinationTop = destinationTop;
-            this.rasterizationMode = RasterizationMode.Antialiased;
-            this.antialiasThreshold = 0F;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DirectMultiSegmentBandRasterizer"/> struct.
-        /// </summary>
-        /// <param name="geometry">The flattened centerline geometry, if present.</param>
-        /// <param name="polylinePoints">The explicit polyline points, if present.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The band-local X translation.</param>
-        /// <param name="translateY">The band-local Y translation.</param>
-        /// <param name="destinationLeft">The destination-space band left edge.</param>
-        /// <param name="destinationTop">The destination-space band top edge.</param>
-        /// <param name="width">The band width in pixels.</param>
-        /// <param name="height">The band height in pixels.</param>
-        /// <param name="rasterizationMode">The rasterization mode.</param>
-        /// <param name="antialiasThreshold">The aliasing threshold used in aliased mode.</param>
-        private DirectMultiSegmentBandRasterizer(
-            LinearGeometry? geometry,
-            PointF[]? polylinePoints,
-            StrokeStyle stroke,
-            float translateX,
-            float translateY,
-            int destinationLeft,
-            int destinationTop,
-            int width,
-            int height,
-            RasterizationMode rasterizationMode,
-            float antialiasThreshold)
-        {
-            this.geometry = geometry;
-            this.polylinePoints = polylinePoints;
-            this.stroke = stroke;
-            this.translateX = translateX;
-            this.translateY = translateY;
-            this.width = width;
-            this.height = height;
-            this.destinationLeft = destinationLeft;
-            this.destinationTop = destinationTop;
-            this.rasterizationMode = rasterizationMode;
-            this.antialiasThreshold = antialiasThreshold;
-        }
-
-        /// <summary>
-        /// Returns a copy configured for the requested rasterization mode.
-        /// </summary>
-        /// <param name="rasterizationMode">The rasterization mode.</param>
-        /// <param name="antialiasThreshold">The aliasing threshold used in aliased mode.</param>
-        /// <returns>A copy configured for the requested rasterization mode.</returns>
-        public DirectMultiSegmentBandRasterizer WithRasterizationMode(RasterizationMode rasterizationMode, float antialiasThreshold)
-            => new(
-                this.geometry,
-                this.polylinePoints,
-                this.stroke,
-                this.translateX,
-                this.translateY,
-                this.destinationLeft,
-                this.destinationTop,
-                this.width,
-                this.height,
-                rasterizationMode,
-                antialiasThreshold);
-
-        /// <summary>
-        /// Rasterizes the stored multi-segment stroke into supersampled band coverage and emits row runs.
-        /// </summary>
-        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-        /// <param name="strokeBandCoverage">The reusable supersampled band coverage buffer.</param>
-        /// <param name="scanline">The reusable scanline scratch buffer.</param>
-        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-        public void Rasterize<TRowHandler>(Span<float> strokeBandCoverage, Span<float> scanline, ref TRowHandler rowHandler)
-            where TRowHandler : struct, IRasterizerCoverageRowHandler
-        {
-            if (this.stroke.Width <= 0F || this.width <= 0 || this.height <= 0)
-            {
-                return;
-            }
-
-            int requiredCoverageLength = checked(this.width * this.height * DirectStrokeVerticalSampleCount);
-            Span<float> coverage = strokeBandCoverage[..requiredCoverageLength];
-            coverage.Clear();
-
-            if (this.polylinePoints is PointF[] explicitPolyline)
-            {
-                this.AccumulateOpenPolyline(explicitPolyline, coverage);
-            }
-            else
-            {
-                this.AccumulateGeometry(coverage);
-            }
-
-            this.EmitCoverageRows(coverage, scanline, ref rowHandler);
-        }
-
-        /// <summary>
-        /// Accumulates stroke coverage for flattened centerline geometry.
-        /// </summary>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateGeometry(Span<float> coverage)
-        {
-            LinearGeometry sourceGeometry = this.geometry!;
-            for (int contourIndex = 0; contourIndex < sourceGeometry.Contours.Count; contourIndex++)
-            {
-                LinearContour contour = sourceGeometry.Contours[contourIndex];
-                if (contour.PointCount == 0)
-                {
-                    continue;
-                }
-
-                if (contour.IsClosed)
-                {
-                    this.AccumulateClosedContour(contour, coverage);
-                }
-                else
-                {
-                    this.AccumulateOpenContour(contour, coverage);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accumulates stroke coverage for an explicit open polyline.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateOpenPolyline(PointF[] points, Span<float> coverage)
-        {
-            int pointCount = DefaultRasterizer.GetDistinctPointCount(points);
-            if (pointCount == 0)
-            {
-                return;
-            }
-
-            if (pointCount == 1)
-            {
-                if (DefaultRasterizer.TryGetFirstDistinctPoint(points, out _, out PointF point))
-                {
-                    this.AccumulatePointLike(point, coverage);
-                }
-
-                return;
-            }
-
-            if (!DefaultRasterizer.TryGetFirstDistinctPoint(points, out int firstIndex, out PointF firstPoint) ||
-                !DefaultRasterizer.TryGetNextDistinctPoint(points, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !DefaultRasterizer.TryGetLastDistinctPoint(points, out int lastIndex, out PointF lastPoint) ||
-                !DefaultRasterizer.TryGetPreviousDistinctPoint(points, lastIndex, out _, out PointF beforeLastPoint) ||
-                !TryGetDirection(firstPoint, secondPoint, out Vector2 startTangent, out _) ||
-                !TryGetDirection(beforeLastPoint, lastPoint, out Vector2 endTangent, out _))
-            {
-                return;
-            }
-
-            this.AccumulateStartCap(firstPoint, startTangent, coverage);
-
-            PointF currentPoint = firstPoint;
-            int nextIndex = secondIndex;
-            PointF nextPoint = secondPoint;
-            while (true)
-            {
-                this.AccumulateSegmentBody(currentPoint, nextPoint, coverage);
-
-                if (!DefaultRasterizer.TryGetNextDistinctPoint(points, nextIndex, out int futureIndex, out PointF futurePoint))
-                {
-                    break;
-                }
-
-                if (TryGetDirection(currentPoint, nextPoint, out Vector2 previousTangent, out float previousLength) &&
-                    TryGetDirection(nextPoint, futurePoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    this.AccumulateJoin(nextPoint, previousTangent, nextTangent, previousLength, nextLength, coverage);
-                }
-
-                currentPoint = nextPoint;
-                nextIndex = futureIndex;
-                nextPoint = futurePoint;
-            }
-
-            this.AccumulateEndCap(lastPoint, endTangent, coverage);
-        }
-
-        /// <summary>
-        /// Accumulates stroke coverage for one open contour.
-        /// </summary>
-        /// <param name="contour">The open contour.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateOpenContour(in LinearContour contour, Span<float> coverage)
-        {
-            int pointCount = this.GetDistinctPointCount(contour);
-            if (pointCount == 0)
-            {
-                return;
-            }
-
-            if (pointCount == 1)
-            {
-                if (this.TryGetFirstDistinctPoint(contour, out _, out PointF point))
-                {
-                    this.AccumulatePointLike(point, coverage);
-                }
-
-                return;
-            }
-
-            if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF firstPoint) ||
-                !this.TryGetNextDistinctPoint(contour, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !this.TryGetLastDistinctPoint(contour, out int lastIndex, out PointF lastPoint) ||
-                !this.TryGetPreviousDistinctPoint(contour, lastIndex, out _, out PointF beforeLastPoint) ||
-                !TryGetDirection(firstPoint, secondPoint, out Vector2 startTangent, out _) ||
-                !TryGetDirection(beforeLastPoint, lastPoint, out Vector2 endTangent, out _))
-            {
-                return;
-            }
-
-            this.AccumulateStartCap(firstPoint, startTangent, coverage);
-
-            PointF currentPoint = firstPoint;
-            int nextIndex = secondIndex;
-            PointF nextPoint = secondPoint;
-            while (true)
-            {
-                this.AccumulateSegmentBody(currentPoint, nextPoint, coverage);
-
-                if (!this.TryGetNextDistinctPoint(contour, nextIndex, out int futureIndex, out PointF futurePoint))
-                {
-                    break;
-                }
-
-                if (TryGetDirection(currentPoint, nextPoint, out Vector2 previousTangent, out float previousLength) &&
-                    TryGetDirection(nextPoint, futurePoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    this.AccumulateJoin(nextPoint, previousTangent, nextTangent, previousLength, nextLength, coverage);
-                }
-
-                currentPoint = nextPoint;
-                nextIndex = futureIndex;
-                nextPoint = futurePoint;
-            }
-
-            this.AccumulateEndCap(lastPoint, endTangent, coverage);
-        }
-
-        /// <summary>
-        /// Accumulates stroke coverage for one closed contour.
-        /// </summary>
-        /// <param name="contour">The closed contour.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateClosedContour(in LinearContour contour, Span<float> coverage)
-        {
-            int pointCount = this.GetDistinctPointCount(contour);
-            if (pointCount == 0)
-            {
-                return;
-            }
-
-            if (pointCount == 1)
-            {
-                if (this.TryGetFirstDistinctPoint(contour, out _, out PointF point))
-                {
-                    this.AccumulatePointLike(point, coverage);
-                }
-
-                return;
-            }
-
-            if (pointCount == 2)
-            {
-                if (this.TryGetFirstDistinctPoint(contour, out int segmentFirstIndex, out PointF start) &&
-                    this.TryGetNextDistinctPoint(contour, segmentFirstIndex, out _, out PointF end) &&
-                    TryGetDirection(start, end, out Vector2 tangent, out _))
-                {
-                    this.AccumulateStartCap(start, tangent, coverage);
-                    this.AccumulateSegmentBody(start, end, coverage);
-                    this.AccumulateEndCap(end, tangent, coverage);
-                }
-
-                return;
-            }
-
-            if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF firstPoint) ||
-                !this.TryGetNextDistinctPoint(contour, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !this.TryGetLastDistinctPoint(contour, out int lastIndex, out PointF lastPoint))
-            {
-                return;
-            }
-
-            PointF previousPoint = lastPoint;
-            int currentIndex = firstIndex;
-            PointF currentPoint = firstPoint;
-            int nextIndex = secondIndex;
-            PointF nextPoint = secondPoint;
-
-            while (true)
-            {
-                this.AccumulateSegmentBody(currentPoint, nextPoint, coverage);
-
-                if (TryGetDirection(previousPoint, currentPoint, out Vector2 previousTangent, out float previousLength) &&
-                    TryGetDirection(currentPoint, nextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    this.AccumulateJoin(currentPoint, previousTangent, nextTangent, previousLength, nextLength, coverage);
-                }
-
-                if (currentIndex == lastIndex)
-                {
-                    break;
-                }
-
-                previousPoint = currentPoint;
-                currentPoint = nextPoint;
-                currentIndex = nextIndex;
-                if (!this.TryGetNextDistinctPoint(contour, currentIndex, out nextIndex, out nextPoint))
-                {
-                    nextIndex = firstIndex;
-                    nextPoint = firstPoint;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accumulates the opening cap for an open contour.
-        /// </summary>
-        /// <param name="point">The contour endpoint.</param>
-        /// <param name="tangent">The normalized outgoing tangent.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateStartCap(PointF point, Vector2 tangent, Span<float> coverage)
-        {
-            Vector2 localPoint = this.Transform(point);
-            Vector2 normal = GetLeftNormal(tangent) * this.stroke.HalfWidth;
-            switch (this.stroke.LineCap)
-            {
-                case LineCap.Round:
-                    this.AccumulateSector(localPoint, normal, -normal, -tangent, coverage);
-                    return;
-
-                case LineCap.Square:
-                    Vector2 extension = tangent * this.stroke.HalfWidth;
-                    this.AccumulateQuadrilateral(
-                        localPoint + normal - extension,
-                        localPoint + normal,
-                        localPoint - normal,
-                        localPoint - normal - extension,
-                        coverage);
-                    return;
-
-                default:
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Accumulates the closing cap for an open contour.
-        /// </summary>
-        /// <param name="point">The contour endpoint.</param>
-        /// <param name="tangent">The normalized incoming tangent.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateEndCap(PointF point, Vector2 tangent, Span<float> coverage)
-        {
-            Vector2 localPoint = this.Transform(point);
-            Vector2 normal = GetLeftNormal(tangent) * this.stroke.HalfWidth;
-            switch (this.stroke.LineCap)
-            {
-                case LineCap.Round:
-                    this.AccumulateSector(localPoint, normal, -normal, tangent, coverage);
-                    return;
-
-                case LineCap.Square:
-                    Vector2 extension = tangent * this.stroke.HalfWidth;
-                    this.AccumulateQuadrilateral(
-                        localPoint + normal,
-                        localPoint + normal + extension,
-                        localPoint - normal + extension,
-                        localPoint - normal,
-                        coverage);
-                    return;
-
-                default:
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Accumulates the cap-shaped footprint for a degenerate point-like stroke.
-        /// </summary>
-        /// <param name="point">The point-like stroke location.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulatePointLike(PointF point, Span<float> coverage)
-        {
-            Vector2 center = this.Transform(point);
-            float halfWidth = this.stroke.HalfWidth;
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.AccumulateCircle(center, halfWidth, coverage);
-            }
-            else
-            {
-                this.AccumulateRectangle(center.X - halfWidth, center.Y - halfWidth, center.X + halfWidth, center.Y + halfWidth, coverage);
-            }
-        }
-
-        /// <summary>
-        /// Accumulates the rectangular body of one stroked segment.
-        /// </summary>
-        /// <param name="start">The segment start point.</param>
-        /// <param name="end">The segment end point.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateSegmentBody(PointF start, PointF end, Span<float> coverage)
-        {
-            if (!TryGetDirection(start, end, out Vector2 tangent, out _))
-            {
-                this.AccumulatePointLike(start, coverage);
-                return;
-            }
-
-            float halfWidth = this.stroke.HalfWidth;
-            Vector2 normal = GetLeftNormal(tangent) * halfWidth;
-            Vector2 localStart = this.Transform(start);
-            Vector2 localEnd = this.Transform(end);
-            this.AccumulateQuadrilateral(
-                localStart + normal,
-                localEnd + normal,
-                localEnd - normal,
-                localStart - normal,
-                coverage);
-        }
-
-        /// <summary>
-        /// Accumulates the join geometry between two consecutive segments.
-        /// </summary>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousLength">The length of the previous segment.</param>
-        /// <param name="nextLength">The length of the next segment.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateJoin(
-            PointF point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            float previousLength,
-            float nextLength,
-            Span<float> coverage)
-        {
-            float dot = Vector2.Dot(previousTangent, nextTangent);
-            float cross = Cross(previousTangent, nextTangent);
-            if (MathF.Abs(cross) <= StrokeParallelEpsilon)
-            {
-                if (dot <= 0F)
-                {
-                    this.AccumulatePointLike(point, coverage);
-                }
-
-                return;
-            }
-
-            // The sign of the turn selects which offset side is visible at the join.
-            float sideSign = cross > 0F ? 1F : -1F;
-            Vector2 previousOffset = GetLeftNormal(previousTangent) * (this.stroke.HalfWidth * sideSign);
-            Vector2 nextOffset = GetLeftNormal(nextTangent) * (this.stroke.HalfWidth * sideSign);
-            Vector2 localPoint = this.Transform(point);
-
-            switch (this.stroke.LineJoin)
-            {
-                case LineJoin.Round:
-                    this.AccumulateSector(localPoint, previousOffset, nextOffset, GetPreferredArcDirection(previousOffset, nextOffset), coverage);
-                    return;
-
-                case LineJoin.Bevel:
-                    this.AccumulateTriangle(localPoint + previousOffset, localPoint, localPoint + nextOffset, coverage);
-                    return;
-
-                default:
-                    this.AccumulateMiterJoin(
-                        localPoint,
-                        previousTangent,
-                        nextTangent,
-                        previousOffset,
-                        nextOffset,
-                        previousLength,
-                        nextLength,
-                        coverage);
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Accumulates one miter-family join and applies the configured miter-limit fallback when necessary.
-        /// </summary>
-        /// <param name="point">The band-local join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousOffset">The offset vector on the previous segment.</param>
-        /// <param name="nextOffset">The offset vector on the next segment.</param>
-        /// <param name="previousLength">The length of the previous segment.</param>
-        /// <param name="nextLength">The length of the next segment.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateMiterJoin(
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            Vector2 previousOffset,
-            Vector2 nextOffset,
-            float previousLength,
-            float nextLength,
-            Span<float> coverage)
-        {
-            Vector2 previousPoint = point + previousOffset;
-            Vector2 nextPoint = point + nextOffset;
-            float bevelDistance = ((previousOffset + nextOffset) * 0.5F).Length();
-            float limit = (float)(Math.Max(this.stroke.MiterLimit, 1D) * Math.Max(previousOffset.Length(), nextOffset.Length()));
-
-            if (TryIntersectOffsetLines(point, previousOffset, previousTangent, nextOffset, nextTangent, out Vector2 intersection))
-            {
-                float intersectionDistance = Vector2.Distance(point, intersection);
-                if (intersectionDistance <= limit)
-                {
-                    this.AccumulateTriangle(previousPoint, intersection, nextPoint, coverage);
-                    return;
-                }
-
-                switch (this.stroke.LineJoin)
-                {
-                    case LineJoin.MiterRevert:
-                        this.AccumulateTriangle(previousPoint, point, nextPoint, coverage);
-                        return;
-
-                    case LineJoin.MiterRound:
-                        this.AccumulateSector(point, previousOffset, nextOffset, GetPreferredArcDirection(previousOffset, nextOffset), coverage);
-                        return;
-
-                    default:
-                        if (intersectionDistance <= bevelDistance + StrokeDirectionEpsilon)
-                        {
-                            this.AccumulateTriangle(previousPoint, point, nextPoint, coverage);
-                            return;
-                        }
-
-                        // Truncate the miter back to the legal limit instead of dropping all the way
-                        // to a bevel so long miters still preserve the intended pointed silhouette.
-                        float ratio = (limit - bevelDistance) / (intersectionDistance - bevelDistance);
-                        this.AccumulateQuadrilateral(
-                            previousPoint,
-                            previousPoint + ((intersection - previousPoint) * ratio),
-                            nextPoint + ((intersection - nextPoint) * ratio),
-                            nextPoint,
-                            coverage);
-                        return;
-                }
-            }
-
-            switch (this.stroke.LineJoin)
-            {
-                case LineJoin.MiterRevert:
-                    this.AccumulateTriangle(previousPoint, point, nextPoint, coverage);
-                    return;
-
-                case LineJoin.MiterRound:
-                    this.AccumulateSector(point, previousOffset, nextOffset, GetPreferredArcDirection(previousOffset, nextOffset), coverage);
-                    return;
-
-                default:
-                    float fallbackLimit = (float)Math.Max(this.stroke.MiterLimit, 1D) * (previousOffset.Length() <= 0F ? nextOffset.Length() : previousOffset.Length());
-                    this.AccumulateQuadrilateral(
-                        previousPoint,
-                        previousPoint + (previousTangent * fallbackLimit),
-                        nextPoint - (nextTangent * fallbackLimit),
-                        nextPoint,
-                        coverage);
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Accumulates a circular footprint into supersampled coverage.
-        /// </summary>
-        /// <param name="center">The circle center in band-local coordinates.</param>
-        /// <param name="radius">The circle radius.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateCircle(Vector2 center, float radius, Span<float> coverage)
-        {
-            if (radius <= StrokeDirectionEpsilon)
-            {
-                return;
-            }
-
-            int startRow = Math.Max(0, (int)MathF.Floor(center.Y - radius));
-            int endRow = Math.Min(this.height - 1, (int)MathF.Ceiling(center.Y + radius) - 1);
-            for (int row = startRow; row <= endRow; row++)
-            {
-                for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
-                {
-                    float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
-                    if (TryGetCircleIntervalAtY(center, radius, sampleY, out float left, out float right))
-                    {
-                        this.AccumulateSampleInterval(coverage, row, sampleIndex, left, right);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accumulates an axis-aligned rectangle into supersampled coverage.
-        /// </summary>
-        /// <param name="left">The rectangle left edge.</param>
-        /// <param name="top">The rectangle top edge.</param>
-        /// <param name="right">The rectangle right edge.</param>
-        /// <param name="bottom">The rectangle bottom edge.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateRectangle(float left, float top, float right, float bottom, Span<float> coverage)
-        {
-            if (right <= left || bottom <= top)
-            {
-                return;
-            }
-
-            int startRow = Math.Max(0, (int)MathF.Floor(top));
-            int endRow = Math.Min(this.height - 1, (int)MathF.Ceiling(bottom) - 1);
-            for (int row = startRow; row <= endRow; row++)
-            {
-                for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
-                {
-                    float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
-                    if (TryGetAxisAlignedIntervalAtY(top, bottom, left, right, sampleY, out float intervalLeft, out float intervalRight))
-                    {
-                        this.AccumulateSampleInterval(coverage, row, sampleIndex, intervalLeft, intervalRight);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accumulates a triangle into supersampled coverage.
-        /// </summary>
-        /// <param name="p0">The first triangle vertex.</param>
-        /// <param name="p1">The second triangle vertex.</param>
-        /// <param name="p2">The third triangle vertex.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateTriangle(Vector2 p0, Vector2 p1, Vector2 p2, Span<float> coverage)
-        {
-            float minY = MathF.Min(p0.Y, MathF.Min(p1.Y, p2.Y));
-            float maxY = MathF.Max(p0.Y, MathF.Max(p1.Y, p2.Y));
-            int startRow = Math.Max(0, (int)MathF.Floor(minY));
-            int endRow = Math.Min(this.height - 1, (int)MathF.Ceiling(maxY) - 1);
-            for (int row = startRow; row <= endRow; row++)
-            {
-                for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
-                {
-                    float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
-                    if (TryGetTriangleIntervalAtY(p0, p1, p2, sampleY, out float left, out float right))
-                    {
-                        this.AccumulateSampleInterval(coverage, row, sampleIndex, left, right);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accumulates a convex quadrilateral into supersampled coverage.
-        /// </summary>
-        /// <param name="p0">The first quadrilateral vertex.</param>
-        /// <param name="p1">The second quadrilateral vertex.</param>
-        /// <param name="p2">The third quadrilateral vertex.</param>
-        /// <param name="p3">The fourth quadrilateral vertex.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateQuadrilateral(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Span<float> coverage)
-        {
-            float minY = MathF.Min(MathF.Min(p0.Y, p1.Y), MathF.Min(p2.Y, p3.Y));
-            float maxY = MathF.Max(MathF.Max(p0.Y, p1.Y), MathF.Max(p2.Y, p3.Y));
-            int startRow = Math.Max(0, (int)MathF.Floor(minY));
-            int endRow = Math.Min(this.height - 1, (int)MathF.Ceiling(maxY) - 1);
-            for (int row = startRow; row <= endRow; row++)
-            {
-                for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
-                {
-                    float sampleY = row + ((sampleIndex + 0.5F) / DirectStrokeVerticalSampleCount);
-                    if (TryGetQuadrilateralIntervalAtY(p0, p1, p2, p3, sampleY, out float left, out float right))
-                    {
-                        this.AccumulateSampleInterval(coverage, row, sampleIndex, left, right);
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accumulates a circular sector into supersampled coverage.
-        /// </summary>
-        /// <param name="center">The sector center.</param>
-        /// <param name="fromOffset">The start offset from the center.</param>
-        /// <param name="toOffset">The end offset from the center.</param>
-        /// <param name="preferredDirection">The preferred outward direction used to choose the sweep.</param>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        private void AccumulateSector(Vector2 center, Vector2 fromOffset, Vector2 toOffset, Vector2 preferredDirection, Span<float> coverage)
-        {
-            if (fromOffset == Vector2.Zero || toOffset == Vector2.Zero)
-            {
-                this.AccumulateTriangle(center, center + fromOffset, center + toOffset, coverage);
-                return;
-            }
-
-            float radius = fromOffset.Length();
-            if (radius <= StrokeDirectionEpsilon)
-            {
-                return;
-            }
-
-            Vector2 preferred = preferredDirection;
-            if (preferred.LengthSquared() <= StrokeDirectionEpsilon * StrokeDirectionEpsilon)
-            {
-                preferred = Vector2.Normalize(fromOffset + toOffset);
-                if (preferred.LengthSquared() <= StrokeDirectionEpsilon * StrokeDirectionEpsilon)
-                {
-                    preferred = Vector2.Normalize(fromOffset);
-                }
-            }
-
-            double startAngle = Math.Atan2(fromOffset.Y, fromOffset.X);
-            double endAngle = Math.Atan2(toOffset.Y, toOffset.X);
-            double counterClockwiseSweep = NormalizePositiveAngle(endAngle - startAngle);
-            double clockwiseSweep = counterClockwiseSweep - (Math.PI * 2D);
-            double chosenSweep = ChooseArcSweep(startAngle, counterClockwiseSweep, clockwiseSweep, preferred);
-            int subdivisionCount = GetArcSubdivisionCount(radius, Math.Abs(chosenSweep), this.stroke.ArcDetailScale);
-            double step = chosenSweep / (subdivisionCount + 1);
-
-            Vector2 previousPoint = center + fromOffset;
-            for (int i = 1; i <= subdivisionCount; i++)
-            {
-                float angle = (float)(startAngle + (step * i));
-                Vector2 nextPoint = center + new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
-                this.AccumulateTriangle(center, previousPoint, nextPoint, coverage);
-                previousPoint = nextPoint;
-            }
-
-            this.AccumulateTriangle(center, previousPoint, center + toOffset, coverage);
-        }
-
-        /// <summary>
-        /// Converts supersampled band coverage into row runs for the row handler.
-        /// </summary>
-        /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        /// <param name="scanline">The reusable scanline scratch buffer.</param>
-        /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-        private void EmitCoverageRows<TRowHandler>(Span<float> coverage, Span<float> scanline, ref TRowHandler rowHandler)
-            where TRowHandler : struct, IRasterizerCoverageRowHandler
-        {
-            for (int row = 0; row < this.height; row++)
-            {
-                Span<float> rowCoverage = scanline[..this.width];
-                bool hasCoverage = false;
-                int rowBase = row * this.width * DirectStrokeVerticalSampleCount;
-                for (int x = 0; x < this.width; x++)
-                {
-                    float coverageValue = 0F;
-                    for (int sampleIndex = 0; sampleIndex < DirectStrokeVerticalSampleCount; sampleIndex++)
-                    {
-                        coverageValue += coverage[rowBase + (sampleIndex * this.width) + x];
-                    }
-
-                    coverageValue /= DirectStrokeVerticalSampleCount;
-                    if (this.rasterizationMode == RasterizationMode.Aliased)
-                    {
-                        coverageValue = coverageValue >= this.antialiasThreshold ? 1F : 0F;
-                    }
-
-                    rowCoverage[x] = coverageValue;
-                    hasCoverage |= coverageValue > 0F;
-                }
-
-                if (hasCoverage)
-                {
-                    EmitCoverageRuns(rowCoverage, 0, this.destinationLeft, this.destinationTop + row, ref rowHandler);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Accumulates one horizontal sample interval into one supersample row of coverage.
-        /// </summary>
-        /// <param name="coverage">The supersampled band coverage buffer.</param>
-        /// <param name="row">The band-local row index.</param>
-        /// <param name="sampleIndex">The vertical supersample index within the row.</param>
-        /// <param name="left">The left edge of the sample interval.</param>
-        /// <param name="right">The right edge of the sample interval.</param>
-        private void AccumulateSampleInterval(Span<float> coverage, int row, int sampleIndex, float left, float right)
-        {
-            int sampleOffset = ((row * DirectStrokeVerticalSampleCount) + sampleIndex) * this.width;
-            DefaultRasterizer.AccumulateSampleInterval(coverage.Slice(sampleOffset, this.width), left, right);
-        }
-
-        /// <summary>
-        /// Maps one stroke-space point into band-local execution space.
-        /// </summary>
-        /// <param name="point">The stroke-space point.</param>
-        /// <returns>The band-local execution-space point.</returns>
-        private Vector2 Transform(PointF point)
-        {
-            Vector2 localPoint = point;
-            localPoint.X += this.translateX;
-            localPoint.Y += this.translateY;
-            return localPoint;
-        }
-
-        /// <summary>
-        /// Counts the distinct points in a contour while skipping immediate duplicates and duplicate closing points.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <returns>The number of distinct contour points.</returns>
-        private int GetDistinctPointCount(in LinearContour contour)
-        {
-            LinearGeometry sourceGeometry = this.geometry!;
-            int pointEnd = contour.PointStart + contour.PointCount;
-            int count = 0;
-            PointF previousPoint = default;
-            bool hasPreviousPoint = false;
-
-            for (int i = contour.PointStart; i < pointEnd; i++)
-            {
-                PointF point = sourceGeometry.Points[i];
-                if (hasPreviousPoint && point == previousPoint)
-                {
-                    continue;
-                }
-
-                previousPoint = point;
-                hasPreviousPoint = true;
-                count++;
-            }
-
-            if (contour.IsClosed &&
-                count > 1 &&
-                this.TryGetFirstDistinctPoint(contour, out _, out PointF firstPoint) &&
-                this.TryGetLastDistinctPoint(contour, out _, out PointF lastPoint) &&
-                firstPoint == lastPoint)
-            {
-                count--;
-            }
-
-            return count;
-        }
-
-        /// <summary>
-        /// Finds the first distinct point of a contour.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">Receives the raw point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private bool TryGetFirstDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
-        {
-            if (contour.PointCount == 0)
-            {
-                rawIndex = -1;
-                point = default;
-                return false;
-            }
-
-            rawIndex = contour.PointStart;
-            point = this.geometry!.Points[rawIndex];
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the next distinct point after the supplied contour index.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">The raw point index to advance from.</param>
-        /// <param name="nextRawIndex">Receives the next distinct raw point index.</param>
-        /// <param name="point">Receives the next distinct point.</param>
-        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
-        private bool TryGetNextDistinctPoint(in LinearContour contour, int rawIndex, out int nextRawIndex, out PointF point)
-        {
-            IReadOnlyList<PointF> points = this.geometry!.Points;
-            PointF currentPoint = points[rawIndex];
-            int pointEnd = contour.PointStart + contour.PointCount;
-            for (int i = rawIndex + 1; i < pointEnd; i++)
-            {
-                PointF candidate = points[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                nextRawIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            nextRawIndex = -1;
-            point = default;
-            return false;
-        }
-
-        /// <summary>
-        /// Finds the last distinct point of a contour.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">Receives the raw point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private bool TryGetLastDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
-        {
-            if (contour.PointCount == 0)
-            {
-                rawIndex = -1;
-                point = default;
-                return false;
-            }
-
-            IReadOnlyList<PointF> points = this.geometry!.Points;
-            int start = contour.PointStart;
-            rawIndex = start + contour.PointCount - 1;
-            point = points[rawIndex];
-            while (rawIndex > start && points[rawIndex - 1] == point)
-            {
-                rawIndex--;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the previous distinct point before the supplied contour index.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">The raw point index to retreat from.</param>
-        /// <param name="previousRawIndex">Receives the previous distinct raw point index.</param>
-        /// <param name="point">Receives the previous distinct point.</param>
-        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
-        private bool TryGetPreviousDistinctPoint(in LinearContour contour, int rawIndex, out int previousRawIndex, out PointF point)
-        {
-            IReadOnlyList<PointF> points = this.geometry!.Points;
-            PointF currentPoint = points[rawIndex];
-            for (int i = rawIndex - 1; i >= contour.PointStart; i--)
-            {
-                PointF candidate = points[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                previousRawIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            previousRawIndex = -1;
-            point = default;
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Accumulates one horizontal interval into a supersample row while clamping each pixel to full coverage.
-    /// </summary>
-    /// <param name="sampleRow">The supersample row coverage buffer.</param>
-    /// <param name="left">The left edge of the sample interval.</param>
-    /// <param name="right">The right edge of the sample interval.</param>
-    private static void AccumulateSampleInterval(Span<float> sampleRow, float left, float right)
-    {
-        int width = sampleRow.Length;
-        float clampedLeft = MathF.Max(left, 0F);
-        float clampedRight = MathF.Min(right, width);
-        if (clampedRight <= clampedLeft)
-        {
-            return;
-        }
-
-        int startPixel = (int)MathF.Floor(clampedLeft);
-        int endPixel = (int)MathF.Ceiling(clampedRight);
-        if (endPixel <= startPixel)
-        {
-            return;
-        }
-
-        if (endPixel == startPixel + 1)
-        {
-            sampleRow[startPixel] = MathF.Min(1F, sampleRow[startPixel] + (clampedRight - clampedLeft));
-            return;
-        }
-
-        sampleRow[startPixel] = MathF.Min(1F, sampleRow[startPixel] + ((startPixel + 1) - clampedLeft));
-        for (int x = startPixel + 1; x < endPixel - 1; x++)
-        {
-            sampleRow[x] = 1F;
-        }
-
-        int endPixelIndex = endPixel - 1;
-        sampleRow[endPixelIndex] = MathF.Min(1F, sampleRow[endPixelIndex] + (clampedRight - endPixelIndex));
-    }
-
-    /// <summary>
-    /// Emits contiguous non-zero coverage runs for one destination row.
-    /// </summary>
-    /// <typeparam name="TRowHandler">The coverage row handler type.</typeparam>
-    /// <param name="rowCoverage">The per-pixel row coverage buffer.</param>
-    /// <param name="startColumn">The destination column corresponding to index 0 in <paramref name="rowCoverage"/>.</param>
-    /// <param name="destinationLeft">The destination-space band left edge.</param>
-    /// <param name="destinationY">The destination-space row.</param>
-    /// <param name="rowHandler">The coverage row handler that receives emitted runs.</param>
-    private static void EmitCoverageRuns<TRowHandler>(
-        Span<float> rowCoverage,
-        int startColumn,
-        int destinationLeft,
-        int destinationY,
-        ref TRowHandler rowHandler)
-        where TRowHandler : struct, IRasterizerCoverageRowHandler
-    {
-        int runStart = -1;
-        for (int i = 0; i < rowCoverage.Length; i++)
-        {
-            if (rowCoverage[i] > 0F)
-            {
-                runStart = runStart < 0 ? i : runStart;
-                continue;
-            }
-
-            if (runStart >= 0)
-            {
-                rowHandler.Handle(destinationY, destinationLeft + startColumn + runStart, rowCoverage[runStart..i]);
-                runStart = -1;
-            }
-        }
-
-        if (runStart >= 0)
-        {
-            rowHandler.Handle(destinationY, destinationLeft + startColumn + runStart, rowCoverage[runStart..]);
-        }
-    }
-
-    /// <summary>
-    /// Intersects a horizontal sample line with an axis-aligned rectangle.
-    /// </summary>
-    /// <param name="top">The rectangle top edge.</param>
-    /// <param name="bottom">The rectangle bottom edge.</param>
-    /// <param name="left">The rectangle left edge.</param>
-    /// <param name="right">The rectangle right edge.</param>
-    /// <param name="sampleY">The sample row.</param>
-    /// <param name="intervalLeft">Receives the left intersection bound.</param>
-    /// <param name="intervalRight">Receives the right intersection bound.</param>
-    /// <returns><see langword="true"/> when the sample intersects the rectangle.</returns>
-    private static bool TryGetAxisAlignedIntervalAtY(
-        float top,
-        float bottom,
-        float left,
-        float right,
-        float sampleY,
-        out float intervalLeft,
-        out float intervalRight)
-    {
-        if (sampleY < top || sampleY > bottom)
-        {
-            intervalLeft = default;
-            intervalRight = default;
-            return false;
-        }
-
-        intervalLeft = left;
-        intervalRight = right;
-        return intervalRight > intervalLeft;
-    }
-
-    /// <summary>
-    /// Intersects a horizontal sample line with a circle.
-    /// </summary>
-    /// <param name="center">The circle center.</param>
-    /// <param name="radius">The circle radius.</param>
-    /// <param name="sampleY">The sample row.</param>
-    /// <param name="intervalLeft">Receives the left intersection bound.</param>
-    /// <param name="intervalRight">Receives the right intersection bound.</param>
-    /// <returns><see langword="true"/> when the sample intersects the circle.</returns>
-    private static bool TryGetCircleIntervalAtY(
-        Vector2 center,
-        float radius,
-        float sampleY,
-        out float intervalLeft,
-        out float intervalRight)
-    {
-        float dy = sampleY - center.Y;
-        float radiusSquared = radius * radius;
-        float dySquared = dy * dy;
-        if (dySquared > radiusSquared)
-        {
-            intervalLeft = default;
-            intervalRight = default;
-            return false;
-        }
-
-        float dx = MathF.Sqrt(MathF.Max(0F, radiusSquared - dySquared));
-        intervalLeft = center.X - dx;
-        intervalRight = center.X + dx;
-        return intervalRight > intervalLeft;
-    }
-
-    /// <summary>
-    /// Intersects a horizontal sample line with a triangle.
-    /// </summary>
-    /// <param name="p0">The first triangle vertex.</param>
-    /// <param name="p1">The second triangle vertex.</param>
-    /// <param name="p2">The third triangle vertex.</param>
-    /// <param name="sampleY">The sample row.</param>
-    /// <param name="intervalLeft">Receives the left intersection bound.</param>
-    /// <param name="intervalRight">Receives the right intersection bound.</param>
-    /// <returns><see langword="true"/> when the sample intersects the triangle.</returns>
-    private static bool TryGetTriangleIntervalAtY(
-        Vector2 p0,
-        Vector2 p1,
-        Vector2 p2,
-        float sampleY,
-        out float intervalLeft,
-        out float intervalRight)
-    {
-        intervalLeft = float.PositiveInfinity;
-        intervalRight = float.NegativeInfinity;
-        bool hasIntersection = false;
-        AppendEdgeInterval(p0, p1, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-        AppendEdgeInterval(p1, p2, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-        AppendEdgeInterval(p2, p0, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-        return hasIntersection && intervalRight > intervalLeft;
-    }
-
-    /// <summary>
-    /// Intersects a horizontal sample line with a convex quadrilateral.
-    /// </summary>
-    /// <param name="p0">The first quadrilateral vertex.</param>
-    /// <param name="p1">The second quadrilateral vertex.</param>
-    /// <param name="p2">The third quadrilateral vertex.</param>
-    /// <param name="p3">The fourth quadrilateral vertex.</param>
-    /// <param name="sampleY">The sample row.</param>
-    /// <param name="intervalLeft">Receives the left intersection bound.</param>
-    /// <param name="intervalRight">Receives the right intersection bound.</param>
-    /// <returns><see langword="true"/> when the sample intersects the quadrilateral.</returns>
-    private static bool TryGetQuadrilateralIntervalAtY(
-        Vector2 p0,
-        Vector2 p1,
-        Vector2 p2,
-        Vector2 p3,
-        float sampleY,
-        out float intervalLeft,
-        out float intervalRight)
-    {
-        intervalLeft = float.PositiveInfinity;
-        intervalRight = float.NegativeInfinity;
-        bool hasIntersection = false;
-        AppendEdgeInterval(p0, p1, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-        AppendEdgeInterval(p1, p2, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-        AppendEdgeInterval(p2, p3, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-        AppendEdgeInterval(p3, p0, sampleY, ref hasIntersection, ref intervalLeft, ref intervalRight);
-        return hasIntersection && intervalRight > intervalLeft;
-    }
-
-    /// <summary>
-    /// Expands the current sample interval bounds with one polygon edge intersection.
-    /// </summary>
-    /// <param name="start">The edge start point.</param>
-    /// <param name="end">The edge end point.</param>
-    /// <param name="sampleY">The sample row.</param>
-    /// <param name="hasIntersection">Tracks whether any edge has intersected the sample row yet.</param>
-    /// <param name="intervalLeft">The running left intersection bound.</param>
-    /// <param name="intervalRight">The running right intersection bound.</param>
-    private static void AppendEdgeInterval(
-        Vector2 start,
-        Vector2 end,
-        float sampleY,
-        ref bool hasIntersection,
-        ref float intervalLeft,
-        ref float intervalRight)
-    {
-        float minY = MathF.Min(start.Y, end.Y);
-        float maxY = MathF.Max(start.Y, end.Y);
-        if (sampleY < minY || sampleY > maxY)
-        {
-            return;
-        }
-
-        if (MathF.Abs(end.Y - start.Y) <= StrokeDirectionEpsilon)
-        {
-            intervalLeft = MathF.Min(intervalLeft, MathF.Min(start.X, end.X));
-            intervalRight = MathF.Max(intervalRight, MathF.Max(start.X, end.X));
-            hasIntersection = true;
-            return;
-        }
-
-        float t = (sampleY - start.Y) / (end.Y - start.Y);
-        float x = start.X + ((end.X - start.X) * t);
-        intervalLeft = MathF.Min(intervalLeft, x);
-        intervalRight = MathF.Max(intervalRight, x);
-        hasIntersection = true;
-    }
-
-    /// <summary>
-    /// Counts the distinct explicit polyline points while skipping immediate duplicates.
-    /// </summary>
-    /// <param name="points">The explicit polyline points.</param>
-    /// <returns>The number of distinct points.</returns>
-    private static int GetDistinctPointCount(PointF[] points)
-    {
-        int count = 0;
-        PointF previousPoint = default;
-        bool hasPreviousPoint = false;
-
-        for (int i = 0; i < points.Length; i++)
-        {
-            PointF point = points[i];
-            if (hasPreviousPoint && point == previousPoint)
-            {
-                continue;
-            }
-
-            previousPoint = point;
-            hasPreviousPoint = true;
-            count++;
-        }
-
-        return count;
-    }
-
-    /// <summary>
-    /// Finds the first distinct point of the explicit polyline.
-    /// </summary>
-    /// <param name="points">The explicit polyline points.</param>
-    /// <param name="index">Receives the distinct point index.</param>
-    /// <param name="point">Receives the distinct point.</param>
-    /// <returns><see langword="true"/> when a distinct point exists.</returns>
-    private static bool TryGetFirstDistinctPoint(PointF[] points, out int index, out PointF point)
-    {
-        if (points.Length == 0)
-        {
-            index = -1;
-            point = default;
-            return false;
-        }
-
-        index = 0;
-        point = points[0];
-        return true;
-    }
-
-    /// <summary>
-    /// Finds the next distinct point after the supplied explicit polyline index.
-    /// </summary>
-    /// <param name="points">The explicit polyline points.</param>
-    /// <param name="index">The point index to advance from.</param>
-    /// <param name="nextIndex">Receives the next distinct point index.</param>
-    /// <param name="point">Receives the next distinct point.</param>
-    /// <returns><see langword="true"/> when a next distinct point exists.</returns>
-    private static bool TryGetNextDistinctPoint(PointF[] points, int index, out int nextIndex, out PointF point)
-    {
-        PointF currentPoint = points[index];
-        for (int i = index + 1; i < points.Length; i++)
-        {
-            PointF candidate = points[i];
-            if (candidate == currentPoint)
-            {
-                continue;
-            }
-
-            nextIndex = i;
-            point = candidate;
-            return true;
-        }
-
-        nextIndex = -1;
-        point = default;
-        return false;
-    }
-
-    /// <summary>
-    /// Finds the last distinct point of the explicit polyline.
-    /// </summary>
-    /// <param name="points">The explicit polyline points.</param>
-    /// <param name="index">Receives the distinct point index.</param>
-    /// <param name="point">Receives the distinct point.</param>
-    /// <returns><see langword="true"/> when a distinct point exists.</returns>
-    private static bool TryGetLastDistinctPoint(PointF[] points, out int index, out PointF point)
-    {
-        if (points.Length == 0)
-        {
-            index = -1;
-            point = default;
-            return false;
-        }
-
-        index = points.Length - 1;
-        point = points[index];
-        while (index > 0 && points[index - 1] == point)
-        {
-            index--;
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    /// Finds the previous distinct point before the supplied explicit polyline index.
-    /// </summary>
-    /// <param name="points">The explicit polyline points.</param>
-    /// <param name="index">The point index to retreat from.</param>
-    /// <param name="previousIndex">Receives the previous distinct point index.</param>
-    /// <param name="point">Receives the previous distinct point.</param>
-    /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
-    private static bool TryGetPreviousDistinctPoint(PointF[] points, int index, out int previousIndex, out PointF point)
-    {
-        PointF currentPoint = points[index];
-        for (int i = index - 1; i >= 0; i--)
-        {
-            PointF candidate = points[i];
-            if (candidate == currentPoint)
-            {
-                continue;
-            }
-
-            previousIndex = i;
-            point = candidate;
-            return true;
-        }
-
-        previousIndex = -1;
-        point = default;
-        return false;
-    }
-
-    /// <summary>
-    /// Execution-time stroke rasterizer that expands centerlines directly into the active band context.
-    /// </summary>
-    private readonly struct StrokeBandRasterizer
-    {
-        private struct ContourState
-        {
-            public bool HasPoint;
-            public PointF FirstPoint;
-            public PointF PreviousPoint;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="StrokeBandRasterizer"/> struct.
-        /// </summary>
-        /// <param name="geometry">The flattened centerline geometry.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="minX">The band-local minimum X coordinate.</param>
-        /// <param name="minY">The band-local minimum Y coordinate.</param>
-        /// <param name="width">The band width in pixels.</param>
-        /// <param name="height">The band height in pixels.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        public StrokeBandRasterizer(
-            LinearGeometry geometry,
-            StrokeStyle stroke,
-            int translateX,
-            int translateY,
-            int minX,
-            int minY,
-            int width,
-            int height,
-            float samplingOffsetX,
-            float samplingOffsetY)
-        {
-            this.geometry = geometry;
-            this.stroke = stroke;
-            this.translateX = translateX;
-            this.translateY = translateY;
-            this.minX = minX;
-            this.minY = minY;
-            this.width = width;
-            this.height = height;
-            this.samplingOffsetX = samplingOffsetX;
-            this.samplingOffsetY = samplingOffsetY;
-            this.singleSegmentStart = default;
-            this.singleSegmentEnd = default;
-            this.hasSingleSegment = false;
-            this.polylinePoints = null;
-            this.hasExplicitPolyline = false;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="StrokeBandRasterizer"/> struct for one two-point line segment.
-        /// </summary>
-        /// <param name="start">The stroke start point.</param>
-        /// <param name="end">The stroke end point.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="minX">The band-local minimum X coordinate.</param>
-        /// <param name="minY">The band-local minimum Y coordinate.</param>
-        /// <param name="width">The band width in pixels.</param>
-        /// <param name="height">The band height in pixels.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        public StrokeBandRasterizer(
-            PointF start,
-            PointF end,
-            StrokeStyle stroke,
-            int translateX,
-            int translateY,
-            int minX,
-            int minY,
-            int width,
-            int height,
-            float samplingOffsetX,
-            float samplingOffsetY)
-        {
-            this.geometry = default!;
-            this.stroke = stroke;
-            this.translateX = translateX;
-            this.translateY = translateY;
-            this.minX = minX;
-            this.minY = minY;
-            this.width = width;
-            this.height = height;
-            this.samplingOffsetX = samplingOffsetX;
-            this.samplingOffsetY = samplingOffsetY;
-            this.singleSegmentStart = start;
-            this.singleSegmentEnd = end;
-            this.hasSingleSegment = true;
-            this.polylinePoints = null;
-            this.hasExplicitPolyline = false;
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="StrokeBandRasterizer"/> struct for one explicit open polyline.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="stroke">The stroke style.</param>
-        /// <param name="translateX">The destination-space X translation applied at composition time.</param>
-        /// <param name="translateY">The destination-space Y translation applied at composition time.</param>
-        /// <param name="minX">The band-local minimum X coordinate.</param>
-        /// <param name="minY">The band-local minimum Y coordinate.</param>
-        /// <param name="width">The band width in pixels.</param>
-        /// <param name="height">The band height in pixels.</param>
-        /// <param name="samplingOffsetX">The horizontal sampling offset.</param>
-        /// <param name="samplingOffsetY">The vertical sampling offset.</param>
-        public StrokeBandRasterizer(
-            PointF[] points,
-            StrokeStyle stroke,
-            int translateX,
-            int translateY,
-            int minX,
-            int minY,
-            int width,
-            int height,
-            float samplingOffsetX,
-            float samplingOffsetY)
-        {
-            this.geometry = default!;
-            this.stroke = stroke;
-            this.translateX = translateX;
-            this.translateY = translateY;
-            this.minX = minX;
-            this.minY = minY;
-            this.width = width;
-            this.height = height;
-            this.samplingOffsetX = samplingOffsetX;
-            this.samplingOffsetY = samplingOffsetY;
-            this.singleSegmentStart = default;
-            this.singleSegmentEnd = default;
-            this.hasSingleSegment = false;
-            this.polylinePoints = points;
-            this.hasExplicitPolyline = true;
-        }
-
-        private readonly LinearGeometry geometry;
-        private readonly StrokeStyle stroke;
-        private readonly int translateX;
-        private readonly int translateY;
-        private readonly int minX;
-        private readonly int minY;
-        private readonly int width;
-        private readonly int height;
-        private readonly float samplingOffsetX;
-        private readonly float samplingOffsetY;
-        private readonly PointF singleSegmentStart;
-        private readonly PointF singleSegmentEnd;
-        private readonly bool hasSingleSegment;
-        private readonly PointF[]? polylinePoints;
-        private readonly bool hasExplicitPolyline;
-
-        /// <summary>
-        /// Rasterizes the retained stroke into the current band context.
-        /// </summary>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        public void Rasterize(ref Context context)
-        {
-            if (this.hasSingleSegment)
-            {
-                this.RasterizeSingleSegment(ref context);
-                return;
-            }
-
-            if (this.hasExplicitPolyline)
-            {
-                this.RasterizeExplicitPolyline(ref context);
-                return;
-            }
-
-            RectangleF translatedBounds = InflateStrokeBounds(this.geometry.Info.Bounds, this.stroke);
-            translatedBounds.Offset(this.translateX + this.samplingOffsetX - this.minX, this.translateY + this.samplingOffsetY - this.minY);
-
-            bool contained =
-                translatedBounds.Left >= 0F &&
-                translatedBounds.Top >= 0F &&
-                translatedBounds.Right <= this.width &&
-                translatedBounds.Bottom <= this.height;
-
-            for (int contourIndex = 0; contourIndex < this.geometry.Contours.Count; contourIndex++)
-            {
-                LinearContour contour = this.geometry.Contours[contourIndex];
-                if (contour.PointCount == 0)
-                {
-                    continue;
-                }
-
-                this.ProcessContour(contour, contained, ref context);
-            }
-        }
-
-        /// <summary>
-        /// Rasterizes one explicit line segment into the current band context.
-        /// </summary>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void RasterizeSingleSegment(ref Context context)
-        {
-            RectangleF bounds = RectangleF.FromLTRB(
-                MathF.Min(this.singleSegmentStart.X, this.singleSegmentEnd.X),
-                MathF.Min(this.singleSegmentStart.Y, this.singleSegmentEnd.Y),
-                MathF.Max(this.singleSegmentStart.X, this.singleSegmentEnd.X),
-                MathF.Max(this.singleSegmentStart.Y, this.singleSegmentEnd.Y));
-            RectangleF translatedBounds = InflateStrokeBounds(bounds, this.stroke);
-            translatedBounds.Offset(this.translateX + this.samplingOffsetX - this.minX, this.translateY + this.samplingOffsetY - this.minY);
-
-            bool contained =
-                translatedBounds.Left >= 0F &&
-                translatedBounds.Top >= 0F &&
-                translatedBounds.Right <= this.width &&
-                translatedBounds.Bottom <= this.height;
-
-            this.EmitOpenSegmentStrokeContour(this.singleSegmentStart, this.singleSegmentEnd, contained, ref context);
-        }
-
-        /// <summary>
-        /// Rasterizes one explicit open polyline into the current band context.
-        /// </summary>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void RasterizeExplicitPolyline(ref Context context)
-        {
-            PointF[] points = this.polylinePoints!;
-            int pointCount = GetDistinctPointCount(points);
-            if (pointCount == 0)
-            {
-                return;
-            }
-
-            float minX = points[0].X;
-            float minY = points[0].Y;
-            float maxX = minX;
-            float maxY = minY;
-            for (int i = 1; i < points.Length; i++)
-            {
-                PointF point = points[i];
-                minX = MathF.Min(minX, point.X);
-                minY = MathF.Min(minY, point.Y);
-                maxX = MathF.Max(maxX, point.X);
-                maxY = MathF.Max(maxY, point.Y);
-            }
-
-            RectangleF bounds = InflateStrokeBounds(RectangleF.FromLTRB(minX, minY, maxX, maxY), this.stroke);
-            RectangleF translatedBounds = bounds;
-            translatedBounds.Offset(this.translateX + this.samplingOffsetX - this.minX, this.translateY + this.samplingOffsetY - this.minY);
-
-            bool contained =
-                translatedBounds.Left >= 0F &&
-                translatedBounds.Top >= 0F &&
-                translatedBounds.Right <= this.width &&
-                translatedBounds.Bottom <= this.height;
-
-            if (pointCount == 1)
-            {
-                if (TryGetFirstDistinctPoint(points, out _, out PointF point))
-                {
-                    this.EmitPointStrokeContour(point, contained, ref context);
-                }
-
-                return;
-            }
-
-            if (pointCount == 2)
-            {
-                this.EmitDistinctSegmentContour(points, contained, ref context);
-                return;
-            }
-
-            this.EmitOpenStrokeContour(points, contained, ref context);
-        }
-
-        /// <summary>
-        /// Appends one contour point to the active stroke contour.
-        /// </summary>
-        /// <param name="state">The active contour state.</param>
-        /// <param name="point">The point to append.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void AppendContourPoint(ref ContourState state, PointF point, bool contained, ref Context context)
-        {
-            if (!state.HasPoint)
-            {
-                state.HasPoint = true;
-                state.FirstPoint = point;
-                state.PreviousPoint = point;
-                return;
-            }
-
-            if (state.PreviousPoint == point)
-            {
-                return;
-            }
-
-            this.EmitLine(state.PreviousPoint, point, contained, ref context);
-            state.PreviousPoint = point;
-        }
-
-        /// <summary>
-        /// Closes the active stroke contour.
-        /// </summary>
-        /// <param name="state">The active contour state.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void CloseContour(ref ContourState state, bool contained, ref Context context)
-        {
-            if (!state.HasPoint || state.PreviousPoint == state.FirstPoint)
-            {
-                return;
-            }
-
-            this.EmitLine(state.PreviousPoint, state.FirstPoint, contained, ref context);
-            state.PreviousPoint = state.FirstPoint;
-        }
-
-        /// <summary>
-        /// Processes one centerline contour.
-        /// </summary>
-        /// <param name="contour">The contour to process.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void ProcessContour(in LinearContour contour, bool contained, ref Context context)
-        {
-            if (this.geometry.Points is PointF[] geometryPoints)
-            {
-                // Reuse contiguous point storage directly when available so we can walk spans
-                // without paying repeated IReadOnlyList indexing costs in the hot contour path.
-                ReadOnlySpan<PointF> contourPoints = geometryPoints.AsSpan(contour.PointStart, contour.PointCount);
-                int distinctPointCount = GetDistinctPointCount(contourPoints, contour.IsClosed);
-                if (distinctPointCount == 0)
-                {
-                    return;
-                }
-
-                if (contour.IsClosed)
-                {
-                    switch (distinctPointCount)
-                    {
-                        case 1:
-                            if (TryGetFirstDistinctPoint(contourPoints, out _, out PointF point))
-                            {
-                                this.EmitPointStrokeContour(point, contained, ref context);
-                            }
-
-                            return;
-                        case 2:
-                            this.EmitDistinctSegmentContour(contourPoints, contained, ref context);
-                            return;
-                        default:
-                            this.EmitClosedStrokeContour(contourPoints, contained, ref context);
-                            return;
-                    }
-                }
-
-                if (distinctPointCount == 1)
-                {
-                    if (TryGetFirstDistinctPoint(contourPoints, out _, out PointF point))
-                    {
-                        this.EmitPointStrokeContour(point, contained, ref context);
-                    }
-                }
-                else if (distinctPointCount == 2)
-                {
-                    this.EmitDistinctSegmentContour(contourPoints, contained, ref context);
-                }
-                else
-                {
-                    this.EmitOpenStrokeContour(contourPoints, contained, ref context);
-                }
-
-                return;
-            }
-
-            int pointCount = this.GetDistinctPointCount(contour);
-            if (pointCount == 0)
-            {
-                return;
-            }
-
-            if (contour.IsClosed)
-            {
-                switch (pointCount)
-                {
-                    case 1:
-                        if (this.TryGetFirstDistinctPoint(contour, out _, out PointF point))
-                        {
-                            this.EmitPointStrokeContour(point, contained, ref context);
-                        }
-
-                        return;
-                    case 2:
-                        this.EmitDistinctSegmentContour(contour, contained, ref context);
-                        return;
-                    default:
-                        this.EmitClosedStrokeContour(contour, contained, ref context);
-                        return;
-                }
-            }
-
-            if (pointCount == 1)
-            {
-                if (this.TryGetFirstDistinctPoint(contour, out _, out PointF point))
-                {
-                    this.EmitPointStrokeContour(point, contained, ref context);
-                }
-            }
-            else if (pointCount == 2)
-            {
-                this.EmitDistinctSegmentContour(contour, contained, ref context);
-            }
-            else
-            {
-                this.EmitOpenStrokeContour(contour, contained, ref context);
-            }
-        }
-
-        /// <summary>
-        /// Emits one distinct two-point contour without creating a temporary point buffer.
-        /// </summary>
-        /// <param name="contour">The contour to emit.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitDistinctSegmentContour(in LinearContour contour, bool contained, ref Context context)
-        {
-            if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF start) ||
-                !this.TryGetNextDistinctPoint(contour, firstIndex, out _, out PointF end))
-            {
-                return;
-            }
-
-            if (start == end)
-            {
-                this.EmitPointStrokeContour(start, contained, ref context);
-                return;
-            }
-
-            this.EmitOpenSegmentStrokeContour(start, end, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits one distinct two-point contour from contiguous point storage without creating a temporary point buffer.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitDistinctSegmentContour(ReadOnlySpan<PointF> contourPoints, bool contained, ref Context context)
-        {
-            if (!TryGetFirstDistinctPoint(contourPoints, out int firstIndex, out PointF start) ||
-                !TryGetNextDistinctPoint(contourPoints, firstIndex, out _, out PointF end))
-            {
-                return;
-            }
-
-            if (start == end)
-            {
-                this.EmitPointStrokeContour(start, contained, ref context);
-                return;
-            }
-
-            this.EmitOpenSegmentStrokeContour(start, end, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits one distinct two-point explicit polyline without creating a temporary point buffer.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitDistinctSegmentContour(PointF[] points, bool contained, ref Context context)
-        {
-            if (!TryGetFirstDistinctPoint(points, out int firstIndex, out PointF start) ||
-                !TryGetNextDistinctPoint(points, firstIndex, out _, out PointF end))
-            {
-                return;
-            }
-
-            if (start == end)
-            {
-                this.EmitPointStrokeContour(start, contained, ref context);
-                return;
-            }
-
-            this.EmitOpenSegmentStrokeContour(start, end, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits one stroked open segment.
-        /// </summary>
-        /// <param name="start">The segment start point.</param>
-        /// <param name="end">The segment end point.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitOpenSegmentStrokeContour(PointF start, PointF end, bool contained, ref Context context)
-        {
-            if (!TryGetDirection(start, end, out Vector2 tangent, out _))
-            {
-                this.EmitPointStrokeContour(start, contained, ref context);
-                return;
-            }
-
-            float halfWidth = this.stroke.HalfWidth;
-            Vector2 normal = GetLeftNormal(tangent) * halfWidth;
-            Vector2 extension = this.stroke.LineCap == LineCap.Square ? tangent * halfWidth : Vector2.Zero;
-            Vector2 startVector = start;
-            Vector2 endVector = end;
-            PointF p0 = startVector + normal - extension;
-            PointF p1 = endVector + normal + extension;
-            PointF p2 = endVector - normal + extension;
-            PointF p3 = startVector - normal - extension;
-
-            this.EmitLine(p0, p1, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.EmitDirectedArcContour(endVector, normal, -normal, tangent, contained, ref context);
-            }
-            else
-            {
-                this.EmitLine(p1, p2, contained, ref context);
-            }
-
-            this.EmitLine(p2, p3, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.EmitDirectedArcContour(startVector, -normal, normal, -tangent, contained, ref context);
-            }
-            else
-            {
-                this.EmitLine(p3, p0, contained, ref context);
-            }
-        }
-
-        /// <summary>
-        /// Emits one stroked open multi-segment contour.
-        /// </summary>
-        /// <param name="contour">The open contour.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitOpenStrokeContour(in LinearContour contour, bool contained, ref Context context)
-        {
-            if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF firstPoint) ||
-                !this.TryGetNextDistinctPoint(contour, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !this.TryGetLastDistinctPoint(contour, out int lastIndex, out PointF lastPoint) ||
-                !this.TryGetPreviousDistinctPoint(contour, lastIndex, out _, out PointF beforeLastPoint) ||
-                !TryGetDirection(firstPoint, secondPoint, out Vector2 startTangent, out _) ||
-                !TryGetDirection(beforeLastPoint, lastPoint, out Vector2 endTangent, out _))
-            {
-                return;
-            }
-
-            float halfWidth = this.stroke.HalfWidth;
-            Vector2 startNormal = GetLeftNormal(startTangent) * halfWidth;
-            Vector2 endNormal = GetLeftNormal(endTangent) * halfWidth;
-            Vector2 startExtension = this.stroke.LineCap == LineCap.Square ? startTangent * halfWidth : Vector2.Zero;
-            Vector2 endExtension = this.stroke.LineCap == LineCap.Square ? endTangent * halfWidth : Vector2.Zero;
-            Vector2 startPoint = firstPoint;
-            Vector2 endPoint = lastPoint;
-            ContourState strokeContour = default;
-            this.AppendContourPoint(ref strokeContour, startPoint + startNormal - startExtension, contained, ref context);
-
-            PointF previousPoint = firstPoint;
-            int currentIndex = secondIndex;
-            PointF currentPoint = secondPoint;
-            while (this.TryGetNextDistinctPoint(contour, currentIndex, out int nextIndex, out PointF nextPoint))
-            {
-                if (!TryGetDirection(previousPoint, currentPoint, out Vector2 previousTangent, out float previousLength) ||
-                    !TryGetDirection(currentPoint, nextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    previousPoint = currentPoint;
-                    currentIndex = nextIndex;
-                    currentPoint = nextPoint;
-                    continue;
-                }
-
-                this.AppendSideJoinContour(
-                    ref strokeContour,
-                    currentPoint,
-                    previousTangent,
-                    nextTangent,
-                    previousLength,
-                    nextLength,
-                    1F,
-                    contained,
-                    ref context);
-
-                previousPoint = currentPoint;
-                currentIndex = nextIndex;
-                currentPoint = nextPoint;
-            }
-
-            this.AppendContourPoint(ref strokeContour, endPoint + endNormal + endExtension, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.AppendDirectedArcContour(ref strokeContour, endPoint, endNormal, -endNormal, endTangent, contained, ref context);
-            }
-            else
-            {
-                this.AppendContourPoint(ref strokeContour, endPoint - endNormal + endExtension, contained, ref context);
-            }
-
-            PointF reversePreviousPoint = lastPoint;
-            int reverseCurrentIndex = lastIndex;
-            PointF reverseCurrentPoint = beforeLastPoint;
-            if (this.TryGetPreviousDistinctPoint(contour, reverseCurrentIndex, out int beforeLastIndex, out _))
-            {
-                reverseCurrentIndex = beforeLastIndex;
-            }
-
-            while (this.TryGetPreviousDistinctPoint(contour, reverseCurrentIndex, out int nextReverseIndex, out PointF nextReversePoint))
-            {
-                if (!TryGetDirection(reversePreviousPoint, reverseCurrentPoint, out Vector2 previousTangent, out float previousLength) ||
-                    !TryGetDirection(reverseCurrentPoint, nextReversePoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    reversePreviousPoint = reverseCurrentPoint;
-                    reverseCurrentIndex = nextReverseIndex;
-                    reverseCurrentPoint = nextReversePoint;
-                    continue;
-                }
-
-                this.AppendSideJoinContour(
-                    ref strokeContour,
-                    reverseCurrentPoint,
-                    previousTangent,
-                    nextTangent,
-                    previousLength,
-                    nextLength,
-                    1F,
-                    contained,
-                    ref context);
-
-                reversePreviousPoint = reverseCurrentPoint;
-                reverseCurrentIndex = nextReverseIndex;
-                reverseCurrentPoint = nextReversePoint;
-            }
-
-            this.AppendContourPoint(ref strokeContour, startPoint - startNormal - startExtension, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.AppendDirectedArcContour(ref strokeContour, startPoint, -startNormal, startNormal, -startTangent, contained, ref context);
-            }
-
-            this.CloseContour(ref strokeContour, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits one stroked open multi-segment contour from contiguous point storage.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitOpenStrokeContour(ReadOnlySpan<PointF> contourPoints, bool contained, ref Context context)
-        {
-            if (!TryGetFirstDistinctPoint(contourPoints, out int firstIndex, out PointF firstPoint) ||
-                !TryGetNextDistinctPoint(contourPoints, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !TryGetLastDistinctPoint(contourPoints, out int lastIndex, out PointF lastPoint) ||
-                !TryGetPreviousDistinctPoint(contourPoints, lastIndex, out _, out PointF beforeLastPoint) ||
-                !TryGetDirection(firstPoint, secondPoint, out Vector2 startTangent, out _) ||
-                !TryGetDirection(beforeLastPoint, lastPoint, out Vector2 endTangent, out _))
-            {
-                return;
-            }
-
-            float halfWidth = this.stroke.HalfWidth;
-            Vector2 startNormal = GetLeftNormal(startTangent) * halfWidth;
-            Vector2 endNormal = GetLeftNormal(endTangent) * halfWidth;
-            Vector2 startExtension = this.stroke.LineCap == LineCap.Square ? startTangent * halfWidth : Vector2.Zero;
-            Vector2 endExtension = this.stroke.LineCap == LineCap.Square ? endTangent * halfWidth : Vector2.Zero;
-            Vector2 startPoint = firstPoint;
-            Vector2 endPoint = lastPoint;
-            ContourState strokeContour = default;
-            this.AppendContourPoint(ref strokeContour, startPoint + startNormal - startExtension, contained, ref context);
-
-            PointF previousPoint = firstPoint;
-            int currentIndex = secondIndex;
-            PointF currentPoint = secondPoint;
-            while (TryGetNextDistinctPoint(contourPoints, currentIndex, out int nextIndex, out PointF nextPoint))
-            {
-                if (!TryGetDirection(previousPoint, currentPoint, out Vector2 previousTangent, out float previousLength) ||
-                    !TryGetDirection(currentPoint, nextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    previousPoint = currentPoint;
-                    currentIndex = nextIndex;
-                    currentPoint = nextPoint;
-                    continue;
-                }
-
-                this.AppendSideJoinContour(
-                    ref strokeContour,
-                    currentPoint,
-                    previousTangent,
-                    nextTangent,
-                    previousLength,
-                    nextLength,
-                    1F,
-                    contained,
-                    ref context);
-
-                previousPoint = currentPoint;
-                currentIndex = nextIndex;
-                currentPoint = nextPoint;
-            }
-
-            this.AppendContourPoint(ref strokeContour, endPoint + endNormal + endExtension, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.AppendDirectedArcContour(ref strokeContour, endPoint, endNormal, -endNormal, endTangent, contained, ref context);
-            }
-            else
-            {
-                this.AppendContourPoint(ref strokeContour, endPoint - endNormal + endExtension, contained, ref context);
-            }
-
-            PointF reversePreviousPoint = lastPoint;
-            int reverseCurrentIndex = lastIndex;
-            PointF reverseCurrentPoint = beforeLastPoint;
-            if (TryGetPreviousDistinctPoint(contourPoints, reverseCurrentIndex, out int beforeLastIndex, out _))
-            {
-                reverseCurrentIndex = beforeLastIndex;
-            }
-
-            while (TryGetPreviousDistinctPoint(contourPoints, reverseCurrentIndex, out int nextReverseIndex, out PointF nextReversePoint))
-            {
-                if (!TryGetDirection(reversePreviousPoint, reverseCurrentPoint, out Vector2 previousTangent, out float previousLength) ||
-                    !TryGetDirection(reverseCurrentPoint, nextReversePoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    reversePreviousPoint = reverseCurrentPoint;
-                    reverseCurrentIndex = nextReverseIndex;
-                    reverseCurrentPoint = nextReversePoint;
-                    continue;
-                }
-
-                this.AppendSideJoinContour(
-                    ref strokeContour,
-                    reverseCurrentPoint,
-                    previousTangent,
-                    nextTangent,
-                    previousLength,
-                    nextLength,
-                    1F,
-                    contained,
-                    ref context);
-
-                reversePreviousPoint = reverseCurrentPoint;
-                reverseCurrentIndex = nextReverseIndex;
-                reverseCurrentPoint = nextReversePoint;
-            }
-
-            this.AppendContourPoint(ref strokeContour, startPoint - startNormal - startExtension, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.AppendDirectedArcContour(ref strokeContour, startPoint, -startNormal, startNormal, -startTangent, contained, ref context);
-            }
-
-            this.CloseContour(ref strokeContour, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits one stroked explicit open multi-segment polyline.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitOpenStrokeContour(PointF[] points, bool contained, ref Context context)
-        {
-            if (!TryGetFirstDistinctPoint(points, out int firstIndex, out PointF firstPoint) ||
-                !TryGetNextDistinctPoint(points, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !TryGetLastDistinctPoint(points, out int lastIndex, out PointF lastPoint) ||
-                !TryGetPreviousDistinctPoint(points, lastIndex, out _, out PointF beforeLastPoint) ||
-                !TryGetDirection(firstPoint, secondPoint, out Vector2 startTangent, out _) ||
-                !TryGetDirection(beforeLastPoint, lastPoint, out Vector2 endTangent, out _))
-            {
-                return;
-            }
-
-            float halfWidth = this.stroke.HalfWidth;
-            Vector2 startNormal = GetLeftNormal(startTangent) * halfWidth;
-            Vector2 endNormal = GetLeftNormal(endTangent) * halfWidth;
-            Vector2 startExtension = this.stroke.LineCap == LineCap.Square ? startTangent * halfWidth : Vector2.Zero;
-            Vector2 endExtension = this.stroke.LineCap == LineCap.Square ? endTangent * halfWidth : Vector2.Zero;
-            Vector2 startPoint = firstPoint;
-            Vector2 endPoint = lastPoint;
-            ContourState strokeContour = default;
-            this.AppendContourPoint(ref strokeContour, startPoint + startNormal - startExtension, contained, ref context);
-
-            PointF previousPoint = firstPoint;
-            int currentIndex = secondIndex;
-            PointF currentPoint = secondPoint;
-            while (TryGetNextDistinctPoint(points, currentIndex, out int nextIndex, out PointF nextPoint))
-            {
-                if (!TryGetDirection(previousPoint, currentPoint, out Vector2 previousTangent, out float previousLength) ||
-                    !TryGetDirection(currentPoint, nextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    previousPoint = currentPoint;
-                    currentIndex = nextIndex;
-                    currentPoint = nextPoint;
-                    continue;
-                }
-
-                this.AppendSideJoinContour(
-                    ref strokeContour,
-                    currentPoint,
-                    previousTangent,
-                    nextTangent,
-                    previousLength,
-                    nextLength,
-                    1F,
-                    contained,
-                    ref context);
-
-                previousPoint = currentPoint;
-                currentIndex = nextIndex;
-                currentPoint = nextPoint;
-            }
-
-            this.AppendContourPoint(ref strokeContour, endPoint + endNormal + endExtension, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.AppendDirectedArcContour(ref strokeContour, endPoint, endNormal, -endNormal, endTangent, contained, ref context);
-            }
-            else
-            {
-                this.AppendContourPoint(ref strokeContour, endPoint - endNormal + endExtension, contained, ref context);
-            }
-
-            PointF reversePreviousPoint = lastPoint;
-            int reverseCurrentIndex = lastIndex;
-            PointF reverseCurrentPoint = beforeLastPoint;
-            if (TryGetPreviousDistinctPoint(points, reverseCurrentIndex, out int beforeLastIndex, out _))
-            {
-                reverseCurrentIndex = beforeLastIndex;
-            }
-
-            while (TryGetPreviousDistinctPoint(points, reverseCurrentIndex, out int nextReverseIndex, out PointF nextReversePoint))
-            {
-                if (!TryGetDirection(reversePreviousPoint, reverseCurrentPoint, out Vector2 previousTangent, out float previousLength) ||
-                    !TryGetDirection(reverseCurrentPoint, nextReversePoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    reversePreviousPoint = reverseCurrentPoint;
-                    reverseCurrentIndex = nextReverseIndex;
-                    reverseCurrentPoint = nextReversePoint;
-                    continue;
-                }
-
-                this.AppendSideJoinContour(
-                    ref strokeContour,
-                    reverseCurrentPoint,
-                    previousTangent,
-                    nextTangent,
-                    previousLength,
-                    nextLength,
-                    1F,
-                    contained,
-                    ref context);
-
-                reversePreviousPoint = reverseCurrentPoint;
-                reverseCurrentIndex = nextReverseIndex;
-                reverseCurrentPoint = nextReversePoint;
-            }
-
-            this.AppendContourPoint(ref strokeContour, startPoint - startNormal - startExtension, contained, ref context);
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                this.AppendDirectedArcContour(ref strokeContour, startPoint, -startNormal, startNormal, -startTangent, contained, ref context);
-            }
-
-            this.CloseContour(ref strokeContour, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits the two stroked contours for a closed centerline contour.
-        /// </summary>
-        /// <param name="contour">The closed contour.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitClosedStrokeContour(in LinearContour contour, bool contained, ref Context context)
-        {
-            if (!this.TryGetFirstDistinctPoint(contour, out int firstIndex, out PointF firstPoint) ||
-                !this.TryGetNextDistinctPoint(contour, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !this.TryGetLastDistinctPoint(contour, out int lastIndex, out PointF lastPoint) ||
-                !this.TryGetPreviousDistinctPoint(contour, lastIndex, out int beforeLastIndex, out PointF beforeLastPoint))
-            {
-                return;
-            }
-
-            ContourState leftContour = default;
-            PointF previousPoint = lastPoint;
-            int currentIndex = firstIndex;
-            PointF currentPoint = firstPoint;
-            int nextIndex = secondIndex;
-            PointF nextPoint = secondPoint;
-
-            while (true)
-            {
-                if (TryGetDirection(previousPoint, currentPoint, out Vector2 previousTangent, out float previousLength) &&
-                    TryGetDirection(currentPoint, nextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    this.AppendSideJoinContour(
-                        ref leftContour,
-                        currentPoint,
-                        previousTangent,
-                        nextTangent,
-                        previousLength,
-                        nextLength,
-                        1F,
-                        contained,
-                        ref context);
-                }
-
-                if (currentIndex == lastIndex)
-                {
-                    break;
-                }
-
-                previousPoint = currentPoint;
-                currentIndex = nextIndex;
-                currentPoint = nextPoint;
-                if (!this.TryGetNextDistinctPoint(contour, currentIndex, out nextIndex, out nextPoint))
-                {
-                    nextIndex = firstIndex;
-                    nextPoint = firstPoint;
-                }
-            }
-
-            this.CloseContour(ref leftContour, contained, ref context);
-
-            ContourState reversedContour = default;
-            PointF reversePreviousPoint = firstPoint;
-            int reverseCurrentIndex = lastIndex;
-            PointF reverseCurrentPoint = lastPoint;
-            int reverseNextIndex = beforeLastIndex;
-            PointF reverseNextPoint = beforeLastPoint;
-
-            while (true)
-            {
-                if (TryGetDirection(reversePreviousPoint, reverseCurrentPoint, out Vector2 previousTangent, out float previousLength) &&
-                    TryGetDirection(reverseCurrentPoint, reverseNextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    this.AppendSideJoinContour(
-                        ref reversedContour,
-                        reverseCurrentPoint,
-                        previousTangent,
-                        nextTangent,
-                        previousLength,
-                        nextLength,
-                        1F,
-                        contained,
-                        ref context);
-                }
-
-                if (reverseCurrentIndex == firstIndex)
-                {
-                    break;
-                }
-
-                reversePreviousPoint = reverseCurrentPoint;
-                reverseCurrentIndex = reverseNextIndex;
-                reverseCurrentPoint = reverseNextPoint;
-                if (!this.TryGetPreviousDistinctPoint(contour, reverseCurrentIndex, out reverseNextIndex, out reverseNextPoint))
-                {
-                    reverseNextIndex = lastIndex;
-                    reverseNextPoint = lastPoint;
-                }
-            }
-
-            this.CloseContour(ref reversedContour, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits the two stroked contours for a closed contour from contiguous point storage.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitClosedStrokeContour(ReadOnlySpan<PointF> contourPoints, bool contained, ref Context context)
-        {
-            if (!TryGetFirstDistinctPoint(contourPoints, out int firstIndex, out PointF firstPoint) ||
-                !TryGetNextDistinctPoint(contourPoints, firstIndex, out int secondIndex, out PointF secondPoint) ||
-                !TryGetLastDistinctPoint(contourPoints, out int lastIndex, out PointF lastPoint) ||
-                !TryGetPreviousDistinctPoint(contourPoints, lastIndex, out int beforeLastIndex, out PointF beforeLastPoint))
-            {
-                return;
-            }
-
-            ContourState leftContour = default;
-            PointF previousPoint = lastPoint;
-            int currentIndex = firstIndex;
-            PointF currentPoint = firstPoint;
-            int nextIndex = secondIndex;
-            PointF nextPoint = secondPoint;
-
-            while (true)
-            {
-                if (TryGetDirection(previousPoint, currentPoint, out Vector2 previousTangent, out float previousLength) &&
-                    TryGetDirection(currentPoint, nextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    this.AppendSideJoinContour(
-                        ref leftContour,
-                        currentPoint,
-                        previousTangent,
-                        nextTangent,
-                        previousLength,
-                        nextLength,
-                        1F,
-                        contained,
-                        ref context);
-                }
-
-                if (currentIndex == lastIndex)
-                {
-                    break;
-                }
-
-                previousPoint = currentPoint;
-                currentIndex = nextIndex;
-                currentPoint = nextPoint;
-                if (!TryGetNextDistinctPoint(contourPoints, currentIndex, out nextIndex, out nextPoint))
-                {
-                    nextIndex = firstIndex;
-                    nextPoint = firstPoint;
-                }
-            }
-
-            this.CloseContour(ref leftContour, contained, ref context);
-
-            ContourState reversedContour = default;
-            PointF reversePreviousPoint = firstPoint;
-            int reverseCurrentIndex = lastIndex;
-            PointF reverseCurrentPoint = lastPoint;
-            int reverseNextIndex = beforeLastIndex;
-            PointF reverseNextPoint = beforeLastPoint;
-
-            while (true)
-            {
-                if (TryGetDirection(reversePreviousPoint, reverseCurrentPoint, out Vector2 previousTangent, out float previousLength) &&
-                    TryGetDirection(reverseCurrentPoint, reverseNextPoint, out Vector2 nextTangent, out float nextLength))
-                {
-                    this.AppendSideJoinContour(
-                        ref reversedContour,
-                        reverseCurrentPoint,
-                        previousTangent,
-                        nextTangent,
-                        previousLength,
-                        nextLength,
-                        1F,
-                        contained,
-                        ref context);
-                }
-
-                if (reverseCurrentIndex == firstIndex)
-                {
-                    break;
-                }
-
-                reversePreviousPoint = reverseCurrentPoint;
-                reverseCurrentIndex = reverseNextIndex;
-                reverseCurrentPoint = reverseNextPoint;
-                if (!TryGetPreviousDistinctPoint(contourPoints, reverseCurrentIndex, out reverseNextIndex, out reverseNextPoint))
-                {
-                    reverseNextIndex = lastIndex;
-                    reverseNextPoint = lastPoint;
-                }
-            }
-
-            this.CloseContour(ref reversedContour, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits a point-like stroke as a cap contour.
-        /// </summary>
-        /// <param name="point">The point-like stroke location.</param>
-        /// <param name="contained">Indicates whether the contour is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitPointStrokeContour(PointF point, bool contained, ref Context context)
-        {
-            Vector2 center = point;
-            float halfWidth = this.stroke.HalfWidth;
-            if (this.stroke.LineCap == LineCap.Round)
-            {
-                Vector2 startOffset = new(halfWidth, 0F);
-                this.EmitDirectedArcContour(center, startOffset, -startOffset, Vector2.UnitY, contained, ref context);
-                this.EmitDirectedArcContour(center, -startOffset, startOffset, -Vector2.UnitY, contained, ref context);
-                return;
-            }
-
-            PointF p0 = center + new Vector2(-halfWidth, -halfWidth);
-            PointF p1 = center + new Vector2(halfWidth, -halfWidth);
-            PointF p2 = center + new Vector2(halfWidth, halfWidth);
-            PointF p3 = center + new Vector2(-halfWidth, halfWidth);
-            this.EmitLine(p0, p1, contained, ref context);
-            this.EmitLine(p1, p2, contained, ref context);
-            this.EmitLine(p2, p3, contained, ref context);
-            this.EmitLine(p3, p0, contained, ref context);
-        }
-
-        /// <summary>
-        /// Emits one round cap or join arc directly into the active band context.
-        /// </summary>
-        /// <param name="center">The arc center.</param>
-        /// <param name="fromOffset">The start offset from the center.</param>
-        /// <param name="toOffset">The end offset from the center.</param>
-        /// <param name="preferredDirection">The preferred outward direction used to choose the sweep.</param>
-        /// <param name="contained">Indicates whether the arc is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitDirectedArcContour(
-            Vector2 center,
-            Vector2 fromOffset,
-            Vector2 toOffset,
-            Vector2 preferredDirection,
-            bool contained,
-            ref Context context)
-        {
-            if (fromOffset == Vector2.Zero || toOffset == Vector2.Zero)
-            {
-                this.EmitLine(center + fromOffset, center + toOffset, contained, ref context);
-                return;
-            }
-
-            float radius = fromOffset.Length();
-            if (radius <= StrokeDirectionEpsilon)
-            {
-                this.EmitLine(center + fromOffset, center + toOffset, contained, ref context);
-                return;
-            }
-
-            Vector2 preferred = preferredDirection;
-            if (preferred.LengthSquared() <= StrokeDirectionEpsilon * StrokeDirectionEpsilon)
-            {
-                preferred = Vector2.Normalize(fromOffset + toOffset);
-                if (preferred.LengthSquared() <= StrokeDirectionEpsilon * StrokeDirectionEpsilon)
-                {
-                    preferred = Vector2.Normalize(fromOffset);
-                }
-            }
-
-            double startAngle = Math.Atan2(fromOffset.Y, fromOffset.X);
-            double endAngle = Math.Atan2(toOffset.Y, toOffset.X);
-            double ccwSweep = NormalizePositiveAngle(endAngle - startAngle);
-            double cwSweep = ccwSweep - (Math.PI * 2D);
-            double chosenSweep = ChooseArcSweep(startAngle, ccwSweep, cwSweep, preferred);
-            int subdivisionCount = GetArcSubdivisionCount(radius, Math.Abs(chosenSweep), this.stroke.ArcDetailScale);
-            double step = chosenSweep / (subdivisionCount + 1);
-
-            PointF previousPoint = center + fromOffset;
-            for (int i = 1; i <= subdivisionCount; i++)
-            {
-                float angle = (float)(startAngle + (step * i));
-                PointF point = center + new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius);
-                this.EmitLine(previousPoint, point, contained, ref context);
-                previousPoint = point;
-            }
-
-            this.EmitLine(previousPoint, center + toOffset, contained, ref context);
-        }
-
-        /// <summary>
-        /// Appends a contour arc directly to the active stroke contour.
-        /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="center">The arc center.</param>
-        /// <param name="fromOffset">The start offset from the center.</param>
-        /// <param name="toOffset">The end offset from the center.</param>
-        /// <param name="preferredDirection">The preferred outward direction used to choose the sweep.</param>
-        /// <param name="contained">Indicates whether the arc is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void AppendDirectedArcContour(
-            ref ContourState contour,
-            Vector2 center,
-            Vector2 fromOffset,
-            Vector2 toOffset,
-            Vector2 preferredDirection,
-            bool contained,
-            ref Context context)
-        {
-            if (fromOffset == Vector2.Zero || toOffset == Vector2.Zero)
-            {
-                this.AppendContourPoint(ref contour, center + toOffset, contained, ref context);
-                return;
-            }
-
-            float radius = fromOffset.Length();
-            if (radius <= StrokeDirectionEpsilon)
-            {
-                this.AppendContourPoint(ref contour, center + toOffset, contained, ref context);
-                return;
-            }
-
-            Vector2 preferred = preferredDirection;
-            if (preferred.LengthSquared() <= StrokeDirectionEpsilon * StrokeDirectionEpsilon)
-            {
-                preferred = Vector2.Normalize(fromOffset + toOffset);
-                if (preferred.LengthSquared() <= StrokeDirectionEpsilon * StrokeDirectionEpsilon)
-                {
-                    preferred = Vector2.Normalize(fromOffset);
-                }
-            }
-
-            double startAngle = Math.Atan2(fromOffset.Y, fromOffset.X);
-            double endAngle = Math.Atan2(toOffset.Y, toOffset.X);
-            double ccwSweep = NormalizePositiveAngle(endAngle - startAngle);
-            double cwSweep = ccwSweep - (Math.PI * 2D);
-            double chosenSweep = ChooseArcSweep(startAngle, ccwSweep, cwSweep, preferred);
-            int subdivisionCount = GetArcSubdivisionCount(radius, Math.Abs(chosenSweep), this.stroke.ArcDetailScale);
-            double step = chosenSweep / (subdivisionCount + 1);
-
-            for (int i = 1; i <= subdivisionCount; i++)
-            {
-                float angle = (float)(startAngle + (step * i));
-                this.AppendContourPoint(
-                    ref contour,
-                    center + new Vector2(MathF.Cos(angle) * radius, MathF.Sin(angle) * radius),
-                    contained,
-                    ref context);
-            }
-
-            this.AppendContourPoint(ref contour, center + toOffset, contained, ref context);
-        }
-
-        /// <summary>
-        /// Appends one side join point sequence directly to the active stroke contour.
-        /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousLength">The length of the previous segment.</param>
-        /// <param name="nextLength">The length of the next segment.</param>
-        /// <param name="sideSign">The side selector for the contour being emitted.</param>
-        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void AppendSideJoinContour(
-            ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            float previousLength,
-            float nextLength,
-            float sideSign,
-            bool contained,
-            ref Context context)
-        {
-            Vector2 previousOffset = GetLeftNormal(previousTangent) * (this.stroke.HalfWidth * sideSign);
-            Vector2 nextOffset = GetLeftNormal(nextTangent) * (this.stroke.HalfWidth * sideSign);
-            float dot = Vector2.Dot(previousTangent, nextTangent);
-            float cross = Cross(previousTangent, nextTangent);
-            if (MathF.Abs(cross) <= StrokeParallelEpsilon && dot > 0F)
-            {
-                this.AppendContourPoint(ref contour, point + nextOffset, contained, ref context);
-                return;
-            }
-
-            // The cross product, adjusted by the contour side, tells us whether this contour is
-            // traversing the visible outer corner or the collapsed inner corner of the join.
-            bool isOuterJoin = cross * sideSign > 0F;
-            if (!isOuterJoin)
-            {
-                this.AppendInnerJoinContour(
-                    ref contour,
-                    point,
-                    previousTangent,
-                    nextTangent,
-                    previousOffset,
-                    nextOffset,
-                    previousLength,
-                    nextLength,
-                    contained,
-                    ref context);
-                return;
-            }
-
-            this.AppendOuterJoinContour(
-                ref contour,
-                point,
-                previousTangent,
-                nextTangent,
-                previousOffset,
-                nextOffset,
-                contained,
-                ref context);
-        }
-
-        /// <summary>
-        /// Appends one outer join directly to the active stroke contour.
-        /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousOffset">The offset vector on the previous segment.</param>
-        /// <param name="nextOffset">The offset vector on the next segment.</param>
-        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void AppendOuterJoinContour(
-            ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            Vector2 previousOffset,
-            Vector2 nextOffset,
-            bool contained,
-            ref Context context)
-        {
-            switch (this.stroke.LineJoin)
-            {
-                case LineJoin.Round:
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained, ref context);
-                    this.AppendDirectedArcContour(
-                        ref contour,
-                        point,
-                        previousOffset,
-                        nextOffset,
-                        GetPreferredArcDirection(previousOffset, nextOffset),
-                        contained,
-                        ref context);
-                    return;
-
-                case LineJoin.Miter:
-                case LineJoin.MiterRevert:
-                case LineJoin.MiterRound:
-                    this.AppendMiterJoinContour(
-                        ref contour,
-                        point,
-                        previousTangent,
-                        nextTangent,
-                        previousOffset,
-                        nextOffset,
-                        this.stroke.LineJoin,
-                        this.stroke.MiterLimit,
-                        contained,
-                        ref context);
-                    return;
-
-                default:
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained, ref context);
-                    this.AppendContourPoint(ref contour, point + nextOffset, contained, ref context);
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Appends one inner join directly to the active stroke contour.
-        /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousOffset">The offset vector on the previous segment.</param>
-        /// <param name="nextOffset">The offset vector on the next segment.</param>
-        /// <param name="previousLength">The length of the previous segment.</param>
-        /// <param name="nextLength">The length of the next segment.</param>
-        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void AppendInnerJoinContour(
-            ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            Vector2 previousOffset,
-            Vector2 nextOffset,
-            float previousLength,
-            float nextLength,
-            bool contained,
-            ref Context context)
-        {
-            double limit = Math.Min(previousLength, nextLength) / Math.Max(this.stroke.HalfWidth, StrokeDirectionEpsilon);
-            if (limit < this.stroke.InnerMiterLimit)
-            {
-                limit = this.stroke.InnerMiterLimit;
-            }
-
-            switch (this.stroke.InnerJoin)
-            {
-                case InnerJoin.Miter:
-                    this.AppendMiterJoinContour(
-                        ref contour,
-                        point,
-                        previousTangent,
-                        nextTangent,
-                        previousOffset,
-                        nextOffset,
-                        LineJoin.MiterRevert,
-                        limit,
-                        contained,
-                        ref context);
-                    return;
-
-                case InnerJoin.Jag:
-                case InnerJoin.Round:
-                    Vector2 offsetDelta = previousOffset - nextOffset;
-                    float offsetDeltaSquared = offsetDelta.LengthSquared();
-                    if (offsetDeltaSquared < previousLength * previousLength && offsetDeltaSquared < nextLength * nextLength)
-                    {
-                        this.AppendMiterJoinContour(
-                            ref contour,
-                            point,
-                            previousTangent,
-                            nextTangent,
-                            previousOffset,
-                            nextOffset,
-                            LineJoin.MiterRevert,
-                            limit,
-                            contained,
-                            ref context);
-                        return;
-                    }
-
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained, ref context);
-                    this.AppendContourPoint(ref contour, point, contained, ref context);
-                    if (this.stroke.InnerJoin == InnerJoin.Round)
-                    {
-                        this.AppendContourPoint(ref contour, point + nextOffset, contained, ref context);
-                        this.AppendDirectedArcContour(
-                            ref contour,
-                            point,
-                            nextOffset,
-                            previousOffset,
-                            -GetPreferredArcDirection(previousOffset, nextOffset),
-                            contained,
-                            ref context);
-                    }
-
-                    this.AppendContourPoint(ref contour, point, contained, ref context);
-                    this.AppendContourPoint(ref contour, point + nextOffset, contained, ref context);
-                    return;
-
-                default:
-                    this.AppendContourPoint(ref contour, point + previousOffset, contained, ref context);
-                    this.AppendContourPoint(ref contour, point + nextOffset, contained, ref context);
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Appends one miter-family join directly to the active stroke contour.
-        /// </summary>
-        /// <param name="contour">The active contour state.</param>
-        /// <param name="point">The join point.</param>
-        /// <param name="previousTangent">The normalized tangent of the previous segment.</param>
-        /// <param name="nextTangent">The normalized tangent of the next segment.</param>
-        /// <param name="previousOffset">The offset vector on the previous segment.</param>
-        /// <param name="nextOffset">The offset vector on the next segment.</param>
-        /// <param name="lineJoin">The miter-family join behavior to apply.</param>
-        /// <param name="miterLimit">The effective miter limit.</param>
-        /// <param name="contained">Indicates whether the join is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void AppendMiterJoinContour(
-            ref ContourState contour,
-            Vector2 point,
-            Vector2 previousTangent,
-            Vector2 nextTangent,
-            Vector2 previousOffset,
-            Vector2 nextOffset,
-            LineJoin lineJoin,
-            double miterLimit,
-            bool contained,
-            ref Context context)
-        {
-            Vector2 previousPoint = point + previousOffset;
-            Vector2 nextPoint = point + nextOffset;
-            float bevelDistance = ((previousOffset + nextOffset) * 0.5F).Length();
-            float limit = (float)(Math.Max(miterLimit, 1D) * Math.Max(previousOffset.Length(), nextOffset.Length()));
-
-            if (TryIntersectOffsetLines(point, previousOffset, previousTangent, nextOffset, nextTangent, out Vector2 intersection))
-            {
-                float intersectionDistance = Vector2.Distance(point, intersection);
-                if (intersectionDistance <= limit)
-                {
-                    this.AppendContourPoint(ref contour, intersection, contained, ref context);
-                    return;
-                }
-
-                switch (lineJoin)
-                {
-                    case LineJoin.MiterRevert:
-                        this.AppendContourPoint(ref contour, previousPoint, contained, ref context);
-                        this.AppendContourPoint(ref contour, nextPoint, contained, ref context);
-                        return;
-
-                    case LineJoin.MiterRound:
-                        this.AppendDirectedArcContour(
-                            ref contour,
-                            point,
-                            previousOffset,
-                            nextOffset,
-                            GetPreferredArcDirection(previousOffset, nextOffset),
-                            contained,
-                            ref context);
-                        return;
-
-                    default:
-                        if (intersectionDistance <= bevelDistance + StrokeDirectionEpsilon)
-                        {
-                            this.AppendContourPoint(ref contour, previousPoint, contained, ref context);
-                            this.AppendContourPoint(ref contour, nextPoint, contained, ref context);
-                            return;
-                        }
-
-                        float ratio = (limit - bevelDistance) / (intersectionDistance - bevelDistance);
-                        this.AppendContourPoint(ref contour, previousPoint + ((intersection - previousPoint) * ratio), contained, ref context);
-                        this.AppendContourPoint(ref contour, nextPoint + ((intersection - nextPoint) * ratio), contained, ref context);
-                        return;
-                }
-            }
-
-            switch (lineJoin)
-            {
-                case LineJoin.MiterRevert:
-                    this.AppendContourPoint(ref contour, previousPoint, contained, ref context);
-                    this.AppendContourPoint(ref contour, nextPoint, contained, ref context);
-                    return;
-
-                case LineJoin.MiterRound:
-                    this.AppendDirectedArcContour(
-                        ref contour,
-                        point,
-                        previousOffset,
-                        nextOffset,
-                        GetPreferredArcDirection(previousOffset, nextOffset),
-                        contained,
-                        ref context);
-                    return;
-
-                default:
-                    float fallbackLimit = (float)Math.Max(miterLimit, 1D) * (previousOffset.Length() <= 0F ? nextOffset.Length() : previousOffset.Length());
-                    this.AppendContourPoint(ref contour, previousPoint + (previousTangent * fallbackLimit), contained, ref context);
-                    this.AppendContourPoint(ref contour, nextPoint - (nextTangent * fallbackLimit), contained, ref context);
-                    return;
-            }
-        }
-
-        /// <summary>
-        /// Emits one stroked boundary edge into the active band context.
-        /// </summary>
-        /// <param name="start">The edge start point.</param>
-        /// <param name="end">The edge end point.</param>
-        /// <param name="contained">Indicates whether the edge is fully contained within the active band.</param>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        private void EmitLine(PointF start, PointF end, bool contained, ref Context context)
-        {
-            if (contained)
-            {
-                RasterizeContainedLineF24Dot8(
-                    ref context,
-                    FloatToFixed24Dot8(((start.X + this.translateX) - this.minX) + this.samplingOffsetX),
-                    FloatToFixed24Dot8(((start.Y + this.translateY) - this.minY) + this.samplingOffsetY),
-                    FloatToFixed24Dot8(((end.X + this.translateX) - this.minX) + this.samplingOffsetX),
-                    FloatToFixed24Dot8(((end.Y + this.translateY) - this.minY) + this.samplingOffsetY));
-            }
-            else
-            {
-                this.AddUncontainedLine(
-                    ref context,
-                    ((start.X + this.translateX) - this.minX) + this.samplingOffsetX,
-                    ((start.Y + this.translateY) - this.minY) + this.samplingOffsetY,
-                    ((end.X + this.translateX) - this.minX) + this.samplingOffsetX,
-                    ((end.Y + this.translateY) - this.minY) + this.samplingOffsetY);
-            }
-        }
-
-        /// <summary>
-        /// Rasterizes one fully contained line in 24.8 fixed-point band-local coordinates.
-        /// </summary>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        /// <param name="x0">The fixed-point X coordinate of the start point.</param>
-        /// <param name="y0">The fixed-point Y coordinate of the start point.</param>
-        /// <param name="x1">The fixed-point X coordinate of the end point.</param>
-        /// <param name="y1">The fixed-point Y coordinate of the end point.</param>
-        private static void RasterizeContainedLineF24Dot8(ref Context context, int x0, int y0, int x1, int y1)
-        {
-            if (y0 == y1)
-            {
-                return;
-            }
-
-            int dx = Math.Abs(x1 - x0);
-            int dy = Math.Abs(y1 - y0);
-            if (dx > MaximumDelta || dy > MaximumDelta)
-            {
-                int mx = (x0 + x1) >> 1;
-                int my = (y0 + y1) >> 1;
-                RasterizeContainedLineF24Dot8(ref context, x0, y0, mx, my);
-                RasterizeContainedLineF24Dot8(ref context, mx, my, x1, y1);
-                return;
-            }
-
-            context.RasterizeLineSegment(x0, y0, x1, y1);
-        }
-
-        /// <summary>
-        /// Clips one edge to the active band and rasterizes the visible portion.
-        /// </summary>
-        /// <param name="context">The mutable scan-conversion context.</param>
-        /// <param name="x0">The band-local X coordinate of the start point.</param>
-        /// <param name="y0">The band-local Y coordinate of the start point.</param>
-        /// <param name="x1">The band-local X coordinate of the end point.</param>
-        /// <param name="y1">The band-local Y coordinate of the end point.</param>
-        private void AddUncontainedLine(ref Context context, float x0, float y0, float x1, float y1)
-        {
-            if (y0 == y1)
-            {
-                return;
-            }
-
-            if (y0 <= 0F && y1 <= 0F)
-            {
-                return;
-            }
-
-            if (y0 >= this.height && y1 >= this.height)
-            {
-                return;
-            }
-
-            if (x0 >= this.width && x1 >= this.width)
-            {
-                return;
-            }
-
-            if (x0 == x1)
-            {
-                int x0c = Math.Clamp(FloatToFixed24Dot8(x0), 0, this.width * FixedOne);
-                int p0y = Math.Clamp(FloatToFixed24Dot8(y0), 0, this.height * FixedOne);
-                int p1y = Math.Clamp(FloatToFixed24Dot8(y1), 0, this.height * FixedOne);
-
-                if (x0c == 0)
-                {
-                    context.AddClippedStartCover(p0y, p1y);
-                }
-                else
-                {
-                    RasterizeContainedLineF24Dot8(ref context, x0c, p0y, x0c, p1y);
-                }
-
-                return;
-            }
-
-            double deltayV = Math.Abs(y1 - y0);
-            double deltaxV = x1 - x0;
-            double rx0 = x0;
-            double ry0 = y0;
-            double rx1 = x1;
-            double ry1 = y1;
-
-            if (y1 > y0)
-            {
-                if (y0 < 0F)
-                {
-                    double t = -y0 / deltayV;
-                    rx0 = x0 + (deltaxV * t);
-                    ry0 = 0D;
-                }
-
-                if (y1 > this.height)
-                {
-                    double t = (this.height - y0) / deltayV;
-                    rx1 = x0 + (deltaxV * t);
-                    ry1 = this.height;
-                }
-            }
-            else
-            {
-                if (y0 > this.height)
-                {
-                    double t = (y0 - this.height) / deltayV;
-                    rx0 = x0 + (deltaxV * t);
-                    ry0 = this.height;
-                }
-
-                if (y1 < 0F)
-                {
-                    double t = y0 / deltayV;
-                    rx1 = x0 + (deltaxV * t);
-                    ry1 = 0D;
-                }
-            }
-
-            if (rx0 >= this.width && rx1 >= this.width)
-            {
-                return;
-            }
-
-            if (rx0 > 0D && rx1 > 0D && rx0 < this.width && rx1 < this.width)
-            {
-                RasterizeContainedLineF24Dot8(
-                    ref context,
-                    Math.Clamp(FloatToFixed24Dot8((float)rx0), 0, this.width * FixedOne),
-                    Math.Clamp(FloatToFixed24Dot8((float)ry0), 0, this.height * FixedOne),
-                    Math.Clamp(FloatToFixed24Dot8((float)rx1), 0, this.width * FixedOne),
-                    Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.height * FixedOne));
-                return;
-            }
-
-            if (rx0 <= 0D && rx1 <= 0D)
-            {
-                context.AddClippedStartCover(
-                    Math.Clamp(FloatToFixed24Dot8((float)ry0), 0, this.height * FixedOne),
-                    Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.height * FixedOne));
-                return;
-            }
-
-            double deltayH = ry1 - ry0;
-            double deltaxH = Math.Abs(rx1 - rx0);
-
-            if (rx1 > rx0)
-            {
-                double bx1 = rx1;
-                double by1 = ry1;
-
-                if (rx1 > this.width)
-                {
-                    double t = (this.width - rx0) / deltaxH;
-                    by1 = ry0 + (deltayH * t);
-                    bx1 = this.width;
-                }
-
-                if (rx0 < 0D)
-                {
-                    double t = -rx0 / deltaxH;
-                    int a = Math.Clamp(FloatToFixed24Dot8((float)ry0), 0, this.height * FixedOne);
-                    int by = Math.Clamp(FloatToFixed24Dot8((float)(ry0 + (deltayH * t))), 0, this.height * FixedOne);
-                    int cx = Math.Clamp(FloatToFixed24Dot8((float)bx1), 0, this.width * FixedOne);
-                    int cy = Math.Clamp(FloatToFixed24Dot8((float)by1), 0, this.height * FixedOne);
-
-                    context.AddClippedStartCover(a, by);
-                    RasterizeContainedLineF24Dot8(ref context, 0, by, cx, cy);
-                }
-                else
-                {
-                    RasterizeContainedLineF24Dot8(
-                        ref context,
-                        Math.Clamp(FloatToFixed24Dot8((float)rx0), 0, this.width * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)ry0), 0, this.height * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)bx1), 0, this.width * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)by1), 0, this.height * FixedOne));
-                }
-            }
-            else
-            {
-                double bx0 = rx0;
-                double by0 = ry0;
-
-                if (rx0 > this.width)
-                {
-                    double t = (rx0 - this.width) / deltaxH;
-                    by0 = ry0 + (deltayH * t);
-                    bx0 = this.width;
-                }
-
-                if (rx1 < 0D)
-                {
-                    double t = rx0 / deltaxH;
-                    int ax = Math.Clamp(FloatToFixed24Dot8((float)bx0), 0, this.width * FixedOne);
-                    int ay = Math.Clamp(FloatToFixed24Dot8((float)by0), 0, this.height * FixedOne);
-                    int by = Math.Clamp(FloatToFixed24Dot8((float)(ry0 + (deltayH * t))), 0, this.height * FixedOne);
-                    int c = Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.height * FixedOne);
-
-                    RasterizeContainedLineF24Dot8(ref context, ax, ay, 0, by);
-                    context.AddClippedStartCover(by, c);
-                }
-                else
-                {
-                    RasterizeContainedLineF24Dot8(
-                        ref context,
-                        Math.Clamp(FloatToFixed24Dot8((float)bx0), 0, this.width * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)by0), 0, this.height * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)rx1), 0, this.width * FixedOne),
-                        Math.Clamp(FloatToFixed24Dot8((float)ry1), 0, this.height * FixedOne));
-                }
-            }
-        }
-
-        /// <summary>
-        /// Counts the distinct contour points while skipping immediate duplicates.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <returns>The number of distinct contour points.</returns>
-        private int GetDistinctPointCount(in LinearContour contour)
-        {
-            int pointEnd = contour.PointStart + contour.PointCount;
-            int count = 0;
-            PointF previousPoint = default;
-            bool hasPreviousPoint = false;
-
-            for (int i = contour.PointStart; i < pointEnd; i++)
-            {
-                PointF point = this.geometry.Points[i];
-                if (hasPreviousPoint && point == previousPoint)
-                {
-                    continue;
-                }
-
-                previousPoint = point;
-                hasPreviousPoint = true;
-                count++;
-            }
-
-            if (contour.IsClosed &&
-                count > 1 &&
-                this.TryGetFirstDistinctPoint(contour, out _, out PointF firstPoint) &&
-                this.TryGetLastDistinctPoint(contour, out _, out PointF lastPoint) &&
-                firstPoint == lastPoint)
-            {
-                count--;
-            }
-
-            return count;
-        }
-
-        /// <summary>
-        /// Counts the distinct contour points in contiguous point storage while skipping immediate duplicates.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="isClosed">Indicates whether the contour is closed.</param>
-        /// <returns>The number of distinct contour points.</returns>
-        private static int GetDistinctPointCount(ReadOnlySpan<PointF> contourPoints, bool isClosed)
-        {
-            int count = 0;
-            PointF previousPoint = default;
-            bool hasPreviousPoint = false;
-
-            for (int i = 0; i < contourPoints.Length; i++)
-            {
-                PointF point = contourPoints[i];
-                if (hasPreviousPoint && point == previousPoint)
-                {
-                    continue;
-                }
-
-                previousPoint = point;
-                hasPreviousPoint = true;
-                count++;
-            }
-
-            if (isClosed &&
-                count > 1 &&
-                TryGetFirstDistinctPoint(contourPoints, out _, out PointF firstPoint) &&
-                TryGetLastDistinctPoint(contourPoints, out _, out PointF lastPoint) &&
-                firstPoint == lastPoint)
-            {
-                count--;
-            }
-
-            return count;
-        }
-
-        /// <summary>
-        /// Counts the distinct explicit polyline points while skipping immediate duplicates.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <returns>The number of distinct points.</returns>
-        private static int GetDistinctPointCount(PointF[] points)
-        {
-            int count = 0;
-            PointF previousPoint = default;
-            bool hasPreviousPoint = false;
-
-            for (int i = 0; i < points.Length; i++)
-            {
-                PointF point = points[i];
-                if (hasPreviousPoint && point == previousPoint)
-                {
-                    continue;
-                }
-
-                previousPoint = point;
-                hasPreviousPoint = true;
-                count++;
-            }
-
-            return count;
-        }
-
-        /// <summary>
-        /// Finds the first distinct point of the contour.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">Receives the raw point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private bool TryGetFirstDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
-        {
-            if (contour.PointCount == 0)
-            {
-                rawIndex = -1;
-                point = default;
-                return false;
-            }
-
-            rawIndex = contour.PointStart;
-            point = this.geometry.Points[rawIndex];
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the next distinct point after the supplied raw index.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">The raw point index to advance from.</param>
-        /// <param name="nextRawIndex">Receives the next distinct raw point index.</param>
-        /// <param name="point">Receives the next distinct point.</param>
-        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
-        private bool TryGetNextDistinctPoint(in LinearContour contour, int rawIndex, out int nextRawIndex, out PointF point)
-        {
-            PointF currentPoint = this.geometry.Points[rawIndex];
-            int pointEnd = contour.PointStart + contour.PointCount;
-            for (int i = rawIndex + 1; i < pointEnd; i++)
-            {
-                PointF candidate = this.geometry.Points[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                nextRawIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            nextRawIndex = -1;
-            point = default;
-            return false;
-        }
-
-        /// <summary>
-        /// Finds the last distinct point of the contour.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">Receives the raw point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private bool TryGetLastDistinctPoint(in LinearContour contour, out int rawIndex, out PointF point)
-        {
-            if (contour.PointCount == 0)
-            {
-                rawIndex = -1;
-                point = default;
-                return false;
-            }
-
-            int start = contour.PointStart;
-            rawIndex = start + contour.PointCount - 1;
-            point = this.geometry.Points[rawIndex];
-            while (rawIndex > start && this.geometry.Points[rawIndex - 1] == point)
-            {
-                rawIndex--;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the previous distinct point before the supplied raw index.
-        /// </summary>
-        /// <param name="contour">The contour to inspect.</param>
-        /// <param name="rawIndex">The raw point index to retreat from.</param>
-        /// <param name="previousRawIndex">Receives the previous distinct raw point index.</param>
-        /// <param name="point">Receives the previous distinct point.</param>
-        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
-        private bool TryGetPreviousDistinctPoint(in LinearContour contour, int rawIndex, out int previousRawIndex, out PointF point)
-        {
-            PointF currentPoint = this.geometry.Points[rawIndex];
-            for (int i = rawIndex - 1; i >= contour.PointStart; i--)
-            {
-                PointF candidate = this.geometry.Points[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                previousRawIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            previousRawIndex = -1;
-            point = default;
-            return false;
-        }
-
-        /// <summary>
-        /// Finds the first distinct point of the explicit polyline.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="index">Receives the distinct point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private static bool TryGetFirstDistinctPoint(PointF[] points, out int index, out PointF point)
-        {
-            if (points.Length == 0)
-            {
-                index = -1;
-                point = default;
-                return false;
-            }
-
-            index = 0;
-            point = points[0];
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the next distinct point after the supplied explicit polyline index.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="index">The point index to advance from.</param>
-        /// <param name="nextIndex">Receives the next distinct point index.</param>
-        /// <param name="point">Receives the next distinct point.</param>
-        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
-        private static bool TryGetNextDistinctPoint(PointF[] points, int index, out int nextIndex, out PointF point)
-        {
-            PointF currentPoint = points[index];
-            for (int i = index + 1; i < points.Length; i++)
-            {
-                PointF candidate = points[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                nextIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            nextIndex = -1;
-            point = default;
-            return false;
-        }
-
-        /// <summary>
-        /// Finds the last distinct point of the explicit polyline.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="index">Receives the distinct point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private static bool TryGetLastDistinctPoint(PointF[] points, out int index, out PointF point)
-        {
-            if (points.Length == 0)
-            {
-                index = -1;
-                point = default;
-                return false;
-            }
-
-            index = points.Length - 1;
-            point = points[index];
-            while (index > 0 && points[index - 1] == point)
-            {
-                index--;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the previous distinct point before the supplied explicit polyline index.
-        /// </summary>
-        /// <param name="points">The explicit polyline points.</param>
-        /// <param name="index">The point index to retreat from.</param>
-        /// <param name="previousIndex">Receives the previous distinct point index.</param>
-        /// <param name="point">Receives the previous distinct point.</param>
-        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
-        private static bool TryGetPreviousDistinctPoint(PointF[] points, int index, out int previousIndex, out PointF point)
-        {
-            PointF currentPoint = points[index];
-            for (int i = index - 1; i >= 0; i--)
-            {
-                PointF candidate = points[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                previousIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            previousIndex = -1;
-            point = default;
-            return false;
-        }
-
-        /// <summary>
-        /// Finds the first distinct point of the contiguous contour point run.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="index">Receives the distinct point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private static bool TryGetFirstDistinctPoint(ReadOnlySpan<PointF> contourPoints, out int index, out PointF point)
-        {
-            if (contourPoints.IsEmpty)
-            {
-                index = -1;
-                point = default;
-                return false;
-            }
-
-            index = 0;
-            point = contourPoints[0];
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the next distinct point after the supplied contiguous contour index.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="index">The point index to advance from.</param>
-        /// <param name="nextIndex">Receives the next distinct point index.</param>
-        /// <param name="point">Receives the next distinct point.</param>
-        /// <returns><see langword="true"/> when a next distinct point exists.</returns>
-        private static bool TryGetNextDistinctPoint(ReadOnlySpan<PointF> contourPoints, int index, out int nextIndex, out PointF point)
-        {
-            PointF currentPoint = contourPoints[index];
-            for (int i = index + 1; i < contourPoints.Length; i++)
-            {
-                PointF candidate = contourPoints[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                nextIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            nextIndex = -1;
-            point = default;
-            return false;
-        }
-
-        /// <summary>
-        /// Finds the last distinct point of the contiguous contour point run.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="index">Receives the distinct point index.</param>
-        /// <param name="point">Receives the distinct point.</param>
-        /// <returns><see langword="true"/> when a distinct point exists.</returns>
-        private static bool TryGetLastDistinctPoint(ReadOnlySpan<PointF> contourPoints, out int index, out PointF point)
-        {
-            if (contourPoints.IsEmpty)
-            {
-                index = -1;
-                point = default;
-                return false;
-            }
-
-            index = contourPoints.Length - 1;
-            point = contourPoints[index];
-            while (index > 0 && contourPoints[index - 1] == point)
-            {
-                index--;
-            }
-
-            return true;
-        }
-
-        /// <summary>
-        /// Finds the previous distinct point before the supplied contiguous contour index.
-        /// </summary>
-        /// <param name="contourPoints">The contiguous contour points.</param>
-        /// <param name="index">The point index to retreat from.</param>
-        /// <param name="previousIndex">Receives the previous distinct point index.</param>
-        /// <param name="point">Receives the previous distinct point.</param>
-        /// <returns><see langword="true"/> when a previous distinct point exists.</returns>
-        private static bool TryGetPreviousDistinctPoint(ReadOnlySpan<PointF> contourPoints, int index, out int previousIndex, out PointF point)
-        {
-            PointF currentPoint = contourPoints[index];
-            for (int i = index - 1; i >= 0; i--)
-            {
-                PointF candidate = contourPoints[i];
-                if (candidate == currentPoint)
-                {
-                    continue;
-                }
-
-                previousIndex = i;
-                point = candidate;
-                return true;
-            }
-
-            previousIndex = -1;
-            point = default;
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// Chooses the arc sweep whose midpoint best matches the preferred outward direction.
-    /// </summary>
-    /// <param name="startAngle">The start angle in radians.</param>
-    /// <param name="counterClockwiseSweep">The counter-clockwise sweep candidate.</param>
-    /// <param name="clockwiseSweep">The clockwise sweep candidate.</param>
-    /// <param name="preferredDirection">The preferred outward direction.</param>
-    /// <returns>The chosen sweep.</returns>
-    private static double ChooseArcSweep(
-        double startAngle,
-        double counterClockwiseSweep,
-        double clockwiseSweep,
-        Vector2 preferredDirection)
-    {
-        Vector2 ccwMid = new(MathF.Cos((float)(startAngle + (counterClockwiseSweep * 0.5D))), MathF.Sin((float)(startAngle + (counterClockwiseSweep * 0.5D))));
-        Vector2 cwMid = new(MathF.Cos((float)(startAngle + (clockwiseSweep * 0.5D))), MathF.Sin((float)(startAngle + (clockwiseSweep * 0.5D))));
-        return Vector2.Dot(ccwMid, preferredDirection) >= Vector2.Dot(cwMid, preferredDirection)
-            ? counterClockwiseSweep
-            : clockwiseSweep;
-    }
-
-    /// <summary>
     /// Returns the tessellation segment count used for one round join or cap arc.
     /// </summary>
     /// <param name="radius">The arc radius.</param>
@@ -5082,35 +1748,22 @@ internal static partial class DefaultRasterizer
     /// <returns>The number of intermediate tessellation points.</returns>
     private static int GetArcSubdivisionCount(float radius, double angle, double arcDetailScale)
     {
-        double safeRadius = Math.Max(radius, 0.25F);
+        double safeRadius = Math.Max(radius, StrokeDirectionEpsilon);
         double safeScale = Math.Max(arcDetailScale, 0.01D);
-        double theta = Math.Max(0.0001D, 2D * Math.Acos(1D - (0.25D / safeRadius)));
-        return Math.Max(0, (int)Math.Ceiling((angle / theta) * safeScale) - 1);
+        double ratio = safeRadius / (safeRadius + (0.125D / safeScale));
+        ratio = Math.Clamp(ratio, -1D, 1D);
+        double theta = Math.Acos(ratio) * 2D;
+        return theta <= 0D
+            ? 0
+            : Math.Max(0, (int)(angle / theta));
     }
 
     /// <summary>
-    /// Returns the preferred outward direction used to pick between the clockwise and counter-clockwise arc sweeps.
-    /// </summary>
-    /// <param name="fromOffset">The start offset from the arc center.</param>
-    /// <param name="toOffset">The end offset from the arc center.</param>
-    /// <returns>The preferred outward direction.</returns>
-    private static Vector2 GetPreferredArcDirection(Vector2 fromOffset, Vector2 toOffset)
-    {
-        Vector2 direction = fromOffset + toOffset;
-        if (direction.LengthSquared() <= StrokeDirectionEpsilon * StrokeDirectionEpsilon)
-        {
-            return Vector2.Normalize(fromOffset);
-        }
-
-        return Vector2.Normalize(direction);
-    }
-
-    /// <summary>
-    /// Returns the left-side unit normal for a normalized tangent.
+    /// Returns the stroke offset unit normal for a normalized tangent.
     /// </summary>
     /// <param name="tangent">The normalized tangent.</param>
-    /// <returns>The left-side unit normal.</returns>
-    private static Vector2 GetLeftNormal(Vector2 tangent) => new(-tangent.Y, tangent.X);
+    /// <returns>The stroke offset unit normal.</returns>
+    private static Vector2 GetStrokeOffsetNormal(Vector2 tangent) => new(tangent.Y, -tangent.X);
 
     /// <summary>
     /// Attempts to normalize the direction from <paramref name="start"/> to <paramref name="end"/>.
@@ -5177,7 +1830,7 @@ internal static partial class DefaultRasterizer
     private static float Cross(Vector2 left, Vector2 right) => (left.X * right.Y) - (left.Y * right.X);
 
     /// <summary>
-    /// Normalizes an angle into the inclusive-exclusive range [0, 2π).
+    /// Normalizes an angle into the inclusive-exclusive range [0, 2Ï€).
     /// </summary>
     /// <param name="angle">The angle to normalize.</param>
     /// <returns>The normalized angle.</returns>
@@ -5260,3 +1913,4 @@ internal static partial class DefaultRasterizer
 }
 
 #pragma warning restore SA1201 // Elements should appear in the correct order
+

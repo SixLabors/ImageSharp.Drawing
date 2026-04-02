@@ -144,7 +144,7 @@ internal static partial class DefaultRasterizer
         /// Executes the linearization pass and finalizes the retained row payloads.
         /// </summary>
         /// <returns><see langword="true"/> when any retained coverage was produced; otherwise <see langword="false"/>.</returns>
-        protected bool ProcessCore()
+        protected virtual bool ProcessCore()
         {
             RectangleF translatedBounds = this.Geometry.Info.Bounds;
             translatedBounds.Offset(this.TranslateX + this.SamplingOffsetX - this.MinX, this.TranslateY + this.SamplingOffsetY - this.MinY);

@@ -24,6 +24,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
     private int commandCount;
     private bool hasLayers;
     private bool hasClips;
+    private bool hasDashes;
 
     internal DrawingCanvasBatcher(
         Configuration configuration,
@@ -51,6 +52,18 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         this.commands[this.commandCount++] = new PathCompositionSceneCommand(composition);
         this.hasLayers |= composition.Kind is not CompositionCommandKind.FillLayer;
         this.hasClips |= composition.ClipPaths is not null;
+    }
+
+    /// <summary>
+    /// Appends one stroked path command to the pending queue.
+    /// </summary>
+    /// <param name="command">The command to queue.</param>
+    public void AddStrokePath(in StrokePathCommand command)
+    {
+        this.EnsureCommandCapacity(this.commandCount + 1);
+        this.commands[this.commandCount++] = new StrokePathCompositionSceneCommand(command);
+        this.hasClips |= command.ClipPaths is not null;
+        this.hasDashes |= command.Pen.StrokePattern.Length >= 2;
     }
 
     /// <summary>
@@ -89,7 +102,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
         try
         {
-            this.ApplyClipping();
+            this.PrepareCommands();
 
             CompositionScene scene = new(
                 new ArraySegment<CompositionSceneCommand>(this.commands, 0, this.commandCount),
@@ -102,6 +115,8 @@ internal sealed class DrawingCanvasBatcher<TPixel>
             Array.Clear(this.commands, 0, this.commandCount);
             this.commandCount = 0;
             this.hasLayers = false;
+            this.hasClips = false;
+            this.hasDashes = false;
         }
     }
 
@@ -125,13 +140,16 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         Array.Resize(ref this.commands, nextCapacity);
     }
 
-    private void ApplyClipping()
+    private void PrepareCommands()
     {
-        if (!this.hasClips)
+        if (!this.hasClips && !this.hasDashes)
         {
             return;
         }
 
+        // If clipping is present we need to apply that now before handing the command
+        // to the backend. This avoids complicating the backend with clipping logic
+        // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
         int requestedParallelism = this.configuration.MaxDegreeOfParallelism;
         int partitionCount = Math.Min(
             this.commandCount,
@@ -141,7 +159,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         {
             for (int i = 0; i < this.commandCount; i++)
             {
-                ApplyClippingToCommand(ref this.commands[i]);
+                PrepareCommand(ref this.commands[i]);
             }
 
             return;
@@ -160,31 +178,19 @@ internal sealed class DrawingCanvasBatcher<TPixel>
 
                 for (int i = commandStart; i < commandEnd; i++)
                 {
-                    ApplyClippingToCommand(ref this.commands[i]);
+                    PrepareCommand(ref this.commands[i]);
                 }
             });
     }
 
-    private static void ApplyClippingToCommand(ref CompositionSceneCommand command)
+    private static void PrepareCommand(ref CompositionSceneCommand command)
     {
         if (command is PathCompositionSceneCommand pathCommand)
         {
             CompositionCommand composition = pathCommand.Command;
-
-            // If clipping is present we need to apply that now before handing the command
-            // to the backend. This avoids complicating the backend with clipping logic
-            // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
             if (composition.ClipPaths is { Count: > 0 })
             {
                 IPath path = composition.SourcePath;
-
-                // Clipped strokes must lower the pen in source space first, then transform
-                // the resulting outline, so clipped commands keep the same stroke-then-transform
-                // invariant as the unclipped CPU and GPU backends.
-                if (composition.Pen is not null)
-                {
-                    path = composition.Pen.GeneratePath(path);
-                }
 
                 if (composition.Transform != Matrix4x4.Identity)
                 {
@@ -205,6 +211,53 @@ internal sealed class DrawingCanvasBatcher<TPixel>
                     Matrix4x4.Identity,
                     composition.TargetBounds,
                     composition.DestinationOffset);
+            }
+        }
+        else if (command is StrokePathCompositionSceneCommand strokePathCommand)
+        {
+            StrokePathCommand composition = strokePathCommand.Command;
+
+            if (composition.ClipPaths is { Count: > 0 })
+            {
+                IPath path = composition.Pen.GeneratePath(composition.SourcePath);
+
+                if (composition.Transform != Matrix4x4.Identity)
+                {
+                    path = path.Transform(composition.Transform);
+                }
+
+                path = path.Clip(composition.ShapeOptions, composition.ClipPaths);
+
+                RasterizerOptions rasterizerOptions = composition.RasterizerOptions;
+                command = new PathCompositionSceneCommand(
+                    CompositionCommand.Create(
+                        path,
+                        composition.Brush.Transform(composition.Transform),
+                        composition.GraphicsOptions,
+                        in rasterizerOptions,
+                        composition.ShapeOptions,
+                        Matrix4x4.Identity,
+                        composition.TargetBounds,
+                        composition.DestinationOffset));
+            }
+            else
+            {
+                // We need to dash the path here before sending it to the backend.
+                Pen pen = composition.Pen;
+                if (pen.StrokePattern.Length >= 2)
+                {
+                    strokePathCommand.Command = new StrokePathCommand(
+                        composition.SourcePath.GenerateDashes(pen.StrokeWidth, pen.StrokePattern.Span),
+                        composition.Brush,
+                        composition.GraphicsOptions,
+                        composition.RasterizerOptions,
+                        composition.ShapeOptions,
+                        composition.Transform,
+                        composition.TargetBounds,
+                        composition.DestinationOffset,
+                        composition.Pen,
+                        null);
+                }
             }
         }
     }

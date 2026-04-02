@@ -346,8 +346,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebGPUWindowDemo", "samples
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp.Drawing.WebGPU.ShaderGen", "src\ImageSharp.Drawing.WebGPU.ShaderGen\ImageSharp.Drawing.WebGPU.ShaderGen.csproj", "{C7606104-5D58-4670-912C-3F336606B02D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp", "..\ImageSharp\src\ImageSharp\ImageSharp.csproj", "{FE71764E-E7BD-B378-8A4C-86929A28AD25}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -454,18 +452,6 @@ Global
 		{C7606104-5D58-4670-912C-3F336606B02D}.Release|x64.Build.0 = Release|Any CPU
 		{C7606104-5D58-4670-912C-3F336606B02D}.Release|x86.ActiveCfg = Release|Any CPU
 		{C7606104-5D58-4670-912C-3F336606B02D}.Release|x86.Build.0 = Release|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Debug|x64.Build.0 = Debug|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Debug|x86.Build.0 = Debug|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Release|Any CPU.Build.0 = Release|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Release|x64.ActiveCfg = Release|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Release|x64.Build.0 = Release|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Release|x86.ActiveCfg = Release|Any CPU
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -497,7 +483,6 @@ Global
 		{061582C2-658F-40AE-A978-7D74A4EB2C0A} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 		{2541FDCD-78AC-40DB-B5E3-6A715DC132BA} = {528610AC-7C0C-46E8-9A2D-D46FD92FEE29}
 		{C7606104-5D58-4670-912C-3F336606B02D} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
-		{FE71764E-E7BD-B378-8A4C-86929A28AD25} = {815C0625-CD3D-440F-9F80-2D83856AB7AE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F8B9D1F-CD8B-4CC5-8216-D531E25BD795}
@@ -506,7 +491,6 @@ Global
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{061582c2-658f-40ae-a978-7d74a4eb2c0a}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{2e33181e-6e28-4662-a801-e2e7dc206029}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{68a8cc40-6aed-4e96-b524-31b1158fdeea}*SharedItemsImports = 13
-		..\ImageSharp\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{fe71764e-e7bd-b378-8a4c-86929a28ad25}*SharedItemsImports = 5
 	EndGlobalSection
 	GlobalSection(Performance) = preSolution
 		HasPerformanceSessions = true

@@ -26,6 +26,9 @@ namespace SixLabors.ImageSharp.Drawing;
 /// </remarks>
 public sealed class LinearGeometry
 {
+    private readonly LinearContour[] contours;
+    private readonly PointF[] points;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LinearGeometry"/> class.
     /// </summary>
@@ -34,9 +37,14 @@ public sealed class LinearGeometry
     /// <param name="points">The point storage.</param>
     public LinearGeometry(LinearGeometryInfo info, IReadOnlyList<LinearContour> contours, IReadOnlyList<PointF> points)
     {
+        ArgumentNullException.ThrowIfNull(contours);
+        ArgumentNullException.ThrowIfNull(points);
+
         this.Info = info;
-        this.Contours = contours ?? throw new ArgumentNullException(nameof(contours));
-        this.Points = points ?? throw new ArgumentNullException(nameof(points));
+        this.contours = contours as LinearContour[] ?? [.. contours];
+        this.points = points as PointF[] ?? [.. points];
+        this.Contours = this.contours;
+        this.Points = this.points;
     }
 
     /// <summary>
@@ -61,14 +69,10 @@ public sealed class LinearGeometry
     /// </remarks>
     public IReadOnlyList<PointF> Points { get; }
 
-    /// <summary>
-    /// Creates retained geometry for one open two-point polyline.
-    /// </summary>
-    /// <param name="start">The first point.</param>
-    /// <param name="end">The second point.</param>
-    /// <returns>The retained open polyline geometry.</returns>
-    public static LinearGeometry CreateOpenPolyline(PointF start, PointF end)
-        => CreateOpenPolyline([start, end]);
+    internal ReadOnlySpan<LinearContour> GetContours() => this.contours;
+
+    internal ReadOnlySpan<PointF> GetContourPoints(in LinearContour contour)
+        => this.points.AsSpan(contour.PointStart, contour.PointCount);
 
     /// <summary>
     /// Creates retained geometry for one open polyline.

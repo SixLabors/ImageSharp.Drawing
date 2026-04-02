@@ -11,10 +11,16 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 public interface ICompositionSceneCommandVisitor
 {
     /// <summary>
-    /// Visits one path- or layer-based composition command.
+    /// Visits one fill-path or layer-based composition command.
     /// </summary>
     /// <param name="command">The command being visited.</param>
     public void Visit(PathCompositionSceneCommand command);
+
+    /// <summary>
+    /// Visits one stroked path command.
+    /// </summary>
+    /// <param name="command">The command being visited.</param>
+    public void Visit(StrokePathCompositionSceneCommand command);
 
     /// <summary>
     /// Visits one explicit stroked line-segment command.
@@ -42,7 +48,7 @@ public abstract class CompositionSceneCommand
 }
 
 /// <summary>
-/// Scene command wrapper for path- and layer-based composition commands.
+/// Scene command wrapper for fill-path and layer-based composition commands.
 /// </summary>
 public sealed class PathCompositionSceneCommand : CompositionSceneCommand
 {
@@ -57,6 +63,27 @@ public sealed class PathCompositionSceneCommand : CompositionSceneCommand
     /// Gets the wrapped composition command.
     /// </summary>
     public CompositionCommand Command { get; internal set; }
+
+    /// <inheritdoc />
+    public override void Accept(ICompositionSceneCommandVisitor visitor) => visitor.Visit(this);
+}
+
+/// <summary>
+/// Scene command wrapper for stroked path commands.
+/// </summary>
+public sealed class StrokePathCompositionSceneCommand : CompositionSceneCommand
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StrokePathCompositionSceneCommand"/> class.
+    /// </summary>
+    /// <param name="command">The wrapped stroke path command.</param>
+    public StrokePathCompositionSceneCommand(in StrokePathCommand command)
+        => this.Command = command;
+
+    /// <summary>
+    /// Gets the wrapped stroke path command.
+    /// </summary>
+    public StrokePathCommand Command { get; internal set; }
 
     /// <inheritdoc />
     public override void Accept(ICompositionSceneCommandVisitor visitor) => visitor.Visit(this);

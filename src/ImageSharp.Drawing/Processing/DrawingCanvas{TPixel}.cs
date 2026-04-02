@@ -539,7 +539,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             effectiveOptions = new DrawingOptions(effectiveOptions.GraphicsOptions, shapeOptions, effectiveOptions.Transform);
         }
 
-        if (state.ClipPaths.Count > 0)
+        if (state.ClipPaths.Count > 0 || !pen.StrokePattern.IsEmpty)
         {
             this.PrepareCompositionCore(
                 new Path(points),
@@ -1061,8 +1061,24 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         // Commands carry their absolute target bounds and destination origin explicitly.
         // Region canvases therefore only need to update state.TargetBounds.
-        this.batcher.AddComposition(
-            CompositionCommand.Create(
+        if (pen is null)
+        {
+            this.batcher.AddComposition(
+                CompositionCommand.Create(
+                    path,
+                    brush,
+                    graphicsOptions,
+                    in rasterizerOptions,
+                    shapeOptions,
+                    options.Transform,
+                    state.TargetBounds,
+                    state.TargetBounds.Location,
+                    clipPaths));
+            return;
+        }
+
+        this.batcher.AddStrokePath(
+            new StrokePathCommand(
                 path,
                 brush,
                 graphicsOptions,
@@ -1219,7 +1235,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
         // Build composition commands and enforce render-pass ordering while preserving
         // original emission order inside each pass. This preserves overlapping color-font
         // layer compositing semantics (for example emoji mouth/teeth layers).
-        List<(byte RenderPass, int Sequence, CompositionCommand Command)> entries = new(operations.Count);
+        List<(byte RenderPass, int Sequence, CompositionSceneCommand Command)> entries = new(operations.Count);
         for (int i = 0; i < operations.Count; i++)
         {
             DrawingOperation operation = operations[i];
@@ -1234,7 +1250,14 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         for (int i = 0; i < entries.Count; i++)
         {
-            this.batcher.AddComposition(entries[i].Command);
+            if (entries[i].Command is PathCompositionSceneCommand pathCommand)
+            {
+                this.batcher.AddComposition(pathCommand.Command);
+            }
+            else
+            {
+                this.batcher.AddStrokePath(((StrokePathCompositionSceneCommand)entries[i].Command).Command);
+            }
         }
     }
 
@@ -1383,8 +1406,8 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="operation">The source drawing operation.</param>
     /// <param name="drawingOptions">Drawing options applied to the operation.</param>
     /// <param name="clipPaths">Optional clip paths to apply during preparation.</param>
-    /// <returns>A composition command ready for batching.</returns>
-    private CompositionCommand CreateCompositionCommand(
+    /// <returns>A composition scene command ready for batching.</returns>
+    private CompositionSceneCommand CreateCompositionCommand(
         DrawingOperation operation,
         DrawingOptions drawingOptions,
         IReadOnlyList<IPath>? clipPaths = null)
@@ -1411,7 +1434,6 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
 
         Pen? pen = operation.Kind == DrawingOperationKind.Draw ? operation.Pen : null;
 
-        // Explicit line commands carry only the rasterizer fields used directly by the backends.
         IntersectionRule intersectionRule = pen is not null && operation.IntersectionRule != IntersectionRule.NonZero
             ? IntersectionRule.NonZero
             : operation.IntersectionRule;
@@ -1427,17 +1449,33 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
             samplingOrigin,
             graphicsOptions.AntialiasThreshold);
 
-        return CompositionCommand.Create(
-            operation.Path,
-            compositeBrush,
-            graphicsOptions,
-            in rasterizerOptions,
-            shapeOptions,
-            Matrix4x4.Identity,
-            state.TargetBounds,
-            destinationOffset,
-            pen,
-            clipPaths);
+        if (pen is null)
+        {
+            return new PathCompositionSceneCommand(
+                CompositionCommand.Create(
+                    operation.Path,
+                    compositeBrush,
+                    graphicsOptions,
+                    in rasterizerOptions,
+                    shapeOptions,
+                    Matrix4x4.Identity,
+                    state.TargetBounds,
+                    destinationOffset,
+                    clipPaths));
+        }
+
+        return new StrokePathCompositionSceneCommand(
+            new StrokePathCommand(
+                operation.Path,
+                compositeBrush,
+                graphicsOptions,
+                in rasterizerOptions,
+                shapeOptions,
+                Matrix4x4.Identity,
+                state.TargetBounds,
+                destinationOffset,
+                pen,
+                clipPaths));
     }
 
     /// <summary>

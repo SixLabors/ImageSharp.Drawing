@@ -505,6 +505,21 @@ internal sealed partial class FlushScene : IDisposable
                     ref currentLayerDepth,
                     ref maxLayerDepth);
             }
+            else if (command is StrokePathCompositionSceneCommand strokePathCommand)
+            {
+                ProcessStrokePathCommand(
+                    strokePathCommand.Command,
+                    commandIndex,
+                    targetRowCount,
+                    firstTargetRowBandIndex,
+                    rowBuilders,
+                    allocator,
+                    strokeItems,
+                    ref strokeItemCount,
+                    ref totalEdgeCount,
+                    ref singleBandItemCount,
+                    ref smallEdgeItemCount);
+            }
             else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
             {
                 ProcessLineSegmentCommand(
@@ -593,21 +608,6 @@ internal sealed partial class FlushScene : IDisposable
             return;
         }
 
-        if (command.Pen is Pen pen)
-        {
-            if (!TryPrepareStrokePath(command, pen, allocator, out PreparedStrokeItem preparedStroke) ||
-                preparedStroke.Rasterizable.RowBandCount == 0)
-            {
-                return;
-            }
-
-            strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
-            strokeItemCount++;
-            AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
-            AppendStrokeRowOperations(rowBuilders, 0, rowBuilders.Length, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
-            return;
-        }
-
         if (!TryPrepareFillPath(command, allocator, out PreparedFillItem preparedFill) ||
             preparedFill.Rasterizable.RowBandCount == 0)
         {
@@ -618,6 +618,31 @@ internal sealed partial class FlushScene : IDisposable
         fillItemCount++;
         AccumulateFillItemStats(preparedFill.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
         AppendFillRowOperations(rowBuilders, 0, rowBuilders.Length, firstTargetRowBandIndex, commandIndex, preparedFill.Rasterizable, allocator);
+    }
+
+    private static void ProcessStrokePathCommand(
+        in StrokePathCommand command,
+        int commandIndex,
+        int targetRowCount,
+        int firstTargetRowBandIndex,
+        RowBuilder[] rowBuilders,
+        MemoryAllocator allocator,
+        StrokeSceneItem?[] strokeItems,
+        ref int strokeItemCount,
+        ref long totalEdgeCount,
+        ref int singleBandItemCount,
+        ref int smallEdgeItemCount)
+    {
+        if (!TryPrepareStrokePath(command, allocator, out PreparedStrokeItem preparedStroke) ||
+            preparedStroke.Rasterizable.RowBandCount == 0)
+        {
+            return;
+        }
+
+        strokeItems[commandIndex] = new StrokeSceneItem(preparedStroke.Brush, preparedStroke.GraphicsOptions, preparedStroke.BrushBounds, preparedStroke.Rasterizable);
+        strokeItemCount++;
+        AccumulateStrokeItemStats(preparedStroke.Rasterizable, ref totalEdgeCount, ref smallEdgeItemCount, ref singleBandItemCount);
+        AppendStrokeRowOperations(rowBuilders, 0, targetRowCount, firstTargetRowBandIndex, commandIndex, preparedStroke.Rasterizable, allocator);
     }
 
     private static void ProcessLineSegmentCommand(
@@ -736,8 +761,7 @@ internal sealed partial class FlushScene : IDisposable
     }
 
     private static bool TryPrepareStrokePath(
-        in CompositionCommand command,
-        Pen pen,
+        in StrokePathCommand command,
         MemoryAllocator allocator,
         out PreparedStrokeItem prepared)
     {
@@ -747,7 +771,7 @@ internal sealed partial class FlushScene : IDisposable
 
         if (!TryResolveRasterization(
                 sourceBrush,
-                hasTransform ? RectangleF.Transform(GetStrokeBounds(path.Bounds, pen), command.Transform) : GetStrokeBounds(path.Bounds, pen),
+                hasTransform ? RectangleF.Transform(GetStrokeBounds(path.Bounds, command.Pen), command.Transform) : GetStrokeBounds(path.Bounds, command.Pen),
                 command.RasterizerOptions,
                 command.DestinationOffset,
                 command.TargetBounds,
@@ -759,12 +783,11 @@ internal sealed partial class FlushScene : IDisposable
             return false;
         }
 
-        // Retained-scene preparation chooses the stroke lowering strategy, but it does not
-        // expand the stroke itself. Path strokes stay on the outline-lowered pipeline so
-        // stroke expansion still happens before any drawing transform is applied.
+        // Retained-scene preparation preserves the stroke centerline and forwards the drawing
+        // transform into the CPU stroke rasterizer so expansion still happens before transform.
         DefaultRasterizer.StrokeRasterizableGeometry? rasterizable = DefaultRasterizer.CreatePathStrokeRasterizableGeometry(
             path,
-            pen,
+            command.Pen,
             command.DestinationOffset.X,
             command.DestinationOffset.Y,
             rasterizerOptions,

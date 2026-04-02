@@ -273,6 +273,13 @@ internal static class WebGPUSceneEncoder
                         return false;
                     }
                 }
+                else if (command is StrokePathCompositionSceneCommand strokePathCommand)
+                {
+                    if (!this.TryAppend(strokePathCommand.Command, out error))
+                    {
+                        return false;
+                    }
+                }
                 else if (command is LineSegmentCompositionSceneCommand lineSegmentCommand)
                 {
                     if (!this.TryAppend(lineSegmentCommand.Command, out error))
@@ -294,7 +301,7 @@ internal static class WebGPUSceneEncoder
         }
 
         /// <summary>
-        /// Appends one prepared path- or layer-based command to the scene streams when the command kind is supported.
+        /// Appends one prepared fill-path or layer-based command to the scene streams when the command kind is supported.
         /// </summary>
         private bool TryAppend(in CompositionCommand command, out string? error)
         {
@@ -314,13 +321,6 @@ internal static class WebGPUSceneEncoder
 
                     this.AppendTransformIfChanged(command.Transform);
 
-                    if (command.Pen is Pen pen)
-                    {
-                        this.AppendPlainStroke(resolved, pen);
-                        error = null;
-                        return true;
-                    }
-
                     this.AppendPlainFill(resolved);
                     error = null;
                     return true;
@@ -336,6 +336,28 @@ internal static class WebGPUSceneEncoder
                     return true;
             }
 
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Appends one prepared stroked path command to the scene streams.
+        /// </summary>
+        private bool TryAppend(in StrokePathCommand command, out string? error)
+        {
+            if (!TryResolveCommand(command, out ResolvedPathCommand resolved))
+            {
+                error = null;
+                return true;
+            }
+
+            if (!this.TryRegisterVisibleFill(resolved.Brush, resolved.RasterizerOptions, out error))
+            {
+                return false;
+            }
+
+            this.AppendTransformIfChanged(command.Transform);
+            this.AppendPlainStroke(resolved, command.Pen);
             error = null;
             return true;
         }
@@ -933,6 +955,18 @@ internal static class WebGPUSceneEncoder
         return true;
     }
 
+    private static bool TryResolveCommand(in StrokePathCommand command, out ResolvedPathCommand resolved)
+    {
+        resolved = new ResolvedPathCommand(
+            command.SourcePath,
+            command.Brush,
+            command.GraphicsOptions,
+            command.RasterizerOptions,
+            command.DestinationOffset,
+            command.Brush is ImageBrush ? command.RasterizerOptions.Interest : default);
+        return true;
+    }
+
     private static bool TryResolveCommand(in StrokeLineSegmentCommand command, out ResolvedLineSegmentCommand resolved)
     {
         resolved = new ResolvedLineSegmentCommand(
@@ -1173,10 +1207,6 @@ internal static class WebGPUSceneEncoder
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
             LinearContour contour = geometry.Contours[i];
-            if (contour.SegmentCount == 0)
-            {
-                continue;
-            }
 
             int markerWordCount = contour.IsClosed ? 2 : 4;
             Span<uint> contourData = pathData.GetAppendSpan(2 + (contour.SegmentCount * 2) + markerWordCount);
@@ -1454,10 +1484,6 @@ internal static class WebGPUSceneEncoder
         for (int i = 0; i < geometry.Contours.Count; i++)
         {
             LinearContour contour = geometry.Contours[i];
-            if (contour.SegmentCount == 0)
-            {
-                continue;
-            }
 
             total += contour.SegmentCount * 2;
             if (contour.IsClosed)

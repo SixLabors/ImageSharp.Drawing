@@ -143,7 +143,7 @@ public class DrawingCanvasBatcherTests
     }
 
     [Fact]
-    public void Flush_DashedStroke_PreparesPathSceneCommand()
+    public void Flush_DashedStroke_PreparesStrokePathSceneCommand()
     {
         Configuration configuration = new();
         CapturingBackend backend = new();
@@ -157,13 +157,13 @@ public class DrawingCanvasBatcherTests
 
         Assert.Single(backend.PreparedCommands);
 
-        PathCompositionSceneCommand command = Assert.IsType<PathCompositionSceneCommand>(backend.PreparedCommands[0]);
+        StrokePathCompositionSceneCommand command = Assert.IsType<StrokePathCompositionSceneCommand>(backend.PreparedCommands[0]);
         Assert.NotNull(command.Command.SourcePath);
         Assert.NotNull(command.Command.Pen);
     }
 
     [Fact]
-    public void Flush_MiterStroke_PreparesPathSceneCommand()
+    public void Flush_MiterStroke_PreparesStrokePathSceneCommand()
     {
         Configuration configuration = new();
         CapturingBackend backend = new();
@@ -185,7 +185,7 @@ public class DrawingCanvasBatcherTests
 
         Assert.Single(backend.PreparedCommands);
 
-        PathCompositionSceneCommand command = Assert.IsType<PathCompositionSceneCommand>(backend.PreparedCommands[0]);
+        StrokePathCompositionSceneCommand command = Assert.IsType<StrokePathCompositionSceneCommand>(backend.PreparedCommands[0]);
         Assert.NotNull(command.Command.SourcePath);
         Assert.NotNull(command.Command.Pen);
     }
