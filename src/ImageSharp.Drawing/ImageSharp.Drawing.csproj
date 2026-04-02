@@ -9,8 +9,8 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageTags>Image Draw Shape Path Font</PackageTags>
-    <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
+    <PackageTags>ImageSharp Drawing Graphics Shapes Paths Text Fonts Vector Raster</PackageTags>
+    <Description>Drawing extensions for ImageSharp with support for shapes, paths, text, and image rendering.</Description>
     <Configurations>Debug;Release</Configurations>
     <IsTrimmable>true</IsTrimmable>
 

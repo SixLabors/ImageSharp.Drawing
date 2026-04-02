@@ -35,26 +35,11 @@ public class WebGPUTheoryAttribute : TheoryAttribute
 
 /// <summary>
 /// Caches the result of the WebGPU compute pipeline probe.
-/// The backend's <see cref="WebGPUDrawingBackend.IsSupported"/> already performs
-/// a full out-of-process probe via the internal RemoteExecutor, so we simply
-/// instantiate the backend and check its result.
 /// </summary>
 internal static class WebGPUProbe
 {
     private static bool? computeSupported;
 
-    internal static bool IsComputeSupported => computeSupported ??= Probe();
-
-    private static bool Probe()
-    {
-        try
-        {
-            using WebGPUDrawingBackend backend = new();
-            return backend.IsSupported;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    internal static bool IsComputeSupported
+        => computeSupported ??= WebGPUEnvironment.TryProbeComputePipelineSupport(out _);
 }

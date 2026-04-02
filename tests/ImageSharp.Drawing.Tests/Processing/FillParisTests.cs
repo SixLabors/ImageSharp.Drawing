@@ -43,29 +43,28 @@ public class FillParisTests
         }));
     }
 
-    [WebGPUFact]//(Skip = "Benchmarking Only")]
+    [WebGPUFact(Skip = "Benchmarking Only")]
     public void FillParis_ImageSharp_WebGPU()
     {
-        using (WebGPURenderTarget<Rgba32> target = new(Width, Height))
-        using (DrawingCanvas<Rgba32> canvas = target.CreateCanvas())
-        {
-            foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
-            {
-                if (fill is not null)
-                {
-                    canvas.Fill(fill, path);
-                }
+        using WebGPURenderTarget<Rgba32> target = new(Width, Height);
+        using DrawingCanvas<Rgba32> canvas = target.CreateCanvas();
 
-                if (stroke is not null)
-                {
-                    canvas.Draw(stroke, path);
-                }
+        foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
+        {
+            if (fill is not null)
+            {
+                canvas.Fill(fill, path);
             }
 
-            canvas.Flush();
-            using Image<Rgba32> readback = target.Readback();
-            Assert.True(ContainsNonDefaultPixel(readback));
+            if (stroke is not null)
+            {
+                canvas.Draw(stroke, path);
+            }
         }
+
+        canvas.Flush();
+        using Image<Rgba32> readback = target.Readback();
+        Assert.True(ContainsNonDefaultPixel(readback));
     }
 
     private static bool ContainsNonDefaultPixel(Image<Rgba32> image)

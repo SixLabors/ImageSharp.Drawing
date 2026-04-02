@@ -33,6 +33,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </remarks>
 internal static unsafe partial class WebGPURuntime
 {
+    private static readonly object ProbeSync = new();
+
     /// <summary>
     /// Synchronizes all runtime state transitions.
     /// </summary>
@@ -68,6 +70,11 @@ internal static unsafe partial class WebGPURuntime
     /// </summary>
     private static bool processExitHooked;
 
+    private static bool? availabilityProbeResult;
+    private static string? availabilityProbeError;
+    private static bool? computePipelineProbeResult;
+    private static string? computePipelineProbeError;
+
     /// <summary>
     /// Timeout for asynchronous WebGPU callbacks.
     /// </summary>
@@ -96,7 +103,10 @@ internal static unsafe partial class WebGPURuntime
 
             if (wgpuExtension is null)
             {
-                api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension);
+                if (!api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension))
+                {
+                    throw new InvalidOperationException("WebGPU.TryGetDeviceExtension for Wgpu failed.");
+                }
             }
 
             leaseCount++;
@@ -209,6 +219,159 @@ internal static unsafe partial class WebGPURuntime
         }
     }
 
+    internal static bool TryProbeAvailability(out string? error)
+    {
+        lock (ProbeSync)
+        {
+            if (availabilityProbeResult.HasValue)
+            {
+                error = availabilityProbeError;
+                return availabilityProbeResult.Value;
+            }
+
+            try
+            {
+                using Lease lease = Acquire();
+                availabilityProbeResult = TryGetOrCreateDevice(out _, out _, out string? deviceError);
+                availabilityProbeError = availabilityProbeResult.Value ? null : deviceError ?? "WebGPU device acquisition failed.";
+            }
+            catch (Exception ex)
+            {
+                availabilityProbeResult = false;
+                availabilityProbeError = ex.Message;
+            }
+
+            error = availabilityProbeError;
+            return availabilityProbeResult.Value;
+        }
+    }
+
+    internal static bool TryProbeComputePipelineSupport(out string? error)
+    {
+        lock (ProbeSync)
+        {
+            if (computePipelineProbeResult.HasValue)
+            {
+                error = computePipelineProbeError;
+                return computePipelineProbeResult.Value;
+            }
+
+            if (!TryProbeAvailability(out string? availabilityError))
+            {
+                computePipelineProbeResult = false;
+                computePipelineProbeError = availabilityError;
+                error = computePipelineProbeError;
+                return false;
+            }
+
+            if (!RemoteExecutor.IsSupported)
+            {
+                computePipelineProbeResult = true;
+                computePipelineProbeError = null;
+                error = null;
+                return true;
+            }
+
+            int exitCode = RemoteExecutor.Invoke(ProbeComputePipelineSupport);
+            computePipelineProbeResult = exitCode == 0;
+            computePipelineProbeError = computePipelineProbeResult.Value
+                ? null
+                : $"WebGPU compute pipeline probe failed with exit code {exitCode}.";
+            error = computePipelineProbeError;
+            return computePipelineProbeResult.Value;
+        }
+    }
+
+    internal static int ProbeComputePipelineSupport()
+    {
+        try
+        {
+            using Lease lease = Acquire();
+            if (!TryGetOrCreateDevice(out Device* device, out _, out _))
+            {
+                return 1;
+            }
+
+            WebGPU api = lease.Api;
+
+            ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn main() {}\0"u8;
+            fixed (byte* shaderCodePtr = probeShader)
+            {
+                ShaderModuleWGSLDescriptor wgslDescriptor = new()
+                {
+                    Chain = new ChainedStruct { SType = SType.ShaderModuleWgslDescriptor },
+                    Code = shaderCodePtr
+                };
+
+                ShaderModuleDescriptor shaderDescriptor = new()
+                {
+                    NextInChain = (ChainedStruct*)&wgslDescriptor
+                };
+
+                ShaderModule* shaderModule = api.DeviceCreateShaderModule(device, in shaderDescriptor);
+                if (shaderModule is null)
+                {
+                    return 1;
+                }
+
+                try
+                {
+                    ReadOnlySpan<byte> entryPoint = "main\0"u8;
+                    fixed (byte* entryPointPtr = entryPoint)
+                    {
+                        ProgrammableStageDescriptor computeStage = new()
+                        {
+                            Module = shaderModule,
+                            EntryPoint = entryPointPtr
+                        };
+
+                        PipelineLayoutDescriptor layoutDescriptor = new()
+                        {
+                            BindGroupLayoutCount = 0,
+                            BindGroupLayouts = null
+                        };
+
+                        PipelineLayout* pipelineLayout = api.DeviceCreatePipelineLayout(device, in layoutDescriptor);
+                        if (pipelineLayout is null)
+                        {
+                            return 1;
+                        }
+
+                        try
+                        {
+                            ComputePipelineDescriptor pipelineDescriptor = new()
+                            {
+                                Layout = pipelineLayout,
+                                Compute = computeStage
+                            };
+
+                            ComputePipeline* pipeline = api.DeviceCreateComputePipeline(device, in pipelineDescriptor);
+                            if (pipeline is null)
+                            {
+                                return 1;
+                            }
+
+                            api.ComputePipelineRelease(pipeline);
+                            return 0;
+                        }
+                        finally
+                        {
+                            api.PipelineLayoutRelease(pipelineLayout);
+                        }
+                    }
+                }
+                finally
+                {
+                    api.ShaderModuleRelease(shaderModule);
+                }
+            }
+        }
+        catch
+        {
+            return 1;
+        }
+    }
+
     /// <summary>
     /// Releases one active runtime lease.
     /// </summary>
@@ -279,6 +442,14 @@ internal static unsafe partial class WebGPURuntime
 
         autoDeviceHandle = 0;
         autoQueueHandle = 0;
+
+        lock (ProbeSync)
+        {
+            availabilityProbeResult = null;
+            availabilityProbeError = null;
+            computePipelineProbeResult = null;
+            computePipelineProbeError = null;
+        }
 
         try
         {

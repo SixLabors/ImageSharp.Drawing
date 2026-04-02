@@ -25,7 +25,7 @@ internal static class Program
 
         return methodName switch
         {
-            nameof(WebGPUDrawingBackend.ProbeComputePipelineSupport) => WebGPUDrawingBackend.ProbeComputePipelineSupport(),
+            nameof(WebGPURuntime.ProbeComputePipelineSupport) => WebGPURuntime.ProbeComputePipelineSupport(),
             _ => -1
         };
     }

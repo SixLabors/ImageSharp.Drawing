@@ -51,12 +51,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
             this.queueHandle = (nint)queue;
             this.runtimeLease = lease;
             this.Configuration = configuration;
-            this.Configuration.SetDrawingBackend(this.Backend);
-
-            if (!this.Backend.IsSupported)
-            {
-                throw new InvalidOperationException("WebGPU unsupported.");
-            }
         }
         catch
         {
@@ -101,7 +95,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         this.queueHandle = queueHandle;
         this.Backend = new WebGPUDrawingBackend();
         this.Configuration = configuration;
-        this.Configuration.SetDrawingBackend(this.Backend);
     }
 
     /// <summary>
@@ -261,7 +254,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         WebGPUTextureFormatId format,
         int width,
         int height)
-        => new(this.Configuration, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), new DrawingOptions());
+        => new(this.Configuration, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), new DrawingOptions());
 
     /// <summary>
     /// Creates a drawing canvas over an externally-owned WebGPU texture.
@@ -280,7 +273,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         int width,
         int height,
         DrawingOptions options)
-        => new(this.Configuration, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), options);
+        => new(this.Configuration, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), options);
 
     /// <summary>
     /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a caller-provided CPU region.
@@ -299,7 +292,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         int width,
         int height,
         Buffer2DRegion<TPixel> cpuRegion)
-        => new(this.Configuration, this.CreateHybridFrame(textureHandle, textureViewHandle, format, width, height, cpuRegion), new DrawingOptions());
+        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, width, height, cpuRegion), new DrawingOptions());
 
     /// <summary>
     /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a caller-provided CPU region.
@@ -320,7 +313,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         int height,
         Buffer2DRegion<TPixel> cpuRegion,
         DrawingOptions options)
-        => new(this.Configuration, this.CreateHybridFrame(textureHandle, textureViewHandle, format, width, height, cpuRegion), options);
+        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, width, height, cpuRegion), options);
 
     /// <summary>
     /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and the root frame of a CPU image.
@@ -335,7 +328,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         nint textureViewHandle,
         WebGPUTextureFormatId format,
         Image<TPixel> image)
-        => new(this.Configuration, this.CreateHybridFrame(textureHandle, textureViewHandle, format, image), new DrawingOptions());
+        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, image), new DrawingOptions());
 
     /// <summary>
     /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a CPU image frame.
@@ -350,7 +343,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         nint textureViewHandle,
         WebGPUTextureFormatId format,
         ImageFrame<TPixel> imageFrame)
-        => new(this.Configuration, this.CreateHybridFrame(textureHandle, textureViewHandle, format, imageFrame), new DrawingOptions());
+        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, imageFrame), new DrawingOptions());
 
     /// <summary>
     /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and the root frame of a CPU image.
@@ -367,7 +360,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         WebGPUTextureFormatId format,
         Image<TPixel> image,
         DrawingOptions options)
-        => new(this.Configuration, this.CreateHybridFrame(textureHandle, textureViewHandle, format, image), options);
+        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, image), options);
 
     /// <summary>
     /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a CPU image frame.
@@ -384,7 +377,7 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         WebGPUTextureFormatId format,
         ImageFrame<TPixel> imageFrame,
         DrawingOptions options)
-        => new(this.Configuration, this.CreateHybridFrame(textureHandle, textureViewHandle, format, imageFrame), options);
+        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, imageFrame), options);
 
     /// <summary>
     /// Disposes the drawing backend owned by this context.

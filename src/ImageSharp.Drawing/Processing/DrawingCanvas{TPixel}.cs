@@ -100,7 +100,7 @@ public sealed partial class DrawingCanvas<TPixel> : IDrawingCanvas
     /// <param name="targetFrame">The destination frame.</param>
     /// <param name="options">Initial drawing options for this canvas instance.</param>
     /// <param name="clipPaths">Initial clip paths for this canvas instance.</param>
-    internal DrawingCanvas(
+    public DrawingCanvas(
         Configuration configuration,
         IDrawingBackend backend,
         ICanvasFrame<TPixel> targetFrame,

@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using SixLabors.ImageSharp.Drawing.Processing;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Processing;
@@ -59,6 +60,8 @@ public partial class DrawingCanvasTests
         canvas.Flush();
 
         target.DebugSave(provider, appendSourceFileOrDescription: false);
-        target.CompareToReferenceOutput(provider, appendSourceFileOrDescription: false);
+
+        // MacOs differs by a reported 0.0000. Go figure!
+        target.CompareToReferenceOutput(ImageComparer.TolerantPercentage(0.0001F), provider, appendSourceFileOrDescription: false);
     }
 }

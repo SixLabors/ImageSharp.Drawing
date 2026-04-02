@@ -9,8 +9,8 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/ImageSharp.Drawing/</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageTags>Image Draw Shape Path Font</PackageTags>
-    <Description>An extension to ImageSharp that allows the drawing of images, paths, and text.</Description>
+    <PackageTags>ImageSharp Drawing WebGPU GPU Graphics Shapes Paths Text Raster Compute</PackageTags>
+    <Description>A WebGPU backend for ImageSharp.Drawing with GPU-accelerated rendering for windows and render targets.</Description>
     <Configurations>Debug;Release</Configurations>
     <!--
       OutputType=Exe is required so that runtimeconfig.json and deps.json are generated.
@@ -21,9 +21,6 @@
     <OutputType>Exe</OutputType>
     <IsTrimmable>true</IsTrimmable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-
-    <!-- TEMP: To avoid publishing while we experiment. -->
-    <IsPublishable>false</IsPublishable>
 
     <!--
       This project is strong-name signed by the shared SixLabors build settings.

@@ -23,11 +23,9 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend, IDisposable
 
     public static bool TryCreate([NotNullWhen(true)] out WebGpuBenchmarkBackend? result, [NotNullWhen(false)] out string? error)
     {
-        using WebGPUDrawingBackend backend = new();
-        if (!backend.IsSupported)
+        if (!WebGPUEnvironment.TryProbeComputePipelineSupport(out error))
         {
             result = null;
-            error = "WebGPU unsupported";
             return false;
         }
 
