@@ -281,7 +281,7 @@ internal static class SvgBenchmarkHelper
         Console.WriteLine($"Saved {name}-imagesharp.png");
 
         // ImageSharp (WebGPU)
-        if (WebGPUTestNativeSurfaceAllocator.TryReadTexture(
+        if (WebGPUTextureTransfer.TryReadTexture(
                 webGpuTextureHandle,
                 width,
                 height,

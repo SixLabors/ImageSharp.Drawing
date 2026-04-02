@@ -1,22 +1,16 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics.CodeAnalysis;
-using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Memory;
-using SixLabors.ImageSharp.PixelFormats;
-using Rectangle = SixLabors.ImageSharp.Rectangle;
 
-namespace DrawingBackendBenchmark;
+namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Small frame wrapper that exposes both a CPU pixel region and a native surface for the sample host.
+/// Canvas frame adapter that exposes both a CPU region and a native surface.
 /// </summary>
-/// <remarks>
-/// The benchmark backend renders to the native surface. The CPU region exists only to satisfy the
-/// canvas frame contract expected by the drawing APIs used in the sample.
-/// </remarks>
-internal sealed class HybridCanvasFrame<TPixel> : ICanvasFrame<TPixel>
+/// <typeparam name="TPixel">The pixel format.</typeparam>
+public sealed class HybridCanvasFrame<TPixel> : ICanvasFrame<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
     private readonly Buffer2DRegion<TPixel> cpuRegion;
@@ -25,8 +19,21 @@ internal sealed class HybridCanvasFrame<TPixel> : ICanvasFrame<TPixel>
     /// <summary>
     /// Initializes a new instance of the <see cref="HybridCanvasFrame{TPixel}"/> class.
     /// </summary>
+    /// <param name="bounds">The frame bounds.</param>
+    /// <param name="cpuRegion">The CPU-accessible pixel buffer region backing this frame.</param>
+    /// <param name="surface">The native surface backing this frame.</param>
     public HybridCanvasFrame(Rectangle bounds, Buffer2DRegion<TPixel> cpuRegion, NativeSurface surface)
     {
+        Guard.NotNull(cpuRegion.Buffer, nameof(cpuRegion));
+        Guard.NotNull(surface, nameof(surface));
+
+        if (cpuRegion.Width != bounds.Width || cpuRegion.Height != bounds.Height)
+        {
+            throw new ArgumentException(
+                $"CPU region dimensions ({cpuRegion.Width}x{cpuRegion.Height}) must match frame bounds ({bounds.Width}x{bounds.Height}).",
+                nameof(cpuRegion));
+        }
+
         this.Bounds = bounds;
         this.cpuRegion = cpuRegion;
         this.surface = surface;

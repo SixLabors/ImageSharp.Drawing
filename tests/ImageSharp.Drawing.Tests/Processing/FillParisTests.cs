@@ -46,65 +46,41 @@ public class FillParisTests
     [WebGPUFact]//(Skip = "Benchmarking Only")]
     public void FillParis_ImageSharp_WebGPU()
     {
-        using FillParisWebGpuContext webGpu = new();
-        using DrawingCanvas<Rgba32> canvas = new(webGpu.Configuration, webGpu.NativeFrame, new DrawingOptions());
-
-        foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
+        using (WebGPURenderTarget<Rgba32> target = new(Width, Height))
+        using (DrawingCanvas<Rgba32> canvas = target.CreateCanvas())
         {
-            if (fill is not null)
+            foreach ((IPath path, SolidBrush fill, SolidPen stroke) in isElements)
             {
-                canvas.Fill(fill, path);
+                if (fill is not null)
+                {
+                    canvas.Fill(fill, path);
+                }
+
+                if (stroke is not null)
+                {
+                    canvas.Draw(stroke, path);
+                }
             }
 
-            if (stroke is not null)
-            {
-                canvas.Draw(stroke, path);
-            }
+            canvas.Flush();
+            using Image<Rgba32> readback = target.Readback();
+            Assert.True(ContainsNonDefaultPixel(readback));
         }
-
-        canvas.Flush();
-
-        Assert.True(
-            webGpu.Backend.DiagnosticLastFlushUsedGPU,
-            webGpu.Backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
     }
 
-    private sealed class FillParisWebGpuContext : IDisposable
+    private static bool ContainsNonDefaultPixel(Image<Rgba32> image)
     {
-        private readonly nint textureHandle;
-        private readonly nint textureViewHandle;
-
-        public FillParisWebGpuContext()
+        for (int y = 0; y < image.Height; y++)
         {
-            this.Backend = new WebGPUDrawingBackend();
-            this.Configuration = Configuration.Default.Clone();
-            this.Configuration.SetDrawingBackend(this.Backend);
-
-            Assert.True(
-                WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
-                    Width,
-                    Height,
-                    out NativeSurface nativeSurface,
-                    out this.textureHandle,
-                    out this.textureViewHandle,
-                    out string createError),
-                createError);
-
-            this.NativeFrame = new NativeCanvasFrame<Rgba32>(
-                new Rectangle(0, 0, Width, Height),
-                nativeSurface);
+            for (int x = 0; x < image.Width; x++)
+            {
+                if (image[x, y] != default)
+                {
+                    return true;
+                }
+            }
         }
 
-        public WebGPUDrawingBackend Backend { get; }
-
-        public Configuration Configuration { get; }
-
-        public NativeCanvasFrame<Rgba32> NativeFrame { get; }
-
-        public void Dispose()
-        {
-            WebGPUTestNativeSurfaceAllocator.Release(this.textureHandle, this.textureViewHandle);
-            this.Backend.Dispose();
-        }
+        return false;
     }
 }

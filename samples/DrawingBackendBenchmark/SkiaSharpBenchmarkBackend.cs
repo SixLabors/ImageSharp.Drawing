@@ -17,10 +17,7 @@ internal sealed class SkiaSharpBenchmarkBackend : IBenchmarkBackend, IDisposable
     private int cachedWidth;
     private int cachedHeight;
 
-    public SkiaSharpBenchmarkBackend(GRContext? context = null)
-    {
-        this.context = context;
-    }
+    public SkiaSharpBenchmarkBackend(GRContext? context = null) => this.context = context;
 
     public bool IsGpu => this.context is not null;
 

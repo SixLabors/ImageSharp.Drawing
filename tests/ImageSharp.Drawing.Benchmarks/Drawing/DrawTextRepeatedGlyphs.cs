@@ -30,11 +30,7 @@ public class DrawTextRepeatedGlyphs
 
     private Configuration defaultConfiguration;
     private Image<Rgba32> defaultImage;
-    private WebGPUDrawingBackend webGpuBackend;
-    private Configuration webGpuConfiguration;
-    private NativeCanvasFrame<Rgba32> webGpuNativeFrame;
-    private nint webGpuNativeTextureHandle;
-    private nint webGpuNativeTextureViewHandle;
+    private WebGPURenderTarget<Rgba32> webGpuTarget;
     private RichTextOptions textOptions;
     private string text;
 
@@ -60,25 +56,7 @@ public class DrawTextRepeatedGlyphs
 
         this.defaultConfiguration = Configuration.Default;
         this.defaultImage = new Image<Rgba32>(Width, Height);
-        this.webGpuBackend = new WebGPUDrawingBackend();
-        this.webGpuConfiguration = Configuration.Default.Clone();
-        this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
-
-        if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
-                Width,
-                Height,
-                out NativeSurface nativeSurface,
-                out this.webGpuNativeTextureHandle,
-                out this.webGpuNativeTextureViewHandle,
-                out string nativeSurfaceError))
-        {
-            throw new InvalidOperationException(
-                $"Unable to create benchmark native WebGPU target. Error='{nativeSurfaceError}'.");
-        }
-
-        this.webGpuNativeFrame = new NativeCanvasFrame<Rgba32>(
-            new Rectangle(0, 0, Width, Height),
-            nativeSurface);
+        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(Width, Height);
 
         this.text = new string('A', this.GlyphCount);
     }
@@ -87,12 +65,7 @@ public class DrawTextRepeatedGlyphs
     public void Cleanup()
     {
         this.defaultImage.Dispose();
-        WebGPUTestNativeSurfaceAllocator.Release(
-            this.webGpuNativeTextureHandle,
-            this.webGpuNativeTextureViewHandle);
-        this.webGpuNativeTextureHandle = 0;
-        this.webGpuNativeTextureViewHandle = 0;
-        this.webGpuBackend.Dispose();
+        this.webGpuTarget.Dispose();
     }
 
     [Benchmark(Baseline = true, Description = "DrawingCanvas Default Backend")]
@@ -108,7 +81,7 @@ public class DrawTextRepeatedGlyphs
     [Benchmark(Description = "DrawingCanvas WebGPU Backend (NativeSurface)")]
     public void DrawingCanvasWebGPUBackendNativeSurface()
     {
-        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, this.drawingOptions);
+        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas(this.drawingOptions);
         canvas.DrawText(this.textOptions, this.text, this.brush, null);
         canvas.Flush();
     }

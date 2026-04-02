@@ -37,11 +37,7 @@ public abstract class DrawPolygon
 
     private IPath imageSharpPath;
 
-    private WebGPUDrawingBackend webGpuBackend;
-    private Configuration webGpuConfiguration;
-    private NativeCanvasFrame<Rgba32> webGpuNativeFrame;
-    private nint webGpuNativeTextureHandle;
-    private nint webGpuNativeTextureViewHandle;
+    private WebGPURenderTarget<Rgba32> webGpuTarget;
 
     protected abstract int Width { get; }
 
@@ -110,25 +106,7 @@ public abstract class DrawPolygon
 
         this.image = new Image<Rgba32>(this.Width, this.Height);
         this.isPen = new SolidPen(Color.White, this.Thickness);
-        this.webGpuBackend = new WebGPUDrawingBackend();
-        this.webGpuConfiguration = Configuration.Default.Clone();
-        this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
-
-        if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
-                this.Width,
-                this.Height,
-                out NativeSurface nativeSurface,
-                out this.webGpuNativeTextureHandle,
-                out this.webGpuNativeTextureViewHandle,
-                out string nativeSurfaceError))
-        {
-            throw new InvalidOperationException(
-                $"Unable to create benchmark native WebGPU target. Error='{nativeSurfaceError}'.");
-        }
-
-        this.webGpuNativeFrame = new NativeCanvasFrame<Rgba32>(
-            new Rectangle(0, 0, this.Width, this.Height),
-            nativeSurface);
+        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(this.Width, this.Height);
 
         this.sdBitmap = new Bitmap(this.Width, this.Height);
         this.sdGraphics = Graphics.FromImage(this.sdBitmap);
@@ -170,12 +148,7 @@ public abstract class DrawPolygon
         this.skPath.Dispose();
 
         this.image.Dispose();
-        WebGPUTestNativeSurfaceAllocator.Release(
-            this.webGpuNativeTextureHandle,
-            this.webGpuNativeTextureViewHandle);
-        this.webGpuNativeTextureHandle = 0;
-        this.webGpuNativeTextureViewHandle = 0;
-        this.webGpuBackend.Dispose();
+        this.webGpuTarget.Dispose();
     }
 
     [Benchmark(Baseline = true)]
@@ -193,7 +166,7 @@ public abstract class DrawPolygon
     [Benchmark]
     public void ImageSharpWebGPU()
     {
-        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, new DrawingOptions());
+        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas();
         canvas.Draw(this.isPen, this.imageSharpPath);
         canvas.Flush();
     }

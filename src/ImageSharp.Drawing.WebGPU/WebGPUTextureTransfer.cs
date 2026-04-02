@@ -11,113 +11,11 @@ using SixLabors.ImageSharp.PixelFormats;
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Internal helper for benchmark/test-only native WebGPU target allocation.
+/// Internal WebGPU texture upload, readback, and release helpers used by tests and benchmarks.
 /// </summary>
-internal static unsafe class WebGPUTestNativeSurfaceAllocator
+internal static unsafe class WebGPUTextureTransfer
 {
     private const int CallbackTimeoutMilliseconds = 5000;
-
-    /// <summary>
-    /// Tries to allocate a native WebGPU texture + view pair and wrap them in a <see cref="NativeSurface"/>.
-    /// </summary>
-    internal static bool TryCreate<TPixel>(
-        int width,
-        int height,
-        out NativeSurface surface,
-        out nint textureHandle,
-        out nint textureViewHandle,
-        out string error)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        if (!WebGPUDrawingBackend.TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId formatId, out FeatureName requiredFeature))
-        {
-            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
-            textureHandle = 0;
-            textureViewHandle = 0;
-            error = $"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.";
-            return false;
-        }
-
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-        WebGPU api = lease.Api;
-
-        if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? deviceError))
-        {
-            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
-            textureHandle = 0;
-            textureViewHandle = 0;
-            error = deviceError ?? "WebGPU device auto-provisioning failed.";
-            return false;
-        }
-
-        if (requiredFeature != FeatureName.Undefined
-            && !WebGPURuntime.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
-        {
-            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
-            textureHandle = 0;
-            textureViewHandle = 0;
-            error = $"Device does not support required feature '{requiredFeature}' for pixel type '{typeof(TPixel).Name}'.";
-            return false;
-        }
-
-        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(formatId);
-        TextureDescriptor targetTextureDescriptor = new()
-        {
-            Usage = TextureUsage.RenderAttachment | TextureUsage.CopySrc | TextureUsage.CopyDst | TextureUsage.TextureBinding | TextureUsage.StorageBinding,
-            Dimension = TextureDimension.Dimension2D,
-            Size = new Extent3D((uint)width, (uint)height, 1),
-            Format = textureFormat,
-            MipLevelCount = 1,
-            SampleCount = 1
-        };
-
-        Texture* targetTexture = api.DeviceCreateTexture(device, in targetTextureDescriptor);
-        if (targetTexture is null)
-        {
-            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
-            textureHandle = 0;
-            textureViewHandle = 0;
-            error = "WebGPU.DeviceCreateTexture returned null.";
-            return false;
-        }
-
-        TextureViewDescriptor targetViewDescriptor = new()
-        {
-            Format = textureFormat,
-            Dimension = TextureViewDimension.Dimension2D,
-            BaseMipLevel = 0,
-            MipLevelCount = 1,
-            BaseArrayLayer = 0,
-            ArrayLayerCount = 1,
-            Aspect = TextureAspect.All
-        };
-
-        TextureView* targetView = api.TextureCreateView(targetTexture, in targetViewDescriptor);
-        if (targetView is null)
-        {
-            api.TextureRelease(targetTexture);
-            surface = new NativeSurface(TPixel.GetPixelTypeInfo());
-            textureHandle = 0;
-            textureViewHandle = 0;
-            error = "WebGPU.TextureCreateView returned null.";
-            return false;
-        }
-
-        nint deviceHandle = (nint)device;
-        nint queueHandle = (nint)queue;
-        textureHandle = (nint)targetTexture;
-        textureViewHandle = (nint)targetView;
-        surface = WebGPUNativeSurfaceFactory.Create<TPixel>(
-            deviceHandle,
-            queueHandle,
-            textureHandle,
-            textureViewHandle,
-            formatId,
-            width,
-            height);
-        error = string.Empty;
-        return true;
-    }
 
     /// <summary>
     /// Tries to upload CPU pixel data to an existing native WebGPU texture handle.
@@ -130,6 +28,8 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         out string error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
+        Guard.NotNull(image, nameof(image));
+
         if (textureHandle == 0)
         {
             error = "Texture handle is zero.";
@@ -215,7 +115,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             {
                 Usage = BufferUsage.CopyDst | BufferUsage.MapRead,
                 Size = readbackByteCount,
-                MappedAtCreation = false
+                MappedAtCreation = false,
             };
 
             readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
@@ -238,7 +138,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
                 Texture = (Texture*)textureHandle,
                 MipLevel = 0,
                 Origin = new Origin3D(0, 0, 0),
-                Aspect = TextureAspect.All
+                Aspect = TextureAspect.All,
             };
 
             ImageCopyBuffer destination = new()
@@ -248,8 +148,8 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
                 {
                     Offset = 0,
                     BytesPerRow = (uint)readbackRowBytes,
-                    RowsPerImage = (uint)height
-                }
+                    RowsPerImage = (uint)height,
+                },
             };
 
             Extent3D copySize = new((uint)width, (uint)height, 1);
@@ -271,6 +171,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
 
             BufferMapAsyncStatus mapStatus = BufferMapAsyncStatus.Unknown;
             using ManualResetEventSlim mapReady = new(false);
+
             void Callback(BufferMapAsyncStatus status, void* userData)
             {
                 _ = userData;
@@ -335,10 +236,8 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
     }
 
     /// <summary>
-    /// Releases native texture and texture-view handles allocated for tests.
+    /// Releases native texture and texture-view handles.
     /// </summary>
-    /// <param name="textureHandle">The native texture handle.</param>
-    /// <param name="textureViewHandle">The native texture-view handle.</param>
     internal static void Release(nint textureHandle, nint textureViewHandle)
     {
         if (textureHandle == 0 && textureViewHandle == 0)
@@ -346,9 +245,9 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
             return;
         }
 
-        // Keep the runtime alive while releasing native handles.
         using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         WebGPU api = lease.Api;
+
         if (textureViewHandle != 0)
         {
             api.TextureViewRelease((TextureView*)textureViewHandle);

@@ -39,11 +39,7 @@ public class FillTiger
     private Image<Rgba32> image;
     private List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> isElements;
 
-    private WebGPUDrawingBackend webGpuBackend;
-    private Configuration webGpuConfiguration;
-    private NativeCanvasFrame<Rgba32> webGpuNativeFrame;
-    private nint webGpuNativeTextureHandle;
-    private nint webGpuNativeTextureViewHandle;
+    private WebGPURenderTarget<Rgba32> webGpuTarget;
 
     [GlobalSetup]
     public void Setup()
@@ -66,25 +62,7 @@ public class FillTiger
         this.image = new Image<Rgba32>(Width, Height);
         this.isElements = SvgBenchmarkHelper.BuildImageSharpElements(elements, Scale);
 
-        this.webGpuBackend = new WebGPUDrawingBackend();
-        this.webGpuConfiguration = Configuration.Default.Clone();
-        this.webGpuConfiguration.SetDrawingBackend(this.webGpuBackend);
-
-        if (!WebGPUTestNativeSurfaceAllocator.TryCreate<Rgba32>(
-                Width,
-                Height,
-                out NativeSurface nativeSurface,
-                out this.webGpuNativeTextureHandle,
-                out this.webGpuNativeTextureViewHandle,
-                out string nativeSurfaceError))
-        {
-            throw new InvalidOperationException(
-                $"Unable to create benchmark native WebGPU target. Error='{nativeSurfaceError}'.");
-        }
-
-        this.webGpuNativeFrame = new NativeCanvasFrame<Rgba32>(
-            new Rectangle(0, 0, Width, Height),
-            nativeSurface);
+        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(Width, Height);
     }
 
     [IterationSetup]
@@ -118,12 +96,7 @@ public class FillTiger
 
         this.image.Dispose();
 
-        WebGPUTestNativeSurfaceAllocator.Release(
-            this.webGpuNativeTextureHandle,
-            this.webGpuNativeTextureViewHandle);
-        this.webGpuNativeTextureHandle = 0;
-        this.webGpuNativeTextureViewHandle = 0;
-        this.webGpuBackend.Dispose();
+        this.webGpuTarget.Dispose();
     }
 
     [Benchmark(Baseline = true)]
@@ -182,7 +155,7 @@ public class FillTiger
     [Benchmark]
     public void ImageSharpWebGPU()
     {
-        using DrawingCanvas<Rgba32> canvas = new(this.webGpuConfiguration, this.webGpuNativeFrame, new DrawingOptions());
+        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas();
         foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
         {
             if (fill is not null)
@@ -216,7 +189,7 @@ public class FillTiger
         //    bench.skSurface,
         //    bench.sdBitmap,
         //    bench.image,
-        //    bench.webGpuNativeTextureHandle);
+        //    bench.webGpuTarget.TextureHandle);
 
         bench.Cleanup();
     }

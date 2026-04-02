@@ -582,7 +582,7 @@ public partial class WebGPUDrawingBackendTests
             }
 
             Assert.True(
-                WebGPUTestNativeSurfaceAllocator.TryReadTexture(
+                WebGPUTextureTransfer.TryReadTexture(
                     textureHandle,
                     defaultImage.Width,
                     defaultImage.Height,
@@ -684,7 +684,7 @@ public partial class WebGPUDrawingBackendTests
             if (initialImage is not null)
             {
                 Assert.True(
-                    WebGPUTestNativeSurfaceAllocator.TryWriteTexture(
+                    WebGPUTextureTransfer.TryWriteTexture(
                         textureHandle,
                         width,
                         height,
@@ -697,7 +697,7 @@ public partial class WebGPUDrawingBackendTests
             canvas.Flush();
 
             Assert.True(
-                WebGPUTestNativeSurfaceAllocator.TryReadTexture(
+                WebGPUTextureTransfer.TryReadTexture(
                     textureHandle,
                     width,
                     height,
@@ -1130,7 +1130,7 @@ public partial class WebGPUDrawingBackendTests
             // Upload initial white content
             using Image<TPixel> initialImage = provider.GetImage();
             Assert.True(
-                WebGPUTestNativeSurfaceAllocator.TryWriteTexture(
+                WebGPUTextureTransfer.TryWriteTexture(
                     textureHandle,
                     defaultImage.Width,
                     defaultImage.Height,
@@ -1153,7 +1153,7 @@ public partial class WebGPUDrawingBackendTests
             }
 
             Assert.True(
-                WebGPUTestNativeSurfaceAllocator.TryReadTexture(
+                WebGPUTextureTransfer.TryReadTexture(
                     textureHandle,
                     defaultImage.Width,
                     defaultImage.Height,

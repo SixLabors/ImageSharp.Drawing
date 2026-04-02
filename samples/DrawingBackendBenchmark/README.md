@@ -23,3 +23,5 @@ dotnet run --project samples/DrawingBackendBenchmark -c Release
 ```
 
 The WebGPU path renders to an offscreen native texture and reads the final frame back for preview. The reported benchmark time measures scene rendering and flush time only, not the preview readback.
+
+Internally the sample now uses an owned `WebGPURenderTarget<TPixel>` so the offscreen WebGPU setup stays small while still supporting the benchmark's hybrid CPU+GPU frame flow.

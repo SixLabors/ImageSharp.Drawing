@@ -130,7 +130,7 @@ public class DrawingCanvasBatcherTests
         configuration.SetDrawingBackend(backend);
         using Image<Rgba32> image = new(configuration, 80, 80);
 
-        using DrawingCanvas<Rgba32> canvas = DrawingCanvas<Rgba32>.FromRootFrame(image, new DrawingOptions());
+        using DrawingCanvas<Rgba32> canvas = image.CreateCanvas(new DrawingOptions());
         canvas.DrawLine(new SolidPen(Color.Red, 5F), new PointF(8, 12), new PointF(70, 64));
         canvas.Flush();
 
