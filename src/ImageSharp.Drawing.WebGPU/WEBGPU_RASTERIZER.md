@@ -12,6 +12,13 @@ In this codebase, the WebGPU rasterizer is not a single type with one scan-conve
 
 Together, these types turn one prepared flush into a staged GPU scene, schedule that scene into tile-relative work, run the fine raster pass, and write final pixels.
 
+This document starts after two earlier boundaries have already been crossed:
+
+- public WebGPU setup has already selected or created a native target through `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, `WebGPUDeviceContext<TPixel>`, or `WebGPUNativeSurfaceFactory`
+- `WebGPUDrawingBackend` has already decided that the flush should stay on the GPU path
+
+Support probing through `WebGPUEnvironment` also sits outside this document. The rasterizer describes execution of one staged scene, not environment detection or object construction.
+
 The staged GPU rasterizer is based on ideas and implementation techniques from Vello:
 
 - https://github.com/linebender/vello
@@ -284,6 +291,12 @@ The backend decides:
 - how fallback works
 - how layer composition is handled
 - how flush-scoped work relates to runtime and device-scoped state
+
+The public setup layer decides:
+
+- how a caller acquires or owns the native target
+- whether support should be probed explicitly through `WebGPUEnvironment`
+- whether the caller is using a library-managed device or caller-owned native handles
 
 That separation is why it helps to document them separately.
 

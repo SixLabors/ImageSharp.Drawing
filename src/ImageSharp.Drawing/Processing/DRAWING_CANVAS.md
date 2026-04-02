@@ -94,6 +94,15 @@ It is the backend handoff boundary.
 
 The backend receives a scene and a target frame. It decides how to execute that prepared work.
 
+There are two backend-selection paths in the architecture:
+
+- the ordinary public `DrawingCanvas<TPixel>` constructors resolve the backend from `Configuration`
+- specialized infrastructure can construct a canvas with an explicit backend
+
+The ordinary CPU entry points also include the `CreateCanvas(...)` extension methods on `Image<TPixel>` and `ImageFrame<TPixel>`, which route into those same constructors.
+
+That explicit-backend path matters for the WebGPU helpers. `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` create canvases that point directly at their owned `WebGPUDrawingBackend` instance instead of storing that backend on the caller's `Configuration`.
+
 ### Frame
 
 `ICanvasFrame<TPixel>` is the target abstraction that the backend renders into.
@@ -110,6 +119,7 @@ That abstraction lets the same canvas target:
 
 - pure CPU memory with `MemoryCanvasFrame<TPixel>`
 - a native or GPU surface with `NativeCanvasFrame<TPixel>`
+- a combined CPU plus native target with `HybridCanvasFrame<TPixel>`
 - a clipped view over another frame with `CanvasRegionFrame<TPixel>`
 
 The point is not to hide all differences. The point is to express the minimum target contract the backends need.
@@ -311,6 +321,14 @@ It benefits from the same canvas-level decisions:
 - layers already exist as explicit boundaries
 - the frame already describes whether a native surface is available
 
+The WebGPU public helpers reach this point in a target-first way:
+
+- `WebGPUWindow<TPixel>` acquires a presentable native target per frame
+- `WebGPURenderTarget<TPixel>` owns an offscreen native target and can pair it with CPU memory through hybrid frames
+- `WebGPUDeviceContext<TPixel>` wraps shared or caller-owned device state and creates native-only or hybrid frames and canvases over native textures
+
+Those helpers all create `DrawingCanvas<TPixel>` instances with an explicit `WebGPUDrawingBackend`, so GPU execution stays attached to the WebGPU object that owns the native target and backend lifetime.
+
 The backend is free to choose a very different execution model because the canvas has already solved the shared semantics problem.
 
 ## The Practical Mental Model
@@ -338,15 +356,18 @@ Once those ideas are clear, the code stops looking like a random collection of t
 If you want to move from the architecture into the code, this is the best order.
 
 1. `DrawingCanvas{TPixel}.cs`
-2. `DrawingCanvasBatcher{TPixel}.cs`
-3. `CompositionCommand.cs`
-4. `CompositionCommandPreparer.cs`
-5. `DefaultDrawingBackend.cs`
-6. `FlushScene.cs`
-7. `WebGPUDrawingBackend` and its scene/dispatch types
+2. `DrawingCanvasExtensions.cs`
+3. `DrawingCanvasBatcher{TPixel}.cs`
+4. `CompositionCommand.cs`
+5. `CompositionCommandPreparer.cs`
+6. `DefaultDrawingBackend.cs`
+7. `FlushScene.cs`
+8. `WebGPUEnvironment.cs`
+9. `WebGPUWindow{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
+10. `WebGPUDrawingBackend` and its scene/dispatch types
 
 That path follows the real runtime flow:
 
-public API -> recorded command -> prepared scene -> backend execution
+public API -> recorded command -> prepared scene -> backend selection -> backend execution
 
 Following the code in that order is much easier than starting from the backend internals first.

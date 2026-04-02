@@ -346,8 +346,8 @@ public partial class ProcessWithDrawingCanvasTests
 
         Color color = Color.Black;
 
-        // NET472 is 0.0045 different.
-        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0046F);
+        // Ubuntu on .NET 10 ARM reported a 0.0051% difference
+        ImageComparer comparer = ImageComparer.TolerantPercentage(0.0052F);
 
         provider.VerifyOperation(
             comparer,

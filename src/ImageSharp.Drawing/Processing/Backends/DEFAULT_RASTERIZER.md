@@ -8,10 +8,19 @@ This rasterizer is based on ideas and implementation techniques from the Blaze p
 
 This document explains the rasterizer as a newcomer needs to understand it:
 
+- where the rasterizer fits relative to `DrawingCanvas<TPixel>` and `DefaultDrawingBackend`
 - what problem the rasterizer is solving inside the CPU backend
 - why the rasterizer is split into retained geometry building and band execution
 - what retained geometry, bands, and coverage mean in this architecture
 - how scan conversion stays separate from brush shading and frame ownership
+
+## Where The Rasterizer Fits
+
+`DefaultRasterizer` sits below `DrawingCanvas<TPixel>` and `DefaultDrawingBackend`.
+
+The canvas records commands, the batcher prepares them into a `CompositionScene`, and `DefaultDrawingBackend` chooses the row-oriented execution plan for the flush. `DefaultRasterizer` then handles the narrower geometry-to-coverage problem inside that CPU execution path.
+
+That means the rasterizer does not select the backend, own the destination frame, or interpret the public drawing API directly. It receives already-prepared geometry through the CPU backend pipeline, and the backend later routes its coverage into whichever frame exposes the CPU region for the flush.
 
 ## The Main Problem
 
@@ -117,13 +126,14 @@ Coverage is the rasterizer's output.
 
 The rasterizer does not decide final pixel colors. It decides how much geometric coverage each pixel receives. The backend later passes that coverage to a `BrushRenderer<TPixel>`, which decides how the destination pixels should be shaded.
 
-## Where The Rasterizer Fits
+## Pipeline Placement
 
 The rasterizer sits in the middle of the CPU backend pipeline.
 
 Upstream:
 
 - `CompositionCommand` preparation produces prepared geometry
+- `DrawingCanvas<TPixel>` and `DrawingCanvasBatcher<TPixel>` have already selected and called the CPU backend
 - `FlushScene` decides which items are visible and when they execute
 
 Downstream:
@@ -411,15 +421,19 @@ That separation is one of the main architectural advantages of the current CPU p
 
 If you are new to this part of the library, read the rasterizer in this order:
 
-1. `CreateRasterizableGeometry(...)` in `DefaultRasterizer.cs`
-2. `Linearizer<TL>` and the concrete linearizers in `DefaultRasterizer.Linearizer.cs`
-3. retained line types in `DefaultRasterizer.RetainedTypes.cs`
-4. `ExecuteRasterizableBand(...)` in `DefaultRasterizer.cs`
-5. `Context` in `DefaultRasterizer.cs`
+1. `DrawingCanvas{TPixel}.cs`
+2. `DrawingCanvasBatcher{TPixel}.cs`
+3. `DefaultDrawingBackend.cs`
+4. `FlushScene.cs`
+5. `CreateRasterizableGeometry(...)` in `DefaultRasterizer.cs`
+6. `Linearizer<TL>` and the concrete linearizers in `DefaultRasterizer.Linearizer.cs`
+7. retained line types in `DefaultRasterizer.RetainedTypes.cs`
+8. `ExecuteRasterizableBand(...)` in `DefaultRasterizer.cs`
+9. `Context` in `DefaultRasterizer.cs`
 
 That order mirrors the data lifecycle:
 
-prepared geometry -> retained storage -> band execution -> coverage emission
+canvas intent -> prepared geometry -> retained storage -> band execution -> coverage emission
 
 ## The Mental Model To Keep
 
@@ -429,6 +443,7 @@ it is a retained fixed-point polygon scanner that transforms prepared geometry i
 
 If that model stays clear, the rest of the code becomes easier to read:
 
+- the canvas and backend docs explain how execution reaches the CPU path
 - the linearizer explains where retained line data comes from
 - `RasterizableGeometry` explains what is stored
 - the `Context` explains how retained data becomes coverage

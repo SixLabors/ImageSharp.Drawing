@@ -8,10 +8,30 @@ The WebGPU backend and staged scene pipeline are based on ideas and implementati
 
 This document explains the backend as a newcomer would need to understand it:
 
+- where the public WebGPU entry points fit
 - what problem the WebGPU backend is solving
 - what `WebGPUDrawingBackend` actually owns
 - how one flush moves through the backend boundary
 - where fallback, layer composition, and runtime caching fit into the design
+
+## Where The Public WebGPU Types Fit
+
+The public WebGPU surface area around this backend is small and target-first:
+
+- `WebGPUEnvironment` exposes explicit support probes for the library-managed WebGPU environment
+- `WebGPUWindow<TPixel>` owns a native window and either runs a render loop or returns `WebGPUWindowFrame<TPixel>` instances through `TryAcquireFrame(...)`
+- `WebGPURenderTarget<TPixel>` owns an offscreen native target for GPU rendering, hybrid CPU plus GPU canvases, and readback
+- `WebGPUDeviceContext<TPixel>` wraps a shared or caller-owned device and queue and creates native-only or hybrid frames and canvases over external textures
+- `WebGPUNativeSurfaceFactory` is the low-level escape hatch for caller-owned native targets
+
+Those types all exist to get a `DrawingCanvas<TPixel>` over a native WebGPU target, sometimes paired with a CPU region through `HybridCanvasFrame<TPixel>`. Once the canvas flushes, `WebGPUDrawingBackend` becomes the execution boundary.
+
+The support probes also live outside the backend:
+
+- `WebGPUEnvironment.TryProbeAvailability(...)` checks whether the library-managed WebGPU device and queue can be acquired
+- `WebGPUEnvironment.TryProbeComputePipelineSupport(...)` runs the crash-isolated trivial compute-pipeline probe
+
+That split keeps support probing separate from flush execution. `WebGPUDrawingBackend` is the flush executor, not the public support API. The WebGPU constructors create their objects directly; callers use `WebGPUEnvironment` when they want explicit preflight checks.
 
 ## The Main Problem
 
@@ -51,6 +71,13 @@ That means `WebGPUDrawingBackend` is responsible for entry-point orchestration, 
 - GPU layer composition when that path is eligible
 
 It is the policy boundary of the GPU path.
+
+It does not own:
+
+- public support probing
+- window creation
+- render-target allocation APIs
+- caller-device or caller-surface interop setup
 
 ### Flush Context
 
@@ -115,6 +142,12 @@ The expensive staged work is delegated:
 - `WebGPUSceneConfig` owns planning data
 - `WebGPUSceneResources` owns flush-scoped GPU resources
 - `WebGPUSceneDispatch` owns the staged compute pipeline
+
+The public object graph around those responsibilities is also separate:
+
+- `WebGPUEnvironment` handles explicit support probes
+- `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` construct native targets, frames, and canvases
+- `DrawingCanvas<TPixel>` hands a prepared `CompositionScene` to the backend
 
 ## The Flush Boundary
 
@@ -199,6 +232,8 @@ They cache things such as:
 - composite pipelines
 - a small amount of reusable device-scoped support state
 
+`WebGPURuntime` also backs the explicit support probes surfaced by `WebGPUEnvironment`. The probe and runtime layer is where the library-managed device/queue availability and crash-isolated compute-pipeline test are cached.
+
 Everything else in the staged scene path is intentionally flush-scoped.
 
 That split keeps flushes isolated while still allowing truly device-scoped state to be reused.
@@ -221,16 +256,18 @@ The staged scene pipeline itself is described in [`WEBGPU_RASTERIZER.md`](d:/Git
 
 If you want to understand the backend first, read the code in this order:
 
-1. `WebGPUDrawingBackend.cs`
-2. `WebGPUFlushContext.cs`
-3. `WebGPURuntime.cs`
-4. `WebGPURuntime.DeviceSharedState.cs`
-5. `WebGPUDrawingBackend.ComposeLayer.cs`
-6. `WEBGPU_RASTERIZER.md`
+1. `WebGPUEnvironment.cs`
+2. `WebGPUWindow{TPixel}.cs`, `WebGPUWindowFrame{TPixel}.cs`, `WebGPURenderTarget{TPixel}.cs`, and `WebGPUDeviceContext{TPixel}.cs`
+3. `WebGPUDrawingBackend.cs`
+4. `WebGPUFlushContext.cs`
+5. `WebGPURuntime.cs`
+6. `WebGPURuntime.DeviceSharedState.cs`
+7. `WebGPUDrawingBackend.ComposeLayer.cs`
+8. `WEBGPU_RASTERIZER.md`
 
 That order mirrors the newcomer view of the system:
 
-backend policy -> flush context -> runtime lifetime -> layer composition -> staged raster pipeline
+support and target setup -> backend policy -> flush context -> runtime lifetime -> layer composition -> staged raster pipeline
 
 ## The Mental Model To Keep
 
@@ -238,6 +275,8 @@ The easiest way to keep this backend straight is to remember that it is not the 
 
 If that model is clear, the major types fall into place:
 
+- `WebGPUEnvironment` exposes explicit support probes
+- `WebGPUWindow<TPixel>`, `WebGPURenderTarget<TPixel>`, and `WebGPUDeviceContext<TPixel>` create canvases over native targets
 - `WebGPUDrawingBackend` orchestrates and decides policy
 - `WebGPUFlushContext` owns one flush's execution state
 - `WebGPURuntime` owns longer-lived device state

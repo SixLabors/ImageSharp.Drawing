@@ -4,10 +4,24 @@
 
 This document explains the backend as a system rather than as a list of methods. The goal is to help a newcomer understand:
 
+- where the CPU backend fits in the canvas/backend selection model
 - what problem the CPU backend is solving
 - why the backend is organized around a flush-scoped execution plan
 - what `FlushScene` means in this architecture
 - how rasterization, brush application, and layer composition fit together
+
+## Where The CPU Backend Fits
+
+`DefaultDrawingBackend` is the standard CPU execution path behind `DrawingCanvas<TPixel>`.
+
+The canvas architecture reaches this backend in two common ways:
+
+- ordinary `DrawingCanvas<TPixel>` construction resolves `IDrawingBackend` from `Configuration`
+- specialized infrastructure can construct a canvas with an explicit backend instance
+
+The CPU path usually uses the first route. The WebGPU helpers use the second route when they need a canvas that targets a native surface through `WebGPUDrawingBackend`.
+
+That means the CPU backend is one backend implementation within the shared canvas architecture, not a separate public drawing model. It executes against any frame that exposes a writable CPU region, whether that frame is pure memory or a hybrid frame that also carries a native surface.
 
 ## The Main Problem
 
@@ -56,6 +70,8 @@ If that idea is clear, most of the important types fall into place.
 - handling CPU layer composition
 
 It does not own every detail of geometry planning or scan conversion.
+
+It also does not own backend selection. By the time `FlushCompositions(...)` is called, `DrawingCanvas<TPixel>` has already chosen the backend instance that will receive the prepared scene.
 
 ### Scene
 
@@ -165,6 +181,12 @@ The expensive work is delegated:
 - `BrushRenderer<TPixel>` owns brush-specific shading
 
 That split keeps each type focused on one class of problem.
+
+The canvas layer above that split is also important:
+
+- `DrawingCanvas<TPixel>` records public drawing intent
+- `DrawingCanvasBatcher<TPixel>` prepares commands and constructs `CompositionScene`
+- `DefaultDrawingBackend` executes the prepared scene on a CPU destination
 
 ## Building The Flush Scene
 
@@ -324,15 +346,17 @@ That ownership model keeps allocation and disposal aligned with real work lifeti
 
 If you are new to this backend, read the code in this order:
 
-1. `DefaultDrawingBackend.cs`
-2. `FlushScene.cs`
-3. `FlushScene.RetainedTypes.cs`
-4. `DefaultDrawingBackend.Helpers.cs`
-5. `DefaultRasterizer.cs`
+1. `DrawingCanvas{TPixel}.cs`
+2. `DrawingCanvasBatcher{TPixel}.cs`
+3. `DefaultDrawingBackend.cs`
+4. `FlushScene.cs`
+5. `FlushScene.RetainedTypes.cs`
+6. `DefaultDrawingBackend.Helpers.cs`
+7. `DefaultRasterizer.cs`
 
 That order mirrors the runtime flow:
 
-backend orchestration -> flush planning -> row execution structures -> worker helpers -> scan conversion
+canvas and backend selection -> backend orchestration -> flush planning -> row execution structures -> worker helpers -> scan conversion
 
 ## The Mental Model To Keep
 
@@ -340,6 +364,7 @@ The easiest way to keep this backend straight is to remember that it is not a co
 
 If that model is clear, the major types fall into place:
 
+- `DrawingCanvas<TPixel>` records intent and selects the backend
 - `DefaultDrawingBackend` orchestrates
 - `FlushScene` plans
 - `DefaultRasterizer` converts geometry to coverage
