@@ -40,7 +40,7 @@ public class SolidPen : Pen
     /// Initializes a new instance of the <see cref="SolidPen"/> class.
     /// </summary>
     /// <param name="strokeFill">The brush used to fill the stroke outline.</param>
-    /// <param name="strokeWidth">The stroke width in px units.</param>
+    /// <param name="strokeWidth">The stroke width in the path's local coordinate space before any drawing transform is applied.</param>
     public SolidPen(Brush strokeFill, float strokeWidth)
         : base(strokeFill, strokeWidth)
     {

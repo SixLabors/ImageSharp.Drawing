@@ -19,46 +19,46 @@ public class Issue_330
         Font bibfont = fontFamily.CreateFont(600, FontStyle.Bold);
         Font namefont = fontFamily.CreateFont(140, FontStyle.Bold);
 
-        provider.RunValidatingProcessorTest(p =>
-        {
-            p.DrawText(
-                new RichTextOptions(bibfont)
-                {
-                    VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    TextAlignment = TextAlignment.Center,
-                    TextDirection = TextDirection.LeftToRight,
-                    Origin = new Point(1156, 1024),
-                },
-                "9999",
-                Brushes.Solid(Color.White),
-                Pens.Solid(Color.Black, 20));
+        provider.RunValidatingProcessorTest(p => p.ProcessWithCanvas(canvas =>
+            {
+                canvas.DrawText(
+                    new RichTextOptions(bibfont)
+                    {
+                        VerticalAlignment = VerticalAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        TextAlignment = TextAlignment.Center,
+                        TextDirection = TextDirection.LeftToRight,
+                        Origin = new Point(1156, 1024),
+                    },
+                    "9999",
+                    Brushes.Solid(Color.White),
+                    Pens.Solid(Color.Black, 20));
 
-            p.DrawText(
-                new RichTextOptions(namefont)
-                {
-                    VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    TextAlignment = TextAlignment.Center,
-                    TextDirection = TextDirection.LeftToRight,
-                    Origin = new Point(1156, 713),
-                },
-                "JOHAN",
-                Brushes.Solid(Color.White),
-                Pens.Solid(Color.Black, 5));
+                canvas.DrawText(
+                    new RichTextOptions(namefont)
+                    {
+                        VerticalAlignment = VerticalAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        TextAlignment = TextAlignment.Center,
+                        TextDirection = TextDirection.LeftToRight,
+                        Origin = new Point(1156, 713),
+                    },
+                    "JOHAN",
+                    Brushes.Solid(Color.White),
+                    Pens.Solid(Color.Black, 5));
 
-            p.DrawText(
-                new RichTextOptions(namefont)
-                {
-                    VerticalAlignment = VerticalAlignment.Center,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    TextAlignment = TextAlignment.Center,
-                    TextDirection = TextDirection.LeftToRight,
-                    Origin = new Point(1156, 1381),
-                },
-                "TIGERTECH",
-                Brushes.Solid(Color.White),
-                Pens.Solid(Color.Black, 5));
-        });
+                canvas.DrawText(
+                    new RichTextOptions(namefont)
+                    {
+                        VerticalAlignment = VerticalAlignment.Center,
+                        HorizontalAlignment = HorizontalAlignment.Center,
+                        TextAlignment = TextAlignment.Center,
+                        TextDirection = TextDirection.LeftToRight,
+                        Origin = new Point(1156, 1381),
+                    },
+                    "TIGERTECH",
+                    Brushes.Solid(Color.White),
+                    Pens.Solid(Color.Black, 5));
+            }));
     }
 }

@@ -2,7 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Utilities;
+using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
 
@@ -83,6 +83,11 @@ public sealed class PatternBrush : Brush
         this.patternVector = brush.patternVector;
     }
 
+    /// <summary>
+    /// Gets the pattern color matrix.
+    /// </summary>
+    public DenseMatrix<Color> Pattern => this.pattern;
+
     /// <inheritdoc />
     public override bool Equals(Brush? other)
     {
@@ -100,45 +105,41 @@ public sealed class PatternBrush : Brush
         => HashCode.Combine(this.pattern, this.patternVector);
 
     /// <inheritdoc />
-    public override BrushApplicator<TPixel> CreateApplicator<TPixel>(
+    public override BrushRenderer<TPixel> CreateRenderer<TPixel>(
         Configuration configuration,
         GraphicsOptions options,
-        ImageFrame<TPixel> source,
-        RectangleF region) =>
-        new PatternBrushApplicator<TPixel>(
+        int canvasWidth,
+        RectangleF region)
+        =>
+        new PatternBrushRenderer<TPixel>(
             configuration,
             options,
-            source,
+            canvasWidth,
             this.pattern.ToPixelMatrix<TPixel>());
 
     /// <summary>
     /// The pattern brush applicator.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
-    private sealed class PatternBrushApplicator<TPixel> : BrushApplicator<TPixel>
+    private sealed class PatternBrushRenderer<TPixel> : BrushRenderer<TPixel>
         where TPixel : unmanaged, IPixel<TPixel>
     {
         private readonly DenseMatrix<TPixel> pattern;
-        private readonly ThreadLocalBlenderBuffers<TPixel> blenderBuffers;
-        private bool isDisposed;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="PatternBrushApplicator{TPixel}" /> class.
+        /// Initializes a new instance of the <see cref="PatternBrushRenderer{TPixel}" /> class.
         /// </summary>
         /// <param name="configuration">The configuration instance to use when performing operations.</param>
         /// <param name="options">The graphics options.</param>
-        /// <param name="source">The source image.</param>
+        /// <param name="canvasWidth">The canvas width for the current render pass.</param>
         /// <param name="pattern">The pattern.</param>
-        public PatternBrushApplicator(
+        public PatternBrushRenderer(
             Configuration configuration,
             GraphicsOptions options,
-            ImageFrame<TPixel> source,
+            int canvasWidth,
             in DenseMatrix<TPixel> pattern)
-            : base(configuration, options, source)
-        {
-            this.pattern = pattern;
-            this.blenderBuffers = new ThreadLocalBlenderBuffers<TPixel>(configuration.MemoryAllocator, source.Width);
-        }
+            : base(configuration, options, canvasWidth)
+            => this.pattern = pattern;
 
         internal TPixel this[int x, int y]
         {
@@ -153,45 +154,32 @@ public sealed class PatternBrush : Brush
         }
 
         /// <inheritdoc />
-        public override void Apply(Span<float> scanline, int x, int y)
+        public override void Apply(
+            Span<TPixel> destinationRow,
+            ReadOnlySpan<float> scanline,
+            int x,
+            int y,
+            BrushWorkspace<TPixel> workspace)
         {
             int patternY = y % this.pattern.Rows;
-            Span<float> amounts = this.blenderBuffers.AmountSpan[..scanline.Length];
-            Span<TPixel> overlays = this.blenderBuffers.OverlaySpan[..scanline.Length];
+            Span<float> amounts = workspace.GetAmounts(scanline.Length);
+            Span<TPixel> overlays = workspace.GetOverlays(scanline.Length);
 
             for (int i = 0; i < scanline.Length; i++)
             {
-                amounts[i] = NumericUtilities.ClampFloat(scanline[i] * this.Options.BlendPercentage, 0, 1F);
+                amounts[i] = Math.Clamp(scanline[i] * this.Options.BlendPercentage, 0, 1F);
 
                 int patternX = (x + i) % this.pattern.Columns;
                 overlays[i] = this.pattern[patternY, patternX];
             }
 
-            Span<TPixel> destinationRow = this.Target.PixelBuffer.DangerousGetRowSpan(y).Slice(x, scanline.Length);
             this.Blender.Blend(
                 this.Configuration,
                 destinationRow,
                 destinationRow,
                 overlays,
-                amounts);
-        }
-
-        /// <inheritdoc/>
-        protected override void Dispose(bool disposing)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            base.Dispose(disposing);
-
-            if (disposing)
-            {
-                this.blenderBuffers.Dispose();
-            }
-
-            this.isDisposed = true;
+                amounts,
+                workspace.GetBlendScratch(scanline.Length, 3));
         }
     }
 }

@@ -60,10 +60,11 @@ public class DrawTextOutline
             Origin = new PointF(10, 10)
         };
 
-        image.Mutate(x => x.DrawText(
+        image.Mutate(x => x.ProcessWithCanvas(canvas => canvas.DrawText(
             textOptions,
             this.TextToRender,
-            Processing.Pens.Solid(Color.HotPink, 10)));
+            brush: null,
+            pen: Processing.Pens.Solid(Color.HotPink, 10))));
     }
 
     [Benchmark(Description = "ImageSharp Draw Text Outline - Naive")]
@@ -79,17 +80,17 @@ public class DrawTextOutline
             };
 
             image.Mutate(
-                x => DrawTextOldVersion(
-                    x,
+                x => x.ProcessWithCanvas(canvas => DrawTextOldVersion(
+                    canvas,
                     new DrawingOptions { GraphicsOptions = { Antialias = true } },
                     textOptions,
                     this.TextToRender,
                     null,
-                    Processing.Pens.Solid(Color.HotPink, 10)));
+                    Processing.Pens.Solid(Color.HotPink, 10))));
         }
 
-        static IImageProcessingContext DrawTextOldVersion(
-            IImageProcessingContext source,
+        static void DrawTextOldVersion(
+            IDrawingCanvas canvas,
             DrawingOptions options,
             TextOptions textOptions,
             string text,
@@ -97,19 +98,23 @@ public class DrawTextOutline
             Pen pen)
         {
             IPathCollection glyphs = TextBuilder.GeneratePaths(text, textOptions);
-
-            DrawingOptions pathOptions = new() { GraphicsOptions = options.GraphicsOptions };
-            if (brush != null)
+            int saveCount = canvas.Save(options);
+            try
             {
-                source.Fill(pathOptions, brush, glyphs);
-            }
+                if (brush != null)
+                {
+                    canvas.Fill(brush, glyphs);
+                }
 
-            if (pen != null)
+                if (pen != null)
+                {
+                    canvas.Draw(pen, glyphs);
+                }
+            }
+            finally
             {
-                source.Draw(pathOptions, pen, glyphs);
+                canvas.RestoreTo(saveCount);
             }
-
-            return source;
         }
     }
 

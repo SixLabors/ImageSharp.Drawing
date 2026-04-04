@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
+
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 
 /// <summary>

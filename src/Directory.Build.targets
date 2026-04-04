@@ -16,4 +16,46 @@
   <!-- Import the solution .targets file. -->
   <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.targets" />
 
+  <!--
+    Override the WebGPU package version so it tracks the main ImageSharp.Drawing
+    version but uses a different major number (defined by WebGpuVersionMajor).
+    For example, if MinVer calculates 3.0.0-alpha.0.201 for the main project,
+    the WebGPU package becomes 1.0.0-alpha.0.201.
+    See: https://github.com/adamralph/minver#can-i-use-the-version-calculated-by-minver-for-other-purposes
+  -->
+  <PropertyGroup>
+    <MinVerMinimumMajorMinor>3.0</MinVerMinimumMajorMinor>
+    <WebGpuVersionMajor>1</WebGpuVersionMajor>
+  </PropertyGroup>
+
+  <Target Name="SetWebGpuVersionNumber" AfterTargets="MinVer" Condition="'$(MSBuildProjectName)' == 'ImageSharp.Drawing.WebGPU' and '$(IsContinuousIntegration)' == 'true'">
+    <PropertyGroup>
+      <_WebGpuVersionPrefix>$(WebGpuVersionMajor).$(MinVerMinor).$(MinVerPatch)</_WebGpuVersionPrefix>
+      <_WebGpuPreReleaseSuffix></_WebGpuPreReleaseSuffix>
+      <_WebGpuPreReleaseSuffix Condition="'$(MinVerPreRelease)' != ''">-$(MinVerPreRelease)</_WebGpuPreReleaseSuffix>
+      <_WebGpuBuildMetadataSuffix></_WebGpuBuildMetadataSuffix>
+      <_WebGpuBuildMetadataSuffix Condition="'$(MinVerBuildMetadata)' != ''">+$(MinVerBuildMetadata)</_WebGpuBuildMetadataSuffix>
+
+      <AssemblyVersion>$(WebGpuVersionMajor).0.0.0</AssemblyVersion>
+      <FileVersion>$(WebGpuVersionMajor).$(MinVerMinor).$(MinVerPatch).0</FileVersion>
+      <Version>$(_WebGpuVersionPrefix)$(_WebGpuPreReleaseSuffix)</Version>
+      <PackageVersion>$(Version)</PackageVersion>
+      <InformationalVersion>$(Version)$(_WebGpuBuildMetadataSuffix)</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
+  <!--
+    Workaround: _GetProjectVersion does not trigger MinVer on referenced projects
+    during pack, resulting in the dependency version falling back to VersionPrefix.
+    The root cause is unknown; other solutions using the same MinVer + ProjectReference
+    pattern resolve the correct version as expected.
+  -->
+  <Target Name="FixProjectReferenceDependencyVersions" AfterTargets="_GetProjectReferenceVersions" BeforeTargets="GenerateNuspec" Condition="'$(MSBuildProjectName)' == 'ImageSharp.Drawing.WebGPU' and '$(IsContinuousIntegration)' == 'true'">
+    <ItemGroup>
+      <_ProjectReferencesWithVersions Update="@(_ProjectReferencesWithVersions)">
+        <ProjectVersion>$(MinVerVersion)</ProjectVersion>
+      </_ProjectReferencesWithVersions>
+    </ItemGroup>
+  </Target>
+
 </Project>

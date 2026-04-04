@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
+using SixLabors.ImageSharp.Drawing.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Drawing.Tests.Shapes;
 
@@ -144,7 +145,7 @@ public class RectangleTests
     public void TransformIdentityReturnsShapeObject()
     {
         IPath shape = new RectangularPolygon(0, 0, 200, 60);
-        IPath transformedShape = shape.Transform(Matrix3x2.Identity);
+        IPath transformedShape = shape.Transform(Matrix4x4.Identity);
 
         Assert.Same(shape, transformedShape);
     }
@@ -154,7 +155,7 @@ public class RectangleTests
     {
         IPath shape = new RectangularPolygon(0, 0, 200, 60);
 
-        IPath newShape = shape.Transform(new Matrix3x2(0, 1, 1, 0, 20, 2));
+        IPath newShape = shape.Transform(new Matrix4x4(new Matrix3x2(0, 1, 1, 0, 20, 2)));
 
         Assert.Equal(new PointF(20, 2), newShape.Bounds.Location);
         Assert.Equal(new SizeF(60, 200), newShape.Bounds.Size);

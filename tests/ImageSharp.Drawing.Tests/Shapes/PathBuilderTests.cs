@@ -164,7 +164,7 @@ public class PathBuilderTests
         Vector2 point1 = new(10, 10);
         Vector2 point2 = new(10, 90);
         Vector2 point3 = new(50, 50);
-        Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(5, 5));
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(5, 5, 0);
         PathBuilder builder = new(matrix);
 
         builder.AddLines(point1, point2, point3);
@@ -178,7 +178,7 @@ public class PathBuilderTests
         Vector2 point1 = new(10, 10);
         Vector2 point2 = new(10, 90);
         Vector2 point3 = new(50, 50);
-        Matrix3x2 matrix = Matrix3x2.CreateTranslation(new Vector2(100, 100));
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(100, 100, 0);
         PathBuilder builder = new();
 
         builder.AddLines(point1, point2, point3);
@@ -202,7 +202,7 @@ public class PathBuilderTests
         Vector2 point2 = new(10, 90);
         Vector2 point3 = new(50, 50);
         Vector2 origin = new(-50, -100);
-        PathBuilder builder = new(Matrix3x2.CreateScale(10));
+        PathBuilder builder = new(Matrix4x4.CreateScale(10));
 
         builder.AddLines(point1, point2, point3);
 

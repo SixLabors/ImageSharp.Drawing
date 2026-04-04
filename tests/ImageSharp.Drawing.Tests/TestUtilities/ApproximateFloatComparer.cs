@@ -13,7 +13,8 @@ internal readonly struct ApproximateFloatComparer :
     IEqualityComparer<Vector2>,
     IEqualityComparer<PointF>,
     IEqualityComparer<Vector4>,
-    IEqualityComparer<ColorMatrix>
+    IEqualityComparer<ColorMatrix>,
+    IEqualityComparer<SizeF>
 {
     private readonly float epsilon;
 
@@ -50,7 +51,13 @@ internal readonly struct ApproximateFloatComparer :
     public bool Equals(Vector4 a, Vector4 b) => this.Equals(a.X, b.X) && this.Equals(a.Y, b.Y) && this.Equals(a.Z, b.Z) && this.Equals(a.W, b.W);
 
     /// <inheritdoc/>
+    public bool Equals(SizeF a, SizeF b) => this.Equals(a.Width, b.Width) && this.Equals(a.Height, b.Height);
+
+    /// <inheritdoc/>
     public int GetHashCode(Vector4 obj) => obj.GetHashCode();
+
+    /// <inheritdoc/>
+    public int GetHashCode(SizeF obj) => obj.GetHashCode();
 
     /// <inheritdoc/>
     public bool Equals(ColorMatrix x, ColorMatrix y)
