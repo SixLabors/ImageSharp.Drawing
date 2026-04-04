@@ -16,11 +16,6 @@
 
   </PropertyGroup>
 
-  <PropertyGroup>
-    <!--Bump to V3 prior to tagged release.-->
-    <MinVerMinimumMajorMinor>3.0</MinVerMinimumMajorMinor>
-  </PropertyGroup>
-
   <!--  This enables the nullable analysis and treats all nullable warnings as error-->
   <PropertyGroup>
     <Nullable>enable</Nullable>

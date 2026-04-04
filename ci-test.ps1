@@ -12,7 +12,7 @@ param(
 )
 
 $netFxRegex = '^net\d+'
-$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.CI.slnf"
+$solution = Join-Path $PSScriptRoot "ImageSharp.Drawing.sln"
 
 if ($codecov -eq 'true') {
 

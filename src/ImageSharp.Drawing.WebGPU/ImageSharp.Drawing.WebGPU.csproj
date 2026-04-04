@@ -30,11 +30,6 @@
     <WarningsNotAsErrors>$(WarningsNotAsErrors);8002;NU1900</WarningsNotAsErrors>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <!--Bump to V1 prior to tagged release.-->
-    <MinVerMinimumMajorMinor>1.0</MinVerMinimumMajorMinor>
-  </PropertyGroup>
-
   <!--  This enables the nullable analysis and treats all nullable warnings as error-->
   <PropertyGroup>
     <Nullable>enable</Nullable>
@@ -57,14 +52,16 @@
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
+    <None Include="buildTransitive\$(PackageId).targets" Pack="true" PackagePath="buildTransitive\$(PackageId).targets" />
   </ItemGroup>
 
   <ItemGroup>
     <!--
-      Silk compile assets are needed by this project but should not flow transitively to consumers.
-      This keeps downstream projects from seeing Silk reference warnings (for example CS8002)
-      unless they explicitly reference Silk themselves.
-      Runtime/native assets still flow so the backend can execute.
+      Silk.NET packages are listed as NuGet dependencies so the native wgpu binaries
+      and managed interop are restored for consumers. Compile assets are marked private
+      so that ProjectReference consumers within this solution do not see Silk types
+      or CS8002 warnings; however, NuGet package consumers will receive the full
+      Silk packages as transitive dependencies.
     -->
     <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
     <PackageReference Include="Silk.NET.WebGPU.Extensions.WGPU" Version="2.23.0" PrivateAssets="compile;build;analyzers;contentfiles;buildtransitive" />
