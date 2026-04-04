@@ -13,9 +13,9 @@ namespace DrawingBackendBenchmark;
 /// <summary>
 /// Small offscreen WebGPU host used by the sample so the benchmark can drive the real backend without manual WebGPU bootstrap code.
 /// </summary>
-internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend, IDisposable
+internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
 {
-    private RenderResources? resources;
+    private WebGPURenderTarget<Bgra32>? renderTarget;
 
     private WebGpuBenchmarkBackend()
     {
@@ -29,19 +29,9 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend, IDisposable
             return false;
         }
 
-        try
-        {
-            using WebGPURenderTarget<Bgra32> probe = new(1, 1);
-            result = new WebGpuBenchmarkBackend();
-            error = null;
-            return true;
-        }
-        catch (Exception ex)
-        {
-            result = null;
-            error = ex.Message;
-            return false;
-        }
+        result = new WebGpuBenchmarkBackend();
+        error = null;
+        return true;
     }
 
     /// <summary>
@@ -49,10 +39,10 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend, IDisposable
     /// </summary>
     public BenchmarkRenderResult Render(ReadOnlySpan<VisualLine> lines, int width, int height, bool capturePreview)
     {
-        RenderResources resources = this.EnsureResources(width, height);
+        WebGPURenderTarget<Bgra32> renderTarget = this.EnsureRenderTarget(width, height);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        using (DrawingCanvas<Bgra32> canvas = resources.RenderTarget.CreateHybridCanvas(resources.CpuImage, new DrawingOptions()))
+        using (DrawingCanvas<Bgra32> canvas = renderTarget.CreateCanvas(new DrawingOptions()))
         {
             VisualLine.RenderLinesToCanvas(canvas, lines);
             canvas.Flush();
@@ -60,12 +50,12 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend, IDisposable
 
         stopwatch.Stop();
 
-        Image<Bgra32>? preview = capturePreview ? resources.RenderTarget.Readback() : null;
+        Image<Bgra32>? preview = capturePreview ? renderTarget.Readback() : null;
         return new BenchmarkRenderResult(
             stopwatch.Elapsed.TotalMilliseconds,
             preview,
-            resources.RenderTarget.Graphics.Backend.DiagnosticLastFlushUsedGPU,
-            resources.RenderTarget.Graphics.Backend.DiagnosticLastSceneFailure);
+            renderTarget.Graphics.Backend.DiagnosticLastFlushUsedGPU,
+            renderTarget.Graphics.Backend.DiagnosticLastSceneFailure);
     }
 
     /// <summary>
@@ -76,42 +66,18 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        this.resources?.Dispose();
-        this.resources = null;
+        this.renderTarget?.Dispose();
+        this.renderTarget = null;
     }
 
-    private RenderResources EnsureResources(int width, int height)
+    private WebGPURenderTarget<Bgra32> EnsureRenderTarget(int width, int height)
     {
-        if (this.resources is RenderResources resources && resources.Width == width && resources.Height == height)
+        if (this.renderTarget is not null)
         {
-            return resources;
+            return this.renderTarget;
         }
 
-        this.resources?.Dispose();
-        this.resources = new RenderResources(new WebGPURenderTarget<Bgra32>(width, height), new Image<Bgra32>(width, height));
-        return this.resources;
-    }
-
-    private sealed class RenderResources : IDisposable
-    {
-        public RenderResources(WebGPURenderTarget<Bgra32> renderTarget, Image<Bgra32> cpuImage)
-        {
-            this.RenderTarget = renderTarget;
-            this.CpuImage = cpuImage;
-        }
-
-        public WebGPURenderTarget<Bgra32> RenderTarget { get; }
-
-        public Image<Bgra32> CpuImage { get; }
-
-        public int Width => this.CpuImage.Width;
-
-        public int Height => this.CpuImage.Height;
-
-        public void Dispose()
-        {
-            this.RenderTarget.Dispose();
-            this.CpuImage.Dispose();
-        }
+        this.renderTarget = new WebGPURenderTarget<Bgra32>(width, height);
+        return this.renderTarget;
     }
 }

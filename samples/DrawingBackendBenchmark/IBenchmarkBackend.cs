@@ -6,7 +6,7 @@ namespace DrawingBackendBenchmark;
 /// <summary>
 /// Base interface for benchmark backends exposing their shared render method.
 /// </summary>
-internal interface IBenchmarkBackend
+internal interface IBenchmarkBackend : IDisposable
 {
     /// <summary>
     /// Renders the benchmark scene and returns timing and optional preview data.
@@ -16,5 +16,5 @@ internal interface IBenchmarkBackend
     /// <param name="height">The height of the render target.</param>
     /// <param name="capturePreview">Whether to capture a preview image of the final frame.</param>
     /// <returns>The benchmark render result including timing and diagnostics.</returns>
-    BenchmarkRenderResult Render(ReadOnlySpan<VisualLine> lines, int width, int height, bool capturePreview);
+    public BenchmarkRenderResult Render(ReadOnlySpan<VisualLine> lines, int width, int height, bool capturePreview);
 }

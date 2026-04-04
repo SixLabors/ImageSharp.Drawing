@@ -1,4 +1,4 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics;
@@ -15,6 +15,7 @@ namespace DrawingBackendBenchmark;
 internal sealed class CpuBenchmarkBackend : IBenchmarkBackend
 {
     private readonly Configuration configuration;
+    private Image<Bgra32>? image;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CpuBenchmarkBackend"/> class.
@@ -26,7 +27,7 @@ internal sealed class CpuBenchmarkBackend : IBenchmarkBackend
     /// </summary>
     public BenchmarkRenderResult Render(ReadOnlySpan<VisualLine> lines, int width, int height, bool capturePreview)
     {
-        using Image<Bgra32> image = new(width, height);
+        Image<Bgra32> image = this.EnsureImage(width, height);
         Buffer2DRegion<Bgra32> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
@@ -46,4 +47,28 @@ internal sealed class CpuBenchmarkBackend : IBenchmarkBackend
     /// Gets the name of this backend.
     /// </summary>
     public override string ToString() => "CPU";
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        this.image?.Dispose();
+        this.image = null;
+    }
+
+    /// <summary>
+    /// Gets the cached CPU render target image for the benchmark backend.
+    /// </summary>
+    /// <param name="width">The image width.</param>
+    /// <param name="height">The image height.</param>
+    /// <returns>The cached image.</returns>
+    private Image<Bgra32> EnsureImage(int width, int height)
+    {
+        if (this.image is not null)
+        {
+            return this.image;
+        }
+
+        this.image = new Image<Bgra32>(width, height);
+        return this.image;
+    }
 }

@@ -4,27 +4,27 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Represents the current state of a <see cref="WebGPUWindow{TPixel}"/>.
+/// Describes the startup or current state of a <see cref="WebGPUWindow{TPixel}"/>.
 /// </summary>
 public enum WebGPUWindowState
 {
     /// <summary>
-    /// The window is in its normal state.
+    /// Opens as a normal restored window using its configured size and position.
     /// </summary>
     Normal = 0,
 
     /// <summary>
-    /// The window is minimized.
+    /// Starts minimized to the taskbar or dock.
     /// </summary>
     Minimized,
 
     /// <summary>
-    /// The window is maximized.
+    /// Starts maximized to fill the normal desktop work area.
     /// </summary>
     Maximized,
 
     /// <summary>
-    /// The window is fullscreen.
+    /// Starts in fullscreen mode and occupies the full display.
     /// </summary>
     Fullscreen,
 }

@@ -4,22 +4,22 @@
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Represents the border mode of a <see cref="WebGPUWindow{TPixel}"/>.
+/// Describes the window chrome and resize behavior for a <see cref="WebGPUWindow{TPixel}"/>.
 /// </summary>
 public enum WebGPUWindowBorder
 {
     /// <summary>
-    /// The window border is visible and resizable.
+    /// Uses the normal decorated window frame and allows the user to resize the window.
     /// </summary>
     Resizable = 0,
 
     /// <summary>
-    /// The window border is visible but fixed-size.
+    /// Uses the normal decorated window frame but does not allow user resizing.
     /// </summary>
     Fixed,
 
     /// <summary>
-    /// The window border is hidden.
+    /// Hides the standard window border and title bar for a borderless look.
     /// </summary>
     Hidden,
 }

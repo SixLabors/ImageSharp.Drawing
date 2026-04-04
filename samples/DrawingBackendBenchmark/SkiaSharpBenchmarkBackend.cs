@@ -8,7 +8,7 @@ using SkiaSharp;
 
 namespace DrawingBackendBenchmark;
 
-internal sealed class SkiaSharpBenchmarkBackend : IBenchmarkBackend, IDisposable
+internal sealed class SkiaSharpBenchmarkBackend : IBenchmarkBackend
 {
     private static readonly SKColor BackgroundColor = SKColor.Parse("#003366");
 

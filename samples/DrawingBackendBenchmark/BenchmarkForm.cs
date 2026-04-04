@@ -249,14 +249,14 @@ internal sealed class BenchmarkForm : Form
     /// Formats one status line describing the current sample, running statistics, and backend outcome.
     /// </summary>
     private static string FormatStatusText(
-        string backendName,
+        string? backendName,
         BenchmarkRenderResult result,
         int lineCount,
         int iteration,
         int totalIterations,
         BenchmarkStatistics statistics)
     {
-        string backendStatus = GetBackendStatusText(backendName, result);
+        string backendStatus = GetBackendStatusText(backendName ?? string.Empty, result);
         string backendFailure = result.BackendFailure is not null ? $" | {result.BackendFailure}" : string.Empty;
 
         return

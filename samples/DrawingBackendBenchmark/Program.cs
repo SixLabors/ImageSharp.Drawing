@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using Color = SixLabors.ImageSharp.Color;
-using PointF = SixLabors.ImageSharp.PointF;
-
 namespace DrawingBackendBenchmark;
 
 /// <summary>

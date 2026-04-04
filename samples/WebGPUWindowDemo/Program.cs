@@ -18,8 +18,12 @@ namespace WebGPUWindowDemo;
 /// </summary>
 public static class Program
 {
+    /// <summary>
+    /// Creates the demo window and runs the animated sample scene.
+    /// </summary>
     public static void Main()
     {
+        // FIFO is the safest sample default: it presents in display order with normal v-sync behavior.
         using WebGPUWindow<Bgra32> window = new(new WebGPUWindowOptions
         {
             Title = "ImageSharp.Drawing WebGPU Demo",
@@ -31,6 +35,9 @@ public static class Program
         app.Run();
     }
 
+    /// <summary>
+    /// Owns the sample scene, animation state, and render loop callbacks for the demo window.
+    /// </summary>
     private sealed class DemoApp
     {
         private const int BallCount = 1000;
@@ -68,6 +75,10 @@ public static class Program
             "github.com/SixLabors/ImageSharp.Drawing\n\n" +
             "Built on the new WebGPUWindow<TPixel> wrapper.";
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DemoApp"/> class.
+        /// </summary>
+        /// <param name="window">The demo window that supplies update and render callbacks.</param>
         public DemoApp(WebGPUWindow<Bgra32> window)
         {
             this.window = window;
@@ -75,8 +86,18 @@ public static class Program
             this.InitializeScene();
         }
 
+        /// <summary>
+        /// Starts the window-owned render loop for the demo.
+        /// </summary>
         public void Run() => this.window.Run(this.OnRender);
 
+        /// <summary>
+        /// Builds the one-time scene state used by the demo.
+        /// </summary>
+        /// <remarks>
+        /// The scrolling text is shaped once up front and reused every frame so the steady-state loop only applies
+        /// a translation and submits visible paths.
+        /// </remarks>
         private void InitializeScene()
         {
             Font scrollFont = SystemFonts.CreateFont("Arial", 24);
@@ -102,6 +123,10 @@ public static class Program
             this.balls = balls;
         }
 
+        /// <summary>
+        /// Advances the animation state for the next frame.
+        /// </summary>
+        /// <param name="deltaTime">Elapsed time since the previous update, in seconds.</param>
         private void OnUpdate(double deltaTime)
         {
             Size framebufferSize = this.window.FramebufferSize;
@@ -114,6 +139,14 @@ public static class Program
             this.scrollOffset += 200F * dt;
         }
 
+        /// <summary>
+        /// Draws one frame into the acquired WebGPU window surface.
+        /// </summary>
+        /// <param name="frame">The acquired frame that exposes the canvas and per-frame timing data.</param>
+        /// <remarks>
+        /// The window loop disposes the frame after this callback returns, which flushes any queued canvas work,
+        /// presents the swapchain texture, and releases the per-frame WebGPU handles.
+        /// </remarks>
         private void OnRender(WebGPUWindowFrame<Bgra32> frame)
         {
             DrawingCanvas<Bgra32> canvas = frame.Canvas;
@@ -148,6 +181,12 @@ public static class Program
             }
         }
 
+        /// <summary>
+        /// Draws the cached scrolling text block with simple viewport culling.
+        /// </summary>
+        /// <param name="canvas">The destination canvas for the current frame.</param>
+        /// <param name="width">The current framebuffer width.</param>
+        /// <param name="height">The current framebuffer height.</param>
         private void DrawScrollingText(DrawingCanvas<Bgra32> canvas, int width, int height)
         {
             if (this.scrollTextHeight <= 0)
@@ -167,6 +206,7 @@ public static class Program
                 Transform = new Matrix4x4(translation),
             };
 
+            // Save once with the frame-local translation, then submit only paths that are actually visible.
             canvas.Save(translatedOptions);
             foreach (IPath path in this.scrollPaths)
             {
@@ -189,6 +229,9 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Mutable physics state for one animated ball in the sample scene.
+    /// </summary>
     private struct Ball
     {
         public float X;
@@ -198,6 +241,13 @@ public static class Program
         public float Radius;
         public Color Color;
 
+        /// <summary>
+        /// Creates a random ball that fits within the current framebuffer bounds.
+        /// </summary>
+        /// <param name="rng">The deterministic random source used by the sample.</param>
+        /// <param name="width">The framebuffer width.</param>
+        /// <param name="height">The framebuffer height.</param>
+        /// <returns>The initialized ball.</returns>
         public static Ball CreateRandom(Random rng, int width, int height)
         {
             float radius = 20F + (rng.NextSingle() * 40F);
@@ -216,6 +266,12 @@ public static class Program
             };
         }
 
+        /// <summary>
+        /// Advances the ball and reflects it off the framebuffer edges.
+        /// </summary>
+        /// <param name="dt">Elapsed time since the previous update, in seconds.</param>
+        /// <param name="width">The framebuffer width.</param>
+        /// <param name="height">The framebuffer height.</param>
         public void Update(float dt, int width, int height)
         {
             this.X += this.VelocityX * dt;
