@@ -151,9 +151,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         // to the backend. This avoids complicating the backend with clipping logic
         // and allows us to reuse the same optimized backend code for clipped and unclipped paths.
         int requestedParallelism = this.configuration.MaxDegreeOfParallelism;
-        int partitionCount = Math.Min(
-            this.commandCount,
-            requestedParallelism == -1 ? Environment.ProcessorCount : requestedParallelism);
+        int partitionCount = ParallelExecutionHelper.GetPartitionCount(requestedParallelism, this.commandCount);
 
         if (partitionCount <= 1)
         {
@@ -168,7 +166,7 @@ internal sealed class DrawingCanvasBatcher<TPixel>
         _ = Parallel.For(
             0,
             partitionCount,
-            new ParallelOptions() { MaxDegreeOfParallelism = partitionCount },
+            ParallelExecutionHelper.CreateParallelOptions(requestedParallelism, partitionCount),
             partitionIndex =>
             {
                 // Integer division splits the commands into contiguous half-open ranges,
