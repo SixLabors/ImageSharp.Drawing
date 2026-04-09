@@ -2,11 +2,8 @@
 // Licensed under the Six Labors Split License.
 
 using System.Numerics;
-using SixLabors.ImageSharp.Drawing.Helpers;
 
 namespace SixLabors.ImageSharp.Drawing.Processing;
-
-using SixLabors.ImageSharp.Memory;
 
 /// <summary>
 /// Provides an implementation of a brush for painting sweep (conic) gradients within areas.
@@ -14,12 +11,6 @@ using SixLabors.ImageSharp.Memory;
 /// </summary>
 public sealed class SweepGradientBrush : GradientBrush
 {
-    private readonly PointF center;
-
-    private readonly float startAngleDegrees;
-
-    private readonly float endAngleDegrees;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="SweepGradientBrush"/> class.
     /// </summary>
@@ -43,45 +34,45 @@ public sealed class SweepGradientBrush : GradientBrush
         params ColorStop[] colorStops)
         : base(repetitionMode, colorStops)
     {
-        this.center = center;
-        this.startAngleDegrees = startAngleDegrees;
-        this.endAngleDegrees = endAngleDegrees;
+        this.Center = center;
+        this.StartAngleDegrees = startAngleDegrees;
+        this.EndAngleDegrees = endAngleDegrees;
     }
 
     /// <summary>
     /// Gets the center point of the sweep gradient.
     /// </summary>
-    public PointF Center => this.center;
+    public PointF Center { get; }
 
     /// <summary>
     /// Gets the starting angle in degrees.
     /// </summary>
-    public float StartAngleDegrees => this.startAngleDegrees;
+    public float StartAngleDegrees { get; }
 
     /// <summary>
     /// Gets the ending angle in degrees.
     /// </summary>
-    public float EndAngleDegrees => this.endAngleDegrees;
+    public float EndAngleDegrees { get; }
 
     /// <inheritdoc/>
     public override Brush Transform(Matrix4x4 matrix)
     {
-        PointF tc = PointF.Transform(this.center, matrix);
+        PointF tc = PointF.Transform(this.Center, matrix);
 
         // Treat the brush as two rays starting at the center:
         // one ray for the start angle and one ray for the end angle.
         // The important value is the signed angular distance between those rays.
         // We keep that sign so a reflected transform can turn a counter-clockwise
         // sweep into a clockwise sweep instead of silently "fixing" it.
-        float sweepDegrees = GetEffectiveSweepDegrees(this.startAngleDegrees, this.endAngleDegrees);
-        float startRad = GeometryUtilities.DegreeToRadian(this.startAngleDegrees);
-        float endRad = GeometryUtilities.DegreeToRadian(this.startAngleDegrees + sweepDegrees);
+        float sweepDegrees = GetEffectiveSweepDegrees(this.StartAngleDegrees, this.EndAngleDegrees);
+        float startRad = GeometryUtilities.DegreeToRadian(this.StartAngleDegrees);
+        float endRad = GeometryUtilities.DegreeToRadian(this.StartAngleDegrees + sweepDegrees);
 
         // The public API uses the design-grid convention, which is y-up.
         // Screen pixels are y-down, so a positive mathematical rotation uses
         // `center.Y - sin(theta)` rather than `center.Y + sin(theta)`.
-        PointF startDir = PointF.Transform(new PointF(this.center.X + MathF.Cos(startRad), this.center.Y - MathF.Sin(startRad)), matrix);
-        PointF endDir = PointF.Transform(new PointF(this.center.X + MathF.Cos(endRad), this.center.Y - MathF.Sin(endRad)), matrix);
+        PointF startDir = PointF.Transform(new PointF(this.Center.X + MathF.Cos(startRad), this.Center.Y - MathF.Sin(startRad)), matrix);
+        PointF endDir = PointF.Transform(new PointF(this.Center.X + MathF.Cos(endRad), this.Center.Y - MathF.Sin(endRad)), matrix);
 
         // Convert the transformed rays back into brush angles in the same public convention:
         // counter-clockwise from +X on the design grid.
@@ -119,9 +110,9 @@ public sealed class SweepGradientBrush : GradientBrush
         if (other is SweepGradientBrush brush)
         {
             return base.Equals(other)
-                && this.center.Equals(brush.center)
-                && this.startAngleDegrees.Equals(brush.startAngleDegrees)
-                && this.endAngleDegrees.Equals(brush.endAngleDegrees);
+                && this.Center.Equals(brush.Center)
+                && this.StartAngleDegrees.Equals(brush.StartAngleDegrees)
+                && this.EndAngleDegrees.Equals(brush.EndAngleDegrees);
         }
 
         return false;
@@ -131,9 +122,9 @@ public sealed class SweepGradientBrush : GradientBrush
     public override int GetHashCode()
         => HashCode.Combine(
             base.GetHashCode(),
-            this.center,
-            this.startAngleDegrees,
-            this.endAngleDegrees);
+            this.Center,
+            this.StartAngleDegrees,
+            this.EndAngleDegrees);
 
     /// <summary>
     /// Converts the stored start/end angles into the signed sweep interval that the brush should render.

@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Drawing.Tests.TestUtilities.ImageComparison;
@@ -100,6 +101,92 @@ public partial class ProcessWithDrawingCanvasTests
             false);
 
     [Fact]
+    public void SweepGradientBrush_Transform_TranslationMovesCenter()
+    {
+        SweepGradientBrush brush = new(
+            new PointF(100, 100),
+            0F,
+            360F,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        Matrix4x4 matrix = Matrix4x4.CreateTranslation(50F, 30F, 0F);
+
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+
+        Assert.Equal(150F, transformed.Center.X, 0.01F);
+        Assert.Equal(130F, transformed.Center.Y, 0.01F);
+    }
+
+    [Fact]
+    public void SweepGradientBrush_Transform_RotationRotatesAngles()
+    {
+        SweepGradientBrush brush = new(
+            new PointF(100, 100),
+            0F,
+            90F,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        // Rotate 90 degrees counter-clockwise in design grid (y-up).
+        // In screen space (y-down), Matrix4x4.CreateRotationZ(pi/2) rotates clockwise,
+        // which corresponds to counter-clockwise on the design grid.
+        Matrix4x4 matrix = Matrix4x4.CreateRotationZ(MathF.PI / 2F);
+
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+
+        // The 90-degree sweep should be preserved.
+        float sweep = transformed.EndAngleDegrees - transformed.StartAngleDegrees;
+        Assert.Equal(90F, sweep, 0.5F);
+    }
+
+    [Fact]
+    public void SweepGradientBrush_Transform_ReflectionFlipsSweepDirection()
+    {
+        SweepGradientBrush brush = new(
+            new PointF(100, 100),
+            0F,
+            90F,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        // Reflect across Y axis (negative determinant).
+        Matrix4x4 matrix = Matrix4x4.CreateScale(-1F, 1F, 1F);
+
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+
+        // Reflection should flip the sweep direction: positive 90 becomes negative 90.
+        float sweep = transformed.EndAngleDegrees - transformed.StartAngleDegrees;
+        Assert.Equal(-90F, sweep, 0.5F);
+    }
+
+    [Fact]
+    public void SweepGradientBrush_Transform_FullSweepPreserved()
+    {
+        // Equal start/end = full 360 sweep.
+        SweepGradientBrush brush = new(
+            new PointF(50, 50),
+            45F,
+            45F,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        Matrix4x4 matrix =
+            Matrix4x4.CreateScale(2F)
+            * Matrix4x4.CreateTranslation(10F, 20F, 0F);
+
+        SweepGradientBrush transformed = Assert.IsType<SweepGradientBrush>(brush.Transform(matrix));
+
+        // Full sweep should remain a full 360 degrees.
+        float sweep = MathF.Abs(transformed.EndAngleDegrees - transformed.StartAngleDegrees);
+        Assert.Equal(360F, sweep, 0.5F);
+    }
+
+    [Fact]
     public void RadialGradientBrush_Transform_UsesAverageScaleForRadii()
     {
         RadialGradientBrush brush = new(
@@ -111,16 +198,16 @@ public partial class ProcessWithDrawingCanvasTests
             new ColorStop(0, Color.Red),
             new ColorStop(1, Color.Blue));
 
-        System.Numerics.Matrix4x4 matrix =
-            System.Numerics.Matrix4x4.CreateScale(2F, 4F, 1F)
-            * System.Numerics.Matrix4x4.CreateTranslation(5F, 7F, 0F);
+        Matrix4x4 matrix =
+            Matrix4x4.CreateScale(2F, 4F, 1F)
+            * Matrix4x4.CreateTranslation(5F, 7F, 0F);
 
         RadialGradientBrush transformed = Assert.IsType<RadialGradientBrush>(brush.Transform(matrix));
 
         Assert.Equal(PointF.Transform(brush.Center0, matrix), transformed.Center0);
-        Assert.Equal(PointF.Transform(brush.Center1!.Value, matrix), transformed.Center1!.Value);
+        Assert.Equal(PointF.Transform(brush.Center1.Value, matrix), transformed.Center1.Value);
         Assert.Equal(12F, transformed.Radius0, 5);
-        Assert.Equal(24F, transformed.Radius1!.Value, 5);
+        Assert.Equal(24F, transformed.Radius1.Value, 5);
     }
 
     [Theory]
@@ -362,17 +449,17 @@ public partial class ProcessWithDrawingCanvasTests
         Color white = Color.White;
 
         ColorStop[] colorStops =
-            Enumerable.Repeat(new ColorStop(0, black), 1)
-                .Concat(
-                    pattern.SelectMany(
-                        (f, index) =>
-                        new[]
-                        {
-                            new ColorStop(f, index % 2 == 0 ? black : white),
-                            new ColorStop(f, index % 2 == 0 ? white : black)
-                        }))
-                .Concat(Enumerable.Repeat(new ColorStop(1, pattern.Length % 2 == 0 ? black : white), 1))
-                .ToArray();
+            [
+                .. Enumerable.Repeat(new ColorStop(0, black), 1),
+                .. pattern.SelectMany(
+                    (f, index) =>
+                    new[]
+                    {
+                        new ColorStop(f, index % 2 == 0 ? black : white),
+                        new ColorStop(f, index % 2 == 0 ? white : black)
+                    }),
+                .. Enumerable.Repeat(new ColorStop(1, pattern.Length % 2 == 0 ? black : white), 1),
+            ];
 
         using Image<TPixel> image = provider.GetImage();
 
