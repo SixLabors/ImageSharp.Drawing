@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -8,7 +9,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
 /// An offscreen WebGPU render target.
-/// Use this type when you want to render to a GPU-backed target and optionally read the result back with <see cref="Readback()"/>.
+/// Use this type when you want to render to a GPU-backed target and optionally read the result back with
+/// <see cref="TryReadback"/> or <see cref="TryReadbackInto(Image{TPixel}, out string?)"/>.
 /// </summary>
 /// <typeparam name="TPixel">The canvas pixel format.</typeparam>
 public sealed class WebGPURenderTarget<TPixel> : IDisposable
@@ -277,27 +279,89 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Reads the current GPU texture contents back into a new CPU image.
+    /// Attempts to read the current GPU texture contents back into a new CPU image.
     /// </summary>
-    /// <returns>The readback image.</returns>
-    public Image<TPixel> Readback()
+    /// <param name="image">Receives the readback image on success.</param>
+    /// <param name="error">Receives the failure reason when readback cannot complete.</param>
+    /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
+    public bool TryReadback([NotNullWhen(true)] out Image<TPixel>? image, [NotNullWhen(false)] out string? error)
     {
-        this.ThrowIfDisposed();
-        this.Graphics.ThrowIfDisposed();
+        if (this.isDisposed)
+        {
+            image = null;
+            error = "Render target is disposed.";
+            return false;
+        }
 
-        Image<TPixel> image = new(this.Width, this.Height);
-        Buffer2DRegion<TPixel> region = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
+        try
+        {
+            this.Graphics.ThrowIfDisposed();
+        }
+        catch (ObjectDisposedException ex)
+        {
+            image = null;
+            error = ex.Message;
+            return false;
+        }
+
+        image = new Image<TPixel>(this.Width, this.Height);
+        if (!this.TryReadbackInto(image, out error))
+        {
+            image.Dispose();
+            image = null;
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Attempts to read the current GPU texture contents back into an existing CPU image.
+    /// </summary>
+    /// <param name="destination">The destination image that receives the readback pixels.</param>
+    /// <param name="error">Receives the failure reason when readback cannot complete.</param>
+    /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
+    public bool TryReadbackInto(Image<TPixel> destination, [NotNullWhen(false)] out string? error)
+    {
+        Guard.NotNull(destination, nameof(destination));
+
+        if (destination.Width != this.Width || destination.Height != this.Height)
+        {
+            throw new ArgumentException(
+                $"Destination image dimensions ({destination.Width}x{destination.Height}) must match render target dimensions ({this.Width}x{this.Height}).",
+                nameof(destination));
+        }
+
+        if (this.isDisposed)
+        {
+            error = "Render target is disposed.";
+            return false;
+        }
+
+        try
+        {
+            this.Graphics.ThrowIfDisposed();
+        }
+        catch (ObjectDisposedException ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+
+        Buffer2DRegion<TPixel> region = new(destination.Frames.RootFrame.PixelBuffer, destination.Bounds);
         if (!this.Graphics.Backend.TryReadRegion(
                 this.Graphics.Configuration,
                 this.NativeFrame,
                 new Rectangle(0, 0, this.Width, this.Height),
-                region))
+                region,
+                out error))
         {
-            image.Dispose();
-            throw new InvalidOperationException("WebGPU readback failed.");
+            return false;
         }
 
-        return image;
+        error = null;
+        return true;
     }
 
     /// <summary>

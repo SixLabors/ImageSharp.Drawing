@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
@@ -26,6 +27,28 @@ public sealed unsafe partial class WebGPUDrawingBackend
         Rectangle sourceRectangle,
         Buffer2DRegion<TPixel> destination)
         where TPixel : unmanaged, IPixel<TPixel>
+        => this.TryReadRegion(configuration, target, sourceRectangle, destination, out _);
+
+    /// <summary>
+    /// Attempts to read source pixels from the target into a caller-provided buffer.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The target frame.</param>
+    /// <param name="sourceRectangle">Source rectangle in target-local coordinates.</param>
+    /// <param name="destination">
+    /// The caller-allocated region to receive the pixel data.
+    /// Must be at least as large as <paramref name="sourceRectangle"/> (clamped to target bounds).
+    /// </param>
+    /// <param name="error">Receives the failure reason when readback cannot complete.</param>
+    /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
+    public bool TryReadRegion<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        Rectangle sourceRectangle,
+        Buffer2DRegion<TPixel> destination,
+        [NotNullWhen(false)] out string? error)
+        where TPixel : unmanaged, IPixel<TPixel>
     {
         this.ThrowIfDisposed();
         Guard.NotNull(configuration, nameof(configuration));
@@ -39,12 +62,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
             capability.Queue == 0 ||
             capability.TargetTexture == 0)
         {
+            error = "Readback is only available for native WebGPU targets with valid device, queue, and texture handles.";
             return false;
         }
 
         if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat, out FeatureName requiredFeature) ||
             expectedFormat != capability.TargetFormat)
         {
+            error = $"Pixel type '{typeof(TPixel).Name}' is not compatible with target format '{capability.TargetFormat}'.";
             return false;
         }
 
@@ -60,6 +85,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         if (source.Width <= 0 || source.Height <= 0)
         {
+            error = "The requested source rectangle does not intersect the target bounds.";
             return false;
         }
 
@@ -70,6 +96,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         if (requiredFeature != FeatureName.Undefined
             && !WebGPURuntime.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
         {
+            error = $"The target device does not support required feature '{requiredFeature}' for pixel type '{typeof(TPixel).Name}'.";
             return false;
         }
 
@@ -97,6 +124,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
             if (readbackBuffer is null)
             {
+                error = "WebGPU.DeviceCreateBuffer returned null for readback.";
                 return false;
             }
 
@@ -104,6 +132,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
             if (commandEncoder is null)
             {
+                error = "WebGPU.DeviceCreateCommandEncoder returned null.";
                 return false;
             }
 
@@ -134,6 +163,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
             if (commandBuffer is null)
             {
+                error = "WebGPU.CommandEncoderFinish returned null.";
                 return false;
             }
 
@@ -157,6 +187,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
             if (!WaitForMapSignal(lease.WgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
             {
+                error = $"WebGPU readback map failed with status '{mapStatus}'.";
                 return false;
             }
 
@@ -164,6 +195,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             if (mapped is null)
             {
                 api.BufferUnmap(readbackBuffer);
+                error = "WebGPU.BufferGetConstMappedRange returned null.";
                 return false;
             }
 
@@ -181,6 +213,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
                         .CopyTo(MemoryMarshal.AsBytes(destination.DangerousGetRowSpan(y)));
                 }
 
+                error = null;
                 return true;
             }
             finally

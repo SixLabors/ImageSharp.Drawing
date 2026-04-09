@@ -83,13 +83,4 @@ public sealed class WebGPUWindowOptions
     /// <see cref="WebGPUPresentMode.Mailbox"/> when you want newer-frame-wins behavior and the backend supports it.
     /// </remarks>
     public WebGPUPresentMode PresentMode { get; set; } = WebGPUPresentMode.Fifo;
-
-    /// <summary>
-    /// Gets or sets an optional swapchain texture format override.
-    /// </summary>
-    /// <remarks>
-    /// Most callers should leave this <see langword="null"/> so the format is inferred from the pixel type used by
-    /// <see cref="WebGPUWindow{TPixel}"/>. Override it only when you have a specific compatible format requirement.
-    /// </remarks>
-    public WebGPUTextureFormatId? Format { get; set; }
 }

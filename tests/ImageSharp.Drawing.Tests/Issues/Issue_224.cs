@@ -13,10 +13,7 @@ public class Issue_224
     {
         RectangularPolygon shape = new(10, 10, 10, 10);
 
-        await this.CompletesIn(TimeSpan.FromSeconds(1), () =>
-        {
-            _ = shape.GenerateOutline(0, [1, 2]);
-        });
+        await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(0, [1, 2]));
     }
 
     [Fact]
@@ -24,10 +21,7 @@ public class Issue_224
     {
         RectangularPolygon shape = new(10, 10, 10, 10);
 
-        await this.CompletesIn(TimeSpan.FromSeconds(1), () =>
-        {
-            _ = shape.GenerateOutline(0, [1]);
-        });
+        await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(0, [1]));
     }
 
     [Fact]
@@ -35,10 +29,7 @@ public class Issue_224
     {
         RectangularPolygon shape = new(10, 10, 10, 10);
 
-        await this.CompletesIn(TimeSpan.FromSeconds(1), () =>
-        {
-            _ = shape.GenerateOutline(0);
-        });
+        await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(0));
     }
 
     [Fact]
@@ -46,10 +37,7 @@ public class Issue_224
     {
         RectangularPolygon shape = new(10, 10, 10, 10);
 
-        await this.CompletesIn(TimeSpan.FromSeconds(1), () =>
-        {
-            _ = shape.GenerateOutline(-10, [1, 2]);
-        });
+        await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(-10, [1, 2]));
     }
 
     [Fact]
@@ -57,10 +45,7 @@ public class Issue_224
     {
         RectangularPolygon shape = new(10, 10, 10, 10);
 
-        await this.CompletesIn(TimeSpan.FromSeconds(1), () =>
-        {
-            _ = shape.GenerateOutline(-10, [1]);
-        });
+        await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(-10, [1]));
     }
 
     [Fact]
@@ -68,13 +53,10 @@ public class Issue_224
     {
         RectangularPolygon shape = new(10, 10, 10, 10);
 
-        await this.CompletesIn(TimeSpan.FromSeconds(1), () =>
-        {
-            _ = shape.GenerateOutline(-10);
-        });
+        await CompletesIn(TimeSpan.FromSeconds(1), () => _ = shape.GenerateOutline(-10));
     }
 
-    private async Task CompletesIn(TimeSpan span, Action action)
+    private static async Task CompletesIn(TimeSpan span, Action action)
     {
         Task task = Task.Run(action);
         Task timeout = Task.Delay(span);

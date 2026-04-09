@@ -92,7 +92,7 @@ The important pattern here is that text shaping is not done every frame. The sam
 this.window.Update += this.OnUpdate;
 ```
 
-`OnUpdate(double deltaTime)` performs simulation only:
+`OnUpdate(TimeSpan deltaTime)` performs simulation only:
 
 - each ball advances by `velocity * dt`
 - each ball reflects off the framebuffer edges

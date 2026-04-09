@@ -14,6 +14,9 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// Scene composition uses a staged WebGPU raster path when the target surface and pixel format are supported,
 /// and falls back to <see cref="DefaultDrawingBackend"/> otherwise.
+/// Public diagnostic properties on this type describe only the most recent flush executed by this backend
+/// instance. They are lightweight inspection state for debugging, tests, and benchmarks, and they are
+/// overwritten by the next flush.
 /// </remarks>
 public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
@@ -72,21 +75,39 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// <summary>
     /// Gets a value indicating whether the last flush completed on the staged path.
     /// </summary>
+    /// <remarks>
+    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
+    /// on this backend instance. It is overwritten by the next flush.
+    /// </remarks>
     public bool DiagnosticLastFlushUsedGPU => this.TestingLastFlushUsedGPU;
 
     /// <summary>
     /// Gets the last staged-scene creation or dispatch failure that forced CPU fallback.
     /// </summary>
+    /// <remarks>
+    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
+    /// on this backend instance. It is reset at the start of each flush and overwritten by the next failure.
+    /// A <see langword="null"/> value means no failure reason was recorded for the most recent flush.
+    /// </remarks>
     public string? DiagnosticLastSceneFailure => this.TestingLastGPUInitializationFailure;
 
     /// <summary>
     /// Gets a value indicating whether the last staged flush used the chunked oversized-scene path.
     /// </summary>
+    /// <remarks>
+    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
+    /// on this backend instance. It is overwritten by the next flush.
+    /// </remarks>
     public bool DiagnosticLastFlushUsedChunking => this.TestingLastFlushUsedChunking;
 
     /// <summary>
     /// Gets the chunkable binding-limit failure that selected the chunked oversized-scene path for the last staged flush.
     /// </summary>
+    /// <remarks>
+    /// This value describes only the most recent call to <see cref="FlushCompositions{TPixel}(Configuration, ICanvasFrame{TPixel}, CompositionScene)"/>
+    /// on this backend instance. When the most recent flush did not use the chunked path, this property returns
+    /// the default <c>None</c> value from <see cref="WebGPUSceneDispatch.BindingLimitBuffer"/>.
+    /// </remarks>
     public string DiagnosticLastChunkingBindingFailure => this.TestingLastChunkingBindingFailure.ToString();
 
     /// <inheritdoc />

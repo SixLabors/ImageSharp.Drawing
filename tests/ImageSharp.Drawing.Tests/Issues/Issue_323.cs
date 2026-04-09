@@ -31,10 +31,10 @@ public class Issue_323
     }
 
     [Theory]
-    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 3f)]
-    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 1f)]
-    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.3f)]
-    //[WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.7f)]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 3f)]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 1f)]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.3f)]
+    [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.7f)]
     [WithSolidFilledImages(300, 300, "White", PixelTypes.Rgba32, 0.003f)]
     public void DrawPolygonMustDrawoutlineOnly_Pattern<TPixel>(TestImageProvider<TPixel> provider, float scale)
         where TPixel : unmanaged, IPixel<TPixel>

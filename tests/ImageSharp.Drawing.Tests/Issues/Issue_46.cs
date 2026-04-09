@@ -25,7 +25,7 @@ public class Issue_46
 
         using Image<Rgba32> image = new(imageSize, imageSize);
 
-        string iconText = char.ConvertFromUtf32(int.Parse("e926", NumberStyles.HexNumber));
+        string iconText = char.ConvertFromUtf32(int.Parse("e926", NumberStyles.HexNumber, CultureInfo.InvariantCulture));
 
         FontRectangle rect = TextMeasurer.MeasureSize(iconText, options);
 

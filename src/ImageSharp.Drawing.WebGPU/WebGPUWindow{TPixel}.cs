@@ -82,7 +82,7 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             throw;
         }
 
-        this.window.Update += deltaTime => this.Update?.Invoke(deltaTime);
+        this.window.Update += deltaTime => this.Update?.Invoke(TimeSpan.FromSeconds(deltaTime));
         this.window.Resize += size => this.Resized?.Invoke(ToSize(size));
         this.window.FramebufferResize += this.OnFramebufferResize;
         this.window.Closing += () => this.Closing?.Invoke();
@@ -95,7 +95,7 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// <summary>
     /// Raised when the window update loop runs.
     /// </summary>
-    public event Action<double>? Update;
+    public event Action<TimeSpan>? Update;
 
     /// <summary>
     /// Raised when the client size changes.
@@ -342,13 +342,21 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="render">The per-frame render callback.</param>
     public void Run(Action<WebGPUWindowFrame<TPixel>> render)
+        => this.Run(render, new DrawingOptions());
+
+    /// <summary>
+    /// Runs the window's event loop and renders one WebGPU frame per render callback.
+    /// </summary>
+    /// <param name="render">The per-frame render callback.</param>
+    /// <param name="options">The drawing options applied to each acquired frame.</param>
+    public void Run(Action<WebGPUWindowFrame<TPixel>> render, DrawingOptions options)
     {
         Guard.NotNull(render, nameof(render));
         this.ThrowIfDisposed();
 
         void OnRender(double deltaTime)
         {
-            if (!this.TryAcquireFrameCore(TimeSpan.FromSeconds(deltaTime), out WebGPUWindowFrame<TPixel>? frame, new DrawingOptions()))
+            if (!this.TryAcquireFrameCore(TimeSpan.FromSeconds(deltaTime), out WebGPUWindowFrame<TPixel>? frame, options))
             {
                 return;
             }
@@ -390,9 +398,17 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     /// </summary>
     /// <param name="render">The per-frame render callback.</param>
     public void Run(Action<DrawingCanvas<TPixel>> render)
+        => this.Run(render, new DrawingOptions());
+
+    /// <summary>
+    /// Runs the window's event loop and renders one WebGPU canvas per render callback.
+    /// </summary>
+    /// <param name="render">The per-frame render callback.</param>
+    /// <param name="options">The drawing options applied to each acquired frame.</param>
+    public void Run(Action<DrawingCanvas<TPixel>> render, DrawingOptions options)
     {
         Guard.NotNull(render, nameof(render));
-        this.Run(frame => render(frame.Canvas));
+        this.Run(frame => render(frame.Canvas), options);
     }
 
     /// <summary>
@@ -571,16 +587,8 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             throw new NotSupportedException($"Pixel type '{typeof(TPixel).Name}' is not supported by the WebGPU backend.");
         }
 
-        WebGPUTextureFormatId format = options.Format ?? expectedFormat;
-        if (format != expectedFormat)
-        {
-            throw new ArgumentException(
-                $"Format '{format}' is not compatible with pixel type '{typeof(TPixel).Name}' (expected '{expectedFormat}').",
-                nameof(options));
-        }
-
         IWindow window = Window.Create(CreateSilkOptions(options));
-        return new WindowConstruction(window, configuration, format, options.PresentMode);
+        return new WindowConstruction(window, configuration, expectedFormat, options.PresentMode);
     }
 
     private bool TryAcquireFrameCore(

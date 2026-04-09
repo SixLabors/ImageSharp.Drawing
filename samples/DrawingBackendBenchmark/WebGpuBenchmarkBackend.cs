@@ -50,12 +50,18 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
 
         stopwatch.Stop();
 
-        Image<Bgra32>? preview = capturePreview ? renderTarget.Readback() : null;
+        Image<Bgra32>? preview = null;
+        string? readbackError = null;
+        if (capturePreview && !renderTarget.TryReadback(out preview, out readbackError))
+        {
+            preview = null;
+        }
+
         return new BenchmarkRenderResult(
             stopwatch.Elapsed.TotalMilliseconds,
             preview,
             renderTarget.Graphics.Backend.DiagnosticLastFlushUsedGPU,
-            renderTarget.Graphics.Backend.DiagnosticLastSceneFailure);
+            readbackError ?? renderTarget.Graphics.Backend.DiagnosticLastSceneFailure);
     }
 
     /// <summary>

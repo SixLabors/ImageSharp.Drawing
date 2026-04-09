@@ -39,6 +39,7 @@ public static class WebGPUNativeSurfaceFactory
         ValidateCommon(
             deviceHandle,
             queueHandle,
+            targetTextureHandle,
             targetTextureViewHandle,
             width,
             height);
@@ -63,6 +64,7 @@ public static class WebGPUNativeSurfaceFactory
     private static void ValidateCommon(
         nint deviceHandle,
         nint queueHandle,
+        nint targetTextureHandle,
         nint targetTextureViewHandle,
         int width,
         int height)
@@ -75,6 +77,11 @@ public static class WebGPUNativeSurfaceFactory
         if (queueHandle == 0)
         {
             throw new ArgumentOutOfRangeException(nameof(queueHandle), "Queue handle must be non-zero.");
+        }
+
+        if (targetTextureHandle == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(targetTextureHandle), "Texture handle must be non-zero.");
         }
 
         if (targetTextureViewHandle == 0)

@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics;
 using System.Numerics;
 using SixLabors.Fonts;
 using SixLabors.ImageSharp;
@@ -41,14 +42,13 @@ public static class Program
     private sealed class DemoApp
     {
         private const int BallCount = 1000;
+        private static readonly TimeSpan FpsUpdateInterval = TimeSpan.FromSeconds(1);
 
         private readonly WebGPUWindow<Bgra32> window;
         private readonly Random rng = new(42);
+        private readonly Stopwatch fpsWindow = Stopwatch.StartNew();
         private Ball[] balls = [];
         private int frameCount;
-        private double fpsElapsed;
-        private double fpsSum;
-        private double fpsSumSquares;
         private IPathCollection scrollPaths = new PathCollection();
         private float scrollOffset;
         private float scrollTextHeight;
@@ -126,11 +126,11 @@ public static class Program
         /// <summary>
         /// Advances the animation state for the next frame.
         /// </summary>
-        /// <param name="deltaTime">Elapsed time since the previous update, in seconds.</param>
-        private void OnUpdate(double deltaTime)
+        /// <param name="deltaTime">Elapsed time since the previous update.</param>
+        private void OnUpdate(TimeSpan deltaTime)
         {
             Size framebufferSize = this.window.FramebufferSize;
-            float dt = (float)deltaTime;
+            float dt = (float)deltaTime.TotalSeconds;
             for (int i = 0; i < this.balls.Length; i++)
             {
                 this.balls[i].Update(dt, framebufferSize.Width, framebufferSize.Height);
@@ -152,8 +152,6 @@ public static class Program
             DrawingCanvas<Bgra32> canvas = frame.Canvas;
             canvas.Fill(Brushes.Solid(Color.FromPixel(new Bgra32(30, 30, 40, 255))));
 
-            this.DrawScrollingText(canvas, frame.FramebufferSize.Width, frame.FramebufferSize.Height);
-
             for (int i = 0; i < this.balls.Length; i++)
             {
                 ref Ball ball = ref this.balls[i];
@@ -161,23 +159,17 @@ public static class Program
                 canvas.Fill(Brushes.Solid(ball.Color), ellipse);
             }
 
+            this.DrawScrollingText(canvas, frame.FramebufferSize.Width, frame.FramebufferSize.Height);
+
             this.frameCount++;
-            double frameSeconds = frame.DeltaTime.TotalSeconds;
-            this.fpsElapsed += frameSeconds;
-            double frameFps = frameSeconds > 0D ? 1D / frameSeconds : 0D;
-            this.fpsSum += frameFps;
-            this.fpsSumSquares += frameFps * frameFps;
-            if (this.fpsElapsed >= 1D)
+            TimeSpan elapsed = this.fpsWindow.Elapsed;
+            if (elapsed >= FpsUpdateInterval)
             {
-                double meanFps = this.fpsSum / this.frameCount;
-                double variance = Math.Max(0D, (this.fpsSumSquares / this.frameCount) - (meanFps * meanFps));
-                double stdDevFps = Math.Sqrt(variance);
-                double frameTimeMs = frame.DeltaTime.TotalMilliseconds;
-                this.window.Title = $"ImageSharp.Drawing WebGPU Demo - Current: {frameTimeMs:F1} ms / {frameFps:F1} FPS | Mean: {meanFps:F1} FPS | StdDev: {stdDevFps:F1}";
+                double fps = this.frameCount / elapsed.TotalSeconds;
+                double frameTimeMs = elapsed.TotalMilliseconds / this.frameCount;
+                this.window.Title = $"ImageSharp.Drawing WebGPU Demo - {frameTimeMs:F1} ms / {fps:F1} FPS";
                 this.frameCount = 0;
-                this.fpsElapsed = 0;
-                this.fpsSum = 0;
-                this.fpsSumSquares = 0;
+                this.fpsWindow.Restart();
             }
         }
 
