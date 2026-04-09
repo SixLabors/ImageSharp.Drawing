@@ -1041,6 +1041,53 @@ public partial class ProcessWithDrawingCanvasTests
             false,
             false);
 
+    [Theory]
+    [WithSolidFilledImages(10, 10, "White", PixelTypes.Rgba32)]
+    public void DrawText_EmojiGrid_NotoColorEmoji<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        Font font = CreateFont(TestFonts.NotoColorEmojiRegular, 64);
+
+        const string text =
+            "😀😃😄😁😆😅😂🤣😭😉😗😙\n" +
+            "😚😘🥰😍🤩🥳🙃🙂🥲🥹😋😛\n" +
+            "😝😜🤪😇😊☺️😏😌😔😑😐😶\n" +
+            "🫡🤔🤫🫢🤭🥱🤗🫣😱🤨🧐😒\n" +
+            "🙄😮‍💨😤😠😡🤬🥺😟😥😢☹️🙁\n" +
+            "🫤😕🤐😰😨😧😦😮😯😲😳🤯\n" +
+            "😬😓😞😖😣😩😫😵😵‍💫🫥😴😪\n" +
+            "🤤🌛🌜🌚🌝🌞🫠😶‍🌫️🥴🥵🥶🤢\n" +
+            "🤮🤧🤒🤕😷🤠🤑😎🤓🥸🤥🤡\n" +
+            "👻💩👽🤖🎃😈👿👹👺🔥💫⭐\n" +
+            "🌟✨💥💯💢💨💦🫧💤🕳️🎉🎊\n" +
+            "🙈🙉🙊😺😸😹😻😼😽🙀😿😾\n" +
+            "❤️🧡💛💚💙💜🤎🖤🤍♥️💘💝\n" +
+            "💖💗💓💞💕💌💟❣️❤️‍🩹💔❤️‍🔥💋\n" +
+            "🫂👥👤🗣️👣🧠🫀🫁🩸🦠🦷🦴\n" +
+            "☠️💀👀👁️👄🫦👅👃👂🦻🦶🦵\n" +
+            "🦿🦾💪👍👎👏🫶🙌👐🤲🤝🤜\n" +
+            "🤛✊👊🫳🫴🫱🫲🤚👋🖐️✋🖖\n" +
+            "🤟🤘✌️🤞🫰🤙🤌🤏👌🖕☝️👆\n" +
+            "👇👉👈🫵✍️🤳🙏💅";
+
+        RichTextOptions textOptions = new(font)
+        {
+            ColorFontSupport = ColorFontSupport.ColrV1,
+            LineSpacing = 1.15F,
+        };
+
+        FontRectangle bounds = TextMeasurer.MeasureRenderableBounds(text, textOptions);
+        int width = (int)MathF.Ceiling(bounds.Right);
+        int height = (int)MathF.Ceiling(bounds.Bottom);
+
+        provider.VerifyOperation(
+            TextDrawingComparer,
+            img => img.Mutate(i => i.Resize(width, height, KnownResamplers.NearestNeighbor)
+                                    .ProcessWithCanvas(canvas => canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null))),
+            appendPixelTypeToFileName: false,
+            appendSourceFileOrDescription: false);
+    }
+
     private static RichTextOptions CreateTextOptionsAt(Font font, PointF origin)
         => new(font) { Origin = origin };
 
