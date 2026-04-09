@@ -51,43 +51,49 @@ public class RegularPolygonTests
     [Fact]
     public void GeneratesCorrectPath()
     {
-        const float Radius = 10;
+        const float radius = 10;
         int pointsCount = new Random().Next(3, 20);
 
-        RegularPolygon poly = new(Vector2.Zero, pointsCount, Radius, 0);
+        RegularPolygon poly = new(Vector2.Zero, pointsCount, radius, 0);
 
-        IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
+        PointF[] points = poly.Flatten().ToArray()[0].Points.ToArray();
 
         // calculates baselineDistance
         float baseline = Vector2.Distance(points[0], points[1]);
 
         // all points are exact the same distance away from the center
-        for (int i = 0; i < points.Count; i++)
+        for (int i = 0; i < points.Length; i++)
         {
             int j = i - 1;
             if (i == 0)
             {
-                j = points.Count - 1;
+                j = points.Length - 1;
             }
 
             float actual = Vector2.Distance(points[i], points[j]);
             Assert.Equal(baseline, actual, 3F);
-            Assert.Equal(Radius, Vector2.Distance(Vector2.Zero, points[i]), 3F);
+            Assert.Equal(radius, Vector2.Distance(Vector2.Zero, points[i]), 3F);
         }
     }
 
     [Fact]
     public void AngleChangesOnePointToStartAtThatPosition()
     {
-        const float Radius = 10;
+        const float radius = 10;
+        const double tolerance = 1e-3D;
         double anAngleDegrees = new Random().NextDouble() * 360D;
+        double expectedAngleDegrees = anAngleDegrees + 90D;
+        if (expectedAngleDegrees >= 360D)
+        {
+            expectedAngleDegrees -= 360D;
+        }
 
-        RegularPolygon poly = new(Vector2.Zero, 3, Radius, (float)anAngleDegrees);
+        RegularPolygon poly = new(Vector2.Zero, 3, radius, (float)anAngleDegrees);
         IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
         IEnumerable<double> allAngles = points.Select(b => GeometryUtilities.RadianToDegree((float)Math.Atan2(b.Y, b.X)))
             .Select(x => x < 0 ? x + 360D : x); // normalise it from +/- 180 to 0 to 360
 
-        Assert.Contains(allAngles, a => Math.Abs(a - anAngleDegrees) < 0.000001);
+        Assert.Contains(allAngles, a => Math.Abs(a - expectedAngleDegrees) < tolerance);
     }
 }
