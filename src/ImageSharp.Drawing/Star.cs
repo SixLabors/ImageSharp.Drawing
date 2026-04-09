@@ -17,7 +17,7 @@ public sealed class Star : Polygon
     /// <param name="prongs">The number of points the <see cref="Star" /> should have.</param>
     /// <param name="innerRadii">The inner radii.</param>
     /// <param name="outerRadii">The outer radii.</param>
-    /// <param name="angle">The angle of rotation in Radians</param>
+    /// <param name="angle">The angle of rotation in degrees.</param>
     public Star(PointF location, int prongs, float innerRadii, float outerRadii, float angle)
         : base(CreateSegment(location, innerRadii, outerRadii, prongs, angle))
     {
@@ -43,7 +43,7 @@ public sealed class Star : Polygon
     /// <param name="prongs">The number of vertices the <see cref="RegularPolygon" /> should have.</param>
     /// <param name="innerRadii">The inner radii.</param>
     /// <param name="outerRadii">The outer radii.</param>
-    /// <param name="angle">The angle of rotation in Radians</param>
+    /// <param name="angle">The angle of rotation in degrees.</param>
     public Star(float x, float y, int prongs, float innerRadii, float outerRadii, float angle)
         : this(new PointF(x, y), prongs, innerRadii, outerRadii, angle)
     {
@@ -73,7 +73,7 @@ public sealed class Star : Polygon
 
         int vertices = prongs * 2;
         float anglePerSegments = (float)(2 * Math.PI / vertices);
-        float current = angle;
+        float current = GeometryUtilities.DegreeToRadian(angle);
         PointF[] points = new PointF[vertices];
         Vector2 distance = distanceVectorInner;
         for (int i = 0; i < vertices; i++)

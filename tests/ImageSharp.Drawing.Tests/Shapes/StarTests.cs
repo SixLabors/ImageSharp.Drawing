@@ -90,17 +90,17 @@ public class StarTests
     [Fact]
     public void AngleChangesOnePointToStartAtThatPosition()
     {
-        const double TwoPI = 2 * Math.PI;
         const float Radius = 10;
         const float Radius2 = 20;
-        double anAngle = new Random().NextDouble() * TwoPI;
+        double anAngleDegrees = new Random().NextDouble() * 360D;
 
-        Star poly = new(Vector2.Zero, 3, Radius, Radius2, (float)anAngle);
+        Star poly = new(Vector2.Zero, 3, Radius, Radius2, (float)anAngleDegrees);
         ISimplePath[] points = poly.Flatten().ToArray();
 
-        IEnumerable<double> allAngles = points[0].Points.ToArray().Select(b => Math.Atan2(b.Y, b.X))
-            .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
+        IEnumerable<double> allAngles = points[0].Points.ToArray()
+            .Select(b => GeometryUtilities.RadianToDegree((float)Math.Atan2(b.Y, b.X)))
+            .Select(x => x < 0 ? x + 360D : x); // normalise it from +/- 180 to 0 to 360
 
-        Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
+        Assert.Contains(allAngles, a => Math.Abs(a - anAngleDegrees) < 0.000001);
     }
 }

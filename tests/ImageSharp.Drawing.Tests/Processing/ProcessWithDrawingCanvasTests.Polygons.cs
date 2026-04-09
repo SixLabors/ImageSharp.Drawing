@@ -325,8 +325,7 @@ public partial class ProcessWithDrawingCanvasTests
     public void FillPolygon_RegularPolygon<TPixel>(TestImageProvider<TPixel> provider, int vertices, float radius, float angleDeg)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        float angle = GeometryUtilities.DegreeToRadian(angleDeg);
-        RegularPolygon polygon = new(100, 100, vertices, radius, angle);
+        RegularPolygon polygon = new(100, 100, vertices, radius, angleDeg);
         Color color = Color.Yellow;
 
         FormattableString testOutput = $"V({vertices})_R({radius})_Ang({angleDeg})";

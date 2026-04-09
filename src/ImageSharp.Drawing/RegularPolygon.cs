@@ -16,7 +16,7 @@ public class RegularPolygon : Polygon
     /// <param name="location">The location the center of the polygon will be placed.</param>
     /// <param name="vertices">The number of vertices the <see cref="RegularPolygon"/> should have.</param>
     /// <param name="radius">The radius of the circle that would touch all vertices.</param>
-    /// <param name="angle">The angle of rotation in Radians</param>
+    /// <param name="angle">The angle of rotation in degrees.</param>
     public RegularPolygon(PointF location, int vertices, float radius, float angle)
         : base(CreateSegment(location, radius, vertices, angle))
     {
@@ -40,7 +40,7 @@ public class RegularPolygon : Polygon
     /// <param name="y">The y-coordinate of the center of the polygon.</param>
     /// <param name="vertices">The number of vertices the <see cref="RegularPolygon" /> should have.</param>
     /// <param name="radius">The radius of the circle that would touch all vertices.</param>
-    /// <param name="angle">The angle of rotation in Radians</param>
+    /// <param name="angle">The angle of rotation in degrees.</param>
     public RegularPolygon(float x, float y, int vertices, float radius, float angle)
         : this(new PointF(x, y), vertices, radius, angle)
     {
@@ -66,7 +66,7 @@ public class RegularPolygon : Polygon
         PointF distanceVector = new(0, radius);
 
         float anglePerSegments = (float)(2 * Math.PI / vertices);
-        float current = angle;
+        float current = GeometryUtilities.DegreeToRadian(angle);
         PointF[] points = new PointF[vertices];
         for (int i = 0; i < vertices; i++)
         {

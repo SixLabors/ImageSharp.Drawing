@@ -34,7 +34,7 @@ public class PathBuilder
     {
         this.defaultTransform = defaultTransform;
         this.Clear();
-        this.ResetTransform();
+        _ = this.ResetTransform();
     }
 
     /// <summary>
@@ -105,7 +105,7 @@ public class PathBuilder
     /// <returns>The <see cref="PathBuilder"/>.</returns>
     public PathBuilder MoveTo(PointF point)
     {
-        this.StartFigure();
+        _ = this.StartFigure();
         this.currentPoint = PointF.Transform(point, this.currentTransform);
         return this;
     }
@@ -388,6 +388,231 @@ public class PathBuilder
         => this.AddSegment(new ArcLineSegment(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle));
 
     /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the pie.</param>
+    /// <param name="radius">The x and y radii of the pie ellipse.</param>
+    /// <param name="rotation">The ellipse rotation in degrees.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(PointF center, SizeF radius, float rotation, float startAngle, float sweepAngle)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new Pie(center, radius, rotation, startAngle, sweepAngle).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the pie.</param>
+    /// <param name="radius">The x and y radii of the pie ellipse.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(PointF center, SizeF radius, float startAngle, float sweepAngle)
+        => this.AddPie(center, radius, 0F, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the pie center.</param>
+    /// <param name="y">The y-coordinate of the pie center.</param>
+    /// <param name="radiusX">The x-radius of the pie ellipse.</param>
+    /// <param name="radiusY">The y-radius of the pie ellipse.</param>
+    /// <param name="rotation">The ellipse rotation in degrees.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(float x, float y, float radiusX, float radiusY, float rotation, float startAngle, float sweepAngle)
+        => this.AddPie(new PointF(x, y), new SizeF(radiusX, radiusY), rotation, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds a pie sector to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the pie center.</param>
+    /// <param name="y">The y-coordinate of the pie center.</param>
+    /// <param name="radiusX">The x-radius of the pie ellipse.</param>
+    /// <param name="radiusY">The y-radius of the pie ellipse.</param>
+    /// <param name="startAngle">The pie start angle in degrees.</param>
+    /// <param name="sweepAngle">The pie sweep angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPie(float x, float y, float radiusX, float radiusY, float startAngle, float sweepAngle)
+        => this.AddPie(x, y, radiusX, radiusY, 0F, startAngle, sweepAngle);
+
+    /// <summary>
+    /// Adds a rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRectangle(RectangleF rectangle)
+        => this.AddRectangle(rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height);
+
+    /// <summary>
+    /// Adds a rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="rectangle">The rectangle bounds.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRectangle(Rectangle rectangle)
+        => this.AddRectangle((RectangleF)rectangle);
+
+    /// <summary>
+    /// Adds a rectangle to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the rectangle.</param>
+    /// <param name="y">The y-coordinate of the rectangle.</param>
+    /// <param name="width">The rectangle width.</param>
+    /// <param name="height">The rectangle height.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRectangle(float x, float y, float width, float height)
+        => this.AddPolygon(
+            new PointF(x, y),
+            new PointF(x + width, y),
+            new PointF(x + width, y + height),
+            new PointF(x, y + height));
+
+    /// <summary>
+    /// Adds a polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="points">The polygon vertices.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPolygon(IEnumerable<PointF> points)
+    {
+        Guard.NotNull(points, nameof(points));
+        return this.AddPolygon([.. points]);
+    }
+
+    /// <summary>
+    /// Adds a polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="points">The polygon vertices.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddPolygon(params PointF[] points)
+    {
+        Guard.NotNull(points, nameof(points));
+
+        _ = this.StartFigure();
+        _ = this.AddSegment(new LinearLineSegment(points));
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the polygon.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(PointF center, int vertices, float radius)
+        => this.AddRegularPolygon(center, vertices, radius, 0F);
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the polygon.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <param name="angle">The polygon rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(PointF center, int vertices, float radius, float angle)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new RegularPolygon(center, vertices, radius, angle).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the polygon center.</param>
+    /// <param name="y">The y-coordinate of the polygon center.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(float x, float y, int vertices, float radius)
+        => this.AddRegularPolygon(new PointF(x, y), vertices, radius);
+
+    /// <summary>
+    /// Adds a regular polygon to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the polygon center.</param>
+    /// <param name="y">The y-coordinate of the polygon center.</param>
+    /// <param name="vertices">The number of polygon vertices.</param>
+    /// <param name="radius">The polygon radius.</param>
+    /// <param name="angle">The polygon rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddRegularPolygon(float x, float y, int vertices, float radius, float angle)
+        => this.AddRegularPolygon(new PointF(x, y), vertices, radius, angle);
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the star.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(PointF center, int prongs, float innerRadii, float outerRadii)
+        => this.AddStar(center, prongs, innerRadii, outerRadii, 0F);
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="center">The center point of the star.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <param name="angle">The star rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(PointF center, int prongs, float innerRadii, float outerRadii, float angle)
+    {
+        _ = this.StartFigure();
+
+        foreach (ILineSegment segment in new Star(center, prongs, innerRadii, outerRadii, angle).LineSegments)
+        {
+            _ = this.AddSegment(segment);
+        }
+
+        return this.CloseFigure();
+    }
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the star center.</param>
+    /// <param name="y">The y-coordinate of the star center.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(float x, float y, int prongs, float innerRadii, float outerRadii)
+        => this.AddStar(new PointF(x, y), prongs, innerRadii, outerRadii);
+
+    /// <summary>
+    /// Adds a star to the current path as a closed figure.
+    /// </summary>
+    /// <param name="x">The x-coordinate of the star center.</param>
+    /// <param name="y">The y-coordinate of the star center.</param>
+    /// <param name="prongs">The number of star prongs.</param>
+    /// <param name="innerRadii">The inner star radius.</param>
+    /// <param name="outerRadii">The outer star radius.</param>
+    /// <param name="angle">The star rotation angle in degrees.</param>
+    /// <returns>The <see cref="PathBuilder"/>.</returns>
+    public PathBuilder AddStar(float x, float y, int prongs, float innerRadii, float outerRadii, float angle)
+        => this.AddStar(new PointF(x, y), prongs, innerRadii, outerRadii, angle);
+
+    /// <summary>
     /// Starts a new figure but leaves the previous one open.
     /// </summary>
     /// <returns>The <see cref="PathBuilder"/>.</returns>
@@ -413,7 +638,7 @@ public class PathBuilder
     public PathBuilder CloseFigure()
     {
         this.currentFigure.IsClosed = true;
-        this.StartFigure();
+        _ = this.StartFigure();
 
         return this;
     }
@@ -429,7 +654,7 @@ public class PathBuilder
             f.IsClosed = true;
         }
 
-        this.CloseFigure();
+        _ = this.CloseFigure();
 
         return this;
     }
@@ -456,7 +681,7 @@ public class PathBuilder
     public PathBuilder Reset()
     {
         this.Clear();
-        this.ResetTransform();
+        _ = this.ResetTransform();
         this.currentPoint = default;
 
         return this;

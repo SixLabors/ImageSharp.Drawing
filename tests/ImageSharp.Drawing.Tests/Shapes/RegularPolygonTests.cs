@@ -79,16 +79,15 @@ public class RegularPolygonTests
     [Fact]
     public void AngleChangesOnePointToStartAtThatPosition()
     {
-        const double TwoPI = 2 * Math.PI;
         const float Radius = 10;
-        double anAngle = new Random().NextDouble() * TwoPI;
+        double anAngleDegrees = new Random().NextDouble() * 360D;
 
-        RegularPolygon poly = new(Vector2.Zero, 3, Radius, (float)anAngle);
+        RegularPolygon poly = new(Vector2.Zero, 3, Radius, (float)anAngleDegrees);
         IReadOnlyList<PointF> points = poly.Flatten().ToArray()[0].Points.ToArray();
 
-        IEnumerable<double> allAngles = points.Select(b => Math.Atan2(b.Y, b.X))
-            .Select(x => x < 0 ? x + TwoPI : x); // normalise it from +/- PI to 0 to TwoPI
+        IEnumerable<double> allAngles = points.Select(b => GeometryUtilities.RadianToDegree((float)Math.Atan2(b.Y, b.X)))
+            .Select(x => x < 0 ? x + 360D : x); // normalise it from +/- 180 to 0 to 360
 
-        Assert.Contains(allAngles, a => Math.Abs(a - anAngle) > 0.000001);
+        Assert.Contains(allAngles, a => Math.Abs(a - anAngleDegrees) < 0.000001);
     }
 }
