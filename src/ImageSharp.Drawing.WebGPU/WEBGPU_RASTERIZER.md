@@ -142,6 +142,8 @@ The encoder first builds several logical streams such as:
 
 Those streams are then packed into the final scene word buffer plus separate gradient and image payloads.
 
+Explicit layers are part of this encoding step too. `BeginLayer` and `EndLayer` stay in the prepared command stream until `WebGPUSceneEncoder` lowers them into `BeginClip` and `EndClip` draw records inside the encoded scene.
+
 That split matters because the shaders consume offsets into one shared packed scene layout. The encoder therefore separates "append logical scene data" from "pack the final GPU-facing layout".
 
 ## Stage 2: Planning
@@ -256,6 +258,8 @@ The fine pass consumes data such as:
 
 and writes the result into the output texture.
 
+That is also where explicit layers are composited. The fine shader handles `BeginClip` and `EndClip` records inline by saving the current tile color, rendering the isolated layer contents, and then blending that isolated result back into the saved backdrop with the layer's stored blend mode and alpha.
+
 ## Stage 7: Copy And Submit
 
 After the fine pass completes, the rasterizer copies the output texture to the target texture and submits the command buffer.
@@ -289,7 +293,6 @@ The backend decides:
 
 - whether this flush can stay on the GPU
 - how fallback works
-- how layer composition is handled
 - how flush-scoped work relates to runtime and device-scoped state
 
 The public setup layer decides:

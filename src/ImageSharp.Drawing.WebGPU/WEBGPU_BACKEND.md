@@ -12,7 +12,7 @@ This document explains the backend as a newcomer would need to understand it:
 - what problem the WebGPU backend is solving
 - what `WebGPUDrawingBackend` actually owns
 - how one flush moves through the backend boundary
-- where fallback, layer composition, and runtime caching fit into the design
+- where fallback, explicit layer handling, and runtime caching fit into the design
 
 ## Where The Public WebGPU Types Fit
 
@@ -68,7 +68,7 @@ That means `WebGPUDrawingBackend` is responsible for entry-point orchestration, 
 - per-flush diagnostic state
 - staged-scene creation attempts
 - the decision to run the staged path or fall back
-- GPU layer composition when that path is eligible
+- lowering explicit layer boundaries into the staged scene path
 
 It is the policy boundary of the GPU path.
 
@@ -134,7 +134,7 @@ Its responsibilities are:
 - try to create a staged scene
 - run the staged path if scene creation succeeds
 - fall back cleanly if any stage fails
-- run GPU layer composition when that path is eligible
+- keep explicit layer boundaries in the shared flush model until the staged scene encoder lowers them
 
 The expensive staged work is delegated:
 
@@ -201,25 +201,20 @@ The architectural goal is simple:
 
 decide as much as possible up front, fall back cleanly, and avoid leaving the flush half-executed across two backends.
 
-## Layer Composition
+## Explicit Layers
 
-GPU layer composition is a separate path from staged scene rasterization.
+Explicit layers are not a separate compose pass in this backend.
 
-That path lives in:
-
-- `WebGPUDrawingBackend.ComposeLayer.cs`
-- `ComposeLayerComputeShader.cs`
-
-Its job is smaller and different. It composites already-rasterized layer pixels rather than running the full vector scene pipeline.
+They stay in the shared composition command stream as `BeginLayer` and `EndLayer`, then the staged scene encoder lowers those boundaries into `BeginClip` and `EndClip` records inside the encoded scene. The fine shader interprets those records directly: it pushes the current tile color to its clip stack at `BeginClip`, renders the isolated layer contents, and then blends that isolated result back into the saved backdrop at `EndClip`.
 
 ```mermaid
 flowchart TD
-    A[Saved layer] --> B[TryComposeLayerGpu]
-    B -->|Native destination supports it| C[ComposeLayer compute shader]
-    B -->|Unsupported| D[CPU compose path]
+    A[SaveLayer / Restore] --> B[BeginLayer / EndLayer in command stream]
+    B --> C[WebGPUSceneEncoder lowers to BeginClip / EndClip]
+    C --> D[Fine shader isolates and blends the layer inline]
 ```
 
-Keeping layer composition separate from staged scene rasterization makes the backend easier to reason about.
+That means layer semantics are part of the main staged scene pipeline rather than a second GPU composition subsystem.
 
 ## Runtime And Caching
 
@@ -262,12 +257,11 @@ If you want to understand the backend first, read the code in this order:
 4. `WebGPUFlushContext.cs`
 5. `WebGPURuntime.cs`
 6. `WebGPURuntime.DeviceSharedState.cs`
-7. `WebGPUDrawingBackend.ComposeLayer.cs`
-8. `WEBGPU_RASTERIZER.md`
+7. `WEBGPU_RASTERIZER.md`
 
 That order mirrors the newcomer view of the system:
 
-support and target setup -> backend policy -> flush context -> runtime lifetime -> layer composition -> staged raster pipeline
+support and target setup -> backend policy -> flush context -> runtime lifetime -> staged raster pipeline
 
 ## The Mental Model To Keep
 

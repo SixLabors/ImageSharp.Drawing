@@ -99,6 +99,30 @@ public partial class ProcessWithDrawingCanvasTests
             false,
             false);
 
+    [Fact]
+    public void RadialGradientBrush_Transform_UsesAverageScaleForRadii()
+    {
+        RadialGradientBrush brush = new(
+            new PointF(10, 20),
+            4F,
+            new PointF(30, 40),
+            8F,
+            GradientRepetitionMode.None,
+            new ColorStop(0, Color.Red),
+            new ColorStop(1, Color.Blue));
+
+        System.Numerics.Matrix4x4 matrix =
+            System.Numerics.Matrix4x4.CreateScale(2F, 4F, 1F)
+            * System.Numerics.Matrix4x4.CreateTranslation(5F, 7F, 0F);
+
+        RadialGradientBrush transformed = Assert.IsType<RadialGradientBrush>(brush.Transform(matrix));
+
+        Assert.Equal(PointF.Transform(brush.Center0, matrix), transformed.Center0);
+        Assert.Equal(PointF.Transform(brush.Center1!.Value, matrix), transformed.Center1!.Value);
+        Assert.Equal(12F, transformed.Radius0, 5);
+        Assert.Equal(24F, transformed.Radius1!.Value, 5);
+    }
+
     [Theory]
     [WithBlankImage(10, 10, PixelTypes.Rgba32)]
     public void FillEllipticGradientBrushWithEqualColorsReturnsUnicolorImage<TPixel>(TestImageProvider<TPixel> provider)

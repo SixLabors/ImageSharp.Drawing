@@ -613,6 +613,67 @@ public partial class WebGPUDrawingBackendTests
         canvas.Flush();
     }
 
+    private static IPath CreateLargeSceneDenseRectangleGridPath()
+    {
+        const int gridSize = 260;
+        const int pitch = 2;
+        const int rectangleSize = 1;
+
+        PathBuilder pathBuilder = new();
+        for (int y = 0; y < gridSize; y++)
+        {
+            int top = y * pitch;
+            for (int x = 0; x < gridSize; x++)
+            {
+                pathBuilder.AddRectangle(x * pitch, top, rectangleSize, rectangleSize);
+            }
+        }
+
+        return pathBuilder.Build();
+    }
+
+    private static Rectangle[] CreateClipReduceLayerBounds(int layerCount, Rectangle targetBounds)
+    {
+        Rectangle[] layerBounds = new Rectangle[layerCount];
+        for (int i = 0; i < layerCount; i++)
+        {
+            int width = 18 + ((i * 7) % 22);
+            int height = 16 + ((i * 11) % 24);
+            int x = (i * 17) % Math.Max(1, targetBounds.Width - width + 1);
+            int y = ((i * 23) + ((i / 8) * 7)) % Math.Max(1, targetBounds.Height - height + 1);
+            layerBounds[i] = new Rectangle(x, y, width, height);
+        }
+
+        return layerBounds;
+    }
+
+    private static IPath CreateClipReduceLayerLocalPath(int layerIndex, Rectangle layerBounds)
+    {
+        int insetX = 1 + (layerIndex % 4);
+        int insetY = 1 + ((layerIndex / 4) % 4);
+        int widthTrim = 1 + ((layerIndex * 3) % 5);
+        int heightTrim = 1 + ((layerIndex * 5) % 5);
+        int innerWidth = Math.Max(4, layerBounds.Width - insetX - widthTrim);
+        int innerHeight = Math.Max(4, layerBounds.Height - insetY - heightTrim);
+
+        return (layerIndex & 1) == 0
+            ? new RectangularPolygon(insetX, insetY, innerWidth, innerHeight)
+            : new EllipsePolygon(
+                insetX + (innerWidth / 2F),
+                insetY + (innerHeight / 2F),
+                innerWidth / 2F,
+                innerHeight / 2F);
+    }
+
+    private static Brush CreateClipReduceLayerBrush(int layerIndex)
+        => Brushes.Solid((layerIndex & 3) switch
+        {
+            0 => Color.Red.WithAlpha(0.55F),
+            1 => Color.CornflowerBlue.WithAlpha(0.5F),
+            2 => Color.LimeGreen.WithAlpha(0.45F),
+            _ => Color.Goldenrod.WithAlpha(0.5F)
+        });
+
     private static EllipsePolygon CreateBlurEllipsePath()
         => new(new PointF(55, 40), new SizeF(110, 80));
 
@@ -660,7 +721,8 @@ public partial class WebGPUDrawingBackendTests
         WebGPUDrawingBackend backend,
         DrawingOptions options,
         Action<DrawingCanvas<TPixel>> drawAction,
-        Image<TPixel> initialImage = null)
+        Image<TPixel> initialImage = null,
+        Action<WebGPUDrawingBackend> assertBackend = null)
         where TPixel : unmanaged, IPixel<TPixel>
     {
         Assert.True(
@@ -695,6 +757,7 @@ public partial class WebGPUDrawingBackendTests
 
             drawAction(canvas);
             canvas.Flush();
+            assertBackend?.Invoke(backend);
 
             Assert.True(
                 WebGPUTextureTransfer.TryReadTexture(
@@ -1077,6 +1140,107 @@ public partial class WebGPUDrawingBackendTests
         DebugSaveBackendPair(provider, "FillPath_LargeTileCount", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
         AssertBackendPairReferenceOutputs(provider, "FillPath_LargeTileCount", defaultImage, nativeSurfaceImage);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(520, 520, "White", PixelTypes.Rgba32)]
+    public void FillPath_LargeScene_UsesLargePathScan_AndMatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DrawingOptions drawingOptions = new()
+        {
+            GraphicsOptions = new GraphicsOptions { Antialias = false }
+        };
+
+        Brush brush = Brushes.Solid(Color.Black);
+        IPath denseGrid = CreateLargeSceneDenseRectangleGridPath();
+        void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Fill(brush, denseGrid);
+        static void AssertBackend(WebGPUDrawingBackend backend)
+        {
+            Assert.True(
+                backend.DiagnosticLastFlushUsedGPU,
+                backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
+            Assert.True(
+                backend.TestingLastEncodedScenePathTagByteCount > (256 * 1024),
+                $"Expected a large-scene path-tag payload but encoded only {backend.TestingLastEncodedScenePathTagByteCount} bytes.");
+            Assert.True(
+                backend.TestingLastUsedLargePathScan,
+                $"Expected the large pathtag scan path for {backend.TestingLastEncodedScenePathTagByteCount} path-tag bytes.");
+        }
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage,
+            AssertBackend);
+
+        DebugSaveBackendPair(provider, "FillPath_LargeScene", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, "FillPath_LargeScene", defaultImage, nativeSurfaceImage);
+        AssertGpuPathWhenRequired(nativeSurfaceBackend);
+    }
+
+    [WebGPUTheory]
+    [WithSolidFilledImages(128, 128, "White", PixelTypes.Rgba32)]
+    public void SaveLayer_ManyLayers_UsesClipReduce_AndMatchesDefaultOutput<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        const int layerCount = 130;
+        DrawingOptions drawingOptions = new();
+
+        using Image<TPixel> defaultImage = provider.GetImage();
+        Rectangle[] layerBounds = CreateClipReduceLayerBounds(layerCount, defaultImage.Bounds);
+
+        void DrawAction(DrawingCanvas<TPixel> canvas)
+        {
+            canvas.Fill(Brushes.Solid(Color.White));
+            for (int i = 0; i < layerBounds.Length; i++)
+            {
+                Rectangle layerBoundsLocal = layerBounds[i];
+                canvas.SaveLayer(new GraphicsOptions(), layerBoundsLocal);
+                canvas.Fill(CreateClipReduceLayerBrush(i), CreateClipReduceLayerLocalPath(i, layerBoundsLocal));
+                canvas.Restore();
+            }
+        }
+
+        static void AssertBackend(WebGPUDrawingBackend backend)
+        {
+            Assert.True(
+                backend.DiagnosticLastFlushUsedGPU,
+                backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
+            Assert.True(
+                backend.TestingLastEncodedSceneClipCount > 256,
+                $"Expected more than 256 clip records but encoded {backend.TestingLastEncodedSceneClipCount}.");
+            Assert.True(
+                backend.TestingLastClipReduceX > 0,
+                $"Expected clip-reduce dispatch for {backend.TestingLastEncodedSceneClipCount} clip records.");
+        }
+
+        RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
+
+        using WebGPUDrawingBackend nativeSurfaceBackend = new();
+        using Image<TPixel> nativeSurfaceInitialImage = provider.GetImage();
+        using Image<TPixel> nativeSurfaceImage = RenderWithNativeSurfaceWebGpuBackend(
+            defaultImage.Width,
+            defaultImage.Height,
+            nativeSurfaceBackend,
+            drawingOptions,
+            DrawAction,
+            nativeSurfaceInitialImage,
+            AssertBackend);
+
+        DebugSaveBackendPair(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage);
+        AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
+        AssertBackendPairReferenceOutputs(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 

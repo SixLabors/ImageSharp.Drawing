@@ -20,10 +20,6 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// </remarks>
 public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisposable
 {
-    private const int CompositeTileWidth = 16;
-    private const int CompositeTileHeight = 16;
-    private const int UniformBufferOffsetAlignment = 256;
-
     // A single flush can rerun the staged path a small number of times while the scratch
     // buffers converge on the capacity reported by the scheduling stages.
     // The prepare shader cancels early when any single buffer overflows, so each
@@ -71,6 +67,26 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     /// Gets the chunkable binding-limit failure that selected the chunked path for the last staged flush.
     /// </summary>
     internal WebGPUSceneDispatch.BindingLimitBuffer TestingLastChunkingBindingFailure { get; private set; }
+
+    /// <summary>
+    /// Gets the encoded scene path-tag payload size for the most recent staged flush.
+    /// </summary>
+    internal int TestingLastEncodedScenePathTagByteCount { get; private set; }
+
+    /// <summary>
+    /// Gets the encoded scene clip record count for the most recent staged flush.
+    /// </summary>
+    internal int TestingLastEncodedSceneClipCount { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the most recent staged flush used the large pathtag scan path.
+    /// </summary>
+    internal bool TestingLastUsedLargePathScan { get; private set; }
+
+    /// <summary>
+    /// Gets the clip-reduce dispatch count for the most recent staged flush.
+    /// </summary>
+    internal uint TestingLastClipReduceX { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether the last flush completed on the staged path.
@@ -127,6 +143,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         this.TestingLastGPUInitializationFailure = null;
         this.TestingLastFlushUsedChunking = false;
         this.TestingLastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
+        this.TestingLastEncodedScenePathTagByteCount = 0;
+        this.TestingLastEncodedSceneClipCount = 0;
+        this.TestingLastUsedLargePathScan = false;
+        this.TestingLastClipReduceX = 0;
         WebGPUSceneBumpSizes currentBumpSizes = this.bumpSizes;
 
         // Rent the cached scheduling arena. Null on first flush or if another thread has it.
@@ -157,6 +177,10 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
                     this.TestingLastFlushUsedGPU = true;
                     this.TestingLastFlushUsedChunking = stagedScene.BindingLimitFailure.Buffer != WebGPUSceneDispatch.BindingLimitBuffer.None;
                     this.TestingLastChunkingBindingFailure = stagedScene.BindingLimitFailure.Buffer;
+                    this.TestingLastEncodedScenePathTagByteCount = stagedScene.EncodedScene.PathTagByteCount;
+                    this.TestingLastEncodedSceneClipCount = stagedScene.EncodedScene.ClipCount;
+                    this.TestingLastUsedLargePathScan = stagedScene.Config.WorkgroupCounts.UseLargePathScan;
+                    this.TestingLastClipReduceX = stagedScene.Config.WorkgroupCounts.ClipReduceX;
 
                     if (stagedScene.EncodedScene.FillCount == 0)
                     {
@@ -253,51 +277,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// CPU fallback for layer compositing when the GPU path is unavailable but the
-    /// destination is a native GPU surface.
-    /// </summary>
-    private void ComposeLayerFallback<TPixel>(
-        Configuration configuration,
-        ICanvasFrame<TPixel> source,
-        ICanvasFrame<TPixel> destination,
-        Point destinationOffset,
-        GraphicsOptions options)
-        where TPixel : unmanaged, IPixel<TPixel>
-    {
-        _ = destination.TryGetNativeSurface(out NativeSurface? destSurface);
-        _ = destSurface!.TryGetCapability(out WebGPUSurfaceCapability? destCapability);
-
-        MemoryAllocator allocator = configuration.MemoryAllocator;
-
-        using Buffer2D<TPixel> destBuffer = allocator.Allocate2D<TPixel>(destination.Bounds.Width, destination.Bounds.Height);
-        Buffer2DRegion<TPixel> destRegion = new(destBuffer);
-        if (!this.TryReadRegion(configuration, destination, destination.Bounds, destRegion))
-        {
-            return;
-        }
-
-        using Buffer2D<TPixel> srcBuffer = allocator.Allocate2D<TPixel>(source.Bounds.Width, source.Bounds.Height);
-        Buffer2DRegion<TPixel> srcRegion = new(srcBuffer);
-        if (!this.TryReadRegion(configuration, source, source.Bounds, srcRegion))
-        {
-            return;
-        }
-
-        ICanvasFrame<TPixel> destFrame = new MemoryCanvasFrame<TPixel>(destRegion);
-        ICanvasFrame<TPixel> srcFrame = new MemoryCanvasFrame<TPixel>(srcRegion);
-
-        DefaultDrawingBackend.ComposeLayer(configuration, srcFrame, destFrame, destinationOffset, options);
-
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-        WebGPUFlushContext.UploadTextureFromRegion(
-            lease.Api,
-            (Queue*)destCapability!.Queue,
-            (Texture*)destCapability.TargetTexture,
-            destRegion,
-            configuration.MemoryAllocator);
-    }
-
-    /// <summary>
     /// Creates one transient composition texture that can be rendered to, sampled from, and copied.
     /// </summary>
     internal static bool TryCreateCompositionTexture(
@@ -389,22 +368,6 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
     }
 
     /// <summary>
-    /// Divides <paramref name="value"/> by <paramref name="divisor"/> and rounds up.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint DivideRoundUp(int value, int divisor)
-        => (uint)((value + divisor - 1) / divisor);
-
-    /// <summary>
-    /// Reinterprets a single-precision float as its raw unsigned 32-bit bit pattern.
-    /// </summary>
-    /// <param name="value">The value to reinterpret.</param>
-    /// <returns>The raw IEEE 754 bit pattern for <paramref name="value"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static uint FloatToUInt32Bits(float value)
-        => unchecked((uint)BitConverter.SingleToInt32Bits(value));
-
-    /// <summary>
     /// Submits the current command encoder, if any.
     /// </summary>
     internal static bool TrySubmit(WebGPUFlushContext flushContext)
@@ -456,6 +419,12 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.TestingLastFlushUsedGPU = false;
         this.TestingLastGPUInitializationFailure = null;
+        this.TestingLastFlushUsedChunking = false;
+        this.TestingLastChunkingBindingFailure = WebGPUSceneDispatch.BindingLimitBuffer.None;
+        this.TestingLastEncodedScenePathTagByteCount = 0;
+        this.TestingLastEncodedSceneClipCount = 0;
+        this.TestingLastUsedLargePathScan = false;
+        this.TestingLastClipReduceX = 0;
         WebGPUSceneSchedulingArena.Dispose(this.cachedSchedulingArena);
         WebGPUSceneResourceArena.Dispose(this.cachedResourceArena);
         this.isDisposed = true;

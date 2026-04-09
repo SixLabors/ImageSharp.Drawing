@@ -663,6 +663,7 @@ internal static class WebGPUSceneDispatch
         if (!TryDispatchPathTilingSetup(
                 recording,
                 flushContext,
+                stagedScene.Resources.HeaderBuffer,
                 bumpBuffer,
                 indirectCountBuffer,
                 ptclBuffer,
@@ -884,18 +885,7 @@ internal static class WebGPUSceneDispatch
             return false;
         }
 
-        WebGPUDrawingBackend.CopyTextureRegion(
-            flushContext,
-            outputTexture,
-            0,
-            0,
-            flushContext.TargetTexture,
-            flushContext.TargetBounds.X,
-            flushContext.TargetBounds.Y,
-            targetWidth,
-            targetHeight);
-
-        // Single submit: scheduling + fine + copy + readback all in one command encoder.
+        // Single submit: scheduling + fine + readback all in one command encoder.
         // The readback map blocks until the GPU finishes everything.
         if (!TryEnqueueSchedulingStatusReadback(flushContext, scheduling.BumpBuffer, schedulingArena.ReadbackBuffer, 0, out error) ||
             !WebGPUDrawingBackend.TrySubmit(flushContext) ||
@@ -911,6 +901,29 @@ internal static class WebGPUSceneDispatch
             requiresGrowth = true;
             grownBumpSizes = GrowBumpSizes(stagedScene.Config.BumpSizes, in bumpAllocators);
             error = "The staged WebGPU scene needs larger scratch buffers and will be retried.";
+            return false;
+        }
+
+        if (!flushContext.EnsureCommandEncoder())
+        {
+            error = "Failed to create a command encoder for the staged-scene final copy.";
+            return false;
+        }
+
+        WebGPUDrawingBackend.CopyTextureRegion(
+            flushContext,
+            outputTexture,
+            0,
+            0,
+            flushContext.TargetTexture,
+            flushContext.TargetBounds.X,
+            flushContext.TargetBounds.Y,
+            targetWidth,
+            targetHeight);
+
+        if (!WebGPUDrawingBackend.TrySubmit(flushContext))
+        {
+            error = "Failed to submit the staged-scene final copy.";
             return false;
         }
 
@@ -2042,6 +2055,7 @@ internal static class WebGPUSceneDispatch
     private static unsafe bool TryDispatchPathTilingSetup(
         WebGPUSceneComputeRecording recording,
         WebGPUFlushContext flushContext,
+        WgpuBuffer* headerBuffer,
         WgpuBuffer* bumpBuffer,
         WgpuBuffer* indirectCountBuffer,
         WgpuBuffer* ptclBuffer,
@@ -2049,12 +2063,13 @@ internal static class WebGPUSceneDispatch
         uint dispatchX,
         out string? error)
     {
-        BindGroupEntry* entries = stackalloc BindGroupEntry[3];
-        entries[0] = CreateBufferBinding(0, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
-        entries[1] = CreateBufferBinding(1, indirectCountBuffer, (nuint)sizeof(GpuSceneIndirectCount));
-        entries[2] = CreateBufferBinding(2, ptclBuffer, ptclBufferSize);
+        BindGroupEntry* entries = stackalloc BindGroupEntry[4];
+        entries[0] = CreateBufferBinding(0, headerBuffer, (nuint)sizeof(GpuSceneConfig));
+        entries[1] = CreateBufferBinding(1, bumpBuffer, (nuint)sizeof(GpuSceneBumpAllocators));
+        entries[2] = CreateBufferBinding(2, indirectCountBuffer, (nuint)sizeof(GpuSceneIndirectCount));
+        entries[3] = CreateBufferBinding(3, ptclBuffer, ptclBufferSize);
 
-        if (!recording.TryRecord(WebGPUSceneShaderId.PathTilingSetup, entries, 3, dispatchX, 1, 1, out error))
+        if (!recording.TryRecord(WebGPUSceneShaderId.PathTilingSetup, entries, 4, dispatchX, 1, 1, out error))
         {
             return false;
         }
