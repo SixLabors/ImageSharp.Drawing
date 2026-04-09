@@ -40,9 +40,9 @@
     <None Include="..\..\shared-infrastructure\branding\icons\imagesharp.drawing\sixlabors.imagesharp.drawing.128.png" Pack="true" PackagePath="" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.36" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.88" />
-    <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.0-alpha.0.52" />
+    <PackageReference Include="SixLabors.Fonts" Version="3.0.0-alpha.0.38" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0-alpha.0.93" />
+    <PackageReference Include="SixLabors.PolygonClipper" Version="1.0.0-alpha.0.54" />
   </ItemGroup>
   
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
