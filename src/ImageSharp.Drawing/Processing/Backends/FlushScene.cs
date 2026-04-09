@@ -948,11 +948,17 @@ internal sealed partial class FlushScene : IDisposable
     private static RectangleF GetStrokeBounds(RectangleF bounds, Pen pen)
     {
         float halfWidth = pen.StrokeWidth * 0.5F;
-        float inflate = pen.StrokeOptions.LineJoin switch
+        float joinInflate = pen.StrokeOptions.LineJoin switch
         {
             LineJoin.Miter or LineJoin.MiterRevert or LineJoin.MiterRound => (float)(halfWidth * Math.Max(pen.StrokeOptions.MiterLimit, 1D)),
             _ => halfWidth
         };
+
+        float capInflate = pen.StrokeOptions.LineCap == LineCap.Square
+            ? halfWidth * MathF.Sqrt(2F)
+            : halfWidth;
+
+        float inflate = MathF.Max(joinInflate, capInflate);
 
         bounds.Inflate(new SizeF(inflate, inflate));
         return bounds;

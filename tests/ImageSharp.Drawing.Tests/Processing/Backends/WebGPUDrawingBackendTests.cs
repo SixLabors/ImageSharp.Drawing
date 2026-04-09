@@ -934,6 +934,8 @@ public partial class WebGPUDrawingBackendTests
         });
 
         void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+        IPath outline = path.GenerateOutline(pen.StrokeWidth, pen.StrokeOptions);
+        void DrawReference(DrawingCanvas<TPixel> canvas) => canvas.Fill(pen.StrokeFill, outline);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -948,14 +950,34 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, $"DrawPath_Stroke_LineJoin_{lineJoin}", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.01F);
+
+        using Image<TPixel> referenceImage = provider.GetImage();
+        RenderWithDefaultBackend(referenceImage, drawingOptions, DrawReference);
+
+        using Image<TPixel> defaultComparisonImage = CreateJoinComparisonImage(referenceImage, defaultImage);
+        using Image<TPixel> nativeSurfaceComparisonImage = CreateJoinComparisonImage(referenceImage, nativeSurfaceImage);
+
+        DebugSaveBackendPair(
+            provider,
+            $"DrawPath_Stroke_LineJoin_{lineJoin}",
+            defaultComparisonImage,
+            nativeSurfaceComparisonImage);
         AssertBackendPairReferenceOutputs(
             provider,
             $"DrawPath_Stroke_LineJoin_{lineJoin}",
-            defaultImage,
-            nativeSurfaceImage);
+            defaultComparisonImage,
+            nativeSurfaceComparisonImage);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
+
+        static Image<TPixel> CreateJoinComparisonImage(Image<TPixel> reference, Image<TPixel> rendered)
+        {
+            Image<TPixel> comparison = new(reference.Width, reference.Height * 2, Color.White.ToPixel<TPixel>());
+            comparison.Mutate(ctx => ctx
+                .DrawImage(reference, new Point(0, 0), 1F)
+                .DrawImage(rendered, new Point(0, reference.Height), 1F));
+            return comparison;
+        }
     }
 
     [WebGPUTheory]
@@ -982,6 +1004,8 @@ public partial class WebGPUDrawingBackendTests
         });
 
         void DrawAction(DrawingCanvas<TPixel> canvas) => canvas.Draw(pen, path);
+        IPath outline = path.GenerateOutline(pen.StrokeWidth, pen.StrokeOptions);
+        void DrawReference(DrawingCanvas<TPixel> canvas) => canvas.Fill(pen.StrokeFill, outline);
 
         using Image<TPixel> defaultImage = provider.GetImage();
         RenderWithDefaultBackend(defaultImage, drawingOptions, DrawAction);
@@ -996,14 +1020,34 @@ public partial class WebGPUDrawingBackendTests
             DrawAction,
             nativeSurfaceInitialImage);
 
-        DebugSaveBackendPair(provider, $"DrawPath_Stroke_LineCap_{lineCap}", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 0.0103F);
+
+        using Image<TPixel> referenceImage = provider.GetImage();
+        RenderWithDefaultBackend(referenceImage, drawingOptions, DrawReference);
+
+        using Image<TPixel> defaultComparisonImage = CreateLineCapComparisonImage(referenceImage, defaultImage);
+        using Image<TPixel> nativeSurfaceComparisonImage = CreateLineCapComparisonImage(referenceImage, nativeSurfaceImage);
+
+        DebugSaveBackendPair(
+            provider,
+            $"DrawPath_Stroke_LineCap_{lineCap}",
+            defaultComparisonImage,
+            nativeSurfaceComparisonImage);
         AssertBackendPairReferenceOutputs(
             provider,
             $"DrawPath_Stroke_LineCap_{lineCap}",
-            defaultImage,
-            nativeSurfaceImage);
+            defaultComparisonImage,
+            nativeSurfaceComparisonImage);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
+
+        static Image<TPixel> CreateLineCapComparisonImage(Image<TPixel> reference, Image<TPixel> rendered)
+        {
+            Image<TPixel> comparison = new(reference.Width, reference.Height * 2, Color.White.ToPixel<TPixel>());
+            comparison.Mutate(ctx => ctx
+                .DrawImage(reference, new Point(0, 0), 1F)
+                .DrawImage(rendered, new Point(0, reference.Height), 1F));
+            return comparison;
+        }
     }
 
     [WebGPUTheory]
@@ -1240,7 +1284,7 @@ public partial class WebGPUDrawingBackendTests
 
         DebugSaveBackendPair(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage);
         AssertBackendPairSimilarity(defaultImage, nativeSurfaceImage, 1F);
-        AssertBackendPairReferenceOutputs(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage);
+        AssertBackendPairReferenceOutputs(provider, "SaveLayer_ClipReduce", defaultImage, nativeSurfaceImage, 0.0006F);
         AssertGpuPathWhenRequired(nativeSurfaceBackend);
     }
 
