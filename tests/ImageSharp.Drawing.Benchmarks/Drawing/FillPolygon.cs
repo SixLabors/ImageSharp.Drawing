@@ -26,6 +26,7 @@ public abstract class FillPolygon
     private List<SKPath> skPaths;
 
     private Image<Rgba32> image;
+    private Image<Rgba32> stImage;
     private SDBitmap sdBitmap;
     private Graphics sdGraphics;
     private SKBitmap skBitmap;
@@ -65,6 +66,9 @@ public abstract class FillPolygon
         }
 
         this.image = new Image<Rgba32>(this.Width, this.Height);
+        Configuration stConfiguration = this.image.Configuration.Clone();
+        stConfiguration.MaxDegreeOfParallelism = 1;
+        this.stImage = new Image<Rgba32>(stConfiguration, this.Width, this.Height);
         this.sdBitmap = new SDBitmap(this.Width, this.Height);
         this.sdGraphics = Graphics.FromImage(this.sdBitmap);
         this.sdGraphics.InterpolationMode = InterpolationMode.Default;
@@ -77,6 +81,7 @@ public abstract class FillPolygon
     public void Cleanup()
     {
         this.image.Dispose();
+        this.stImage.Dispose();
         this.sdGraphics.Dispose();
         this.sdBitmap.Dispose();
         this.skCanvas.Dispose();
@@ -101,6 +106,16 @@ public abstract class FillPolygon
     [Benchmark]
     public void ImageSharp()
         => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        {
+            foreach (Polygon polygon in this.polygons)
+            {
+                canvas.Fill(Processing.Brushes.Solid(Color.White), polygon);
+            }
+        }));
+
+    [Benchmark]
+    public void ImageSharp_SingleThreaded() =>
+        this.stImage.Mutate(c => c.ProcessWithCanvas(canvas =>
         {
             foreach (Polygon polygon in this.polygons)
             {

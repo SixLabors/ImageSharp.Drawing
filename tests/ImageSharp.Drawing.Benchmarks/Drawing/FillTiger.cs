@@ -22,9 +22,9 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 /// </summary>
 public class FillTiger
 {
-    private const float Scale = 4f;
-    private const int Width = 800;
-    private const int Height = 800;
+    private const float Scale = 5f;
+    private const int Width = 1000;
+    private const int Height = 1000;
 
     private static readonly string SvgFilePath =
         TestFile.GetInputFileFullPath(TestImages.Svg.GhostscriptTiger);
@@ -37,6 +37,7 @@ public class FillTiger
     private List<(GraphicsPath Path, SDSolidBrush Fill, SDPen Stroke)> sdElements;
 
     private Image<Rgba32> image;
+    private Image<Rgba32> stImage;
     private List<(IPath Path, Processing.SolidBrush Fill, SolidPen Stroke)> isElements;
 
     private WebGPURenderTarget<Rgba32> webGpuTarget;
@@ -60,6 +61,9 @@ public class FillTiger
         this.sdElements = SvgBenchmarkHelper.BuildSystemDrawingElements(elements, Scale);
 
         this.image = new Image<Rgba32>(Width, Height);
+        Configuration stConfiguration = this.image.Configuration.Clone();
+        stConfiguration.MaxDegreeOfParallelism = 1;
+        this.stImage = new Image<Rgba32>(stConfiguration, Width, Height);
         this.isElements = SvgBenchmarkHelper.BuildImageSharpElements(elements, Scale);
 
         this.webGpuTarget = new WebGPURenderTarget<Rgba32>(Width, Height);
@@ -95,6 +99,7 @@ public class FillTiger
         this.sdBitmap.Dispose();
 
         this.image.Dispose();
+        this.stImage.Dispose();
 
         this.webGpuTarget.Dispose();
     }
@@ -137,6 +142,24 @@ public class FillTiger
     [Benchmark]
     public void ImageSharp()
         => this.image.Mutate(c => c.ProcessWithCanvas(canvas =>
+        {
+            foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
+            {
+                if (fill is not null)
+                {
+                    canvas.Fill(fill, path);
+                }
+
+                if (stroke is not null)
+                {
+                    canvas.Draw(stroke, path);
+                }
+            }
+        }));
+
+    [Benchmark]
+    public void ImageSharp_SingleThreaded()
+        => this.stImage.Mutate(c => c.ProcessWithCanvas(canvas =>
         {
             foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
             {
