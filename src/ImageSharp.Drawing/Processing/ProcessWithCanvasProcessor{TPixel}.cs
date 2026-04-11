@@ -36,7 +36,7 @@ internal sealed class ProcessWithCanvasProcessor<TPixel> : ImageProcessor<TPixel
     /// <inheritdoc />
     protected override void OnFrameApply(ImageFrame<TPixel> source)
     {
-        using DrawingCanvas<TPixel> canvas = source.CreateCanvas(this.definition.Options);
+        using DrawingCanvas<TPixel> canvas = source.CreateCanvas(this.Configuration, this.definition.Options);
         this.action(canvas);
     }
 }

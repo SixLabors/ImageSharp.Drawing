@@ -120,7 +120,8 @@ internal sealed partial class FlushScene : IDisposable
     /// <param name="targetBounds">The destination bounds of the flush.</param>
     /// <param name="allocator">The allocator used for retained row storage.</param>
     /// <param name="maxDegreeOfParallelism">
-    /// The maximum degree of parallelism to use when building the scene, or -1 to leave the degree of parallelism unbounded.
+    /// The maximum degree of parallelism to use when building the scene, or <c>-1</c> to pass
+    /// through the runtime's unlimited sentinel for <see cref="ParallelOptions.MaxDegreeOfParallelism"/>.
     /// </param>
     /// <returns>A flush-ready scene.</returns>
     public static FlushScene Create(
