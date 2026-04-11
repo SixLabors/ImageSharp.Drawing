@@ -166,40 +166,6 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     }
 
     /// <summary>
-    /// Creates a hybrid frame over this render target and a caller-provided CPU region.
-    /// </summary>
-    /// <param name="cpuRegion">The CPU region to expose alongside the native surface.</param>
-    /// <returns>A hybrid frame.</returns>
-    public HybridCanvasFrame<TPixel> CreateHybridFrame(Buffer2DRegion<TPixel> cpuRegion)
-    {
-        this.ThrowIfDisposed();
-        this.Graphics.ThrowIfDisposed();
-        return new HybridCanvasFrame<TPixel>(this.Bounds, cpuRegion, this.Surface);
-    }
-
-    /// <summary>
-    /// Creates a hybrid frame over this render target and the root frame of a CPU image.
-    /// </summary>
-    /// <param name="image">The CPU image that backs the frame's CPU region.</param>
-    /// <returns>A hybrid frame.</returns>
-    public HybridCanvasFrame<TPixel> CreateHybridFrame(Image<TPixel> image)
-    {
-        Guard.NotNull(image, nameof(image));
-        return this.CreateHybridFrame(new Buffer2DRegion<TPixel>(image.Frames.RootFrame.PixelBuffer, image.Bounds));
-    }
-
-    /// <summary>
-    /// Creates a hybrid frame over this render target and a CPU image frame.
-    /// </summary>
-    /// <param name="imageFrame">The CPU image frame that backs the frame's CPU region.</param>
-    /// <returns>A hybrid frame.</returns>
-    public HybridCanvasFrame<TPixel> CreateHybridFrame(ImageFrame<TPixel> imageFrame)
-    {
-        Guard.NotNull(imageFrame, nameof(imageFrame));
-        return this.CreateHybridFrame(new Buffer2DRegion<TPixel>(imageFrame.PixelBuffer, imageFrame.Bounds));
-    }
-
-    /// <summary>
     /// Creates a drawing canvas over this native-only render target.
     /// </summary>
     /// <returns>A drawing canvas targeting this render target.</returns>
@@ -216,67 +182,6 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
         this.ThrowIfDisposed();
         this.Graphics.ThrowIfDisposed();
         return new DrawingCanvas<TPixel>(this.Graphics.Configuration, this.Graphics.Backend, this.NativeFrame, options);
-    }
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over this render target and a caller-provided CPU region.
-    /// </summary>
-    /// <param name="cpuRegion">The CPU region to expose alongside the native surface.</param>
-    /// <returns>A drawing canvas targeting this render target and CPU region.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(Buffer2DRegion<TPixel> cpuRegion)
-        => this.CreateHybridCanvas(cpuRegion, new DrawingOptions());
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over this render target and a caller-provided CPU region.
-    /// </summary>
-    /// <param name="cpuRegion">The CPU region to expose alongside the native surface.</param>
-    /// <param name="options">The initial drawing options.</param>
-    /// <returns>A drawing canvas targeting this render target and CPU region.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(Buffer2DRegion<TPixel> cpuRegion, DrawingOptions options)
-    {
-        this.ThrowIfDisposed();
-        this.Graphics.ThrowIfDisposed();
-        return new DrawingCanvas<TPixel>(this.Graphics.Configuration, this.Graphics.Backend, this.CreateHybridFrame(cpuRegion), options);
-    }
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over this render target and the root frame of a CPU image.
-    /// </summary>
-    /// <param name="image">The CPU image that backs the frame's CPU region.</param>
-    /// <returns>A drawing canvas targeting this render target and CPU image.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(Image<TPixel> image)
-        => this.CreateHybridCanvas(image, new DrawingOptions());
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over this render target and the root frame of a CPU image.
-    /// </summary>
-    /// <param name="image">The CPU image that backs the frame's CPU region.</param>
-    /// <param name="options">The initial drawing options.</param>
-    /// <returns>A drawing canvas targeting this render target and CPU image.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(Image<TPixel> image, DrawingOptions options)
-    {
-        Guard.NotNull(image, nameof(image));
-        return this.CreateHybridCanvas(new Buffer2DRegion<TPixel>(image.Frames.RootFrame.PixelBuffer, image.Bounds), options);
-    }
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over this render target and a CPU image frame.
-    /// </summary>
-    /// <param name="imageFrame">The CPU image frame that backs the frame's CPU region.</param>
-    /// <returns>A drawing canvas targeting this render target and CPU image frame.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(ImageFrame<TPixel> imageFrame)
-        => this.CreateHybridCanvas(imageFrame, new DrawingOptions());
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over this render target and a CPU image frame.
-    /// </summary>
-    /// <param name="imageFrame">The CPU image frame that backs the frame's CPU region.</param>
-    /// <param name="options">The initial drawing options.</param>
-    /// <returns>A drawing canvas targeting this render target and CPU image frame.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(ImageFrame<TPixel> imageFrame, DrawingOptions options)
-    {
-        Guard.NotNull(imageFrame, nameof(imageFrame));
-        return this.CreateHybridCanvas(new Buffer2DRegion<TPixel>(imageFrame.PixelBuffer, imageFrame.Bounds), options);
     }
 
     /// <summary>

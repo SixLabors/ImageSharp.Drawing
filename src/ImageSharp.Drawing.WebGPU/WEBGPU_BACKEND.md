@@ -24,7 +24,7 @@ The public WebGPU surface area around this backend is small and target-first:
 - `WebGPUDeviceContext<TPixel>` wraps a shared or caller-owned device and queue and creates native-only or hybrid frames and canvases over external textures
 - `WebGPUNativeSurfaceFactory` is the low-level escape hatch for caller-owned native targets
 
-Those types all exist to get a `DrawingCanvas<TPixel>` over a native WebGPU target, sometimes paired with a CPU region through `HybridCanvasFrame<TPixel>`. Once the canvas flushes, `WebGPUDrawingBackend` becomes the execution boundary.
+Those types all exist to get a `DrawingCanvas<TPixel>` over a native WebGPU target. Once the canvas flushes, `WebGPUDrawingBackend` becomes the execution boundary.
 
 The support probes also live outside the backend:
 

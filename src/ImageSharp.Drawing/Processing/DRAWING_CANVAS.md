@@ -119,7 +119,7 @@ That abstraction lets the same canvas target:
 
 - pure CPU memory with `MemoryCanvasFrame<TPixel>`
 - a native or GPU surface with `NativeCanvasFrame<TPixel>`
-- a combined CPU plus native target with `HybridCanvasFrame<TPixel>`
+- a combined CPU plus native target
 - a clipped view over another frame with `CanvasRegionFrame<TPixel>`
 
 The point is not to hide all differences. The point is to express the minimum target contract the backends need.

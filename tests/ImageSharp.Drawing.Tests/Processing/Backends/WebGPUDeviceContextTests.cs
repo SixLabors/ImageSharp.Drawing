@@ -64,27 +64,6 @@ public class WebGPUDeviceContextTests
     }
 
     [WebGPUFact]
-    public void RenderTarget_CreateHybridCanvas_Image_Works()
-    {
-        using WebGPUDeviceContext<Rgba32> drawing = new();
-        using WebGPURenderTarget<Rgba32> target = drawing.CreateRenderTarget(20, 16);
-        using Image<Rgba32> cpuImage = new(20, 16);
-        using (DrawingCanvas<Rgba32> canvas = target.CreateHybridCanvas(cpuImage))
-        {
-            canvas.Fill(Brushes.Solid(Color.Blue), new RectangularPolygon(0, 0, 20, 16));
-            canvas.Flush();
-
-            Assert.True(
-                drawing.Backend.DiagnosticLastFlushUsedGPU,
-                drawing.Backend.DiagnosticLastSceneFailure ?? "The last flush did not use the staged path.");
-
-            HybridCanvasFrame<Rgba32> frame = target.CreateHybridFrame(cpuImage);
-            Assert.True(frame.TryGetCpuRegion(out _));
-            Assert.True(frame.TryGetNativeSurface(out _));
-        }
-    }
-
-    [WebGPUFact]
     public void RenderTarget_CreateCanvas_RendersAndReadsBack()
     {
         using WebGPUDeviceContext<Rgba32> drawing = new();

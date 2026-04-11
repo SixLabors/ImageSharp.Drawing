@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using Silk.NET.WebGPU;
-using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
@@ -168,74 +167,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         => new(CreateBounds(width, height), this.CreateSurface(textureHandle, textureViewHandle, format, width, height));
 
     /// <summary>
-    /// Creates a hybrid frame over an externally-owned WebGPU texture and a caller-provided CPU region.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="width">The frame width in pixels.</param>
-    /// <param name="height">The frame height in pixels.</param>
-    /// <param name="cpuRegion">The CPU region to expose alongside the native surface.</param>
-    /// <returns>A hybrid canvas frame.</returns>
-    public HybridCanvasFrame<TPixel> CreateHybridFrame(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        int width,
-        int height,
-        Buffer2DRegion<TPixel> cpuRegion)
-        => new(CreateBounds(width, height), cpuRegion, this.CreateSurface(textureHandle, textureViewHandle, format, width, height));
-
-    /// <summary>
-    /// Creates a hybrid frame over an externally-owned WebGPU texture and the root frame of a CPU image.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="image">The CPU image that backs the frame's CPU region.</param>
-    /// <returns>A hybrid canvas frame.</returns>
-    public HybridCanvasFrame<TPixel> CreateHybridFrame(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        Image<TPixel> image)
-    {
-        Guard.NotNull(image, nameof(image));
-        return this.CreateHybridFrame(
-            textureHandle,
-            textureViewHandle,
-            format,
-            image.Width,
-            image.Height,
-            GetImageRegion(image));
-    }
-
-    /// <summary>
-    /// Creates a hybrid frame over an externally-owned WebGPU texture and a CPU image frame.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="imageFrame">The CPU image frame that backs the frame's CPU region.</param>
-    /// <returns>A hybrid canvas frame.</returns>
-    public HybridCanvasFrame<TPixel> CreateHybridFrame(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        ImageFrame<TPixel> imageFrame)
-    {
-        Guard.NotNull(imageFrame, nameof(imageFrame));
-        Rectangle bounds = imageFrame.Bounds;
-        return this.CreateHybridFrame(
-            textureHandle,
-            textureViewHandle,
-            format,
-            bounds.Width,
-            bounds.Height,
-            GetImageRegion(imageFrame));
-    }
-
-    /// <summary>
     /// Creates a drawing canvas over an externally-owned WebGPU texture.
     /// </summary>
     /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
@@ -270,110 +201,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         int height,
         DrawingOptions options)
         => new(this.Configuration, this.Backend, this.CreateFrame(textureHandle, textureViewHandle, format, width, height), options);
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a caller-provided CPU region.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="width">The frame width in pixels.</param>
-    /// <param name="height">The frame height in pixels.</param>
-    /// <param name="cpuRegion">The CPU region to expose alongside the native surface.</param>
-    /// <returns>A drawing canvas targeting the external texture and CPU region.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        int width,
-        int height,
-        Buffer2DRegion<TPixel> cpuRegion)
-        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, width, height, cpuRegion), new DrawingOptions());
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a caller-provided CPU region.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="width">The frame width in pixels.</param>
-    /// <param name="height">The frame height in pixels.</param>
-    /// <param name="cpuRegion">The CPU region to expose alongside the native surface.</param>
-    /// <param name="options">The initial drawing options.</param>
-    /// <returns>A drawing canvas targeting the external texture and CPU region.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        int width,
-        int height,
-        Buffer2DRegion<TPixel> cpuRegion,
-        DrawingOptions options)
-        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, width, height, cpuRegion), options);
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and the root frame of a CPU image.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="image">The CPU image that backs the frame's CPU region.</param>
-    /// <returns>A drawing canvas targeting the external texture and CPU image.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        Image<TPixel> image)
-        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, image), new DrawingOptions());
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a CPU image frame.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="imageFrame">The CPU image frame that backs the frame's CPU region.</param>
-    /// <returns>A drawing canvas targeting the external texture and CPU image frame.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        ImageFrame<TPixel> imageFrame)
-        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, imageFrame), new DrawingOptions());
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and the root frame of a CPU image.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="image">The CPU image that backs the frame's CPU region.</param>
-    /// <param name="options">The initial drawing options.</param>
-    /// <returns>A drawing canvas targeting the external texture and CPU image.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        Image<TPixel> image,
-        DrawingOptions options)
-        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, image), options);
-
-    /// <summary>
-    /// Creates a hybrid drawing canvas over an externally-owned WebGPU texture and a CPU image frame.
-    /// </summary>
-    /// <param name="textureHandle">The opaque <c>WGPUTexture*</c> handle.</param>
-    /// <param name="textureViewHandle">The opaque <c>WGPUTextureView*</c> handle.</param>
-    /// <param name="format">The texture format identifier.</param>
-    /// <param name="imageFrame">The CPU image frame that backs the frame's CPU region.</param>
-    /// <param name="options">The initial drawing options.</param>
-    /// <returns>A drawing canvas targeting the external texture and CPU image frame.</returns>
-    public DrawingCanvas<TPixel> CreateHybridCanvas(
-        nint textureHandle,
-        nint textureViewHandle,
-        WebGPUTextureFormatId format,
-        ImageFrame<TPixel> imageFrame,
-        DrawingOptions options)
-        => new(this.Configuration, this.Backend, this.CreateHybridFrame(textureHandle, textureViewHandle, format, imageFrame), options);
 
     /// <summary>
     /// Disposes the drawing backend owned by this context.
@@ -446,10 +273,4 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
         return new Rectangle(0, 0, width, height);
     }
-
-    private static Buffer2DRegion<TPixel> GetImageRegion(Image<TPixel> image)
-        => new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
-
-    private static Buffer2DRegion<TPixel> GetImageRegion(ImageFrame<TPixel> imageFrame)
-        => new(imageFrame.PixelBuffer, imageFrame.Bounds);
 }
