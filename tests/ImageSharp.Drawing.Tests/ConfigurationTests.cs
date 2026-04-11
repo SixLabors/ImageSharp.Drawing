@@ -39,13 +39,13 @@ public class ConfigurationTests
     /// Test that the default configuration is not null.
     /// </summary>
     [Fact]
-    public void TestDefaultConfigurationIsNotNull() => Assert.True(this.DefaultConfiguration != null);
+    public void TestDefaultConfigurationIsNotNull() => Assert.NotNull(this.DefaultConfiguration);
 
     /// <summary>
     /// Test that the default configuration read origin options is set to begin.
     /// </summary>
     [Fact]
-    public void TestDefaultConfigurationReadOriginIsCurrent() => Assert.True(this.DefaultConfiguration.ReadOrigin == ReadOrigin.Current);
+    public void TestDefaultConfigurationReadOriginIsCurrent() => Assert.Equal(ReadOrigin.Current, this.DefaultConfiguration.ReadOrigin);
 
     /// <summary>
     /// Test that the default configuration parallel options max degrees of parallelism matches the

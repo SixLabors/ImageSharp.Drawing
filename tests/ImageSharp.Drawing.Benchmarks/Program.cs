@@ -8,7 +8,6 @@ using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Running;
-using BenchmarkDotNet.Toolchains.InProcess.Emit;
 
 namespace SixLabors.ImageSharp.Drawing.Benchmarks;
 
@@ -22,14 +21,15 @@ public class InProcessConfig : ManualConfig
 
         this.AddExporter(DefaultExporters.Html, DefaultExporters.Csv);
 
-        // Use a long, stable job for rasterization benchmarks where scheduler noise and
-        // thread-pool startup can otherwise dominate short in-process runs.
+        // Use high warmup to ensure tiered JIT has fully promoted all hot paths.
+        // Server GC reduces pause times for allocation-heavy rasterization benchmarks.
         this.AddJob(
             Job.Default
                 .WithLaunchCount(3)
-                .WithWarmupCount(15)
+                .WithWarmupCount(40)
                 .WithIterationCount(40)
-                .WithToolchain(InProcessEmitToolchain.Instance));
+                .WithGcServer(true)
+                .WithGcForce(false));
     }
 }
 
@@ -37,6 +37,47 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--verify")
+        {
+            string target = args.Length > 1 ? args[1] : "tiger";
+            switch (target.ToLowerInvariant())
+            {
+                case "tiger":
+                    Drawing.FillTiger.VerifyOutput();
+                    break;
+                case "paris":
+                    Drawing.FillParis.VerifyOutput();
+                    break;
+                default:
+                    Console.WriteLine($"Unknown verify target: {target}. Use 'tiger' or 'paris'.");
+                    break;
+            }
+
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--profile")
+        {
+            string target = args.Length > 1 ? args[1] : string.Empty;
+            int iterations = args.Length > 2 && int.TryParse(args[2], out int parsedIterations)
+                ? parsedIterations
+                : 20;
+            switch (target.ToLowerInvariant())
+            {
+                case "paris-cpu":
+                    Drawing.FillParis.ProfileCpu(iterations);
+                    break;
+                case "paris-webgpu":
+                    Drawing.FillParis.ProfileWebGpu(iterations);
+                    break;
+                default:
+                    Console.WriteLine($"Unknown profile target: {target}. Use 'paris-cpu' or 'paris-webgpu'.");
+                    break;
+            }
+
+            return;
+        }
+
         new BenchmarkSwitcher(typeof(Program).GetTypeInfo().Assembly).Run(args, new InProcessConfig());
     }
 }

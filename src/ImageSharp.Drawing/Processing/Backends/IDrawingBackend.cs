@@ -1,62 +1,49 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
 using SixLabors.ImageSharp.Memory;
 
 namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 
 /// <summary>
-/// Internal drawing backend abstraction used by processors.
+/// Drawing backend abstraction used by processors.
 /// </summary>
-/// <remarks>
-/// This boundary allows processor logic to stay stable while the implementation evolves
-/// (for example: alternate CPU rasterizers or eventual non-CPU backends).
-/// </remarks>
-internal interface IDrawingBackend
+public interface IDrawingBackend
 {
     /// <summary>
-    /// Fills a path into the destination image using the given brush and drawing options.
+    /// Gets a value indicating whether this backend is available on the current system.
     /// </summary>
-    /// <remarks>
-    /// This operation-level API keeps processors independent from scanline rasterization details,
-    /// allowing alternate backend implementations (for example GPU backends) to consume brush
-    /// and path data directly.
-    /// </remarks>
+    public bool IsSupported => true;
+
+    /// <summary>
+    /// Flushes queued composition operations for the target.
+    /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     /// <param name="configuration">Active processing configuration.</param>
-    /// <param name="source">Destination image frame.</param>
-    /// <param name="path">The path to rasterize.</param>
-    /// <param name="brush">Brush used to shade covered pixels.</param>
-    /// <param name="graphicsOptions">Graphics blending/composition options.</param>
-    /// <param name="rasterizerOptions">Rasterizer options.</param>
-    /// <param name="brushBounds">Brush bounds used when creating the applicator.</param>
-    /// <param name="allocator">Allocator for temporary data.</param>
-    public void FillPath<TPixel>(
+    /// <param name="target">Destination frame.</param>
+    /// <param name="compositionScene">Scene commands in submission order.</param>
+    public void FlushCompositions<TPixel>(
         Configuration configuration,
-        ImageFrame<TPixel> source,
-        IPath path,
-        Brush brush,
-        in GraphicsOptions graphicsOptions,
-        in RasterizerOptions rasterizerOptions,
-        Rectangle brushBounds,
-        MemoryAllocator allocator)
+        ICanvasFrame<TPixel> target,
+        CompositionScene compositionScene)
         where TPixel : unmanaged, IPixel<TPixel>;
 
     /// <summary>
-    /// Rasterizes path coverage into a floating-point destination map.
+    /// Attempts to read source pixels from the target into a caller-provided buffer.
     /// </summary>
-    /// <remarks>
-    /// Coverage values are written in local destination coordinates where <c>(0,0)</c> maps to
-    /// the top-left of <paramref name="destination"/>.
-    /// </remarks>
-    /// <param name="path">The path to rasterize.</param>
-    /// <param name="rasterizerOptions">Rasterizer options.</param>
-    /// <param name="allocator">Allocator for temporary data.</param>
-    /// <param name="destination">Destination coverage map.</param>
-    public void RasterizeCoverage(
-        IPath path,
-        in RasterizerOptions rasterizerOptions,
-        MemoryAllocator allocator,
-        Buffer2D<float> destination);
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    /// <param name="configuration">The active processing configuration.</param>
+    /// <param name="target">The target frame.</param>
+    /// <param name="sourceRectangle">Source rectangle in target-local coordinates.</param>
+    /// <param name="destination">
+    /// The caller-allocated region to receive the pixel data.
+    /// Must be at least as large as <paramref name="sourceRectangle"/> (clamped to target bounds).
+    /// </param>
+    /// <returns><see langword="true"/> when readback succeeds; otherwise <see langword="false"/>.</returns>
+    public bool TryReadRegion<TPixel>(
+        Configuration configuration,
+        ICanvasFrame<TPixel> target,
+        Rectangle sourceRectangle,
+        Buffer2DRegion<TPixel> destination)
+        where TPixel : unmanaged, IPixel<TPixel>;
 }

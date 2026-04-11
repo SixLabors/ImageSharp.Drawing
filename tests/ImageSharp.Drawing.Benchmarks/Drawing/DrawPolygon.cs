@@ -8,7 +8,7 @@ using BenchmarkDotNet.Attributes;
 using GeoJSON.Net.Feature;
 using Newtonsoft.Json;
 using SixLabors.ImageSharp.Drawing.Processing;
-using SixLabors.ImageSharp.Drawing.Shapes.Rasterization;
+using SixLabors.ImageSharp.Drawing.Processing.Backends;
 using SixLabors.ImageSharp.Drawing.Tests;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -37,7 +37,7 @@ public abstract class DrawPolygon
 
     private IPath imageSharpPath;
 
-    private IPath strokedImageSharpPath;
+    private WebGPURenderTarget<Rgba32> webGpuTarget;
 
     protected abstract int Width { get; }
 
@@ -46,7 +46,7 @@ public abstract class DrawPolygon
     protected abstract float Thickness { get; }
 
     protected virtual PointF[][] GetPoints(FeatureCollection features) =>
-        features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix3x2.CreateScale(60, 60))).ToArray();
+        [.. features.Features.SelectMany(f => PolygonFactory.GetGeoJsonPoints(f, Matrix4x4.CreateScale(60, 60, 1)))];
 
     [GlobalSetup]
     public void Setup()
@@ -106,7 +106,7 @@ public abstract class DrawPolygon
 
         this.image = new Image<Rgba32>(this.Width, this.Height);
         this.isPen = new SolidPen(Color.White, this.Thickness);
-        this.strokedImageSharpPath = this.isPen.GeneratePath(this.imageSharpPath);
+        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(this.Width, this.Height);
 
         this.sdBitmap = new Bitmap(this.Width, this.Height);
         this.sdGraphics = Graphics.FromImage(this.sdBitmap);
@@ -148,55 +148,28 @@ public abstract class DrawPolygon
         this.skPath.Dispose();
 
         this.image.Dispose();
+        this.webGpuTarget.Dispose();
     }
-
-    [Benchmark]
-    public void SystemDrawing()
-        => this.sdGraphics.DrawPath(this.sdPen, this.sdPath);
-
-    // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
-    [Benchmark]
-    public void ImageSharpCombinedPathsScanlineRasterizer()
-        => this.image.Mutate(c => c.SetRasterizer(ScanlineRasterizer.Instance).Draw(this.isPen, this.imageSharpPath));
-
-    [Benchmark]
-    public void ImageSharpSeparatePathsScanlineRasterizer()
-        => this.image.Mutate(
-            c =>
-            {
-                // Keep explicit scanline rasterizer path for side-by-side comparison now that tiled is default.
-                c.SetRasterizer(ScanlineRasterizer.Instance);
-                foreach (PointF[] loop in this.points)
-                {
-                    c.DrawPolygon(Color.White, this.Thickness, loop);
-                }
-            });
-
-    // Tiled is now the framework default rasterizer path.
-    [Benchmark]
-    public void ImageSharpCombinedPathsTiled()
-        => this.image.Mutate(c => c.Draw(this.isPen, this.imageSharpPath));
-
-    [Benchmark]
-    public void ImageSharpSeparatePathsTiled()
-        => this.image.Mutate(
-            c =>
-            {
-                foreach (PointF[] loop in this.points)
-                {
-                    c.DrawPolygon(Color.White, this.Thickness, loop);
-                }
-            });
 
     [Benchmark(Baseline = true)]
     public void SkiaSharp()
         => this.skSurface.Canvas.DrawPath(this.skPath, this.skPaint);
 
     [Benchmark]
-    public IPath ImageSharpStrokeAndClip() => this.isPen.GeneratePath(this.imageSharpPath);
+    public void SystemDrawing()
+        => this.sdGraphics.DrawPath(this.sdPen, this.sdPath);
 
     [Benchmark]
-    public void FillPolygon() => this.image.Mutate(c => c.Fill(Color.White, this.strokedImageSharpPath));
+    public void ImageSharp()
+        => this.image.Mutate(c => c.ProcessWithCanvas(canvas => canvas.Draw(this.isPen, this.imageSharpPath)));
+
+    [Benchmark]
+    public void ImageSharpWebGPU()
+    {
+        using DrawingCanvas<Rgba32> canvas = this.webGpuTarget.CreateCanvas();
+        canvas.Draw(this.isPen, this.imageSharpPath);
+        canvas.Flush();
+    }
 }
 
 public class DrawPolygonAll : DrawPolygon
@@ -220,9 +193,9 @@ public class DrawPolygonMediumThin : DrawPolygon
     {
         Feature state = features.Features.Single(f => (string)f.Properties["NAME"] == "Mississippi");
 
-        Matrix3x2 transform = Matrix3x2.CreateTranslation(-87, -54)
-                              * Matrix3x2.CreateScale(60, 60);
-        return PolygonFactory.GetGeoJsonPoints(state, transform).ToArray();
+        Matrix4x4 transform = Matrix4x4.CreateTranslation(-87, -54, 0)
+                              * Matrix4x4.CreateScale(60, 60, 1);
+        return [.. PolygonFactory.GetGeoJsonPoints(state, transform)];
     }
 }
 

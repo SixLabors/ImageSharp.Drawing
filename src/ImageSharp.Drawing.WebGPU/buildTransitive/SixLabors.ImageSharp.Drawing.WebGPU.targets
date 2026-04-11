@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+
+  <!--
+    Work around Silk.NET native runtime assets not always landing in the final output directory.
+    See https://github.com/dotnet/Silk.NET/issues/2465
+  -->
+  <Target Name="SixLaborsImageSharpDrawingWebGPUCopyNativeLibraries"
+          AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true'
+                 and '$(IsCrossTargetingBuild)' != 'true'
+                 and '$(SixLaborsWebGPUCopyNativeLibraries)' != 'false'">
+    <ItemGroup>
+      <_SixLaborsImageSharpDrawingWebGPUNativeLibs Include="@(RuntimeTargetsCopyLocalItems)"
+                                                   Condition="'%(RuntimeTargetsCopyLocalItems.AssetType)' == 'native'" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_SixLaborsImageSharpDrawingWebGPUNativeLibs)"
+          DestinationFolder="$(TargetDir)"
+          SkipUnchangedFiles="true"
+          Condition="'@(_SixLaborsImageSharpDrawingWebGPUNativeLibs)' != ''" />
+  </Target>
+
+</Project>

@@ -23,20 +23,20 @@ public class Issue_37
 
             Fonts.Font font = Fonts.SystemFonts.CreateFont("Arial", 40, Fonts.FontStyle.Regular);
             GraphicsOptions graphicsOptions = new() { Antialias = false };
+            DrawingOptions drawingOptions = new() { GraphicsOptions = graphicsOptions };
+            RichTextOptions textOptions = new(font) { Origin = new PointF(50, 50) };
             image.Mutate(
-                x => x.BackgroundColor(Color.White)
-                .DrawLine(
-                    new DrawingOptions { GraphicsOptions = graphicsOptions },
-                    Color.Black,
-                    1,
-                    new PointF(0, 50),
-                    new PointF(150, 50))
-                .DrawText(
-                    new DrawingOptions { GraphicsOptions = graphicsOptions },
-                    text,
-                    font,
-                    Color.Black,
-                    new PointF(50, 50)));
+                x => x.ProcessWithCanvas(
+                    drawingOptions,
+                    canvas =>
+                    {
+                        canvas.Clear(Brushes.Solid(Color.White));
+                        canvas.DrawLine(
+                            Pens.Solid(Color.Black, 1),
+                            new PointF(0, 50),
+                            new PointF(150, 50));
+                        canvas.DrawText(textOptions, text, Brushes.Solid(Color.Black), pen: null);
+                    }));
         }
     }
 }

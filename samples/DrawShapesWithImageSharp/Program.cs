@@ -21,8 +21,6 @@ public static class Program
     {
         OutputClippedRectangle();
         OutputStars();
-
-        ImageSharpLogo.SaveLogo(300, "ImageSharp.png");
     }
 
     private static void OutputStars()
@@ -113,7 +111,7 @@ public static class Program
         })];
 
         ComplexPolygon complex = new(polys);
-        complex.SaveImage("letter", "a.png");
+        complex.SaveImage("Letter", "a.png");
     }
 
     private static void DrawSerializedOPenSansLetterShape_o()
@@ -131,7 +129,7 @@ public static class Program
         })];
 
         ComplexPolygon complex = new(polys);
-        complex.SaveImage("letter", "o.png");
+        complex.SaveImage("Letter", "o.png");
     }
 
     private static void DrawOval()
@@ -159,7 +157,7 @@ public static class Program
         sb.AddLine(new Vector2(25, 30), new Vector2(15, 30));
         sb.CloseFigure();
 
-        sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"paths.png");
+        sb.Build().Translate(0, 10).Scale(10).SaveImage("Drawing", $"paths.png");
     }
 
     private static void OutputDrawnShapeHourGlass()
@@ -176,7 +174,7 @@ public static class Program
         sb.AddLine(new Vector2(15, 30), new Vector2(25, 30));
         sb.CloseFigure();
 
-        sb.Build().Translate(0, 10).Scale(10).SaveImage("drawing", $"HourGlass.png");
+        sb.Build().Translate(0, 10).Scale(10).SaveImage("Drawing", $"HourGlass.png");
     }
 
     private static void OutputStarOutline(int points, float inner = 10, float outer = 20, float width = 5, LineJoin jointStyle = LineJoin.Miter)
@@ -239,11 +237,12 @@ public static class Program
         int height = (int)(collection.Bounds.Top + collection.Bounds.Bottom);
         using Image<Rgba32> img = new(width, height);
 
-        // Fill the canvas background and draw our shape
-        img.Mutate(i => i.Fill(Color.DarkBlue));
-
-        // Draw our path collection.
-        img.Mutate(i => i.Fill(Color.HotPink, collection));
+        img.Mutate(i => i.ProcessWithCanvas(canvas =>
+        {
+            // Fill the canvas background and draw our shape.
+            canvas.Fill(Brushes.Solid(Color.DarkBlue));
+            canvas.Fill(Brushes.Solid(Color.HotPink), collection);
+        }));
 
         // Ensure directory exists
         string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
@@ -264,11 +263,15 @@ public static class Program
 
         using Image<Rgba32> img = new(width, height);
 
-        // Fill the canvas background and draw our shape
-        img.Mutate(i => i.Fill(Color.DarkBlue).Fill(Color.White.WithAlpha(.25F), shape));
+        img.Mutate(i => i.ProcessWithCanvas(canvas =>
+        {
+            // Fill the canvas background and draw our shape.
+            canvas.Fill(Brushes.Solid(Color.DarkBlue));
+            canvas.Fill(Brushes.Solid(Color.White.WithAlpha(.25F)), shape);
 
-        // Draw our path collection.
-        img.Mutate(i => i.Fill(Color.HotPink, collection));
+            // Draw our path collection.
+            canvas.Fill(Brushes.Solid(Color.HotPink), collection);
+        }));
 
         // Ensure directory exists
         string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
@@ -282,8 +285,11 @@ public static class Program
     public static void SaveImage(this IPathCollection shape, int width, int height, params string[] path)
     {
         using Image<Rgba32> img = new(width, height);
-        img.Mutate(i => i.Fill(Color.DarkBlue));
-        img.Mutate(i => i.Fill(Color.HotPink, shape));
+        img.Mutate(i => i.ProcessWithCanvas(canvas =>
+        {
+            canvas.Fill(Brushes.Solid(Color.DarkBlue));
+            canvas.Fill(Brushes.Solid(Color.HotPink), shape);
+        }));
 
         // Ensure directory exists
         string fullPath = IOPath.GetFullPath(IOPath.Combine("Output", IOPath.Combine(path)));
