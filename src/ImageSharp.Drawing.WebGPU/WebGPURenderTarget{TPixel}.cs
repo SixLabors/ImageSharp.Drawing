@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Diagnostics.CodeAnalysis;
+using Silk.NET.WebGPU;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -121,9 +122,9 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
         WebGPUDeviceContext<TPixel> graphics = new(configuration);
         try
         {
-            using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+            WebGPU api = WebGPURuntime.GetApi();
             if (!WebGPURenderTargetAllocation.TryCreateRenderTarget<TPixel>(
-                    lease.Api,
+                    api,
                     graphics.DeviceHandle,
                     graphics.QueueHandle,
                     width,
@@ -403,9 +404,9 @@ public sealed class WebGPURenderTarget<TPixel> : IDisposable
     {
         graphics.ThrowIfDisposed();
 
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        WebGPU api = WebGPURuntime.GetApi();
         if (!WebGPURenderTargetAllocation.TryCreateRenderTarget<TPixel>(
-                lease.Api,
+                api,
                 graphics.DeviceHandle,
                 graphics.QueueHandle,
                 width,

@@ -1733,7 +1733,7 @@ internal static class WebGPUSceneDispatch
 
         using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)sizeof(GpuSceneBumpAllocators), callback, null);
-        if (!WaitForMapSignal(flushContext.RuntimeLease.WgpuExtension, flushContext.Device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+        if (!WaitForMapSignal(flushContext.WgpuExtension, flushContext.Device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
         {
             error = $"Failed to map staged-scene scheduling status with status '{mapStatus}'.";
             return false;
@@ -1803,7 +1803,7 @@ internal static class WebGPUSceneDispatch
         nuint mappedByteLength = checked((nuint)chunkCount * (nuint)sizeof(GpuSceneBumpAllocators));
         using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
         flushContext.Api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, mappedByteLength, callback, null);
-        if (!WaitForMapSignal(flushContext.RuntimeLease.WgpuExtension, flushContext.Device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+        if (!WaitForMapSignal(flushContext.WgpuExtension, flushContext.Device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
         {
             error = $"Failed to map staged-scene chunk scheduling status with status '{mapStatus}'.";
             return false;

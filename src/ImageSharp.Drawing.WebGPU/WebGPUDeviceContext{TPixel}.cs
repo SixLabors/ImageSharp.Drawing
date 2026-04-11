@@ -17,7 +17,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 {
     private readonly nint deviceHandle;
     private readonly nint queueHandle;
-    private readonly WebGPURuntime.Lease? runtimeLease;
     private bool isDisposed;
 
     /// <summary>
@@ -37,7 +36,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         Guard.NotNull(configuration, nameof(configuration));
         EnsurePixelTypeSupported();
 
-        WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
         this.Backend = new WebGPUDrawingBackend();
 
         try
@@ -49,13 +47,11 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
 
             this.deviceHandle = (nint)device;
             this.queueHandle = (nint)queue;
-            this.runtimeLease = lease;
             this.Configuration = configuration;
         }
         catch
         {
             this.Backend.Dispose();
-            lease.Dispose();
             throw;
         }
     }
@@ -390,7 +386,6 @@ public sealed class WebGPUDeviceContext<TPixel> : IDisposable
         }
 
         this.Backend.Dispose();
-        this.runtimeLease?.Dispose();
         this.isDisposed = true;
     }
 

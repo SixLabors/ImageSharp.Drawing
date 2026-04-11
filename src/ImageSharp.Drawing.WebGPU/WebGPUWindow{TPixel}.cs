@@ -503,8 +503,7 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
 
     private WindowResources CreateResources()
     {
-        WebGPURuntime.Lease runtimeLease = WebGPURuntime.Acquire();
-        WebGPU api = runtimeLease.Api;
+        WebGPU api = WebGPURuntime.GetApi();
         Instance* instance = null;
         Surface* surface = null;
         Adapter* adapter = null;
@@ -548,7 +547,7 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             }
 
             graphics = new WebGPUDeviceContext<TPixel>(this.Configuration, (nint)device, (nint)queue);
-            WindowResources resources = new(runtimeLease, api, instance, surface, adapter, device, graphics);
+            WindowResources resources = new(api, instance, surface, adapter, device, graphics);
             this.ConfigureSurface(resources);
             return resources;
         }
@@ -575,7 +574,6 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
                 api.InstanceRelease(instance);
             }
 
-            runtimeLease.Dispose();
             throw;
         }
     }
@@ -850,7 +848,6 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
     private sealed class WindowResources : IDisposable
     {
         public WindowResources(
-            WebGPURuntime.Lease runtimeLease,
             WebGPU api,
             Instance* instance,
             Surface* surface,
@@ -858,7 +855,6 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             Device* device,
             WebGPUDeviceContext<TPixel> graphics)
         {
-            this.RuntimeLease = runtimeLease;
             this.Api = api;
             this.Instance = instance;
             this.Surface = surface;
@@ -866,8 +862,6 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             this.Device = device;
             this.Graphics = graphics;
         }
-
-        public WebGPURuntime.Lease RuntimeLease { get; }
 
         public WebGPU Api { get; }
 
@@ -888,7 +882,6 @@ public sealed unsafe class WebGPUWindow<TPixel> : IDisposable
             this.Api.AdapterRelease(this.Adapter);
             this.Api.SurfaceRelease(this.Surface);
             this.Api.InstanceRelease(this.Instance);
-            this.RuntimeLease.Dispose();
         }
     }
 

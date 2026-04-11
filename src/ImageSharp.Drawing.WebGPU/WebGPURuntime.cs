@@ -12,24 +12,20 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <remarks>
 /// <para>
 /// This type owns the process-level Silk <see cref="WebGPU"/> API loader, its
-/// optional <see cref="Wgpu"/> extension, and a lazily provisioned default
+/// shared <see cref="Wgpu"/> extension, and a lazily provisioned default
 /// device/queue pair used by the GPU backend when no native surface is available.
 /// </para>
 /// <para>
-/// Backends acquire access by taking a <see cref="Lease"/> via <see cref="Acquire"/>.
-/// The lease count is thread-safe and prevents accidental shutdown while active
-/// backends are still running.
+/// Backends use <see cref="GetApi"/> to access the shared WebGPU loader and
+/// <see cref="TryGetOrCreateDevice"/> to use the cached default device/queue pair.
 /// </para>
 /// <para>
 /// Runtime unload is explicit:
 /// </para>
 /// <list type="bullet">
-/// <item><description><see cref="Shutdown"/> when there are no active leases.</description></item>
+/// <item><description><see cref="Shutdown"/> for explicit teardown.</description></item>
 /// <item><description>Best-effort cleanup on process exit.</description></item>
 /// </list>
-/// <para>
-/// The shutdown path is resilient to duplicate native unload attempts.
-/// </para>
 /// </remarks>
 internal static unsafe partial class WebGPURuntime
 {
@@ -46,7 +42,7 @@ internal static unsafe partial class WebGPURuntime
     private static WebGPU? api;
 
     /// <summary>
-    /// Optional wgpu-native extension facade.
+    /// Shared wgpu-native extension facade.
     /// </summary>
     private static Wgpu? wgpuExtension;
 
@@ -59,11 +55,6 @@ internal static unsafe partial class WebGPURuntime
     /// Lazily provisioned queue handle for CPU-backed frames.
     /// </summary>
     private static nint autoQueueHandle;
-
-    /// <summary>
-    /// Number of currently active runtime leases.
-    /// </summary>
-    private static int leaseCount;
 
     /// <summary>
     /// Tracks whether the process-exit hook has been installed.
@@ -81,36 +72,40 @@ internal static unsafe partial class WebGPURuntime
     private const int CallbackTimeoutMilliseconds = 10_000;
 
     /// <summary>
-    /// Acquires a runtime lease for WebGPU access.
+    /// Gets the shared WebGPU API loader, initializing the runtime on first use.
     /// </summary>
-    /// <returns>A lease that must be disposed when access is no longer required.</returns>
+    /// <returns>The shared WebGPU API loader.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the WebGPU API cannot be initialized.</exception>
-    public static Lease Acquire()
+    public static WebGPU GetApi()
     {
         lock (Sync)
         {
-            if (!processExitHooked)
-            {
-                AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
-                processExitHooked = true;
-            }
-
-            api ??= WebGPU.GetApi();
+            EnsureInitialized();
             if (api is null)
             {
                 throw new InvalidOperationException("WebGPU.GetApi returned null.");
             }
 
+            return api;
+        }
+    }
+
+    /// <summary>
+    /// Gets the shared wgpu-native extension facade, initializing the runtime on first use.
+    /// </summary>
+    /// <returns>The shared wgpu-native extension facade.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the WebGPU API cannot be initialized.</exception>
+    public static Wgpu GetWgpuExtension()
+    {
+        lock (Sync)
+        {
+            EnsureInitialized();
             if (wgpuExtension is null)
             {
-                if (!api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension))
-                {
-                    throw new InvalidOperationException("WebGPU.TryGetDeviceExtension for Wgpu failed.");
-                }
+                throw new InvalidOperationException("WebGPU.TryGetDeviceExtension for Wgpu failed.");
             }
 
-            leaseCount++;
-            return new Lease(api, wgpuExtension);
+            return wgpuExtension;
         }
     }
 
@@ -135,11 +130,12 @@ internal static unsafe partial class WebGPURuntime
                 return true;
             }
 
+            EnsureInitialized();
             if (api is null)
             {
                 device = null;
                 queue = null;
-                error = "WebGPU API is not initialized. Call Acquire() first.";
+                error = "WebGPU API is not initialized.";
                 return false;
             }
 
@@ -231,7 +227,6 @@ internal static unsafe partial class WebGPURuntime
 
             try
             {
-                using Lease lease = Acquire();
                 availabilityProbeResult = TryGetOrCreateDevice(out _, out _, out string? deviceError);
                 availabilityProbeError = availabilityProbeResult.Value ? null : deviceError ?? "WebGPU device acquisition failed.";
             }
@@ -286,13 +281,12 @@ internal static unsafe partial class WebGPURuntime
     {
         try
         {
-            using Lease lease = Acquire();
             if (!TryGetOrCreateDevice(out Device* device, out _, out _))
             {
                 return 1;
             }
 
-            WebGPU api = lease.Api;
+            WebGPU api = GetApi();
 
             ReadOnlySpan<byte> probeShader = "@compute @workgroup_size(1) fn main() {}\0"u8;
             fixed (byte* shaderCodePtr = probeShader)
@@ -373,42 +367,16 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Releases one active runtime lease.
-    /// </summary>
-    /// <remarks>
-    /// Lease release does not automatically unload the runtime. Unload is performed by
-    /// <see cref="Shutdown"/> or by the process-exit handler.
-    /// </remarks>
-    private static void Release()
-    {
-        lock (Sync)
-        {
-            if (leaseCount <= 0)
-            {
-                return;
-            }
-
-            leaseCount--;
-        }
-    }
-
-    /// <summary>
-    /// Shuts down the process-level WebGPU runtime when no leases are active.
+    /// Shuts down the process-level WebGPU runtime.
     /// </summary>
     /// <remarks>
     /// This call is intended for coordinated application shutdown. Runtime state can be
-    /// reinitialized later by calling <see cref="Acquire"/> again.
+    /// reinitialized later by calling <see cref="GetApi"/> again.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when runtime leases are still active.</exception>
     public static void Shutdown()
     {
         lock (Sync)
         {
-            if (leaseCount != 0)
-            {
-                throw new InvalidOperationException($"Cannot shut down WebGPU runtime while {leaseCount} lease(s) are active.");
-            }
-
             DisposeRuntimeCore();
         }
     }
@@ -422,23 +390,25 @@ internal static unsafe partial class WebGPURuntime
     {
         _ = sender;
         _ = e;
-        lock (Sync)
-        {
-            leaseCount = 0;
-            DisposeRuntimeCore();
-        }
+        Shutdown();
     }
 
-    /// <summary>
-    /// Disposes native runtime objects in a safe and idempotent way.
-    /// </summary>
-    /// <remarks>
-    /// Duplicate-dispose exceptions are intentionally swallowed because process-exit
-    /// teardown may race with other shutdown paths.
-    /// </remarks>
     private static void DisposeRuntimeCore()
     {
         ClearDeviceStateCache();
+
+        if (api is not null)
+        {
+            if (autoQueueHandle != 0)
+            {
+                api.QueueRelease((Queue*)autoQueueHandle);
+            }
+
+            if (autoDeviceHandle != 0)
+            {
+                api.DeviceRelease((Device*)autoDeviceHandle);
+            }
+        }
 
         autoDeviceHandle = 0;
         autoQueueHandle = 0;
@@ -451,30 +421,29 @@ internal static unsafe partial class WebGPURuntime
             computePipelineProbeError = null;
         }
 
-        try
+        wgpuExtension?.Dispose();
+        wgpuExtension = null;
+        api?.Dispose();
+        api = null;
+    }
+
+    private static void EnsureInitialized()
+    {
+        if (!processExitHooked)
         {
-            wgpuExtension?.Dispose();
-        }
-        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
-        {
-            // Safe to ignore at process shutdown or double-dispose races.
-        }
-        finally
-        {
-            wgpuExtension = null;
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            processExitHooked = true;
         }
 
-        try
+        api ??= WebGPU.GetApi();
+        if (api is null)
         {
-            api?.Dispose();
+            throw new InvalidOperationException("WebGPU.GetApi returned null.");
         }
-        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+
+        if (wgpuExtension is null && !api.TryGetDeviceExtension<Wgpu>(null, out wgpuExtension))
         {
-            // Safe to ignore at process shutdown or double-dispose races.
-        }
-        finally
-        {
-            api = null;
+            throw new InvalidOperationException("WebGPU.TryGetDeviceExtension for Wgpu failed.");
         }
     }
 
@@ -598,48 +567,5 @@ internal static unsafe partial class WebGPURuntime
 
         error = null;
         return true;
-    }
-
-    /// <summary>
-    /// Ref-counted access token for <see cref="WebGPURuntime"/>.
-    /// </summary>
-    /// <remarks>
-    /// Disposing the lease decrements the runtime lease count exactly once.
-    /// </remarks>
-    internal sealed class Lease : IDisposable
-    {
-        private int disposed;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Lease"/> class.
-        /// </summary>
-        /// <param name="api">The shared WebGPU API loader.</param>
-        /// <param name="wgpuExtension">The shared optional wgpu extension facade.</param>
-        internal Lease(WebGPU api, Wgpu? wgpuExtension)
-        {
-            this.Api = api;
-            this.WgpuExtension = wgpuExtension;
-        }
-
-        /// <summary>
-        /// Gets the shared WebGPU API loader.
-        /// </summary>
-        public WebGPU Api { get; }
-
-        /// <summary>
-        /// Gets the shared optional wgpu extension facade.
-        /// </summary>
-        public Wgpu? WgpuExtension { get; }
-
-        /// <summary>
-        /// Releases this lease exactly once.
-        /// </summary>
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref this.disposed, 1) == 0)
-            {
-                Release();
-            }
-        }
     }
 }

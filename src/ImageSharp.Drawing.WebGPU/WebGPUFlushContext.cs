@@ -5,6 +5,7 @@ using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Silk.NET.WebGPU;
+using Silk.NET.WebGPU.Extensions.WGPU;
 using SixLabors.ImageSharp.Memory;
 using SixLabors.ImageSharp.PixelFormats;
 using WgpuBuffer = Silk.NET.WebGPU.Buffer;
@@ -41,7 +42,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     private readonly Dictionary<Image, nint> cachedSourceTextureViews = new(ReferenceEqualityComparer.Instance);
 
     private WebGPUFlushContext(
-        WebGPURuntime.Lease runtimeLease,
+        WebGPU api,
+        Wgpu wgpuExtension,
         Device* device,
         Queue* queue,
         in Rectangle targetBounds,
@@ -49,8 +51,8 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         MemoryAllocator memoryAllocator,
         WebGPURuntime.DeviceSharedState deviceState)
     {
-        this.RuntimeLease = runtimeLease;
-        this.Api = runtimeLease.Api;
+        this.Api = api;
+        this.WgpuExtension = wgpuExtension;
         this.Device = device;
         this.Queue = queue;
         this.TargetBounds = targetBounds;
@@ -60,9 +62,9 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
     }
 
     /// <summary>
-    /// Gets the runtime lease that keeps the process-level WebGPU API alive.
+    /// Gets the wgpu-native extension used to poll asynchronous callbacks.
     /// </summary>
-    public WebGPURuntime.Lease RuntimeLease { get; }
+    public Wgpu WgpuExtension { get; }
 
     /// <summary>
     /// Gets the WebGPU API facade for this flush.
@@ -165,40 +167,38 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
             return null;
         }
 
-        WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-        try
+        WebGPU api = WebGPURuntime.GetApi();
+        Device* device = (Device*)nativeCapability.Device;
+        Queue* queue = (Queue*)nativeCapability.Queue;
+        TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
+        Rectangle bounds = frame.Bounds;
+        Rectangle nativeBounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
+        WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(api, device);
+
+        if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
         {
-            Device* device = (Device*)nativeCapability.Device;
-            Queue* queue = (Queue*)nativeCapability.Queue;
-            TextureFormat textureFormat = WebGPUTextureFormatMapper.ToSilk(nativeCapability.TargetFormat);
-            Rectangle bounds = frame.Bounds;
-            Rectangle nativeBounds = new(0, 0, nativeCapability.Width, nativeCapability.Height);
-            WebGPURuntime.DeviceSharedState deviceState = WebGPURuntime.GetOrCreateDeviceState(lease.Api, device);
-
-            if (requiredFeature != FeatureName.Undefined && !deviceState.HasFeature(requiredFeature))
-            {
-                lease.Dispose();
-                return null;
-            }
-
-            // Region frames expose bounds relative to their parent target. The flush context must preserve
-            // that absolute slice so later scene encoding, dispatch planning, and texture copies address
-            // the correct sub-rectangle of the native surface instead of silently expanding back to full-frame.
-            if (!nativeBounds.Contains(bounds))
-            {
-                lease.Dispose();
-                return null;
-            }
-
-            WebGPUFlushContext context = new(lease, device, queue, in bounds, textureFormat, memoryAllocator, deviceState);
-            context.InitializeNativeTarget(nativeCapability);
-            return context;
+            return null;
         }
-        catch
+
+        // Region frames expose bounds relative to their parent target. The flush context must preserve
+        // that absolute slice so later scene encoding, dispatch planning, and texture copies address
+        // the correct sub-rectangle of the native surface instead of silently expanding back to full-frame.
+        if (!nativeBounds.Contains(bounds))
         {
-            lease.Dispose();
-            throw;
+            return null;
         }
+
+        WebGPUFlushContext context = new(
+            api,
+            WebGPURuntime.GetWgpuExtension(),
+            device,
+            queue,
+            in bounds,
+            textureFormat,
+            memoryAllocator,
+            deviceState);
+        context.InitializeNativeTarget(nativeCapability);
+        return context;
     }
 
     /// <summary>
@@ -487,7 +487,6 @@ internal sealed unsafe class WebGPUFlushContext : IDisposable
         this.ownsTargetView = false;
         this.ownsTargetTexture = false;
 
-        this.RuntimeLease.Dispose();
         this.disposed = true;
     }
 

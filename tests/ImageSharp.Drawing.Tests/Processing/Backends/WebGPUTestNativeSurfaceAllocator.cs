@@ -23,7 +23,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         out string error)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        WebGPU api = WebGPURuntime.GetApi();
         if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? deviceError))
         {
             surface = new NativeSurface(TPixel.GetPixelTypeInfo());
@@ -34,7 +34,7 @@ internal static unsafe class WebGPUTestNativeSurfaceAllocator
         }
 
         return WebGPURenderTargetAllocation.TryCreateRenderTarget<TPixel>(
-            lease.Api,
+            api,
             (nint)device,
             (nint)queue,
             width,

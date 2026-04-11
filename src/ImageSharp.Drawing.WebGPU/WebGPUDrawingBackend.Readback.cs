@@ -89,8 +89,8 @@ public sealed unsafe partial class WebGPUDrawingBackend
             return false;
         }
 
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-        WebGPU api = lease.Api;
+        WebGPU api = WebGPURuntime.GetApi();
+        Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
         Device* device = (Device*)capability.Device;
 
         if (requiredFeature != FeatureName.Undefined
@@ -185,7 +185,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
             using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
-            if (!WaitForMapSignal(lease.WgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForMapSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
             {
                 error = $"WebGPU readback map failed with status '{mapStatus}'.";
                 return false;

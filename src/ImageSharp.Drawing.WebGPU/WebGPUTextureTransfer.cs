@@ -42,7 +42,7 @@ internal static unsafe class WebGPUTextureTransfer
             return false;
         }
 
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        WebGPU api = WebGPURuntime.GetApi();
         if (!WebGPURuntime.TryGetOrCreateDevice(out _, out Queue* queue, out string? deviceError))
         {
             error = deviceError ?? "WebGPU device auto-provisioning failed.";
@@ -53,7 +53,7 @@ internal static unsafe class WebGPUTextureTransfer
         {
             Buffer2DRegion<TPixel> sourceRegion = new(image.Frames.RootFrame.PixelBuffer, image.Bounds);
             WebGPUFlushContext.UploadTextureFromRegion(
-                lease.Api,
+                api,
                 queue,
                 (Texture*)textureHandle,
                 sourceRegion,
@@ -92,14 +92,14 @@ internal static unsafe class WebGPUTextureTransfer
             return false;
         }
 
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        WebGPU api = WebGPURuntime.GetApi();
+        Wgpu wgpuExtension = WebGPURuntime.GetWgpuExtension();
         if (!WebGPURuntime.TryGetOrCreateDevice(out Device* device, out Queue* queue, out string? deviceError))
         {
             error = deviceError ?? "WebGPU device auto-provisioning failed.";
             return false;
         }
 
-        WebGPU api = lease.Api;
         int pixelSizeInBytes = Unsafe.SizeOf<TPixel>();
         int packedRowBytes = checked(width * pixelSizeInBytes);
         int readbackRowBytes = Align(packedRowBytes, 256);
@@ -181,7 +181,7 @@ internal static unsafe class WebGPUTextureTransfer
 
             using PfnBufferMapCallback callback = PfnBufferMapCallback.From(Callback);
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
-            if (!WaitForSignal(lease.WgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
+            if (!WaitForSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
             {
                 error = $"WebGPU readback map failed with status '{mapStatus}'.";
                 return false;
@@ -245,8 +245,7 @@ internal static unsafe class WebGPUTextureTransfer
             return;
         }
 
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
-        WebGPU api = lease.Api;
+        WebGPU api = WebGPURuntime.GetApi();
 
         if (textureViewHandle != 0)
         {

@@ -257,7 +257,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
 
         this.fallbackBackend.FlushCompositions(configuration, stagingFrame, compositionScene);
 
-        using WebGPURuntime.Lease lease = WebGPURuntime.Acquire();
+        WebGPU api = WebGPURuntime.GetApi();
         Buffer2DRegion<TPixel> uploadRegion = compositionBounds is Rectangle cb && cb.Width > 0 && cb.Height > 0
             ? stagingRegion.GetSubRegion(cb)
             : stagingRegion;
@@ -266,7 +266,7 @@ public sealed unsafe partial class WebGPUDrawingBackend : IDrawingBackend, IDisp
         uint destY = compositionBounds is Rectangle cby ? (uint)cby.Y : 0;
 
         WebGPUFlushContext.UploadTextureFromRegion(
-            lease.Api,
+            api,
             (Queue*)capability!.Queue,
             (Texture*)capability.TargetTexture,
             uploadRegion,
