@@ -22,10 +22,6 @@ namespace SixLabors.ImageSharp.Drawing.Benchmarks.Drawing;
 /// </summary>
 public class FillTiger
 {
-    private const float Scale = 4f;
-    private const int Width = 800;
-    private const int Height = 800;
-
     private static readonly string SvgFilePath =
         TestFile.GetInputFileFullPath(TestImages.Svg.GhostscriptTiger);
 
@@ -41,9 +37,16 @@ public class FillTiger
 
     private WebGPURenderTarget<Rgba32> webGpuTarget;
 
+    [Params(1000, 100)]
+    public int Dimensions { get; set; }
+
     [GlobalSetup]
     public void Setup()
     {
+        int width = this.Dimensions;
+        int height = this.Dimensions;
+        float scale = this.Dimensions / 200f;
+
         ThreadPool.GetMinThreads(out int minWorkerThreads, out int minCompletionPortThreads);
         int desiredWorkerThreads = Math.Max(minWorkerThreads, Environment.ProcessorCount);
         ThreadPool.SetMinThreads(desiredWorkerThreads, minCompletionPortThreads);
@@ -51,18 +54,18 @@ public class FillTiger
 
         List<SvgBenchmarkHelper.SvgElement> elements = SvgBenchmarkHelper.ParseSvg(SvgFilePath);
 
-        this.skSurface = SKSurface.Create(new SKImageInfo(Width, Height));
-        this.skElements = SvgBenchmarkHelper.BuildSkiaElements(elements, Scale);
+        this.skSurface = SKSurface.Create(new SKImageInfo(width, height));
+        this.skElements = SvgBenchmarkHelper.BuildSkiaElements(elements, scale);
 
-        this.sdBitmap = new Bitmap(Width, Height);
+        this.sdBitmap = new Bitmap(width, height);
         this.sdGraphics = Graphics.FromImage(this.sdBitmap);
         this.sdGraphics.SmoothingMode = SmoothingMode.AntiAlias;
-        this.sdElements = SvgBenchmarkHelper.BuildSystemDrawingElements(elements, Scale);
+        this.sdElements = SvgBenchmarkHelper.BuildSystemDrawingElements(elements, scale);
 
-        this.image = new Image<Rgba32>(Width, Height);
-        this.isElements = SvgBenchmarkHelper.BuildImageSharpElements(elements, Scale);
+        this.image = new Image<Rgba32>(width, height);
+        this.isElements = SvgBenchmarkHelper.BuildImageSharpElements(elements, scale);
 
-        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(Width, Height);
+        this.webGpuTarget = new WebGPURenderTarget<Rgba32>(width, height);
     }
 
     [IterationSetup]
@@ -151,6 +154,28 @@ public class FillTiger
                 }
             }
         }));
+
+    [Benchmark]
+    public void ImageSharp_SingleThreaded()
+    {
+        Configuration configuration = this.image.Configuration.Clone();
+        configuration.MaxDegreeOfParallelism = 1;
+        this.image.Mutate(configuration, c => c.ProcessWithCanvas(canvas =>
+        {
+            foreach ((IPath path, Processing.SolidBrush fill, SolidPen stroke) in this.isElements)
+            {
+                if (fill is not null)
+                {
+                    canvas.Fill(fill, path);
+                }
+
+                if (stroke is not null)
+                {
+                    canvas.Draw(stroke, path);
+                }
+            }
+        }));
+    }
 
     [Benchmark]
     public void ImageSharpWebGPU()
