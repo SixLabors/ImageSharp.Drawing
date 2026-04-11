@@ -63,8 +63,7 @@ public class FillParisTests
         }
 
         canvas.Flush();
-        Assert.True(target.TryReadback(out Image<Rgba32> readback, out string error), error);
-        using Image<Rgba32> readbackImage = readback!;
+        using Image<Rgba32> readbackImage = target.Readback();
         Assert.True(ContainsNonDefaultPixel(readbackImage));
     }
 

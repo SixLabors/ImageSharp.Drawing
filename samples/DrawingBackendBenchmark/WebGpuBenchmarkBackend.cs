@@ -52,9 +52,17 @@ internal sealed class WebGpuBenchmarkBackend : IBenchmarkBackend
 
         Image<Bgra32>? preview = null;
         string? readbackError = null;
-        if (capturePreview && !renderTarget.TryReadback(out preview, out readbackError))
+        if (capturePreview)
         {
-            preview = null;
+            try
+            {
+                preview = renderTarget.Readback();
+            }
+            catch (Exception ex)
+            {
+                preview = null;
+                readbackError = ex.Message;
+            }
         }
 
         return new BenchmarkRenderResult(

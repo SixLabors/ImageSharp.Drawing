@@ -62,14 +62,14 @@ public sealed unsafe partial class WebGPUDrawingBackend
             capability.Queue == 0 ||
             capability.TargetTexture == 0)
         {
-            error = "Readback is only available for native WebGPU targets with valid device, queue, and texture handles.";
+            error = "The target does not expose a native WebGPU surface with valid device, queue, and texture handles for readback.";
             return false;
         }
 
         if (!TryGetCompositeTextureFormat<TPixel>(out WebGPUTextureFormatId expectedFormat, out FeatureName requiredFeature) ||
             expectedFormat != capability.TargetFormat)
         {
-            error = $"Pixel type '{typeof(TPixel).Name}' is not compatible with target format '{capability.TargetFormat}'.";
+            error = $"Pixel type '{typeof(TPixel).Name}' cannot be read back from target format '{capability.TargetFormat}'.";
             return false;
         }
 
@@ -85,7 +85,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
 
         if (source.Width <= 0 || source.Height <= 0)
         {
-            error = "The requested source rectangle does not intersect the target bounds.";
+            error = "The requested readback rectangle does not intersect the target bounds.";
             return false;
         }
 
@@ -96,7 +96,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
         if (requiredFeature != FeatureName.Undefined
             && !WebGPURuntime.GetOrCreateDeviceState(api, device).HasFeature(requiredFeature))
         {
-            error = $"The target device does not support required feature '{requiredFeature}' for pixel type '{typeof(TPixel).Name}'.";
+            error = $"The target device does not support WebGPU feature '{requiredFeature}' required to read back pixel type '{typeof(TPixel).Name}'.";
             return false;
         }
 
@@ -124,7 +124,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             readbackBuffer = api.DeviceCreateBuffer(device, in bufferDescriptor);
             if (readbackBuffer is null)
             {
-                error = "WebGPU.DeviceCreateBuffer returned null for readback.";
+                error = "The WebGPU device could not create a readback buffer.";
                 return false;
             }
 
@@ -132,7 +132,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             commandEncoder = api.DeviceCreateCommandEncoder(device, in encoderDescriptor);
             if (commandEncoder is null)
             {
-                error = "WebGPU.DeviceCreateCommandEncoder returned null.";
+                error = "The WebGPU device could not create a command encoder for readback.";
                 return false;
             }
 
@@ -163,7 +163,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             commandBuffer = api.CommandEncoderFinish(commandEncoder, in commandBufferDescriptor);
             if (commandBuffer is null)
             {
-                error = "WebGPU.CommandEncoderFinish returned null.";
+                error = "The WebGPU device could not finalize the readback command buffer.";
                 return false;
             }
 
@@ -187,7 +187,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             api.BufferMapAsync(readbackBuffer, MapMode.Read, 0, (nuint)readbackByteCount, callback, null);
             if (!WaitForMapSignal(wgpuExtension, device, mapReady) || mapStatus != BufferMapAsyncStatus.Success)
             {
-                error = $"WebGPU readback map failed with status '{mapStatus}'.";
+                error = $"The WebGPU device could not map the readback buffer. Status: '{mapStatus}'.";
                 return false;
             }
 
@@ -195,7 +195,7 @@ public sealed unsafe partial class WebGPUDrawingBackend
             if (mapped is null)
             {
                 api.BufferUnmap(readbackBuffer);
-                error = "WebGPU.BufferGetConstMappedRange returned null.";
+                error = "The WebGPU device mapped the readback buffer but returned no readable data.";
                 return false;
             }
 

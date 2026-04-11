@@ -20,12 +20,8 @@ namespace SixLabors.ImageSharp.Drawing.Processing.Backends;
 /// <see cref="TryGetOrCreateDevice"/> to use the cached default device/queue pair.
 /// </para>
 /// <para>
-/// Runtime unload is explicit:
+/// Runtime cleanup happens automatically on process exit.
 /// </para>
-/// <list type="bullet">
-/// <item><description><see cref="Shutdown"/> for explicit teardown.</description></item>
-/// <item><description>Best-effort cleanup on process exit.</description></item>
-/// </list>
 /// </remarks>
 internal static unsafe partial class WebGPURuntime
 {
@@ -367,21 +363,6 @@ internal static unsafe partial class WebGPURuntime
     }
 
     /// <summary>
-    /// Shuts down the process-level WebGPU runtime.
-    /// </summary>
-    /// <remarks>
-    /// This call is intended for coordinated application shutdown. Runtime state can be
-    /// reinitialized later by calling <see cref="GetApi"/> again.
-    /// </remarks>
-    public static void Shutdown()
-    {
-        lock (Sync)
-        {
-            DisposeRuntimeCore();
-        }
-    }
-
-    /// <summary>
     /// Process-exit cleanup callback.
     /// </summary>
     /// <param name="sender">Event sender.</param>
@@ -390,7 +371,11 @@ internal static unsafe partial class WebGPURuntime
     {
         _ = sender;
         _ = e;
-        Shutdown();
+
+        lock (Sync)
+        {
+            DisposeRuntimeCore();
+        }
     }
 
     private static void DisposeRuntimeCore()
@@ -421,10 +406,35 @@ internal static unsafe partial class WebGPURuntime
             computePipelineProbeError = null;
         }
 
-        wgpuExtension?.Dispose();
-        wgpuExtension = null;
-        api?.Dispose();
-        api = null;
+        // By the time process-exit teardown reaches the shared loader wrappers, the runtime may
+        // already be unwinding native loader state underneath Silk. The cached device/queue and
+        // all runtime-owned GPU state have already been released above, so these dispose failures
+        // no longer represent leaked WebGPU objects; they only mean the loader is already torn
+        // down or no longer in a state where Silk can unload it cleanly. We must still null the
+        // references so any later re-entry in the same process cannot observe stale wrappers.
+        try
+        {
+            wgpuExtension?.Dispose();
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+        {
+        }
+        finally
+        {
+            wgpuExtension = null;
+        }
+
+        try
+        {
+            api?.Dispose();
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+        {
+        }
+        finally
+        {
+            api = null;
+        }
     }
 
     private static void EnsureInitialized()
